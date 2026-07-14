@@ -1,0 +1,11 @@
+{
+  "chainId": 46630,
+  "network": "Robinhood Chain Testnet",
+  "rpc": "https://rpc.testnet.chain.robinhood.com",
+  "explorer": "https://explorer.testnet.chain.robinhood.com",
+  "contracts": {
+    "ShieldPool": null,
+    "Verifier": null
+  },
+  "notes": "Scaffold only. Deploy after forge install + DEPLOYER_PK. Not production."
+}

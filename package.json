@@ -10,6 +10,8 @@
     "build": "pnpm --filter @gloam/app build && pnpm --filter @gloam/docs build",
     "build:app": "pnpm --filter @gloam/app build",
     "build:docs": "pnpm --filter @gloam/docs build",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test",
     "lint": "pnpm -r lint"
   },
   "engines": {

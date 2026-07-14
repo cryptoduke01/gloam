@@ -1,3 +1,4 @@
 packages:
   - "app"
   - "docs"
+  # contracts/ is Foundry (forge), not a pnpm package
