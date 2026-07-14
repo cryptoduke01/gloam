@@ -48,6 +48,7 @@ import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
+import { DevKeysBanner } from "./DevKeysBanner";
 
 type Mode = "send" | "cashout" | "receive";
 
@@ -464,6 +465,7 @@ export function MoveView() {
             </div>
 
             <div className="space-y-5 p-5 sm:p-6">
+              <DevKeysBanner />
               <p className="text-sm leading-relaxed text-mute">
                 Money stays in the Gloam vault.{" "}
                 <strong className="text-foreground">Private send</strong> creates

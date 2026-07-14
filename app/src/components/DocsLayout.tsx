@@ -27,13 +27,17 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     items: [
       { href: "/docs/encryption", label: "How shield works" },
       { href: "/docs/privacy-model", label: "What stays private" },
+      { href: "/docs/sealed-trade", label: "Sealed trade" },
       { href: "/docs/chain", label: "Robinhood Chain" },
       { href: "/docs/data", label: "Live data" },
     ],
   },
   {
     section: "Deeper",
-    items: [{ href: "/whitepaper", label: "Whitepaper" }],
+    items: [
+      { href: "/docs/production", label: "Production gate" },
+      { href: "/whitepaper", label: "Whitepaper" },
+    ],
   },
 ];
 

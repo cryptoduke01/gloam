@@ -53,6 +53,7 @@ import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
+import { DevKeysBanner } from "./DevKeysBanner";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
@@ -580,6 +581,7 @@ export function ShieldView() {
             </div>
 
             <form onSubmit={onSubmit} className="space-y-5 p-5 sm:p-6">
+              <DevKeysBanner compact />
               <div>
                 <p className="text-sm font-medium text-foreground">Asset</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">

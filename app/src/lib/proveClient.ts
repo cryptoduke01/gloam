@@ -1,5 +1,5 @@
 /**
- * Browser snarkjs fullProve for Poseidon unshield.
+ * Browser snarkjs fullProve for Poseidon unshield / transfer.
  * Artifacts in /public/circuits (dev ceremony — replace for production).
  */
 
@@ -8,6 +8,11 @@ import {
   parseAbiParameters,
   type Hex,
 } from "viem";
+import {
+  assertTransferArtifacts,
+  assertUnshieldArtifacts,
+  CIRCUIT_ARTIFACTS,
+} from "./circuitArtifacts";
 
 export type Groth16Proof = {
   pi_a: string[];
@@ -15,10 +20,10 @@ export type Groth16Proof = {
   pi_c: string[];
 };
 
-const UNSHIELD_WASM = "/circuits/unshield.wasm";
-const UNSHIELD_ZKEY = "/circuits/unshield_final.zkey";
-const TRANSFER_WASM = "/circuits/transfer.wasm";
-const TRANSFER_ZKEY = "/circuits/transfer_final.zkey";
+const UNSHIELD_WASM = CIRCUIT_ARTIFACTS.unshieldWasm.path;
+const UNSHIELD_ZKEY = CIRCUIT_ARTIFACTS.unshieldZkey.path;
+const TRANSFER_WASM = CIRCUIT_ARTIFACTS.transferWasm.path;
+const TRANSFER_ZKEY = CIRCUIT_ARTIFACTS.transferZkey.path;
 
 /** Pack proof for IVerifier adapters: abi.encode(a, b, c) with G2 swap */
 export function packGroth16Proof(proof: Groth16Proof): Hex {
@@ -56,12 +61,14 @@ async function fullProve(
 export async function proveUnshieldInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  await assertUnshieldArtifacts();
   return fullProve(circomInput, UNSHIELD_WASM, UNSHIELD_ZKEY);
 }
 
 export async function proveTransferInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  await assertTransferArtifacts();
   return fullProve(circomInput, TRANSFER_WASM, TRANSFER_ZKEY);
 }
 

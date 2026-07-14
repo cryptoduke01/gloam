@@ -18,20 +18,21 @@ export default function DocsOverviewPage() {
         { label: "Product", value: "gloam.trade/app" },
         { label: "Network", value: "RH testnet" },
         { label: "Chain ID", value: "46630" },
-        { label: "Live", value: "Shield + unshield" },
-        { label: "Not yet", value: "Private send" },
+        { label: "Live", value: "Vault + send" },
+        { label: "Keys", value: "Dev ceremony" },
       ]}
     >
       <h2 id="what">What is Gloam?</h2>
       <p>
         Gloam is an app on <strong>Robinhood Chain</strong> where you can put
-        assets into a shared vault (“shield”) and take them out again with a
-        real proof (“unshield”). Goal: stocks and memes can sit and trade more
-        privately than a normal public wallet.
+        assets into a shared vault (“shield”), pay privately inside the vault,
+        cash out with a real proof, and use a vault trade adapter. Goal: stocks
+        and memes can sit, move, and eventually trade more privately than a
+        normal public wallet.
       </p>
       <p>
-        Right now everything is <strong>testnet</strong> — play money. No real
-        dollars.
+        Right now everything is <strong>testnet</strong> — play money,{" "}
+        <strong>development proving keys</strong>. No real dollars.
       </p>
 
       <PoolPicture title="One picture" />
@@ -46,8 +47,8 @@ export default function DocsOverviewPage() {
           <Link href="/app/shield">Shield</Link> a tiny amount of testnet ETH.
         </li>
         <li>
-          <Link href="/app/move">Move</Link> → prove &amp; unshield → ETH returns
-          to your wallet.
+          <Link href="/app/move">Move</Link> → private send or cash out with a
+          browser proof.
         </li>
       </ol>
 
@@ -61,13 +62,13 @@ export default function DocsOverviewPage() {
           },
           {
             n: "2",
-            title: "Note",
-            body: "Your browser keeps a private record so only you can exit that deposit later.",
+            title: "Move",
+            body: "Private send (payment code) or cash out. Proofs run in your browser.",
           },
           {
             n: "3",
-            title: "Unshield",
-            body: "Prove ownership and withdraw to a normal address. Exit shows on the public explorer.",
+            title: "Trade adapter",
+            body: "Optional: cash out → public swap → re-shield. Size still public on the swap edge.",
           },
         ]}
       />
@@ -77,14 +78,20 @@ export default function DocsOverviewPage() {
         <li>Connect wallet, portfolio, markets</li>
         <li>Send ETH and faucet stock tokens (public)</li>
         <li>Shield ETH + faucet stocks</li>
-        <li>Unshield with a real zero-knowledge proof</li>
+        <li>Private send + payment codes (optional passphrase)</li>
+        <li>Cash out (unshield) with a real zero-knowledge proof</li>
+        <li>Vault trade adapter (public swap edge)</li>
+        <li>Note backup (optional lock) in Settings</li>
       </ul>
 
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
-        <li>Private transfer to another person</li>
-        <li>Private trading / swaps</li>
-        <li>Mainnet</li>
+        <li>
+          <Link href="/docs/sealed-trade">Sealed-size private trade</Link>
+        </li>
+        <li>
+          <Link href="/docs/production">Production ceremony keys / mainnet</Link>
+        </li>
       </ul>
 
       <h2 id="read-next">Read next</h2>
@@ -97,6 +104,12 @@ export default function DocsOverviewPage() {
         </li>
         <li>
           <Link href="/docs/privacy-model">What stays private vs public</Link>
+        </li>
+        <li>
+          <Link href="/docs/production">Production gate</Link>
+        </li>
+        <li>
+          <Link href="/docs/sealed-trade">Sealed-size private trade</Link>
         </li>
         <li>
           <Link href="/whitepaper">Whitepaper</Link>

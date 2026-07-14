@@ -69,7 +69,12 @@ export default function DocsProductPage() {
           {
             n: "○",
             title: "Sealed-size private trade",
-            body: "Swap without broadcasting full size on the open book. Future step.",
+            body: "Swap without broadcasting full size. See sealed-trade docs — not shipped.",
+          },
+          {
+            n: "○",
+            title: "Production keys + mainnet",
+            body: "Ceremony, audit, ops. Blocked until the production gate checklist is green.",
           },
         ]}
       />
@@ -82,7 +87,9 @@ export default function DocsProductPage() {
       </ul>
 
       <p>
-        Open the app: <Link href="/app">/app</Link>. Follow{" "}
+        Open the app: <Link href="/app">/app</Link> ·{" "}
+        <Link href="/docs/production">Production gate</Link> ·{" "}
+        <Link href="/docs/sealed-trade">Sealed trade</Link>. Follow{" "}
         <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer">
           @gloamtrade
         </a>{" "}

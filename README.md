@@ -102,7 +102,8 @@ No purple crypto fog.
 
 - **Product:** testnet-only  
 - **Poseidon pool:** shield · private send · cash out · vault trade adapter  
-- **Next:** sealed-size private trade · production ceremony keys  
+- **Keys:** dev ceremony (see [docs/production](https://gloam.trade/docs/production), `contracts/PRODUCTION.md`)  
+- **Next:** production ceremony · sealed-size private trade (design only)  
 
 ---
 

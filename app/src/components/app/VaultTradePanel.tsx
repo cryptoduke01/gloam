@@ -54,6 +54,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
+import { DevKeysBanner } from "./DevKeysBanner";
 
 type Side = "buy" | "sell";
 type Phase =
@@ -623,6 +624,7 @@ export function VaultTradePanel({
   return (
     <>
       <div className="space-y-4">
+        <DevKeysBanner />
         <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-sm text-mute">
           <p className="font-medium text-foreground">Vault trade adapter</p>
           <p className="mt-1">

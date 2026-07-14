@@ -44,7 +44,7 @@ import { VaultTradePanel } from "./VaultTradePanel";
 type Side = "buy" | "sell";
 type InputMode = "token" | "usd";
 type TxKind = "transfer" | "approve" | "buy" | "sell" | null;
-type PathMode = "public" | "vault";
+type PathMode = "public" | "vault" | "sealed";
 
 export function TradeView() {
   const { address, isConnected } = useAccount();
@@ -67,9 +67,11 @@ export function TradeView() {
   const [filter, setFilter] = useState<"all" | "onchain" | "stocks">("onchain");
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<"swap" | "transfer">("transfer");
-  const [pathMode, setPathMode] = useState<PathMode>(
-    pathParam === "vault" && shieldLive ? "vault" : "public"
-  );
+  const [pathMode, setPathMode] = useState<PathMode>(() => {
+    if (pathParam === "sealed") return "sealed";
+    if (pathParam === "vault" && shieldLive) return "vault";
+    return "public";
+  });
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
@@ -470,23 +472,23 @@ export function TradeView() {
         </span>
       </div>
 
-      {shieldLive && (
-        <div className="flex gap-1 rounded-xl border border-line bg-panel p-1">
-          <button
-            type="button"
-            onClick={() => setPathMode("public")}
-            className={`min-h-10 flex-1 rounded-lg text-sm font-medium ${
-              pathMode === "public"
-                ? "bg-lime text-black"
-                : "text-mute hover:text-foreground"
-            }`}
-          >
-            Public wallet
-          </button>
+      <div className="flex flex-wrap gap-1 rounded-xl border border-line bg-panel p-1">
+        <button
+          type="button"
+          onClick={() => setPathMode("public")}
+          className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
+            pathMode === "public"
+              ? "bg-lime text-black"
+              : "text-mute hover:text-foreground"
+          }`}
+        >
+          Public wallet
+        </button>
+        {shieldLive && (
           <button
             type="button"
             onClick={() => setPathMode("vault")}
-            className={`min-h-10 flex-1 rounded-lg text-sm font-medium ${
+            className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
               pathMode === "vault"
                 ? "bg-lime text-black"
                 : "text-mute hover:text-foreground"
@@ -494,8 +496,19 @@ export function TradeView() {
           >
             From vault
           </button>
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          onClick={() => setPathMode("sealed")}
+          className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
+            pathMode === "sealed"
+              ? "bg-foreground text-background"
+              : "text-mute hover:text-foreground"
+          }`}
+        >
+          Sealed (soon)
+        </button>
+      </div>
 
       {pathMode === "public" && (
         <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
@@ -503,6 +516,21 @@ export function TradeView() {
           your open wallet and show on the explorer. Use{" "}
           <strong className="text-foreground">From vault</strong> to cash out →
           swap → re-shield in one flow.
+        </div>
+      )}
+      {pathMode === "sealed" && (
+        <div className="rounded-xl border border-line bg-panel px-4 py-4 text-sm text-mute">
+          <p className="font-medium text-foreground">
+            Sealed-size private trade is not shipped
+          </p>
+          <p className="mt-2">
+            We will not put a fake private swap here. Today: public wallet or
+            vault adapter (swap edge still public). Design options and gate:{" "}
+            <a href="/docs/sealed-trade" className="text-lime hover:underline">
+              sealed trade docs
+            </a>
+            .
+          </p>
         </div>
       )}
 
@@ -621,6 +649,45 @@ export function TradeView() {
               tokenAddress={token}
               hasPool={hasPool}
             />
+          ) : pathMode === "sealed" ? (
+            <div className="rounded-xl border border-line bg-panel p-6 text-sm text-mute">
+              <p className="font-display text-2xl text-foreground">
+                Sealed trade
+              </p>
+              <p className="mt-3 leading-relaxed">
+                Goal: execute without broadcasting full size as free signal.
+                Requires new settlement design (intents, vault-native pool, or
+                hybrid) plus production keys. Nothing to click yet — by design.
+              </p>
+              <ul className="mt-4 list-inside list-disc space-y-1">
+                <li>
+                  <button
+                    type="button"
+                    className="text-lime hover:underline"
+                    onClick={() => setPathMode("vault")}
+                  >
+                    Use vault adapter
+                  </button>{" "}
+                  (hold private, swap public)
+                </li>
+                <li>
+                  <a
+                    href="/docs/sealed-trade"
+                    className="text-lime hover:underline"
+                  >
+                    Read sealed trade plan
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/docs/production"
+                    className="text-lime hover:underline"
+                  >
+                    Production gate
+                  </a>
+                </li>
+              </ul>
+            </div>
           ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
