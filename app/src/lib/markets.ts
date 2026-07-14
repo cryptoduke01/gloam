@@ -1,6 +1,6 @@
 export type MarketKind = "stock" | "meme";
 
-export type MarketSource = "yahoo" | "coingecko" | "static";
+export type MarketSource = "live" | "static";
 
 export type MarketDef = {
   id: string;
@@ -9,6 +9,8 @@ export type MarketDef = {
   kind: MarketKind;
   yahoo?: string;
   coingecko?: string;
+  /** Testnet ERC-20 when this is a real onchain asset */
+  address?: `0x${string}`;
   fallbackMark: number;
   privateReady: boolean;
 };
@@ -19,34 +21,72 @@ export type LiveQuote = {
   volume: string;
   source: MarketSource;
   updatedAt: number;
-  /** Recent prices for mini chart */
   spark?: number[];
 };
 
 export type Market = MarketDef & LiveQuote;
 
 /**
- * Product catalog.
- * Live: stocks → Yahoo (server) · memes → CoinGecko (server).
- * Marks are reference prices — never fills.
+ * Catalog: faucet stock tokens first (real onchain), then more equities + memes.
  */
 export const MARKET_DEFS: MarketDef[] = [
-  {
-    id: "hood",
-    symbol: "HOOD",
-    name: "Robinhood",
-    kind: "stock",
-    yahoo: "HOOD",
-    fallbackMark: 24,
-    privateReady: false,
-  },
   {
     id: "tsla",
     symbol: "TSLA",
     name: "Tesla",
     kind: "stock",
     yahoo: "TSLA",
+    address: "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
     fallbackMark: 250,
+    privateReady: false,
+  },
+  {
+    id: "amzn",
+    symbol: "AMZN",
+    name: "Amazon",
+    kind: "stock",
+    yahoo: "AMZN",
+    address: "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+    fallbackMark: 190,
+    privateReady: false,
+  },
+  {
+    id: "pltr",
+    symbol: "PLTR",
+    name: "Palantir",
+    kind: "stock",
+    yahoo: "PLTR",
+    address: "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
+    fallbackMark: 80,
+    privateReady: false,
+  },
+  {
+    id: "nflx",
+    symbol: "NFLX",
+    name: "Netflix",
+    kind: "stock",
+    yahoo: "NFLX",
+    address: "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
+    fallbackMark: 900,
+    privateReady: false,
+  },
+  {
+    id: "amd",
+    symbol: "AMD",
+    name: "AMD",
+    kind: "stock",
+    yahoo: "AMD",
+    address: "0x71178BAc73cBeb415514eB542a8995b82669778d",
+    fallbackMark: 120,
+    privateReady: false,
+  },
+  {
+    id: "hood",
+    symbol: "HOOD",
+    name: "Robinhood",
+    kind: "stock",
+    yahoo: "HOOD",
+    fallbackMark: 100,
     privateReady: false,
   },
   {
@@ -77,21 +117,21 @@ export const MARKET_DEFS: MarketDef[] = [
     privateReady: false,
   },
   {
-    id: "amzn",
-    symbol: "AMZN",
-    name: "Amazon",
-    kind: "stock",
-    yahoo: "AMZN",
-    fallbackMark: 190,
-    privateReady: false,
-  },
-  {
     id: "msft",
     symbol: "MSFT",
     name: "Microsoft",
     kind: "stock",
     yahoo: "MSFT",
     fallbackMark: 420,
+    privateReady: false,
+  },
+  {
+    id: "eth",
+    symbol: "ETH",
+    name: "Ethereum",
+    kind: "meme",
+    coingecko: "ethereum",
+    fallbackMark: 3500,
     privateReady: false,
   },
   {
@@ -130,15 +170,6 @@ export const MARKET_DEFS: MarketDef[] = [
     fallbackMark: 0.4,
     privateReady: false,
   },
-  {
-    id: "eth",
-    symbol: "ETH",
-    name: "Ethereum",
-    kind: "meme",
-    coingecko: "ethereum",
-    fallbackMark: 3500,
-    privateReady: false,
-  },
 ];
 
 export const MARKETS: Market[] = MARKET_DEFS.map((d) => ({
@@ -169,6 +200,19 @@ export function formatMark(mark: number) {
   });
 }
 
-export function formatMarkMarket(m: { mark: number }) {
-  return formatMark(m.mark);
+export function formatUsd(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  if (n < 0.01 && n > 0) return "<$0.01";
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: n < 10 ? 2 : 0,
+  });
+}
+
+export function formatTokenAmount(raw: bigint, decimals = 18, maxDigits = 4) {
+  const n = Number(raw) / 10 ** decimals;
+  if (!Number.isFinite(n) || n === 0) return "0";
+  if (n < 0.0001) return "<0.0001";
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxDigits });
 }

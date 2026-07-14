@@ -1,6 +1,6 @@
 "use client";
 
-/** Tiny price path — pure SVG, no chart library. */
+/** Tiny price path — theme-aware stroke. */
 export function Sparkline({
   points,
   up,
@@ -39,7 +39,8 @@ export function Sparkline({
   });
 
   const d = `M ${coords.join(" L ")}`;
-  const stroke = up === false ? "#f87171" : "#c8ff00";
+  // CSS vars: --chart-up / --chart-down set in globals
+  const stroke = up === false ? "var(--chart-down)" : "var(--chart-up)";
 
   return (
     <svg
@@ -53,7 +54,7 @@ export function Sparkline({
         d={d}
         fill="none"
         stroke={stroke}
-        strokeWidth="1.5"
+        strokeWidth="1.75"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

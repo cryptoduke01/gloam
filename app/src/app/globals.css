@@ -13,6 +13,8 @@ html[data-theme="dark"] {
   --background: #000000;
   --foreground: #ffffff;
   --shadow-dock: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --chart-up: #c8ff00;
+  --chart-down: #f87171;
 }
 
 html.light,
@@ -27,6 +29,9 @@ html[data-theme="light"] {
   --background: #f7f7f5;
   --foreground: #0a0a0a;
   --shadow-dock: 0 8px 28px rgba(0, 0, 0, 0.08);
+  /* Stronger contrast on paper backgrounds */
+  --chart-up: #4d7c0f;
+  --chart-down: #dc2626;
 }
 
 @theme inline {

@@ -2,7 +2,6 @@
 
 import { formatMark } from "@/lib/markets";
 
-/** Larger spark area for trade ticket. */
 export function PriceChart({
   points,
   mark,
@@ -13,7 +12,7 @@ export function PriceChart({
   change24h: number;
 }) {
   const up = change24h >= 0;
-  const stroke = up ? "#c8ff00" : "#f87171";
+  const stroke = up ? "var(--chart-up)" : "var(--chart-down)";
   const w = 560;
   const h = 160;
   const pad = 12;
@@ -45,15 +44,21 @@ export function PriceChart({
             Price
           </p>
           <p className="mt-1 font-display text-3xl text-foreground">
-            {formatMark(mark)}
+            ${formatMark(mark)}
           </p>
         </div>
-        <p className={`font-mono text-sm ${up ? "text-lime" : "text-red-400"}`}>
+        <p
+          className={`rounded-full px-2.5 py-1 font-mono text-sm font-medium ${
+            up
+              ? "bg-[color-mix(in_srgb,var(--chart-up)_18%,transparent)] text-[var(--chart-up)]"
+              : "bg-[color-mix(in_srgb,var(--chart-down)_15%,transparent)] text-[var(--chart-down)]"
+          }`}
+        >
           {up ? "+" : ""}
           {change24h}%
         </p>
       </div>
-      <div className="mt-4 overflow-hidden">
+      <div className="mt-4 overflow-hidden rounded-lg bg-background/60 p-1">
         {points.length < 2 ? (
           <div className="flex h-40 items-center justify-center text-sm text-mute">
             Chart loading…
@@ -66,12 +71,18 @@ export function PriceChart({
             role="img"
             aria-label="Price chart"
           >
-            <path d={area} fill={stroke} opacity="0.08" />
+            <defs>
+              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
+                <stop offset="100%" stopColor={stroke} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill="url(#chartFill)" />
             <path
               d={path}
               fill="none"
               stroke={stroke}
-              strokeWidth="2"
+              strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"

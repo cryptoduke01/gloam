@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
-import { formatMark } from "@/lib/markets";
+import { useTradingSettings } from "@/hooks/useTradingSettings";
+import { formatMark, formatUsd } from "@/lib/markets";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
 export function MarketsView() {
+  const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<"all" | "stock" | "meme">("all");
+  const [kind, setKind] = useState<"all" | "stock" | "meme">(
+    settings.marketFilter
+  );
   const { data, isFetching, isError, refetch } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
@@ -107,9 +111,16 @@ export function MarketsView() {
                 width={88}
                 height={32}
               />
-              <p className="font-mono text-sm text-foreground">
-                {formatMark(m.mark)}
-              </p>
+              <div>
+                <p className="font-mono text-sm text-foreground">
+                  {settings.showUsd
+                    ? formatUsd(m.mark)
+                    : `$${formatMark(m.mark)}`}
+                </p>
+                {m.address && (
+                  <p className="text-[10px] text-lime">Onchain</p>
+                )}
+              </div>
               <p
                 className={`text-sm ${
                   m.change24h >= 0 ? "text-lime" : "text-red-400"

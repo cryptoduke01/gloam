@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
-import { formatMark } from "@/lib/markets";
+import { useTradingSettings } from "@/hooks/useTradingSettings";
+import { formatMark, formatUsd } from "@/lib/markets";
 import { ConnectButton } from "./ConnectButton";
 import { NetworkPulse } from "./NetworkPulse";
 import { PriceChart } from "./PriceChart";
@@ -14,6 +15,7 @@ import { StatusPill } from "./StatusPill";
 export function TradeView() {
   const { isConnected } = useAccount();
   const search = useSearchParams();
+  const { settings } = useTradingSettings();
   const { data, isFetching, isError, refetch, isFetched } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
@@ -21,11 +23,13 @@ export function TradeView() {
   const initial =
     markets.find((m) => m.id === search.get("market"))?.id ??
     markets[0]?.id ??
-    "hood";
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+    "tsla";
+  const [side, setSide] = useState<"buy" | "sell">(settings.defaultSide);
   const [marketId, setMarketId] = useState(initial);
   const [amount, setAmount] = useState("");
-  const [filter, setFilter] = useState<"all" | "stock" | "meme">("all");
+  const [filter, setFilter] = useState<"all" | "stock" | "meme">(
+    settings.marketFilter
+  );
   const [note, setNote] = useState<string | null>(null);
 
   const resolvedId = markets.some((m) => m.id === marketId)
@@ -156,11 +160,13 @@ export function TradeView() {
         </div>
 
         <div className="space-y-4 lg:col-span-5">
-          <PriceChart
-            points={market.spark ?? []}
-            mark={market.mark}
-            change24h={market.change24h}
-          />
+          {!settings.compactCharts && (
+            <PriceChart
+              points={market.spark ?? []}
+              mark={market.mark}
+              change24h={market.change24h}
+            />
+          )}
 
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="border-b border-line px-5 py-4">
@@ -171,10 +177,10 @@ export function TradeView() {
                   </p>
                   <p className="text-sm text-mute">{market.name}</p>
                 </div>
-                {liveCount > 0 && market.source !== "static" ? (
+                {market.source === "live" ? (
                   <StatusPill tone="lime">Live</StatusPill>
                 ) : (
-                  <StatusPill tone="warn">Cached</StatusPill>
+                  <StatusPill tone="warn">Offline</StatusPill>
                 )}
               </div>
             </div>
@@ -274,6 +280,20 @@ export function TradeView() {
               <div className="flex justify-between">
                 <dt className="text-mute">24h volume</dt>
                 <dd className="text-foreground">{market.volume}</dd>
+              </div>
+              {market.address && (
+                <div className="flex justify-between">
+                  <dt className="text-mute">Onchain</dt>
+                  <dd className="text-lime">Testnet token</dd>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <dt className="text-mute">Mark</dt>
+                <dd className="text-foreground">
+                  {settings.showUsd
+                    ? formatUsd(market.mark)
+                    : `$${formatMark(market.mark)}`}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-mute">Private</dt>

@@ -5,16 +5,18 @@ import { MARKETS, type Market } from "@/lib/markets";
 
 type ApiResponse = {
   markets: Market[];
+  ethUsd?: number | null;
   meta?: {
     liveCount: number;
     total: number;
     fetchedAt: number;
-    note?: string;
   };
 };
 
 async function fetchMarkets(): Promise<ApiResponse> {
-  const res = await fetch("/api/markets", { cache: "no-store" });
+  const res = await fetch(`/api/markets?t=${Date.now()}`, {
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error("markets_failed");
   return res.json() as Promise<ApiResponse>;
 }
@@ -23,12 +25,12 @@ export function useLiveMarkets() {
   return useQuery({
     queryKey: ["markets", "live"],
     queryFn: fetchMarkets,
-    staleTime: 20_000,
-    refetchInterval: 40_000,
-    retry: 2,
-    // Show catalog instantly; swap when live payload arrives
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: 3,
     placeholderData: {
       markets: MARKETS,
+      ethUsd: null,
       meta: {
         liveCount: 0,
         total: MARKETS.length,
@@ -36,4 +38,12 @@ export function useLiveMarkets() {
       },
     },
   });
+}
+
+export function useEthPrice() {
+  const q = useLiveMarkets();
+  return {
+    ethUsd: q.data?.ethUsd ?? null,
+    isLoading: q.isLoading,
+  };
 }

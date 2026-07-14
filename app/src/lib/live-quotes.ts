@@ -8,7 +8,6 @@ type YahooChart = {
         previousClose?: number;
         chartPreviousClose?: number;
       };
-      timestamp?: number[];
       indicators?: {
         quote?: Array<{
           close?: Array<number | null>;
@@ -30,17 +29,17 @@ function formatVol(n: number | undefined) {
 function sparkFromCloses(closes: Array<number | null | undefined>): number[] {
   const pts = closes.filter((c): c is number => c != null && Number.isFinite(c));
   if (pts.length < 2) return pts;
-  return pts.slice(-24);
+  return pts.slice(-30);
 }
 
 async function fetchYahoo(symbol: string): Promise<LiveQuote | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol
-  )}?interval=1d&range=1mo`;
+  )}?interval=1d&range=3mo`;
   const res = await fetch(url, {
     headers: {
       "User-Agent":
-        "Mozilla/5.0 (compatible; Gloam/1.0; +https://gloam.trade)",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       Accept: "application/json",
     },
     cache: "no-store",
@@ -62,7 +61,7 @@ async function fetchYahoo(symbol: string): Promise<LiveQuote | null> {
     mark: price,
     change24h: Number(change24h.toFixed(2)),
     volume: formatVol(lastVol ?? undefined),
-    source: "yahoo",
+    source: "live",
     updatedAt: Date.now(),
     spark: sparkFromCloses(closes),
   };
@@ -94,7 +93,7 @@ async function fetchCoinGeckoSimple(
       mark: row.usd,
       change24h: Number((row.usd_24h_change ?? 0).toFixed(2)),
       volume: formatVol(row.usd_24h_vol),
-      source: "coingecko",
+      source: "live",
       updatedAt: Date.now(),
     });
   }
@@ -102,7 +101,7 @@ async function fetchCoinGeckoSimple(
 }
 
 async function fetchCoinGeckoSpark(id: string): Promise<number[]> {
-  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=7`;
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=30`;
   const res = await fetch(url, {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -110,8 +109,7 @@ async function fetchCoinGeckoSpark(id: string): Promise<number[]> {
   if (!res.ok) return [];
   const data = (await res.json()) as { prices?: [number, number][] };
   const prices = data.prices ?? [];
-  // sample ~24 points
-  const step = Math.max(1, Math.floor(prices.length / 24));
+  const step = Math.max(1, Math.floor(prices.length / 30));
   return prices.filter((_, i) => i % step === 0).map((p) => p[1]);
 }
 
@@ -126,10 +124,6 @@ function fallbackQuote(def: MarketDef): LiveQuote {
   };
 }
 
-/**
- * Live quotes for product catalog.
- * Always runs at request time (API route is force-dynamic).
- */
 export async function loadLiveMarkets() {
   const cgIds = [
     ...new Set(
@@ -138,7 +132,6 @@ export async function loadLiveMarkets() {
       )
     ),
   ];
-
   const yahooDefs = MARKET_DEFS.filter((m) => m.yahoo);
 
   const [cgSimple, ...yahooPairs] = await Promise.all([
@@ -153,10 +146,9 @@ export async function loadLiveMarkets() {
 
   const yahooMap = new Map(yahooPairs);
 
-  // sparklines for CG assets (sequential-ish batch, limited)
   const sparkMap = new Map<string, number[]>();
   await Promise.all(
-    cgIds.slice(0, 8).map(async (id) => {
+    cgIds.map(async (id) => {
       const spark = await fetchCoinGeckoSpark(id).catch(() => [] as number[]);
       sparkMap.set(id, spark);
     })
@@ -188,4 +180,14 @@ export async function loadLiveMarkets() {
       spark: q.spark ?? [],
     };
   });
+}
+
+/** ETH USD for portfolio dollar conversion */
+export async function loadEthUsd(): Promise<number | null> {
+  try {
+    const map = await fetchCoinGeckoSimple(["ethereum"]);
+    return map.get("ethereum")?.mark ?? null;
+  } catch {
+    return null;
+  }
 }

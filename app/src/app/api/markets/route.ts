@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
-import { loadLiveMarkets } from "@/lib/live-quotes";
+import { loadEthUsd, loadLiveMarkets } from "@/lib/live-quotes";
 
-/** Always fetch fresh — do not bake static quotes at build time. */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    const markets = await loadLiveMarkets();
-    const liveCount = markets.filter((m) => m.source !== "static").length;
+    const [markets, ethUsd] = await Promise.all([
+      loadLiveMarkets(),
+      loadEthUsd(),
+    ]);
+    const liveCount = markets.filter((m) => m.source === "live").length;
     return NextResponse.json(
       {
         markets,
+        ethUsd,
         meta: {
           liveCount,
           total: markets.length,
@@ -28,6 +31,7 @@ export async function GET() {
     return NextResponse.json(
       {
         markets: [],
+        ethUsd: null,
         error: e instanceof Error ? e.message : "quote_failed",
       },
       { status: 502 }
