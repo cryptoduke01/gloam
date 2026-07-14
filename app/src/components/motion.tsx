@@ -3,7 +3,6 @@
 import {
   motion,
   useReducedMotion,
-  type HTMLMotionProps,
   type Variants,
 } from "framer-motion";
 import type { ReactNode } from "react";
@@ -38,28 +37,28 @@ export const stagger: Variants = {
 };
 
 /**
- * Section wrapper. Intentionally a plain <section> so its content is never
- * hidden waiting on a variant that might not propagate — children reveal
- * themselves independently via MotionItem / MotionCard.
+ * Section wrapper. Plain <section> so content is never stuck at opacity 0.
+ * Children reveal via MotionItem / MotionCard whileInView.
  */
 export function MotionSection({
   children,
   className = "",
-  delay: _delay = 0,
-  ...rest
+  id,
 }: {
   children: ReactNode;
   className?: string;
+  id?: string;
+  /** @deprecated ignored — kept for call-site compatibility */
   delay?: number;
-} & HTMLMotionProps<"section">) {
+}) {
   return (
-    <section className={className} {...(rest as HTMLMotionProps<"section">)}>
+    <section id={id} className={className}>
       {children}
     </section>
   );
 }
 
-const viewport = { once: true, amount: 0.2, margin: "0px 0px -60px 0px" } as const;
+const viewport = { once: true, amount: 0.15, margin: "0px 0px -40px 0px" } as const;
 
 export function MotionItem({
   children,
@@ -73,7 +72,7 @@ export function MotionItem({
   const animate = useMotionSafe();
   const Comp = motion[as];
   if (!animate) {
-    return <Comp className={className}>{children}</Comp>;
+    return <div className={className}>{children}</div>;
   }
   return (
     <Comp
