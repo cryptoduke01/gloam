@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · Gloam Docs",
   },
   description:
-    "Documentation for Gloam — private money on Robinhood Chain.",
+    "Documentation and whitepaper for Gloam — trade and move money privately onchain on Robinhood Chain.",
   metadataBase: new URL("https://docs.gloam.trade"),
 };
 

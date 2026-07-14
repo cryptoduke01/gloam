@@ -7,9 +7,11 @@ import { Logo } from "./Logo";
 
 const links = [
   { href: "/#product", label: "Product" },
-  { href: "/#how", label: "How it works" },
+  { href: "/#encryption", label: "Encrypt" },
+  { href: "/#how", label: "Path" },
   { href: "/#chain", label: "Chain" },
   { href: "https://docs.gloam.trade", label: "Docs", external: true },
+  { href: "https://docs.gloam.trade/whitepaper", label: "Whitepaper", external: true },
 ];
 
 export function Header() {

@@ -15,24 +15,25 @@ export function useMotionSafe() {
   return !reduce;
 }
 
+/** Subtle entrance — never leave long opacity-0 voids on scroll. */
 export const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 28 },
+  hidden: { opacity: 0, y: 12 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.55, ease },
+    transition: { duration: 0.4, ease },
   },
 };
 
 export const fadeIn: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.45, ease } },
+  show: { opacity: 1, transition: { duration: 0.35, ease } },
 };
 
 export const stagger: Variants = {
   hidden: {},
   show: {
-    transition: { staggerChildren: 0.08, delayChildren: 0.06 },
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
   },
 };
 
@@ -52,11 +53,11 @@ export function MotionSection({
       className={className}
       initial={animate ? "hidden" : false}
       whileInView={animate ? "show" : undefined}
-      viewport={{ once: true, margin: "-10% 0px -8% 0px", amount: 0.2 }}
+      viewport={{ once: true, amount: 0.08, margin: "0px 0px -40px 0px" }}
       variants={{
         hidden: {},
         show: {
-          transition: { staggerChildren: 0.1, delayChildren: delay },
+          transition: { staggerChildren: 0.07, delayChildren: delay },
         },
       }}
       {...rest}
@@ -102,7 +103,7 @@ export function MotionCard({
       variants={animate ? fadeUp : undefined}
       whileHover={
         animate
-          ? { y: -4, transition: { duration: 0.25, ease } }
+          ? { y: -3, transition: { duration: 0.2, ease } }
           : undefined
       }
       whileTap={animate ? { scale: 0.99 } : undefined}

@@ -3,18 +3,13 @@
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
 
-/**
- * Hero side plate: on hover, the image "tears" then stitches closed again —
- * private surface under a public gash.
- */
+/** Hero side plate: lime ink figure, no gimmick overlays. */
 export function HeroPrivacyArt() {
   const reduce = useReducedMotion();
 
   return (
     <motion.div
-      className={`group relative aspect-[4/5] overflow-hidden rounded-lg border border-line bg-black ${
-        reduce ? "" : "hero-privacy"
-      }`}
+      className="group relative aspect-[4/5] overflow-hidden rounded-lg border border-line bg-black"
       whileHover={reduce ? undefined : { scale: 1.01 }}
       transition={{ type: "spring", stiffness: 260, damping: 24 }}
     >
@@ -31,17 +26,12 @@ export function HeroPrivacyArt() {
         style={{ backgroundColor: "#c8ff00" }}
         aria-hidden
       />
-
-      {!reduce && (
-        <>
-          <div className="hero-tear hero-tear-a" aria-hidden />
-          <div className="hero-tear hero-tear-b" aria-hidden />
-          <div className="hero-stitch" aria-hidden />
-        </>
-      )}
-
-      <p className="pointer-events-none absolute bottom-4 left-4 right-4 font-mono text-[10px] uppercase tracking-[0.16em] text-black/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-        Tear open. Stitch shut. Stay private.
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent"
+        aria-hidden
+      />
+      <p className="pointer-events-none absolute bottom-4 left-4 right-4 font-mono text-[10px] uppercase tracking-[0.16em] text-black/75">
+        What the chain cannot see
       </p>
     </motion.div>
   );

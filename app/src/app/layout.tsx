@@ -13,7 +13,7 @@ const instrument = Instrument_Serif({
   display: "swap",
 });
 
-const siteTitle = "Gloam. Private money on Robinhood Chain";
+const siteTitle = "Trade and move money privately onchain · Gloam";
 const siteDescription =
   "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.";
 

@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Gloam. Private money on Robinhood Chain";
+export const alt = "Trade and move money privately onchain · Gloam";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -113,7 +113,7 @@ export default function OpenGraphImage() {
                 display: "flex",
               }}
             >
-              Private money on Robinhood Chain
+              Trade and move money privately onchain
             </div>
             <div
               style={{
@@ -125,7 +125,7 @@ export default function OpenGraphImage() {
                 display: "flex",
               }}
             >
-              Shield · Move · Trade without printing your book
+              Shielded balances · Private transfer · Private trade
             </div>
           </div>
 
