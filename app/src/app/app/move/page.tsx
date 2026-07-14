@@ -10,7 +10,7 @@ export default function MovePage() {
   return (
     <AppShell
       title="Move"
-      subtitle="Pay someone inside the vault, or cash out to your open wallet."
+      subtitle="Payment tickets inside the vault (no 0x address) — or cash out publicly."
     >
       <MoveView />
     </AppShell>

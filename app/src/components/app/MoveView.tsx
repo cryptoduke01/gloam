@@ -49,12 +49,13 @@ import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
+import { PaymentTicketShare } from "./PaymentTicketShare";
 
 type Mode = "send" | "cashout" | "receive";
 
 /**
- * Move = private send inside the vault, or cash out (unshield).
- * Plain labels for normal users.
+ * Move = vault payment tickets (not address transfer) + cash out.
+ * Private pay never asks for a recipient 0x address.
  */
 export function MoveView() {
   const shieldLive = isShieldDeployed();
@@ -88,7 +89,7 @@ export function MoveView() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [claimPreview, setClaimPreview] = useState<string | null>(null);
 
   const {
     writeContract,
@@ -151,7 +152,6 @@ export function MoveView() {
       if (pendingShare.current) {
         setShareBlob(pendingShare.current.blob);
         setShareAmountLabel(pendingShare.current.amountLabel);
-        setCopied(false);
         pendingShare.current = null;
       }
 
@@ -427,16 +427,43 @@ export function MoveView() {
     }
   }
 
-  async function copyShare() {
-    if (!shareBlob) return;
-    try {
-      await navigator.clipboard.writeText(shareBlob);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError("Could not copy — select the text manually.");
+  // Live preview when pasting a ticket (amount only — not a full claim)
+  useEffect(() => {
+    const t = importText.trim();
+    if (!t || mode !== "receive") {
+      setClaimPreview(null);
+      return;
     }
-  }
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (isEncryptedPackage(t) && !importPassphrase.trim()) {
+            if (!cancelled) {
+              setClaimPreview("Locked ticket — enter the passphrase to preview.");
+            }
+            return;
+          }
+          const pack = await decodeNotePackage(
+            t,
+            importPassphrase || undefined
+          );
+          if (cancelled) return;
+          setClaimPreview(
+            `Looks like ${formatAmountEth(pack.amountWei)} ETH vault payment${
+              isEncryptedPackage(t) ? " (unlocked)" : ""
+            }.`
+          );
+        } catch {
+          if (!cancelled) setClaimPreview(null);
+        }
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [importText, importPassphrase, mode]);
 
   const working = busy || isPending || confirming;
 
@@ -467,19 +494,28 @@ export function MoveView() {
             <div className="space-y-5 p-5 sm:p-6">
               <DevKeysBanner />
               <p className="text-sm leading-relaxed text-mute">
-                Money stays in the Gloam vault.{" "}
-                <strong className="text-foreground">Private send</strong> creates
-                a payment ticket for someone else.{" "}
-                <strong className="text-foreground">Cash out</strong> returns
-                funds to your open wallet (that step is public).
+                This is <strong className="text-foreground">not</strong> a
+                normal crypto send. No recipient address. You mint a{" "}
+                <strong className="text-foreground">payment ticket</strong>{" "}
+                inside the vault; they claim it.{" "}
+                <strong className="text-foreground">Cash out</strong> exits to
+                your open wallet (public edge).
+              </p>
+              <p className="rounded-lg border border-line bg-background px-3 py-2 text-xs text-mute">
+                Need a classic on-chain transfer to a{" "}
+                <span className="font-mono">0x</span> address? Use{" "}
+                <Link href="/app/send" className="text-lime hover:underline">
+                  Send
+                </Link>{" "}
+                (public book).
               </p>
 
-              {/* Mode tabs */}
+              {/* Mode tabs — ticket language, not address send */}
               <div className="flex gap-1 rounded-lg border border-line p-1">
                 {(
                   [
-                    ["send", "Send"],
-                    ["receive", "Receive"],
+                    ["send", "Pay ticket"],
+                    ["receive", "Claim"],
                     ["cashout", "Cash out"],
                   ] as const
                 ).map(([id, label]) => (
@@ -491,6 +527,7 @@ export function MoveView() {
                       setError(null);
                       setStatus(null);
                       setImportOk(null);
+                      setClaimPreview(null);
                     }}
                     className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
                       mode === id
@@ -589,12 +626,18 @@ export function MoveView() {
 
                   {mode === "send" && (
                     <div className="space-y-3">
+                      <div className="rounded-lg border border-lime/20 bg-lime/5 px-3 py-2 text-xs text-mute">
+                        <strong className="text-foreground">How it works:</strong>{" "}
+                        split your vault note → payment ticket + your change.
+                        No <span className="font-mono">0x</span> address field.
+                        Chain sees a transfer proof, not who paid whom.
+                      </div>
                       <div>
                         <label
                           htmlFor="pay-amt"
                           className="text-sm font-medium text-foreground"
                         >
-                          Amount (stays in vault)
+                          Ticket amount (stays in vault)
                         </label>
                         <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
                           <input
@@ -618,7 +661,7 @@ export function MoveView() {
                           </button>
                         </div>
                         <p className="mt-1 text-xs text-mute">
-                          Leftover stays with you as change in the vault.
+                          Leftover stays with you as vault change.
                         </p>
                       </div>
                       <div>
@@ -626,7 +669,7 @@ export function MoveView() {
                           htmlFor="send-pass"
                           className="text-sm font-medium text-foreground"
                         >
-                          Lock with passphrase{" "}
+                          Lock ticket with passphrase{" "}
                           <span className="font-normal text-mute">(optional)</span>
                         </label>
                         <input
@@ -639,8 +682,8 @@ export function MoveView() {
                           className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                         />
                         <p className="mt-1 text-xs text-mute">
-                          Tell the recipient this phrase separately (chat/call).
-                          Leave blank for a plain payment code.
+                          Share the phrase on a different channel (call/chat).
+                          Blank = plain ticket (still a bearer secret).
                         </p>
                       </div>
                       <button
@@ -657,35 +700,14 @@ export function MoveView() {
                       >
                         {working && pendingAction.current === "send"
                           ? status || "Working…"
-                          : "Private send"}
+                          : "Create payment ticket"}
                       </button>
                       {shareBlob && (
-                        <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
-                          <p className="text-sm font-medium text-foreground">
-                            Payment ready
-                            {shareAmountLabel
-                              ? ` · ${shareAmountLabel} ETH`
-                              : ""}
-                          </p>
-                          <p className="mt-1 text-xs text-mute">
-                            Send this code to the recipient. They open Move →
-                            Receive. Anyone with the code
-                            {sendPassphrase.trim()
-                              ? " and passphrase"
-                              : ""}{" "}
-                            can claim it.
-                          </p>
-                          <div className="mt-3 break-all rounded-lg border border-line bg-panel p-3 font-mono text-[11px] text-mute">
-                            {shareBlob}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void copyShare()}
-                            className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-lime/40 text-sm font-medium text-lime hover:bg-lime/10"
-                          >
-                            {copied ? "Copied" : "Copy payment code"}
-                          </button>
-                        </div>
+                        <PaymentTicketShare
+                          code={shareBlob}
+                          amountLabel={shareAmountLabel}
+                          locked={Boolean(sendPassphrase.trim())}
+                        />
                       )}
                     </div>
                   )}
@@ -729,8 +751,8 @@ export function MoveView() {
                     <Link href="/app/shield" className="text-lime hover:underline">
                       Shield
                     </Link>{" "}
-                    first, or open the <strong className="text-foreground">Receive</strong> tab
-                    to paste a payment package.
+                    first, or open <strong className="text-foreground">Claim</strong>{" "}
+                    to paste a payment ticket you received.
                   </p>
                 </div>
               ) : null}
@@ -738,19 +760,24 @@ export function MoveView() {
               {mode === "receive" && (
                 <div className="rounded-xl border border-line bg-background p-4">
                   <p className="text-sm font-medium text-foreground">
-                    Receive a private payment
+                    Claim a payment ticket
                   </p>
                   <p className="mt-1 text-xs text-mute">
-                    Paste the payment code from the sender (
-                    <span className="font-mono">gloam1…</span> or older JSON).
+                    Paste or scan-share the ticket (
+                    <span className="font-mono">gloam1…</span> /{" "}
+                    <span className="font-mono">gloam1e…</span>). No sender
+                    address needed — the ticket is the payment.
                   </p>
                   <textarea
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
                     rows={4}
                     className="mt-3 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
-                    placeholder="gloam1.… or paste full package"
+                    placeholder="gloam1.… or gloam1e.… locked ticket"
                   />
+                  {claimPreview && (
+                    <p className="mt-2 text-xs text-lime">{claimPreview}</p>
+                  )}
                   {(isEncryptedPackage(importText) ||
                     importText.trim().startsWith("gloam1e.")) && (
                     <div className="mt-3">
@@ -766,7 +793,7 @@ export function MoveView() {
                         autoComplete="off"
                         value={importPassphrase}
                         onChange={(e) => setImportPassphrase(e.target.value)}
-                        placeholder="From the sender"
+                        placeholder="From the sender (other channel)"
                         className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                       />
                     </div>
@@ -777,7 +804,7 @@ export function MoveView() {
                     disabled={!importText.trim() || !isConnected}
                     className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                   >
-                    Claim payment
+                    Claim into my vault
                   </button>
                 </div>
               )}
@@ -810,20 +837,25 @@ export function MoveView() {
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-              Does it show on the explorer?
+              Ticket vs traditional send
             </p>
             <ul className="mt-3 space-y-2 text-mute">
               <li>
-                <strong className="text-foreground">Shield / cash out</strong> —
-                yes, those edges are public.
+                <strong className="text-foreground">Traditional</strong> —{" "}
+                <Link href="/app/send" className="text-lime hover:underline">
+                  Send
+                </Link>
+                : you type a <span className="font-mono">0x</span> address;
+                amount is public.
               </li>
               <li>
-                <strong className="text-foreground">Private send</strong> — the
-                chain sees a transfer proof, not “Alice paid Bob 0.01 ETH”.
+                <strong className="text-foreground">Gloam ticket</strong> — no
+                address. Bearer code (optional lock). Chain sees a proof, not
+                “Alice → Bob 0.01”.
               </li>
               <li>
-                Nothing is fully invisible; privacy is about what is hidden, not
-                erasing the chain.
+                <strong className="text-foreground">Cash out</strong> — exit to
+                open wallet is a public edge.
               </li>
             </ul>
           </div>
@@ -845,9 +877,9 @@ export function MoveView() {
         body={
           pendingAction.current === "send" || shareBlob ? (
             <p>
-              Copy the payment code below and send it to the recipient only.
-              Your change (if any) stays in this browser. Do not keep the
-              payment code if you meant it for someone else.
+              Your payment ticket is below (QR / copy / share). Hand it to the
+              recipient only — it is bearer cash. Your vault change stays in
+              this browser. Do not reuse a ticket you already gave away.
             </p>
           ) : (
             <p>Funds should be back in your open wallet.</p>

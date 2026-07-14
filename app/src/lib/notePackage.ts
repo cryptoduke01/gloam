@@ -1,5 +1,6 @@
 /**
- * Portable private-payment packages for Gloam.
+ * Portable **payment tickets** for Gloam vault pay.
+ * Not a traditional address transfer — bearer secret for a vault note.
  * - Compact: gloam1.<base64url>
  * - Optional passphrase: gloam1e.<base64url> (AES-GCM)
  * Still accepts legacy JSON for older shares.
