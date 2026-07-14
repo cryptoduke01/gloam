@@ -28,7 +28,21 @@ if (!pkRaw) {
   console.error("Set DEPLOYER_PK");
   process.exit(1);
 }
-const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
+// strip whitespace / newlines (common when pasting)
+const pkHex = pkRaw.trim().replace(/^0x/i, "");
+if (!/^[0-9a-fA-F]+$/.test(pkHex)) {
+  console.error("DEPLOYER_PK must be hex (0-9, a-f).");
+  process.exit(1);
+}
+if (pkHex.length !== 64) {
+  console.error(
+    `DEPLOYER_PK must be 32 bytes = 64 hex chars (got ${pkHex.length}).\n` +
+      "Often the last character got cut off when exporting. Re-set:\n" +
+      "  export DEPLOYER_PK=0x + 64 hex characters"
+  );
+  process.exit(1);
+}
+const pk = `0x${pkHex}`;
 
 function loadEthers() {
   // Prefer CJS require — works for both v5 and v6 package layouts
