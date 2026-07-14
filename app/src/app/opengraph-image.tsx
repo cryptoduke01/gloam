@@ -1,16 +1,11 @@
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
 export const alt = "Gloam. Private money on Robinhood Chain";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function OpenGraphImage() {
-  // Instrument Serif from Google Fonts for OG (matches site display face)
-  const serif = await fetch(
-    "https://github.com/google/fonts/raw/main/ofl/instrumentserif/InstrumentSerif-Regular.ttf"
-  ).then((r) => r.arrayBuffer()).catch(() => null);
-
+/** System fonts only so the Edge Function stays under the 1MB plan limit. */
+export default function OpenGraphImage() {
   return new ImageResponse(
     (
       <div
@@ -22,7 +17,7 @@ export default async function OpenGraphImage() {
           justifyContent: "space-between",
           background: "#000000",
           padding: "56px 64px",
-          fontFamily: serif ? "Instrument Serif" : "Georgia, serif",
+          fontFamily: "Georgia, Times New Roman, serif",
         }}
       >
         <div
@@ -31,8 +26,8 @@ export default async function OpenGraphImage() {
             alignItems: "center",
             gap: 16,
             color: "#c8ff00",
-            fontSize: 22,
-            fontFamily: "system-ui, sans-serif",
+            fontSize: 20,
+            fontFamily: "ui-sans-serif, system-ui, sans-serif",
             letterSpacing: "0.16em",
             textTransform: "uppercase",
           }}
@@ -48,8 +43,8 @@ export default async function OpenGraphImage() {
               justifyContent: "center",
               color: "#000",
               fontWeight: 700,
-              fontSize: 28,
-              fontFamily: "system-ui, sans-serif",
+              fontSize: 26,
+              fontFamily: "ui-sans-serif, system-ui, sans-serif",
             }}
           >
             G
@@ -60,20 +55,20 @@ export default async function OpenGraphImage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div
             style={{
-              fontSize: 72,
-              lineHeight: 1.05,
+              fontSize: 68,
+              lineHeight: 1.06,
               color: "#ffffff",
-              maxWidth: 900,
+              maxWidth: 920,
             }}
           >
             Private money on Robinhood Chain
           </div>
           <div
             style={{
-              fontSize: 28,
+              fontSize: 26,
               color: "#a3a3a3",
               maxWidth: 780,
-              fontFamily: "system-ui, sans-serif",
+              fontFamily: "ui-sans-serif, system-ui, sans-serif",
               lineHeight: 1.35,
             }}
           >
@@ -92,22 +87,10 @@ export default async function OpenGraphImage() {
           }}
         >
           <span>gloam.trade</span>
-          <span style={{ color: "#666" }}>Chain ID 4663</span>
+          <span style={{ color: "#666666" }}>Chain ID 4663</span>
         </div>
       </div>
     ),
-    {
-      ...size,
-      fonts: serif
-        ? [
-            {
-              name: "Instrument Serif",
-              data: serif,
-              style: "normal" as const,
-              weight: 400 as const,
-            },
-          ]
-        : [],
-    }
+    { ...size }
   );
 }
