@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #000000;
+  --lime: #c8ff00;
+  --mute: #a3a3a3;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-lime: var(--lime);
+  --color-mute: var(--mute);
+}
+
+body {
+  background: #000;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}

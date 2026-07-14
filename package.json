@@ -1,0 +1,19 @@
+{
+  "name": "gloam",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Private money on Robinhood Chain",
+  "scripts": {
+    "dev": "pnpm --filter @gloam/app dev",
+    "dev:app": "pnpm --filter @gloam/app dev",
+    "dev:docs": "pnpm --filter @gloam/docs dev",
+    "build": "pnpm --filter @gloam/app build && pnpm --filter @gloam/docs build",
+    "build:app": "pnpm --filter @gloam/app build",
+    "build:docs": "pnpm --filter @gloam/docs build",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.34.3"
+}
