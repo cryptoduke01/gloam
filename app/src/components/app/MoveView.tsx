@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { formatEther, formatUnits, parseEther } from "viem";
+import { formatEther, formatUnits } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
@@ -31,13 +31,15 @@ import {
   proveTransferInBrowser,
   proveUnshieldInBrowser,
 } from "@/lib/proveClient";
+import { noteNullifierPoseidon } from "@/lib/notePoseidon";
+import { hexToField } from "@/lib/poseidon";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 
-type Mode = "send" | "cashout";
+type Mode = "send" | "cashout" | "receive";
 
 /**
  * Move = private send inside the vault, or cash out (unshield).
@@ -67,6 +69,7 @@ export function MoveView() {
   const [error, setError] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<string | null>(null);
   const [importText, setImportText] = useState("");
+  const [importOk, setImportOk] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [busy, setBusy] = useState(false);
@@ -305,10 +308,12 @@ export function MoveView() {
     }
   }
 
-  function onImportNote() {
+  async function onImportNote() {
     setError(null);
+    setImportOk(null);
     try {
-      const pack = JSON.parse(importText) as {
+      const raw = importText.trim();
+      const pack = JSON.parse(raw) as {
         type?: string;
         secret?: string;
         commitment?: string;
@@ -318,34 +323,69 @@ export function MoveView() {
         scheme?: string;
       };
       if (pack.type !== "gloam-private-note" || !pack.secret || !pack.amountWei) {
-        throw new Error("Not a valid Gloam note package.");
+        throw new Error("Paste the full payment package from the sender.");
       }
       if (!SHIELD_POOL_ADDRESS || !address) {
         throw new Error("Connect wallet first.");
       }
+      if (
+        pack.pool &&
+        pack.pool.toLowerCase() !== SHIELD_POOL_ADDRESS.toLowerCase()
+      ) {
+        throw new Error("This note is for a different vault address.");
+      }
+
+      const asset = (pack.asset as `0x${string}`) ||
+        ("0x0000000000000000000000000000000000000000" as const);
+      const secret = pack.secret as `0x${string}`;
+      const commitment = (pack.commitment || "0x") as `0x${string}`;
+      let nullifier: `0x${string}` | undefined;
+      try {
+        const n = await noteNullifierPoseidon(
+          hexToField(secret),
+          hexToField(commitment)
+        );
+        nullifier =
+          `0x${n.toString(16).padStart(64, "0")}` as `0x${string}`;
+      } catch {
+        /* optional */
+      }
+
+      // Prefer live tree index; fall back after refresh
+      await refreshTree();
+      const idx =
+        leafIndexForCommitment(commitment) ??
+        leafIndexForCommitment(commitment.toLowerCase());
+
       const note: LocalNote = {
         id: `imp-${Date.now()}`,
         chainId: CHAIN,
-        pool: (pack.pool as `0x${string}`) || SHIELD_POOL_ADDRESS,
-        asset: (pack.asset as `0x${string}`) || ("0x0000000000000000000000000000000000000000" as const),
+        pool: SHIELD_POOL_ADDRESS,
+        asset,
         amountWei: pack.amountWei,
-        commitment: (pack.commitment || "0x") as `0x${string}`,
-        secret: pack.secret as `0x${string}`,
+        commitment,
+        secret,
+        nullifier,
         bound: true,
         scheme: "poseidon",
         from: address,
         createdAt: Date.now(),
         status: "open",
         source: "local",
-        // leafIndex filled after resync by matching commitment — user may need resync
+        leafIndex: idx ?? undefined,
+        // No txHash — still spendable (import)
       };
       saveLocalNote(note);
       refreshNotes();
-      void refreshTree();
+      setSelectedId(note.id);
       setImportText("");
-      setStatus(
-        "Note imported. If the sender’s tx is confirmed, Refresh the vault tree, then cash out or send."
+      const ethLabel = formatEth(BigInt(pack.amountWei));
+      setImportOk(
+        idx != null
+          ? `Imported ${ethLabel} ETH — ready under your vault notes. Cash out or send.`
+          : `Imported ${ethLabel} ETH. Tap Refresh on the vault tree if the note doesn’t list yet, then cash out.`
       );
+      setMode("cashout");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
     }
@@ -390,7 +430,8 @@ export function MoveView() {
               <div className="flex gap-1 rounded-lg border border-line p-1">
                 {(
                   [
-                    ["send", "Private send"],
+                    ["send", "Send"],
+                    ["receive", "Receive"],
                     ["cashout", "Cash out"],
                   ] as const
                 ).map(([id, label]) => (
@@ -401,6 +442,7 @@ export function MoveView() {
                       setMode(id);
                       setError(null);
                       setStatus(null);
+                      setImportOk(null);
                     }}
                     className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
                       mode === id
@@ -453,7 +495,13 @@ export function MoveView() {
                 </p>
               )}
 
-              {shieldLive && notes.length > 0 ? (
+              {importOk && (
+                <div className="rounded-xl border border-lime/30 bg-lime/5 px-4 py-3 text-sm text-foreground">
+                  {importOk}
+                </div>
+              )}
+
+              {shieldLive && notes.length > 0 && mode !== "receive" ? (
                 <>
                   <div>
                     <p className="text-sm font-medium text-foreground">
@@ -476,6 +524,11 @@ export function MoveView() {
                                 ? formatEth(BigInt(n.amountWei))
                                 : formatUnits(BigInt(n.amountWei), 18)}{" "}
                               {assetLabel(n.asset)}
+                              {!n.txHash && (
+                                <span className="ml-2 text-[10px] text-lime">
+                                  imported
+                                </span>
+                              )}
                             </span>
                             <span className="font-mono text-[10px]">
                               #{n.leafIndex ?? "?"}
@@ -576,7 +629,8 @@ export function MoveView() {
                           !onProduct ||
                           !selected ||
                           !matchesChain ||
-                          working
+                          working ||
+                          selected?.leafIndex == null
                         }
                         onClick={() => void onCashOut()}
                         className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
@@ -585,44 +639,54 @@ export function MoveView() {
                           ? status || "Working…"
                           : "Cash out to wallet"}
                       </button>
+                      {selected?.leafIndex == null && (
+                        <p className="text-xs text-amber-600 dark:text-amber-500">
+                          Note not linked to the vault tree yet — tap Refresh
+                          above.
+                        </p>
+                      )}
                     </div>
                   )}
                 </>
-              ) : (
+              ) : mode !== "receive" ? (
                 <div className="rounded-xl border border-line bg-background p-4 text-sm text-mute">
                   <p className="text-foreground">No vault notes yet.</p>
                   <p className="mt-1">
                     <Link href="/app/shield" className="text-lime hover:underline">
                       Shield
                     </Link>{" "}
-                    first, or import a note someone sent you.
+                    first, or open the <strong className="text-foreground">Receive</strong> tab
+                    to paste a payment package.
                   </p>
                 </div>
-              )}
+              ) : null}
 
-              {/* Import */}
-              <div className="rounded-xl border border-line bg-background p-4">
-                <p className="text-sm font-medium text-foreground">
-                  Import a private note
-                </p>
-                <p className="mt-1 text-xs text-mute">
-                  Paste the package from a private send.
-                </p>
-                <textarea
-                  value={importText}
-                  onChange={(e) => setImportText(e.target.value)}
-                  rows={4}
-                  className="mt-2 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
-                  placeholder='{ "type": "gloam-private-note", ... }'
-                />
-                <button
-                  type="button"
-                  onClick={onImportNote}
-                  className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-line px-4 text-sm text-foreground hover:border-lime/40"
-                >
-                  Import
-                </button>
-              </div>
+              {mode === "receive" && (
+                <div className="rounded-xl border border-line bg-background p-4">
+                  <p className="text-sm font-medium text-foreground">
+                    Receive a private payment
+                  </p>
+                  <p className="mt-1 text-xs text-mute">
+                    Paste the package the sender copied for you. Keep it secret —
+                    it is the key to that amount in the vault.
+                  </p>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    rows={5}
+                    className="mt-3 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
+                    placeholder="Paste payment package here…"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void onImportNote()}
+                    disabled={!importText.trim() || !isConnected}
+                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                  >
+                    Import payment
+                  </button>
+                </div>
+              )}
 
               {(error || writeError) && (
                 <p role="alert" className="text-sm text-red-500">

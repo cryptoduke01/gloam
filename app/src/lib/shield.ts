@@ -255,12 +255,17 @@ export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
 }
 
 /**
- * Notes you can still spend (have a local secret). Chain-only history rows
- * do not count as balance — they linger after unshield/transfer.
+ * Notes you can still spend (have a local secret).
+ * Includes imports (no txHash yet) and confirmed shields/transfers.
+ * Excludes recovered and chain-history-only rows without a secret.
  */
 export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
-  return confirmedNotes(notes).filter(
-    (n) => Boolean(n.secret) && n.secret !== "0x" && n.secret.length > 10
+  return notes.filter(
+    (n) =>
+      n.status !== "recovered" &&
+      Boolean(n.secret) &&
+      n.secret !== "0x" &&
+      n.secret.length > 10
   );
 }
 
