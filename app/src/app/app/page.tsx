@@ -10,7 +10,7 @@ export default function AppHomePage() {
   return (
     <AppShell
       title="Portfolio"
-      subtitle="Wallet, stocks, and anything you shielded into the pool — testnet only."
+      subtitle="Your open wallet, vault balance, and stocks. Testnet only."
     >
       <PortfolioView />
     </AppShell>

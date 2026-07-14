@@ -278,9 +278,13 @@ export function PortfolioView() {
           {isConnected && hasShield && (
             <div className="border-t border-line bg-lime/5 px-5 py-3 sm:px-6">
               <p className="text-sm text-foreground">
-                Shielded assets sit in the pool — not in Send/Trade.{" "}
+                Vault balance is not in Send/Trade.{" "}
                 <Link href="/app/shield" className="text-lime hover:underline">
-                  Manage on Shield →
+                  Shield more
+                </Link>
+                {" · "}
+                <Link href="/app/move" className="text-lime hover:underline">
+                  Move / cash out
                 </Link>
               </p>
             </div>
@@ -305,36 +309,48 @@ export function PortfolioView() {
             </div>
           )}
           {isConnected && address && (
-            <div className="flex items-center justify-between border-t border-line px-5 py-2.5 sm:px-6">
+            <div className="space-y-3 border-t border-line px-5 py-4 sm:px-6">
               <AddressChip address={address} />
-              <div className="flex flex-wrap gap-1">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Link
                   href="/app/send"
-                  className="inline-flex min-h-8 items-center rounded-full bg-lime px-3 text-[11px] font-semibold text-black"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-lime px-3 text-sm font-semibold text-black hover:opacity-90 active:scale-[0.98]"
                 >
                   Send
                 </Link>
-                {shieldLive && (
+                {shieldLive ? (
                   <Link
                     href="/app/shield"
-                    className="inline-flex min-h-8 items-center rounded-full border border-lime/40 px-3 text-[11px] font-medium text-lime"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-lime/40 px-3 text-sm font-medium text-lime hover:bg-lime/10 active:scale-[0.98]"
                   >
                     Shield
                   </Link>
+                ) : (
+                  <span className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm text-mute opacity-50">
+                    Shield
+                  </span>
                 )}
                 <Link
                   href="/app/trade"
-                  className="inline-flex min-h-8 items-center rounded-full border border-line px-3 text-[11px] text-foreground"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
                 >
                   Trade
                 </Link>
                 <Link
                   href="/app/markets"
-                  className="inline-flex min-h-8 items-center rounded-full border border-line px-3 text-[11px] text-mute hover:text-foreground"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
                 >
                   Markets
                 </Link>
               </div>
+              {shieldLive && (
+                <Link
+                  href="/app/move"
+                  className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-line text-sm text-mute hover:border-lime/40 hover:text-foreground"
+                >
+                  Move · private send & cash out
+                </Link>
+              )}
             </div>
           )}
         </div>

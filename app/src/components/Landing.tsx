@@ -104,18 +104,10 @@ export function Landing() {
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <MotionPress>
                   <Link
-                    href="/app"
+                    href="/docs"
                     className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
                   >
-                    Launch testnet
-                  </Link>
-                </MotionPress>
-                <MotionPress>
-                  <Link
-                    href="/docs"
-                    className="inline-flex min-h-11 items-center rounded-md border border-line px-5 text-sm font-medium text-foreground hover:border-mute"
-                  >
-                    Docs
+                    Read the docs
                   </Link>
                 </MotionPress>
                 <MotionPress>

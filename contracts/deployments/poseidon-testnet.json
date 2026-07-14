@@ -11,7 +11,10 @@
     "Poseidon3": "0x3242C523B5101c436e1AC74224598335E4f8F054",
     "UnshieldVerifier": "0x1CdEf210C65616D7059397022BE3564fa742AED6",
     "UnshieldIVerifier": "0xa40eCfBbB91D53dc66bf18E312228790751c3034",
-    "ShieldPoolPoseidon": "0xA488809a089F003A2B6E69daa65B0db79823c93B"
+    "ShieldPoolPoseidon": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+    "TransferVerifier": "0x281Fe05bbD9f777fd26E1fF88d5b3BF094894719",
+    "TransferIVerifier": "0x73fe891fF323F7eBB730F8b6220fBc4D3d9648B1",
+    "DualProofVerifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C"
   },
   "deployer": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
   "deployedAt": "2026-07-14T20:54:13.980Z",
@@ -20,5 +23,9 @@
     "NEXT_PUBLIC_HASH_SCHEME": "poseidon",
     "NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK": "90260331"
   },
-  "notes": "Phase-2 Poseidon pool with real unshield verifier (dev ceremony keys). App defaults to this pool. Legacy keccak: 0x2BD98196D90AB45D58843B4c8B8809aa34343d35."
+  "notes": "Phase-2 Poseidon pool. DualProofVerifier routes unshield (5 inputs) and transfer (4). Dev ceremony keys. Legacy keccak: 0x2BD98196D90AB45D58843B4c8B8809aa34343d35.",
+  "privateSend": true,
+  "verifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C",
+  "setVerifierTx": "0x72a8b58f9dd52295a7629d40ffbd1ca78c4c0b585b81acbcef377780f9994702",
+  "updatedAt": "2026-07-14T21:45:50.925Z"
 }
