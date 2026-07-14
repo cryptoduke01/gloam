@@ -17,6 +17,13 @@ import {
   openWithPassphrase,
   sealWithPassphrase,
 } from "@/lib/secretBox";
+import {
+  CIRCUIT_ARTIFACTS,
+  PROVING_CEREMONY,
+  assertTransferArtifacts,
+  assertUnshieldArtifacts,
+} from "@/lib/circuitArtifacts";
+import { resetOnboarding } from "@/lib/onboarding";
 import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { WalletMenu } from "./WalletMenu";
@@ -93,6 +100,8 @@ export function SettingsView() {
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [backupImport, setBackupImport] = useState("");
   const [backupPass, setBackupPass] = useState("");
+  const [integrityMsg, setIntegrityMsg] = useState<string | null>(null);
+  const [integrityBusy, setIntegrityBusy] = useState(false);
 
   useEffect(() => {
     if (!copied) return;
@@ -481,6 +490,81 @@ export function SettingsView() {
             {backupMsg}
           </p>
         )}
+      </section>
+
+      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          Proving artifacts
+        </p>
+        <p className="mt-2 text-sm text-mute">
+          Ceremony:{" "}
+          <strong className="text-foreground">{PROVING_CEREMONY}</strong>
+          {PROVING_CEREMONY === "dev"
+            ? " — not for real money."
+            : " — production fingerprints."}
+        </p>
+        <ul className="mt-3 space-y-1 font-mono text-[11px] text-mute">
+          {(
+            [
+              ["unshield zkey", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
+              ["transfer zkey", CIRCUIT_ARTIFACTS.transferZkey.sha256],
+              ["unshield wasm", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
+              ["transfer wasm", CIRCUIT_ARTIFACTS.transferWasm.sha256],
+            ] as const
+          ).map(([label, hash]) => (
+            <li key={label}>
+              {label}:{" "}
+              <span className="text-foreground">
+                {hash.slice(0, 12)}…{hash.slice(-8)}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          disabled={integrityBusy}
+          onClick={() => {
+            void (async () => {
+              setIntegrityBusy(true);
+              setIntegrityMsg(null);
+              try {
+                await assertUnshieldArtifacts();
+                await assertTransferArtifacts();
+                setIntegrityMsg("All four artifacts match expected SHA-256.");
+              } catch (e) {
+                setIntegrityMsg(
+                  e instanceof Error ? e.message : "Integrity check failed"
+                );
+              } finally {
+                setIntegrityBusy(false);
+              }
+            })();
+          }}
+          className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
+        >
+          {integrityBusy ? "Checking…" : "Verify circuit files"}
+        </button>
+        {integrityMsg && (
+          <p className="mt-2 text-sm text-mute" role="status">
+            {integrityMsg}
+          </p>
+        )}
+        <p className="mt-4 text-xs text-mute">
+          <a href="/docs/production" className="text-lime hover:underline">
+            Production gate
+          </a>
+          {" · "}
+          <button
+            type="button"
+            className="text-lime hover:underline"
+            onClick={() => {
+              resetOnboarding();
+              setIntegrityMsg("Start checklist restored on Portfolio.");
+            }}
+          >
+            Show start checklist
+          </button>
+        </p>
       </section>
     </div>
   );

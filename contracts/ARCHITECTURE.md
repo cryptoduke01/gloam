@@ -41,8 +41,8 @@ Legacy keccak Phase-1 pool `0x2BD9…` remains on-chain but is not the product d
 | 1 | Keccak pool, shield only | Live (legacy) |
 | 2 | Poseidon pool, unshield + transfer, dual verifier | **Live (dev keys)** |
 | 3a | Vault trade adapter (unshield → DEX → reshield) | **App live** |
-| 3b | Sealed-size private trade | Not shipped |
-| Prod | Ceremony keys + audit + mainnet | Blocked |
+| 3b | Sealed-size private trade | Design only — [SEALED_TRADE.md](./SEALED_TRADE.md) |
+| Prod | Ceremony keys + audit + mainnet | Blocked — [PRODUCTION.md](./PRODUCTION.md) |
 
 ## Note scheme (Poseidon)
 

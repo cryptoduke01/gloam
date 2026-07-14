@@ -32,6 +32,7 @@ import {
 } from "@/lib/shield";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
+import { OnboardingCard } from "./OnboardingCard";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
@@ -159,6 +160,8 @@ export function PortfolioView() {
           Get testnet ETH →
         </a>
       </div>
+
+      <OnboardingCard />
 
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-8">

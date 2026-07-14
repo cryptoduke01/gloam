@@ -83,9 +83,24 @@ export default function DocsSealedTradePage() {
         <li>Promise dark-pool guarantees on thin testnet liquidity</li>
       </ul>
 
+      <h2>Repo pointers</h2>
+      <ul>
+        <li>
+          Engineering design: <code>contracts/SEALED_TRADE.md</code>
+        </li>
+        <li>
+          Type placeholders only: <code>app/src/lib/sealedTrade.ts</code> (
+          <code>sealedTradeReady() === false</code>)
+        </li>
+        <li>
+          Production keys gate: <Link href="/docs/production">/docs/production</Link>
+        </li>
+      </ul>
+
       <p>
-        Try the adapter: <Link href="/app/trade?path=vault">Trade → From vault</Link>
-        . Hold/move: <Link href="/app/move">Move</Link>.
+        Try the adapter:{" "}
+        <Link href="/app/trade?path=vault">Trade → From vault</Link>. Hold/move:{" "}
+        <Link href="/app/move">Move</Link>.
       </p>
     </DocsLayout>
   );
