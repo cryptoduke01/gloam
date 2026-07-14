@@ -57,6 +57,12 @@ export function useShieldTree() {
     return synced.pathForLeaf(leafIndex);
   }
 
+  function leafIndexForCommitment(commitment?: string | null): number | null {
+    if (!synced || !commitment) return null;
+    const i = synced.indexByCommitment.get(commitment.toLowerCase());
+    return i === undefined ? null : i;
+  }
+
   return {
     synced,
     matchesChain,
@@ -64,6 +70,7 @@ export function useShieldTree() {
     error,
     refresh,
     pathForLeaf,
+    leafIndexForCommitment,
     leafCount: synced?.leafCount ?? 0,
     root: synced?.root ?? null,
     scheme: synced?.scheme ?? null,

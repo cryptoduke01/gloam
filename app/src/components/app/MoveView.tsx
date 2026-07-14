@@ -56,6 +56,7 @@ export function MoveView() {
     matchesChain,
     leafCount,
     pathForLeaf,
+    leafIndexForCommitment,
     refresh: refreshTree,
   } = useShieldTree();
 
@@ -120,18 +121,23 @@ export function MoveView() {
     setBusy(false);
   }, [isSuccess, hash, refreshNotes, refreshTree]);
 
-  const notes = useMemo(
-    () =>
-      open.filter(
+  // Resolve leafIndex from tree when import left it missing
+  const notes = useMemo(() => {
+    return open
+      .filter(
         (n) =>
           n.bound &&
           n.secret &&
           n.secret !== "0x" &&
-          n.leafIndex != null &&
           (!poseidonMode || n.scheme === "poseidon" || !n.scheme)
-      ),
-    [open, poseidonMode]
-  );
+      )
+      .map((n) => {
+        if (n.leafIndex != null) return n;
+        const idx = leafIndexForCommitment(n.commitment);
+        return idx != null ? { ...n, leafIndex: idx } : n;
+      })
+      .filter((n) => n.leafIndex != null);
+  }, [open, poseidonMode, leafIndexForCommitment]);
 
   const selected =
     notes.find((n) => n.id === selectedId) ?? notes[0] ?? null;
@@ -335,9 +341,10 @@ export function MoveView() {
       };
       saveLocalNote(note);
       refreshNotes();
+      void refreshTree();
       setImportText("");
       setStatus(
-        "Note imported. Resync the tree; after the sender’s tx confirms, you can cash out or send again."
+        "Note imported. If the sender’s tx is confirmed, Refresh the vault tree, then cash out or send."
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");

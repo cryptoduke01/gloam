@@ -1,8 +1,12 @@
 /**
- * Rebuild ShieldPool Merkle tree from on-chain Shielded events.
+ * Rebuild ShieldPool Merkle tree from on-chain insertions:
+ *   - Shielded → one leaf (commitment)
+ *   - Transferred → two leaves (payment, change) in that order
+ *
+ * Private send only emits Transferred — ignoring it makes root mismatch.
  */
 
-import type { Address, Hex, PublicClient } from "viem";
+import type { Address, Hex, Log, PublicClient } from "viem";
 import {
   HASH_SCHEME,
   SHIELD_DEPLOY_BLOCK,
@@ -18,10 +22,14 @@ import { fieldToHex, hexToField } from "./poseidon";
 export type ChainLeaf = {
   leafIndex: number;
   commitment: Hex;
-  asset: Address;
-  amount: bigint;
-  from: Address;
+  /** shield | transfer-pay | transfer-change */
+  kind: "shield" | "transfer";
+  asset?: Address;
+  amount?: bigint;
+  from?: Address;
   txHash?: Hex;
+  blockNumber?: bigint;
+  logIndex?: number;
 };
 
 export type SyncedTree = {
@@ -29,71 +37,155 @@ export type SyncedTree = {
   leaves: ChainLeaf[];
   root: Hex;
   leafCount: number;
-  pathForLeaf: (leafIndex: number) => Promise<MerklePath | PoseidonMerklePath | null>;
+  /** Look up leaf index by commitment hex */
+  indexByCommitment: Map<string, number>;
+  pathForLeaf: (
+    leafIndex: number
+  ) => Promise<MerklePath | PoseidonMerklePath | null>;
 };
+
+type OrderedInsert = {
+  commitment: Hex;
+  kind: "shield" | "transfer";
+  asset?: Address;
+  amount?: bigint;
+  from?: Address;
+  txHash?: Hex;
+  blockNumber: bigint;
+  logIndex: number;
+  /** order within same log (0,1 for transfer pair) */
+  subIndex: number;
+};
+
+function logKey(log: Log) {
+  return {
+    blockNumber: log.blockNumber ?? 0n,
+    logIndex: log.logIndex ?? 0,
+    txHash: log.transactionHash as Hex | undefined,
+  };
+}
 
 export async function syncShieldTree(
   client: PublicClient
 ): Promise<SyncedTree | null> {
   if (!SHIELD_POOL_ADDRESS) return null;
 
-  const logs = await client.getLogs({
-    address: SHIELD_POOL_ADDRESS,
-    event: {
-      type: "event",
-      name: "Shielded",
-      inputs: [
-        { name: "commitment", type: "bytes32", indexed: true },
-        { name: "asset", type: "address", indexed: true },
-        { name: "amount", type: "uint256", indexed: false },
-        { name: "leafIndex", type: "uint256", indexed: false },
-        { name: "from", type: "address", indexed: true },
-      ],
-    },
-    fromBlock: SHIELD_DEPLOY_BLOCK,
-    toBlock: "latest",
+  const [shieldLogs, transferLogs] = await Promise.all([
+    client.getLogs({
+      address: SHIELD_POOL_ADDRESS,
+      event: {
+        type: "event",
+        name: "Shielded",
+        inputs: [
+          { name: "commitment", type: "bytes32", indexed: true },
+          { name: "asset", type: "address", indexed: true },
+          { name: "amount", type: "uint256", indexed: false },
+          { name: "leafIndex", type: "uint256", indexed: false },
+          { name: "from", type: "address", indexed: true },
+        ],
+      },
+      fromBlock: SHIELD_DEPLOY_BLOCK,
+      toBlock: "latest",
+    }),
+    client.getLogs({
+      address: SHIELD_POOL_ADDRESS,
+      event: {
+        type: "event",
+        name: "Transferred",
+        inputs: [
+          { name: "nullifier", type: "bytes32", indexed: true },
+          { name: "newCommitments", type: "bytes32[2]", indexed: false },
+        ],
+      },
+      fromBlock: SHIELD_DEPLOY_BLOCK,
+      toBlock: "latest",
+    }),
+  ]);
+
+  const inserts: OrderedInsert[] = [];
+
+  for (const log of shieldLogs) {
+    const args = log.args as {
+      commitment?: Hex;
+      asset?: Address;
+      amount?: bigint;
+      from?: Address;
+    };
+    const meta = logKey(log);
+    inserts.push({
+      commitment: (args.commitment ??
+        "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex,
+      kind: "shield",
+      asset: args.asset,
+      amount: args.amount,
+      from: args.from,
+      txHash: meta.txHash,
+      blockNumber: meta.blockNumber,
+      logIndex: meta.logIndex,
+      subIndex: 0,
+    });
+  }
+
+  for (const log of transferLogs) {
+    const args = log.args as {
+      newCommitments?: readonly [Hex, Hex];
+    };
+    const pair = args.newCommitments;
+    if (!pair) continue;
+    const meta = logKey(log);
+    inserts.push({
+      commitment: pair[0],
+      kind: "transfer",
+      txHash: meta.txHash,
+      blockNumber: meta.blockNumber,
+      logIndex: meta.logIndex,
+      subIndex: 0,
+    });
+    inserts.push({
+      commitment: pair[1],
+      kind: "transfer",
+      txHash: meta.txHash,
+      blockNumber: meta.blockNumber,
+      logIndex: meta.logIndex,
+      subIndex: 1,
+    });
+  }
+
+  inserts.sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber)
+      return a.blockNumber < b.blockNumber ? -1 : 1;
+    if (a.logIndex !== b.logIndex) return a.logIndex - b.logIndex;
+    return a.subIndex - b.subIndex;
   });
 
-  const leaves: ChainLeaf[] = logs
-    .map((log) => {
-      const args = log.args as {
-        commitment?: Hex;
-        asset?: Address;
-        amount?: bigint;
-        leafIndex?: bigint;
-        from?: Address;
-      };
-      return {
-        leafIndex: Number(args.leafIndex ?? 0),
-        commitment: (args.commitment ??
-          "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex,
-        asset: (args.asset ??
-          "0x0000000000000000000000000000000000000000") as Address,
-        amount: args.amount ?? BigInt(0),
-        from: (args.from ??
-          "0x0000000000000000000000000000000000000000") as Address,
-        txHash: log.transactionHash as Hex | undefined,
-      };
-    })
-    .sort((a, b) => a.leafIndex - b.leafIndex);
+  const leaves: ChainLeaf[] = [];
+  const indexByCommitment = new Map<string, number>();
 
   if (HASH_SCHEME === "poseidon") {
     const tree = new IncrementalMerkleTreePoseidon();
     await tree.init();
-    for (const leaf of leaves) {
-      if (leaf.leafIndex !== tree.nextIndex) {
-        if (leaf.leafIndex < tree.nextIndex) continue;
-        throw new Error(
-          `Leaf gap: expected ${tree.nextIndex}, got ${leaf.leafIndex}`
-        );
-      }
-      await tree.insert(hexToField(leaf.commitment));
+    for (const ins of inserts) {
+      const leafIndex = tree.nextIndex;
+      await tree.insert(hexToField(ins.commitment));
+      leaves.push({
+        leafIndex,
+        commitment: ins.commitment,
+        kind: ins.kind,
+        asset: ins.asset,
+        amount: ins.amount,
+        from: ins.from,
+        txHash: ins.txHash,
+        blockNumber: ins.blockNumber,
+        logIndex: ins.logIndex,
+      });
+      indexByCommitment.set(ins.commitment.toLowerCase(), leafIndex);
     }
     return {
       scheme: "poseidon",
       leaves,
       root: fieldToHex(tree.currentRoot),
       leafCount: tree.nextIndex,
+      indexByCommitment,
       pathForLeaf: async (i) => {
         try {
           return await tree.path(i);
@@ -105,14 +197,21 @@ export async function syncShieldTree(
   }
 
   const tree = new IncrementalMerkleTree();
-  for (const leaf of leaves) {
-    if (leaf.leafIndex !== tree.nextIndex) {
-      if (leaf.leafIndex < tree.nextIndex) continue;
-      throw new Error(
-        `Leaf gap: expected ${tree.nextIndex}, got ${leaf.leafIndex}`
-      );
-    }
-    tree.insert(leaf.commitment);
+  for (const ins of inserts) {
+    const leafIndex = tree.nextIndex;
+    tree.insert(ins.commitment);
+    leaves.push({
+      leafIndex,
+      commitment: ins.commitment,
+      kind: ins.kind,
+      asset: ins.asset,
+      amount: ins.amount,
+      from: ins.from,
+      txHash: ins.txHash,
+      blockNumber: ins.blockNumber,
+      logIndex: ins.logIndex,
+    });
+    indexByCommitment.set(ins.commitment.toLowerCase(), leafIndex);
   }
 
   return {
@@ -120,6 +219,7 @@ export async function syncShieldTree(
     leaves,
     root: tree.currentRoot,
     leafCount: tree.nextIndex,
+    indexByCommitment,
     pathForLeaf: async (i) => {
       try {
         return tree.path(i);
