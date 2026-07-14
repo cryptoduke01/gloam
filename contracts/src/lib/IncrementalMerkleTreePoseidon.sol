@@ -10,7 +10,7 @@ import {IPoseidon2} from "./IPoseidon.sol";
  */
 library IncrementalMerkleTreePoseidon {
     uint256 internal constant DEPTH = 20;
-    uint256 internal constant MAX_LEAVES = 1 << DEPTH;
+    uint256 internal constant MAX_LEAVES = uint256(1) << DEPTH;
 
     struct Tree {
         uint256 nextIndex;

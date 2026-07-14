@@ -9,7 +9,7 @@ pragma solidity ^0.8.24;
  */
 library IncrementalMerkleTree {
     uint256 internal constant DEPTH = 20;
-    uint256 internal constant MAX_LEAVES = 1 << DEPTH;
+    uint256 internal constant MAX_LEAVES = uint256(1) << DEPTH;
 
     struct Tree {
         uint256 nextIndex;

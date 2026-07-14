@@ -3,11 +3,15 @@
  * Deploy Phase-2 Poseidon stack to Robinhood testnet:
  *   Poseidon2, Poseidon3, UnshieldVerifier, UnshieldIVerifier, ShieldPoolPoseidon
  *
+ * Supports ethers v5 (pulled by circomlibjs) and v6.
+ *
  *   export DEPLOYER_PK=0x...
  *   export RPC_URL=https://rpc.testnet.chain.robinhood.com
  *   node scripts/deploy-phase2.mjs
  *
  * Writes ../../deployments/poseidon-testnet.json
+ *
+ * NEVER commit DEPLOYER_PK. If you pasted a key in chat, rotate it.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
@@ -17,36 +21,61 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "../..");
-const circuits = join(__dirname, "..");
 
 const RPC = process.env.RPC_URL || "https://rpc.testnet.chain.robinhood.com";
-const pk = process.env.DEPLOYER_PK;
-if (!pk) {
+const pkRaw = process.env.DEPLOYER_PK;
+if (!pkRaw) {
   console.error("Set DEPLOYER_PK");
   process.exit(1);
+}
+const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
+
+function loadEthers() {
+  // Prefer CJS require — works for both v5 and v6 package layouts
+  const ethers = require("ethers");
+  return ethers.ethers ?? ethers;
+}
+
+function isV6(ethers) {
+  return typeof ethers.JsonRpcProvider === "function";
 }
 
 async function main() {
   const { poseidonContract } = await import("circomlibjs");
-  const { ethers } = await import("ethers");
+  const ethers = loadEthers();
+  const v6 = isV6(ethers);
 
-  const provider = new ethers.JsonRpcProvider(RPC);
-  const wallet = new ethers.Wallet(
-    pk.startsWith("0x") ? pk : `0x${pk}`,
-    provider
-  );
+  const provider = v6
+    ? new ethers.JsonRpcProvider(RPC)
+    : new ethers.providers.JsonRpcProvider(RPC);
+
+  const wallet = new ethers.Wallet(pk, provider);
+  console.log("ethers", ethers.version || (v6 ? "v6" : "v5"));
   console.log("deployer", wallet.address);
+
   const bal = await provider.getBalance(wallet.address);
-  console.log("balance", ethers.formatEther(bal), "ETH");
+  const balEth = v6
+    ? ethers.formatEther(bal)
+    : ethers.utils.formatEther(bal);
+  console.log("balance", balEth, "ETH");
+
+  async function waitDeployed(contract) {
+    if (v6) {
+      await contract.waitForDeployment();
+      return await contract.getAddress();
+    }
+    await contract.deployed();
+    return contract.address;
+  }
 
   async function deployPoseidon(n) {
     const abi = poseidonContract.generateABI(n);
-    const bytecode = poseidonContract.createCode(n);
+    let bytecode = poseidonContract.createCode(n);
+    if (!bytecode.startsWith("0x")) bytecode = `0x${bytecode}`;
     const factory = new ethers.ContractFactory(abi, bytecode, wallet);
     console.log(`deploying Poseidon${n}...`);
     const c = await factory.deploy();
-    await c.waitForDeployment();
-    const addr = await c.getAddress();
+    const addr = await waitDeployed(c);
     console.log(`Poseidon${n}`, addr);
     return addr;
   }
@@ -54,24 +83,21 @@ async function main() {
   function loadArtifact(name) {
     const p = join(root, "out", name, `${name}.json`);
     if (!existsSync(p)) {
-      throw new Error(
-        `Missing ${p} — run: cd contracts && forge build`
-      );
+      throw new Error(`Missing ${p} — run: cd contracts && forge build`);
     }
     return JSON.parse(readFileSync(p, "utf8"));
   }
 
   async function deployArtifact(name, args = []) {
     const art = loadArtifact(name);
-    const factory = new ethers.ContractFactory(
-      art.abi,
-      art.bytecode.object,
-      wallet
-    );
+    const bytecode =
+      typeof art.bytecode === "string"
+        ? art.bytecode
+        : art.bytecode.object;
+    const factory = new ethers.ContractFactory(art.abi, bytecode, wallet);
     console.log(`deploying ${name}...`, args);
     const c = await factory.deploy(...args);
-    await c.waitForDeployment();
-    const addr = await c.getAddress();
+    const addr = await waitDeployed(c);
     console.log(name, addr);
     return addr;
   }
@@ -88,12 +114,23 @@ async function main() {
   ]);
 
   const net = await provider.getNetwork();
+  const chainId = Number(net.chainId ?? net.chainId);
+
+  // best-effort deploy block
+  let deployBlock = null;
+  try {
+    deployBlock = await provider.getBlockNumber();
+  } catch {
+    /* ignore */
+  }
+
   const out = {
-    chainId: Number(net.chainId),
+    chainId,
     network: "Robinhood Chain Testnet",
     rpc: RPC,
     hashScheme: "poseidon",
     proofLayout: 2,
+    deployBlock,
     contracts: {
       Poseidon2: poseidon2,
       Poseidon3: poseidon3,
@@ -113,6 +150,12 @@ async function main() {
   writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log("wrote", outPath);
   console.log(JSON.stringify(out, null, 2));
+  console.log("\nApp env:");
+  console.log(`NEXT_PUBLIC_POSEIDON_SHIELD_POOL=${pool}`);
+  console.log("NEXT_PUBLIC_HASH_SCHEME=poseidon");
+  if (deployBlock != null) {
+    console.log(`NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=${deployBlock}`);
+  }
 }
 
 main().catch((e) => {
