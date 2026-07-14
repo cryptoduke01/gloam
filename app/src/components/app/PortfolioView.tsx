@@ -9,7 +9,7 @@ import {
   useReadContracts,
 } from "wagmi";
 import { AsciiImage } from "@/components/AsciiImage";
-import { PRODUCT_CHAIN_ID, formatEth, shortAddress } from "@/lib/chain";
+import { PRODUCT_CHAIN_ID, formatEth } from "@/lib/chain";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
@@ -20,9 +20,9 @@ import {
 } from "@/lib/markets";
 import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
 import { ActivityFeed } from "./ActivityFeed";
+import { AddressChip } from "./AddressChip";
 import { ConnectButton } from "./ConnectButton";
 import { NetworkPulse } from "./NetworkPulse";
-import { ReceiveCard } from "./ReceiveCard";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
@@ -104,9 +104,8 @@ export function PortfolioView() {
         </a>
       </div>
 
-      {/* Net worth */}
       <div className="grid gap-4 lg:grid-cols-12">
-        <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-7">
+        <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-8">
           <div className="relative h-40 border-b border-line sm:h-44">
             <AsciiImage
               src="/ascii/shield.png"
@@ -115,12 +114,11 @@ export function PortfolioView() {
               className="h-full w-full opacity-40"
               sizes="60vw"
             />
-            {/* Strong scrim so balance text always reads */}
             <div className="absolute inset-0 bg-gradient-to-t from-panel via-panel/90 to-panel/50" />
             <div className="absolute inset-0 bg-panel/30" />
             <div className="absolute bottom-4 left-4 right-4 sm:bottom-5 sm:left-5">
               <StatusPill tone="lime">Portfolio</StatusPill>
-              <p className="mt-2 font-display text-3xl tracking-tight text-foreground drop-shadow-sm sm:text-4xl">
+              <p className="mt-2 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
                 {totalUsd != null && settings.showUsd
                   ? formatUsd(totalUsd)
                   : isConnected
@@ -169,9 +167,7 @@ export function PortfolioView() {
                   ? formatUsd(stocksUsd)
                   : `${positions.filter((p) => p.raw > BigInt(0)).length} tokens`}
               </p>
-              <p className="mt-0.5 text-xs text-mute">
-                From faucet · live marks
-              </p>
+              <p className="mt-0.5 text-xs text-mute">Faucet · live marks</p>
             </div>
           </div>
 
@@ -193,50 +189,38 @@ export function PortfolioView() {
               </div>
             </div>
           )}
-          {isConnected && address && onProduct && (
-            <div className="border-t border-line px-5 py-3 font-mono text-[11px] text-mute sm:px-6">
-              {shortAddress(address, 6)}
+          {isConnected && address && (
+            <div className="flex items-center justify-between border-t border-line px-5 py-2.5 sm:px-6">
+              <AddressChip address={address} />
+              <div className="flex flex-wrap gap-1">
+                <Link
+                  href="/app/send"
+                  className="inline-flex min-h-8 items-center rounded-full bg-lime px-3 text-[11px] font-semibold text-black"
+                >
+                  Send
+                </Link>
+                <Link
+                  href="/app/trade"
+                  className="inline-flex min-h-8 items-center rounded-full border border-line px-3 text-[11px] text-foreground"
+                >
+                  Trade
+                </Link>
+                <Link
+                  href="/app/markets"
+                  className="inline-flex min-h-8 items-center rounded-full border border-line px-3 text-[11px] text-mute hover:text-foreground"
+                >
+                  Markets
+                </Link>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-3 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Quick
-            </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <Link
-                href="/app/send"
-                className="inline-flex min-h-9 items-center rounded-full bg-lime px-3.5 text-xs font-semibold text-black hover:opacity-90"
-              >
-                Send
-              </Link>
-              <Link
-                href="/app/trade"
-                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-foreground hover:border-mute"
-              >
-                Trade
-              </Link>
-              <Link
-                href="/app/markets"
-                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-foreground hover:border-mute"
-              >
-                Markets
-              </Link>
-              <Link
-                href="/app/settings"
-                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-mute hover:text-foreground"
-              >
-                Settings
-              </Link>
-            </div>
-          </div>
-          <ReceiveCard />
+        <div className="lg:col-span-4">
+          <ActivityFeed />
         </div>
       </div>
 
-      {/* Holdings */}
       <div>
         <div className="mb-3 flex items-center justify-between">
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
@@ -264,7 +248,13 @@ export function PortfolioView() {
                     <p className="text-xs text-mute">{p.name}</p>
                   </div>
                   <Sparkline
-                    points={p.spark}
+                    points={
+                      p.spark.length >= 2
+                        ? p.spark
+                        : p.mark > 0
+                          ? [p.mark * 0.98, p.mark * 1.01, p.mark]
+                          : []
+                    }
                     up={p.change24h >= 0}
                     width={72}
                     height={28}
@@ -291,8 +281,6 @@ export function PortfolioView() {
           )}
         </div>
       </div>
-
-      <ActivityFeed />
     </div>
   );
 }
