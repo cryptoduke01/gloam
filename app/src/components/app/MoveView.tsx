@@ -34,6 +34,14 @@ import {
 import { noteNullifierPoseidon } from "@/lib/notePoseidon";
 import { hexToField } from "@/lib/poseidon";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
+import {
+  buildNotePackage,
+  decodeNotePackage,
+  encodeNotePackage,
+  encodeNotePackageEncrypted,
+  formatAmountEth,
+  isEncryptedPackage,
+} from "@/lib/notePackage";
 import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
@@ -68,11 +76,15 @@ export function MoveView() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<string | null>(null);
+  const [shareAmountLabel, setShareAmountLabel] = useState<string | null>(null);
+  const [sendPassphrase, setSendPassphrase] = useState("");
   const [importText, setImportText] = useState("");
+  const [importPassphrase, setImportPassphrase] = useState("");
   const [importOk, setImportOk] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const {
     writeContract,
@@ -269,19 +281,20 @@ export function MoveView() {
             }
           : null;
 
-      // Share package for recipient (they import it)
-      const pack = {
-        v: 1,
-        type: "gloam-private-note",
-        scheme: "poseidon",
+      // Share package for recipient (compact, optional lock)
+      const pack = buildNotePackage({
         pool: SHIELD_POOL_ADDRESS,
         asset: w.paymentNote.asset,
         amountWei: w.paymentNote.amountWei,
         secret: w.paymentNote.secret,
         commitment: w.paymentNote.commitment,
-        message: "Import this in Gloam → Move → Import note. Keep secret.",
-      };
-      setShareBlob(JSON.stringify(pack, null, 2));
+      });
+      const share = sendPassphrase.trim()
+        ? await encodeNotePackageEncrypted(pack, sendPassphrase)
+        : encodeNotePackage(pack);
+      setShareBlob(share);
+      setShareAmountLabel(formatAmountEth(w.paymentNote.amountWei));
+      setCopied(false);
 
       setStatus("Confirm private send in your wallet…");
       writeContract({
@@ -312,33 +325,23 @@ export function MoveView() {
     setError(null);
     setImportOk(null);
     try {
-      const raw = importText.trim();
-      const pack = JSON.parse(raw) as {
-        type?: string;
-        secret?: string;
-        commitment?: string;
-        amountWei?: string;
-        asset?: string;
-        pool?: string;
-        scheme?: string;
-      };
-      if (pack.type !== "gloam-private-note" || !pack.secret || !pack.amountWei) {
-        throw new Error("Paste the full payment package from the sender.");
-      }
       if (!SHIELD_POOL_ADDRESS || !address) {
         throw new Error("Connect wallet first.");
       }
+      const pack = await decodeNotePackage(
+        importText,
+        importPassphrase || undefined
+      );
       if (
         pack.pool &&
         pack.pool.toLowerCase() !== SHIELD_POOL_ADDRESS.toLowerCase()
       ) {
-        throw new Error("This note is for a different vault address.");
+        throw new Error("This payment is for a different vault.");
       }
 
-      const asset = (pack.asset as `0x${string}`) ||
-        ("0x0000000000000000000000000000000000000000" as const);
-      const secret = pack.secret as `0x${string}`;
-      const commitment = (pack.commitment || "0x") as `0x${string}`;
+      const asset = pack.asset;
+      const secret = pack.secret;
+      const commitment = pack.commitment;
       let nullifier: `0x${string}` | undefined;
       try {
         const n = await noteNullifierPoseidon(
@@ -351,11 +354,8 @@ export function MoveView() {
         /* optional */
       }
 
-      // Prefer live tree index; fall back after refresh
       await refreshTree();
-      const idx =
-        leafIndexForCommitment(commitment) ??
-        leafIndexForCommitment(commitment.toLowerCase());
+      const idx = leafIndexForCommitment(commitment);
 
       const note: LocalNote = {
         id: `imp-${Date.now()}`,
@@ -373,21 +373,32 @@ export function MoveView() {
         status: "open",
         source: "local",
         leafIndex: idx ?? undefined,
-        // No txHash — still spendable (import)
       };
       saveLocalNote(note);
       refreshNotes();
       setSelectedId(note.id);
       setImportText("");
-      const ethLabel = formatEth(BigInt(pack.amountWei));
+      setImportPassphrase("");
+      const ethLabel = formatAmountEth(pack.amountWei);
       setImportOk(
         idx != null
-          ? `Imported ${ethLabel} ETH — ready under your vault notes. Cash out or send.`
-          : `Imported ${ethLabel} ETH. Tap Refresh on the vault tree if the note doesn’t list yet, then cash out.`
+          ? `Got ${ethLabel} ETH in the vault — open Cash out when ready.`
+          : `Got ${ethLabel} ETH. Tap Refresh on the vault tree, then Cash out.`
       );
       setMode("cashout");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
+    }
+  }
+
+  async function copyShare() {
+    if (!shareBlob) return;
+    try {
+      await navigator.clipboard.writeText(shareBlob);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy — select the text manually.");
     }
   }
 
@@ -546,7 +557,7 @@ export function MoveView() {
                           htmlFor="pay-amt"
                           className="text-sm font-medium text-foreground"
                         >
-                          Amount to send (stays in vault)
+                          Amount (stays in vault)
                         </label>
                         <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
                           <input
@@ -570,7 +581,29 @@ export function MoveView() {
                           </button>
                         </div>
                         <p className="mt-1 text-xs text-mute">
-                          Rest of the note stays with you as change.
+                          Leftover stays with you as change in the vault.
+                        </p>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="send-pass"
+                          className="text-sm font-medium text-foreground"
+                        >
+                          Lock with passphrase{" "}
+                          <span className="font-normal text-mute">(optional)</span>
+                        </label>
+                        <input
+                          id="send-pass"
+                          type="text"
+                          autoComplete="off"
+                          value={sendPassphrase}
+                          onChange={(e) => setSendPassphrase(e.target.value)}
+                          placeholder="e.g. coffee-tuesday"
+                          className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
+                        />
+                        <p className="mt-1 text-xs text-mute">
+                          Tell the recipient this phrase separately (chat/call).
+                          Leave blank for a plain payment code.
                         </p>
                       </div>
                       <button
@@ -592,24 +625,28 @@ export function MoveView() {
                       {shareBlob && (
                         <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
                           <p className="text-sm font-medium text-foreground">
-                            Share this with the recipient only
+                            Payment ready
+                            {shareAmountLabel
+                              ? ` · ${shareAmountLabel} ETH`
+                              : ""}
                           </p>
                           <p className="mt-1 text-xs text-mute">
-                            They import it under Move → Import note. Anyone with
-                            this text can cash out that amount.
+                            Send this code to the recipient. They open Move →
+                            Receive. Anyone with the code
+                            {sendPassphrase.trim()
+                              ? " and passphrase"
+                              : ""}{" "}
+                            can claim it.
                           </p>
-                          <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-line bg-panel p-3 font-mono text-[10px] text-mute">
+                          <div className="mt-3 break-all rounded-lg border border-line bg-panel p-3 font-mono text-[11px] text-mute">
                             {shareBlob}
-                          </pre>
+                          </div>
                           <button
                             type="button"
-                            className="mt-2 text-xs text-lime hover:underline"
-                            onClick={() => {
-                              void navigator.clipboard.writeText(shareBlob);
-                              setStatus("Copied to clipboard.");
-                            }}
+                            onClick={() => void copyShare()}
+                            className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-lime/40 text-sm font-medium text-lime hover:bg-lime/10"
                           >
-                            Copy package
+                            {copied ? "Copied" : "Copy payment code"}
                           </button>
                         </div>
                       )}
@@ -667,23 +704,43 @@ export function MoveView() {
                     Receive a private payment
                   </p>
                   <p className="mt-1 text-xs text-mute">
-                    Paste the package the sender copied for you. Keep it secret —
-                    it is the key to that amount in the vault.
+                    Paste the payment code from the sender (
+                    <span className="font-mono">gloam1…</span> or older JSON).
                   </p>
                   <textarea
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
-                    rows={5}
+                    rows={4}
                     className="mt-3 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
-                    placeholder="Paste payment package here…"
+                    placeholder="gloam1.… or paste full package"
                   />
+                  {(isEncryptedPackage(importText) ||
+                    importText.trim().startsWith("gloam1e.")) && (
+                    <div className="mt-3">
+                      <label
+                        htmlFor="recv-pass"
+                        className="text-sm font-medium text-foreground"
+                      >
+                        Passphrase
+                      </label>
+                      <input
+                        id="recv-pass"
+                        type="text"
+                        autoComplete="off"
+                        value={importPassphrase}
+                        onChange={(e) => setImportPassphrase(e.target.value)}
+                        placeholder="From the sender"
+                        className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
+                      />
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => void onImportNote()}
                     disabled={!importText.trim() || !isConnected}
                     className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                   >
-                    Import payment
+                    Claim payment
                   </button>
                 </div>
               )}
