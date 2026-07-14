@@ -25,18 +25,21 @@ const steps = [
     title: "Shield",
     body: "Move assets into a shielded balance so the public graph stops tracking what you hold.",
     src: "/ascii/shield.png",
+    tone: "lime" as const,
   },
   {
     n: "02",
     title: "Move",
     body: "Send privately between shielded parties without printing sender, size, and timing to the tape.",
     src: "/ascii/move.png",
+    tone: "lime" as const,
   },
   {
     n: "03",
     title: "Trade",
     body: "Execute without broadcasting your full hand. Stock tokens first on Robinhood Chain — liquid assets next.",
     src: "/ascii/trade.png",
+    tone: "lime" as const,
   },
 ];
 
@@ -45,21 +48,21 @@ export default function Home() {
     <>
       <Header />
       <main className="flex-1">
-        {/* Hero — Arrow structure: eyebrow, big claim, sub, dual CTAs, visual */}
+        {/* Hero — classical justice plate + soft lime wash */}
         <section className="relative overflow-hidden border-b border-line">
-          <div className="pointer-events-none absolute inset-0 opacity-40">
-            <div className="ascii-fade absolute inset-0">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="ascii-fade absolute inset-0 opacity-50">
               <AsciiImage
-                src="/ascii/hero.png"
+                src="/ascii/IMG_1476.PNG"
                 alt=""
-                tone="lime"
+                tone="paper"
                 priority
-                className="h-full min-h-[520px] w-full"
+                className="h-full min-h-[560px] w-full"
                 sizes="100vw"
               />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/40" />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/60" />
+            <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/92 to-ink/55" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-ink/70" />
           </div>
 
           <div className="relative mx-auto grid max-w-6xl gap-10 px-5 py-20 sm:px-8 lg:grid-cols-12 lg:py-28">
@@ -104,21 +107,21 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="hidden lg:col-span-5 lg:block">
-              <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_80px_rgba(200,255,0,0.06)]">
+            <div className="lg:col-span-5">
+              <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_60px_rgba(200,255,0,0.04)]">
                 <AsciiImage
-                  src="/ascii/rim.png"
-                  alt="Gloam ASCII coin rim"
-                  tone="lime"
+                  src="/ascii/IMG_1476.PNG"
+                  alt="Blind justice — private money"
+                  tone="paper"
                   className="h-full w-full"
-                  sizes="40vw"
+                  sizes="(max-width: 1024px) 100vw, 40vw"
+                  priority
                 />
               </div>
             </div>
           </div>
         </section>
 
-        {/* Strip */}
         <section className="border-b border-line bg-panel/40">
           <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
             <p className="text-sm text-mute">
@@ -131,7 +134,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Problem — Arrow "The Problem" pattern */}
         <section id="product" className="border-b border-line">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
@@ -146,22 +148,38 @@ export default function Home() {
               without a free live feed of your intent.
             </p>
             <div className="mt-12 grid gap-4 md:grid-cols-3">
-              {problems.map((p) => (
+              {problems.map((p, i) => (
                 <article
                   key={p.title}
-                  className="rounded-2xl border border-line bg-panel p-6"
+                  className="overflow-hidden rounded-2xl border border-line bg-panel"
                 >
-                  <h3 className="font-display text-xl text-white">{p.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-mute">
-                    {p.body}
-                  </p>
+                  <div className="relative h-36 border-b border-line">
+                    <AsciiImage
+                      src={
+                        i === 0
+                          ? "/ascii/IMG_1478.PNG"
+                          : i === 1
+                            ? "/ascii/IMG_1477.JPG"
+                            : "/ascii/neutral.png"
+                      }
+                      alt=""
+                      tone={i < 2 ? "paper" : "white"}
+                      className="h-full w-full"
+                      sizes="33vw"
+                    />
+                  </div>
+                  <div className="p-6">
+                    <h3 className="font-display text-xl text-white">{p.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-mute">
+                      {p.body}
+                    </p>
+                  </div>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        {/* How it works */}
         <section id="how" className="border-b border-line">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
@@ -191,7 +209,7 @@ export default function Home() {
                     <AsciiImage
                       src={s.src}
                       alt={`${s.title} illustration`}
-                      tone="lime"
+                      tone={s.tone}
                       className="h-full w-full"
                       sizes="(max-width: 1024px) 100vw, 50vw"
                     />
@@ -202,7 +220,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Chain / why RH */}
         <section id="chain" className="border-b border-line">
           <div className="mx-auto grid max-w-6xl gap-10 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:items-center">
             <div>
@@ -236,13 +253,13 @@ export default function Home() {
             </div>
             <div className="relative aspect-[16/11] overflow-hidden rounded-2xl border border-line">
               <AsciiImage
-                src="/ascii/neutral.png"
-                alt="ASCII still life"
-                tone="white"
+                src="/ascii/IMG_1475.JPG"
+                alt=""
+                tone="paper"
                 className="h-full w-full"
                 sizes="50vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
               <p className="absolute bottom-5 left-5 right-5 font-display text-2xl text-white">
                 Private by construction. Public only when you exit.
               </p>
@@ -250,7 +267,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* CTA / waitlist band */}
         <section id="waitlist" className="border-b border-line bg-lime">
           <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-16 sm:flex-row sm:items-center sm:justify-between sm:px-8">
             <div>
@@ -283,14 +299,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Bleed texture */}
-        <section className="relative h-40 overflow-hidden border-b border-line sm:h-56">
+        <section className="relative h-40 overflow-hidden border-b border-line sm:h-52">
           <Image
             src="/ascii/optional-bleed.png"
             alt=""
             fill
-            className="ascii-lime object-cover opacity-50"
+            className="ascii-base object-cover"
             sizes="100vw"
+          />
+          <div
+            className="pointer-events-none absolute inset-0 mix-blend-multiply"
+            style={{ backgroundColor: "#c8ff00", opacity: 0.55 }}
+            aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-ink via-transparent to-ink" />
         </section>

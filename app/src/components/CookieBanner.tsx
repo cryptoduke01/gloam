@@ -2,26 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const KEY = "gloam_cookie_consent";
+import { getConsent, setConsent, type ConsentValue } from "@/lib/consent";
 
 export function CookieBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    try {
-      if (!localStorage.getItem(KEY)) setVisible(true);
-    } catch {
-      setVisible(true);
-    }
+    setVisible(getConsent() === null);
   }, []);
 
-  const accept = (value: "all" | "essential") => {
-    try {
-      localStorage.setItem(KEY, value);
-    } catch {
-      /* ignore */
-    }
+  const accept = (value: ConsentValue) => {
+    setConsent(value);
     setVisible(false);
   };
 
@@ -35,14 +26,21 @@ export function CookieBanner() {
     >
       <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-sm leading-relaxed text-mute">
-          We use essential cookies to run the site and optional analytics if you
-          allow them. See our{" "}
-          <Link href="/cookies" className="text-lime underline-offset-2 hover:underline">
-            Cookie Policy
+          We use essential cookies to run the site. Optional first-party
+          analytics load only if you allow them — no third-party trackers by
+          default. See{" "}
+          <Link
+            href="/cookies"
+            className="text-lime underline-offset-2 hover:underline"
+          >
+            Cookies
           </Link>{" "}
           and{" "}
-          <Link href="/privacy" className="text-lime underline-offset-2 hover:underline">
-            Privacy Policy
+          <Link
+            href="/privacy"
+            className="text-lime underline-offset-2 hover:underline"
+          >
+            Privacy
           </Link>
           .
         </p>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CookiePreferences } from "@/components/CookiePreferences";
 import { LegalLayout } from "@/components/LegalLayout";
 
 export const metadata: Metadata = { title: "Cookie Policy" };
@@ -10,6 +11,8 @@ export default function CookiesPage() {
         This Cookie Policy explains how Gloam uses cookies and similar
         technologies on gloam.trade.
       </p>
+      <h2 className="font-display text-2xl text-white">Your preferences</h2>
+      <CookiePreferences />
       <h2 className="font-display text-2xl text-white">What are cookies?</h2>
       <p>
         Cookies are small text files stored on your device. They help sites

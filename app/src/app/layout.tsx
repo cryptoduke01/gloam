@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
+import { Analytics } from "@/components/Analytics";
 import { CookieBanner } from "@/components/CookieBanner";
 import "./globals.css";
 
@@ -18,6 +19,10 @@ export const metadata: Metadata = {
   description:
     "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.",
   metadataBase: new URL("https://gloam.trade"),
+  icons: {
+    icon: "/brand/logo.png",
+    apple: "/brand/logo.png",
+  },
   openGraph: {
     title: "Gloam — Private money on Robinhood Chain",
     description:
@@ -41,23 +46,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${instrument.variable} h-full antialiased`}
-    >
+    <html lang="en" className={`${instrument.variable} h-full antialiased`}>
       <head>
-        {/* Switzer via Fontshare — pairs with Instrument Serif */}
+        {/* Overused Grotesk — cleaner than Switzer for UI body */}
         <link
-          href="https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&display=swap"
+          href="https://fonts.cdnfonts.com/css/overused-grotesk"
           rel="stylesheet"
         />
       </head>
       <body
         className="flex min-h-full flex-col bg-ink text-white"
-        style={{ fontFamily: "Switzer, system-ui, sans-serif" }}
+        style={{
+          fontFamily: '"Overused Grotesk", system-ui, sans-serif',
+        }}
       >
         {children}
         <CookieBanner />
+        <Analytics />
       </body>
     </html>
   );
