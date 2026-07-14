@@ -1,10 +1,15 @@
 export type TradingSettings = {
   defaultSide: "buy" | "sell";
-  marketFilter: "all" | "stock" | "meme";
+  marketFilter: "all" | "stock" | "meme" | "onchain";
   showUsd: boolean;
   hideZeroBalances: boolean;
   confirmSends: boolean;
   compactCharts: boolean;
+  /**
+   * Fast send: skip extra in-app steps; still requires one wallet confirm
+   * (non-custodial — we never move funds without a signature).
+   */
+  fastSend: boolean;
 };
 
 export const DEFAULT_SETTINGS: TradingSettings = {
@@ -14,6 +19,7 @@ export const DEFAULT_SETTINGS: TradingSettings = {
   hideZeroBalances: false,
   confirmSends: true,
   compactCharts: false,
+  fastSend: false,
 };
 
 const KEY = "gloam_trading_settings";

@@ -113,18 +113,20 @@ export function PortfolioView() {
       {/* Net worth */}
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-7">
-          <div className="relative h-36 border-b border-line sm:h-40">
+          <div className="relative h-40 border-b border-line sm:h-44">
             <AsciiImage
               src="/ascii/shield.png"
               alt=""
               tone="plate"
-              className="h-full w-full"
+              className="h-full w-full opacity-40"
               sizes="60vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-panel via-transparent to-transparent" />
-            <div className="absolute bottom-4 left-4 right-4">
+            {/* Strong scrim so balance text always reads */}
+            <div className="absolute inset-0 bg-gradient-to-t from-panel via-panel/90 to-panel/50" />
+            <div className="absolute inset-0 bg-panel/30" />
+            <div className="absolute bottom-4 left-4 right-4 sm:bottom-5 sm:left-5">
               <StatusPill tone="lime">Portfolio</StatusPill>
-              <p className="mt-2 font-display text-2xl text-foreground sm:text-3xl">
+              <p className="mt-2 font-display text-3xl tracking-tight text-foreground drop-shadow-sm sm:text-4xl">
                 {totalUsd != null && settings.showUsd
                   ? formatUsd(totalUsd)
                   : isConnected
@@ -135,7 +137,7 @@ export function PortfolioView() {
                 <p className="mt-1 text-sm text-mute">
                   {formatEth(bal?.value ?? BigInt(0))} ETH
                   {stocksUsd > 0
-                    ? ` + ${positions.filter((p) => p.raw > BigInt(0)).length} stocks`
+                    ? ` · ${positions.filter((p) => p.raw > BigInt(0)).length} stocks`
                     : ""}
                 </p>
               )}

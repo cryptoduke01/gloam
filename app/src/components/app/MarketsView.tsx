@@ -9,11 +9,13 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
+type Filter = "all" | "stock" | "meme" | "onchain";
+
 export function MarketsView() {
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<"all" | "stock" | "meme">(
-    settings.marketFilter
+  const [kind, setKind] = useState<Filter>(
+    settings.marketFilter === "onchain" ? "onchain" : settings.marketFilter
   );
   const { data, isFetching, isError, refetch } = useLiveMarkets();
   const markets = data?.markets ?? [];
@@ -21,7 +23,9 @@ export function MarketsView() {
 
   const rows = useMemo(() => {
     return markets.filter((m) => {
-      if (kind !== "all" && m.kind !== kind) return false;
+      if (kind === "onchain" && !m.address) return false;
+      if (kind === "stock" && m.kind !== "stock") return false;
+      if (kind === "meme" && m.kind !== "meme") return false;
       if (!q.trim()) return true;
       const s = q.toLowerCase();
       return (
@@ -30,6 +34,13 @@ export function MarketsView() {
       );
     });
   }, [q, kind, markets]);
+
+  const filters: { id: Filter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "stock", label: "Stocks" },
+    { id: "meme", label: "Memes" },
+    { id: "onchain", label: "Onchain" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -47,27 +58,27 @@ export function MarketsView() {
           ) : isFetching ? (
             "Updating…"
           ) : liveCount > 0 ? (
-            "Live prices"
+            `${liveCount} live`
           ) : (
-            "Waiting for prices…"
+            "Waiting…"
           )}
         </p>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1">
-          {(["all", "stock", "meme"] as const).map((f) => (
+        <div className="flex flex-wrap gap-1">
+          {filters.map((f) => (
             <button
-              key={f}
+              key={f.id}
               type="button"
-              onClick={() => setKind(f)}
-              className={`rounded-md px-3 py-2 text-sm capitalize ${
-                kind === f
+              onClick={() => setKind(f.id)}
+              className={`rounded-lg px-3 py-2 text-sm ${
+                kind === f.id
                   ? "bg-lime text-black"
                   : "border border-line text-mute hover:text-foreground"
               }`}
             >
-              {f === "all" ? "All" : f === "stock" ? "Stocks" : "Memes"}
+              {f.label}
             </button>
           ))}
         </div>
@@ -79,7 +90,7 @@ export function MarketsView() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search"
-          className="min-h-11 w-full rounded-md border border-line bg-panel px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime sm:max-w-xs"
+          className="min-h-11 w-full rounded-lg border border-line bg-panel px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime sm:max-w-xs"
         />
       </div>
 
@@ -102,8 +113,9 @@ export function MarketsView() {
                 <p className="font-medium text-foreground">{m.symbol}</p>
                 <p className="text-xs text-mute">{m.name}</p>
               </div>
-              <div>
+              <div className="flex flex-wrap gap-1">
                 <StatusPill>{m.kind}</StatusPill>
+                {m.address && <StatusPill tone="lime">Onchain</StatusPill>}
               </div>
               <Sparkline
                 points={m.spark ?? []}
@@ -111,19 +123,16 @@ export function MarketsView() {
                 width={88}
                 height={32}
               />
-              <div>
-                <p className="font-mono text-sm text-foreground">
-                  {settings.showUsd
-                    ? formatUsd(m.mark)
-                    : `$${formatMark(m.mark)}`}
-                </p>
-                {m.address && (
-                  <p className="text-[10px] text-lime">Onchain</p>
-                )}
-              </div>
+              <p className="font-mono text-sm text-foreground">
+                {settings.showUsd
+                  ? formatUsd(m.mark)
+                  : `$${formatMark(m.mark)}`}
+              </p>
               <p
                 className={`text-sm ${
-                  m.change24h >= 0 ? "text-lime" : "text-red-400"
+                  m.change24h >= 0
+                    ? "text-[var(--chart-up)]"
+                    : "text-[var(--chart-down)]"
                 }`}
               >
                 {m.change24h >= 0 ? "+" : ""}
@@ -131,7 +140,7 @@ export function MarketsView() {
               </p>
               <Link
                 href={`/app/trade?market=${m.id}`}
-                className="inline-flex min-h-10 items-center justify-center rounded-md border border-line px-3 text-sm text-foreground hover:border-lime/50 sm:justify-self-end"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-lime/50 sm:justify-self-end"
               >
                 Trade
               </Link>

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
-import { ConnectButton } from "./ConnectButton";
+import { WalletMenu } from "./WalletMenu";
 
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
@@ -13,7 +13,6 @@ const nav = [
   { href: "/app/trade", label: "Trade" },
   { href: "/app/markets", label: "Markets" },
   { href: "/app/shield", label: "Shield" },
-  { href: "/app/settings", label: "Settings" },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
@@ -65,7 +64,7 @@ export function AppShell({
             })}
           </nav>
           <div className="flex items-center gap-2">
-            <ConnectButton />
+            <WalletMenu />
             <button
               type="button"
               className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line text-foreground md:hidden"
@@ -98,6 +97,13 @@ export function AppShell({
               );
             })}
             <Link
+              href="/app/settings"
+              onClick={() => setOpen(false)}
+              className="block rounded-md px-3 py-3 text-sm text-mute"
+            >
+              Settings
+            </Link>
+            <Link
               href="/"
               onClick={() => setOpen(false)}
               className="mt-1 block rounded-md px-3 py-3 text-sm text-mute"
@@ -112,7 +118,7 @@ export function AppShell({
         <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-              Gloam · Robinhood Chain
+              Gloam
             </p>
             <h1 className="mt-1 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
               {title}
@@ -123,12 +129,6 @@ export function AppShell({
               </p>
             )}
           </div>
-          <Link
-            href="/docs"
-            className="text-sm text-mute transition-colors hover:text-lime"
-          >
-            Docs →
-          </Link>
         </div>
         {children}
       </div>
@@ -136,7 +136,7 @@ export function AppShell({
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p>Testnet. Private trading ships when the rails are real.</p>
-          <p className="font-mono uppercase tracking-[0.12em]">Robinhood · 46630</p>
+          <p className="font-mono uppercase tracking-[0.12em]">gloam.trade</p>
         </div>
       </footer>
     </div>

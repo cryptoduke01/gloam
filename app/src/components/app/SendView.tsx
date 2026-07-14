@@ -18,6 +18,7 @@ import {
 } from "@/lib/chain";
 import { FAUCET_URL } from "@/lib/faucet";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
+import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatUsd } from "@/lib/markets";
 import { ConnectButton } from "./ConnectButton";
 import { StatusPill } from "./StatusPill";
@@ -28,6 +29,7 @@ export function SendView() {
   const chainId = useChainId();
   const onProduct = chainId === PRODUCT_CHAIN_ID;
   const { ethUsd } = useEthPrice();
+  const { settings } = useTradingSettings();
   const { data: bal, refetch } = useBalance({
     address,
     chainId: PRODUCT_CHAIN_ID,
@@ -38,7 +40,9 @@ export function SendView() {
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [sentAmount, setSentAmount] = useState("");
+  const [sentTo, setSentTo] = useState("");
 
   const {
     sendTransaction,
@@ -56,46 +60,60 @@ export function SendView() {
   useEffect(() => {
     if (isSuccess && hash) {
       void refetch();
-      setShowSuccess(true);
+      if (settings.confirmSends) setShowSuccess(true);
     }
-  }, [isSuccess, hash, refetch]);
+  }, [isSuccess, hash, refetch, settings.confirmSends]);
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setFormError(null);
-    reset();
-    setShowSuccess(false);
-
+  function validate(): string | null {
     if (!isConnected || !onProduct) {
-      setFormError("Connect and switch to Robinhood testnet.");
-      return;
+      return "Connect and switch to testnet.";
     }
-    if (!isAddress(to)) {
-      setFormError("Enter a valid address.");
-      return;
-    }
+    if (!isAddress(to)) return "Enter a valid address.";
     let value: bigint;
     try {
       value = parseEther(amount || "0");
     } catch {
-      setFormError("Invalid amount.");
-      return;
+      return "Invalid amount.";
     }
-    if (value <= BigInt(0)) {
-      setFormError("Amount must be greater than zero.");
-      return;
-    }
-    if (bal && value > bal.value) {
-      setFormError("Not enough testnet ETH.");
-      return;
-    }
+    if (value <= BigInt(0)) return "Amount must be greater than zero.";
+    if (bal && value > bal.value) return "Not enough testnet ETH.";
+    return null;
+  }
 
+  function executeSend() {
+    const err = validate();
+    if (err) {
+      setFormError(err);
+      return;
+    }
+    setFormError(null);
+    setShowPreview(false);
+    reset();
+    setShowSuccess(false);
     setSentAmount(amount);
+    setSentTo(to);
     sendTransaction({
       to: to as `0x${string}`,
-      value,
+      value: parseEther(amount),
       chainId: PRODUCT_CHAIN_ID,
     });
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const err = validate();
+    if (err) {
+      setFormError(err);
+      return;
+    }
+    setFormError(null);
+
+    // Fast send: go straight to wallet (still needs one signature — non-custodial)
+    if (settings.fastSend) {
+      executeSend();
+      return;
+    }
+    setShowPreview(true);
   }
 
   const maxEth = bal ? formatEth(bal.value, 6) : "0";
@@ -104,6 +122,7 @@ export function SendView() {
     ethUsd && Number.isFinite(amtNum) && amtNum > 0
       ? formatUsd(amtNum * ethUsd)
       : null;
+  const validPreview = !validate() && isAddress(to) && amtNum > 0;
 
   return (
     <>
@@ -118,9 +137,11 @@ export function SendView() {
                 className="h-full w-full"
                 sizes="60vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/80 to-panel/40" />
               <div className="absolute bottom-4 left-5">
-                <StatusPill tone="lime">Live</StatusPill>
+                <StatusPill tone="lime">
+                  {settings.fastSend ? "Fast mode" : "Live"}
+                </StatusPill>
                 <p className="mt-2 font-display text-xl text-foreground sm:text-2xl">
                   Send ETH
                 </p>
@@ -164,7 +185,7 @@ export function SendView() {
                       )
                     }
                   >
-                    Max {isConnected ? maxEth : "—"} ETH
+                    Max {isConnected ? maxEth : "—"}
                   </button>
                 </div>
                 <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
@@ -187,9 +208,30 @@ export function SendView() {
                 )}
               </div>
 
-              <p className="text-sm text-mute">
-                Public transfer on testnet. Anyone can see it on the explorer.
-              </p>
+              {/* Live preview card */}
+              {validPreview && (
+                <div className="rounded-xl border border-lime/30 bg-background px-4 py-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                    Preview
+                  </p>
+                  <div className="mt-2 flex items-baseline justify-between gap-3">
+                    <p className="font-display text-2xl text-foreground">
+                      {amount} ETH
+                    </p>
+                    {usdHint && (
+                      <p className="text-sm text-mute">{usdHint}</p>
+                    )}
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-mute">
+                    → {shortAddress(to, 6)}
+                  </p>
+                  <p className="mt-2 text-xs text-mute">
+                    {settings.fastSend
+                      ? "Fast mode: wallet confirms once, then settles."
+                      : "Review, then confirm in your wallet."}
+                  </p>
+                </div>
+              )}
 
               {!isConnected || !onProduct ? (
                 <ConnectButton />
@@ -197,13 +239,15 @@ export function SendView() {
                 <button
                   type="submit"
                   disabled={isPending || confirming}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
                 >
                   {isPending
                     ? "Confirm in wallet…"
                     : confirming
                       ? "Sending…"
-                      : "Send"}
+                      : settings.fastSend
+                        ? "Send now"
+                        : "Review & send"}
                 </button>
               )}
 
@@ -241,12 +285,21 @@ export function SendView() {
             </p>
             {ethUsd && bal && (
               <p className="mt-1 text-sm text-mute">
-                ≈{" "}
-                {formatUsd(
-                  (Number(bal.value) / 1e18) * ethUsd
-                )}
+                ≈ {formatUsd((Number(bal.value) / 1e18) * ethUsd)}
               </p>
             )}
+          </div>
+          <div className="rounded-xl border border-line bg-panel p-5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              Mode
+            </p>
+            <p className="mt-2 text-sm text-foreground">
+              {settings.fastSend ? "Fast send on" : "Review before send"}
+            </p>
+            <p className="mt-1 text-xs text-mute">
+              Change in Settings. Wallet still signs once — we never hold your
+              keys.
+            </p>
           </div>
           <a
             href={FAUCET_URL}
@@ -257,10 +310,70 @@ export function SendView() {
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
               Need more ETH?
             </p>
-            <p className="mt-2 text-sm text-mute">Open the free testnet faucet →</p>
+            <p className="mt-2 text-sm text-mute">Open faucet →</p>
           </a>
         </aside>
       </div>
+
+      {/* Review modal */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            aria-label="Close"
+            onClick={() => setShowPreview(false)}
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            <div className="h-1 bg-lime" />
+            <div className="px-6 py-6">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+                Review
+              </p>
+              <h2 className="mt-2 font-display text-2xl text-foreground">
+                Confirm send
+              </h2>
+              <dl className="mt-5 space-y-3 text-sm">
+                <div className="flex justify-between gap-4 border-b border-line pb-2">
+                  <dt className="text-mute">Amount</dt>
+                  <dd className="font-medium text-foreground">
+                    {amount} ETH
+                    {usdHint ? (
+                      <span className="ml-1 text-mute">({usdHint})</span>
+                    ) : null}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4 border-b border-line pb-2">
+                  <dt className="text-mute">To</dt>
+                  <dd className="font-mono text-foreground">
+                    {shortAddress(to, 6)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-mute">Network</dt>
+                  <dd className="text-foreground">Robinhood testnet</dd>
+                </div>
+              </dl>
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={executeSend}
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90"
+                >
+                  Confirm in wallet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line text-sm text-mute hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SuccessModal
         open={showSuccess && Boolean(hash)}
@@ -268,16 +381,15 @@ export function SendView() {
         body={
           <>
             <p>
-              <span className="text-foreground font-medium">
+              <span className="font-medium text-foreground">
                 {sentAmount || "—"} ETH
               </span>{" "}
-              went to{" "}
+              to{" "}
               <span className="font-mono text-foreground">
-                {to ? shortAddress(to, 5) : "—"}
+                {sentTo ? shortAddress(sentTo, 5) : "—"}
               </span>
-              .
             </p>
-            <p className="mt-2">Settled on Robinhood testnet.</p>
+            <p className="mt-2">Settled on testnet.</p>
           </>
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}

@@ -29,11 +29,11 @@ function Toggle({
     <button
       type="button"
       onClick={() => onChange(!on)}
-      className="flex w-full items-center justify-between gap-4 rounded-lg border border-line px-4 py-3 text-left transition-colors hover:border-mute"
+      className="flex h-full w-full flex-col justify-between gap-3 rounded-xl border border-line bg-background/40 p-4 text-left transition-colors hover:border-mute"
     >
       <div>
         <p className="text-sm font-medium text-foreground">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-mute">{hint}</p>}
+        {hint && <p className="mt-1 text-xs leading-relaxed text-mute">{hint}</p>}
       </div>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
@@ -46,6 +46,30 @@ function Toggle({
           }`}
         />
       </span>
+    </button>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-10 rounded-lg px-3 text-sm font-medium capitalize ${
+        active
+          ? "bg-lime text-black"
+          : "border border-line text-mute hover:text-foreground"
+      }`}
+    >
+      {children}
     </button>
   );
 }
@@ -103,210 +127,196 @@ export function SettingsView() {
   const onProduct = chainId === PRODUCT_CHAIN_ID;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <section className="rounded-xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Wallet
-        </p>
-        {!isConnected || !address ? (
-          <div className="mt-4">
-            <p className="text-sm text-mute">Connect to manage your session.</p>
-            <div className="mt-3">
-              <ConnectButton />
+    <div className="space-y-6">
+      {/* Top row: wallet + appearance */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Wallet
+          </p>
+          {!isConnected || !address ? (
+            <div className="mt-4">
+              <p className="text-sm text-mute">Connect to manage your session.</p>
+              <div className="mt-3">
+                <ConnectButton />
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3">
-            <p className="break-all font-mono text-sm text-foreground">
-              {address}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={copyAddr}
-                className="inline-flex min-h-10 items-center rounded-md border border-line px-3 text-sm text-foreground hover:border-mute"
-              >
-                {copied ? "Copied" : "Copy"}
-              </button>
-              <a
-                href={EXPLORER_ADDRESS(address)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-10 items-center rounded-md border border-line px-3 text-sm text-foreground hover:border-mute"
-              >
-                Explorer
-              </a>
-              <button
-                type="button"
-                onClick={() => disconnect()}
-                className="inline-flex min-h-10 items-center rounded-md border border-line px-3 text-sm text-mute hover:text-foreground"
-              >
-                Disconnect
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
+          ) : (
+            <div className="mt-4 space-y-3">
+              <p className="break-all font-mono text-xs text-foreground sm:text-sm">
+                {address}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={copyAddr}
+                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-mute"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+                <a
+                  href={EXPLORER_ADDRESS(address)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-mute"
+                >
+                  Explorer
+                </a>
+                <button
+                  type="button"
+                  onClick={() => disconnect()}
+                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-mute hover:text-foreground"
+                >
+                  Disconnect
+                </button>
+              </div>
               {onProduct ? (
                 <StatusPill tone="lime">Testnet</StatusPill>
               ) : (
                 <StatusPill tone="warn">Wrong network</StatusPill>
               )}
-              <span className="font-mono text-xs text-mute">
-                {shortAddress(address, 4)}
-              </span>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
 
-      <section className="rounded-xl border border-line bg-panel p-5 sm:p-6">
+        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Appearance
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Chip active={theme === "dark"} onClick={() => setTheme("dark")}>
+              Dark
+            </Chip>
+            <Chip active={theme === "light"} onClick={() => setTheme("light")}>
+              Light
+            </Chip>
+          </div>
+          <p className="mt-4 text-xs text-mute">
+            {ready ? "Preferences save on this device." : "Loading…"}
+          </p>
+        </section>
+      </div>
+
+      {/* Trading grid */}
+      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
           Trading
         </p>
-        <p className="mt-1 text-xs text-mute">
-          Saved on this device. {ready ? "" : "Loading…"}
-        </p>
-        <div className="mt-4 space-y-2">
-          <p className="text-xs font-medium text-mute">Default side</p>
-          <div className="grid grid-cols-2 gap-2">
-            {(["buy", "sell"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSettings({ defaultSide: s })}
-                className={`min-h-11 rounded-md text-sm font-medium capitalize ${
-                  settings.defaultSide === s
-                    ? "bg-lime text-black"
-                    : "border border-line text-mute hover:text-foreground"
-                }`}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 text-xs font-medium text-mute">Default side</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Chip
+                active={settings.defaultSide === "buy"}
+                onClick={() => setSettings({ defaultSide: "buy" })}
               >
-                {s}
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-xs font-medium text-mute">Markets filter</p>
-          <div className="grid grid-cols-3 gap-2">
-            {(["all", "stock", "meme"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setSettings({ marketFilter: f })}
-                className={`min-h-11 rounded-md text-sm font-medium capitalize ${
-                  settings.marketFilter === f
-                    ? "bg-lime text-black"
-                    : "border border-line text-mute hover:text-foreground"
-                }`}
+                Buy
+              </Chip>
+              <Chip
+                active={settings.defaultSide === "sell"}
+                onClick={() => setSettings({ defaultSide: "sell" })}
               >
-                {f === "all" ? "All" : f === "stock" ? "Stocks" : "Memes"}
-              </button>
-            ))}
+                Sell
+              </Chip>
+            </div>
           </div>
-          <div className="mt-3 space-y-2">
-            <Toggle
-              on={settings.showUsd}
-              onChange={(v) => setSettings({ showUsd: v })}
-              label="Show USD values"
-              hint="Portfolio and balances in dollars"
-            />
-            <Toggle
-              on={settings.hideZeroBalances}
-              onChange={(v) => setSettings({ hideZeroBalances: v })}
-              label="Hide empty tokens"
-              hint="Only show stocks you hold"
-            />
-            <Toggle
-              on={settings.confirmSends}
-              onChange={(v) => setSettings({ confirmSends: v })}
-              label="Success after send"
-              hint="Show a modal when a transfer settles"
-            />
-            <Toggle
-              on={settings.compactCharts}
-              onChange={(v) => setSettings({ compactCharts: v })}
-              label="Compact charts"
-              hint="Smaller charts on trade"
-            />
+          <div>
+            <p className="mb-2 text-xs font-medium text-mute">Markets filter</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(
+                [
+                  ["all", "All"],
+                  ["stock", "Stocks"],
+                  ["meme", "Memes"],
+                  ["onchain", "Onchain"],
+                ] as const
+              ).map(([k, label]) => (
+                <Chip
+                  key={k}
+                  active={settings.marketFilter === k}
+                  onClick={() => setSettings({ marketFilter: k })}
+                >
+                  {label}
+                </Chip>
+              ))}
+            </div>
           </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Toggle
+            on={settings.showUsd}
+            onChange={(v) => setSettings({ showUsd: v })}
+            label="Show USD"
+            hint="Dollar values on portfolio and trade"
+          />
+          <Toggle
+            on={settings.hideZeroBalances}
+            onChange={(v) => setSettings({ hideZeroBalances: v })}
+            label="Hide empty"
+            hint="Only tokens you hold"
+          />
+          <Toggle
+            on={settings.confirmSends}
+            onChange={(v) => setSettings({ confirmSends: v })}
+            label="Success modal"
+            hint="Celebrate after a send settles"
+          />
+          <Toggle
+            on={settings.compactCharts}
+            onChange={(v) => setSettings({ compactCharts: v })}
+            label="Compact charts"
+            hint="Smaller charts on trade"
+          />
+          <Toggle
+            on={settings.fastSend}
+            onChange={(v) => setSettings({ fastSend: v })}
+            label="Fast send"
+            hint="Skip review — still one wallet confirm. We never hold keys."
+          />
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Network
-        </p>
-        <p className="mt-2 font-display text-xl text-foreground">
-          Robinhood testnet
-        </p>
-        <dl className="mt-4 space-y-2 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-mute">Chain ID</dt>
-            <dd className="font-mono text-foreground">46630</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-mute">Gas</dt>
-            <dd className="text-foreground">ETH</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-mute">Faucet stocks</dt>
-            <dd className="text-foreground">TSLA · AMZN · PLTR · NFLX · AMD</dd>
-          </div>
-        </dl>
-        <button
-          type="button"
-          onClick={addNetwork}
-          className="mt-4 inline-flex min-h-11 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90"
-        >
-          Add network to wallet
-        </button>
-        {netMsg && <p className="mt-2 text-sm text-mute">{netMsg}</p>}
-      </section>
-
-      <section className="rounded-xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Testnet ETH
-        </p>
-        <p className="mt-2 font-display text-xl text-foreground">Faucet</p>
-        <p className="mt-2 text-sm text-mute">{FAUCET_BLURB}</p>
-        <a
-          href={FAUCET_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex min-h-11 items-center rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50"
-        >
-          Open faucet →
-        </a>
-      </section>
-
-      <section className="rounded-xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Appearance
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-2">
+      {/* Network + faucet */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Network
+          </p>
+          <p className="mt-2 font-display text-xl text-foreground">
+            Robinhood testnet
+          </p>
+          <p className="mt-2 text-sm text-mute">
+            Faucet stocks: TSLA · AMZN · PLTR · NFLX · AMD
+          </p>
           <button
             type="button"
-            onClick={() => setTheme("dark")}
-            className={`min-h-11 rounded-md text-sm font-medium ${
-              theme === "dark"
-                ? "bg-lime text-black"
-                : "border border-line text-mute hover:text-foreground"
-            }`}
+            onClick={addNetwork}
+            className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90"
           >
-            Dark
+            Add to wallet
           </button>
-          <button
-            type="button"
-            onClick={() => setTheme("light")}
-            className={`min-h-11 rounded-md text-sm font-medium ${
-              theme === "light"
-                ? "bg-lime text-black"
-                : "border border-line text-mute hover:text-foreground"
-            }`}
-          >
-            Light
-          </button>
-        </div>
-      </section>
+          {netMsg && <p className="mt-2 text-sm text-mute">{netMsg}</p>}
+        </section>
 
-      <p className="text-center text-xs text-mute">Gloam testnet</p>
+        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Faucet
+          </p>
+          <p className="mt-2 font-display text-xl text-foreground">
+            Free testnet ETH
+          </p>
+          <p className="mt-2 text-sm text-mute">{FAUCET_BLURB}</p>
+          <a
+            href={FAUCET_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50"
+          >
+            Open faucet →
+          </a>
+        </section>
+      </div>
     </div>
   );
 }

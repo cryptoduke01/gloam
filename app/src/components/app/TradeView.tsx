@@ -27,7 +27,7 @@ export function TradeView() {
   const [side, setSide] = useState<"buy" | "sell">(settings.defaultSide);
   const [marketId, setMarketId] = useState(initial);
   const [amount, setAmount] = useState("");
-  const [filter, setFilter] = useState<"all" | "stock" | "meme">(
+  const [filter, setFilter] = useState<"all" | "stock" | "meme" | "onchain">(
     settings.marketFilter
   );
   const [note, setNote] = useState<string | null>(null);
@@ -43,6 +43,7 @@ export function TradeView() {
 
   const list = useMemo(() => {
     if (filter === "all") return markets;
+    if (filter === "onchain") return markets.filter((m) => Boolean(m.address));
     return markets.filter((m) => m.kind === filter);
   }, [filter, markets]);
 
@@ -101,19 +102,26 @@ export function TradeView() {
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
               Markets
             </p>
-            <div className="flex gap-1">
-              {(["all", "stock", "meme"] as const).map((f) => (
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  ["all", "All"],
+                  ["stock", "Stocks"],
+                  ["meme", "Memes"],
+                  ["onchain", "Onchain"],
+                ] as const
+              ).map(([f, label]) => (
                 <button
                   key={f}
                   type="button"
                   onClick={() => setFilter(f)}
-                  className={`rounded-md px-2 py-1 text-[11px] capitalize ${
+                  className={`rounded-md px-2 py-1 text-[11px] ${
                     filter === f
                       ? "bg-lime text-black"
                       : "text-mute hover:text-foreground"
                   }`}
                 >
-                  {f}
+                  {label}
                 </button>
               ))}
             </div>
