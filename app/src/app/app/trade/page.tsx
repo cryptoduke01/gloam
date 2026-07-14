@@ -11,7 +11,7 @@ export default function TradePage() {
   return (
     <AppShell
       title="Trade"
-      subtitle="Public swaps on testnet. Private trade (sealed size) is next."
+      subtitle="Public wallet swaps, or From vault (cash out → swap → re-shield)."
     >
       <Suspense
         fallback={

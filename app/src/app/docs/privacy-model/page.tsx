@@ -40,9 +40,14 @@ export default function DocsPrivacyPage() {
             body: "Shield and cash out touch the public chain. Someone can see that the vault was used.",
           },
           {
+            n: "½",
+            title: "Vault trade adapter (live)",
+            body: "Cash out → swap → re-shield. Your bag can leave and re-enter the vault; the swap size is still public on that edge.",
+          },
+          {
             n: "→",
             title: "Not yet",
-            body: "Private trade — swap size sealed from the public book — is next, not shipped.",
+            body: "Sealed-size private trade — swap without broadcasting full size — is not shipped.",
           },
         ]}
       />

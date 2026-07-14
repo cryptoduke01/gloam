@@ -62,9 +62,14 @@ export default function DocsProductPage() {
             body: "Withdraw to your open wallet with a real browser proof.",
           },
           {
+            n: "●",
+            title: "Vault trade adapter",
+            body: "From vault: cash out → public DEX swap → re-shield. Hold private; swap edge still public.",
+          },
+          {
             n: "○",
-            title: "Private trade",
-            body: "Swap stocks/memes without broadcasting full size as free signal. Next up.",
+            title: "Sealed-size private trade",
+            body: "Swap without broadcasting full size on the open book. Future step.",
           },
         ]}
       />

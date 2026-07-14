@@ -32,16 +32,19 @@ import {
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatMark, formatUsd } from "@/lib/markets";
+import { isShieldDeployed } from "@/lib/shield";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { PriceChart } from "./PriceChart";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
+import { VaultTradePanel } from "./VaultTradePanel";
 
 type Side = "buy" | "sell";
 type InputMode = "token" | "usd";
 type TxKind = "transfer" | "approve" | "buy" | "sell" | null;
+type PathMode = "public" | "vault";
 
 export function TradeView() {
   const { address, isConnected } = useAccount();
@@ -53,8 +56,10 @@ export function TradeView() {
   const markets = data?.markets ?? [];
   const ethUsd = data?.ethUsd ?? null;
   const liveCount = data?.meta?.liveCount ?? 0;
+  const shieldLive = isShieldDeployed();
 
   const searchMarket = search.get("market");
+  const pathParam = search.get("path");
   const [side, setSide] = useState<Side>(settings.defaultSide);
   const [marketId, setMarketId] = useState(searchMarket ?? "tsla");
   const [amount, setAmount] = useState("");
@@ -62,6 +67,9 @@ export function TradeView() {
   const [filter, setFilter] = useState<"all" | "onchain" | "stocks">("onchain");
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<"swap" | "transfer">("transfer");
+  const [pathMode, setPathMode] = useState<PathMode>(
+    pathParam === "vault" && shieldLive ? "vault" : "public"
+  );
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
@@ -462,11 +470,41 @@ export function TradeView() {
         </span>
       </div>
 
-      <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
-        <strong className="text-foreground">Public trade today.</strong> Swaps
-        and transfers show on the explorer. Sealed-size private trade is next —
-        vault path is Shield → Move for now.
-      </div>
+      {shieldLive && (
+        <div className="flex gap-1 rounded-xl border border-line bg-panel p-1">
+          <button
+            type="button"
+            onClick={() => setPathMode("public")}
+            className={`min-h-10 flex-1 rounded-lg text-sm font-medium ${
+              pathMode === "public"
+                ? "bg-lime text-black"
+                : "text-mute hover:text-foreground"
+            }`}
+          >
+            Public wallet
+          </button>
+          <button
+            type="button"
+            onClick={() => setPathMode("vault")}
+            className={`min-h-10 flex-1 rounded-lg text-sm font-medium ${
+              pathMode === "vault"
+                ? "bg-lime text-black"
+                : "text-mute hover:text-foreground"
+            }`}
+          >
+            From vault
+          </button>
+        </div>
+      )}
+
+      {pathMode === "public" && (
+        <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
+          <strong className="text-foreground">Public path.</strong> Swaps use
+          your open wallet and show on the explorer. Use{" "}
+          <strong className="text-foreground">From vault</strong> to cash out →
+          swap → re-shield in one flow.
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="rounded-xl border border-line bg-panel lg:col-span-4">
@@ -576,6 +614,14 @@ export function TradeView() {
             </div>
           )}
 
+          {pathMode === "vault" && shieldLive ? (
+            <VaultTradePanel
+              marketId={resolvedId}
+              marketSymbol={market.symbol}
+              tokenAddress={token}
+              hasPool={hasPool}
+            />
+          ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <div>
@@ -803,6 +849,7 @@ export function TradeView() {
               )}
             </form>
           </div>
+          )}
         </div>
 
         <aside className="space-y-4 lg:col-span-3">

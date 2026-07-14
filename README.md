@@ -30,8 +30,9 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
 | Vault move | **Private send** — pay someone inside the vault (payment code + optional passphrase) |
 | Vault out | **Cash out** (unshield) with a real browser proof |
+| Vault trade | **Adapter:** cash out → public DEX swap → re-shield (swap edge still public) |
 
-**Not yet:** private trade (swap size stays sealed). Production ceremony keys for real money.
+**Not yet:** sealed-size private trade (size stays hidden). Production ceremony keys for real money.
 
 ---
 
@@ -95,8 +96,8 @@ No purple crypto fog.
 ### Status
 
 - **Product:** testnet-only  
-- **Poseidon pool:** shield · private send · cash out  
-- **Next:** private trade adapter · production ceremony keys  
+- **Poseidon pool:** shield · private send · cash out · vault trade adapter  
+- **Next:** sealed-size private trade · production ceremony keys  
 
 ---
 

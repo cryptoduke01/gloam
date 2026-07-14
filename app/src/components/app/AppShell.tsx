@@ -136,7 +136,10 @@ export function AppShell({
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>Testnet. Shield, private send, and cash out are live on the vault.</p>
+          <p>
+            Testnet. Shield, private send, cash out, and vault trade adapter are
+            live.
+          </p>
           <p className="font-mono uppercase tracking-[0.12em]">gloam.trade</p>
         </div>
       </footer>

@@ -310,6 +310,10 @@ export default function WhitepaperPage() {
         <li>Shield deposits into the Poseidon pool</li>
         <li>Private send (transfer) and cash-out (unshield) with browser proofs</li>
         <li>Note import for payment packages received off-app</li>
+        <li>
+          Vault trade adapter (cash out → public swap → re-shield); sealed-size
+          private trade remains future work
+        </li>
       </ul>
       <p>
         Documentation and this whitepaper live on the same origin (
@@ -329,8 +333,8 @@ export default function WhitepaperPage() {
           anonymity set.
         </li>
         <li>
-          <strong>Mid term:</strong> private trade adapter for stock and meme
-          markets; liquidity and routing without free public size signals.
+          <strong>Mid term:</strong> sealed-size private trade (hide swap size
+          on the open book); deeper liquidity routing for stocks and memes.
         </li>
         <li>
           <strong>Production gate:</strong> independent review, production
