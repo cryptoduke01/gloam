@@ -34,19 +34,19 @@ const steps = [
   {
     n: "01",
     title: "Shield",
-    body: "Park assets in a shielded balance. The public graph loses the thread of what you hold. The note replaces the address.",
+    body: "Park assets in the vault. Your open wallet no longer shows that bag. Live on testnet.",
     src: "/ascii/shield.png",
   },
   {
     n: "02",
     title: "Move",
-    body: "Send between shielded parties without publishing sender, size, and timing on the open tape. Transfer as silence.",
+    body: "Private send inside the vault — share a payment code, not a public transfer. Cash out only when you choose the light. Live on testnet.",
     src: "/ascii/move.png",
   },
   {
     n: "03",
     title: "Trade",
-    body: "Execute without showing the full hand. Stocks and memes on Robinhood Chain. Same rails. Same silence. Exit only when you choose the light.",
+    body: "Public swaps work today. Private trade — size sealed from the open book — is next on the same rails.",
     src: "/ascii/trade.png",
   },
 ];

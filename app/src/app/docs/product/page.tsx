@@ -53,18 +53,18 @@ export default function DocsProductPage() {
           },
           {
             n: "●",
-            title: "Unshield",
-            body: "Prove and withdraw with a real browser proof.",
+            title: "Private send",
+            body: "Pay someone inside the vault. Share a compact payment code (optional passphrase lock).",
           },
           {
             n: "●",
-            title: "Private send",
-            body: "Split a vault note into payment + change with a real proof (deploy dual verifier once).",
+            title: "Cash out",
+            body: "Withdraw to your open wallet with a real browser proof.",
           },
           {
             n: "○",
             title: "Private trade",
-            body: "Swap stocks/memes without broadcasting full size as free signal.",
+            body: "Swap stocks/memes without broadcasting full size as free signal. Next up.",
           },
         ]}
       />

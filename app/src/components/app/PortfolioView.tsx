@@ -14,7 +14,6 @@ import {
   EXPLORER_TX,
   PRODUCT_CHAIN_ID,
   formatEth,
-  shortAddress,
 } from "@/lib/chain";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -186,7 +185,7 @@ export function PortfolioView() {
                 <p className="mt-1 text-sm text-mute">
                   {formatEth(bal?.value ?? BigInt(0))} wallet
                   {hasShield
-                    ? ` · ${shieldRows.map((r) => `${r.label}`).join(", ")} shielded`
+                    ? ` · ${shieldRows.map((r) => `${r.label}`).join(", ")} in vault`
                     : ""}
                   {stocksUsd > 0
                     ? ` · ${positions.filter((p) => p.raw > BigInt(0)).length} stocks`
@@ -221,7 +220,7 @@ export function PortfolioView() {
             </div>
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                Shielded
+                Vault
               </p>
               {!isConnected ? (
                 <p className="mt-2 font-display text-2xl text-mute">—</p>
@@ -229,7 +228,7 @@ export function PortfolioView() {
                 <>
                   <p className="mt-2 font-display text-2xl text-foreground">0</p>
                   <p className="mt-0.5 text-xs text-mute">
-                    {shieldLive ? "Deposit on Shield" : "Not live"}
+                    {shieldLive ? "Shield to deposit" : "Not live"}
                   </p>
                 </>
               ) : (
@@ -278,13 +277,13 @@ export function PortfolioView() {
           {isConnected && hasShield && (
             <div className="border-t border-line bg-lime/5 px-5 py-3 sm:px-6">
               <p className="text-sm text-foreground">
-                Vault balance is not in Send/Trade.{" "}
-                <Link href="/app/shield" className="text-lime hover:underline">
-                  Shield more
+                Vault money stays private until you cash out.{" "}
+                <Link href="/app/move" className="text-lime hover:underline">
+                  Private send or cash out
                 </Link>
                 {" · "}
-                <Link href="/app/move" className="text-lime hover:underline">
-                  Move / cash out
+                <Link href="/app/shield" className="text-lime hover:underline">
+                  Shield more
                 </Link>
               </p>
             </div>
@@ -330,27 +329,25 @@ export function PortfolioView() {
                     Shield
                   </span>
                 )}
+                {shieldLive ? (
+                  <Link
+                    href="/app/move"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-lime/40 px-3 text-sm font-medium text-lime hover:bg-lime/10 active:scale-[0.98]"
+                  >
+                    Move
+                  </Link>
+                ) : (
+                  <span className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm text-mute opacity-50">
+                    Move
+                  </span>
+                )}
                 <Link
                   href="/app/trade"
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
                 >
                   Trade
                 </Link>
-                <Link
-                  href="/app/markets"
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
-                >
-                  Markets
-                </Link>
               </div>
-              {shieldLive && (
-                <Link
-                  href="/app/move"
-                  className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-line text-sm text-mute hover:border-lime/40 hover:text-foreground"
-                >
-                  Move · private send & cash out
-                </Link>
-              )}
             </div>
           )}
         </div>
@@ -364,9 +361,9 @@ export function PortfolioView() {
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Shielded deposits
+              In the vault
             </p>
-            <StatusPill tone="lime">In pool</StatusPill>
+            <StatusPill tone="lime">Private</StatusPill>
           </div>
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <ul>
@@ -382,10 +379,13 @@ export function PortfolioView() {
                         : formatUnits(BigInt(n.amountWei), 18)}{" "}
                       {assetLabel(n.asset)}
                     </p>
-                    <p className="mt-0.5 font-mono text-[11px] text-mute">
-                      {n.leafIndex != null ? `leaf #${n.leafIndex}` : "note"} ·{" "}
-                      {n.source === "chain" ? "on-chain" : "local"} ·{" "}
-                      {shortAddress(n.commitment, 4)}
+                    <p className="mt-0.5 text-xs text-mute">
+                      {n.leafIndex != null
+                        ? "Ready to move or cash out"
+                        : "Linking to vault…"}
+                      {n.source === "local" && n.id.startsWith("imp-")
+                        ? " · received"
+                        : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -400,10 +400,10 @@ export function PortfolioView() {
                       </a>
                     )}
                     <Link
-                      href="/app/shield"
-                      className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-lime/50"
+                      href="/app/move"
+                      className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
                     >
-                      View
+                      Move
                     </Link>
                   </div>
                 </li>

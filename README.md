@@ -22,9 +22,16 @@ Stocks. Memes. Same rails. Money that can sit, move, and trade without printing 
 
 Gloam is private money on **Robinhood Chain** — not a dark theme on a public DEX.
 
-**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts, **shield ETH + faucet stocks** into the live pool (history syncs from chain).
+**Works today (testnet):**
 
-**Still closed:** private transfer, private unshield, private trade. Those need a real verifier + proofs. We do not fake them.
+| Path | What you can do |
+| --- | --- |
+| Public | Connect, portfolio, send ETH, send faucet stocks, markets, charts |
+| Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
+| Vault move | **Private send** — pay someone inside the vault (payment code + optional passphrase) |
+| Vault out | **Cash out** (unshield) with a real browser proof |
+
+**Not yet:** private trade (swap size stays sealed). Production ceremony keys for real money.
 
 ---
 
@@ -38,7 +45,7 @@ gloam/
 ```
 
 Public path needs **no** Gloam contracts.  
-Private path needs **ShieldPool + verifier + circuits**.
+Private path needs **ShieldPool + dual verifier + circuits**.
 
 ---
 
@@ -64,7 +71,7 @@ Chain ID **46630**.
 | | Phase 1 (keccak) | Phase 2 (Poseidon) **default** |
 | --- | --- | --- |
 | Pool | `0x2BD9…3d35` | `0xA488…c93B` |
-| Unshield | locked | live (dev keys) |
+| Unshield / transfer | locked | live (dev keys) |
 | Record | [testnet.json](./contracts/deployments/testnet.json) | [poseidon-testnet.json](./contracts/deployments/poseidon-testnet.json) |
 
 App defaults to **Poseidon**. Override with `NEXT_PUBLIC_HASH_SCHEME=keccak` for the old pool.
@@ -88,13 +95,8 @@ No purple crypto fog.
 ### Status
 
 - **Product:** testnet-only  
-- **Phase 2 Poseidon pool:** live — shield + **prove & unshield** in the app  
-- **Next:** production ceremony keys; private transfer circuit  
-
-
-
-
-
+- **Poseidon pool:** shield · private send · cash out  
+- **Next:** private trade adapter · production ceremony keys  
 
 ---
 

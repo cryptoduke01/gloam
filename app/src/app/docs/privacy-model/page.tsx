@@ -26,18 +26,23 @@ export default function DocsPrivacyPage() {
         steps={[
           {
             n: "✓",
-            title: "While shielded",
-            body: "Your open wallet no longer shows that amount. Goal: harder to read your full position from the street.",
+            title: "While in the vault",
+            body: "Your open wallet no longer shows that amount. Harder to read your full bag from the street.",
+          },
+          {
+            n: "✓",
+            title: "Private send (live)",
+            body: "Pay someone inside the vault with a payment code. The chain sees a transfer proof — not “Alice paid Bob 0.01 ETH”.",
           },
           {
             n: "!",
-            title: "When you enter/exit",
-            body: "Shield and unshield touch the public chain. Someone can see that the vault was used.",
+            title: "When you enter / exit",
+            body: "Shield and cash out touch the public chain. Someone can see that the vault was used.",
           },
           {
             n: "→",
             title: "Not yet",
-            body: "Private send between people, and private trade size, are product goals — not fully shipped.",
+            body: "Private trade — swap size sealed from the public book — is next, not shipped.",
           },
         ]}
       />
@@ -45,7 +50,7 @@ export default function DocsPrivacyPage() {
       <h2>We aim to hide</h2>
       <ul>
         <li>How much you hold while it is in the vault</li>
-        <li>(Later) who paid whom inside the vault</li>
+        <li>Who paid whom inside the vault (private send — live on testnet)</li>
         <li>(Later) trade size during private execution</li>
       </ul>
 

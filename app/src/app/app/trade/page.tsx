@@ -11,7 +11,7 @@ export default function TradePage() {
   return (
     <AppShell
       title="Trade"
-      subtitle="Stock tokens on Robinhood. Private execution when the book is sealed."
+      subtitle="Public swaps on testnet. Private trade (sealed size) is next."
     >
       <Suspense
         fallback={

@@ -25,7 +25,6 @@ import {
   EXPLORER_TX,
   PRODUCT_CHAIN_ID,
   formatEth,
-  shortAddress,
 } from "@/lib/chain";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import { FAUCET_URL } from "@/lib/faucet";
@@ -555,9 +554,7 @@ export function ShieldView() {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/80 to-panel/40" />
               <div className="absolute bottom-4 left-5">
-                <StatusPill tone="lime">
-                  Live · {HASH_SCHEME}
-                </StatusPill>
+                <StatusPill tone="lime">Vault live</StatusPill>
                 <p className="mt-2 font-display text-xl text-foreground sm:text-2xl">
                   Deposit
                 </p>
@@ -657,7 +654,8 @@ export function ShieldView() {
               </div>
 
               <p className="text-xs text-mute">
-                Stocks need approve + shield (two wallet confirms). Then use{" "}
+                Deposit hides this amount from your open wallet. Stocks need two
+                confirms (approve, then shield). After that use{" "}
                 <Link href="/app/move" className="text-lime hover:underline">
                   Move
                 </Link>{" "}
@@ -734,17 +732,10 @@ export function ShieldView() {
                           : formatUnits(BigInt(n.amountWei), 18)}{" "}
                         {assetLabel(n.asset)}
                       </p>
-                      <p className="mt-0.5 font-mono text-[11px] text-mute">
+                      <p className="mt-0.5 text-xs text-mute">
                         {n.leafIndex != null
-                          ? `leaf #${n.leafIndex}`
-                          : "leaf —"}{" "}
-                        ·{" "}
-                        {n.bound
-                          ? "bound"
-                          : n.source === "chain"
-                            ? "on-chain"
-                            : "local"}{" "}
-                        · {shortAddress(n.commitment, 4)}
+                          ? "In vault · ready to move"
+                          : "Confirming on chain…"}
                       </p>
                     </div>
                     {n.txHash && (

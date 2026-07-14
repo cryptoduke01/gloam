@@ -10,7 +10,7 @@ export default function SendPage() {
   return (
     <AppShell
       title="Send"
-      subtitle="Public ETH on Robinhood Chain testnet. Real settlement. Open book."
+      subtitle="Public wallet send on testnet. For private pay, use Move."
     >
       <SendView />
     </AppShell>

@@ -462,6 +462,12 @@ export function TradeView() {
         </span>
       </div>
 
+      <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
+        <strong className="text-foreground">Public trade today.</strong> Swaps
+        and transfers show on the explorer. Sealed-size private trade is next —
+        vault path is Shield → Move for now.
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="rounded-xl border border-line bg-panel lg:col-span-4">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">

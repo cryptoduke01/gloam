@@ -17,8 +17,8 @@ export default function DocsEncryptionPage() {
       lede="No exam required. This is the deposit / note / withdraw loop in plain language."
       glance={[
         { label: "In", value: "Shield" },
-        { label: "Hold", value: "Note" },
-        { label: "Out", value: "Unshield" },
+        { label: "Move", value: "Private send" },
+        { label: "Out", value: "Cash out" },
         { label: "Network", value: "Testnet" },
       ]}
     >
@@ -26,8 +26,11 @@ export default function DocsEncryptionPage() {
       <p>
         <strong>Shield</strong> = put money into Gloam’s vault.
         <br />
-        <strong>Unshield</strong> = take it back out with a proof that you own
-        it.
+        <strong>Private send</strong> = pay someone while funds stay in the
+        vault (share a payment code).
+        <br />
+        <strong>Cash out</strong> = take it back to your open wallet with a
+        proof that you own it.
       </p>
       <p>
         While it is in the vault, your normal wallet balance no longer shows
@@ -56,8 +59,8 @@ export default function DocsEncryptionPage() {
           },
           {
             n: "4",
-            title: "You unshield",
-            body: "The app builds a proof: “I know a secret for a valid note.” The pool checks it and pays your wallet.",
+            title: "You private-send or cash out",
+            body: "Private send splits a note into payment + change and hands the recipient a code. Cash out builds a proof and pays your open wallet.",
           },
         ]}
       />
@@ -68,19 +71,21 @@ export default function DocsEncryptionPage() {
       <h2>What the public still sees</h2>
       <ul>
         <li>That someone used the Gloam contract</li>
-        <li>When money entered or left the vault (shield / unshield edges)</li>
+        <li>When money entered or left the vault (shield / cash out edges)</li>
+        <li>That a private transfer happened — not who paid whom how much</li>
         <li>Not (goal) your exact private bag while it stays inside</li>
       </ul>
 
       <h2>What we do not claim</h2>
       <p>
-        Unshield is not invisible. Leaving the vault is a public moment. Private
-        send between two people is the next product step, not this page’s claim.
+        Cash out is not invisible — leaving the vault is a public moment.
+        Private send hides the payment details, not the fact that the vault was
+        used. Private trade is next.
       </p>
 
       <p>
         Try it: <Link href="/app/shield">Shield</Link> →{" "}
-        <Link href="/app/move">Unshield</Link>.
+        <Link href="/app/move">Move</Link> (send or cash out).
       </p>
     </DocsLayout>
   );
