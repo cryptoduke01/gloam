@@ -9,33 +9,33 @@ import { motion, useReducedMotion } from "framer-motion";
 const steps = [
   {
     id: "clear",
-    label: "Clear balance",
-    sub: "Public token",
-    detail: "Wallet holds plain ERC-20 on Robinhood Chain.",
+    label: "Your wallet",
+    sub: "Open balance",
+    detail: "Normal wallet. Anyone who knows the address can see what it holds.",
   },
   {
     id: "encrypt",
-    label: "Encrypt",
-    sub: "Commit + proof",
-    detail: "Amount and asset commit into a ciphertext. A proof attests validity without revealing the values.",
+    label: "Shield",
+    sub: "Deposit",
+    detail: "You send assets into Gloam’s pool. A fingerprint of the deposit is written on-chain.",
   },
   {
     id: "note",
-    label: "Shielded note",
-    sub: "Private UTXO",
-    detail: "The note lives in the anonymity set. Explorers see a commitment, not your bag.",
+    label: "Your note",
+    sub: "Private claim",
+    detail: "Your browser keeps the secret that proves the deposit is yours.",
   },
   {
     id: "move",
-    label: "Private transfer",
-    sub: "Nullify + reissue",
-    detail: "Spender nullifies the old note and issues a new one to the recipient. Graph breaks.",
+    label: "Private send",
+    sub: "Coming next",
+    detail: "Later: move value to someone else without a clear public path. Not fully live yet.",
   },
   {
     id: "read",
-    label: "Only you read",
-    sub: "Viewing key",
-    detail: "The recipient decrypts with their viewing key. Everyone else sees noise.",
+    label: "Unshield",
+    sub: "Withdraw",
+    detail: "You prove ownership and money returns to a normal wallet. Exit is public on purpose.",
   },
 ];
 
@@ -46,10 +46,10 @@ export function EncryptFlow() {
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
       <div className="border-b border-line px-5 py-4 sm:px-6">
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-          Encryption path
+          How Gloam works
         </p>
         <p className="mt-1 text-sm text-mute">
-          How value leaves the open ledger and reappears only for those who hold the key.
+          Wallet → vault → note → (later private send) → withdraw.
         </p>
       </div>
 

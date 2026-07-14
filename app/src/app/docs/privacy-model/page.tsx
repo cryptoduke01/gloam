@@ -1,55 +1,72 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
-  title: "Privacy model",
+  title: "What stays private",
   description:
-    "What Gloam hides, what may leak, and the honest threat model.",
+    "Honest privacy model for Gloam — what we hide, what the public still sees, and what we will not promise.",
 };
 
 export default function DocsPrivacyPage() {
   return (
     <DocsLayout
-      title="Privacy model"
-      lede="Robinhood Chain is transparent. Privacy is not free with the chain — Gloam adds it at the application layer."
+      title="What stays private"
+      lede="Robinhood Chain is a public ledger. Gloam adds a vault on top. Here is what that does and does not hide."
       glance={[
-        { label: "Layer", value: "App-layer" },
-        { label: "Hidden", value: "Amount · path" },
-        { label: "Edge", value: "Shield / unshield" },
-        { label: "Set", value: "Anonymity size" },
+        { label: "Goal", value: "Hide the bag" },
+        { label: "Edge", value: "In / out public" },
+        { label: "Set", value: "More users = better" },
+        { label: "Mode", value: "Honest" },
       ]}
     >
-      <h2>What we aim to hide</h2>
+      <FlowDiagram
+        title="At a glance"
+        steps={[
+          {
+            n: "✓",
+            title: "While shielded",
+            body: "Your open wallet no longer shows that amount. Goal: harder to read your full position from the street.",
+          },
+          {
+            n: "!",
+            title: "When you enter/exit",
+            body: "Shield and unshield touch the public chain. Someone can see that the vault was used.",
+          },
+          {
+            n: "→",
+            title: "Not yet",
+            body: "Private send between people, and private trade size, are product goals — not fully shipped.",
+          },
+        ]}
+      />
+
+      <h2>We aim to hide</h2>
       <ul>
-        <li>Balance amounts while shielded</li>
-        <li>The private transfer graph between shielded parties</li>
-        <li>Trade intent and size before and during private execution</li>
+        <li>How much you hold while it is in the vault</li>
+        <li>(Later) who paid whom inside the vault</li>
+        <li>(Later) trade size during private execution</li>
       </ul>
 
-      <h2>What may still leak</h2>
+      <h2>The public can still see</h2>
       <ul>
-        <li>Shield and unshield edges on the public chain</li>
-        <li>Timing and amount correlation if the anonymity set is small</li>
-        <li>User error, malware, or legal process off-chain</li>
-        <li>Metadata at the network and RPC layers if clients are careless</li>
+        <li>That someone used Gloam</li>
+        <li>When money went in or out of the vault</li>
+        <li>Timing clues if very few people use the system</li>
       </ul>
 
-      <h2>Design stance</h2>
+      <h2>We will not promise</h2>
+      <ul>
+        <li>Invisibility from law or courts</li>
+        <li>Safety if your phone is compromised</li>
+        <li>Privacy if you clear the browser note and lose the secret</li>
+        <li>Strong anonymity with almost no users</li>
+      </ul>
+
       <p>
-        Prefer battle-tested EVM privacy systems (Railgun-class) over inventing
-        circuits from nothing on day one. Honest threat models beat marketing
-        that pretends the edge does not exist. Privacy reduces public
-        visibility. It does not erase the physical world.
-      </p>
-      <p>
-        Implementation details land as contracts land on testnet. Until then,
-        treat this page as the contract with the reader: no fake privacy, no
-        silent expansion of claims.
-      </p>
-      <p>
-        See also: <Link href="/docs/encryption">How money is encrypted</Link>{" "}
-        and the <Link href="/whitepaper">whitepaper</Link>.
+        More detail: <Link href="/docs/encryption">How shield works</Link> ·{" "}
+        <Link href="/whitepaper">Whitepaper</Link>.
       </p>
     </DocsLayout>
   );

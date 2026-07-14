@@ -1,69 +1,86 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
+import { EncryptFlow } from "@/components/EncryptFlow";
 
 export const metadata: Metadata = {
-  title: "How money is encrypted",
+  title: "How shield works",
   description:
-    "Clear value → commit → shielded note → private transfer → only the holder reads.",
+    "Simple explanation of Gloam shield and unshield — deposit, private note, proof, withdraw.",
 };
 
 export default function DocsEncryptionPage() {
   return (
     <DocsLayout
-      title="How money is encrypted"
-      lede="Value does not disappear when it becomes private. It is rewritten — clear tokens become sealed notes only a viewing key can read."
+      title="How shield works"
+      lede="No exam required. This is the deposit / note / withdraw loop in plain language."
       glance={[
-        { label: "Step 1", value: "Clear balance" },
-        { label: "Step 2", value: "Commit + proof" },
-        { label: "Step 3", value: "Shielded note" },
-        { label: "Step 4", value: "Private transfer" },
-        { label: "Step 5", value: "Viewing key" },
+        { label: "In", value: "Shield" },
+        { label: "Hold", value: "Note" },
+        { label: "Out", value: "Unshield" },
+        { label: "Network", value: "Testnet" },
       ]}
     >
-      <h2>01 · Clear balance</h2>
+      <h2>The short version</h2>
       <p>
-        The wallet holds a plain ERC-20 (or equivalent) on Robinhood Chain. The
-        explorer can see it. So can anyone watching the address.
+        <strong>Shield</strong> = put money into Gloam’s vault.
+        <br />
+        <strong>Unshield</strong> = take it back out with a proof that you own
+        it.
+      </p>
+      <p>
+        While it is in the vault, your normal wallet balance no longer shows
+        that amount. The vault holds many people’s deposits together.
       </p>
 
-      <h2>02 · Encrypt / commit</h2>
+      <PoolPicture />
+
+      <FlowDiagram
+        title="Step by step"
+        steps={[
+          {
+            n: "1",
+            title: "You start public",
+            body: "ETH or stock tokens sit in your wallet. Explorers can show that balance.",
+          },
+          {
+            n: "2",
+            title: "You shield",
+            body: "You send assets to the pool contract. A “commitment” (a fingerprint of your deposit) is written on-chain.",
+          },
+          {
+            n: "3",
+            title: "You keep a note",
+            body: "Your browser stores a secret linked to that deposit. Clear site data and you lose the local copy (the on-chain leaf remains).",
+          },
+          {
+            n: "4",
+            title: "You unshield",
+            body: "The app builds a proof: “I know a secret for a valid note.” The pool checks it and pays your wallet.",
+          },
+        ]}
+      />
+
+      <h2>Visual path</h2>
+      <EncryptFlow />
+
+      <h2>What the public still sees</h2>
+      <ul>
+        <li>That someone used the Gloam contract</li>
+        <li>When money entered or left the vault (shield / unshield edges)</li>
+        <li>Not (goal) your exact private bag while it stays inside</li>
+      </ul>
+
+      <h2>What we do not claim</h2>
       <p>
-        Amount and asset identity commit into a ciphertext. A zero-knowledge
-        proof attests that the commitment is well-formed and funded without
-        revealing the values.
+        Unshield is not invisible. Leaving the vault is a public moment. Private
+        send between two people is the next product step, not this page’s claim.
       </p>
 
-      <h2>03 · Shielded note</h2>
       <p>
-        The note enters the anonymity set as a commitment. The public graph sees
-        structure: a deposit, a tree update. It does not see which bag is yours.
-      </p>
-
-      <h2>04 · Private transfer</h2>
-      <p>
-        To move value, the spender nullifies the old note and issues one or more
-        new notes. Recipients are addresses or viewing keys in the private
-        domain. The transfer graph breaks.
-      </p>
-
-      <h2>05 · Only the holder reads</h2>
-      <p>
-        Decryption belongs to those who hold the viewing key. Everyone else sees
-        commitments and nullifiers: noise with a formal shape.
-      </p>
-
-      <h2>What the explorer still sees</h2>
-      <p>
-        Shield and unshield events touch the public chain. Contract calls are
-        visible. Proofs are verified on-chain. Privacy lives in the gap between
-        those facts and the identity of amounts, owners, and counterparties
-        inside the set. A small set is a weak set. Growth of honest users is
-        part of the cryptography.
-      </p>
-      <p>
-        Full argument: <Link href="/whitepaper">whitepaper</Link>. Threat
-        notes: <Link href="/docs/privacy-model">privacy model</Link>.
+        Try it: <Link href="/app/shield">Shield</Link> →{" "}
+        <Link href="/app/move">Unshield</Link>.
       </p>
     </DocsLayout>
   );

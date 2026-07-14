@@ -1,70 +1,102 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Gloam documentation — Trade Everything on Robinhood Privately. Stocks, memes, shielded balances.",
+    "Gloam docs — private money on Robinhood Chain, explained simply. Shield, unshield, what works on testnet.",
 };
 
 export default function DocsOverviewPage() {
   return (
     <DocsLayout
-      title="Trade Everything on Robinhood Privately."
-      lede="Gloam is private money infrastructure on Robinhood Chain. Stocks. Memes. Shielded balances, private transfers, private trade — without printing your book to the street."
+      title="Docs"
+      lede="Private money on Robinhood Chain — without the jargon wall. Start here."
       glance={[
-        { label: "Thesis", value: "Private trade" },
-        { label: "Assets", value: "Stocks · Memes" },
-        { label: "Chain", value: "Robinhood" },
-        { label: "Chain ID", value: "4663" },
-        { label: "Privacy", value: "Shielded notes" },
-        { label: "Status", value: "Testnet path" },
+        { label: "Product", value: "gloam.trade/app" },
+        { label: "Network", value: "RH testnet" },
+        { label: "Chain ID", value: "46630" },
+        { label: "Live", value: "Shield + unshield" },
+        { label: "Not yet", value: "Private send" },
       ]}
     >
-      <h2 id="overview">1. Overview</h2>
+      <h2 id="what">What is Gloam?</h2>
       <p>
-        Every transparent ledger is a confession. Swap, size, and timing become
-        a continuous autobiography of intent — harvested by bots, copy traders,
-        and anyone who can read a graph. Gloam builds the sealed chamber beside
-        that confession.
+        Gloam is an app on <strong>Robinhood Chain</strong> where you can put
+        assets into a shared vault (“shield”) and take them out again with a
+        real proof (“unshield”). Goal: stocks and memes can sit and trade more
+        privately than a normal public wallet.
       </p>
       <p>
-        Not a dark theme on a public DEX. Not theatrical privacy. The product is
-        real cryptographic privacy for three acts that matter:{" "}
-        <strong>hold</strong>, <strong>move</strong>, <strong>trade</strong>.
+        Right now everything is <strong>testnet</strong> — play money. No real
+        dollars.
       </p>
 
-      <h2 id="actions">Core actions</h2>
+      <PoolPicture title="One picture" />
+
+      <h2 id="try">Try it (2 minutes)</h2>
+      <ol>
+        <li>
+          Open <Link href="/app">/app</Link> and connect a wallet on Robinhood
+          testnet.
+        </li>
+        <li>
+          <Link href="/app/shield">Shield</Link> a tiny amount of testnet ETH.
+        </li>
+        <li>
+          <Link href="/app/move">Move</Link> → prove &amp; unshield → ETH returns
+          to your wallet.
+        </li>
+      </ol>
+
+      <FlowDiagram
+        title="What those buttons mean"
+        steps={[
+          {
+            n: "1",
+            title: "Shield",
+            body: "Deposit into the Gloam vault. Your wallet balance goes down; the pool holds the asset.",
+          },
+          {
+            n: "2",
+            title: "Note",
+            body: "Your browser keeps a private record so only you can exit that deposit later.",
+          },
+          {
+            n: "3",
+            title: "Unshield",
+            body: "Prove ownership and withdraw to a normal address. Exit shows on the public explorer.",
+          },
+        ]}
+      />
+
+      <h2 id="works">What works today</h2>
       <ul>
-        <li>
-          <strong>Shield</strong> — assets enter a private balance set; the
-          public graph loses the thread of what you hold.
-        </li>
-        <li>
-          <strong>Move</strong> — transfer without a clear public map of sender,
-          size, and timing.
-        </li>
-        <li>
-          <strong>Trade</strong> — execute without broadcasting the full hand
-          until you choose to exit to light.
-        </li>
+        <li>Connect wallet, portfolio, markets</li>
+        <li>Send ETH and faucet stock tokens (public)</li>
+        <li>Shield ETH + faucet stocks</li>
+        <li>Unshield with a real zero-knowledge proof</li>
       </ul>
 
-      <h2 id="markets">Stocks and memes</h2>
-      <p>
-        One private venue for everything that settles on Robinhood Chain.
-        Tokenized equities for size and legitimacy. Meme markets for volume and
-        urgency. Same rails. Same silence.
-      </p>
+      <h2 id="not-yet">What does not work yet</h2>
+      <ul>
+        <li>Private transfer to another person</li>
+        <li>Private trading / swaps</li>
+        <li>Mainnet</li>
+      </ul>
 
       <h2 id="read-next">Read next</h2>
       <ul>
         <li>
-          <Link href="/docs/encryption">How money is encrypted</Link>
+          <Link href="/docs/encryption">How shield works (simple)</Link>
         </li>
         <li>
-          <Link href="/docs/privacy-model">Privacy model</Link>
+          <Link href="/docs/product">What ships when</Link>
+        </li>
+        <li>
+          <Link href="/docs/privacy-model">What stays private vs public</Link>
         </li>
         <li>
           <Link href="/whitepaper">Whitepaper</Link>

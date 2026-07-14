@@ -16,23 +16,23 @@ export type GlanceRow = { label: string; value: string };
 
 const nav: { section: string; items: DocNavItem[] }[] = [
   {
-    section: "Introduction",
+    section: "Start here",
     items: [
-      { href: "/docs", label: "1. Overview" },
-      { href: "/docs/product", label: "2. Product surface" },
+      { href: "/docs", label: "Overview" },
+      { href: "/docs/product", label: "What ships when" },
     ],
   },
   {
-    section: "Protocol",
+    section: "How it works",
     items: [
-      { href: "/docs/encryption", label: "3. How money is encrypted" },
-      { href: "/docs/privacy-model", label: "4. Privacy model" },
-      { href: "/docs/chain", label: "5. Robinhood Chain" },
-      { href: "/docs/data", label: "6. Live data" },
+      { href: "/docs/encryption", label: "How shield works" },
+      { href: "/docs/privacy-model", label: "What stays private" },
+      { href: "/docs/chain", label: "Robinhood Chain" },
+      { href: "/docs/data", label: "Live data" },
     ],
   },
   {
-    section: "Reference",
+    section: "Deeper",
     items: [{ href: "/whitepaper", label: "Whitepaper" }],
   },
 ];

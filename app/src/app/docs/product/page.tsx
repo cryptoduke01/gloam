@@ -1,66 +1,84 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
-  title: "Product surface",
-  description: "Gloam ship order — connect, public path, shield, private trade.",
+  title: "What ships when",
+  description:
+    "Gloam product status — what is live on testnet, what is next, what we will not fake.",
 };
 
 export default function DocsProductPage() {
   return (
     <DocsLayout
-      title="Product surface"
-      lede="What ships, in what order, and what we refuse to fake."
+      title="What ships when"
+      lede="Status board for the product. Updated as features actually land."
       glance={[
-        { label: "Marketing", value: "gloam.trade" },
+        { label: "App", value: "gloam.trade/app" },
         { label: "Docs", value: "/docs" },
-        { label: "App (later)", value: "app.gloam.trade" },
+        { label: "Paper", value: "/whitepaper" },
         { label: "X", value: "@gloamtrade" },
       ]}
     >
-      <h2>Host plan</h2>
+      <h2>Where things live</h2>
       <ul>
         <li>
-          <strong>Marketing</strong> — <code>gloam.trade</code>
+          <strong>Marketing</strong> — gloam.trade
         </li>
         <li>
-          <strong>Docs</strong> — <code>gloam.trade/docs</code>
+          <strong>App</strong> — gloam.trade/app
         </li>
         <li>
-          <strong>Whitepaper</strong> — <code>gloam.trade/whitepaper</code>
+          <strong>Docs</strong> — gloam.trade/docs
         </li>
         <li>
-          <strong>Testnet product</strong> — <code>gloam.trade/app</code>
+          <strong>Whitepaper</strong> — gloam.trade/whitepaper
         </li>
       </ul>
 
-      <h2>Vertical slices</h2>
-      <ol>
-        <li>
-          <strong>Live:</strong> wallet connect on Robinhood Chain testnet
-          (46630), portfolio, markets catalog, product shell
-        </li>
-        <li>Public swap path so the app is never an empty shell</li>
-        <li>Shield / private transfer vertical slice (real proofs)</li>
-        <li>Private trade path for stock tokens and meme markets</li>
-        <li>Guardrails, audits, anonymity-set health, mainnet gates</li>
-      </ol>
+      <h2>Status (honest)</h2>
+      <FlowDiagram
+        title="Ship board"
+        steps={[
+          {
+            n: "●",
+            title: "Public path",
+            body: "Connect, portfolio, send ETH, send faucet stocks, markets.",
+          },
+          {
+            n: "●",
+            title: "Shield",
+            body: "Deposit ETH and faucet stocks into the live Poseidon pool.",
+          },
+          {
+            n: "●",
+            title: "Unshield",
+            body: "Prove and withdraw with a real browser proof.",
+          },
+          {
+            n: "○",
+            title: "Private send",
+            body: "Move value between notes without a public recipient graph.",
+          },
+          {
+            n: "○",
+            title: "Private trade",
+            body: "Swap stocks/memes without broadcasting full size as free signal.",
+          },
+        ]}
+      />
 
-      <h2>Principles</h2>
+      <h2>Rules we will not break</h2>
       <ul>
-        <li>No mock fills that look like private success</li>
-        <li>No claim that expands past the cryptography</li>
-        <li>Stocks and memes on the same private rails</li>
+        <li>No fake “private success” screens</li>
+        <li>No claims past what the contracts actually do</li>
+        <li>Testnet until audits and production keys exist for real money</li>
       </ul>
 
       <p>
-        Nothing is production-ready until guardrails, audits, and a real
-        anonymity set exist. Follow{" "}
-        <a
-          href="https://x.com/gloamtrade"
-          target="_blank"
-          rel="noreferrer"
-        >
+        Open the app: <Link href="/app">/app</Link>. Follow{" "}
+        <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer">
           @gloamtrade
         </a>{" "}
         for release notes.

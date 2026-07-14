@@ -1,155 +1,223 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
   title: "Whitepaper",
   description:
-    "Gloam whitepaper: Trade Everything on Robinhood Privately — thesis, architecture, threat model, roadmap.",
+    "Gloam whitepaper — private trading on Robinhood Chain, explained simply. What works today, what does not.",
 };
 
 export default function WhitepaperPage() {
   return (
     <DocsLayout
       title="Whitepaper"
-      lede="Living document · v0.1. Claims expand only as contracts and audits land."
+      lede="v0.2 · Living draft. Written for humans first. Technical details only where they matter."
       glance={[
-        { label: "Version", value: "0.1" },
-        { label: "Thesis", value: "Private everything" },
-        { label: "Chain", value: "Robinhood 4663" },
-        { label: "Assets", value: "Stocks · Memes" },
-        { label: "Privacy", value: "Shielded set" },
+        { label: "Version", value: "0.2" },
+        { label: "Chain", value: "RH testnet 46630" },
+        { label: "Live", value: "Shield + unshield" },
+        { label: "Assets", value: "ETH · stocks" },
+        { label: "Status", value: "Testnet" },
       ]}
       quickLinks={[
-        { href: "/docs", label: "Docs home" },
-        { href: "/docs/encryption", label: "Encryption path" },
-        { href: "/#waitlist", label: "Launch testnet" },
+        { href: "/app", label: "Open app" },
+        { href: "/docs", label: "Docs" },
+        { href: "/docs/encryption", label: "How shield works" },
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
       <p className="!text-sm">
-        Status: public draft. Not a promise of mainnet dates.
+        <strong className="text-foreground">Plain English:</strong> Gloam lets
+        you park money in a shared vault on Robinhood Chain so your open wallet
+        balance is not the whole story. Today on <strong>testnet</strong> you can
+        put ETH (and faucet stocks) in, and take them out with a real proof.
+        Private send-to-someone-else is next.
       </p>
 
-      <h2>1. Thesis</h2>
+      <h2>1. The idea</h2>
       <p>
-        Onchain finance inherited a strange piety: everything must be visible.
-        The ledger that was meant to free money from intermediaries became a
-        permanent audience. Traders, funds, and ordinary holders leave a
-        continuous autobiography of intent. Bots harvest that autobiography.
-        Copy traders reprice it. Enemies map it.
+        Public blockchains show almost everything. If someone knows your
+        address, they can watch what you hold and when you move it.
       </p>
       <p>
-        Gloam asserts one rule.{" "}
-        <strong>Trade Everything on Robinhood Privately.</strong> Stocks. Memes.
-        Whatever is liquid on Robinhood Chain. Settlement may remain public.
-        Strategy, size, and path need not. Privacy is not a costume. It is the
-        sealed chamber beside the open book.
+        Gloam&apos;s goal is simple:{" "}
+        <strong>Trade everything on Robinhood privately</strong> — stocks,
+        memes, whatever settles on that chain — without turning every move into
+        a public confession.
       </p>
 
-      <h2>2. The problem</h2>
+      <h2>2. Why it matters</h2>
       <p>
-        Transparent AMMs and wallet intelligence products turned every move
-        into content. Large size on a public pool is a confession of urgency.
-        Address clustering turns a portfolio into a public dossier. Tokenized
-        equities and meme books on Robinhood Chain inherit the same exposure:
-        the asset is modern; the privacy model is medieval.
+        Size and timing are signals. Bots and copy-traders read public wallets.
+        Tokenized stocks and meme markets on Robinhood Chain inherit the same
+        problem: modern assets, old privacy model.
       </p>
       <p>
-        Existing retail venues will list stock tokens and chase degen flow.
-        They will not ship private balances as product. That gap is Gloam —
-        one private venue for everything that settles on Robinhood.
+        We are not claiming invisibility from the law or from your own mistakes.
+        We are building a product layer where balances can sit and (soon) move
+        without the open tape showing every detail.
       </p>
 
-      <h2>3. Where we build</h2>
-      <p>
-        Robinhood Chain (mainnet ID <strong>4663</strong>) is an Arbitrum Orbit
-        L2 aimed at financial services and real-world assets — and it is also
-        where onchain culture trades. Tokenized equities and meme liquidity
-        already live there. Gloam adds a private trading layer: stocks and memes
-        on the same rails.
-      </p>
+      <h2>3. How it works (picture)</h2>
+      <PoolPicture />
+      <FlowDiagram
+        title="The loop you can run today"
+        subtitle="Testnet · real contracts · no fake success screens"
+        steps={[
+          {
+            n: "01",
+            title: "Wallet",
+            body: "You hold testnet ETH (or faucet stock tokens) in a normal wallet.",
+          },
+          {
+            n: "02",
+            title: "Shield",
+            body: "You deposit into Gloam’s pool. The chain records a deposit; you keep a private note in your browser.",
+          },
+          {
+            n: "03",
+            title: "Prove",
+            body: "When you want out, your browser builds a math proof that you own a valid note — without pasting the secret on-chain.",
+          },
+          {
+            n: "04",
+            title: "Unshield",
+            body: "The pool checks the proof and sends the asset back to your wallet. Exit is public; that is intentional.",
+          },
+        ]}
+      />
 
-      <h2>4. Architecture</h2>
-      <p>
-        Application-layer privacy on a transparent L2. Design target: shielded
-        balances in the family of proven EVM privacy protocols — commitments,
-        nullifiers, set structures, and zero-knowledge proofs that validate
-        state transitions without revealing private fields.
-      </p>
+      <h2>4. Words we use (and what they mean)</h2>
       <ul>
         <li>
-          <strong>Shield</strong> — public tokens enter as notes in a private
-          set.
+          <strong>Shield</strong> — put money into the Gloam vault.
         </li>
         <li>
-          <strong>Move</strong> — private transfers nullify and reissue notes.
+          <strong>Note</strong> — your private claim that some of the vault is
+          yours (saved in this browser when you deposit).
         </li>
         <li>
-          <strong>Trade</strong> — private execution so intent and size are not
-          free signals.
+          <strong>Unshield</strong> — take money back out to a normal wallet.
         </li>
         <li>
-          <strong>Exit</strong> — unshield remains a deliberate, visible edge.
+          <strong>Pool</strong> — the smart contract that holds everyone’s
+          shielded deposits together.
+        </li>
+        <li>
+          <strong>Proof</strong> — a short cryptographic certificate that a
+          deposit is valid, without revealing your secret.
         </li>
       </ul>
       <p>
-        Prefer integrating or porting battle-tested systems over novel circuits
-        on day one.
+        You do not need those words to use the app. They exist so builders can
+        talk precisely.
       </p>
 
-      <h2>5. How money is encrypted</h2>
-      <p>
-        Clear value becomes a commitment: ciphertext plus a proof of
-        well-formedness. The commitment joins an anonymity set. Transfers spend
-        notes by publishing nullifiers and creating new commitments. Only
-        holders of the appropriate viewing keys decrypt note contents. Detail:{" "}
-        <Link href="/docs/encryption">encryption docs</Link>.
-      </p>
-
-      <h2>6. Threat model</h2>
+      <h2>5. What is live (testnet)</h2>
       <ul>
+        <li>Wallet connect on Robinhood Chain testnet (chain ID 46630)</li>
+        <li>Portfolio, send ETH, send faucet stock tokens, markets</li>
         <li>
-          <strong>Hidden (goal):</strong> amounts while shielded; private
-          transfer graph; trade intent during private execution.
+          <strong>Shield</strong> ETH and stocks into the Poseidon pool
         </li>
         <li>
-          <strong>Visible (edge):</strong> shield and unshield; contract calls;
-          proof verification.
-        </li>
-        <li>
-          <strong>Weak when small:</strong> anonymity set size, timing
-          correlation, amount fingerprinting.
-        </li>
-        <li>
-          <strong>Out of scope as magic:</strong> device malware, coerced keys,
-          legal process off-chain, operational mistakes.
+          <strong>Unshield</strong> with a real zero-knowledge proof in the
+          browser
         </li>
       </ul>
       <p>
-        Privacy tools reduce public visibility. They do not make anyone
-        invisible to the state or to their own carelessness.
+        Product:{" "}
+        <Link href="/app">gloam.trade/app</Link>. This is testnet money only.
       </p>
 
-      <h2>7. Product path</h2>
+      <h2>6. What is not live yet</h2>
+      <ul>
+        <li>Private send from one person to another (inside the vault)</li>
+        <li>Private trading (swap without showing size on the open book)</li>
+        <li>Mainnet / real money</li>
+        <li>Production security ceremony for the proving keys</li>
+      </ul>
+      <p>
+        We will not show a “private success” screen until those paths are real.
+      </p>
+
+      <h2>7. Architecture (for builders)</h2>
+      <p>
+        Application privacy on a transparent L2: a custody pool, a Merkle tree of
+        note commitments, nullifiers to stop double-spends, and a verifier that
+        checks proofs for unshield. Notes bind amount and asset. Today’s live
+        path uses a Poseidon tree and circuit pair; an earlier keccak pool remains
+        for history only.
+      </p>
+      <p>
+        Prefer proven patterns (commitments, nullifiers, Merkle roots, ZK
+        proofs) over invented cryptography.
+      </p>
+      <FlowDiagram
+        title="System sketch"
+        steps={[
+          {
+            n: "A",
+            title: "App",
+            body: "Wallet UI, note storage in the browser, builds proofs.",
+          },
+          {
+            n: "B",
+            title: "Pool contract",
+            body: "Holds assets, stores the tree root, pays out on valid unshield.",
+          },
+          {
+            n: "C",
+            title: "Verifier",
+            body: "On-chain check that a proof matches public inputs.",
+          },
+          {
+            n: "D",
+            title: "Circuit",
+            body: "Math rules: open note, check tree membership, derive nullifier.",
+          },
+        ]}
+      />
+
+      <h2>8. Honesty about privacy</h2>
+      <ul>
+        <li>
+          <strong>Hidden (goal):</strong> what you hold while it is shielded;
+          later, private transfer graph.
+        </li>
+        <li>
+          <strong>Still visible:</strong> when you enter or exit the vault;
+          that you used the contract at all.
+        </li>
+        <li>
+          <strong>Weak when small:</strong> few users means weaker privacy set.
+        </li>
+        <li>
+          <strong>Not magic:</strong> malware, lost keys, or legal process are
+          outside the product.
+        </li>
+      </ul>
+
+      <h2>9. Roadmap</h2>
       <ol>
-        <li>Marketing and docs (live at gloam.trade)</li>
-        <li>Wallet connect + public path on testnet</li>
-        <li>Shield and private transfer vertical slice</li>
-        <li>Private trade for stock tokens and meme markets</li>
-        <li>Audits, guardrails, anonymity-set health, mainnet gates</li>
+        <li>
+          <strong>Done:</strong> testnet app, shield, unshield with real proofs
+        </li>
+        <li>
+          <strong>Next:</strong> private move between notes; clearer product
+          language everywhere
+        </li>
+        <li>Private trade for stock tokens and memes</li>
+        <li>Audits, production keys, mainnet only when ready</li>
       </ol>
-      <p>
-        No mock private fills. No theatrical dashboards that imply privacy
-        where proofs do not exist.
-      </p>
 
-      <h2>8. Closing</h2>
+      <h2>10. Closing</h2>
       <p>
-        The open ledger will remain. Markets need settlement. What they do not
-        need is the automatic confession of every private calculation. Gloam
-        exists so that on Robinhood Chain, money can move and trade in a sealed
-        chamber — until the holder chooses the light.
+        The open ledger will stay — markets need settlement. They do not need
+        every private calculation on a billboard. Gloam is the sealed chamber
+        beside that book.
       </p>
       <p className="!font-mono !text-[11px] !uppercase !tracking-[0.14em] !text-lime">
         gloam.trade · /docs · /whitepaper · @gloamtrade
