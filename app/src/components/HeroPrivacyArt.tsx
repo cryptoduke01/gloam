@@ -30,9 +30,9 @@ export function HeroPrivacyArt() {
         className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent"
         aria-hidden
       />
-      <p className="pointer-events-none absolute bottom-4 left-4 right-4 font-mono text-[10px] uppercase tracking-[0.16em] text-black/75">
+      <span className="pointer-events-none absolute bottom-4 left-4 rounded-md border border-white/10 bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-lime backdrop-blur-sm">
         What the chain cannot see
-      </p>
+      </span>
     </motion.div>
   );
 }

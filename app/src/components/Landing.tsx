@@ -98,8 +98,8 @@ export function Landing() {
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-mute sm:text-lg">
                 Every transparent ledger is a confession. Gloam is the sealed
-                chamber on Robinhood Chain: stocks, memes, whatever is liquid —
-                held, moved, and traded without printing your book to the street.
+                chamber on Robinhood Chain: stocks, memes, whatever is liquid.
+                Held, moved, and traded without printing your book to the street.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <MotionPress>
@@ -165,7 +165,7 @@ export function Landing() {
             </MotionItem>
             <MotionItem>
               <p className="mt-3 max-w-2xl text-mute leading-relaxed">
-                Public AMMs and wallet trackers turned every move into spectacle —
+                Public AMMs and wallet trackers turned every move into spectacle:
                 equity tokens and degen books alike. Gloam is the private layer
                 for hold, send, and trade when you refuse a live feed of your intent.
               </p>
@@ -314,7 +314,7 @@ export function Landing() {
               <MotionItem>
                 <p className="mt-3 text-mute leading-relaxed">
                   Robinhood Chain is where equities and onchain culture already
-                  settle — stock tokens past the close, memes when the tape is
+                  settle: stock tokens past the close, memes when the tape is
                   loud. Gloam adds shielded balances and private execution so
                   size and strategy remain yours, on both ends of the book.
                 </p>

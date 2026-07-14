@@ -96,15 +96,17 @@ export function EncryptFlow() {
                   cx={x}
                   cy={70}
                   r={i === 1 || i === 2 ? 28 : 24}
-                  fill="#0a0a0a"
-                  stroke={i === 1 || i === 2 ? "#c8ff00" : "#333"}
+                  style={{
+                    fill: "var(--panel)",
+                    stroke: i === 1 || i === 2 ? "#c8ff00" : "var(--line)",
+                  }}
                   strokeWidth={i === 1 || i === 2 ? 2 : 1}
                 />
                 <text
                   x={x}
                   y={74}
                   textAnchor="middle"
-                  fill={i === 1 || i === 2 ? "#c8ff00" : "#fff"}
+                  style={{ fill: i === 1 || i === 2 ? "#c8ff00" : "var(--foreground)" }}
                   fontSize="11"
                   fontFamily="ui-monospace, monospace"
                 >
@@ -114,7 +116,7 @@ export function EncryptFlow() {
                   x={x}
                   y={130}
                   textAnchor="middle"
-                  fill="#fff"
+                  style={{ fill: "var(--foreground)" }}
                   fontSize="13"
                   fontFamily="Georgia, serif"
                 >
@@ -124,7 +126,7 @@ export function EncryptFlow() {
                   x={x}
                   y={150}
                   textAnchor="middle"
-                  fill="#a3a3a3"
+                  style={{ fill: "var(--mute)" }}
                   fontSize="10"
                   fontFamily="ui-monospace, monospace"
                   letterSpacing="0.08em"
