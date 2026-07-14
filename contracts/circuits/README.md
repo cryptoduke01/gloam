@@ -82,9 +82,25 @@ circuits/
 ## Tools
 
 ```bash
+# one-time
+cargo install --git https://github.com/iden3/circom.git --tag v2.1.9 circom
 cd contracts/circuits
-npm run check-tools   # circom + snarkjs
+npm i snarkjs@0.7.5
+npm run check-tools
+
+# compile scaffold circuit
+mkdir -p build/unshield
+circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield
+
+# full groth16 pipeline (dev ceremony — NOT production)
+# see scripts in package history / snarkjs docs; keys land in build/
 ```
+
+### Scaffold verifier (generated)
+
+`src/verifiers/ScaffoldUnshieldVerifier.sol` + `ScaffoldIVerifier.sol` adapt snarkjs → `IVerifier`.
+
+**Never `setVerifier` these on a funded pool.** The circuit is a placeholder (no note open / Merkle). They exist so the compile → prove → Solidity path is proven end-to-end.
 
 ## Safety
 

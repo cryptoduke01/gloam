@@ -15,7 +15,9 @@ import {
 import { PROOF_LAYOUT_VERSION } from "@/lib/note";
 import {
   buildUnshieldWitness,
+  downloadWitnessJson,
   formatWitnessSummary,
+  type UnshieldWitness,
 } from "@/lib/prover";
 import { formatEth, shortAddress } from "@/lib/chain";
 import { StatusPill } from "./StatusPill";
@@ -37,6 +39,7 @@ export function MoveView() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [witnessLog, setWitnessLog] = useState<string | null>(null);
+  const [lastWitness, setLastWitness] = useState<UnshieldWitness | null>(null);
 
   const boundNotes = useMemo(
     () =>
@@ -57,6 +60,7 @@ export function MoveView() {
     if (!selected || !address || selected.leafIndex == null) return;
     const path = pathForLeaf(selected.leafIndex);
     if (!path) {
+      setLastWitness(null);
       setWitnessLog(
         "No Merkle path — wait for tree sync or refresh. Leaf may be missing."
       );
@@ -70,6 +74,7 @@ export function MoveView() {
       path,
       root: path.root,
     });
+    setLastWitness(w);
     setWitnessLog(formatWitnessSummary(w));
   }
 
@@ -176,22 +181,33 @@ export function MoveView() {
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  onClick={onBuildWitness}
-                  disabled={!selected || !matchesChain}
-                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-foreground hover:bg-lime/10 disabled:opacity-50"
-                >
-                  Build unshield witness
-                </button>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={onBuildWitness}
+                    disabled={!selected || !matchesChain}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-foreground hover:bg-lime/10 disabled:opacity-50"
+                  >
+                    Build unshield witness
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => lastWitness && downloadWitnessJson(lastWitness)}
+                    disabled={!lastWitness?.checks.pathValid || !lastWitness.checks.commitmentMatches}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-line px-4 text-sm text-foreground hover:border-lime/40 disabled:opacity-50"
+                  >
+                    Download JSON
+                  </button>
+                </div>
                 {witnessLog && (
                   <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-panel p-3 font-mono text-[10px] leading-relaxed text-mute">
                     {witnessLog}
                   </pre>
                 )}
                 <p className="mt-2 text-xs text-mute">
-                  Witness packs public inputs for layout v{PROOF_LAYOUT_VERSION}.
-                  Proving key not deployed — button will not send a tx.
+                  Witness packs public inputs for layout v{PROOF_LAYOUT_VERSION}
+                  (circom input included in JSON). Proving key not deployed —
+                  nothing is submitted on-chain.
                 </p>
               </div>
             ) : (

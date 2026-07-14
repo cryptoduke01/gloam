@@ -109,12 +109,48 @@ export function buildUnshieldWitness(args: BuildUnshieldArgs): UnshieldWitness {
 
 /**
  * Call when a real prover exists. Today always returns null.
+ * Wire snarkjs fullProve here once `circuits/build/unshield` keys exist.
  */
 export async function proveUnshield(
   _witness: UnshieldWitness
-): Promise<{ proof: Hex } | null> {
-  // Future: wasm/snarkjs or remote prover
+): Promise<{ proof: Hex; publicSignals: bigint[] } | null> {
   return null;
+}
+
+/** Circom / snarkjs input.json shape (field elements as decimal strings). */
+export function witnessToCircomInput(w: UnshieldWitness): Record<string, string | string[]> {
+  return {
+    root: BigInt(w.publicInputs.root).toString(),
+    nullifier: BigInt(w.publicInputs.nullifier).toString(),
+    asset: BigInt(w.publicInputs.asset).toString(),
+    amount: w.publicInputs.amount.toString(),
+    recipient: BigInt(w.publicInputs.to).toString(),
+    secret: BigInt(w.private.secret).toString(),
+    pathElements: w.private.pathElements.map((e) => BigInt(e).toString()),
+    pathIndices: w.private.pathIndices.map(String),
+  };
+}
+
+/** Full debug export (includes commitment; still not a proof). */
+export function witnessToExportJson(w: UnshieldWitness) {
+  return {
+    version: 1,
+    proofLayout: 2,
+    readyToProve: w.readyToProve,
+    blocker: w.blocker,
+    checks: w.checks,
+    publicInputs: {
+      root: w.publicInputs.root,
+      nullifier: w.publicInputs.nullifier,
+      asset: w.publicInputs.asset,
+      amount: w.publicInputs.amount.toString(),
+      to: w.publicInputs.to,
+    },
+    publicInputsUint: w.publicInputsUint.map(String),
+    commitment: w.private.commitment,
+    leafIndex: w.private.leafIndex,
+    circomInput: witnessToCircomInput(w),
+  };
 }
 
 export function formatWitnessSummary(w: UnshieldWitness): string {
@@ -127,4 +163,17 @@ export function formatWitnessSummary(w: UnshieldWitness): string {
     w.blocker ?? "ok",
   ];
   return lines.join("\n");
+}
+
+/** Download helper for browsers */
+export function downloadWitnessJson(w: UnshieldWitness, filename = "gloam-unshield-witness.json") {
+  const blob = new Blob([JSON.stringify(witnessToExportJson(w), null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

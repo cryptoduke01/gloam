@@ -96,8 +96,9 @@ No purple crypto fog.
 
 - **Product:** testnet-only until the private rails hold  
 - **Shield deposit:** live on RH testnet (ETH + stocks)  
-- **Phase 2 source:** bound notes + proof public-input layout; circuits scaffolded  
-- **Next:** implement unshield circuit → deploy real verifier → private move / unshield UI  
+- **Phase 2:** bound notes, Merkle sync, witness export, **circom→snarkjs→Solidity pipeline** (scaffold verifier — not on the live pool)  
+- **Next:** real circuit constraints (note open + Merkle) → production ceremony → private unshield UI  
+
 
 
 

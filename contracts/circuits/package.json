@@ -5,7 +5,9 @@
   "description": "Gloam unshield/transfer circuits (scaffold). Install circom + snarkjs to build.",
   "scripts": {
     "check-tools": "node scripts/check-tools.js",
-    "build:unshield": "node scripts/check-tools.js && echo 'Install circom then: circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield'",
+    "sample-input": "node scripts/export-sample-input.js",
+    "compile:unshield": "mkdir -p build/unshield && circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield -l node_modules",
+    "build:unshield": "npm run check-tools && npm run compile:unshield",
     "info": "node scripts/check-tools.js"
   }
 }
