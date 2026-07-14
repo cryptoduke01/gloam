@@ -83,6 +83,17 @@ export const shieldPoolAbi = [
     outputs: [{ type: "bool" }],
   },
   {
+    type: "function",
+    name: "emergencyWithdraw",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "Shielded",
     inputs: [
@@ -97,6 +108,7 @@ export const shieldPoolAbi = [
 
 /** RH L2 gas headroom — forge under-estimates multi-tx; wallets vary */
 export const SHIELD_GAS_LIMIT = 500_000n;
+export const EMERGENCY_GAS_LIMIT = 200_000n;
 
 export function isShieldDeployed(): boolean {
   return Boolean(SHIELD_POOL_ADDRESS);
@@ -123,9 +135,41 @@ export type LocalNote = {
   txHash?: Hex;
   from?: Address;
   createdAt: number;
+  /** Local only — set when owner empties pool on testnet */
+  status?: "open" | "recovered";
 };
 
 const NOTES_KEY = "gloam.shield.notes.v1";
+
+export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
+  return notes.filter((n) => Boolean(n.txHash) && n.status !== "recovered");
+}
+
+export function sumNoteWei(notes: LocalNote[]): bigint {
+  return confirmedNotes(notes).reduce(
+    (s, n) => s + BigInt(n.amountWei || "0"),
+    BigInt(0)
+  );
+}
+
+export function markAllNotesRecovered(address?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (!raw) return;
+    const all = JSON.parse(raw) as LocalNote[];
+    const lower = address?.toLowerCase();
+    const next = all.map((n) => {
+      if (n.chainId !== PRODUCT_CHAIN_ID) return n;
+      if (lower && n.from && n.from.toLowerCase() !== lower) return n;
+      if (!n.txHash) return n;
+      return { ...n, status: "recovered" as const };
+    });
+    localStorage.setItem(NOTES_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function loadLocalNotes(address?: string | null): LocalNote[] {
   if (typeof window === "undefined") return [];

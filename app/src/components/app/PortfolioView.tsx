@@ -9,9 +9,15 @@ import {
   useReadContracts,
 } from "wagmi";
 import { AsciiImage } from "@/components/AsciiImage";
-import { PRODUCT_CHAIN_ID, formatEth } from "@/lib/chain";
+import {
+  EXPLORER_TX,
+  PRODUCT_CHAIN_ID,
+  formatEth,
+  shortAddress,
+} from "@/lib/chain";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
+import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import {
   formatMark,
@@ -35,6 +41,8 @@ export function PortfolioView() {
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
   const markets = marketData?.markets ?? [];
+  const { open: shieldNotes, shieldedWei } = useLocalShieldNotes(address);
+  const shieldLive = isShieldDeployed();
 
   const { data: bal, isLoading } = useBalance({
     address,
@@ -85,10 +93,16 @@ export function PortfolioView() {
   }, [tokenBals, markets, settings.hideZeroBalances]);
 
   const ethAmt = bal ? Number(bal.value) / 1e18 : 0;
+  const shieldAmt = Number(shieldedWei) / 1e18;
   const ethUsdVal = ethUsd != null ? ethAmt * ethUsd : null;
+  const shieldUsdVal = ethUsd != null ? shieldAmt * ethUsd : null;
   const stocksUsd = positions.reduce((s, p) => s + p.usd, 0);
   const totalUsd =
-    ethUsdVal != null ? ethUsdVal + stocksUsd : stocksUsd > 0 ? stocksUsd : null;
+    ethUsdVal != null
+      ? ethUsdVal + stocksUsd + (shieldUsdVal ?? 0)
+      : stocksUsd > 0 || shieldAmt > 0
+        ? stocksUsd + (shieldUsdVal ?? 0)
+        : null;
 
   return (
     <div className="space-y-6">
@@ -123,12 +137,15 @@ export function PortfolioView() {
                 {totalUsd != null && settings.showUsd
                   ? formatUsd(totalUsd)
                   : isConnected
-                    ? `${formatEth(bal?.value ?? BigInt(0))} ETH`
+                    ? `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`
                     : "—"}
               </p>
-              {totalUsd != null && settings.showUsd && isConnected && (
+              {isConnected && (
                 <p className="mt-1 text-sm text-mute">
-                  {formatEth(bal?.value ?? BigInt(0))} ETH
+                  {formatEth(bal?.value ?? BigInt(0))} wallet
+                  {shieldedWei > BigInt(0)
+                    ? ` · ${formatEth(shieldedWei)} shielded`
+                    : ""}
                   {stocksUsd > 0
                     ? ` · ${positions.filter((p) => p.raw > BigInt(0)).length} stocks`
                     : ""}
@@ -137,10 +154,10 @@ export function PortfolioView() {
             </div>
           </div>
 
-          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+          <div className="grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                ETH
+                Wallet ETH
               </p>
               {!isConnected ? (
                 <p className="mt-2 font-display text-2xl text-mute">—</p>
@@ -161,6 +178,34 @@ export function PortfolioView() {
             </div>
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                Shielded
+              </p>
+              {!isConnected ? (
+                <p className="mt-2 font-display text-2xl text-mute">—</p>
+              ) : (
+                <>
+                  <p className="mt-2 font-display text-2xl text-foreground">
+                    {formatEth(shieldedWei)}
+                  </p>
+                  {shieldUsdVal != null &&
+                    settings.showUsd &&
+                    shieldedWei > BigInt(0) && (
+                      <p className="mt-0.5 text-sm text-mute">
+                        {formatUsd(shieldUsdVal)}
+                      </p>
+                    )}
+                  <p className="mt-0.5 text-xs text-mute">
+                    {shieldNotes.length > 0
+                      ? `${shieldNotes.length} note${shieldNotes.length === 1 ? "" : "s"} · this browser`
+                      : shieldLive
+                        ? "None yet · deposit on Shield"
+                        : "Not live"}
+                  </p>
+                </>
+              )}
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
                 Stocks
               </p>
               <p className="mt-2 font-display text-2xl text-foreground">
@@ -171,6 +216,21 @@ export function PortfolioView() {
               <p className="mt-0.5 text-xs text-mute">Faucet · live marks</p>
             </div>
           </div>
+
+          {isConnected && shieldedWei > BigInt(0) && (
+            <div className="border-t border-line bg-lime/5 px-5 py-3 sm:px-6">
+              <p className="text-sm text-foreground">
+                <span className="font-medium">{formatEth(shieldedWei)} ETH</span>
+                {shieldUsdVal != null && settings.showUsd
+                  ? ` (≈ ${formatUsd(shieldUsdVal)})`
+                  : ""}{" "}
+                sits in the shield pool — not in your wallet.{" "}
+                <Link href="/app/shield" className="text-lime hover:underline">
+                  Manage on Shield →
+                </Link>
+              </p>
+            </div>
+          )}
 
           {!isConnected && (
             <div className="border-t border-line px-5 py-4 sm:px-6">
@@ -200,7 +260,7 @@ export function PortfolioView() {
                 >
                   Send
                 </Link>
-                {isShieldDeployed() && (
+                {shieldLive && (
                   <Link
                     href="/app/shield"
                     className="inline-flex min-h-8 items-center rounded-full border border-lime/40 px-3 text-[11px] font-medium text-lime"
@@ -229,6 +289,55 @@ export function PortfolioView() {
           <ActivityFeed />
         </div>
       </div>
+
+      {shieldNotes.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              Shielded notes
+            </p>
+            <StatusPill tone="lime">In pool</StatusPill>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-line bg-panel">
+            <ul>
+              {shieldNotes.slice(0, 6).map((n) => (
+                <li
+                  key={n.id}
+                  className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 last:border-0"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      {formatEth(BigInt(n.amountWei))} ETH
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-mute">
+                      {n.leafIndex != null ? `leaf #${n.leafIndex}` : "note"} ·{" "}
+                      {shortAddress(n.commitment, 4)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {n.txHash && (
+                      <a
+                        href={EXPLORER_TX(n.txHash)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-lime hover:underline"
+                      >
+                        Tx
+                      </a>
+                    )}
+                    <Link
+                      href="/app/shield"
+                      className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-lime/50"
+                    >
+                      View
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="mb-3 flex items-center justify-between">

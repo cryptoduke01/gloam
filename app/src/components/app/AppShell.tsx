@@ -135,7 +135,7 @@ export function AppShell({
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>Testnet. Private trading ships when the rails are real.</p>
+          <p>Testnet. Shield deposit is live. Private move still closed.</p>
           <p className="font-mono uppercase tracking-[0.12em]">gloam.trade</p>
         </div>
       </footer>
