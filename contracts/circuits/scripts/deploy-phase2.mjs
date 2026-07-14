@@ -81,9 +81,16 @@ async function main() {
   }
 
   function loadArtifact(name) {
-    const p = join(root, "out", name, `${name}.json`);
-    if (!existsSync(p)) {
-      throw new Error(`Missing ${p} — run: cd contracts && forge build`);
+    // Foundry: out/Contract.sol/Contract.json (preferred) or out/Contract/Contract.json
+    const candidates = [
+      join(root, "out", `${name}.sol`, `${name}.json`),
+      join(root, "out", name, `${name}.json`),
+    ];
+    const p = candidates.find((c) => existsSync(c));
+    if (!p) {
+      throw new Error(
+        `Missing artifact for ${name}. Tried:\n  ${candidates.join("\n  ")}\nRun: cd contracts && forge build`
+      );
     }
     return JSON.parse(readFileSync(p, "utf8"));
   }
@@ -102,8 +109,15 @@ async function main() {
     return addr;
   }
 
-  const poseidon2 = await deployPoseidon(2);
-  const poseidon3 = await deployPoseidon(3);
+  // Resume: reuse already-deployed Poseidon hashers if set
+  //   export POSEIDON2=0xcc2d... POSEIDON3=0x3242...
+  const poseidon2 =
+    process.env.POSEIDON2 || (await deployPoseidon(2));
+  const poseidon3 =
+    process.env.POSEIDON3 || (await deployPoseidon(3));
+  if (process.env.POSEIDON2) console.log("reuse Poseidon2", poseidon2);
+  if (process.env.POSEIDON3) console.log("reuse Poseidon3", poseidon3);
+
   const unshieldVerifier = await deployArtifact("UnshieldVerifier");
   const unshieldIVerifier = await deployArtifact("UnshieldIVerifier", [
     unshieldVerifier,
