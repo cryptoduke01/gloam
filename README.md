@@ -7,7 +7,8 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 | | |
 | --- | --- |
 | Site | [gloam.trade](https://gloam.trade) |
-| Docs | [docs.gloam.trade](https://docs.gloam.trade) |
+| Docs | [gloam.trade/docs](https://gloam.trade/docs) |
+| Whitepaper | [gloam.trade/whitepaper](https://gloam.trade/whitepaper) |
 | X | [@gloamtrade](https://x.com/gloamtrade) |
 
 ## What this is
@@ -22,8 +23,8 @@ Private trading rails on **Robinhood Chain** (EVM L2):
 
 ```
 gloam/
-  app/    → gloam.trade        (marketing / landing)
-  docs/   → docs.gloam.trade   (documentation + whitepaper)
+  app/    → gloam.trade   (landing + /docs + /whitepaper)
+  docs/   → legacy (do not deploy)
 ```
 
 ## Setup
@@ -31,18 +32,12 @@ gloam/
 ```bash
 pnpm install
 pnpm dev:app    # http://localhost:3000
-pnpm dev:docs   # http://localhost:3001
+pnpm build:app
 ```
 
-## Domains / DNS (later)
+## Deploy
 
-| Host | Target |
-| --- | --- |
-| `gloam.trade` | Landing or redirect → app |
-| `app.gloam.trade` | Vercel project: `app` |
-| `docs.gloam.trade` | Vercel project: `docs` |
-
-At your registrar (or Cloudflare): CNAME each host to Vercel, then assign domains in the Vercel project settings. See [DEPLOY.md](./DEPLOY.md).
+One Vercel project. Root Directory = **`app`**. Output Directory empty. See [DEPLOY.md](./DEPLOY.md).
 
 ## Stack (target)
 

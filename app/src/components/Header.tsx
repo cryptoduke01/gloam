@@ -10,8 +10,8 @@ const links = [
   { href: "/#encryption", label: "Encrypt" },
   { href: "/#how", label: "Path" },
   { href: "/#chain", label: "Chain" },
-  { href: "https://docs.gloam.trade", label: "Docs", external: true },
-  { href: "https://docs.gloam.trade/whitepaper", label: "Whitepaper", external: true },
+  { href: "/docs", label: "Docs" },
+  { href: "/whitepaper", label: "Whitepaper" },
 ];
 
 export function Header() {
@@ -35,28 +35,16 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-line bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:h-16 sm:px-8">
         <Logo />
-        <nav className="hidden items-center gap-7 md:flex" aria-label="Primary">
-          {links.map((l) =>
-            l.external ? (
-              <a
-                key={l.href}
-                href={l.href}
-                className="text-sm text-mute transition-colors hover:text-foreground"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {l.label}
-              </a>
-            ) : (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="text-sm text-mute transition-colors hover:text-foreground"
-              >
-                {l.label}
-              </Link>
-            )
-          )}
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-sm text-mute transition-colors hover:text-foreground"
+            >
+              {l.label}
+            </Link>
+          ))}
         </nav>
         <div className="flex items-center gap-2">
           <Link
@@ -67,7 +55,7 @@ export function Header() {
           </Link>
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line text-foreground md:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line text-foreground lg:hidden"
             aria-expanded={open}
             aria-controls="mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
@@ -82,7 +70,7 @@ export function Header() {
         {open && (
           <motion.div
             id="mobile-nav"
-            className="border-t border-line bg-background md:hidden"
+            className="border-t border-line bg-background lg:hidden"
             initial={reduce ? false : { height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={reduce ? undefined : { height: 0, opacity: 0 }}
@@ -92,38 +80,22 @@ export function Header() {
               className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-4"
               aria-label="Mobile"
             >
-              {links.map((l, i) =>
-                l.external ? (
-                  <motion.a
-                    key={l.href}
+              {links.map((l, i) => (
+                <motion.div
+                  key={l.href}
+                  initial={reduce ? false : { opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.04 * i }}
+                >
+                  <Link
                     href={l.href}
-                    className="rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
-                    target="_blank"
-                    rel="noreferrer"
+                    className="block rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
                     onClick={() => setOpen(false)}
-                    initial={reduce ? false : { opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.04 * i }}
                   >
                     {l.label}
-                  </motion.a>
-                ) : (
-                  <motion.div
-                    key={l.href}
-                    initial={reduce ? false : { opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.04 * i }}
-                  >
-                    <Link
-                      href={l.href}
-                      className="block rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
-                      onClick={() => setOpen(false)}
-                    >
-                      {l.label}
-                    </Link>
-                  </motion.div>
-                )
-              )}
+                  </Link>
+                </motion.div>
+              ))}
               <Link
                 href="/#waitlist"
                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-black"

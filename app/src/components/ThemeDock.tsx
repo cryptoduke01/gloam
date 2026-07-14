@@ -15,7 +15,7 @@ export function ThemeDock() {
         type="button"
         onClick={toggle}
         aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-line bg-panel text-foreground shadow-[0_8px_30px_rgba(0,0,0,0.35)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+        className="pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full border border-line bg-panel text-foreground shadow-[var(--shadow-dock)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
         initial={reduce ? false : { scale: 0.8, opacity: 0, y: 12 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         whileHover={reduce ? undefined : { scale: 1.08 }}

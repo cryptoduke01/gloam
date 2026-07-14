@@ -37,35 +37,29 @@ export const stagger: Variants = {
   },
 };
 
+/**
+ * Section wrapper. Intentionally a plain <section> so its content is never
+ * hidden waiting on a variant that might not propagate — children reveal
+ * themselves independently via MotionItem / MotionCard.
+ */
 export function MotionSection({
   children,
   className = "",
-  delay = 0,
+  delay: _delay = 0,
   ...rest
 }: {
   children: ReactNode;
   className?: string;
   delay?: number;
 } & HTMLMotionProps<"section">) {
-  const animate = useMotionSafe();
   return (
-    <motion.section
-      className={className}
-      initial={animate ? "hidden" : false}
-      whileInView={animate ? "show" : undefined}
-      viewport={{ once: true, amount: 0.08, margin: "0px 0px -40px 0px" }}
-      variants={{
-        hidden: {},
-        show: {
-          transition: { staggerChildren: 0.07, delayChildren: delay },
-        },
-      }}
-      {...rest}
-    >
+    <section className={className} {...(rest as HTMLMotionProps<"section">)}>
       {children}
-    </motion.section>
+    </section>
   );
 }
+
+const viewport = { once: true, amount: 0.2, margin: "0px 0px -60px 0px" } as const;
 
 export function MotionItem({
   children,
@@ -78,11 +72,16 @@ export function MotionItem({
 }) {
   const animate = useMotionSafe();
   const Comp = motion[as];
+  if (!animate) {
+    return <Comp className={className}>{children}</Comp>;
+  }
   return (
     <Comp
       className={className}
-      variants={animate ? fadeUp : undefined}
-      initial={animate ? "hidden" : false}
+      variants={fadeUp}
+      initial="hidden"
+      whileInView="show"
+      viewport={viewport}
     >
       {children}
     </Comp>
@@ -97,16 +96,18 @@ export function MotionCard({
   className?: string;
 }) {
   const animate = useMotionSafe();
+  if (!animate) {
+    return <article className={className}>{children}</article>;
+  }
   return (
     <motion.article
       className={className}
-      variants={animate ? fadeUp : undefined}
-      whileHover={
-        animate
-          ? { y: -3, transition: { duration: 0.2, ease } }
-          : undefined
-      }
-      whileTap={animate ? { scale: 0.99 } : undefined}
+      variants={fadeUp}
+      initial="hidden"
+      whileInView="show"
+      viewport={viewport}
+      whileHover={{ y: -3, transition: { duration: 0.2, ease } }}
+      whileTap={{ scale: 0.99 }}
     >
       {children}
     </motion.article>

@@ -15,7 +15,7 @@ export function Logo({ className = "" }: { className?: string }) {
         className="h-8 w-8 rounded-sm"
         priority
       />
-      <span className="text-lg font-semibold tracking-tight text-white">
+      <span className="text-lg font-semibold tracking-tight text-foreground">
         Gloam
       </span>
     </Link>

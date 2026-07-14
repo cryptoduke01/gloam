@@ -111,24 +111,20 @@ export function Landing() {
                   </Link>
                 </MotionPress>
                 <MotionPress>
-                  <a
-                    href="https://docs.gloam.trade"
-                    target="_blank"
-                    rel="noreferrer"
+                  <Link
+                    href="/docs"
                     className="inline-flex min-h-11 items-center rounded-md border border-line px-5 text-sm font-medium text-foreground hover:border-mute"
                   >
                     Docs
-                  </a>
+                  </Link>
                 </MotionPress>
                 <MotionPress>
-                  <a
-                    href="https://docs.gloam.trade/whitepaper"
-                    target="_blank"
-                    rel="noreferrer"
+                  <Link
+                    href="/whitepaper"
                     className="inline-flex min-h-11 items-center rounded-md border border-line px-5 text-sm font-medium text-foreground hover:border-mute"
                   >
                     Whitepaper
-                  </a>
+                  </Link>
                 </MotionPress>
               </div>
             </motion.div>
@@ -337,14 +333,12 @@ export function Landing() {
                 ))}
               </ul>
               <MotionItem className="mt-6">
-                <a
-                  href="https://docs.gloam.trade/whitepaper"
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href="/whitepaper"
                   className="inline-flex min-h-10 items-center text-sm font-medium text-lime hover:underline"
                 >
                   Read the whitepaper →
-                </a>
+                </Link>
               </MotionItem>
             </div>
             <MotionItem className="relative aspect-[16/11] overflow-hidden rounded-lg border border-line">
@@ -395,14 +389,12 @@ export function Landing() {
                 </a>
               </MotionPress>
               <MotionPress>
-                <a
-                  href="https://docs.gloam.trade"
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href="/docs"
                   className="inline-flex min-h-11 items-center rounded-md border border-black/25 px-5 text-sm font-medium text-black hover:bg-black/5"
                 >
                   Docs
-                </a>
+                </Link>
               </MotionPress>
             </div>
           </div>

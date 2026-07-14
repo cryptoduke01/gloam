@@ -1,8 +1,8 @@
 # Deploy (Vercel)
 
-## Marketing site (`gloam.trade`)
+One project. One domain. Docs live on the same app.
 
-**Project settings (this is what fixes the `.next/package.json` error):**
+## Marketing + docs (`gloam.trade`)
 
 | Field | Value |
 | --- | --- |
@@ -15,18 +15,22 @@
 
 If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at `/vercel/path0/.next` and fails with `ENOENT ... package.json`.
 
-## Docs (`docs.gloam.trade`)
+## Routes
 
-Second project:
-
-| Field | Value |
+| Path | Content |
 | --- | --- |
-| Root Directory | **`docs`** |
-| Framework | Next.js |
-| Output Directory | empty |
+| `/` | Landing |
+| `/docs` | Docs overview (Arrow-style) |
+| `/docs/*` | encryption, privacy-model, chain, product |
+| `/whitepaper` | Whitepaper |
+| `/terms` `/privacy` `/cookies` `/disclosures` | Legal |
 
 ## Domains
 
-- `gloam.trade` / `www` → marketing project
-- `docs.gloam.trade` → docs project
-- `app.gloam.trade` / `testnet.gloam.trade` → later
+- `gloam.trade` / `www` → this project only
+- **No** `docs.gloam.trade` (removed — use `/docs`)
+- `app.gloam.trade` / `testnet.gloam.trade` → later product
+
+## Note on `docs/` package
+
+The standalone `docs/` package is legacy. Do not deploy it. Canonical docs are in `app/src/app/docs` and `app/src/app/whitepaper`.

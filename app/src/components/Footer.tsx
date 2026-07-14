@@ -6,8 +6,8 @@ const product = [
   { href: "/#encryption", label: "Encryption" },
   { href: "/#how", label: "How it works" },
   { href: "/#chain", label: "Robinhood Chain" },
-  { href: "https://docs.gloam.trade", label: "Documentation", external: true },
-  { href: "https://docs.gloam.trade/whitepaper", label: "Whitepaper", external: true },
+  { href: "/docs", label: "Documentation" },
+  { href: "/whitepaper", label: "Whitepaper" },
 ];
 
 const company = [
