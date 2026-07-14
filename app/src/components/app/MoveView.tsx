@@ -5,10 +5,11 @@ import Link from "next/link";
 import {
   useAccount,
   useChainId,
+  usePublicClient,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { formatEther, formatUnits } from "viem";
+import { formatEther, formatUnits, type Hex } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
@@ -24,6 +25,7 @@ import {
   shieldPoolAbi,
   updateLocalNote,
 } from "@/lib/shield";
+import { syncShieldTree } from "@/lib/treeSync";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { buildTransferWitness } from "@/lib/proverTransfer";
 import {
@@ -32,7 +34,7 @@ import {
   proveUnshieldInBrowser,
 } from "@/lib/proveClient";
 import { noteNullifierPoseidon } from "@/lib/notePoseidon";
-import { hexToField } from "@/lib/poseidon";
+import { fieldToHex, hexToField } from "@/lib/poseidon";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import {
   buildNotePackage,
@@ -59,6 +61,7 @@ export function MoveView() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const onProduct = chainId === CHAIN;
+  const publicClient = usePublicClient({ chainId: CHAIN });
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     loading: treeLoading,
@@ -102,39 +105,73 @@ export function MoveView() {
   const handledHash = useRef<string | null>(null);
   const pendingAction = useRef<"send" | "cashout" | null>(null);
   const spentNoteId = useRef<string | null>(null);
+  /** Change only — never store the payment note on the sender */
   const pendingChange = useRef<LocalNote | null>(null);
-  const pendingPayment = useRef<LocalNote | null>(null);
-  const leafBase = useRef<number>(0);
+  const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
+    null
+  );
 
+  // Confirm path: spend note, keep change for sender, publish share only after success
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
     handledHash.current = hash;
 
-    if (spentNoteId.current) {
-      updateLocalNote(spentNoteId.current, { status: "recovered" });
-    }
-    if (pendingPayment.current) {
-      saveLocalNote({
-        ...pendingPayment.current,
-        txHash: hash,
-        leafIndex: leafBase.current,
-      });
-      pendingPayment.current = null;
-    }
-    if (pendingChange.current) {
-      saveLocalNote({
-        ...pendingChange.current,
-        txHash: hash,
-        leafIndex: leafBase.current + 1,
-      });
-      pendingChange.current = null;
-    }
-    refreshNotes();
-    void refreshTree();
-    setShowSuccess(true);
+    void (async () => {
+      if (spentNoteId.current) {
+        updateLocalNote(spentNoteId.current, { status: "recovered" });
+        spentNoteId.current = null;
+      }
+
+      // Resolve leaf index from chain tree (safe if others inserted mid-flight)
+      let changeLeaf: number | undefined;
+      if (pendingChange.current && publicClient) {
+        try {
+          const tree = await syncShieldTree(publicClient);
+          const idx = tree?.indexByCommitment.get(
+            pendingChange.current.commitment.toLowerCase()
+          );
+          if (idx != null) changeLeaf = idx;
+        } catch {
+          /* leafIndex optional — path resolved on next sync */
+        }
+      }
+
+      if (pendingChange.current) {
+        saveLocalNote({
+          ...pendingChange.current,
+          txHash: hash,
+          leafIndex: changeLeaf,
+        });
+        pendingChange.current = null;
+      }
+
+      // Payment note is NOT saved here — only the share package for the recipient
+      if (pendingShare.current) {
+        setShareBlob(pendingShare.current.blob);
+        setShareAmountLabel(pendingShare.current.amountLabel);
+        setCopied(false);
+        pendingShare.current = null;
+      }
+
+      refreshNotes();
+      void refreshTree();
+      setShowSuccess(true);
+      setBusy(false);
+      setStatus(null);
+    })();
+  }, [isSuccess, hash, refreshNotes, refreshTree, publicClient]);
+
+  // Wallet reject / tx fail: drop ephemeral payment secrets
+  useEffect(() => {
+    if (!writeError) return;
     setBusy(false);
-  }, [isSuccess, hash, refreshNotes, refreshTree]);
+    setStatus(null);
+    pendingChange.current = null;
+    pendingShare.current = null;
+    spentNoteId.current = null;
+    setShareBlob(null);
+  }, [writeError]);
 
   // Resolve leafIndex from tree when import left it missing
   const notes = useMemo(() => {
@@ -244,44 +281,39 @@ export function MoveView() {
 
       const { proofBytes } = await proveTransferInBrowser(w.circomInput);
 
-      leafBase.current = leafCount;
+      // Change stays with sender only. Payment secret goes solely into share package.
+      let changeNullifier: Hex | undefined;
+      if (BigInt(w.changeNote.amountWei) > 0n) {
+        try {
+          const n = await noteNullifierPoseidon(
+            hexToField(w.changeNote.secret),
+            hexToField(w.changeNote.commitment)
+          );
+          changeNullifier = fieldToHex(n);
+        } catch {
+          /* optional for spend tracking */
+        }
+        pendingChange.current = {
+          id: `chg-${Date.now()}`,
+          chainId: CHAIN,
+          pool: SHIELD_POOL_ADDRESS,
+          asset: selected.asset,
+          amountWei: w.changeNote.amountWei,
+          commitment: w.changeNote.commitment,
+          secret: w.changeNote.secret,
+          nullifier: changeNullifier,
+          bound: true,
+          scheme: "poseidon",
+          from: address,
+          createdAt: Date.now(),
+          status: "open",
+          source: "local",
+        };
+      } else {
+        pendingChange.current = null;
+      }
 
-      // Payment note (recipient package) + change for sender
-      pendingPayment.current = {
-        id: `pay-${Date.now()}`,
-        chainId: CHAIN,
-        pool: SHIELD_POOL_ADDRESS,
-        asset: selected.asset,
-        amountWei: w.paymentNote.amountWei,
-        commitment: w.paymentNote.commitment,
-        secret: w.paymentNote.secret,
-        bound: true,
-        scheme: "poseidon",
-        from: address,
-        createdAt: Date.now(),
-        status: "open",
-        source: "local",
-      };
-      pendingChange.current =
-        BigInt(w.changeNote.amountWei) > 0n
-          ? {
-              id: `chg-${Date.now()}`,
-              chainId: CHAIN,
-              pool: SHIELD_POOL_ADDRESS,
-              asset: selected.asset,
-              amountWei: w.changeNote.amountWei,
-              commitment: w.changeNote.commitment,
-              secret: w.changeNote.secret,
-              bound: true,
-              scheme: "poseidon",
-              from: address,
-              createdAt: Date.now(),
-              status: "open",
-              source: "local",
-            }
-          : null;
-
-      // Share package for recipient (compact, optional lock)
+      // Share package for recipient (shown only after on-chain success)
       const pack = buildNotePackage({
         pool: SHIELD_POOL_ADDRESS,
         asset: w.paymentNote.asset,
@@ -292,9 +324,11 @@ export function MoveView() {
       const share = sendPassphrase.trim()
         ? await encodeNotePackageEncrypted(pack, sendPassphrase)
         : encodeNotePackage(pack);
-      setShareBlob(share);
-      setShareAmountLabel(formatAmountEth(w.paymentNote.amountWei));
-      setCopied(false);
+      pendingShare.current = {
+        blob: share,
+        amountLabel: formatAmountEth(w.paymentNote.amountWei),
+      };
+      setShareBlob(null);
 
       setStatus("Confirm private send in your wallet…");
       writeContract({
@@ -318,6 +352,8 @@ export function MoveView() {
       setError(e instanceof Error ? e.message : "Private send failed");
       setBusy(false);
       setStatus(null);
+      pendingChange.current = null;
+      pendingShare.current = null;
     }
   }
 
@@ -806,10 +842,11 @@ export function MoveView() {
         open={showSuccess && Boolean(hash)}
         title={successTitle}
         body={
-          pendingAction.current === "send" ? (
+          pendingAction.current === "send" || shareBlob ? (
             <p>
-              Payment note is ready to share. Your change (if any) is saved in
-              this browser.
+              Copy the payment code below and send it to the recipient only.
+              Your change (if any) stays in this browser. Do not keep the
+              payment code if you meant it for someone else.
             </p>
           ) : (
             <p>Funds should be back in your open wallet.</p>

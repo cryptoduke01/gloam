@@ -107,15 +107,23 @@ export function VaultTradePanel({
   const [lastHash, setLastHash] = useState<`0x${string}` | undefined>();
 
   const planRef = useRef<Plan | null>(null);
+  /** Pipeline phase in a ref so receipt handlers never see a stale React state */
+  const phaseRef = useRef<Phase>("idle");
   const spentNoteId = useRef<string | null>(null);
   const handledHash = useRef<string | null>(null);
   const preTokenBal = useRef<bigint>(0n);
   const preEthBal = useRef<bigint>(0n);
+  const unshieldDone = useRef(false);
   const pendingReshield = useRef<{
     amount: bigint;
     asset: Address;
     note: LocalNote;
   } | null>(null);
+
+  function setPipeline(p: Phase) {
+    phaseRef.current = p;
+    setPhase(p);
+  }
 
   const {
     writeContract,
@@ -211,7 +219,7 @@ export function VaultTradePanel({
 
   async function runSwap(plan: Plan) {
     if (!address) return;
-    setPhase("swap");
+    setPipeline("swap");
     setStatus(
       plan.side === "buy"
         ? `Swapping vault ETH → ${plan.symbol}…`
@@ -260,7 +268,7 @@ export function VaultTradePanel({
 
   async function runApproveThenSwap(plan: Plan) {
     if (!address) return;
-    setPhase("approve");
+    setPipeline("approve");
     setStatus(`Approve ${plan.symbol} for the router…`);
     handledHash.current = null;
     writeContract({
@@ -305,7 +313,7 @@ export function VaultTradePanel({
     commitment: Hex
   ) {
     if (!SHIELD_POOL_ADDRESS) return;
-    setPhase("reshield");
+    setPipeline("reshield");
     setStatus("Shielding proceeds back into the vault…");
     handledHash.current = null;
     writeContract({
@@ -325,7 +333,7 @@ export function VaultTradePanel({
     const { amount, asset } = await measureProceeds(plan);
     if (amount <= 0n) {
       throw new Error(
-        "Could not measure swap proceeds. Funds may be in your wallet — shield manually."
+        "Could not measure swap proceeds. Funds may be in your open wallet — use Shield manually."
       );
     }
 
@@ -346,8 +354,8 @@ export function VaultTradePanel({
       status: "open",
       source: "local",
     };
+    // Hold in memory until shield confirms — avoids ghost notes on fail
     pendingReshield.current = { amount, asset, note };
-    saveLocalNote(note);
 
     // ERC-20 shield needs pool allowance first
     if (!isNativeAsset(asset)) {
@@ -358,7 +366,7 @@ export function VaultTradePanel({
         args: [address, SHIELD_POOL_ADDRESS],
       })) as bigint;
       if (allowance < amount) {
-        setPhase("approve");
+        setPipeline("approve");
         setStatus(`Approve ${plan.symbol} for the vault…`);
         handledHash.current = null;
         planRef.current = { ...plan, reshieldApprove: true };
@@ -377,7 +385,7 @@ export function VaultTradePanel({
     await submitShield(amount, asset, n.commitment);
   }
 
-  // Advance pipeline after each confirmed tx
+  // Advance pipeline after each confirmed tx (phaseRef avoids stale React state)
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
@@ -386,10 +394,12 @@ export function VaultTradePanel({
 
     const plan = planRef.current;
     if (!plan) return;
+    const p = phaseRef.current;
 
     void (async () => {
       try {
-        if (phase === "unshield") {
+        if (p === "unshield") {
+          unshieldDone.current = true;
           if (spentNoteId.current) {
             updateLocalNote(spentNoteId.current, { status: "recovered" });
             spentNoteId.current = null;
@@ -400,7 +410,6 @@ export function VaultTradePanel({
           void refetchTok();
 
           if (plan.side === "sell") {
-            // check allowance
             if (!publicClient || !address) return;
             const allowance = (await publicClient.readContract({
               address: plan.token,
@@ -418,7 +427,7 @@ export function VaultTradePanel({
           return;
         }
 
-        if (phase === "approve") {
+        if (p === "approve") {
           if (plan.reshieldApprove) {
             const pending = pendingReshield.current;
             if (!pending) throw new Error("Missing re-shield note.");
@@ -435,20 +444,19 @@ export function VaultTradePanel({
           return;
         }
 
-        if (phase === "swap") {
+        if (p === "swap") {
           void refetchEth();
           void refetchTok();
-          // brief settle for RPC
           await new Promise((r) => setTimeout(r, 800));
           await runReshield(plan);
           return;
         }
 
-        if (phase === "reshield") {
+        if (p === "reshield") {
           const pending = pendingReshield.current;
           if (pending) {
-            // leaf index filled on next tree sync; save with tx
-            updateLocalNote(pending.note.id, {
+            saveLocalNote({
+              ...pending.note,
               txHash: hash,
               status: "open",
             });
@@ -456,19 +464,37 @@ export function VaultTradePanel({
           }
           refreshNotes();
           void refreshTree();
-          setPhase("done");
+          setPipeline("done");
           setStatus(null);
           setShowSuccess(true);
           planRef.current = null;
+          unshieldDone.current = false;
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Vault trade step failed");
-        setPhase("idle");
+        const msg =
+          e instanceof Error ? e.message : "Vault trade step failed";
+        setError(
+          unshieldDone.current
+            ? `${msg} Funds may already be in your open wallet — finish swap/Shield manually.`
+            : msg
+        );
+        setPipeline("idle");
         setStatus(null);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- phase-driven pipeline
-  }, [isSuccess, hash, phase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- receipt-driven pipeline
+  }, [isSuccess, hash]);
+
+  useEffect(() => {
+    if (!writeError) return;
+    setError(
+      unshieldDone.current
+        ? `${writeError.message.slice(0, 120)} — if cash-out already landed, finish swap/Shield from wallet balances.`
+        : writeError.message.slice(0, 160)
+    );
+    setPipeline("idle");
+    setStatus(null);
+  }, [writeError]);
 
   async function onStart() {
     setError(null);
@@ -516,8 +542,10 @@ export function VaultTradePanel({
     spentNoteId.current = selected.id;
     preTokenBal.current = (tokenBal as bigint | undefined) ?? 0n;
     preEthBal.current = ethBal?.value ?? 0n;
+    unshieldDone.current = false;
+    pendingReshield.current = null;
 
-    setPhase("prove");
+    setPipeline("prove");
     setStatus("Building cash-out proof… 10–30s is normal.");
 
     try {
@@ -536,7 +564,7 @@ export function VaultTradePanel({
       }
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
 
-      setPhase("unshield");
+      setPipeline("unshield");
       setStatus("Confirm cash out in your wallet…");
       writeContract({
         address: SHIELD_POOL_ADDRESS,
@@ -555,7 +583,7 @@ export function VaultTradePanel({
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start vault trade");
-      setPhase("idle");
+      setPipeline("idle");
       setStatus(null);
       planRef.current = null;
     }
@@ -736,9 +764,9 @@ export function VaultTradePanel({
               </button>
             )}
 
-            {(error || writeError) && (
+            {error && (
               <p role="alert" className="text-sm text-red-500">
-                {error || writeError?.message.slice(0, 200)}
+                {error}
               </p>
             )}
             {status && !error && (
@@ -784,7 +812,7 @@ export function VaultTradePanel({
         primaryLabel="Portfolio"
         onClose={() => {
           setShowSuccess(false);
-          setPhase("idle");
+          setPipeline("idle");
         }}
       />
     </>

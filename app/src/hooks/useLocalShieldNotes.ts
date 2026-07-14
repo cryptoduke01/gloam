@@ -30,6 +30,37 @@ export function useLocalShieldNotes(address?: string | null) {
   const [syncing, setSyncing] = useState(false);
 
   const refreshLocal = useCallback(() => {
+    // Historic bug: private send used to save the *payment* note on the sender.
+    // Those ids start with pay- — drop them so the sender cannot double-claim.
+    try {
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem("gloam.shield.notes.v1");
+        if (raw) {
+          const all = JSON.parse(raw) as { id?: string; status?: string }[];
+          if (Array.isArray(all)) {
+            let changed = false;
+            const next = all.map((n) => {
+              if (
+                n?.id?.startsWith("pay-") &&
+                n.status !== "recovered"
+              ) {
+                changed = true;
+                return { ...n, status: "recovered" as const };
+              }
+              return n;
+            });
+            if (changed) {
+              localStorage.setItem(
+                "gloam.shield.notes.v1",
+                JSON.stringify(next)
+              );
+            }
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
     setLocal(loadLocalNotes(address));
     setReady(true);
   }, [address]);

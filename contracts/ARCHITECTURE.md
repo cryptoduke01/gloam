@@ -1,44 +1,50 @@
-# Shield architecture (v1)
+# Shield architecture (v2 — Poseidon live)
 
 ## Goal
 
-**Trade Everything on Robinhood Privately** — private hold / move / trade on **testnet first**.
+**Trade Everything on Robinhood Privately** — private hold / move / trade on **Robinhood Chain testnet**.
 
 ## Contract surface
 
 ```
 User wallet
     │
-    ├─ public path ──► ETH / ERC-20 (no Gloam contracts)
+    ├─ public path ──► ETH / ERC-20 / DEX (no Gloam contracts)
     │
-    └─ private path ─► ShieldPool ──► IVerifier
-                           │
-                           ├ commitments (Merkle leaves)
+    └─ private path ─► ShieldPoolPoseidon ──► DualProofVerifier
+                           │                      ├ UnshieldIVerifier (5 inputs)
+                           │                      └ TransferIVerifier (4 inputs)
+                           ├ commitments (Poseidon Merkle leaves)
                            ├ spent nullifiers
                            └ currentRoot
 ```
 
-### Phases
+## Live deploy (RH testnet 46630)
 
-| Phase | What ships | Custody |
-| --- | --- | --- |
-| **0** | Interfaces + scaffold | Commitments only |
-| **1 (live RH testnet)** | ETH/ERC-20 `shield`, keccak Merkle, `deposited[]` | **Pool holds assets** · verifier = 0 |
-| **2 (source ready)** | NoteLib binding · unshield/transfer public inputs bind amount/asset/recipient · circuits spec | Redeploy + real verifier next |
-| **3** | Private trade adapter | Intent hidden until exit |
-
-### Live deploy (Phase 1)
+See [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json).
 
 | | |
 | --- | --- |
-| ShieldPool | `0x2BD98196D90AB45D58843B4c8B8809aa34343d35` |
-| Chain | 46630 |
-| Proof layout on-chain | v1 (root + nullifier only if verifier were set) |
-| Source proof layout | **v2** (`PROOF_LAYOUT_VERSION = 2`) — needs redeploy |
+| Pool | `0xA488…c93B` |
+| DualProofVerifier | `0x4B0D…949C` |
+| Hash | Poseidon |
+| Proof layout | v2 |
+| Keys | **Dev ceremony** — not production |
 
-See [deployments/testnet.json](./deployments/testnet.json).
+Legacy keccak Phase-1 pool `0x2BD9…` remains on-chain but is not the product default.
 
-### Note scheme (Phase 2 — Poseidon, circuit-ready)
+## Phases (status)
+
+| Phase | What | Status |
+| --- | --- | --- |
+| 0 | Interfaces + scaffold | Done |
+| 1 | Keccak pool, shield only | Live (legacy) |
+| 2 | Poseidon pool, unshield + transfer, dual verifier | **Live (dev keys)** |
+| 3a | Vault trade adapter (unshield → DEX → reshield) | **App live** |
+| 3b | Sealed-size private trade | Not shipped |
+| Prod | Ceremony keys + audit + mainnet | Blocked |
+
+## Note scheme (Poseidon)
 
 ```
 commitment = Poseidon(secret, amount, asset)
@@ -48,40 +54,38 @@ Merkle     = Poseidon(left, right)  // depth 20
 
 | Piece | Location |
 | --- | --- |
-| Circuit | `circuits/unshield/unshield.circom` (**real constraints**, ~5.3k) |
-| Verifier | `src/verifiers/UnshieldVerifier.sol` + `UnshieldIVerifier` |
-| Solidity tree | `IncrementalMerkleTreePoseidon.sol` |
-| App | `notePoseidon.ts`, `merklePoseidon.ts`, `proverPoseidon.ts` |
-
-**Live RH pool `0x2BD9…` is still keccak Phase-1.** Poseidon verifier must not be set on it. Next deploy: Poseidon hashers → Poseidon pool → setVerifier.
-
-### Legacy keccak notes (Phase-1 app)
-
-```
-commitment = keccak256(secret || amount || asset)  // NoteLib.sol / note.ts
-```
+| Unshield circuit | `circuits/unshield/` |
+| Transfer circuit | `circuits/transfer/` |
+| Dual verifier | `src/verifiers/DualProofVerifier.sol` |
+| Pool | `src/ShieldPoolPoseidon.sol` |
+| App artifacts | `app/public/circuits/*.wasm` + `*_final.zkey` |
 
 ### Proof public inputs (v2)
 
-**Unshield:** `[root, nullifier, asset, amount, to]`  
-**Transfer:** `[root, nullifier, newC0, newC1]`
+**Unshield (5):** `[root, nullifier, asset, amount, to]`  
+**Transfer (4):** `[root, nullifier, newC0, newC1]`  
+`newC0` = payment note, `newC1` = change note.
 
 ## App integration
 
 ```
-app/src/lib/shield.ts   → pool address, ABI, gas
-app/src/lib/note.ts     → bound commitments (new deposits)
-app/.../ShieldView.tsx  → live deposit
-app/.../MoveView.tsx    → status until prover ships
+app/src/lib/config.ts          → Poseidon pool default
+app/src/lib/shield.ts          → ABI, local notes
+app/src/lib/treeSync.ts        → rebuild tree from Shielded + Transferred
+app/src/lib/proveClient.ts     → browser snarkjs
+app/.../ShieldView.tsx         → deposit
+app/.../MoveView.tsx           → private send + cash out
+app/.../VaultTradePanel.tsx    → vault trade adapter
 ```
 
 ## Threat model (short)
 
-- **Hidden (goal):** amount while shielded, private graph  
-- **Visible:** shield/unshield edges, contract calls, proof verification  
-- **Never:** mock verifier that always returns true on a funded pool  
+- **Hidden (goal):** amount while shielded; private-send parties/amount (anonymity set dependent)
+- **Visible:** shield / cash-out / vault-trade swap edges; contract usage; timing
+- **Never:** mock verifier on a funded pool; fake “private success” UI
+- **Keys:** current zkeys are **dev** — do not use for real money
 
 ## Testnet policy
 
-- Chain ID **46630** only for Gloam private deploys until private path works  
-- No mainnet ShieldPool until audits + real verifier  
+- Chain ID **46630** only for Gloam private deploys until production criteria  
+- No mainnet ShieldPool until audits + production ceremony (or equivalent)
