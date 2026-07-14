@@ -5,26 +5,37 @@ import { useAccount, useBalance, useChainId } from "wagmi";
 import { AsciiImage } from "@/components/AsciiImage";
 import { PRODUCT_CHAIN_ID, formatEth, shortAddress } from "@/lib/chain";
 import { ConnectButton } from "./ConnectButton";
+import { ReceiveCard } from "./ReceiveCard";
 import { StatusPill } from "./StatusPill";
 
 const gates = [
+  {
+    href: "/app/send",
+    title: "Send",
+    body: "Public ETH on testnet. Real settlement on the open book — live now.",
+    n: "00",
+    live: true,
+  },
   {
     href: "/app/shield",
     title: "Shield",
     body: "Park public balances into sealed notes. The graph loses the thread.",
     n: "01",
+    live: false,
   },
   {
     href: "/app/move",
     title: "Move",
     body: "Private transfer between shielded parties. Silence on the open tape.",
     n: "02",
+    live: false,
   },
   {
     href: "/app/trade",
     title: "Trade",
     body: "Stocks and memes without printing size and intent to the street.",
     n: "03",
+    live: false,
   },
 ];
 
@@ -118,42 +129,53 @@ export function PortfolioView() {
           )}
         </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-line bg-panel p-5 sm:p-6 lg:col-span-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-            At a glance
-          </p>
-          <dl className="space-y-3 text-sm">
-            {[
-              ["Network", "Robinhood testnet"],
-              ["Chain ID", "46630"],
-              ["Privacy", "Rails shipping"],
-              ["Assets", "Stocks · Memes"],
-              ["Status", "Connect → explore"],
-            ].map(([k, v]) => (
-              <div
-                key={k}
-                className="flex items-center justify-between border-b border-line pb-2 last:border-0"
+        <div className="flex flex-col gap-3 lg:col-span-5">
+          <div className="rounded-xl border border-line bg-panel p-5 sm:p-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              At a glance
+            </p>
+            <dl className="mt-3 space-y-3 text-sm">
+              {[
+                ["Network", "Robinhood testnet"],
+                ["Chain ID", "46630"],
+                ["Public path", "Send · live"],
+                ["Privacy", "Rails shipping"],
+                ["Host", "gloam.trade/app"],
+              ].map(([k, v]) => (
+                <div
+                  key={k}
+                  className="flex items-center justify-between border-b border-line pb-2 last:border-0"
+                >
+                  <dt className="text-mute">{k}</dt>
+                  <dd className="font-medium text-foreground">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Link
+                href="/app/send"
+                className="inline-flex min-h-11 items-center justify-center rounded-md bg-lime text-sm font-semibold text-black hover:opacity-90"
               >
-                <dt className="text-mute">{k}</dt>
-                <dd className="font-medium text-foreground">{v}</dd>
-              </div>
-            ))}
-          </dl>
-          <Link
-            href="/app/markets"
-            className="mt-auto inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
-          >
-            Browse markets
-          </Link>
+                Send
+              </Link>
+              <Link
+                href="/app/markets"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+              >
+                Markets
+              </Link>
+            </div>
+          </div>
+          <ReceiveCard />
         </div>
       </div>
 
       {/* Gates */}
       <div>
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Three gates
+          Product path
         </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {gates.map((g) => (
             <Link
               key={g.href}
@@ -162,9 +184,11 @@ export function PortfolioView() {
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] text-lime">{g.n}</span>
-                <span className="text-mute transition-colors group-hover:text-lime">
-                  →
-                </span>
+                {g.live ? (
+                  <StatusPill tone="lime">Live</StatusPill>
+                ) : (
+                  <StatusPill tone="warn">Soon</StatusPill>
+                )}
               </div>
               <h2 className="mt-3 font-display text-2xl text-foreground">
                 {g.title}

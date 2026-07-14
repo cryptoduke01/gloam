@@ -27,9 +27,10 @@ If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at
 
 ## Domains
 
-- `gloam.trade` / `www` → this project only
-- **No** `docs.gloam.trade` (removed — use `/docs`)
-- `app.gloam.trade` / `testnet.gloam.trade` → later product
+- `gloam.trade` / `www` → this project (landing + `/docs` + `/app`)
+- **No** `docs.gloam.trade` (use `/docs`)
+- Product today: `gloam.trade/app`
+- Later: point `testnet.gloam.trade` at the same project (rewrite `/` → `/app` or keep path). No second codebase required.
 
 ## Note on `docs/` package
 
