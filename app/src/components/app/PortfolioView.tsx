@@ -21,7 +21,7 @@ import {
 import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
-import { ConnectButton } from "./ConnectButton";
+import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
@@ -175,7 +175,7 @@ export function PortfolioView() {
             <div className="border-t border-line px-5 py-4 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-mute">Connect to load balances.</p>
-                <ConnectButton />
+                <WalletMenu />
               </div>
             </div>
           )}
@@ -185,7 +185,7 @@ export function PortfolioView() {
                 Switch to Robinhood testnet.
               </p>
               <div className="mt-3">
-                <ConnectButton />
+                <WalletMenu />
               </div>
             </div>
           )}

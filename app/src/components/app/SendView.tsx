@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useAccount,
   useBalance,
@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useChainId,
 } from "wagmi";
-import { isAddress, parseEther } from "viem";
+import { isAddress } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import {
   EXPLORER_TX,
@@ -16,11 +16,12 @@ import {
   formatEth,
   shortAddress,
 } from "@/lib/chain";
+import { safeParseEther } from "@/lib/amount";
 import { FAUCET_URL } from "@/lib/faucet";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatUsd } from "@/lib/markets";
-import { ConnectButton } from "./ConnectButton";
+import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 
@@ -57,11 +58,14 @@ export function SendView() {
     chainId: PRODUCT_CHAIN_ID,
   });
 
+  const handledHash = useRef<string | null>(null);
+
   useEffect(() => {
-    if (isSuccess && hash) {
-      void refetch();
-      if (settings.confirmSends) setShowSuccess(true);
-    }
+    if (!isSuccess || !hash) return;
+    if (handledHash.current === hash) return;
+    handledHash.current = hash;
+    void refetch();
+    if (settings.confirmSends) setShowSuccess(true);
   }, [isSuccess, hash, refetch, settings.confirmSends]);
 
   function validate(): string | null {
@@ -69,12 +73,8 @@ export function SendView() {
       return "Connect and switch to testnet.";
     }
     if (!isAddress(to)) return "Enter a valid address.";
-    let value: bigint;
-    try {
-      value = parseEther(amount || "0");
-    } catch {
-      return "Invalid amount.";
-    }
+    const value = safeParseEther(amount || "0");
+    if (value === null) return "Invalid amount.";
     if (value <= BigInt(0)) return "Amount must be greater than zero.";
     if (bal && value > bal.value) return "Not enough testnet ETH.";
     return null;
@@ -86,15 +86,21 @@ export function SendView() {
       setFormError(err);
       return;
     }
+    const value = safeParseEther(amount);
+    if (value === null) {
+      setFormError("Invalid amount.");
+      return;
+    }
     setFormError(null);
     setShowPreview(false);
     reset();
     setShowSuccess(false);
+    handledHash.current = null;
     setSentAmount(amount);
     setSentTo(to);
     sendTransaction({
       to: to as `0x${string}`,
-      value: parseEther(amount),
+      value,
       chainId: PRODUCT_CHAIN_ID,
     });
   }
@@ -234,7 +240,7 @@ export function SendView() {
               )}
 
               {!isConnected || !onProduct ? (
-                <ConnectButton />
+                <WalletMenu />
               ) : (
                 <button
                   type="submit"

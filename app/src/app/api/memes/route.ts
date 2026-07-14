@@ -1,32 +1,19 @@
 import { NextResponse } from "next/server";
-import { loadRobinhoodMemes } from "@/lib/dexscreener";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 /**
- * Robinhood mainnet memes from DexScreener (chainId "robinhood").
- * Not testnet faucet stocks — different network.
+ * Product is testnet-only. RH mainnet memes (DexScreener) stay off until we ship mainnet.
+ * Endpoint kept so clients don't 404 — returns empty + honest meta.
  */
 export async function GET() {
-  try {
-    const memes = await loadRobinhoodMemes(48);
-    return NextResponse.json(
-      {
-        memes,
-        meta: {
-          chain: "robinhood",
-          note: "Mainnet RH memes via DexScreener. Testnet faucet stocks are separate.",
-          count: memes.length,
-          fetchedAt: Date.now(),
-        },
-      },
-      { headers: { "Cache-Control": "no-store, max-age=0" } }
-    );
-  } catch (e) {
-    return NextResponse.json(
-      { memes: [], error: e instanceof Error ? e.message : "failed" },
-      { status: 502 }
-    );
-  }
+  return NextResponse.json({
+    memes: [],
+    meta: {
+      chain: "robinhood-testnet",
+      count: 0,
+      note: "Memes paused while product is testnet-only. No mainnet data mixed in.",
+      fetchedAt: Date.now(),
+    },
+  });
 }

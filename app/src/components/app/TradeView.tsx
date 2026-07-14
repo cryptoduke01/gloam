@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   useAccount,
@@ -10,8 +10,14 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { formatUnits, isAddress, parseEther, parseUnits } from "viem";
-import { PRODUCT_CHAIN_ID, EXPLORER_TX, formatEth, shortAddress } from "@/lib/chain";
+import { formatUnits, isAddress } from "viem";
+import {
+  PRODUCT_CHAIN_ID,
+  EXPLORER_TX,
+  formatEth,
+  shortAddress,
+} from "@/lib/chain";
+import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import {
   DEX_FACTORY,
   DEX_ROUTER,
@@ -26,7 +32,7 @@ import {
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatMark, formatUsd } from "@/lib/markets";
-import { ConnectButton } from "./ConnectButton";
+import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { PriceChart } from "./PriceChart";
 import { Sparkline } from "./Sparkline";
@@ -35,6 +41,7 @@ import { SuccessModal } from "./SuccessModal";
 
 type Side = "buy" | "sell";
 type InputMode = "token" | "usd";
+type TxKind = "transfer" | "approve" | "buy" | "sell" | null;
 
 export function TradeView() {
   const { address, isConnected } = useAccount();
@@ -47,31 +54,31 @@ export function TradeView() {
   const ethUsd = data?.ethUsd ?? null;
   const liveCount = data?.meta?.liveCount ?? 0;
 
-  const initial =
-    markets.find((m) => m.id === search.get("market"))?.id ??
-    markets.find((m) => m.address)?.id ??
-    markets[0]?.id ??
-    "tsla";
-
+  const searchMarket = search.get("market");
   const [side, setSide] = useState<Side>(settings.defaultSide);
-  const [marketId, setMarketId] = useState(initial);
+  const [marketId, setMarketId] = useState(searchMarket ?? "tsla");
   const [amount, setAmount] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("token");
-  const [filter, setFilter] = useState<"all" | "onchain" | "stocks">(
-    settings.marketFilter === "onchain" || settings.marketFilter === "stocks"
-      ? settings.marketFilter
-      : "onchain"
-  );
+  const [filter, setFilter] = useState<"all" | "onchain" | "stocks">("onchain");
   const [to, setTo] = useState("");
-  const [mode, setMode] = useState<"swap" | "transfer">("swap");
+  const [mode, setMode] = useState<"swap" | "transfer">("transfer");
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [lastHash, setLastHash] = useState<`0x${string}` | undefined>();
+  const [pendingKind, setPendingKind] = useState<TxKind>(null);
+  const handledHash = useRef<string | null>(null);
+
+  // Sync market from URL
+  useEffect(() => {
+    if (searchMarket && markets.some((m) => m.id === searchMarket)) {
+      setMarketId(searchMarket);
+    }
+  }, [searchMarket, markets]);
 
   const resolvedId = markets.some((m) => m.id === marketId)
     ? marketId
-    : markets[0]?.id ?? "tsla";
+    : markets.find((m) => m.address)?.id ?? markets[0]?.id ?? "tsla";
 
   const market = useMemo(
     () => markets.find((m) => m.id === resolvedId) ?? markets[0],
@@ -97,9 +104,7 @@ export function TradeView() {
   });
 
   const hasPool =
-    Boolean(pair) &&
-    pair !== ZERO_ADDRESS &&
-    pair !== undefined;
+    Boolean(pair) && pair !== ZERO_ADDRESS && pair !== undefined;
 
   const { data: ethBal, refetch: refetchEth } = useBalance({
     address,
@@ -122,10 +127,9 @@ export function TradeView() {
     functionName: "allowance",
     args: address ? [address, DEX_ROUTER] : undefined,
     chainId: PRODUCT_CHAIN_ID,
-    query: { enabled: Boolean(address && token && side === "sell" && hasPool) },
+    query: { enabled: Boolean(address && token && hasPool) },
   });
 
-  // Auto mode: pool → swap, else transfer for sell/send of stocks
   useEffect(() => {
     if (hasPool) setMode("swap");
     else if (hasToken) setMode("transfer");
@@ -146,19 +150,13 @@ export function TradeView() {
     return n * mark;
   }, [amount, inputMode, mark]);
 
-  const ethFromUsd = ethUsd && ethUsd > 0 ? usdAmt / ethUsd : 0;
-
   const buyEthIn = useMemo(() => {
     if (side !== "buy") return 0n;
-    if (inputMode === "usd" && ethUsd && ethUsd > 0) {
-      return parseEther((usdAmt / ethUsd).toFixed(8));
-    }
-    // token amount → USD → ETH
-    if (mark > 0 && ethUsd && ethUsd > 0) {
-      return parseEther(((tokenAmt * mark) / ethUsd).toFixed(8));
-    }
-    return 0n;
-  }, [side, inputMode, ethUsd, usdAmt, mark, tokenAmt]);
+    if (!ethUsd || ethUsd <= 0 || usdAmt <= 0) return 0n;
+    const eth = usdAmt / ethUsd;
+    if (!Number.isFinite(eth) || eth <= 0) return 0n;
+    return safeParseEther(eth.toFixed(8)) ?? 0n;
+  }, [side, ethUsd, usdAmt]);
 
   const { data: buyQuote } = useReadContract({
     address: DEX_ROUTER,
@@ -174,22 +172,35 @@ export function TradeView() {
     },
   });
 
+  const sellAmountIn = useMemo(
+    () => (tokenAmt > 0 ? safeParseUnits(tokenAmt.toFixed(8), 18) : null),
+    [tokenAmt]
+  );
+
   const { data: sellQuote } = useReadContract({
     address: DEX_ROUTER,
     abi: routerAbi,
     functionName: "getAmountsOut",
     args:
-      hasPool && token && tokenAmt > 0 && side === "sell" && mode === "swap"
-        ? [parseUnits(tokenAmt.toFixed(8), 18), [token, WETH]]
+      hasPool &&
+      token &&
+      sellAmountIn &&
+      sellAmountIn > 0n &&
+      side === "sell" &&
+      mode === "swap"
+        ? [sellAmountIn, [token, WETH]]
         : undefined,
     chainId: PRODUCT_CHAIN_ID,
     query: {
-      enabled: hasPool && Boolean(token) && tokenAmt > 0 && side === "sell",
+      enabled:
+        hasPool &&
+        Boolean(token) &&
+        Boolean(sellAmountIn && sellAmountIn > 0n) &&
+        side === "sell",
     },
   });
 
   const quoteOut = side === "buy" ? buyQuote?.[1] : sellQuote?.[1];
-  const quoteIn = side === "buy" ? buyEthIn : parseUnits(tokenAmt > 0 ? tokenAmt.toFixed(8) : "0", 18);
 
   const {
     writeContract,
@@ -204,28 +215,85 @@ export function TradeView() {
     chainId: PRODUCT_CHAIN_ID,
   });
 
+  // After approve, auto-submit sell once allowance is enough
   useEffect(() => {
-    if (isSuccess && txHash) {
-      setLastHash(txHash);
-      setSuccessOpen(true);
-      void refetchEth();
-      void refetchTok();
-      void refetchAllow();
-    }
-  }, [isSuccess, txHash, refetchEth, refetchTok, refetchAllow]);
+    if (!isSuccess || !txHash || !pendingKind) return;
+    if (handledHash.current === txHash) return;
+    handledHash.current = txHash;
 
-  async function onSubmit(e: React.FormEvent) {
+    void refetchEth();
+    void refetchTok();
+    void refetchAllow();
+
+    if (pendingKind === "approve") {
+      setPendingKind(null);
+      setError(null);
+      // will re-enable sell on next click with fresh allowance — auto sell:
+      // wait for allowance refetch via short delay then sell
+      return;
+    }
+
+    setLastHash(txHash);
+    setSuccessTitle(
+      pendingKind === "transfer"
+        ? "Tokens sent"
+        : pendingKind === "buy"
+          ? "Bought"
+          : "Sold"
+    );
+    setSuccessOpen(true);
+    setPendingKind(null);
+  }, [
+    isSuccess,
+    txHash,
+    pendingKind,
+    refetchEth,
+    refetchTok,
+    refetchAllow,
+  ]);
+
+  // Auto-continue sell after approve when allowance updates
+  const autoSellAfterApprove = useRef(false);
+  useEffect(() => {
+    if (!autoSellAfterApprove.current) return;
+    if (!token || !address || !sellAmountIn) return;
+    if (allowance === undefined || allowance < sellAmountIn) return;
+    autoSellAfterApprove.current = false;
+    if (!quoteOut || quoteOut <= 0n) {
+      setError("No quote — try again.");
+      return;
+    }
+    setPendingKind("sell");
+    handledHash.current = null;
+    writeContract({
+      address: DEX_ROUTER,
+      abi: routerAbi,
+      functionName: "swapExactTokensForETH",
+      args: [
+        sellAmountIn,
+        applySlippage(quoteOut),
+        [token, WETH],
+        address,
+        deadlineSeconds(),
+      ],
+      chainId: PRODUCT_CHAIN_ID,
+    });
+  }, [allowance, sellAmountIn, quoteOut, token, address, writeContract]);
+
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     resetWrite();
+    handledHash.current = null;
+
     if (!isConnected || !onProduct || !address) {
       setError("Connect on Robinhood testnet.");
       return;
     }
     if (!market) return;
 
-    // Transfer stock tokens (always works for faucet tokens)
-    if (mode === "transfer" || (!hasPool && side === "sell")) {
+    // Transfer (default path for faucet stocks without pools)
+    if (mode === "transfer" || (!hasPool && hasToken)) {
       if (!token) {
         setError("No onchain token for this market.");
         return;
@@ -234,16 +302,21 @@ export function TradeView() {
         setError("Enter a recipient address.");
         return;
       }
-      if (tokenAmt <= 0) {
-        setError("Enter an amount.");
+      const value = safeParseUnits(
+        inputMode === "usd" && mark > 0
+          ? (Number(amount) / mark).toFixed(8)
+          : amount,
+        18
+      );
+      if (value === null || value <= 0n) {
+        setError("Enter a valid amount.");
         return;
       }
-      const value = parseUnits(tokenAmt.toFixed(8), 18);
       if (tokenBal !== undefined && value > tokenBal) {
         setError("Not enough tokens.");
         return;
       }
-      setSuccessTitle("Tokens sent");
+      setPendingKind("transfer");
       writeContract({
         address: token,
         abi: erc20Abi,
@@ -255,9 +328,7 @@ export function TradeView() {
     }
 
     if (!hasPool || !token) {
-      setError(
-        "No swap pool for this stock yet. Transfer tokens, or use the faucet."
-      );
+      setError("No swap pool for this stock on testnet. Use Send for transfers.");
       return;
     }
 
@@ -270,49 +341,64 @@ export function TradeView() {
         setError("Not enough ETH.");
         return;
       }
-      const minOut = quoteOut ? applySlippage(quoteOut) : 0n;
-      setSuccessTitle("Bought");
+      if (!quoteOut || quoteOut <= 0n) {
+        setError("No pool quote. Liquidity may be empty.");
+        return;
+      }
+      setPendingKind("buy");
       writeContract({
         address: DEX_ROUTER,
         abi: routerAbi,
         functionName: "swapExactETHForTokens",
-        args: [minOut, [WETH, token], address, deadlineSeconds()],
+        args: [
+          applySlippage(quoteOut),
+          [WETH, token],
+          address,
+          deadlineSeconds(),
+        ],
         value: buyEthIn,
         chainId: PRODUCT_CHAIN_ID,
       });
       return;
     }
 
-    // sell via pool
-    const amountIn = parseUnits(tokenAmt.toFixed(8), 18);
-    if (amountIn <= 0n) {
+    // sell
+    if (!sellAmountIn || sellAmountIn <= 0n) {
       setError("Enter an amount.");
       return;
     }
-    if (tokenBal !== undefined && amountIn > tokenBal) {
+    if (tokenBal !== undefined && sellAmountIn > tokenBal) {
       setError("Not enough tokens.");
       return;
     }
-    const needApprove =
-      allowance === undefined || allowance < amountIn;
-    if (needApprove) {
-      setSuccessTitle("Approved");
+    if (allowance === undefined || allowance < sellAmountIn) {
+      setPendingKind("approve");
+      autoSellAfterApprove.current = true;
       writeContract({
         address: token,
         abi: erc20Abi,
         functionName: "approve",
-        args: [DEX_ROUTER, amountIn * 2n],
+        args: [DEX_ROUTER, sellAmountIn * 2n],
         chainId: PRODUCT_CHAIN_ID,
       });
       return;
     }
-    const minOut = quoteOut ? applySlippage(quoteOut) : 0n;
-    setSuccessTitle("Sold");
+    if (!quoteOut || quoteOut <= 0n) {
+      setError("No pool quote. Liquidity may be empty.");
+      return;
+    }
+    setPendingKind("sell");
     writeContract({
       address: DEX_ROUTER,
       abi: routerAbi,
       functionName: "swapExactTokensForETH",
-      args: [amountIn, minOut, [token, WETH], address, deadlineSeconds()],
+      args: [
+        sellAmountIn,
+        applySlippage(quoteOut),
+        [token, WETH],
+        address,
+        deadlineSeconds(),
+      ],
       chainId: PRODUCT_CHAIN_ID,
     });
   }
@@ -350,13 +436,20 @@ export function TradeView() {
           ]
         : [];
 
+  const busy = isPending || confirming;
+  const showTransferFields = mode === "transfer" || (!hasPool && hasToken);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NetworkPulse />
         <span className="text-xs text-mute">
           {isError ? (
-            <button type="button" onClick={() => void refetch()} className="text-lime hover:underline">
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-lime hover:underline"
+            >
               Retry prices
             </button>
           ) : isFetching ? (
@@ -370,7 +463,6 @@ export function TradeView() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        {/* List */}
         <div className="rounded-xl border border-line bg-panel lg:col-span-4">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
@@ -406,7 +498,9 @@ export function TradeView() {
                   type="button"
                   onClick={() => setMarketId(m.id)}
                   className={`flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 ${
-                    m.id === resolvedId ? "bg-background" : "hover:bg-background/60"
+                    m.id === resolvedId
+                      ? "bg-background"
+                      : "hover:bg-background/60"
                   }`}
                 >
                   <div className="min-w-0 flex-1">
@@ -417,7 +511,13 @@ export function TradeView() {
                     </p>
                   </div>
                   <Sparkline
-                    points={m.spark ?? []}
+                    points={
+                      m.spark && m.spark.length >= 2
+                        ? m.spark
+                        : m.mark > 0
+                          ? [m.mark * 0.98, m.mark, m.mark * 1.01]
+                          : []
+                    }
                     up={m.change24h >= 0}
                     width={64}
                     height={28}
@@ -445,7 +545,6 @@ export function TradeView() {
           </ul>
         </div>
 
-        {/* Ticket + chart */}
         <div className="space-y-4 lg:col-span-5">
           {!settings.compactCharts && (
             <PriceChart
@@ -462,7 +561,12 @@ export function TradeView() {
                 </p>
                 <p className="text-xs text-mute">{market.symbol}</p>
               </div>
-              <Sparkline points={spark} up={market.change24h >= 0} width={120} height={40} />
+              <Sparkline
+                points={spark}
+                up={market.change24h >= 0}
+                width={120}
+                height={40}
+              />
             </div>
           )}
 
@@ -475,9 +579,9 @@ export function TradeView() {
                 <p className="text-sm text-mute">{market.name}</p>
               </div>
               {hasPool ? (
-                <StatusPill tone="lime">Pool live</StatusPill>
+                <StatusPill tone="lime">Pool</StatusPill>
               ) : hasToken ? (
-                <StatusPill tone="warn">Transfer</StatusPill>
+                <StatusPill tone="lime">Transfer</StatusPill>
               ) : (
                 <StatusPill>Watch</StatusPill>
               )}
@@ -489,16 +593,17 @@ export function TradeView() {
                   <button
                     type="button"
                     onClick={() => {
-                      setMode(hasPool ? "swap" : "transfer");
-                      setSide("buy");
+                      if (hasPool) {
+                        setMode("swap");
+                        setSide("buy");
+                      }
                     }}
-                    className={`min-h-10 rounded-lg text-sm font-semibold ${
+                    disabled={!hasPool}
+                    className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-40 ${
                       mode === "swap" && side === "buy"
                         ? "bg-lime text-black"
                         : "border border-line text-mute"
                     }`}
-                    disabled={!hasPool}
-                    title={!hasPool ? "No pool yet" : undefined}
                   >
                     Buy
                   </button>
@@ -514,7 +619,8 @@ export function TradeView() {
                       }
                     }}
                     className={`min-h-10 rounded-lg text-sm font-semibold ${
-                      (mode === "swap" && side === "sell") || mode === "transfer"
+                      (mode === "swap" && side === "sell") ||
+                      mode === "transfer"
                         ? "bg-foreground text-background"
                         : "border border-line text-mute"
                     }`}
@@ -526,9 +632,8 @@ export function TradeView() {
 
               {!hasPool && hasToken && (
                 <p className="rounded-lg border border-line bg-background px-3 py-2 text-xs text-mute">
-                  No DEX pool for {market.symbol} yet. You can still{" "}
-                  <strong className="text-foreground">send tokens</strong> onchain
-                  (faucet balances work).
+                  No testnet pool for {market.symbol}. You can still send
+                  faucet tokens to any address.
                 </p>
               )}
 
@@ -559,26 +664,22 @@ export function TradeView() {
 
               <div>
                 <div className="flex items-center justify-between">
-                  <label htmlFor="trade-amt" className="text-sm font-medium text-foreground">
-                    {inputMode === "usd" ? "Amount (USD)" : `Amount (${market.symbol})`}
+                  <label
+                    htmlFor="trade-amt"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    {inputMode === "usd"
+                      ? "Amount (USD)"
+                      : `Amount (${market.symbol})`}
                   </label>
-                  {isConnected && (
+                  {isConnected && hasToken && (
                     <button
                       type="button"
                       className="text-xs text-lime hover:underline"
                       onClick={() => {
-                        if (mode === "transfer" || side === "sell") {
-                          const bal = tokenBal ? Number(formatUnits(tokenBal, 18)) : 0;
+                        if (tokenBal && tokenBal > 0n) {
                           setInputMode("token");
-                          setAmount(bal > 0 ? bal.toFixed(4) : "");
-                        } else if (ethBal) {
-                          const e = Number(ethBal.value) / 1e18;
-                          if (inputMode === "usd" && ethUsd) {
-                            setAmount((e * ethUsd).toFixed(2));
-                          } else if (mark > 0 && ethUsd) {
-                            setInputMode("token");
-                            setAmount(((e * ethUsd) / mark).toFixed(4));
-                          }
+                          setAmount(formatUnits(tokenBal, 18));
                         }
                       }}
                     >
@@ -604,29 +705,37 @@ export function TradeView() {
                 <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-mute">
                   {inputMode === "usd" ? (
                     <span>
-                      ≈ {tokenAmt > 0 ? tokenAmt.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}{" "}
+                      ≈{" "}
+                      {tokenAmt > 0
+                        ? tokenAmt.toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          })
+                        : "—"}{" "}
                       {market.symbol}
                     </span>
                   ) : (
                     <span>≈ {usdAmt > 0 ? formatUsd(usdAmt) : "—"}</span>
                   )}
-                  {side === "buy" && ethFromUsd > 0 && (
-                    <span>≈ {ethFromUsd.toFixed(5)} ETH</span>
+                  {side === "buy" && buyEthIn > 0n && (
+                    <span>≈ {formatEth(buyEthIn, 5)} ETH</span>
                   )}
-                  {quoteOut !== undefined && mode === "swap" && (
+                  {quoteOut !== undefined && mode === "swap" && quoteOut > 0n && (
                     <span className="text-lime">
                       Quote:{" "}
                       {side === "buy"
                         ? `${Number(formatUnits(quoteOut, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${market.symbol}`
-                        : `${Number(formatUnits(quoteOut, 18)).toFixed(5)} ETH`}
+                        : `${formatEth(quoteOut, 5)} ETH`}
                     </span>
                   )}
                 </div>
               </div>
 
-              {(mode === "transfer" || (!hasPool && hasToken)) && (
+              {showTransferFields && (
                 <div>
-                  <label htmlFor="xfer-to" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="xfer-to"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Recipient
                   </label>
                   <input
@@ -646,9 +755,11 @@ export function TradeView() {
                   <>
                     {" · "}
                     <span className="text-foreground">
-                      {Number(tokenBalFmt).toLocaleString(undefined, {
-                        maximumFractionDigits: 4,
-                      })}{" "}
+                      {tokenBal !== undefined
+                        ? Number(tokenBalFmt).toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          })
+                        : "—"}{" "}
                       {market.symbol}
                     </span>
                   </>
@@ -656,22 +767,24 @@ export function TradeView() {
               </div>
 
               {!isConnected || !onProduct ? (
-                <ConnectButton />
+                <WalletMenu />
               ) : (
                 <button
                   type="submit"
-                  disabled={isPending || confirming || !hasToken}
+                  disabled={busy || !hasToken}
                   className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
                 >
-                  {isPending || confirming
-                    ? "Confirm in wallet…"
-                    : mode === "transfer" || !hasPool
+                  {busy
+                    ? pendingKind === "approve"
+                      ? "Approve in wallet…"
+                      : "Confirm in wallet…"
+                    : showTransferFields
                       ? `Send ${market.symbol}`
                       : side === "buy"
                         ? `Buy ${market.symbol}`
-                        : allowance !== undefined &&
-                            quoteIn > 0n &&
-                            allowance < quoteIn
+                        : sellAmountIn &&
+                            allowance !== undefined &&
+                            allowance < sellAmountIn
                           ? `Approve ${market.symbol}`
                           : `Sell ${market.symbol}`}
                 </button>
@@ -702,19 +815,23 @@ export function TradeView() {
               }`}
             >
               {market.change24h >= 0 ? "+" : ""}
-              {market.change24h}% today
+              {market.change24h}%
             </p>
             <dl className="mt-4 space-y-2 text-xs">
               <div className="flex justify-between">
+                <dt className="text-mute">Network</dt>
+                <dd className="text-foreground">Testnet</dd>
+              </div>
+              <div className="flex justify-between">
                 <dt className="text-mute">Pool</dt>
                 <dd className={hasPool ? "text-lime" : "text-mute"}>
-                  {hasPool ? "Yes" : "None yet"}
+                  {hasPool ? "Yes" : "None"}
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-mute">Onchain</dt>
+                <dt className="text-mute">Action</dt>
                 <dd className="text-foreground">
-                  {hasToken ? "Faucet token" : "Watch only"}
+                  {hasPool ? "Swap" : hasToken ? "Transfer" : "Watch"}
                 </dd>
               </div>
             </dl>
@@ -727,7 +844,7 @@ export function TradeView() {
         title={successTitle}
         body={
           <p>
-            {market.symbol} settled on testnet.
+            {market.symbol} · testnet
             {lastHash && (
               <>
                 {" "}

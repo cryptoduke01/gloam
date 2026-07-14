@@ -11,7 +11,7 @@ import {
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
-import { ConnectButton } from "./ConnectButton";
+import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 
 function Toggle({
@@ -138,7 +138,7 @@ export function SettingsView() {
             <div className="mt-4">
               <p className="text-sm text-mute">Connect to manage your session.</p>
               <div className="mt-3">
-                <ConnectButton />
+                <WalletMenu />
               </div>
             </div>
           ) : (
