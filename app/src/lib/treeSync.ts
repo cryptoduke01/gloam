@@ -65,13 +65,55 @@ function logKey(log: Log) {
   };
 }
 
+/** Many public RPCs cap eth_getLogs range — walk in chunks. */
+const LOG_CHUNK = 40_000n;
+
+type DecodedLog = Log & {
+  args?: Record<string, unknown>;
+};
+
+async function getLogsChunked(
+  client: PublicClient,
+  params: {
+    address: Address;
+    // viem event ABI fragment
+    event: {
+      type: "event";
+      name: string;
+      inputs: readonly {
+        name: string;
+        type: string;
+        indexed: boolean;
+      }[];
+    };
+    fromBlock: bigint;
+  }
+): Promise<DecodedLog[]> {
+  const latest = await client.getBlockNumber();
+  if (latest < params.fromBlock) return [];
+  const out: DecodedLog[] = [];
+  for (let start = params.fromBlock; start <= latest; start += LOG_CHUNK) {
+    let end = start + LOG_CHUNK - 1n;
+    if (end > latest) end = latest;
+    const chunk = (await client.getLogs({
+      address: params.address,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      event: params.event as any,
+      fromBlock: start,
+      toBlock: end,
+    })) as DecodedLog[];
+    out.push(...chunk);
+  }
+  return out;
+}
+
 export async function syncShieldTree(
   client: PublicClient
 ): Promise<SyncedTree | null> {
   if (!SHIELD_POOL_ADDRESS) return null;
 
   const [shieldLogs, transferLogs] = await Promise.all([
-    client.getLogs({
+    getLogsChunked(client, {
       address: SHIELD_POOL_ADDRESS,
       event: {
         type: "event",
@@ -85,9 +127,8 @@ export async function syncShieldTree(
         ],
       },
       fromBlock: SHIELD_DEPLOY_BLOCK,
-      toBlock: "latest",
     }),
-    client.getLogs({
+    getLogsChunked(client, {
       address: SHIELD_POOL_ADDRESS,
       event: {
         type: "event",
@@ -98,7 +139,6 @@ export async function syncShieldTree(
         ],
       },
       fromBlock: SHIELD_DEPLOY_BLOCK,
-      toBlock: "latest",
     }),
   ]);
 

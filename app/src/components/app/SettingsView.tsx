@@ -6,9 +6,12 @@ import {
   EXPLORER_ADDRESS,
   PRODUCT_CHAIN_ID,
   RH_TESTNET_WALLET_PARAMS,
-  shortAddress,
 } from "@/lib/chain";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
+import {
+  exportNotesBackup,
+  importNotesBackup,
+} from "@/lib/shield";
 import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { WalletMenu } from "./WalletMenu";
@@ -82,6 +85,8 @@ export function SettingsView() {
   const { settings, setSettings, ready } = useTradingSettings();
   const [copied, setCopied] = useState(false);
   const [netMsg, setNetMsg] = useState<string | null>(null);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [backupImport, setBackupImport] = useState("");
 
   useEffect(() => {
     if (!copied) return;
@@ -316,6 +321,101 @@ export function SettingsView() {
           </a>
         </section>
       </div>
+
+      {/* Vault note backup — secrets leave this browser only when you export */}
+      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          Vault notes backup
+        </p>
+        <p className="mt-2 text-sm text-mute">
+          Secrets live in this browser. Export a JSON backup before clearing
+          site data — anyone with the file can spend those notes.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={!isConnected}
+            onClick={async () => {
+              setBackupMsg(null);
+              try {
+                const backup = exportNotesBackup(address);
+                const text = JSON.stringify(backup, null, 2);
+                await navigator.clipboard.writeText(text);
+                setBackupMsg(
+                  backup.notes.length
+                    ? `Copied ${backup.notes.length} note(s) to clipboard.`
+                    : "No spendable notes to export."
+                );
+              } catch {
+                setBackupMsg("Could not copy backup.");
+              }
+            }}
+            className="inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-black disabled:opacity-50"
+          >
+            Copy backup
+          </button>
+          <button
+            type="button"
+            disabled={!isConnected}
+            onClick={() => {
+              setBackupMsg(null);
+              const backup = exportNotesBackup(address);
+              const blob = new Blob([JSON.stringify(backup, null, 2)], {
+                type: "application/json",
+              });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `gloam-notes-${Date.now()}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              setBackupMsg(
+                backup.notes.length
+                  ? `Downloaded ${backup.notes.length} note(s).`
+                  : "Empty backup file downloaded."
+              );
+            }}
+            className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
+          >
+            Download JSON
+          </button>
+        </div>
+        <label
+          htmlFor="backup-import"
+          className="mt-5 block text-sm font-medium text-foreground"
+        >
+          Restore backup
+        </label>
+        <textarea
+          id="backup-import"
+          value={backupImport}
+          onChange={(e) => setBackupImport(e.target.value)}
+          rows={3}
+          placeholder='Paste {"v":1,"type":"gloam-notes-backup",…}'
+          className="mt-2 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
+        />
+        <button
+          type="button"
+          disabled={!backupImport.trim() || !isConnected}
+          onClick={() => {
+            const res = importNotesBackup(backupImport, address);
+            if (res.ok) {
+              setBackupMsg(`Restored ${res.count} note(s). Refresh Portfolio.`);
+              setBackupImport("");
+            } else {
+              setBackupMsg(res.error);
+            }
+          }}
+          className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-lime hover:bg-lime/10 disabled:opacity-50"
+        >
+          Import notes
+        </button>
+        {backupMsg && (
+          <p className="mt-2 text-sm text-mute" role="status">
+            {backupMsg}
+          </p>
+        )}
+      </section>
     </div>
   );
 }

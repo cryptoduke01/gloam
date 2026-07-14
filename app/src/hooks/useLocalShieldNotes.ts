@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePublicClient } from "wagmi";
 import type { Address, Hex } from "viem";
 import { PRODUCT_CHAIN_ID } from "@/lib/chain";
@@ -12,6 +12,7 @@ import {
   loadLocalNotes,
   markNoteRecovered,
   mergeNotes,
+  purgeSenderPaymentNotes,
   shieldPoolAbi,
   sumByAsset,
   sumEthWei,
@@ -28,39 +29,10 @@ export function useLocalShieldNotes(address?: string | null) {
   const [chain, setChain] = useState<LocalNote[]>([]);
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const lastFocusSync = useRef(0);
 
   const refreshLocal = useCallback(() => {
-    // Historic bug: private send used to save the *payment* note on the sender.
-    // Those ids start with pay- — drop them so the sender cannot double-claim.
-    try {
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem("gloam.shield.notes.v1");
-        if (raw) {
-          const all = JSON.parse(raw) as { id?: string; status?: string }[];
-          if (Array.isArray(all)) {
-            let changed = false;
-            const next = all.map((n) => {
-              if (
-                n?.id?.startsWith("pay-") &&
-                n.status !== "recovered"
-              ) {
-                changed = true;
-                return { ...n, status: "recovered" as const };
-              }
-              return n;
-            });
-            if (changed) {
-              localStorage.setItem(
-                "gloam.shield.notes.v1",
-                JSON.stringify(next)
-              );
-            }
-          }
-        }
-      }
-    } catch {
-      /* ignore */
-    }
+    purgeSenderPaymentNotes();
     setLocal(loadLocalNotes(address));
     setReady(true);
   }, [address]);
@@ -76,6 +48,7 @@ export function useLocalShieldNotes(address?: string | null) {
           n.secret &&
           n.secret !== "0x"
       );
+      let any = false;
       for (const n of candidates) {
         try {
           const spent = (await publicClient.readContract({
@@ -86,13 +59,13 @@ export function useLocalShieldNotes(address?: string | null) {
           })) as boolean;
           if (spent) {
             markNoteRecovered(n.id);
+            any = true;
           }
         } catch {
           /* ignore */
         }
       }
-      // reload after marks
-      if (candidates.length) {
+      if (any) {
         setLocal(loadLocalNotes(address));
       }
     },
@@ -161,11 +134,21 @@ export function useLocalShieldNotes(address?: string | null) {
     const onStorage = (e: StorageEvent) => {
       if (e.key === "gloam.shield.notes.v1") refreshLocal();
     };
+    const onFocus = () => {
+      const now = Date.now();
+      // Debounce focus re-sync (RPC / log load can be heavy)
+      if (now - lastFocusSync.current < 15_000) {
+        refreshLocal();
+        return;
+      }
+      lastFocusSync.current = now;
+      refresh();
+    };
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", refresh);
+    window.addEventListener("focus", onFocus);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", onFocus);
     };
   }, [refreshLocal, refresh]);
 

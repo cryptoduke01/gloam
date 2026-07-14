@@ -31,6 +31,7 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | Vault move | **Private send** — pay someone inside the vault (payment code + optional passphrase) |
 | Vault out | **Cash out** (unshield) with a real browser proof |
 | Vault trade | **Adapter:** cash out → public DEX swap → re-shield (swap edge still public) |
+| Note backup | Settings → export/import vault note secrets (this browser / JSON) |
 
 **Not yet:** sealed-size private trade (size stays hidden). Production ceremony keys for real money.
 

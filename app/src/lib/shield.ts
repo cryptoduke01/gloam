@@ -258,15 +258,102 @@ export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
  * Notes you can still spend (have a local secret).
  * Includes imports (no txHash yet) and confirmed shields/transfers.
  * Excludes recovered and chain-history-only rows without a secret.
+ * Excludes historic sender payment rows (id pay-*).
  */
 export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter(
     (n) =>
       n.status !== "recovered" &&
+      !n.id.startsWith("pay-") &&
       Boolean(n.secret) &&
       n.secret !== "0x" &&
       n.secret.length > 10
   );
+}
+
+/**
+ * Retire payment notes wrongly saved on the sender (pre-audit bug).
+ * Safe to call on every load.
+ */
+export function purgeSenderPaymentNotes(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    if (!raw) return false;
+    const all = JSON.parse(raw) as LocalNote[];
+    if (!Array.isArray(all)) return false;
+    let changed = false;
+    const next = all.map((n) => {
+      if (n?.id?.startsWith("pay-") && n.status !== "recovered") {
+        changed = true;
+        return { ...n, status: "recovered" as const };
+      }
+      return n;
+    });
+    if (changed) localStorage.setItem(NOTES_KEY, JSON.stringify(next));
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
+export type NotesBackup = {
+  v: 1;
+  type: "gloam-notes-backup";
+  exportedAt: number;
+  chainId: number;
+  notes: LocalNote[];
+};
+
+/** Export spendable notes (secrets!) for device backup. */
+export function exportNotesBackup(address?: string | null): NotesBackup {
+  purgeSenderPaymentNotes();
+  const notes = activeSpendableNotes(loadLocalNotes(address));
+  return {
+    v: 1,
+    type: "gloam-notes-backup",
+    exportedAt: Date.now(),
+    chainId: PRODUCT_CHAIN_ID,
+    notes,
+  };
+}
+
+/** Merge a backup into local storage. Returns how many notes were added/updated. */
+export function importNotesBackup(
+  raw: string,
+  address?: string | null
+): { ok: true; count: number } | { ok: false; error: string } {
+  try {
+    const data = JSON.parse(raw) as NotesBackup;
+    if (data?.type !== "gloam-notes-backup" || data.v !== 1) {
+      return { ok: false, error: "Not a Gloam notes backup." };
+    }
+    if (data.chainId !== PRODUCT_CHAIN_ID) {
+      return { ok: false, error: "Backup is for a different chain." };
+    }
+    if (!Array.isArray(data.notes)) {
+      return { ok: false, error: "Backup has no notes." };
+    }
+    let count = 0;
+    for (const n of data.notes) {
+      if (!n?.secret || !n?.commitment || !n?.amountWei) continue;
+      if (n.chainId !== PRODUCT_CHAIN_ID) continue;
+      if (n.id?.startsWith("pay-")) continue;
+      const note: LocalNote = {
+        ...n,
+        from: (address as Address | undefined) ?? n.from,
+        status: n.status === "recovered" ? "recovered" : "open",
+        source: "local",
+        bound: n.bound ?? true,
+      };
+      if (note.status === "recovered") continue;
+      saveLocalNote(note);
+      count++;
+    }
+    return { ok: true, count };
+  } catch {
+    return { ok: false, error: "Could not parse backup JSON." };
+  }
 }
 
 /** ETH only (native asset) — spendable notes only */
@@ -405,32 +492,43 @@ export async function fetchChainShieldNotes(
 ): Promise<LocalNote[]> {
   if (!SHIELD_POOL_ADDRESS) return [];
   try {
-    const logs = await client.getLogs({
-      address: SHIELD_POOL_ADDRESS,
-      event: {
-        type: "event",
-        name: "Shielded",
-        inputs: [
-          { name: "commitment", type: "bytes32", indexed: true },
-          { name: "asset", type: "address", indexed: true },
-          { name: "amount", type: "uint256", indexed: false },
-          { name: "leafIndex", type: "uint256", indexed: false },
-          { name: "from", type: "address", indexed: true },
-        ],
-      },
-      args: { from },
-      fromBlock: SHIELD_DEPLOY_BLOCK,
-      toBlock: "latest",
-    });
-
-    return logs.map((log, i) => {
-      const args = log.args as {
+    const latest = await client.getBlockNumber();
+    const CHUNK = 40_000n;
+    const logs: {
+      args?: {
         commitment?: Hex;
         asset?: Address;
         amount?: bigint;
         leafIndex?: bigint;
         from?: Address;
       };
+      transactionHash?: Hex | null;
+    }[] = [];
+    for (let start = SHIELD_DEPLOY_BLOCK; start <= latest; start += CHUNK) {
+      let end = start + CHUNK - 1n;
+      if (end > latest) end = latest;
+      const chunk = await client.getLogs({
+        address: SHIELD_POOL_ADDRESS,
+        event: {
+          type: "event",
+          name: "Shielded",
+          inputs: [
+            { name: "commitment", type: "bytes32", indexed: true },
+            { name: "asset", type: "address", indexed: true },
+            { name: "amount", type: "uint256", indexed: false },
+            { name: "leafIndex", type: "uint256", indexed: false },
+            { name: "from", type: "address", indexed: true },
+          ],
+        },
+        args: { from },
+        fromBlock: start,
+        toBlock: end,
+      });
+      logs.push(...(chunk as typeof logs));
+    }
+
+    return logs.map((log, i) => {
+      const args = log.args ?? {};
       const commitment = (args.commitment ??
         "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex;
       return {

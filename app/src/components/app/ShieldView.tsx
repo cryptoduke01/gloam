@@ -48,7 +48,6 @@ import {
   markAllNotesRecovered,
   saveLocalNote,
   shieldPoolAbi,
-  updateLocalNote,
 } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
@@ -297,7 +296,13 @@ export function ShieldView() {
     }
 
     if (pendingNote) {
-      updateLocalNote(pendingNote.id, { txHash: hash, leafIndex });
+      // Persist only after on-chain success (avoids ghost notes on reject)
+      saveLocalNote({
+        ...pendingNote,
+        txHash: hash,
+        leafIndex,
+        status: "open",
+      });
     }
     setPendingNote(null);
     setPendingKind(null);
@@ -312,10 +317,13 @@ export function ShieldView() {
       <>
         <p>
           <span className="font-medium text-foreground">{sentLabel}</span> is in
-          the pool.
+          the vault.
         </p>
         <p className="mt-2">
-          Check Portfolio → Shielded. Private exit is not open yet.
+          Open <strong className="text-foreground">Move</strong> to private-send
+          or cash out ·{" "}
+          <strong className="text-foreground">Trade → From vault</strong> to
+          swap.
         </p>
       </>
     );
@@ -368,7 +376,7 @@ export function ShieldView() {
     if (!SHIELD_POOL_ADDRESS) return;
     setPendingNote(note);
     setPendingKind("shield");
-    saveLocalNote(note);
+    // Do not saveLocalNote until shield confirms — see receipt handler
 
     if (selectedToken) {
       writeContract({
@@ -451,7 +459,6 @@ export function ShieldView() {
         autoShieldAfterApprove.current = true;
         setPendingKind("approve");
         setPendingNote(note);
-        saveLocalNote(note);
         writeContract({
           address: selectedToken.address,
           abi: erc20Abi,
@@ -466,6 +473,17 @@ export function ShieldView() {
 
     executeShield(value, note, commitment);
   }
+
+  // Clear in-memory pending on wallet reject / failed write
+  useEffect(() => {
+    if (!writeError) return;
+    if (pendingKind === "shield" || pendingKind === "approve") {
+      setPendingNote(null);
+      setPendingKind(null);
+      pendingShieldArgs.current = null;
+      autoShieldAfterApprove.current = false;
+    }
+  }, [writeError, pendingKind]);
 
   function onOwnerPull() {
     if (!SHIELD_POOL_ADDRESS || !address || !isOwner) return;

@@ -6,7 +6,8 @@
     "dev": "next dev --port 3000 --webpack",
     "build": "next build --webpack",
     "start": "next start --port 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke": "node scripts/smoke-note-package.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.83.0",

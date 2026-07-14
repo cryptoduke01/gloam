@@ -378,14 +378,13 @@ export function MoveView() {
       const asset = pack.asset;
       const secret = pack.secret;
       const commitment = pack.commitment;
-      let nullifier: `0x${string}` | undefined;
+      let nullifier: Hex | undefined;
       try {
         const n = await noteNullifierPoseidon(
           hexToField(secret),
           hexToField(commitment)
         );
-        nullifier =
-          `0x${n.toString(16).padStart(64, "0")}` as `0x${string}`;
+        nullifier = fieldToHex(n);
       } catch {
         /* optional */
       }
