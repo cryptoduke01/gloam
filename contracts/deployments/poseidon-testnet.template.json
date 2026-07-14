@@ -1,0 +1,15 @@
+{
+  "chainId": 46630,
+  "network": "Robinhood Chain Testnet",
+  "rpc": "https://rpc.testnet.chain.robinhood.com",
+  "hashScheme": "poseidon",
+  "proofLayout": 2,
+  "contracts": {
+    "Poseidon2": null,
+    "Poseidon3": null,
+    "UnshieldVerifier": null,
+    "UnshieldIVerifier": null,
+    "ShieldPoolPoseidon": null
+  },
+  "notes": "Run: cd contracts && forge build && cd circuits && DEPLOYER_PK=0x... node scripts/deploy-phase2.mjs"
+}

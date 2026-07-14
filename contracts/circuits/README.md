@@ -115,13 +115,27 @@ root       = PoseidonMerkle(commitment, path…)
 Proven end-to-end with snarkjs (`OK!` on real-input.json).  
 App helpers: `app/src/lib/notePoseidon.ts`, `merklePoseidon.ts`, `proverPoseidon.ts`.
 
-### Next deploy path
+### Deploy Phase-2 stack (one command)
 
-1. Deploy Poseidon2 + Poseidon3 (`scripts/deploy-poseidon.mjs`)
-2. Deploy ShieldPool with Poseidon tree (source: `IncrementalMerkleTreePoseidon`)
-3. Deploy `UnshieldIVerifier` wrapping `UnshieldVerifier`
-4. `setVerifier` on the **new** pool only
-5. Production powers-of-tau ceremony before real funds
+```bash
+cd contracts && forge build
+cd circuits
+npm i   # circomlibjs ethers snarkjs
+export DEPLOYER_PK=0x...
+export RPC_URL=https://rpc.testnet.chain.robinhood.com
+node scripts/deploy-phase2.mjs
+# → writes deployments/poseidon-testnet.json
+```
+
+Then in Vercel / app env:
+
+```
+NEXT_PUBLIC_POSEIDON_SHIELD_POOL=0x...   # ShieldPoolPoseidon
+NEXT_PUBLIC_HASH_SCHEME=poseidon
+NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=<deploy block>
+```
+
+App `/app/move` → **Prove & unshield** uses browser snarkjs + `/public/circuits/*` (dev keys).
 
 ## Safety
 

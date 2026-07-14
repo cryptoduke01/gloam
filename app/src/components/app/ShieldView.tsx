@@ -37,6 +37,7 @@ import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
 import {
   APPROVE_GAS_LIMIT,
   EMERGENCY_GAS_LIMIT,
+  HASH_SCHEME,
   NATIVE_ASSET,
   SHIELD_GAS_LIMIT,
   SHIELD_POOL_ADDRESS,
@@ -50,6 +51,7 @@ import {
   shieldPoolAbi,
   updateLocalNote,
 } from "@/lib/shield";
+import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
@@ -391,7 +393,7 @@ export function ShieldView() {
     }
   }
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const err = validate();
     if (err) {
@@ -406,10 +408,20 @@ export function ShieldView() {
       return;
     }
 
-    const { secret, commitment, nullifier } = makeNoteMaterial(
-      value,
-      assetAddress
-    );
+    let secret: `0x${string}`;
+    let commitment: `0x${string}`;
+    let nullifier: `0x${string}`;
+    if (HASH_SCHEME === "poseidon") {
+      const n = await makeBoundNotePoseidon(value, assetAddress);
+      secret = n.secret;
+      commitment = n.commitment;
+      nullifier = n.nullifier;
+    } else {
+      const n = makeNoteMaterial(value, assetAddress);
+      secret = n.secret;
+      commitment = n.commitment;
+      nullifier = n.nullifier;
+    }
     const note: LocalNote = {
       id: `${Date.now()}-${commitment.slice(0, 10)}`,
       chainId: PRODUCT_CHAIN_ID,
@@ -420,6 +432,7 @@ export function ShieldView() {
       secret,
       nullifier,
       bound: true,
+      scheme: HASH_SCHEME,
       from: address,
       createdAt: Date.now(),
       status: "open",
@@ -587,7 +600,9 @@ export function ShieldView() {
               />
               <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/80 to-panel/40" />
               <div className="absolute bottom-4 left-5">
-                <StatusPill tone="lime">Live · testnet</StatusPill>
+                <StatusPill tone="lime">
+                  Live · {HASH_SCHEME}
+                </StatusPill>
                 <p className="mt-2 font-display text-xl text-foreground sm:text-2xl">
                   Deposit
                 </p>

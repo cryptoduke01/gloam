@@ -1,33 +1,30 @@
 /**
- * ShieldPool — Robinhood Chain testnet (phase 1: custody + Merkle leaf).
- * Private transfer / unshield need a real verifier (not deployed yet).
+ * ShieldPool — RH testnet.
+ * keccak Phase-1 live pool OR Poseidon Phase-2 (env NEXT_PUBLIC_POSEIDON_SHIELD_POOL).
  */
 
 import { zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { PRODUCT_CHAIN_ID } from "./chain";
 import { TESTNET_STOCK_TOKENS } from "./tokens";
 import { makeBoundNote } from "./note";
+import {
+  activeHashScheme,
+  activePoolAddress,
+  type HashScheme,
+} from "./config";
 
-/** Live RH testnet deploy (see contracts/deployments/testnet.json) */
+/** Live keccak RH testnet deploy */
 export const TESTNET_SHIELD_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** First deploy block — getLogs from here */
-export const SHIELD_DEPLOY_BLOCK = 90_232_912n;
+/** First keccak deploy block — getLogs from here (poseidon pool uses its own deploy block via env) */
+export const SHIELD_DEPLOY_BLOCK = BigInt(
+  process.env.NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK ?? "90232912"
+);
 
-export const SHIELD_POOL_ADDRESS: Address | null = (() => {
-  const fromEnv = process.env.NEXT_PUBLIC_SHIELD_POOL_ADDRESS;
-  if (
-    fromEnv &&
-    fromEnv !== "null" &&
-    fromEnv.startsWith("0x") &&
-    fromEnv.length === 42
-  ) {
-    return fromEnv as Address;
-  }
-  if (PRODUCT_CHAIN_ID === 46630) return TESTNET_SHIELD_POOL;
-  return null;
-})();
+export const HASH_SCHEME: HashScheme = activeHashScheme();
+
+export const SHIELD_POOL_ADDRESS: Address | null = activePoolAddress();
 
 /** Native ETH in the pool (asset address zero) */
 export const NATIVE_ASSET = zeroAddress;
@@ -132,6 +129,20 @@ export const shieldPoolAbi = [
   },
   {
     type: "function",
+    name: "HASH_SCHEME",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "string" }],
+  },
+  {
+    type: "function",
+    name: "verifier",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
     name: "isKnownRoot",
     stateMutability: "view",
     inputs: [{ name: "root", type: "bytes32" }],
@@ -202,8 +213,8 @@ function shortAsset(addr: string) {
 }
 
 /**
- * Bound note for shield() — amount/asset locked in commitment (Phase 2 ready).
- * Prefer this over random unbound commitments.
+ * Bound note for shield() — keccak scheme (legacy live pool).
+ * Poseidon notes: use makeBoundNotePoseidon from notePoseidon.ts
  */
 export function makeNoteMaterial(
   amount: bigint,
@@ -223,8 +234,10 @@ export type LocalNote = {
   secret: Hex;
   /** Precomputed for unshield when secret is known */
   nullifier?: Hex;
-  /** true when commitment = NoteLib(secret, amount, asset) */
+  /** true when commitment binds secret+amount+asset */
   bound?: boolean;
+  /** poseidon = circuit-compatible; keccak = live Phase-1 */
+  scheme?: HashScheme;
   leafIndex?: number;
   txHash?: Hex;
   from?: Address;

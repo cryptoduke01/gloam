@@ -1,15 +1,19 @@
 /**
  * Rebuild ShieldPool Merkle tree from on-chain Shielded events.
- * Needed for Merkle paths at unshield time (client cannot trust partial trees).
  */
 
 import type { Address, Hex, PublicClient } from "viem";
 import {
+  HASH_SCHEME,
   SHIELD_DEPLOY_BLOCK,
   SHIELD_POOL_ADDRESS,
   shieldPoolAbi,
 } from "./shield";
 import { IncrementalMerkleTree } from "./merkle";
+import { IncrementalMerkleTreePoseidon } from "./merklePoseidon";
+import type { MerklePath } from "./merkle";
+import type { PoseidonMerklePath } from "./merklePoseidon";
+import { fieldToHex, hexToField } from "./poseidon";
 
 export type ChainLeaf = {
   leafIndex: number;
@@ -21,16 +25,13 @@ export type ChainLeaf = {
 };
 
 export type SyncedTree = {
-  tree: IncrementalMerkleTree;
+  scheme: "keccak" | "poseidon";
   leaves: ChainLeaf[];
-  /** Root after replaying all leaves */
   root: Hex;
   leafCount: number;
+  pathForLeaf: (leafIndex: number) => Promise<MerklePath | PoseidonMerklePath | null>;
 };
 
-/**
- * Fetch every Shielded event and rebuild the keccak tree in leaf order.
- */
 export async function syncShieldTree(
   client: PublicClient
 ): Promise<SyncedTree | null> {
@@ -76,28 +77,59 @@ export async function syncShieldTree(
     })
     .sort((a, b) => a.leafIndex - b.leafIndex);
 
-  // densify: insert in order 0..n-1; skip gaps if any
+  if (HASH_SCHEME === "poseidon") {
+    const tree = new IncrementalMerkleTreePoseidon();
+    await tree.init();
+    for (const leaf of leaves) {
+      if (leaf.leafIndex !== tree.nextIndex) {
+        if (leaf.leafIndex < tree.nextIndex) continue;
+        throw new Error(
+          `Leaf gap: expected ${tree.nextIndex}, got ${leaf.leafIndex}`
+        );
+      }
+      await tree.insert(hexToField(leaf.commitment));
+    }
+    return {
+      scheme: "poseidon",
+      leaves,
+      root: fieldToHex(tree.currentRoot),
+      leafCount: tree.nextIndex,
+      pathForLeaf: async (i) => {
+        try {
+          return await tree.path(i);
+        } catch {
+          return null;
+        }
+      },
+    };
+  }
+
   const tree = new IncrementalMerkleTree();
   for (const leaf of leaves) {
     if (leaf.leafIndex !== tree.nextIndex) {
-      // fill shouldn't happen if chain is consistent; abort on gap
       if (leaf.leafIndex < tree.nextIndex) continue;
       throw new Error(
-        `Leaf gap: expected index ${tree.nextIndex}, got ${leaf.leafIndex}`
+        `Leaf gap: expected ${tree.nextIndex}, got ${leaf.leafIndex}`
       );
     }
     tree.insert(leaf.commitment);
   }
 
   return {
-    tree,
+    scheme: "keccak",
     leaves,
     root: tree.currentRoot,
     leafCount: tree.nextIndex,
+    pathForLeaf: async (i) => {
+      try {
+        return tree.path(i);
+      } catch {
+        return null;
+      }
+    },
   };
 }
 
-/** Compare synced root to on-chain currentRoot() */
 export async function assertTreeMatchesChain(
   client: PublicClient,
   synced: SyncedTree

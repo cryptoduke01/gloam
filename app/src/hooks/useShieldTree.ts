@@ -8,8 +8,9 @@ import {
   syncShieldTree,
   type SyncedTree,
 } from "@/lib/treeSync";
-import type { MerklePath } from "@/lib/merkle";
 import { isShieldDeployed } from "@/lib/shield";
+import type { MerklePath } from "@/lib/merkle";
+import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 
 export function useShieldTree() {
   const publicClient = usePublicClient({ chainId: PRODUCT_CHAIN_ID });
@@ -49,13 +50,11 @@ export function useShieldTree() {
     void refresh();
   }, [refresh]);
 
-  function pathForLeaf(leafIndex: number): MerklePath | null {
+  async function pathForLeaf(
+    leafIndex: number
+  ): Promise<MerklePath | PoseidonMerklePath | null> {
     if (!synced) return null;
-    try {
-      return synced.tree.path(leafIndex);
-    } catch {
-      return null;
-    }
+    return synced.pathForLeaf(leafIndex);
   }
 
   return {
@@ -67,5 +66,6 @@ export function useShieldTree() {
     pathForLeaf,
     leafCount: synced?.leafCount ?? 0,
     root: synced?.root ?? null,
+    scheme: synced?.scheme ?? null,
   };
 }
