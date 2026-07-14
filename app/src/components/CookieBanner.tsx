@@ -27,7 +27,7 @@ export function CookieBanner() {
       <div className="mx-auto flex max-w-6xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-sm leading-relaxed text-mute">
           We use essential cookies to run the site. Optional first-party
-          analytics load only if you allow them — no third-party trackers by
+          analytics load only if you allow them. No third-party trackers by
           default. See{" "}
           <Link
             href="/cookies"
@@ -48,14 +48,14 @@ export function CookieBanner() {
           <button
             type="button"
             onClick={() => accept("essential")}
-            className="min-h-10 rounded-md border border-line px-4 text-sm text-white hover:border-mute"
+            className="min-h-10 rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"
           >
             Essential only
           </button>
           <button
             type="button"
             onClick={() => accept("all")}
-            className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-ink hover:opacity-90"
+            className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-black hover:opacity-90"
           >
             Accept all
           </button>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { CookieBanner } from "@/components/CookieBanner";
+import { ThemeDock } from "@/components/ThemeDock";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
@@ -93,6 +94,7 @@ export default function RootLayout({
       >
         <ThemeProvider>
           {children}
+          <ThemeDock />
           <CookieBanner />
           <Analytics />
         </ThemeProvider>

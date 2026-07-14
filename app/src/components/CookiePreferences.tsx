@@ -22,7 +22,7 @@ export function CookiePreferences() {
     <div className="rounded-2xl border border-line bg-panel p-5">
       <p className="text-sm text-mute">
         Current choice:{" "}
-        <span className="text-white">
+        <span className="text-foreground">
           {current === "all"
             ? "All (analytics on)"
             : current === "essential"
@@ -34,14 +34,14 @@ export function CookiePreferences() {
         <button
           type="button"
           onClick={() => save("essential")}
-          className="min-h-10 rounded-md border border-line px-4 text-sm text-white hover:border-mute"
+          className="min-h-10 rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"
         >
           Essential only
         </button>
         <button
           type="button"
           onClick={() => save("all")}
-          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-ink hover:opacity-90"
+          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-black hover:opacity-90"
         >
           Accept analytics
         </button>

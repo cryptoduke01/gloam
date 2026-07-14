@@ -1,9 +1,9 @@
 import Image from "next/image";
 
 /**
- * plate  – dark ASCII (white dots on black) → lime via multiply
- * ink    – light paper ASCII (brown/blue on white) → lime ink wash
- * raw    – no color treatment
+ * plate – dark ASCII (white on black) → brand lime via multiply
+ * ink   – paper ASCII (dark on light) → invert then same lime multiply (matches plate)
+ * raw   – untouched
  */
 export type AsciiTone = "plate" | "ink" | "raw";
 
@@ -25,14 +25,12 @@ export function AsciiImage({
   fit?: "cover" | "contain";
 }) {
   const fitClass =
-    fit === "contain" ? "object-contain object-center" : "object-cover object-center";
+    fit === "contain"
+      ? "object-contain object-center"
+      : "object-cover object-center";
 
   return (
-    <div
-      className={`relative overflow-hidden ${
-        tone === "ink" ? "bg-white dark:bg-[#0a0a0a]" : "bg-ink"
-      } ${className}`}
-    >
+    <div className={`relative overflow-hidden bg-black ${className}`}>
       <Image
         src={src}
         alt={alt}
@@ -47,10 +45,10 @@ export function AsciiImage({
               : ""
         }`}
       />
-      {tone === "plate" && (
+      {(tone === "plate" || tone === "ink") && (
         <div
-          className="pointer-events-none absolute inset-0 mix-blend-multiply opacity-[0.68] dark:opacity-[0.72]"
-          style={{ backgroundColor: "#c8ff00" }}
+          className="pointer-events-none absolute inset-0 mix-blend-multiply"
+          style={{ backgroundColor: "#c8ff00", opacity: 0.7 }}
           aria-hidden
         />
       )}

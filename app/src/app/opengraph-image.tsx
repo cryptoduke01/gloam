@@ -4,7 +4,7 @@ export const alt = "Gloam. Private money on Robinhood Chain";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-/** System fonts only so the Edge Function stays under the 1MB plan limit. */
+/** Lightweight OG card (system fonts only; under Edge 1MB). */
 export default function OpenGraphImage() {
   return new ImageResponse(
     (
@@ -13,81 +13,136 @@ export default function OpenGraphImage() {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
           background: "#000000",
-          padding: "56px 64px",
-          fontFamily: "Georgia, Times New Roman, serif",
+          position: "relative",
         }}
       >
         <div
           style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 8,
+            height: "100%",
+            background: "#c8ff00",
             display: "flex",
-            alignItems: "center",
-            gap: 16,
-            color: "#c8ff00",
-            fontSize: 20,
-            fontFamily: "ui-sans-serif, system-ui, sans-serif",
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
           }}
-        >
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 8,
-              background: "#c8ff00",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#000",
-              fontWeight: 700,
-              fontSize: 26,
-              fontFamily: "ui-sans-serif, system-ui, sans-serif",
-            }}
-          >
-            G
-          </div>
-          GLOAM
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div
-            style={{
-              fontSize: 68,
-              lineHeight: 1.06,
-              color: "#ffffff",
-              maxWidth: 920,
-            }}
-          >
-            Private money on Robinhood Chain
-          </div>
-          <div
-            style={{
-              fontSize: 26,
-              color: "#a3a3a3",
-              maxWidth: 780,
-              fontFamily: "ui-sans-serif, system-ui, sans-serif",
-              lineHeight: 1.35,
-            }}
-          >
-            Shield. Move. Trade. Without printing your book to the public chain.
-          </div>
-        </div>
+        />
 
         <div
           style={{
             display: "flex",
+            flexDirection: "column",
             justifyContent: "space-between",
-            alignItems: "center",
-            fontFamily: "ui-monospace, monospace",
-            fontSize: 18,
-            color: "#c8ff00",
+            padding: "64px 72px",
+            width: "100%",
+            height: "100%",
           }}
         >
-          <span>gloam.trade</span>
-          <span style={{ color: "#666666" }}>Chain ID 4663</span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 10,
+                background: "#c8ff00",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#000000",
+                fontSize: 28,
+                fontWeight: 700,
+                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+              }}
+            >
+              G
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}
+            >
+              <div
+                style={{
+                  color: "#ffffff",
+                  fontSize: 28,
+                  fontWeight: 600,
+                  fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Gloam
+              </div>
+              <div
+                style={{
+                  color: "#c8ff00",
+                  fontSize: 14,
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase" as const,
+                }}
+              >
+                Private money
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 20,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 64,
+                lineHeight: 1.05,
+                color: "#ffffff",
+                maxWidth: 900,
+                fontFamily: "Georgia, Times New Roman, serif",
+                letterSpacing: "-0.03em",
+                display: "flex",
+              }}
+            >
+              Private money on Robinhood Chain
+            </div>
+            <div
+              style={{
+                fontSize: 24,
+                color: "#a3a3a3",
+                maxWidth: 720,
+                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                lineHeight: 1.4,
+                display: "flex",
+              }}
+            >
+              Shield · Move · Trade without printing your book
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderTop: "1px solid #1a1a1a",
+              paddingTop: 22,
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 16,
+            }}
+          >
+            <div style={{ color: "#c8ff00", display: "flex" }}>gloam.trade</div>
+            <div style={{ color: "#666666", display: "flex" }}>CHAIN 4663</div>
+          </div>
         </div>
       </div>
     ),

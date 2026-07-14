@@ -1,27 +1,33 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AsciiImage } from "@/components/AsciiImage";
+import { HeroPrivacyArt } from "@/components/HeroPrivacyArt";
 
+/**
+ * Problem art mapped to meaning:
+ * - Public record → open ledger (trade.png)
+ * - Size harvested → value changing hands (move.png)
+ * - Thin venue → solitary coin (rim.png)
+ */
 const problems = [
   {
     title: "Public by default",
     body: "Every swap is a signal. Bots and copy traders read your book as it happens.",
-    src: "/ascii/rim.png",
-    tone: "plate" as const,
+    src: "/ascii/trade.png",
+    caption: "Open ledger",
   },
   {
     title: "Size gets farmed",
     body: "Show real size on a transparent AMM and the market prices you before settlement.",
-    src: "/ascii/shield.png",
-    tone: "plate" as const,
+    src: "/ascii/move.png",
+    caption: "Hands in the open",
   },
   {
     title: "No serious venue",
     body: "Retail apps list stock tokens. They will not ship private balances or private flow.",
-    src: "/ascii/move.png",
-    tone: "plate" as const,
+    src: "/ascii/rim.png",
+    caption: "Alone on the book",
   },
 ];
 
@@ -51,9 +57,8 @@ export default function Home() {
     <>
       <Header />
       <main className="flex-1">
-        {/* Hero */}
         <section className="relative overflow-hidden border-b border-line">
-          <div className="pointer-events-none absolute inset-0 opacity-40">
+          <div className="pointer-events-none absolute inset-0 opacity-35">
             <AsciiImage
               src="/ascii/hero.png"
               alt=""
@@ -62,7 +67,7 @@ export default function Home() {
               className="h-full min-h-[560px] w-full"
               sizes="100vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/92 to-background/45" />
+            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/92 to-background/50" />
             <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/55" />
           </div>
 
@@ -83,7 +88,7 @@ export default function Home() {
               <div className="mt-9 flex flex-wrap items-center gap-3">
                 <Link
                   href="#waitlist"
-                  className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-ink hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+                  className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
                 >
                   Launch testnet
                 </Link>
@@ -99,16 +104,7 @@ export default function Home() {
             </div>
 
             <div className="lg:col-span-5">
-              <div className="relative aspect-[4/5] overflow-hidden rounded-lg border border-line bg-panel">
-                <AsciiImage
-                  src="/ascii/IMG_1476.PNG"
-                  alt="Blind justice in brand green"
-                  tone="ink"
-                  className="h-full w-full"
-                  sizes="(max-width: 1024px) 100vw, 40vw"
-                  priority
-                />
-              </div>
+              <HeroPrivacyArt />
             </div>
           </div>
         </section>
@@ -125,7 +121,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Problem */}
         <section id="product" className="border-b border-line">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
@@ -148,11 +143,14 @@ export default function Home() {
                   <div className="relative aspect-[4/3] w-full border-b border-line">
                     <AsciiImage
                       src={p.src}
-                      alt=""
-                      tone={p.tone}
+                      alt={p.caption}
+                      tone="plate"
                       className="h-full w-full"
                       sizes="33vw"
                     />
+                    <span className="absolute left-3 top-3 rounded-md border border-white/10 bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-lime backdrop-blur-sm">
+                      {p.caption}
+                    </span>
                   </div>
                   <div className="p-5 sm:p-6">
                     <h3 className="font-display text-xl text-foreground">
@@ -168,52 +166,56 @@ export default function Home() {
           </div>
         </section>
 
-        {/* How it works — vertical tree with text on image */}
+        {/* How it works: full-width trunk + wide panels (no empty right rail) */}
         <section id="how" className="border-b border-line">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-20">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
-              How it works
-            </p>
-            <h2 className="mt-3 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-              Shield. Move. Trade.
-            </h2>
-            <p className="mt-4 max-w-xl text-mute">
-              One trunk. Three gates. Each step stays private until you choose
-              to exit to the public chain.
-            </p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
+                  How it works
+                </p>
+                <h2 className="mt-3 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+                  Shield. Move. Trade.
+                </h2>
+              </div>
+              <p className="max-w-md text-sm text-mute lg:text-right">
+                One path. Three gates. Each step stays private until you exit to
+                the public chain.
+              </p>
+            </div>
 
-            <div className="relative mt-14 max-w-3xl">
+            <div className="relative mt-14">
               <div
-                className="absolute bottom-4 left-[0.95rem] top-4 w-px bg-gradient-to-b from-lime via-line to-lime sm:left-[1.15rem]"
+                className="absolute bottom-6 left-[1.15rem] top-6 w-px bg-gradient-to-b from-lime via-line to-lime md:left-8"
                 aria-hidden
               />
-              <ol className="space-y-8 sm:space-y-10">
+              <ol className="space-y-6 md:space-y-8">
                 {steps.map((s) => (
-                  <li key={s.n} className="relative pl-10 sm:pl-14">
-                    <span
-                      className="absolute left-0 top-8 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-lime bg-background font-mono text-[10px] text-lime sm:top-10"
-                      aria-hidden
-                    >
+                  <li key={s.n} className="relative pl-12 md:pl-20">
+                    <span className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-lime bg-background font-mono text-[11px] text-lime md:left-3.5">
                       {s.n}
                     </span>
-                    <div className="relative overflow-hidden rounded-lg border border-line">
-                      <div className="relative aspect-[16/9] sm:aspect-[21/9]">
+                    <div className="grid overflow-hidden rounded-lg border border-line bg-panel md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                      <div className="relative min-h-[200px] aspect-[16/10] md:aspect-auto md:min-h-[240px]">
                         <AsciiImage
                           src={s.src}
                           alt=""
                           tone="plate"
                           className="h-full w-full"
-                          sizes="(max-width: 768px) 100vw, 720px"
+                          sizes="(max-width: 768px) 100vw, 55vw"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/55 to-black/20" />
-                        <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-8">
-                          <h3 className="font-display text-3xl text-white sm:text-4xl">
-                            {s.title}
-                          </h3>
-                          <p className="mt-2 max-w-md text-sm leading-relaxed text-white/80 sm:text-base">
-                            {s.body}
-                          </p>
-                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-panel/90 max-md:bg-gradient-to-t max-md:from-black/80 max-md:via-black/20 max-md:to-transparent" />
+                      </div>
+                      <div className="flex flex-col justify-center gap-3 p-6 sm:p-8">
+                        <h3 className="font-display text-3xl text-foreground sm:text-4xl">
+                          {s.title}
+                        </h3>
+                        <p className="text-sm leading-relaxed text-mute sm:text-base">
+                          {s.body}
+                        </p>
+                        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">
+                          Gate {s.n}
+                        </p>
                       </div>
                     </div>
                   </li>
@@ -223,7 +225,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Chain */}
         <section id="chain" className="border-b border-line">
           <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-2 lg:items-center">
             <div>
@@ -256,13 +257,13 @@ export default function Home() {
             </div>
             <div className="relative aspect-[16/11] overflow-hidden rounded-lg border border-line">
               <AsciiImage
-                src="/ascii/rim.png"
-                alt="Coin rim"
+                src="/ascii/shield.png"
+                alt="Shielded coin"
                 tone="plate"
                 className="h-full w-full"
                 sizes="50vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
               <p className="absolute bottom-5 left-5 right-5 font-display text-xl text-white sm:text-2xl">
                 Private by construction. Public only when you exit.
               </p>
@@ -273,10 +274,10 @@ export default function Home() {
         <section id="waitlist" className="border-b border-line bg-lime">
           <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-12 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-16">
             <div>
-              <h2 className="font-display text-3xl tracking-tight text-ink sm:text-4xl">
+              <h2 className="font-display text-3xl tracking-tight text-black sm:text-4xl">
                 Testnet first. Mainnet when the rails hold.
               </h2>
-              <p className="mt-3 max-w-xl text-sm text-ink/75">
+              <p className="mt-3 max-w-xl text-sm text-black/70">
                 We ship shield, transfer, and trade on Robinhood Chain in the
                 open. No mock fills. No fake privacy.
               </p>
@@ -286,7 +287,7 @@ export default function Home() {
                 href="https://x.com/gloamtrade"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-11 items-center rounded-md bg-ink px-5 text-sm font-semibold text-white hover:opacity-90"
+                className="inline-flex min-h-11 items-center rounded-md bg-black px-5 text-sm font-semibold text-white hover:opacity-90"
               >
                 Follow @gloamtrade
               </a>
@@ -294,7 +295,7 @@ export default function Home() {
                 href="https://docs.gloam.trade"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex min-h-11 items-center rounded-md border border-ink/25 px-5 text-sm font-medium text-ink hover:bg-ink/5"
+                className="inline-flex min-h-11 items-center rounded-md border border-black/25 px-5 text-sm font-medium text-black hover:bg-black/5"
               >
                 Docs
               </a>
