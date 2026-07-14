@@ -10,7 +10,7 @@ export default function ShieldPage() {
   return (
     <AppShell
       title="Shield"
-      subtitle="Park assets in a sealed note. The public graph loses the thread."
+      subtitle="Deposit testnet ETH into the pool. Private exit ships with the verifier."
     >
       <ShieldView />
     </AppShell>

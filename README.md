@@ -22,9 +22,9 @@ Stocks. Memes. Same rails. Money that can sit, move, and trade without printing 
 
 Gloam is private money on **Robinhood Chain** — not a dark theme on a public DEX.
 
-**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts.
+**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts, **shield ETH** into the live pool.
 
-**Still closed:** shield, private transfer, private trade. Those need contracts and proofs. We do not fake them.
+**Still closed:** private transfer, private unshield, private trade. Those need a real verifier + proofs. We do not fake them.
 
 ---
 
@@ -61,12 +61,20 @@ Chain ID **46630**.
 
 ### Contracts (private path)
 
-Phase 1 is in source: custody, Merkle tree, unshield payout path. Transfer / unshield stay locked until a real verifier is set.
+Phase 1 is **deployed** on RH testnet:
+
+| | |
+| --- | --- |
+| ShieldPool | `0x2BD98196D90AB45D58843B4c8B8809aa34343d35` |
+| Chain | 46630 |
+| Record | [contracts/deployments/testnet.json](./contracts/deployments/testnet.json) |
+
+App defaults to that address (`NEXT_PUBLIC_SHIELD_POOL_ADDRESS` overrides). Deposit works in `/app/shield`. Transfer / unshield stay locked until a real verifier is set.
 
 ```bash
 cd contracts
 forge test
-# deploy only with your own key — never commit secrets
+# redeploy only with your own key — never commit secrets
 export DEPLOYER_PK=0x...
 forge script script/DeployShieldPool.s.sol \
   --rpc-url https://rpc.testnet.chain.robinhood.com \
@@ -87,8 +95,9 @@ No purple crypto fog.
 ### Status
 
 - **Product:** testnet-only until the private rails hold  
-- **Frontend / public flows:** largely shipped  
-- **Next:** deploy ShieldPool → real verifier → wire Shield UI  
+- **Shield deposit:** live on RH testnet  
+- **Next:** real verifier + circuits → private move / unshield  
+
 
 ---
 

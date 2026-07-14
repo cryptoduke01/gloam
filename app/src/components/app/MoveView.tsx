@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { AsciiImage } from "@/components/AsciiImage";
+import { isShieldDeployed } from "@/lib/shield";
 import { StatusPill } from "./StatusPill";
 
-/** Honest placeholder — public token send is under Trade / Send. */
+/** Private transfer still closed — no fake txs. */
 export function MoveView() {
+  const shieldLive = isShieldDeployed();
+
   return (
     <div className="grid gap-6 lg:grid-cols-12">
       <div className="lg:col-span-7">
@@ -28,19 +31,34 @@ export function MoveView() {
           </div>
           <div className="space-y-4 p-6">
             <p className="text-sm leading-relaxed text-mute">
-              Private transfers need shielded notes and nullifiers. Nothing is
-              submitted from this screen.
+              Moving between notes needs a verifier and proofs. We do not fake
+              that here.
             </p>
-            <p className="text-sm text-mute">
-              For <strong className="text-foreground">public</strong> moves on
-              testnet right now:
-            </p>
+            {shieldLive ? (
+              <p className="text-sm text-mute">
+                <strong className="text-foreground">Shield is live</strong> —
+                you can deposit ETH into the pool. Exit and private transfer
+                still wait on Phase 2.
+              </p>
+            ) : (
+              <p className="text-sm text-mute">
+                Shield the pool first, then private move can ship.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
+              {shieldLive && (
+                <Link
+                  href="/app/shield"
+                  className="inline-flex min-h-10 items-center rounded-lg bg-lime px-4 text-sm font-semibold text-black"
+                >
+                  Open shield
+                </Link>
+              )}
               <Link
                 href="/app/send"
-                className="inline-flex min-h-10 items-center rounded-lg bg-lime px-4 text-sm font-semibold text-black"
+                className="inline-flex min-h-10 items-center rounded-lg border border-line px-4 text-sm text-foreground"
               >
-                Send ETH
+                Send ETH (public)
               </Link>
               <Link
                 href="/app/trade"
@@ -54,7 +72,20 @@ export function MoveView() {
       </div>
       <aside className="lg:col-span-5">
         <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-          Public path is live. Private path ships after shield.
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Status
+          </p>
+          <ul className="mt-3 space-y-2 text-foreground">
+            <li>
+              <span className="text-lime">●</span> Shield deposit
+            </li>
+            <li>
+              <span className="text-mute">○</span> Private transfer
+            </li>
+            <li>
+              <span className="text-mute">○</span> Private unshield
+            </li>
+          </ul>
         </div>
       </aside>
     </div>

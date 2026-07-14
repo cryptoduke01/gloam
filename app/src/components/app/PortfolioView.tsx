@@ -19,6 +19,7 @@ import {
   formatUsd,
 } from "@/lib/markets";
 import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
+import { isShieldDeployed } from "@/lib/shield";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { WalletMenu } from "./WalletMenu";
@@ -199,6 +200,14 @@ export function PortfolioView() {
                 >
                   Send
                 </Link>
+                {isShieldDeployed() && (
+                  <Link
+                    href="/app/shield"
+                    className="inline-flex min-h-8 items-center rounded-full border border-lime/40 px-3 text-[11px] font-medium text-lime"
+                  >
+                    Shield
+                  </Link>
+                )}
                 <Link
                   href="/app/trade"
                   className="inline-flex min-h-8 items-center rounded-full border border-line px-3 text-[11px] text-foreground"
