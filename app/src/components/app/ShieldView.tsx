@@ -28,8 +28,9 @@ export function ShieldView() {
           </div>
           <div className="space-y-4 p-6">
             <p className="text-sm leading-relaxed text-mute">
-              Private notes need deployed circuits and an anonymity set. We are
-              not taking shield deposits until that is real — no mock success.
+              Contracts Phase 1 (custody + Merkle tree) is in{" "}
+              <code className="text-foreground">contracts/</code>. UI stays
+              closed until a testnet deploy + verifier — no mock success.
             </p>
             <ul className="space-y-2 text-sm text-mute">
               <li>

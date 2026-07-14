@@ -12,10 +12,17 @@
 
 ## What we will deploy (order)
 
-1. **ShieldPool** — public deposit → commitment; withdraw with proof (or testnet stub)
-2. **Verifier** — onchain check of ZK proofs (Groth16 / Plonk — TBD)
-3. **Nullifier set** — prevent double-spend of notes
+1. **ShieldPool (Phase 1 — done in source)** — ETH/ERC-20 custody + keccak Merkle tree + unshield payout path
+2. **Verifier** — onchain check of ZK proofs (transfer / unshield stay locked until set)
+3. **Circuits** — bind amount/asset inside the note (Phase 2)
 4. **Trade adapter** (later) — private intent → settlement
+
+### Optional: seed testnet stock pools (swaps)
+
+```bash
+export DEPLOYER_PK=0x...   # wallet with faucet stocks + ETH
+forge script script/SeedTestnetLiquidity.s.sol --rpc-url https://rpc.testnet.chain.robinhood.com --broadcast
+```
 
 ## Stack
 

@@ -22,9 +22,9 @@ User wallet
 
 | Phase | What ships | Custody |
 | --- | --- | --- |
-| **0 (now)** | Interfaces + `ShieldPool` scaffold + unit tests | Commitments only; **no real asset custody** |
-| **1** | ERC-20/ETH pull on `shield`, Merkle tree, client note encryption | Pool holds assets |
-| **2** | Real verifier + circuits (transfer / unshield) | Full private move |
+| **0** | Interfaces + scaffold | Commitments only |
+| **1 (now)** | ERC-20/ETH pull on `shield`, keccak Merkle tree, `deposited[]`, unshield payout | **Pool holds assets** |
+| **2** | Real verifier + circuits (transfer / unshield proofs bind amount) | Full private move |
 | **3** | Private trade adapter | Intent hidden until exit |
 
 ## Why not invent circuits on day one
