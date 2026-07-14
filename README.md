@@ -1,34 +1,30 @@
 # Gloam
 
-**Trade and move money privately onchain — on Robinhood Chain.**
+**Trade Everything on Robinhood Privately.**
+
+Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood Chain.
 
 | | |
 | --- | --- |
 | Site | [gloam.trade](https://gloam.trade) |
-| App | [app.gloam.trade](https://app.gloam.trade) |
 | Docs | [docs.gloam.trade](https://docs.gloam.trade) |
 | X | [@gloamtrade](https://x.com/gloamtrade) |
 
 ## What this is
 
-Private money rails on **Robinhood Chain** (EVM L2):
+Private trading rails on **Robinhood Chain** (EVM L2):
 
-- Shielded balances
-- Private transfers
-- Private trading (stock tokens first, then liquid assets)
-- Trench-simple product UX
-
-Not a dark theme on a public DEX. Real privacy, stacked as the chain matures.
+- Stocks + memes on the same private layer
+- Shielded balances, private transfers, private trade
+- Real privacy — not a dark theme on a public DEX
 
 ## Monorepo
 
 ```
 gloam/
-  app/    → app.gloam.trade   (product)
-  docs/   → docs.gloam.trade  (documentation)
+  app/    → gloam.trade        (marketing / landing)
+  docs/   → docs.gloam.trade   (documentation + whitepaper)
 ```
-
-Root marketing domain `gloam.trade` can point at `app` or a thin landing later.
 
 ## Setup
 
