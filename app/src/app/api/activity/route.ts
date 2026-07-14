@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const url = `${EXPLORER_API}?module=account&action=txlist&address=${address}&page=1&offset=12&sort=desc`;
+    // Cap server fetch; UI paginates client-side (PAGE_SIZE=5)
+    const url = `${EXPLORER_API}?module=account&action=txlist&address=${address}&page=1&offset=40&sort=desc`;
     const res = await fetch(url, {
       cache: "no-store",
       headers: { Accept: "application/json" },
