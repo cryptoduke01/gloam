@@ -27,14 +27,16 @@ export function TradeView() {
   const [side, setSide] = useState<"buy" | "sell">(settings.defaultSide);
   const [marketId, setMarketId] = useState(initial);
   const [amount, setAmount] = useState("");
-  const [filter, setFilter] = useState<"all" | "stock" | "meme" | "onchain">(
-    settings.marketFilter
+  const [filter, setFilter] = useState<"all" | "onchain" | "stocks">(
+    settings.marketFilter === "onchain" || settings.marketFilter === "stocks"
+      ? settings.marketFilter
+      : "all"
   );
   const [note, setNote] = useState<string | null>(null);
 
   const resolvedId = markets.some((m) => m.id === marketId)
     ? marketId
-    : markets[0]?.id ?? "hood";
+    : markets[0]?.id ?? "tsla";
 
   const market = useMemo(
     () => markets.find((m) => m.id === resolvedId) ?? markets[0],
@@ -44,7 +46,7 @@ export function TradeView() {
   const list = useMemo(() => {
     if (filter === "all") return markets;
     if (filter === "onchain") return markets.filter((m) => Boolean(m.address));
-    return markets.filter((m) => m.kind === filter);
+    return markets.filter((m) => m.kind === "stock");
   }, [filter, markets]);
 
   function onTrade(e: React.FormEvent) {
@@ -106,9 +108,8 @@ export function TradeView() {
               {(
                 [
                   ["all", "All"],
-                  ["stock", "Stocks"],
-                  ["meme", "Memes"],
                   ["onchain", "Onchain"],
+                  ["stocks", "Stocks"],
                 ] as const
               ).map(([f, label]) => (
                 <button
@@ -140,7 +141,10 @@ export function TradeView() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground">{m.symbol}</p>
-                    <p className="truncate text-xs text-mute">{m.name}</p>
+                    <p className="truncate text-xs text-mute">
+                      {m.name}
+                      {filter === "all" && m.address ? " · onchain" : ""}
+                    </p>
                   </div>
                   <Sparkline
                     points={m.spark ?? []}
@@ -283,7 +287,13 @@ export function TradeView() {
             <dl className="mt-3 space-y-2 text-xs">
               <div className="flex justify-between">
                 <dt className="text-mute">Type</dt>
-                <dd className="capitalize text-foreground">{market.kind}</dd>
+                <dd className="text-foreground">
+                  {market.address
+                    ? "Onchain"
+                    : market.kind === "native"
+                      ? "Gas"
+                      : "Watch"}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-mute">24h volume</dt>

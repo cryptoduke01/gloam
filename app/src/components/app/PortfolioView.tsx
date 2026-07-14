@@ -90,25 +90,19 @@ export function PortfolioView() {
     ethUsdVal != null ? ethUsdVal + stocksUsd : stocksUsd > 0 ? stocksUsd : null;
 
   return (
-    <div className="space-y-8">
-      <NetworkPulse />
-
-      <a
-        href={FAUCET_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="flex flex-col gap-2 rounded-xl border border-lime/35 bg-panel px-5 py-4 transition-colors hover:border-lime sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-            Testnet faucet
-          </p>
-          <p className="mt-1 text-sm text-mute">{FAUCET_BLURB}</p>
-        </div>
-        <span className="inline-flex min-h-10 shrink-0 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black">
-          Open faucet →
-        </span>
-      </a>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <NetworkPulse />
+        <a
+          href={FAUCET_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-mute transition-colors hover:text-lime"
+          title={FAUCET_BLURB}
+        >
+          Get testnet ETH →
+        </a>
+      </div>
 
       {/* Net worth */}
       <div className="grid gap-4 lg:grid-cols-12">
@@ -207,32 +201,32 @@ export function PortfolioView() {
         </div>
 
         <div className="flex flex-col gap-3 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-5 sm:p-6">
+          <div className="rounded-xl border border-line bg-panel p-4">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
               Quick
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               <Link
                 href="/app/send"
-                className="inline-flex min-h-11 items-center justify-center rounded-md bg-lime text-sm font-semibold text-black hover:opacity-90"
+                className="inline-flex min-h-9 items-center rounded-full bg-lime px-3.5 text-xs font-semibold text-black hover:opacity-90"
               >
                 Send
               </Link>
               <Link
                 href="/app/trade"
-                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-foreground hover:border-mute"
               >
                 Trade
               </Link>
               <Link
                 href="/app/markets"
-                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-foreground hover:border-mute"
               >
                 Markets
               </Link>
               <Link
                 href="/app/settings"
-                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+                className="inline-flex min-h-9 items-center rounded-full border border-line px-3.5 text-xs font-medium text-mute hover:text-foreground"
               >
                 Settings
               </Link>

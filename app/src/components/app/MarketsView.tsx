@@ -9,23 +9,25 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
-type Filter = "all" | "stock" | "meme" | "onchain";
+type Filter = "all" | "onchain" | "stocks";
 
 export function MarketsView() {
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<Filter>(
-    settings.marketFilter === "onchain" ? "onchain" : settings.marketFilter
+    settings.marketFilter === "onchain" || settings.marketFilter === "stocks"
+      ? settings.marketFilter
+      : "all"
   );
   const { data, isFetching, isError, refetch } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
+  const showType = kind === "all";
 
   const rows = useMemo(() => {
     return markets.filter((m) => {
       if (kind === "onchain" && !m.address) return false;
-      if (kind === "stock" && m.kind !== "stock") return false;
-      if (kind === "meme" && m.kind !== "meme") return false;
+      if (kind === "stocks" && m.kind !== "stock") return false;
       if (!q.trim()) return true;
       const s = q.toLowerCase();
       return (
@@ -37,10 +39,16 @@ export function MarketsView() {
 
   const filters: { id: Filter; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "stock", label: "Stocks" },
-    { id: "meme", label: "Memes" },
     { id: "onchain", label: "Onchain" },
+    { id: "stocks", label: "Stocks" },
   ];
+
+  const gridHead = showType
+    ? "sm:grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto]"
+    : "sm:grid-cols-[1.4fr_1.1fr_1fr_0.8fr_auto]";
+  const gridRow = showType
+    ? "sm:grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto]"
+    : "sm:grid-cols-[1.4fr_1.1fr_1fr_0.8fr_auto]";
 
   return (
     <div className="space-y-4">
@@ -95,9 +103,11 @@ export function MarketsView() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="hidden grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto] gap-4 border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute sm:grid">
+        <div
+          className={`hidden gap-4 border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute sm:grid ${gridHead}`}
+        >
           <span>Market</span>
-          <span>Type</span>
+          {showType && <span>Type</span>}
           <span>Chart</span>
           <span>Price</span>
           <span>24h</span>
@@ -107,16 +117,23 @@ export function MarketsView() {
           {rows.map((m) => (
             <li
               key={m.id}
-              className="grid gap-2 border-b border-line px-4 py-4 last:border-0 sm:grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto] sm:items-center sm:gap-4"
+              className={`grid gap-2 border-b border-line px-4 py-4 last:border-0 sm:items-center sm:gap-4 ${gridRow}`}
             >
               <div>
                 <p className="font-medium text-foreground">{m.symbol}</p>
                 <p className="text-xs text-mute">{m.name}</p>
               </div>
-              <div className="flex flex-wrap gap-1">
-                <StatusPill>{m.kind}</StatusPill>
-                {m.address && <StatusPill tone="lime">Onchain</StatusPill>}
-              </div>
+              {showType && (
+                <div className="flex flex-wrap gap-1">
+                  {m.address ? (
+                    <StatusPill tone="lime">Onchain</StatusPill>
+                  ) : m.kind === "native" ? (
+                    <StatusPill>Gas</StatusPill>
+                  ) : (
+                    <StatusPill>Watch</StatusPill>
+                  )}
+                </div>
+              )}
               <Sparkline
                 points={m.spark ?? []}
                 up={m.change24h >= 0}

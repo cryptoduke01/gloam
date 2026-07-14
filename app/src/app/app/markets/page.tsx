@@ -10,7 +10,7 @@ export default function MarketsPage() {
   return (
     <AppShell
       title="Markets"
-      subtitle="Everything that will settle privately — equities and degen books."
+      subtitle="Robinhood stock tokens and equity marks. Private settlement next."
     >
       <MarketsView />
     </AppShell>

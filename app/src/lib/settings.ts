@@ -1,13 +1,13 @@
 export type TradingSettings = {
   defaultSide: "buy" | "sell";
-  marketFilter: "all" | "stock" | "meme" | "onchain";
+  /** all | onchain (faucet tokens) | stocks (equity book) */
+  marketFilter: "all" | "onchain" | "stocks";
   showUsd: boolean;
   hideZeroBalances: boolean;
   confirmSends: boolean;
   compactCharts: boolean;
   /**
-   * Fast send: skip extra in-app steps; still requires one wallet confirm
-   * (non-custodial — we never move funds without a signature).
+   * Fast send: skip review step; still requires one wallet confirm.
    */
   fastSend: boolean;
 };
@@ -29,7 +29,26 @@ export function loadSettings(): TradingSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = {
+      ...DEFAULT_SETTINGS,
+      ...(JSON.parse(raw) as Partial<TradingSettings>),
+    };
+    const filter = String(
+      (JSON.parse(raw) as { marketFilter?: string }).marketFilter ?? "all"
+    );
+    // migrate old filters
+    if (filter === "meme" || filter === "stock") {
+      parsed.marketFilter = "all";
+    } else if (
+      filter === "all" ||
+      filter === "onchain" ||
+      filter === "stocks"
+    ) {
+      parsed.marketFilter = filter;
+    } else {
+      parsed.marketFilter = "all";
+    }
+    return parsed;
   } catch {
     return DEFAULT_SETTINGS;
   }

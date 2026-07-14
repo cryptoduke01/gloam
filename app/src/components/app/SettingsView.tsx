@@ -222,13 +222,12 @@ export function SettingsView() {
           </div>
           <div>
             <p className="mb-2 text-xs font-medium text-mute">Markets filter</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2">
               {(
                 [
                   ["all", "All"],
-                  ["stock", "Stocks"],
-                  ["meme", "Memes"],
                   ["onchain", "Onchain"],
+                  ["stocks", "Stocks"],
                 ] as const
               ).map(([k, label]) => (
                 <Chip

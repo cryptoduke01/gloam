@@ -1,4 +1,4 @@
-export type MarketKind = "stock" | "meme";
+export type MarketKind = "stock" | "native";
 
 export type MarketSource = "live" | "static";
 
@@ -8,8 +8,9 @@ export type MarketDef = {
   name: string;
   kind: MarketKind;
   yahoo?: string;
+  /** Only used for ETH USD */
   coingecko?: string;
-  /** Testnet ERC-20 when this is a real onchain asset */
+  /** Robinhood testnet ERC-20 */
   address?: `0x${string}`;
   fallbackMark: number;
   privateReady: boolean;
@@ -27,9 +28,13 @@ export type LiveQuote = {
 export type Market = MarketDef & LiveQuote;
 
 /**
- * Catalog: faucet stock tokens first (real onchain), then more equities + memes.
+ * Robinhood-sensible catalog only:
+ * - Faucet stock tokens (onchain testnet)
+ * - Equity watchlist (live marks, not other-chain memes)
+ * - ETH for gas / USD conversion
  */
 export const MARKET_DEFS: MarketDef[] = [
+  // Onchain faucet tokens
   {
     id: "tsla",
     symbol: "TSLA",
@@ -80,6 +85,7 @@ export const MARKET_DEFS: MarketDef[] = [
     fallbackMark: 120,
     privateReady: false,
   },
+  // Equity watchlist (marks only — not on RH testnet yet)
   {
     id: "hood",
     symbol: "HOOD",
@@ -126,174 +132,31 @@ export const MARKET_DEFS: MarketDef[] = [
     privateReady: false,
   },
   {
+    id: "googl",
+    symbol: "GOOGL",
+    name: "Alphabet",
+    kind: "stock",
+    yahoo: "GOOGL",
+    fallbackMark: 175,
+    privateReady: false,
+  },
+  {
+    id: "meta",
+    symbol: "META",
+    name: "Meta",
+    kind: "stock",
+    yahoo: "META",
+    fallbackMark: 580,
+    privateReady: false,
+  },
+  // Native gas
+  {
     id: "eth",
     symbol: "ETH",
-    name: "Ethereum",
-    kind: "meme",
+    name: "Ether",
+    kind: "native",
     coingecko: "ethereum",
     fallbackMark: 3500,
-    privateReady: false,
-  },
-  {
-    id: "pepe",
-    symbol: "PEPE",
-    name: "Pepe",
-    kind: "meme",
-    coingecko: "pepe",
-    fallbackMark: 0.00001,
-    privateReady: false,
-  },
-  {
-    id: "wif",
-    symbol: "WIF",
-    name: "dogwifhat",
-    kind: "meme",
-    coingecko: "dogwifcoin",
-    fallbackMark: 1.5,
-    privateReady: false,
-  },
-  {
-    id: "bonk",
-    symbol: "BONK",
-    name: "Bonk",
-    kind: "meme",
-    coingecko: "bonk",
-    fallbackMark: 0.00002,
-    privateReady: false,
-  },
-  {
-    id: "popcat",
-    symbol: "POPCAT",
-    name: "Popcat",
-    kind: "meme",
-    coingecko: "popcat",
-    fallbackMark: 0.4,
-    privateReady: false,
-  },
-  {
-    id: "doge",
-    symbol: "DOGE",
-    name: "Dogecoin",
-    kind: "meme",
-    coingecko: "dogecoin",
-    fallbackMark: 0.15,
-    privateReady: false,
-  },
-  {
-    id: "shib",
-    symbol: "SHIB",
-    name: "Shiba Inu",
-    kind: "meme",
-    coingecko: "shiba-inu",
-    fallbackMark: 0.000015,
-    privateReady: false,
-  },
-  {
-    id: "floki",
-    symbol: "FLOKI",
-    name: "FLOKI",
-    kind: "meme",
-    coingecko: "floki",
-    fallbackMark: 0.0001,
-    privateReady: false,
-  },
-  {
-    id: "brett",
-    symbol: "BRETT",
-    name: "Brett",
-    kind: "meme",
-    coingecko: "based-brett",
-    fallbackMark: 0.05,
-    privateReady: false,
-  },
-  {
-    id: "mog",
-    symbol: "MOG",
-    name: "Mog Coin",
-    kind: "meme",
-    coingecko: "mog-coin",
-    fallbackMark: 0.000001,
-    privateReady: false,
-  },
-  {
-    id: "neiro",
-    symbol: "NEIRO",
-    name: "Neiro",
-    kind: "meme",
-    coingecko: "neiro-3",
-    fallbackMark: 0.001,
-    privateReady: false,
-  },
-  {
-    id: "turbo",
-    symbol: "TURBO",
-    name: "Turbo",
-    kind: "meme",
-    coingecko: "turbo",
-    fallbackMark: 0.005,
-    privateReady: false,
-  },
-  {
-    id: "mew",
-    symbol: "MEW",
-    name: "cat in a dogs world",
-    kind: "meme",
-    coingecko: "cat-in-a-dogs-world",
-    fallbackMark: 0.005,
-    privateReady: false,
-  },
-  {
-    id: "spx",
-    symbol: "SPX",
-    name: "SPX6900",
-    kind: "meme",
-    coingecko: "spx6900",
-    fallbackMark: 0.8,
-    privateReady: false,
-  },
-  {
-    id: "goat",
-    symbol: "GOAT",
-    name: "Goatseus Maximus",
-    kind: "meme",
-    coingecko: "goatseus-maximus",
-    fallbackMark: 0.1,
-    privateReady: false,
-  },
-  {
-    id: "fartcoin",
-    symbol: "FARTCOIN",
-    name: "Fartcoin",
-    kind: "meme",
-    coingecko: "fartcoin",
-    fallbackMark: 0.5,
-    privateReady: false,
-  },
-  {
-    id: "trump",
-    symbol: "TRUMP",
-    name: "Official Trump",
-    kind: "meme",
-    coingecko: "official-trump",
-    fallbackMark: 10,
-    privateReady: false,
-  },
-  {
-    id: "sol",
-    symbol: "SOL",
-    name: "Solana",
-    kind: "meme",
-    coingecko: "solana",
-    fallbackMark: 150,
-    privateReady: false,
-  },
-  {
-    id: "link",
-    symbol: "LINK",
-    name: "Chainlink",
-    kind: "meme",
-    coingecko: "chainlink",
-    fallbackMark: 15,
     privateReady: false,
   },
 ];
