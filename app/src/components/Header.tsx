@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
 
@@ -13,6 +14,7 @@ const links = [
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     if (!open) return;
@@ -74,48 +76,63 @@ export function Header() {
         </div>
       </div>
 
-      {open && (
-        <div
-          id="mobile-nav"
-          className="border-t border-line bg-background md:hidden"
-        >
-          <nav
-            className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-4"
-            aria-label="Mobile"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id="mobile-nav"
+            className="border-t border-line bg-background md:hidden"
+            initial={reduce ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduce ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {links.map((l) =>
-              l.external ? (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  className="rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setOpen(false)}
-                >
-                  {l.label}
-                </a>
-              ) : (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
-                  onClick={() => setOpen(false)}
-                >
-                  {l.label}
-                </Link>
-              )
-            )}
-            <Link
-              href="/#waitlist"
-              className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-black"
-              onClick={() => setOpen(false)}
+            <nav
+              className="mx-auto flex max-w-6xl flex-col gap-1 px-5 py-4"
+              aria-label="Mobile"
             >
-              Launch testnet
-            </Link>
-          </nav>
-        </div>
-      )}
+              {links.map((l, i) =>
+                l.external ? (
+                  <motion.a
+                    key={l.href}
+                    href={l.href}
+                    className="rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => setOpen(false)}
+                    initial={reduce ? false : { opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 * i }}
+                  >
+                    {l.label}
+                  </motion.a>
+                ) : (
+                  <motion.div
+                    key={l.href}
+                    initial={reduce ? false : { opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.04 * i }}
+                  >
+                    <Link
+                      href={l.href}
+                      className="block rounded-md px-3 py-3 text-base text-foreground hover:bg-panel"
+                      onClick={() => setOpen(false)}
+                    >
+                      {l.label}
+                    </Link>
+                  </motion.div>
+                )
+              )}
+              <Link
+                href="/#waitlist"
+                className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-black"
+                onClick={() => setOpen(false)}
+              >
+                Launch testnet
+              </Link>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }

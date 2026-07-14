@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useReducedMotion } from "./useReducedMotion";
+import { motion, useReducedMotion } from "framer-motion";
 
 /**
  * Hero side plate: on hover, the image "tears" then stitches closed again —
@@ -11,10 +11,12 @@ export function HeroPrivacyArt() {
   const reduce = useReducedMotion();
 
   return (
-    <div
+    <motion.div
       className={`group relative aspect-[4/5] overflow-hidden rounded-lg border border-line bg-black ${
         reduce ? "" : "hero-privacy"
       }`}
+      whileHover={reduce ? undefined : { scale: 1.01 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24 }}
     >
       <Image
         src="/ascii/IMG_1476.PNG"
@@ -30,7 +32,6 @@ export function HeroPrivacyArt() {
         aria-hidden
       />
 
-      {/* Tear planes */}
       {!reduce && (
         <>
           <div className="hero-tear hero-tear-a" aria-hidden />
@@ -42,6 +43,6 @@ export function HeroPrivacyArt() {
       <p className="pointer-events-none absolute bottom-4 left-4 right-4 font-mono text-[10px] uppercase tracking-[0.16em] text-black/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
         Tear open. Stitch shut. Stay private.
       </p>
-    </div>
+    </motion.div>
   );
 }
