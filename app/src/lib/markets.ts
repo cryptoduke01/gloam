@@ -1,31 +1,41 @@
 export type MarketKind = "stock" | "meme";
 
-export type Market = {
+export type MarketSource = "yahoo" | "coingecko" | "static";
+
+export type MarketDef = {
   id: string;
   symbol: string;
   name: string;
   kind: MarketKind;
-  /** Display-only placeholder quotes for testnet UI — not live prices */
-  mark: number;
-  change24h: number;
-  volume: string;
+  yahoo?: string;
+  coingecko?: string;
+  fallbackMark: number;
   privateReady: boolean;
 };
 
+export type LiveQuote = {
+  mark: number;
+  change24h: number;
+  volume: string;
+  source: MarketSource;
+  updatedAt: number;
+};
+
+export type Market = MarketDef & LiveQuote;
+
 /**
- * Testnet market catalog.
- * Quotes are UI scaffolding until real oracles / pools are wired.
- * Never present as confirmed fills.
+ * Product catalog.
+ * Live: stocks → Yahoo (server) · memes → CoinGecko (server).
+ * Marks are reference prices — never fills.
  */
-export const MARKETS: Market[] = [
+export const MARKET_DEFS: MarketDef[] = [
   {
     id: "hood",
     symbol: "HOOD",
     name: "Robinhood",
     kind: "stock",
-    mark: 24.18,
-    change24h: 1.4,
-    volume: "12.4M",
+    yahoo: "HOOD",
+    fallbackMark: 24,
     privateReady: false,
   },
   {
@@ -33,9 +43,8 @@ export const MARKETS: Market[] = [
     symbol: "TSLA",
     name: "Tesla",
     kind: "stock",
-    mark: 248.6,
-    change24h: -0.8,
-    volume: "31.2M",
+    yahoo: "TSLA",
+    fallbackMark: 250,
     privateReady: false,
   },
   {
@@ -43,9 +52,8 @@ export const MARKETS: Market[] = [
     symbol: "AAPL",
     name: "Apple",
     kind: "stock",
-    mark: 212.4,
-    change24h: 0.3,
-    volume: "18.7M",
+    yahoo: "AAPL",
+    fallbackMark: 210,
     privateReady: false,
   },
   {
@@ -53,9 +61,8 @@ export const MARKETS: Market[] = [
     symbol: "NVDA",
     name: "NVIDIA",
     kind: "stock",
-    mark: 128.9,
-    change24h: 2.1,
-    volume: "44.1M",
+    yahoo: "NVDA",
+    fallbackMark: 130,
     privateReady: false,
   },
   {
@@ -63,9 +70,26 @@ export const MARKETS: Market[] = [
     symbol: "COIN",
     name: "Coinbase",
     kind: "stock",
-    mark: 248.0,
-    change24h: -1.2,
-    volume: "9.6M",
+    yahoo: "COIN",
+    fallbackMark: 250,
+    privateReady: false,
+  },
+  {
+    id: "amzn",
+    symbol: "AMZN",
+    name: "Amazon",
+    kind: "stock",
+    yahoo: "AMZN",
+    fallbackMark: 190,
+    privateReady: false,
+  },
+  {
+    id: "msft",
+    symbol: "MSFT",
+    name: "Microsoft",
+    kind: "stock",
+    yahoo: "MSFT",
+    fallbackMark: 420,
     privateReady: false,
   },
   {
@@ -73,9 +97,8 @@ export const MARKETS: Market[] = [
     symbol: "PEPE",
     name: "Pepe",
     kind: "meme",
-    mark: 0.0000124,
-    change24h: 8.4,
-    volume: "2.1M",
+    coingecko: "pepe",
+    fallbackMark: 0.00001,
     privateReady: false,
   },
   {
@@ -83,9 +106,8 @@ export const MARKETS: Market[] = [
     symbol: "WIF",
     name: "dogwifhat",
     kind: "meme",
-    mark: 1.84,
-    change24h: -3.2,
-    volume: "4.8M",
+    coingecko: "dogwifcoin",
+    fallbackMark: 1.5,
     privateReady: false,
   },
   {
@@ -93,9 +115,8 @@ export const MARKETS: Market[] = [
     symbol: "BONK",
     name: "Bonk",
     kind: "meme",
-    mark: 0.000021,
-    change24h: 5.1,
-    volume: "3.3M",
+    coingecko: "bonk",
+    fallbackMark: 0.00002,
     privateReady: false,
   },
   {
@@ -103,21 +124,48 @@ export const MARKETS: Market[] = [
     symbol: "POPCAT",
     name: "Popcat",
     kind: "meme",
-    mark: 0.42,
-    change24h: 12.0,
-    volume: "1.9M",
+    coingecko: "popcat",
+    fallbackMark: 0.4,
+    privateReady: false,
+  },
+  {
+    id: "eth",
+    symbol: "ETH",
+    name: "Ethereum",
+    kind: "meme",
+    coingecko: "ethereum",
+    fallbackMark: 3500,
     privateReady: false,
   },
 ];
 
-export function formatMark(m: Market) {
-  if (m.mark < 0.01) {
-    return m.mark.toLocaleString(undefined, {
+export const MARKETS: Market[] = MARKET_DEFS.map((d) => ({
+  ...d,
+  mark: d.fallbackMark,
+  change24h: 0,
+  volume: "—",
+  source: "static" as const,
+  updatedAt: 0,
+}));
+
+export function formatMark(mark: number) {
+  if (mark < 0.01) {
+    return mark.toLocaleString(undefined, {
       maximumSignificantDigits: 4,
     });
   }
-  return m.mark.toLocaleString(undefined, {
+  if (mark < 1) {
+    return mark.toLocaleString(undefined, {
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 6,
+    });
+  }
+  return mark.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+export function formatMarkMarket(m: { mark: number }) {
+  return formatMark(m.mark);
 }

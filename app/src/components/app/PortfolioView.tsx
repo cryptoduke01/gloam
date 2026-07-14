@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useAccount, useBalance, useChainId } from "wagmi";
 import { AsciiImage } from "@/components/AsciiImage";
 import { PRODUCT_CHAIN_ID, formatEth, shortAddress } from "@/lib/chain";
+import { ActivityFeed } from "./ActivityFeed";
 import { ConnectButton } from "./ConnectButton";
+import { NetworkPulse } from "./NetworkPulse";
 import { ReceiveCard } from "./ReceiveCard";
 import { StatusPill } from "./StatusPill";
 
@@ -51,6 +53,8 @@ export function PortfolioView() {
 
   return (
     <div className="space-y-8">
+      <NetworkPulse />
+
       {/* Hero strip */}
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-7">
@@ -196,6 +200,42 @@ export function PortfolioView() {
               <p className="mt-2 text-sm leading-relaxed text-mute">{g.body}</p>
             </Link>
           ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ActivityFeed />
+        <div className="rounded-xl border border-line bg-panel p-5">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Live data
+          </p>
+          <p className="mt-3 font-display text-xl text-foreground">
+            How marks arrive
+          </p>
+          <ol className="mt-3 space-y-2 text-sm text-mute">
+            <li>
+              <span className="text-lime">1.</span> UI calls{" "}
+              <code className="text-foreground">/api/markets</code>
+            </li>
+            <li>
+              <span className="text-lime">2.</span> Server pulls Yahoo (stocks)
+              + CoinGecko (memes)
+            </li>
+            <li>
+              <span className="text-lime">3.</span> Cache ~30s · refetch in app
+              every 45s
+            </li>
+            <li>
+              <span className="text-lime">4.</span> Next: RH stock-token oracles
+              + Uniswap depth
+            </li>
+          </ol>
+          <Link
+            href="/docs/data"
+            className="mt-4 inline-flex text-sm text-lime hover:underline"
+          >
+            Data docs →
+          </Link>
         </div>
       </div>
     </div>

@@ -28,6 +28,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
       { href: "/docs/encryption", label: "3. How money is encrypted" },
       { href: "/docs/privacy-model", label: "4. Privacy model" },
       { href: "/docs/chain", label: "5. Robinhood Chain" },
+      { href: "/docs/data", label: "6. Live data" },
     ],
   },
   {
