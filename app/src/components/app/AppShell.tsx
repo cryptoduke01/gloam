@@ -13,6 +13,7 @@ const nav = [
   { href: "/app/trade", label: "Trade" },
   { href: "/app/markets", label: "Markets" },
   { href: "/app/shield", label: "Shield" },
+  { href: "/app/move", label: "Move" },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
