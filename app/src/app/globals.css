@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-:root {
+/* Default dark */
+:root,
+html.dark,
+html[data-theme="dark"] {
   --ink: #000000;
   --lime: #c8ff00;
   --lime-dim: #a8d600;
@@ -8,8 +11,21 @@
   --mute: #a3a3a3;
   --line: #1a1a1a;
   --panel: #0a0a0a;
-  --background: var(--ink);
-  --foreground: var(--text);
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+html.light,
+html[data-theme="light"] {
+  --ink: #0a0a0a;
+  --lime: #8fb800;
+  --lime-dim: #6f9200;
+  --text: #0a0a0a;
+  --mute: #5c5c5c;
+  --line: #e6e6e6;
+  --panel: #f4f4f2;
+  --background: #f7f7f5;
+  --foreground: #0a0a0a;
 }
 
 @theme inline {
@@ -30,8 +46,8 @@ html {
 }
 
 body {
-  background: var(--ink);
-  color: var(--text);
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
@@ -47,6 +63,26 @@ body {
 
 .font-display {
   font-family: var(--font-instrument), ui-serif, Georgia, serif;
+}
+
+/* Dark plates: slightly lift whites before lime multiply */
+.ascii-plate {
+  filter: contrast(1.06) brightness(1.04);
+}
+
+/*
+ * Paper ASCII (brown/blue on white) → lime ink.
+ * Tuned toward brand #c8ff00 without crushing the plate.
+ */
+.ascii-ink {
+  filter: grayscale(1) sepia(1) hue-rotate(38deg) saturate(7) brightness(0.92)
+    contrast(1.05);
+}
+
+html.light .ascii-ink,
+html[data-theme="light"] .ascii-ink {
+  filter: grayscale(1) sepia(1) hue-rotate(42deg) saturate(5.5) brightness(0.88)
+    contrast(1.08);
 }
 
 @media (prefers-reduced-motion: reduce) {

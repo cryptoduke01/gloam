@@ -23,13 +23,12 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="relative overflow-hidden border-t border-line bg-ink">
-      {/* Giant wordmark bleed */}
+    <footer className="relative overflow-hidden border-t border-line bg-background">
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 select-none overflow-hidden"
         aria-hidden
       >
-        <p className="translate-y-1/3 text-center font-display text-[22vw] leading-none tracking-tighter text-white/[0.035] sm:text-[18vw]">
+        <p className="translate-y-1/3 text-center font-display text-[22vw] leading-none tracking-tighter text-foreground/[0.04] sm:text-[18vw]">
           GLOAM
         </p>
       </div>
@@ -46,7 +45,7 @@ export function Footer() {
                 className="h-10 w-10 rounded-sm"
               />
               <div>
-                <p className="text-xl font-semibold tracking-tight text-white">
+                <p className="text-xl font-semibold tracking-tight text-foreground">
                   Gloam
                 </p>
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-lime">
@@ -64,7 +63,7 @@ export function Footer() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
                   Network
                 </p>
-                <p className="truncate text-sm text-white">
+                <p className="truncate text-sm text-foreground">
                   Robinhood Chain · 4663
                 </p>
               </div>
@@ -114,14 +113,14 @@ function FooterCol({
                 href={l.href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-mute transition-colors hover:text-white"
+                className="text-sm text-mute transition-colors hover:text-foreground"
               >
                 {l.label}
               </a>
             ) : (
               <Link
                 href={l.href}
-                className="text-sm text-mute transition-colors hover:text-white"
+                className="text-sm text-mute transition-colors hover:text-foreground"
               >
                 {l.label}
               </Link>

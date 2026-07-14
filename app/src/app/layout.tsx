@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { CookieBanner } from "@/components/CookieBanner";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const instrument = Instrument_Serif({
@@ -11,14 +12,28 @@ const instrument = Instrument_Serif({
   display: "swap",
 });
 
+const siteTitle = "Gloam. Private money on Robinhood Chain";
+const siteDescription =
+  "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://gloam.trade"),
   title: {
-    default: "Gloam. Private money on Robinhood Chain",
+    default: siteTitle,
     template: "%s · Gloam",
   },
-  description:
-    "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.",
-  metadataBase: new URL("https://gloam.trade"),
+  description: siteDescription,
+  applicationName: "Gloam",
+  authors: [{ name: "Gloam", url: "https://gloam.trade" }],
+  creator: "Gloam",
+  keywords: [
+    "Gloam",
+    "Robinhood Chain",
+    "private money",
+    "shielded balances",
+    "private trading",
+    "tokenized stocks",
+  ],
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -28,20 +43,30 @@ export const metadata: Metadata = {
     apple: "/brand/logo.png",
   },
   openGraph: {
-    title: "Gloam. Private money on Robinhood Chain",
-    description:
-      "Trade and move money privately onchain on Robinhood Chain.",
+    title: siteTitle,
+    description: siteDescription,
     url: "https://gloam.trade",
     siteName: "Gloam",
+    locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     site: "@gloamtrade",
-    title: "Gloam. Private money on Robinhood Chain",
-    description: "Private money on Robinhood Chain.",
+    creator: "@gloamtrade",
+    title: siteTitle,
+    description: siteDescription,
   },
   robots: { index: true, follow: true },
+  alternates: { canonical: "https://gloam.trade" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f7f5" },
+  ],
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({
@@ -50,23 +75,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${instrument.variable} h-full antialiased`}>
+    <html lang="en" className={`${instrument.variable} dark h-full antialiased`} suppressHydrationWarning>
       <head>
-        {/* Overused Grotesk — cleaner than Switzer for UI body */}
         <link
           href="https://fonts.cdnfonts.com/css/overused-grotesk"
           rel="stylesheet"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('gloam_theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.dataset.theme=t;d.classList.add(t);d.classList.remove(t==='dark'?'light':'dark')}catch(e){}})()`,
+          }}
+        />
       </head>
       <body
-        className="flex min-h-full flex-col bg-ink text-white"
-        style={{
-          fontFamily: '"Overused Grotesk", system-ui, sans-serif',
-        }}
+        className="flex min-h-full flex-col bg-background text-foreground"
+        style={{ fontFamily: '"Overused Grotesk", system-ui, sans-serif' }}
       >
-        {children}
-        <CookieBanner />
-        <Analytics />
+        <ThemeProvider>
+          {children}
+          <CookieBanner />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   );
