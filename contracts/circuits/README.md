@@ -61,13 +61,30 @@ circuits/
   keys/              ← never commit toxic waste; only verifying keys
 ```
 
+## Offchain stack (app)
+
+| Module | Role |
+| --- | --- |
+| `app/src/lib/merkle.ts` | Keccak tree = Solidity |
+| `app/src/lib/treeSync.ts` | Rebuild leaves from `Shielded` events |
+| `app/src/lib/prover.ts` | Pack unshield witness (no snark yet) |
+| `app/.../MoveView` | Resync tree + “Build unshield witness” |
+
 ## Ship order
 
 1. ~~NoteLib + pool public-input layout~~ (contracts)
 2. ~~TS note helpers matching NoteLib~~ (app)
-3. Circom/Noir unshield → trusted setup / universal setup → `Groth16Verifier.sol`
-4. Deploy verifier, `setVerifier` only after verification tests
-5. Wire Move / Unshield UI to real proofs only
+3. ~~Merkle path + tree sync + witness pack~~ (app)
+4. Circom/Noir unshield → trusted setup → `Groth16Verifier.sol`
+5. Deploy verifier, `setVerifier` only after verification tests
+6. Wire Move / Unshield UI to real proofs only
+
+## Tools
+
+```bash
+cd contracts/circuits
+npm run check-tools   # circom + snarkjs
+```
 
 ## Safety
 

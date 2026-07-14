@@ -10,7 +10,7 @@ export default function MovePage() {
   return (
     <AppShell
       title="Move"
-      subtitle="Private transfer. Nullify and reissue without publishing the path."
+      subtitle="Merkle sync + unshield witness prep. Real proofs when the circuit ships."
     >
       <MoveView />
     </AppShell>

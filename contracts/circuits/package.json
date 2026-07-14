@@ -1,0 +1,11 @@
+{
+  "name": "@gloam/circuits",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gloam unshield/transfer circuits (scaffold). Install circom + snarkjs to build.",
+  "scripts": {
+    "check-tools": "node scripts/check-tools.js",
+    "build:unshield": "node scripts/check-tools.js && echo 'Install circom then: circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield'",
+    "info": "node scripts/check-tools.js"
+  }
+}
