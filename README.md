@@ -61,24 +61,17 @@ Chain ID **46630**.
 
 ### Contracts (private path)
 
-Phase 1 is **deployed** on RH testnet:
+| | Phase 1 (keccak) | Phase 2 (Poseidon) **default** |
+| --- | --- | --- |
+| Pool | `0x2BD9…3d35` | `0xA488…c93B` |
+| Unshield | locked | live (dev keys) |
+| Record | [testnet.json](./contracts/deployments/testnet.json) | [poseidon-testnet.json](./contracts/deployments/poseidon-testnet.json) |
 
-| | |
-| --- | --- |
-| ShieldPool | `0x2BD98196D90AB45D58843B4c8B8809aa34343d35` |
-| Chain | 46630 |
-| Record | [contracts/deployments/testnet.json](./contracts/deployments/testnet.json) |
-
-App defaults to that address (`NEXT_PUBLIC_SHIELD_POOL_ADDRESS` overrides). Deposit works in `/app/shield`. Transfer / unshield stay locked until a real verifier is set.
+App defaults to **Poseidon**. Override with `NEXT_PUBLIC_HASH_SCHEME=keccak` for the old pool.
 
 ```bash
-cd contracts
-forge test
-# redeploy only with your own key — never commit secrets
-export DEPLOYER_PK=0x...
-forge script script/DeployShieldPool.s.sol \
-  --rpc-url https://rpc.testnet.chain.robinhood.com \
-  --broadcast
+cd contracts && forge test
+# phase-2 redeploy: circuits/scripts/deploy-phase2.mjs
 ```
 
 Details: [contracts/ARCHITECTURE.md](./contracts/ARCHITECTURE.md)
@@ -94,11 +87,10 @@ No purple crypto fog.
 
 ### Status
 
-- **Product:** testnet-only until the private rails hold  
-- **Shield deposit:** live on RH testnet (ETH + stocks)  
-- **Phase 2:** **real Poseidon unshield circuit** (note open + Merkle) proven with snarkjs; Solidity verifier in repo  
-- **Live pool** still keccak Phase-1 — Poseidon pool redeploy next  
-- **Next:** deploy Poseidon hashers + Poseidon ShieldPool → wire unshield UI → production ceremony  
+- **Product:** testnet-only  
+- **Phase 2 Poseidon pool:** live — shield + **prove & unshield** in the app  
+- **Next:** production ceremony keys; private transfer circuit  
+
 
 
 

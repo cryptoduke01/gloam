@@ -17,9 +17,10 @@ import {
 export const TESTNET_SHIELD_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** First keccak deploy block — getLogs from here (poseidon pool uses its own deploy block via env) */
+/** getLogs from pool deploy block (Poseidon default; override via env) */
 export const SHIELD_DEPLOY_BLOCK = BigInt(
-  process.env.NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK ?? "90232912"
+  process.env.NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK ??
+    (activeHashScheme() === "poseidon" ? "90260331" : "90232912")
 );
 
 export const HASH_SCHEME: HashScheme = activeHashScheme();

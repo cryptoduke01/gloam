@@ -1,0 +1,24 @@
+{
+  "chainId": 46630,
+  "network": "Robinhood Chain Testnet",
+  "rpc": "https://rpc.testnet.chain.robinhood.com",
+  "explorer": "https://explorer.testnet.chain.robinhood.com",
+  "hashScheme": "poseidon",
+  "proofLayout": 2,
+  "deployBlock": 90260331,
+  "contracts": {
+    "Poseidon2": "0xcc2d2D0f12324DcC32f781198664C92BB5200947",
+    "Poseidon3": "0x3242C523B5101c436e1AC74224598335E4f8F054",
+    "UnshieldVerifier": "0x1CdEf210C65616D7059397022BE3564fa742AED6",
+    "UnshieldIVerifier": "0xa40eCfBbB91D53dc66bf18E312228790751c3034",
+    "ShieldPoolPoseidon": "0xA488809a089F003A2B6E69daa65B0db79823c93B"
+  },
+  "deployer": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
+  "deployedAt": "2026-07-14T20:54:13.980Z",
+  "appEnv": {
+    "NEXT_PUBLIC_POSEIDON_SHIELD_POOL": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+    "NEXT_PUBLIC_HASH_SCHEME": "poseidon",
+    "NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK": "90260331"
+  },
+  "notes": "Phase-2 Poseidon pool with real unshield verifier (dev ceremony keys). App defaults to this pool. Legacy keccak: 0x2BD98196D90AB45D58843B4c8B8809aa34343d35."
+}
