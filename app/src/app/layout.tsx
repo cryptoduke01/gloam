@@ -20,7 +20,11 @@ export const metadata: Metadata = {
     "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.",
   metadataBase: new URL("https://gloam.trade"),
   icons: {
-    icon: "/brand/logo.png",
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/brand/logo.png", type: "image/png" },
+    ],
     apple: "/brand/logo.png",
   },
   openGraph: {

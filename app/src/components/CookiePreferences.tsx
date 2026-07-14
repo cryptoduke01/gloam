@@ -34,14 +34,14 @@ export function CookiePreferences() {
         <button
           type="button"
           onClick={() => save("essential")}
-          className="min-h-10 rounded-full border border-line px-4 text-sm text-white hover:border-mute"
+          className="min-h-10 rounded-md border border-line px-4 text-sm text-white hover:border-mute"
         >
           Essential only
         </button>
         <button
           type="button"
           onClick={() => save("all")}
-          className="min-h-10 rounded-full bg-lime px-4 text-sm font-medium text-ink hover:opacity-90"
+          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-ink hover:opacity-90"
         >
           Accept analytics
         </button>

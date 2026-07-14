@@ -1,24 +1,32 @@
-# Deploy & subdomains
+# Deploy (Vercel)
 
-## Domains we own
+## Marketing site (`gloam.trade`)
 
-- **Primary:** `gloam.trade`
-- **App:** `app.gloam.trade`
-- **Docs:** `docs.gloam.trade`
+**Project settings (this is what fixes the `.next/package.json` error):**
 
-## Vercel (recommended)
-
-1. Import this GitHub repo twice (or once with monorepo filters):
-   - Project **gloam-app** → Root Directory `app` → domain `app.gloam.trade` (+ optional `gloam.trade`)
-   - Project **gloam-docs** → Root Directory `docs` → domain `docs.gloam.trade`
-2. DNS at registrar:
-   - `CNAME app` → `cname.vercel-dns.com`
-   - `CNAME docs` → `cname.vercel-dns.com`
-   - Apex `gloam.trade`: A/CNAME per Vercel docs (or redirect apex → `app.gloam.trade`)
-
-## Local ports
-
-| Package | Port |
+| Field | Value |
 | --- | --- |
-| app | 3000 |
-| docs | 3001 |
+| Root Directory | **`app`** |
+| Framework | **Next.js** (auto) |
+| Build Command | `pnpm run build` (or leave default) |
+| Output Directory | **Leave empty** (do not set `.next`) |
+| Install Command | `pnpm install` |
+| Node | 20+ |
+
+If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at `/vercel/path0/.next` and fails with `ENOENT ... package.json`.
+
+## Docs (`docs.gloam.trade`)
+
+Second project:
+
+| Field | Value |
+| --- | --- |
+| Root Directory | **`docs`** |
+| Framework | Next.js |
+| Output Directory | empty |
+
+## Domains
+
+- `gloam.trade` / `www` → marketing project
+- `docs.gloam.trade` → docs project
+- `app.gloam.trade` / `testnet.gloam.trade` → later

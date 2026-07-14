@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+/**
+ * When this package is the Vercel Root Directory (`app`), keep tracing
+ * inside the monorepo without pointing output at a broken `.next` path.
+ */
 const nextConfig: NextConfig = {
-  // Workspace root is monorepo parent; pin Turbopack to this package.
-  turbopack: {
-    root: path.resolve(process.cwd()),
-  },
-  outputFileTracingRoot: path.resolve(process.cwd()),
+  outputFileTracingRoot: path.join(__dirname, ".."),
   images: {
     formats: ["image/avif", "image/webp"],
   },
