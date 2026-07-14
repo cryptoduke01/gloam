@@ -61,7 +61,7 @@ export function PriceChart({
       <div className="mt-4 overflow-hidden rounded-lg bg-background/60 p-1">
         {points.length < 2 ? (
           <div className="flex h-40 items-center justify-center text-sm text-mute">
-            Chart loading…
+            No chart data
           </div>
         ) : (
           <svg

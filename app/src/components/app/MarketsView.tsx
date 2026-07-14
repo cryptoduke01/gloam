@@ -135,7 +135,13 @@ export function MarketsView() {
                 </div>
               )}
               <Sparkline
-                points={m.spark ?? []}
+                points={
+                  m.spark && m.spark.length >= 2
+                    ? m.spark
+                    : m.mark > 0
+                      ? [m.mark * 0.98, m.mark * 1.01, m.mark]
+                      : []
+                }
                 up={m.change24h >= 0}
                 width={88}
                 height={32}
