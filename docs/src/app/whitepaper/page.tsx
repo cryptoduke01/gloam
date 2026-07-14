@@ -26,12 +26,13 @@ export default function WhitepaperPage() {
         Copy traders reprice it. Enemies map it.
       </p>
       <p>
-        Gloam asserts a simpler rule.{" "}
+        Gloam asserts one rule.{" "}
         <strong className="text-white">
-          Trade and move money privately onchain.
+          Trade Everything on Robinhood Privately.
         </strong>{" "}
-        Settlement may remain public. Strategy, size, and path need not. Privacy
-        is not a costume. It is the sealed chamber beside the open book.
+        Stocks. Memes. Whatever is liquid on Robinhood Chain. Settlement may
+        remain public. Strategy, size, and path need not. Privacy is not a
+        costume. It is the sealed chamber beside the open book.
       </p>
 
       <h2 className="!mt-10 text-2xl text-white" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
@@ -41,12 +42,13 @@ export default function WhitepaperPage() {
         Transparent AMMs and wallet intelligence products turned every move
         into content. Large size on a public pool is a confession of urgency.
         Address clustering turns a portfolio into a public dossier. Tokenized
-        equities on Robinhood Chain inherit the same exposure: the asset is
-        modern; the privacy model is medieval.
+        equities and meme books on Robinhood Chain inherit the same exposure:
+        the asset is modern; the privacy model is medieval.
       </p>
       <p>
-        Existing retail venues will list stock tokens. They will not ship
-        private balances as product. That gap is Gloam.
+        Existing retail venues will list stock tokens and chase degen flow.
+        They will not ship private balances as product. That gap is Gloam —
+        one private venue for everything that settles on Robinhood.
       </p>
 
       <h2 className="!mt-10 text-2xl text-white" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
@@ -54,10 +56,11 @@ export default function WhitepaperPage() {
       </h2>
       <p>
         Robinhood Chain (mainnet ID <span className="text-lime">4663</span>) is
-        an Arbitrum Orbit L2 aimed at financial services and real-world assets.
-        Tokenized equities already live there. EVM tooling and Uniswap-class
-        liquidity paths exist. Gloam does not invent a new chain. It adds a
-        private money layer where the markets already are.
+        an Arbitrum Orbit L2 aimed at financial services and real-world assets —
+        and it is also where onchain culture trades. Tokenized equities and meme
+        liquidity already live there. EVM tooling and Uniswap-class paths exist.
+        Gloam does not invent a new chain. It adds a private trading layer where
+        the markets already are: stocks and memes on the same rails.
       </p>
 
       <h2 className="!mt-10 text-2xl text-white" style={{ fontFamily: "var(--font-display), Georgia, serif" }}>
@@ -151,7 +154,7 @@ export default function WhitepaperPage() {
         <li>Marketing and docs (live)</li>
         <li>Wallet connect + public path on testnet</li>
         <li>Shield and private transfer vertical slice</li>
-        <li>Private trade for allowlisted stock tokens</li>
+        <li>Private trade for stock tokens and meme markets</li>
         <li>Audits, guardrails, anonymity-set health, mainnet gates</li>
       </ol>
       <p>

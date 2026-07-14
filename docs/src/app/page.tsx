@@ -55,8 +55,9 @@ export default function DocsHome() {
           Gloam Docs
         </h1>
         <p className="mt-4 max-w-xl text-mute leading-relaxed">
-          Trade and move money privately onchain. This is the early surface of
-          truth: what we build, what we hide, and what we refuse to promise.
+          Trade Everything on Robinhood Privately. Stocks. Memes. This is the
+          early surface of truth: what we build, what we hide, and what we
+          refuse to promise.
         </p>
 
         <div className="mt-10 grid gap-3">

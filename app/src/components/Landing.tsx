@@ -46,7 +46,7 @@ const steps = [
   {
     n: "03",
     title: "Trade",
-    body: "Execute without showing the full hand. Stock tokens first on Robinhood Chain. Liquid markets next. Exit only when you choose the light.",
+    body: "Execute without showing the full hand. Stocks and memes on Robinhood Chain. Same rails. Same silence. Exit only when you choose the light.",
     src: "/ascii/trade.png",
   },
 ];
@@ -91,16 +91,15 @@ export function Landing() {
                   }
                   transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
                 />
-                Private money · Robinhood Chain
+                Stocks · Memes · Robinhood Chain
               </p>
               <h1 className="mt-4 font-display text-[2.4rem] leading-[1.06] tracking-tight text-foreground sm:text-5xl lg:text-[3.75rem]">
-                Trade and move money privately onchain
+                Trade Everything on Robinhood Privately
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-mute sm:text-lg">
                 Every transparent ledger is a confession. Gloam is the sealed
-                chamber: shielded balances, private transfers, private trade.
-                Stock tokens and liquid markets on Robinhood Chain, without
-                printing your book to the street.
+                chamber on Robinhood Chain: stocks, memes, whatever is liquid —
+                held, moved, and traded without printing your book to the street.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <MotionPress>
@@ -170,9 +169,9 @@ export function Landing() {
             </MotionItem>
             <MotionItem>
               <p className="mt-3 max-w-2xl text-mute leading-relaxed">
-                Public AMMs and wallet trackers turned every move into spectacle.
-                Gloam is the private layer for hold, send, and trade when you
-                refuse a live feed of your intent.
+                Public AMMs and wallet trackers turned every move into spectacle —
+                equity tokens and degen books alike. Gloam is the private layer
+                for hold, send, and trade when you refuse a live feed of your intent.
               </p>
             </MotionItem>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -318,15 +317,15 @@ export function Landing() {
               </MotionItem>
               <MotionItem>
                 <p className="mt-3 text-mute leading-relaxed">
-                  Robinhood Chain is an Arbitrum Orbit L2 for financial services
-                  and real-world assets, including stock tokens that trade past
-                  the equity close. Gloam adds shielded balances and private
-                  execution so size and strategy remain yours.
+                  Robinhood Chain is where equities and onchain culture already
+                  settle — stock tokens past the close, memes when the tape is
+                  loud. Gloam adds shielded balances and private execution so
+                  size and strategy remain yours, on both ends of the book.
                 </p>
               </MotionItem>
               <ul className="mt-6 space-y-2.5 text-sm text-mute">
                 {[
-                  "Tokenized equity markets around the clock",
+                  "Stocks and memes on the same private rails",
                   "EVM tooling and Uniswap-class liquidity paths",
                   "Privacy as construction, not a skin on a public book",
                 ].map((line) => (
@@ -377,11 +376,11 @@ export function Landing() {
           <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-12">
             <div>
               <h2 className="font-display text-3xl tracking-tight text-black sm:text-4xl">
-                Testnet first. Mainnet when the rails hold.
+                Everything on Robinhood. Privately.
               </h2>
               <p className="mt-2 max-w-xl text-sm text-black/70">
-                We ship shield, transfer, and trade on Robinhood Chain in the
-                open. No mock fills. No theatrical privacy.
+                Stocks. Memes. Shield, transfer, and trade on Robinhood Chain.
+                No mock fills. No theatrical privacy. Testnet first.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

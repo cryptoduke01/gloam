@@ -19,7 +19,7 @@ export default function ProductPage() {
         <li>Wallet connect on Robinhood Chain (testnet → mainnet)</li>
         <li>Public swap path so the app is never an empty shell</li>
         <li>Shield / private transfer vertical slice</li>
-        <li>Private trade path for allowlisted stock tokens</li>
+        <li>Private trade path for stock tokens and meme markets</li>
         <li>Guardrails, audits, anonymity-set health, mainnet gates</li>
       </ol>
 

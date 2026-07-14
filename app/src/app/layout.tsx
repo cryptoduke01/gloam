@@ -13,9 +13,9 @@ const instrument = Instrument_Serif({
   display: "swap",
 });
 
-const siteTitle = "Trade and move money privately onchain · Gloam";
+const siteTitle = "Trade Everything on Robinhood Privately · Gloam";
 const siteDescription =
-  "Trade and move money privately onchain. Shielded balances, private transfers, and private trading on Robinhood Chain.";
+  "Trade Everything on Robinhood Privately. Stocks, memes, shielded balances, private transfers, and private trading on Robinhood Chain.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gloam.trade"),
@@ -34,6 +34,8 @@ export const metadata: Metadata = {
     "shielded balances",
     "private trading",
     "tokenized stocks",
+    "memecoins",
+    "private meme trading",
   ],
   icons: {
     icon: [

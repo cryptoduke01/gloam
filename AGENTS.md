@@ -1,6 +1,8 @@
 # Gloam
 
-Private money on Robinhood Chain. Product: trade and move money privately onchain.
+**Thesis: Trade Everything on Robinhood Privately.**
+
+Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood Chain.
 
 ## Canonical
 
@@ -12,7 +14,7 @@ Private money on Robinhood Chain. Product: trade and move money privately onchai
 ## Rules
 
 - Real privacy (shielded balances / private txs) — never fake or mock success.
-- Trader/asset surfaces are parameters; RH stock tokens are the GTM wedge, not a permanent cage.
+- Asset surfaces: equities and memes on RH chain; parameters stay flexible after GTM.
 - Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto slop.
 - Secrets server-side only.
-- If it does not serve private money on RH chain, it waits.
+- If it does not serve private trading on RH chain, it waits.

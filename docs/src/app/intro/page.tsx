@@ -8,16 +8,20 @@ export default function IntroPage() {
     <DocShell title="What is Gloam" eyebrow="Introduction">
       <p>
         Gloam is private money infrastructure on{" "}
-        <strong className="text-white">Robinhood Chain</strong>. Not a dark skin
-        on a public book. Not a theatre of green numbers. The product is real
-        cryptographic privacy for three acts that matter: hold, move, trade.
+        <strong className="text-white">Robinhood Chain</strong>. Thesis:{" "}
+        <strong className="text-white">
+          Trade Everything on Robinhood Privately
+        </strong>
+        . Stocks. Memes. Not a dark skin on a public book. Not a theatre of
+        green numbers. Real cryptographic privacy for three acts: hold, move,
+        trade.
       </p>
       <p>
         The public chain is a confessional. Every swap, every size, every
         hesitation of the wallet becomes evidence for whoever can read a graph.
         Gloam builds the sealed chamber beside that confession: shielded
-        balances, private transfers, private execution. Stock tokens are the
-        first market. Liquid markets follow.
+        balances, private transfers, private execution — for equity tokens and
+        degen books on the same rails.
       </p>
 
       <h2 className="!mt-10 text-xl text-white">Core actions</h2>

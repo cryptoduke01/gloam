@@ -56,8 +56,8 @@ export function Footer() {
               </div>
             </div>
             <p className="mt-6 max-w-sm text-sm leading-relaxed text-mute">
-              Trade and move money privately onchain. Hold, send, and trade on
-              Robinhood Chain without turning every move into a public confession.
+              Trade Everything on Robinhood Privately. Stocks, memes, hold, send,
+              and trade without turning every move into a public confession.
             </p>
             <div className="mt-8 flex items-center gap-3 border border-line bg-panel px-4 py-3">
               <span className="h-2 w-2 shrink-0 rounded-full bg-lime shadow-[0_0_12px_#c8ff00]" />
