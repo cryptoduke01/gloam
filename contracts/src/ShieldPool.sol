@@ -47,12 +47,18 @@ contract ShieldPool is IShieldPool {
     error InvalidAmount();
     error InvalidMsgValue();
     error InsufficientPoolBalance();
+    error FeeOnTransferNotSupported();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
+    /**
+     * @param verifier_ Real verifier only. Prefer address(0) on first testnet deploy
+     *        so transfer/unshield stay locked. Never set a mock that always returns true
+     *        on a pool that holds value — it can be drained.
+     */
     constructor(address verifier_) {
         owner = msg.sender;
         if (verifier_ != address(0)) {
@@ -70,6 +76,22 @@ contract ShieldPool is IShieldPool {
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
         owner = newOwner;
+    }
+
+    /**
+     * @notice Testnet recovery only. Pull assets out if verifier path is not ready.
+     * @dev Remove or renounce ownership before any mainnet-style trust assumptions.
+     */
+    function emergencyWithdraw(
+        address asset,
+        address to,
+        uint256 amount
+    ) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (deposited[asset] < amount) revert InsufficientPoolBalance();
+        deposited[asset] -= amount;
+        _pushAsset(asset, to, amount);
     }
 
     /// @inheritdoc IShieldPool
@@ -109,8 +131,10 @@ contract ShieldPool is IShieldPool {
             if (msg.value != amount) revert InvalidMsgValue();
         } else {
             if (msg.value != 0) revert InvalidMsgValue();
-            bool ok = IERC20(asset).transferFrom(msg.sender, address(this), amount);
-            if (!ok) revert TransferFailed();
+            uint256 before = IERC20(asset).balanceOf(address(this));
+            _pullERC20(msg.sender, amount, asset);
+            uint256 received = IERC20(asset).balanceOf(address(this)) - before;
+            if (received != amount) revert FeeOnTransferNotSupported();
         }
 
         deposited[asset] += amount;
@@ -158,14 +182,7 @@ contract ShieldPool is IShieldPool {
 
         if (deposited[asset] < amount) revert InsufficientPoolBalance();
         deposited[asset] -= amount;
-
-        if (asset == address(0)) {
-            (bool ok, ) = to.call{value: amount}("");
-            if (!ok) revert TransferFailed();
-        } else {
-            bool ok = IERC20(asset).transfer(to, amount);
-            if (!ok) revert TransferFailed();
-        }
+        _pushAsset(asset, to, amount);
 
         emit Unshielded(nullifier, asset, to, amount);
     }
@@ -177,9 +194,38 @@ contract ShieldPool is IShieldPool {
     ) internal view {
         if (address(verifier) == address(0)) revert VerifierNotSet();
         if (!tree.isKnownRoot(root)) revert UnknownRoot();
+        // Phase 2: include amount + asset in public inputs so proofs bind the note.
         uint256[] memory inputs = new uint256[](2);
         inputs[0] = uint256(root);
         inputs[1] = uint256(nullifier);
         if (!verifier.verify(proof, inputs)) revert InvalidProof();
+    }
+
+    function _pullERC20(address from, uint256 amount, address asset) internal {
+        (bool success, bytes memory data) = asset.call(
+            abi.encodeWithSelector(
+                IERC20.transferFrom.selector,
+                from,
+                address(this),
+                amount
+            )
+        );
+        if (!success || (data.length != 0 && !abi.decode(data, (bool)))) {
+            revert TransferFailed();
+        }
+    }
+
+    function _pushAsset(address asset, address to, uint256 amount) internal {
+        if (asset == address(0)) {
+            (bool ok, ) = to.call{value: amount}("");
+            if (!ok) revert TransferFailed();
+        } else {
+            (bool success, bytes memory data) = asset.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, to, amount)
+            );
+            if (!success || (data.length != 0 && !abi.decode(data, (bool)))) {
+                revert TransferFailed();
+            }
+        }
     }
 }

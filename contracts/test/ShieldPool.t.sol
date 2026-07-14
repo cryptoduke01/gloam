@@ -173,4 +173,34 @@ contract ShieldPoolTest is Test {
         vm.expectRevert(ShieldPool.InvalidProof.selector);
         pool.transfer(hex"00", root, keccak256("n"), next);
     }
+
+    function test_emergency_withdraw_owner_only() public {
+        vm.prank(alice);
+        pool.shield{value: 3 ether}(address(0), 3 ether, keccak256("e"));
+
+        address sink = address(0x51A1);
+        pool.emergencyWithdraw(address(0), sink, 1 ether);
+        assertEq(sink.balance, 1 ether);
+        assertEq(pool.deposited(address(0)), 2 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(ShieldPool.NotOwner.selector);
+        pool.emergencyWithdraw(address(0), sink, 1 ether);
+    }
+
+    function test_deploy_without_verifier_blocks_unshield() public {
+        ShieldPool bare = new ShieldPool(address(0));
+        vm.deal(address(this), 1 ether);
+        bare.shield{value: 1 ether}(address(0), 1 ether, keccak256("a"));
+        bytes32 root = bare.currentRoot();
+        vm.expectRevert(ShieldPool.VerifierNotSet.selector);
+        bare.unshield(
+            hex"00",
+            root,
+            keccak256("n"),
+            address(0),
+            address(0xB0B),
+            1 ether
+        );
+    }
 }

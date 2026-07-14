@@ -2,63 +2,94 @@
 
 **Trade Everything on Robinhood Privately.**
 
-Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood Chain.
+Stocks. Memes. Same rails. Money that can sit, move, and trade without printing your book to a public chain.
+
+---
+
+### Live
 
 | | |
 | --- | --- |
 | Site | [gloam.trade](https://gloam.trade) |
+| App | [gloam.trade/app](https://gloam.trade/app) |
 | Docs | [gloam.trade/docs](https://gloam.trade/docs) |
-| Whitepaper | [gloam.trade/whitepaper](https://gloam.trade/whitepaper) |
+| Paper | [gloam.trade/whitepaper](https://gloam.trade/whitepaper) |
 | X | [@gloamtrade](https://x.com/gloamtrade) |
 
-## What this is
+---
 
-Private trading rails on **Robinhood Chain** (EVM L2):
+### What this is
 
-- Stocks + memes on the same private layer
-- Shielded balances, private transfers, private trade
-- Real privacy — not a dark theme on a public DEX
+Gloam is private money on **Robinhood Chain** — not a dark theme on a public DEX.
 
-## Monorepo
+**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts.
+
+**Still closed:** shield, private transfer, private trade. Those need contracts and proofs. We do not fake them.
+
+---
+
+### Repo layout
 
 ```
 gloam/
-  app/        → gloam.trade (landing + product /app + /docs pages)
-  docs/       → legacy package (do not deploy)
-  contracts/  → Foundry — ShieldPool scaffold (private path)
+  app/         Marketing + product UI (Next.js) → Vercel root: app
+  contracts/   ShieldPool (Foundry) — private path
+  docs/        Legacy package — do not deploy
 ```
 
-**Smart contracts are only required for privacy** (shield / private move / private trade).  
-Public send and faucet stock transfers need no Gloam contracts.
+Public path needs **no** Gloam contracts.  
+Private path needs **ShieldPool + verifier + circuits**.
 
-## Contracts
+---
 
-```bash
-# requires Foundry: https://book.getfoundry.sh/getting-started/installation
-cd contracts && forge install && forge test
-```
-
-See [contracts/ARCHITECTURE.md](./contracts/ARCHITECTURE.md).
-
-## Setup
+### Local
 
 ```bash
 pnpm install
-pnpm dev:app    # http://localhost:3000
-pnpm build:app
+pnpm dev:app          # http://localhost:3000
+
+# contracts (Foundry)
+cd contracts && forge test
 ```
 
-## Deploy
+Deploy the site with Vercel: **Root Directory = `app`**, leave Output Directory empty.
 
-One Vercel project. Root Directory = **`app`**. Output Directory empty. See [DEPLOY.md](./DEPLOY.md).
+Testnet ETH: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/)  
+Chain ID **46630**.
 
-## Stack (target)
+---
 
-- Next.js + TypeScript + Tailwind
-- Robinhood Chain (`chainId` 4663)
-- viem / wagmi
-- Privacy: EVM shielded-pool path (integrate/port — not mocked)
+### Contracts (private path)
 
-## License
+Phase 1 is in source: custody, Merkle tree, unshield payout path. Transfer / unshield stay locked until a real verifier is set.
+
+```bash
+cd contracts
+forge test
+# deploy only with your own key — never commit secrets
+export DEPLOYER_PK=0x...
+forge script script/DeployShieldPool.s.sol \
+  --rpc-url https://rpc.testnet.chain.robinhood.com \
+  --broadcast
+```
+
+Details: [contracts/ARCHITECTURE.md](./contracts/ARCHITECTURE.md)
+
+---
+
+### Brand
+
+Black. Lime `#C8FF00`. White. Instrument Serif + Overused Grotesk.  
+No purple crypto fog.
+
+---
+
+### Status
+
+- **Product:** testnet-only until the private rails hold  
+- **Frontend / public flows:** largely shipped  
+- **Next:** deploy ShieldPool → real verifier → wire Shield UI  
+
+---
 
 Private / all rights reserved until stated otherwise.
