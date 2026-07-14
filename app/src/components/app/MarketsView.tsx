@@ -5,12 +5,13 @@ import { useMemo, useState } from "react";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { formatMark } from "@/lib/markets";
 import { NetworkPulse } from "./NetworkPulse";
+import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
 export function MarketsView() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | "stock" | "meme">("all");
-  const { data, isFetching, dataUpdatedAt } = useLiveMarkets();
+  const { data, isFetching, isError, refetch } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
 
@@ -30,11 +31,22 @@ export function MarketsView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NetworkPulse />
-        <p className="font-mono text-[11px] text-mute">
-          {isFetching ? "Refreshing marks…" : `${liveCount}/${markets.length} live`}
-          {dataUpdatedAt
-            ? ` · ${new Date(dataUpdatedAt).toLocaleTimeString()}`
-            : ""}
+        <p className="text-xs text-mute">
+          {isError ? (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-lime hover:underline"
+            >
+              Retry
+            </button>
+          ) : isFetching ? (
+            "Updating…"
+          ) : liveCount > 0 ? (
+            "Live prices"
+          ) : (
+            "Waiting for prices…"
+          )}
         </p>
       </div>
 
@@ -62,25 +74,25 @@ export function MarketsView() {
           id="mkt-search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search symbol or name"
+          placeholder="Search"
           className="min-h-11 w-full rounded-md border border-line bg-panel px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime sm:max-w-xs"
         />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="hidden grid-cols-[1.2fr_0.8fr_1fr_0.8fr_0.8fr_auto] gap-4 border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute sm:grid">
+        <div className="hidden grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto] gap-4 border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute sm:grid">
           <span>Market</span>
-          <span>Kind</span>
-          <span>Mark</span>
+          <span>Type</span>
+          <span>Chart</span>
+          <span>Price</span>
           <span>24h</span>
-          <span>Source</span>
           <span />
         </div>
         <ul>
           {rows.map((m) => (
             <li
               key={m.id}
-              className="grid gap-2 border-b border-line px-4 py-4 last:border-0 sm:grid-cols-[1.2fr_0.8fr_1fr_0.8fr_0.8fr_auto] sm:items-center sm:gap-4"
+              className="grid gap-2 border-b border-line px-4 py-4 last:border-0 sm:grid-cols-[1.2fr_0.7fr_1fr_1fr_0.8fr_auto] sm:items-center sm:gap-4"
             >
               <div>
                 <p className="font-medium text-foreground">{m.symbol}</p>
@@ -89,6 +101,12 @@ export function MarketsView() {
               <div>
                 <StatusPill>{m.kind}</StatusPill>
               </div>
+              <Sparkline
+                points={m.spark ?? []}
+                up={m.change24h >= 0}
+                width={88}
+                height={32}
+              />
               <p className="font-mono text-sm text-foreground">
                 {formatMark(m.mark)}
               </p>
@@ -100,7 +118,6 @@ export function MarketsView() {
                 {m.change24h >= 0 ? "+" : ""}
                 {m.change24h}%
               </p>
-              <p className="font-mono text-[11px] text-mute">{m.source}</p>
               <Link
                 href={`/app/trade?market=${m.id}`}
                 className="inline-flex min-h-10 items-center justify-center rounded-md border border-line px-3 text-sm text-foreground hover:border-lime/50 sm:justify-self-end"
@@ -116,12 +133,6 @@ export function MarketsView() {
           )}
         </ul>
       </div>
-
-      <p className="text-xs text-mute">
-        Live path: <code className="text-foreground">GET /api/markets</code>{" "}
-        (server cache ~30s). Stocks via Yahoo Finance chart; memes via CoinGecko.
-        RH Chainlink stock-token feeds wire when we settle those assets on-chain.
-      </p>
     </div>
   );
 }

@@ -23,15 +23,16 @@ export function useLiveMarkets() {
   return useQuery({
     queryKey: ["markets", "live"],
     queryFn: fetchMarkets,
-    staleTime: 25_000,
-    refetchInterval: 45_000,
+    staleTime: 20_000,
+    refetchInterval: 40_000,
+    retry: 2,
+    // Show catalog instantly; swap when live payload arrives
     placeholderData: {
       markets: MARKETS,
       meta: {
         liveCount: 0,
         total: MARKETS.length,
         fetchedAt: 0,
-        note: "Loading live marks…",
       },
     },
   });

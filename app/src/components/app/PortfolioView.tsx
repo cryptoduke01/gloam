@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAccount, useBalance, useChainId } from "wagmi";
 import { AsciiImage } from "@/components/AsciiImage";
 import { PRODUCT_CHAIN_ID, formatEth, shortAddress } from "@/lib/chain";
+import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { ActivityFeed } from "./ActivityFeed";
 import { ConnectButton } from "./ConnectButton";
 import { NetworkPulse } from "./NetworkPulse";
@@ -14,28 +15,28 @@ const gates = [
   {
     href: "/app/send",
     title: "Send",
-    body: "Public ETH on testnet. Real settlement on the open book — live now.",
+    body: "Move public ETH on testnet. Live now.",
     n: "00",
     live: true,
   },
   {
     href: "/app/shield",
     title: "Shield",
-    body: "Park public balances into sealed notes. The graph loses the thread.",
+    body: "Lock value into a private note.",
     n: "01",
     live: false,
   },
   {
     href: "/app/move",
     title: "Move",
-    body: "Private transfer between shielded parties. Silence on the open tape.",
+    body: "Private transfer. Path stays sealed.",
     n: "02",
     live: false,
   },
   {
     href: "/app/trade",
     title: "Trade",
-    body: "Stocks and memes without printing size and intent to the street.",
+    body: "Stocks and memes. Private book next.",
     n: "03",
     live: false,
   },
@@ -55,7 +56,24 @@ export function PortfolioView() {
     <div className="space-y-8">
       <NetworkPulse />
 
-      {/* Hero strip */}
+      {/* Faucet banner */}
+      <a
+        href={FAUCET_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="flex flex-col gap-2 rounded-xl border border-lime/35 bg-panel px-5 py-4 transition-colors hover:border-lime sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            Need testnet ETH?
+          </p>
+          <p className="mt-1 text-sm text-mute">{FAUCET_BLURB}</p>
+        </div>
+        <span className="inline-flex min-h-10 shrink-0 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black">
+          Open faucet →
+        </span>
+      </a>
+
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-7">
           <div className="relative h-40 border-b border-line sm:h-48">
@@ -68,9 +86,9 @@ export function PortfolioView() {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-panel via-transparent to-transparent" />
             <div className="absolute bottom-4 left-4 right-4">
-              <StatusPill tone="lime">Testnet portfolio</StatusPill>
+              <StatusPill tone="lime">Testnet</StatusPill>
               <p className="mt-2 font-display text-2xl text-foreground sm:text-3xl">
-                Public book. Private chamber next.
+                Your public balance
               </p>
             </div>
           </div>
@@ -89,29 +107,22 @@ export function PortfolioView() {
                   <span className="text-lg text-mute">ETH</span>
                 </p>
               )}
-              <p className="mt-1 text-xs text-mute">
-                Robinhood Chain testnet · visible on explorer
-              </p>
+              <p className="mt-1 text-xs text-mute">Robinhood testnet</p>
             </div>
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                Shielded
+                Private
               </p>
               <p className="mt-2 font-display text-3xl text-foreground">
-                0{" "}
-                <span className="text-lg text-mute">notes</span>
+                0 <span className="text-lg text-mute">notes</span>
               </p>
-              <p className="mt-1 text-xs text-mute">
-                Empty until shield contracts are live — not simulated
-              </p>
+              <p className="mt-1 text-xs text-mute">Shield opens next</p>
             </div>
           </div>
           {!isConnected && (
             <div className="border-t border-line px-5 py-4 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-mute">
-                  Connect a wallet on Robinhood Chain testnet to see balances.
-                </p>
+                <p className="text-sm text-mute">Connect your wallet to begin.</p>
                 <ConnectButton />
               </div>
             </div>
@@ -119,7 +130,7 @@ export function PortfolioView() {
           {isConnected && !onProduct && (
             <div className="border-t border-line px-5 py-4 sm:px-6">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                Wrong network. Switch to Robinhood Chain testnet (46630).
+                Switch to Robinhood testnet.
               </p>
               <div className="mt-3">
                 <ConnectButton />
@@ -128,7 +139,7 @@ export function PortfolioView() {
           )}
           {isConnected && address && onProduct && (
             <div className="border-t border-line px-5 py-3 font-mono text-[11px] text-mute sm:px-6">
-              {shortAddress(address, 6)} · chain {chainId}
+              {shortAddress(address, 6)}
             </div>
           )}
         </div>
@@ -136,25 +147,8 @@ export function PortfolioView() {
         <div className="flex flex-col gap-3 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5 sm:p-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              At a glance
+              Quick
             </p>
-            <dl className="mt-3 space-y-3 text-sm">
-              {[
-                ["Network", "Robinhood testnet"],
-                ["Chain ID", "46630"],
-                ["Public path", "Send · live"],
-                ["Privacy", "Rails shipping"],
-                ["Host", "gloam.trade/app"],
-              ].map(([k, v]) => (
-                <div
-                  key={k}
-                  className="flex items-center justify-between border-b border-line pb-2 last:border-0"
-                >
-                  <dt className="text-mute">{k}</dt>
-                  <dd className="font-medium text-foreground">{v}</dd>
-                </div>
-              ))}
-            </dl>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Link
                 href="/app/send"
@@ -163,10 +157,22 @@ export function PortfolioView() {
                 Send
               </Link>
               <Link
+                href="/app/trade"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+              >
+                Trade
+              </Link>
+              <Link
                 href="/app/markets"
                 className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
               >
                 Markets
+              </Link>
+              <Link
+                href="/app/settings"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-line text-sm font-medium text-foreground hover:border-mute"
+              >
+                Settings
               </Link>
             </div>
           </div>
@@ -174,10 +180,9 @@ export function PortfolioView() {
         </div>
       </div>
 
-      {/* Gates */}
       <div>
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-          Product path
+          Product
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {gates.map((g) => (
@@ -203,41 +208,7 @@ export function PortfolioView() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ActivityFeed />
-        <div className="rounded-xl border border-line bg-panel p-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-            Live data
-          </p>
-          <p className="mt-3 font-display text-xl text-foreground">
-            How marks arrive
-          </p>
-          <ol className="mt-3 space-y-2 text-sm text-mute">
-            <li>
-              <span className="text-lime">1.</span> UI calls{" "}
-              <code className="text-foreground">/api/markets</code>
-            </li>
-            <li>
-              <span className="text-lime">2.</span> Server pulls Yahoo (stocks)
-              + CoinGecko (memes)
-            </li>
-            <li>
-              <span className="text-lime">3.</span> Cache ~30s · refetch in app
-              every 45s
-            </li>
-            <li>
-              <span className="text-lime">4.</span> Next: RH stock-token oracles
-              + Uniswap depth
-            </li>
-          </ol>
-          <Link
-            href="/docs/data"
-            className="mt-4 inline-flex text-sm text-lime hover:underline"
-          >
-            Data docs →
-          </Link>
-        </div>
-      </div>
+      <ActivityFeed />
     </div>
   );
 }

@@ -3,17 +3,18 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
-import { AsciiImage } from "@/components/AsciiImage";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
-import { formatMark, type Market } from "@/lib/markets";
+import { formatMark } from "@/lib/markets";
 import { ConnectButton } from "./ConnectButton";
 import { NetworkPulse } from "./NetworkPulse";
+import { PriceChart } from "./PriceChart";
+import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
 export function TradeView() {
   const { isConnected } = useAccount();
   const search = useSearchParams();
-  const { data, isFetching, dataUpdatedAt } = useLiveMarkets();
+  const { data, isFetching, isError, refetch, isFetched } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
 
@@ -27,7 +28,6 @@ export function TradeView() {
   const [filter, setFilter] = useState<"all" | "stock" | "meme">("all");
   const [note, setNote] = useState<string | null>(null);
 
-  // keep marketId in sync when list loads
   const resolvedId = markets.some((m) => m.id === marketId)
     ? marketId
     : markets[0]?.id ?? "hood";
@@ -46,14 +46,22 @@ export function TradeView() {
     e.preventDefault();
     if (!market) return;
     setNote(
-      `Private ${side} for ${market.symbol} is not live. No order was placed. Live marks are reference only — public swap + private book ship next.`
+      `Trading ${market.symbol} privately is not open yet. Nothing was sent.`
+    );
+  }
+
+  if (!isFetched && markets.length === 0) {
+    return (
+      <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
+        Loading markets…
+      </div>
     );
   }
 
   if (!market) {
     return (
       <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
-        Loading markets…
+        No markets available.
       </div>
     );
   }
@@ -62,12 +70,25 @@ export function TradeView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NetworkPulse />
-        <p className="font-mono text-[11px] text-mute">
-          {isFetching ? "Refreshing…" : `${liveCount} live marks`}
-          {dataUpdatedAt
-            ? ` · ${new Date(dataUpdatedAt).toLocaleTimeString()}`
-            : ""}
-        </p>
+        <div className="flex items-center gap-3 text-xs text-mute">
+          {isError ? (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="text-lime hover:underline"
+            >
+              Retry prices
+            </button>
+          ) : (
+            <span>
+              {isFetching
+                ? "Updating…"
+                : liveCount > 0
+                  ? "Live prices"
+                  : "Prices offline"}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
@@ -93,25 +114,29 @@ export function TradeView() {
               ))}
             </div>
           </div>
-          <ul className="max-h-[28rem] overflow-y-auto">
+          <ul className="max-h-[32rem] overflow-y-auto">
             {list.map((m) => (
               <li key={m.id}>
                 <button
                   type="button"
                   onClick={() => setMarketId(m.id)}
-                  className={`flex w-full items-center justify-between gap-3 border-b border-line px-4 py-3 text-left transition-colors last:border-0 ${
+                  className={`flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 ${
                     m.id === resolvedId
                       ? "bg-background"
                       : "hover:bg-background/60"
                   }`}
                 >
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground">{m.symbol}</p>
-                    <p className="text-xs text-mute">
-                      {m.name} · {m.source}
-                    </p>
+                    <p className="truncate text-xs text-mute">{m.name}</p>
                   </div>
-                  <div className="text-right">
+                  <Sparkline
+                    points={m.spark ?? []}
+                    up={m.change24h >= 0}
+                    width={64}
+                    height={28}
+                  />
+                  <div className="w-16 text-right">
                     <p className="font-mono text-sm text-foreground">
                       {formatMark(m.mark)}
                     </p>
@@ -128,52 +153,56 @@ export function TradeView() {
               </li>
             ))}
           </ul>
-          <p className="border-t border-line px-4 py-2 text-[11px] text-mute">
-            Stocks: Yahoo · Memes: CoinGecko · not RH-oracle fills
-          </p>
         </div>
 
-        <div className="lg:col-span-5">
+        <div className="space-y-4 lg:col-span-5">
+          <PriceChart
+            points={market.spark ?? []}
+            mark={market.mark}
+            change24h={market.change24h}
+          />
+
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="relative h-28 border-b border-line">
-              <AsciiImage
-                src="/ascii/trade.png"
-                alt=""
-                tone="plate"
-                className="h-full w-full"
-                sizes="40vw"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-panel to-transparent" />
-              <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+            <div className="border-b border-line px-5 py-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <StatusPill
-                    tone={market.source === "static" ? "warn" : "lime"}
-                  >
-                    {market.source}
-                  </StatusPill>
-                  <p className="mt-1 font-display text-2xl text-foreground">
+                  <p className="font-display text-2xl text-foreground">
                     {market.symbol}
                   </p>
+                  <p className="text-sm text-mute">{market.name}</p>
                 </div>
-                <p className="font-mono text-sm text-mute">
-                  {formatMark(market.mark)}
-                </p>
+                {liveCount > 0 && market.source !== "static" ? (
+                  <StatusPill tone="lime">Live</StatusPill>
+                ) : (
+                  <StatusPill tone="warn">Cached</StatusPill>
+                )}
               </div>
             </div>
 
             <form onSubmit={onTrade} className="space-y-4 p-5">
               <div className="grid grid-cols-2 gap-2">
-                <SideButton
-                  active={side === "buy"}
+                <button
+                  type="button"
                   onClick={() => setSide("buy")}
-                  label="Buy"
-                />
-                <SideButton
-                  active={side === "sell"}
+                  className={`min-h-11 rounded-md text-sm font-semibold ${
+                    side === "buy"
+                      ? "bg-lime text-black"
+                      : "border border-line text-mute"
+                  }`}
+                >
+                  Buy
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSide("sell")}
-                  label="Sell"
-                  sell
-                />
+                  className={`min-h-11 rounded-md text-sm font-semibold ${
+                    side === "sell"
+                      ? "bg-foreground text-background"
+                      : "border border-line text-mute"
+                  }`}
+                >
+                  Sell
+                </button>
               </div>
 
               <div>
@@ -200,10 +229,10 @@ export function TradeView() {
                 </div>
               </div>
 
-              <div className="rounded-md border border-line bg-background px-4 py-3 text-xs text-mute">
-                Live mark is a reference. Private execution does not fill until
-                shield rails land.
-              </div>
+              <p className="text-xs text-mute">
+                Private trading is not open on testnet yet. Prices update live;
+                orders do not fill.
+              </p>
 
               {!isConnected ? (
                 <ConnectButton />
@@ -216,7 +245,7 @@ export function TradeView() {
                       : "bg-foreground text-background hover:opacity-90"
                   }`}
                 >
-                  {side === "buy" ? "Buy" : "Sell"} {market.symbol} when live
+                  {side === "buy" ? "Buy" : "Sell"} {market.symbol}
                 </button>
               )}
 
@@ -233,89 +262,27 @@ export function TradeView() {
         </div>
 
         <aside className="space-y-4 lg:col-span-3">
-          <MarketCard market={market} />
           <div className="rounded-xl border border-line bg-panel p-4">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Data path
+              Stats
             </p>
-            <p className="mt-2 text-xs leading-relaxed text-mute">
-              Browser → <code className="text-lime">/api/markets</code> → Yahoo
-              / CoinGecko (30s cache). Next: RH stock-token oracles + pool
-              depth.
-            </p>
+            <dl className="mt-3 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <dt className="text-mute">Type</dt>
+                <dd className="capitalize text-foreground">{market.kind}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-mute">24h volume</dt>
+                <dd className="text-foreground">{market.volume}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-mute">Private</dt>
+                <dd className="text-mute">Coming soon</dd>
+              </div>
+            </dl>
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function SideButton({
-  active,
-  onClick,
-  label,
-  sell,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  sell?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`min-h-11 rounded-md text-sm font-semibold transition-colors ${
-        active
-          ? sell
-            ? "bg-foreground text-background"
-            : "bg-lime text-black"
-          : "border border-line text-mute hover:text-foreground"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function MarketCard({ market }: { market: Market }) {
-  return (
-    <div className="rounded-xl border border-line bg-panel p-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-        Selected
-      </p>
-      <p className="mt-2 text-lg font-medium text-foreground">{market.name}</p>
-      <dl className="mt-3 space-y-2 text-xs">
-        <div className="flex justify-between">
-          <dt className="text-mute">Kind</dt>
-          <dd className="capitalize text-foreground">{market.kind}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-mute">Mark</dt>
-          <dd className="font-mono text-foreground">
-            {formatMark(market.mark)}
-          </dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-mute">24h</dt>
-          <dd
-            className={
-              market.change24h >= 0 ? "text-lime" : "text-red-400"
-            }
-          >
-            {market.change24h >= 0 ? "+" : ""}
-            {market.change24h}%
-          </dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-mute">Vol</dt>
-          <dd className="text-foreground">{market.volume}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-mute">Source</dt>
-          <dd className="text-foreground">{market.source}</dd>
-        </div>
-      </dl>
     </div>
   );
 }

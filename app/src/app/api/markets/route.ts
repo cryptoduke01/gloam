@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { loadLiveMarkets } from "@/lib/live-quotes";
 
-export const revalidate = 30;
+/** Always fetch fresh — do not bake static quotes at build time. */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-/**
- * Live market marks for the product UI.
- * GET /api/markets → Market[] with source + updatedAt
- */
 export async function GET() {
   try {
     const markets = await loadLiveMarkets();
@@ -17,14 +15,12 @@ export async function GET() {
         meta: {
           liveCount,
           total: markets.length,
-          sources: ["yahoo", "coingecko"],
-          note: "Marks are reference prices, not fills. RH stock-token oracles wire next.",
           fetchedAt: Date.now(),
         },
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+          "Cache-Control": "no-store, max-age=0",
         },
       }
     );

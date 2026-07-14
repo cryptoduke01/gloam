@@ -3,6 +3,8 @@ import { isAddress } from "viem";
 
 const EXPLORER_API = "https://explorer.testnet.chain.robinhood.com/api";
 
+export const dynamic = "force-dynamic";
+
 type TxRow = {
   hash: string;
   from: string;
@@ -10,13 +12,8 @@ type TxRow = {
   value: string;
   timeStamp: string;
   isError: string;
-  txreceipt_status?: string;
 };
 
-/**
- * Public activity for an address on RH testnet via Blockscout.
- * GET /api/activity?address=0x…
- */
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get("address") ?? "";
   if (!isAddress(address)) {
@@ -26,7 +23,7 @@ export async function GET(req: NextRequest) {
   try {
     const url = `${EXPLORER_API}?module=account&action=txlist&address=${address}&page=1&offset=12&sort=desc`;
     const res = await fetch(url, {
-      next: { revalidate: 15 },
+      cache: "no-store",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
@@ -36,7 +33,6 @@ export async function GET(req: NextRequest) {
       );
     }
     const data = (await res.json()) as {
-      status?: string;
       result?: TxRow[] | string;
     };
     const rows = Array.isArray(data.result) ? data.result : [];
@@ -49,14 +45,7 @@ export async function GET(req: NextRequest) {
       ok: t.isError === "0",
     }));
 
-    return NextResponse.json(
-      { txs, address },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30",
-        },
-      }
-    );
+    return NextResponse.json({ txs, address });
   } catch {
     return NextResponse.json(
       { txs: [], error: "fetch_failed" },

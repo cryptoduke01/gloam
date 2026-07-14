@@ -13,7 +13,7 @@ export function ActivityFeed() {
   if (!isConnected || !address) {
     return (
       <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-        Connect to load public activity from Robinhood Chain testnet.
+        Connect to see recent activity.
       </div>
     );
   }
@@ -26,19 +26,19 @@ export function ActivityFeed() {
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
           Public activity
         </p>
-        <StatusPill>Blockscout</StatusPill>
+        <StatusPill>Onchain</StatusPill>
       </div>
       {isLoading && (
         <p className="px-4 py-6 text-sm text-mute">Loading explorer…</p>
       )}
       {isError && (
         <p className="px-4 py-6 text-sm text-mute">
-          Explorer API unavailable. Try again shortly.
+          Could not load history. Try again.
         </p>
       )}
       {!isLoading && !isError && txs.length === 0 && (
         <p className="px-4 py-6 text-sm text-mute">
-          No public txs yet. Send on testnet to see history.
+          No activity yet. Send ETH to see it here.
         </p>
       )}
       <ul>

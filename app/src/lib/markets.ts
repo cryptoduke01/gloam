@@ -19,6 +19,8 @@ export type LiveQuote = {
   volume: string;
   source: MarketSource;
   updatedAt: number;
+  /** Recent prices for mini chart */
+  spark?: number[];
 };
 
 export type Market = MarketDef & LiveQuote;
@@ -146,6 +148,7 @@ export const MARKETS: Market[] = MARKET_DEFS.map((d) => ({
   volume: "—",
   source: "static" as const,
   updatedAt: 0,
+  spark: [],
 }));
 
 export function formatMark(mark: number) {

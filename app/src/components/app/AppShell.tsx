@@ -10,10 +10,10 @@ import { ConnectButton } from "./ConnectButton";
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
   { href: "/app/send", label: "Send" },
-  { href: "/app/shield", label: "Shield" },
-  { href: "/app/move", label: "Move" },
   { href: "/app/trade", label: "Trade" },
   { href: "/app/markets", label: "Markets" },
+  { href: "/app/shield", label: "Shield" },
+  { href: "/app/settings", label: "Settings" },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
@@ -135,13 +135,8 @@ export function AppShell({
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>
-            Testnet product. No mock private fills. Shield rails ship when
-            proofs land.
-          </p>
-          <p className="font-mono uppercase tracking-[0.12em]">
-            Chain 46630 · /app · testnet.gloam.trade later
-          </p>
+          <p>Testnet. Private trading ships when the rails are real.</p>
+          <p className="font-mono uppercase tracking-[0.12em]">Robinhood · 46630</p>
         </div>
       </footer>
     </div>
