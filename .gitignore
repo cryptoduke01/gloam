@@ -8,14 +8,25 @@ out
 build
 dist
 
-# env
+# env / secrets — never commit real keys
 .env
-.env*.local
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+DEPLOYER_PK*
+
+# foundry (also in contracts/.gitignore)
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/circuits/build/pot*
+contracts/circuits/build/**/*.ptau
 
 # debug / os
 npm-debug.log*
 .DS_Store
-*.pem
 
 # typescript
 next-env.d.ts

@@ -12,6 +12,11 @@ import {
   exportNotesBackup,
   importNotesBackup,
 } from "@/lib/shield";
+import {
+  isSealedBackup,
+  openWithPassphrase,
+  sealWithPassphrase,
+} from "@/lib/secretBox";
 import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { WalletMenu } from "./WalletMenu";
@@ -87,6 +92,7 @@ export function SettingsView() {
   const [netMsg, setNetMsg] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [backupImport, setBackupImport] = useState("");
+  const [backupPass, setBackupPass] = useState("");
 
   useEffect(() => {
     if (!copied) return;
@@ -328,9 +334,25 @@ export function SettingsView() {
           Vault notes backup
         </p>
         <p className="mt-2 text-sm text-mute">
-          Secrets live in this browser. Export a JSON backup before clearing
-          site data — anyone with the file can spend those notes.
+          Secrets live in this browser. Export before clearing site data.
+          Prefer a passphrase lock so a stolen file is not free money.
         </p>
+        <label
+          htmlFor="backup-pass"
+          className="mt-4 block text-sm font-medium text-foreground"
+        >
+          Backup passphrase{" "}
+          <span className="font-normal text-mute">(recommended)</span>
+        </label>
+        <input
+          id="backup-pass"
+          type="password"
+          autoComplete="new-password"
+          value={backupPass}
+          onChange={(e) => setBackupPass(e.target.value)}
+          placeholder="Lock / unlock backup"
+          className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
+        />
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -339,15 +361,24 @@ export function SettingsView() {
               setBackupMsg(null);
               try {
                 const backup = exportNotesBackup(address);
-                const text = JSON.stringify(backup, null, 2);
+                if (!backup.notes.length) {
+                  setBackupMsg("No spendable notes to export.");
+                  return;
+                }
+                const json = JSON.stringify(backup, null, 2);
+                const text = backupPass.trim()
+                  ? await sealWithPassphrase(json, backupPass)
+                  : json;
                 await navigator.clipboard.writeText(text);
                 setBackupMsg(
-                  backup.notes.length
-                    ? `Copied ${backup.notes.length} note(s) to clipboard.`
-                    : "No spendable notes to export."
+                  backupPass.trim()
+                    ? `Copied locked backup (${backup.notes.length} note(s)).`
+                    : `Copied plain backup (${backup.notes.length} note(s)). Anyone with it can spend.`
                 );
-              } catch {
-                setBackupMsg("Could not copy backup.");
+              } catch (e) {
+                setBackupMsg(
+                  e instanceof Error ? e.message : "Could not copy backup."
+                );
               }
             }}
             className="inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-black disabled:opacity-50"
@@ -357,27 +388,43 @@ export function SettingsView() {
           <button
             type="button"
             disabled={!isConnected}
-            onClick={() => {
+            onClick={async () => {
               setBackupMsg(null);
-              const backup = exportNotesBackup(address);
-              const blob = new Blob([JSON.stringify(backup, null, 2)], {
-                type: "application/json",
-              });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `gloam-notes-${Date.now()}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-              setBackupMsg(
-                backup.notes.length
-                  ? `Downloaded ${backup.notes.length} note(s).`
-                  : "Empty backup file downloaded."
-              );
+              try {
+                const backup = exportNotesBackup(address);
+                const json = JSON.stringify(backup, null, 2);
+                const text = backupPass.trim()
+                  ? await sealWithPassphrase(json, backupPass)
+                  : json;
+                const blob = new Blob([text], {
+                  type: backupPass.trim()
+                    ? "text/plain"
+                    : "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = backupPass.trim()
+                  ? `gloam-notes-locked-${Date.now()}.txt`
+                  : `gloam-notes-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setBackupMsg(
+                  backup.notes.length
+                    ? `Downloaded ${backup.notes.length} note(s)${
+                        backupPass.trim() ? " (locked)" : ""
+                      }.`
+                    : "Empty backup file downloaded."
+                );
+              } catch (e) {
+                setBackupMsg(
+                  e instanceof Error ? e.message : "Download failed."
+                );
+              }
             }}
             className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
           >
-            Download JSON
+            Download
           </button>
         </div>
         <label
@@ -391,20 +438,39 @@ export function SettingsView() {
           value={backupImport}
           onChange={(e) => setBackupImport(e.target.value)}
           rows={3}
-          placeholder='Paste {"v":1,"type":"gloam-notes-backup",…}'
+          placeholder='Paste JSON or gloambak1.… locked backup'
           className="mt-2 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
         />
         <button
           type="button"
           disabled={!backupImport.trim() || !isConnected}
           onClick={() => {
-            const res = importNotesBackup(backupImport, address);
-            if (res.ok) {
-              setBackupMsg(`Restored ${res.count} note(s). Refresh Portfolio.`);
-              setBackupImport("");
-            } else {
-              setBackupMsg(res.error);
-            }
+            void (async () => {
+              setBackupMsg(null);
+              try {
+                let raw = backupImport.trim();
+                if (isSealedBackup(raw)) {
+                  if (!backupPass.trim()) {
+                    setBackupMsg("Enter the passphrase for this locked backup.");
+                    return;
+                  }
+                  raw = await openWithPassphrase(raw, backupPass);
+                }
+                const res = importNotesBackup(raw, address);
+                if (res.ok) {
+                  setBackupMsg(
+                    `Restored ${res.count} note(s). Open Portfolio / Move.`
+                  );
+                  setBackupImport("");
+                } else {
+                  setBackupMsg(res.error);
+                }
+              } catch (e) {
+                setBackupMsg(
+                  e instanceof Error ? e.message : "Import failed."
+                );
+              }
+            })();
           }}
           className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-lime hover:bg-lime/10 disabled:opacity-50"
         >

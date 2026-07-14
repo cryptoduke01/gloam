@@ -87,6 +87,10 @@ Details: [contracts/ARCHITECTURE.md](./contracts/ARCHITECTURE.md)
 
 ---
 
+### Security
+
+See [SECURITY.md](./SECURITY.md). No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Circuit zkeys are **dev ceremony** artifacts (secret scanners may false-positive).
+
 ### Brand
 
 Black. Lime `#C8FF00`. White. Instrument Serif + Overused Grotesk.  

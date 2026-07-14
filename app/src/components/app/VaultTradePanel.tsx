@@ -105,6 +105,8 @@ export function VaultTradePanel({
   const [phase, setPhase] = useState<Phase>("idle");
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastHash, setLastHash] = useState<`0x${string}` | undefined>();
+  /** True after cash-out landed — show recovery links if later steps fail */
+  const [needsRecovery, setNeedsRecovery] = useState(false);
 
   const planRef = useRef<Plan | null>(null);
   /** Pipeline phase in a ref so receipt handlers never see a stale React state */
@@ -400,6 +402,7 @@ export function VaultTradePanel({
       try {
         if (p === "unshield") {
           unshieldDone.current = true;
+          setNeedsRecovery(true);
           if (spentNoteId.current) {
             updateLocalNote(spentNoteId.current, { status: "recovered" });
             spentNoteId.current = null;
@@ -469,6 +472,7 @@ export function VaultTradePanel({
           setShowSuccess(true);
           planRef.current = null;
           unshieldDone.current = false;
+          setNeedsRecovery(false);
         }
       } catch (e) {
         const msg =
@@ -543,6 +547,7 @@ export function VaultTradePanel({
     preTokenBal.current = (tokenBal as bigint | undefined) ?? 0n;
     preEthBal.current = ethBal?.value ?? 0n;
     unshieldDone.current = false;
+    setNeedsRecovery(false);
     pendingReshield.current = null;
 
     setPipeline("prove");
@@ -765,9 +770,35 @@ export function VaultTradePanel({
             )}
 
             {error && (
-              <p role="alert" className="text-sm text-red-500">
-                {error}
-              </p>
+              <div role="alert" className="space-y-2 text-sm text-red-500">
+                <p>{error}</p>
+                {needsRecovery && (
+                  <p className="text-mute">
+                    Recovery:{" "}
+                    <button
+                      type="button"
+                      className="text-lime hover:underline"
+                      onClick={() => {
+                        // parent TradeView pathMode — deep-link query
+                        window.location.href = "/app/trade?path=public";
+                      }}
+                    >
+                      swap from open wallet
+                    </button>
+                    {" · "}
+                    <Link
+                      href="/app/shield"
+                      className="text-lime hover:underline"
+                    >
+                      re-shield leftover
+                    </Link>
+                    {" · "}
+                    <Link href="/app/move" className="text-lime hover:underline">
+                      cash out other notes
+                    </Link>
+                  </p>
+                )}
+              </div>
             )}
             {status && !error && (
               <p className="text-sm text-mute">{status}</p>

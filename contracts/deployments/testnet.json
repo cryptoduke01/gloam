@@ -8,7 +8,7 @@
     "Verifier": null
   },
   "deploy": {
-    "tx": "0x4607a188a938c6eb1f1efa35df8027b22c0816fa818df1553949cac766fe83fb",
+    "txExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0x4607a188a938c6eb1f1efa35df8027b22c0816fa818df1553949cac766fe83fb",
     "block": 90232912,
     "owner": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
     "deployedAt": "2026-07-14"

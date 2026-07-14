@@ -20,6 +20,7 @@ function b64urlDecode(s) {
 }
 
 const PREFIX = "gloam1.";
+// Use short placeholder secrets (not 32-byte hex — avoids secret-scanner FPs)
 const pack = {
   v: 1,
   t: "gloam-private-note",
@@ -27,8 +28,8 @@ const pack = {
   p: "0xA488809a089F003A2B6E69daa65B0db79823c93B",
   a: "0x0000000000000000000000000000000000000000",
   w: "1000000000000000",
-  k: "0x" + "11".repeat(32),
-  c: "0x" + "22".repeat(32),
+  k: "test-secret-not-a-key",
+  c: "test-commitment-not-a-key",
 };
 
 const encoded = PREFIX + b64urlEncode(Buffer.from(JSON.stringify(pack), "utf8"));

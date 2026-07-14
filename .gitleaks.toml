@@ -1,0 +1,33 @@
+# Gloam — secret scan allowlist for public crypto artifacts and on-chain data.
+# Real keys must never land in the repo (use DEPLOYER_PK env only).
+
+title = "gloam"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public contracts, circuit artifacts, test fixtures — not private keys"
+paths = [
+  '''(^|/)app/public/circuits/.*''',
+  '''(^|/)contracts/test/fixtures/.*''',
+  '''(^|/)contracts/deployments/.*''',
+  '''(^|/)contracts/circuits/build/.*''',
+  '''(^|/)contracts/out/.*''',
+  '''(^|/)contracts/cache/.*''',
+  '''(^|/)contracts/broadcast/.*''',
+  '''(^|/)contracts/lib/.*''',
+  '''(^|/)node_modules/.*''',
+  '''\.zkey$''',
+  '''\.wasm$''',
+  '''\.ptau$''',
+]
+
+# On-chain addresses / public tx hashes often look like 32-byte secrets
+regexTarget = "match"
+regexes = [
+  '''0x0000000000000000000000000000000000000000000000000000000000000000''',
+  '''0xA488809a089F003A2B6E69daa65B0db79823c93B''',
+  '''0x2BD98196D90AB45D58843B4c8B8809aa34343d35''',
+  '''0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C''',
+]

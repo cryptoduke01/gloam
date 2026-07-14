@@ -538,10 +538,11 @@ export async function fetchChainShieldNotes(
         asset: (args.asset ?? NATIVE_ASSET) as Address,
         amountWei: (args.amount ?? BigInt(0)).toString(),
         commitment,
+        // chain-only row — no spend secret (placeholder, not a key)
         secret: "0x" as Hex,
         leafIndex:
           args.leafIndex != null ? Number(args.leafIndex) : undefined,
-        txHash: log.transactionHash as Hex | undefined,
+        txHash: (log.transactionHash ?? undefined) as Hex | undefined,
         from: (args.from ?? from) as Address,
         createdAt: Date.now() - i,
         status: "open" as const,

@@ -6,14 +6,13 @@
  *   export RPC_URL=https://rpc.testnet.chain.robinhood.com
  *   node scripts/deploy-poseidon.mjs
  */
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { createWalletClient, http, createPublicClient } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { writeFileSync, mkdirSync } from "fs";
 
 const RPC = process.env.RPC_URL || "https://rpc.testnet.chain.robinhood.com";
+// Never hardcode — read from environment only (secret scanners flag inline keys)
 const pk = process.env.DEPLOYER_PK;
-if (!pk) {
-  console.error("Set DEPLOYER_PK");
+if (!pk || !pk.startsWith("0x") || pk.length < 66) {
+  console.error("Set DEPLOYER_PK to a funded testnet key (env only, never commit).");
   process.exit(1);
 }
 

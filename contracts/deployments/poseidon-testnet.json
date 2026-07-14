@@ -26,6 +26,7 @@
   "notes": "Phase-2 Poseidon pool. DualProofVerifier routes unshield (5 inputs) and transfer (4). Dev ceremony keys. Legacy keccak: 0x2BD98196D90AB45D58843B4c8B8809aa34343d35.",
   "privateSend": true,
   "verifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C",
-  "setVerifierTx": "0x72a8b58f9dd52295a7629d40ffbd1ca78c4c0b585b81acbcef377780f9994702",
-  "updatedAt": "2026-07-14T21:45:50.925Z"
+  "setVerifierTxExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0x72a8b58f9dd52295a7629d40ffbd1ca78c4c0b585b81acbcef377780f9994702",
+  "updatedAt": "2026-07-14T21:45:50.925Z",
+  "securityNote": "Dev ceremony zkeys in app/public/circuits — not production. No private keys in this file; addresses and explorer URLs only."
 }
