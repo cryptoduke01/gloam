@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   useAccount,
@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { formatUnits } from "viem";
+import { formatEther, formatUnits, parseEther } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
@@ -16,59 +16,59 @@ import {
   HASH_SCHEME,
   SHIELD_GAS_LIMIT,
   SHIELD_POOL_ADDRESS,
+  type LocalNote,
   assetLabel,
   isNativeAsset,
   isShieldDeployed,
+  saveLocalNote,
   shieldPoolAbi,
   updateLocalNote,
 } from "@/lib/shield";
-import { PROOF_LAYOUT_VERSION } from "@/lib/note";
-import {
-  buildUnshieldWitness,
-  downloadWitnessJson,
-  formatWitnessSummary,
-  type UnshieldWitness,
-} from "@/lib/prover";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
+import { buildTransferWitness } from "@/lib/proverTransfer";
 import {
   fieldToBytes32,
+  proveTransferInBrowser,
   proveUnshieldInBrowser,
 } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID,
-  formatEth,
-  shortAddress,
-} from "@/lib/chain";
+import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
+import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 
-/** Private unshield / move prep + Poseidon unshield when pool is live. */
+type Mode = "send" | "cashout";
+
+/**
+ * Move = private send inside the vault, or cash out (unshield).
+ * Plain labels for normal users.
+ */
 export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === CHAIN;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     loading: treeLoading,
     error: treeError,
     matchesChain,
     leafCount,
-    root,
     pathForLeaf,
     refresh: refreshTree,
-    scheme,
   } = useShieldTree();
 
+  const [mode, setMode] = useState<Mode>("send");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [witnessLog, setWitnessLog] = useState<string | null>(null);
-  const [lastWitness, setLastWitness] = useState<UnshieldWitness | null>(null);
-  const [proving, setProving] = useState(false);
-  const [proveError, setProveError] = useState<string | null>(null);
+  const [sendAmount, setSendAmount] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [shareBlob, setShareBlob] = useState<string | null>(null);
+  const [importText, setImportText] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("Done");
+  const [busy, setBusy] = useState(false);
 
   const {
     writeContract,
@@ -80,25 +80,47 @@ export function MoveView() {
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: CHAIN,
   });
 
   const handledHash = useRef<string | null>(null);
-  const unshieldNoteId = useRef<string | null>(null);
+  const pendingAction = useRef<"send" | "cashout" | null>(null);
+  const spentNoteId = useRef<string | null>(null);
+  const pendingChange = useRef<LocalNote | null>(null);
+  const pendingPayment = useRef<LocalNote | null>(null);
+  const leafBase = useRef<number>(0);
 
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
     handledHash.current = hash;
-    if (unshieldNoteId.current) {
-      updateLocalNote(unshieldNoteId.current, { status: "recovered" });
+
+    if (spentNoteId.current) {
+      updateLocalNote(spentNoteId.current, { status: "recovered" });
+    }
+    if (pendingPayment.current) {
+      saveLocalNote({
+        ...pendingPayment.current,
+        txHash: hash,
+        leafIndex: leafBase.current,
+      });
+      pendingPayment.current = null;
+    }
+    if (pendingChange.current) {
+      saveLocalNote({
+        ...pendingChange.current,
+        txHash: hash,
+        leafIndex: leafBase.current + 1,
+      });
+      pendingChange.current = null;
     }
     refreshNotes();
     void refreshTree();
     setShowSuccess(true);
+    setBusy(false);
   }, [isSuccess, hash, refreshNotes, refreshTree]);
 
-  const boundNotes = useMemo(
+  const notes = useMemo(
     () =>
       open.filter(
         (n) =>
@@ -106,74 +128,32 @@ export function MoveView() {
           n.secret &&
           n.secret !== "0x" &&
           n.leafIndex != null &&
-          (!poseidonMode || n.scheme === "poseidon")
+          (!poseidonMode || n.scheme === "poseidon" || !n.scheme)
       ),
     [open, poseidonMode]
   );
 
   const selected =
-    boundNotes.find((n) => n.id === selectedId) ?? boundNotes[0] ?? null;
+    notes.find((n) => n.id === selectedId) ?? notes[0] ?? null;
 
-  async function onBuildWitness() {
-    if (!selected || !address || selected.leafIndex == null) return;
-    setProveError(null);
-    const path = await pathForLeaf(selected.leafIndex);
-    if (!path) {
-      setLastWitness(null);
-      setWitnessLog(
-        "No Merkle path — wait for tree sync or refresh. Leaf may be missing."
-      );
-      return;
-    }
+  const maxEth = selected
+    ? formatEther(BigInt(selected.amountWei))
+    : "0";
 
-    if (poseidonMode) {
-      const pp = path as PoseidonMerklePath;
-      const w = await buildPoseidonUnshieldWitness({
-        secretHex: selected.secret,
-        amount: BigInt(selected.amountWei),
-        asset: selected.asset,
-        to: address,
-        path: pp,
-      });
-      setLastWitness(null);
-      setWitnessLog(
-        [
-          `scheme poseidon`,
-          `root ${w.publicInputs.root.toString().slice(0, 20)}…`,
-          `nullifier ${w.publicInputs.nullifier.toString().slice(0, 20)}…`,
-          `amount ${w.publicInputs.amount.toString()}`,
-          `commitment ok: ${w.checks.commitmentMatches}`,
-          w.blocker ?? "ok",
-        ].join("\n")
-      );
-      // stash for prove
-      (window as unknown as { __gloamPoseidonWitness?: typeof w }).__gloamPoseidonWitness =
-        w;
-      return;
-    }
-
-    const w = buildUnshieldWitness({
-      secret: selected.secret,
-      amount: BigInt(selected.amountWei),
-      asset: selected.asset,
-      to: address,
-      path: path as import("@/lib/merkle").MerklePath,
-      root: (path as import("@/lib/merkle").MerklePath).root,
-    });
-    setLastWitness(w);
-    setWitnessLog(formatWitnessSummary(w));
-  }
-
-  async function onUnshield() {
+  async function onCashOut() {
     if (!selected || !address || !SHIELD_POOL_ADDRESS || !poseidonMode) return;
-    setProveError(null);
-    setProving(true);
+    setError(null);
+    setBusy(true);
     reset();
     handledHash.current = null;
+    pendingAction.current = "cashout";
+    spentNoteId.current = selected.id;
+    pendingChange.current = null;
 
     try {
       const path = await pathForLeaf(selected.leafIndex!);
-      if (!path) throw new Error("No Merkle path — resync tree.");
+      if (!path) throw new Error("Could not build path — resync the tree.");
+      setStatus("Building proof… this can take 10–30 seconds.");
       const w = await buildPoseidonUnshieldWitness({
         secretHex: selected.secret,
         amount: BigInt(selected.amountWei),
@@ -182,13 +162,10 @@ export function MoveView() {
         path: path as PoseidonMerklePath,
       });
       if (!w.checks.commitmentMatches) {
-        throw new Error(w.blocker ?? "Note does not open");
+        throw new Error(w.blocker ?? "Note does not match");
       }
-
-      setWitnessLog("Proving in browser (may take ~10–30s)…");
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
-
-      unshieldNoteId.current = selected.id;
+      setStatus("Confirm cash out in your wallet…");
       writeContract({
         address: SHIELD_POOL_ADDRESS,
         abi: shieldPoolAbi,
@@ -202,33 +179,179 @@ export function MoveView() {
           BigInt(selected.amountWei),
         ],
         gas: SHIELD_GAS_LIMIT,
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: CHAIN,
       });
-      setWitnessLog("Proof ready — confirm unshield in wallet…");
+      setSuccessTitle("Cashed out");
     } catch (e) {
-      setProveError(e instanceof Error ? e.message : "Prove/unshield failed");
-      setWitnessLog(null);
-    } finally {
-      setProving(false);
+      setError(e instanceof Error ? e.message : "Cash out failed");
+      setBusy(false);
+      setStatus(null);
     }
   }
 
-  const canUnshield =
-    poseidonMode &&
-    isConnected &&
-    onProduct &&
-    selected &&
-    matchesChain &&
-    !proving &&
-    !isPending &&
-    !confirming;
+  async function onPrivateSend() {
+    if (!selected || !address || !SHIELD_POOL_ADDRESS || !poseidonMode) return;
+    setError(null);
+    setShareBlob(null);
+    setBusy(true);
+    reset();
+    handledHash.current = null;
+    pendingAction.current = "send";
+    spentNoteId.current = selected.id;
+
+    try {
+      const amountPay = safeParseEther(sendAmount);
+      if (amountPay === null || amountPay <= 0n) {
+        throw new Error("Enter a valid amount to send.");
+      }
+      if (amountPay > BigInt(selected.amountWei)) {
+        throw new Error("Amount is larger than this note.");
+      }
+
+      const path = await pathForLeaf(selected.leafIndex!);
+      if (!path) throw new Error("Could not build path — resync the tree.");
+
+      setStatus("Building private send proof…");
+      const w = await buildTransferWitness({
+        secretHex: selected.secret,
+        amountIn: BigInt(selected.amountWei),
+        amountPay,
+        asset: selected.asset,
+        path: path as PoseidonMerklePath,
+      });
+      if (w.blocker) throw new Error(w.blocker);
+
+      const { proofBytes } = await proveTransferInBrowser(w.circomInput);
+
+      leafBase.current = leafCount;
+
+      // Payment note (recipient package) + change for sender
+      pendingPayment.current = {
+        id: `pay-${Date.now()}`,
+        chainId: CHAIN,
+        pool: SHIELD_POOL_ADDRESS,
+        asset: selected.asset,
+        amountWei: w.paymentNote.amountWei,
+        commitment: w.paymentNote.commitment,
+        secret: w.paymentNote.secret,
+        bound: true,
+        scheme: "poseidon",
+        from: address,
+        createdAt: Date.now(),
+        status: "open",
+        source: "local",
+      };
+      pendingChange.current =
+        BigInt(w.changeNote.amountWei) > 0n
+          ? {
+              id: `chg-${Date.now()}`,
+              chainId: CHAIN,
+              pool: SHIELD_POOL_ADDRESS,
+              asset: selected.asset,
+              amountWei: w.changeNote.amountWei,
+              commitment: w.changeNote.commitment,
+              secret: w.changeNote.secret,
+              bound: true,
+              scheme: "poseidon",
+              from: address,
+              createdAt: Date.now(),
+              status: "open",
+              source: "local",
+            }
+          : null;
+
+      // Share package for recipient (they import it)
+      const pack = {
+        v: 1,
+        type: "gloam-private-note",
+        scheme: "poseidon",
+        pool: SHIELD_POOL_ADDRESS,
+        asset: w.paymentNote.asset,
+        amountWei: w.paymentNote.amountWei,
+        secret: w.paymentNote.secret,
+        commitment: w.paymentNote.commitment,
+        message: "Import this in Gloam → Move → Import note. Keep secret.",
+      };
+      setShareBlob(JSON.stringify(pack, null, 2));
+
+      setStatus("Confirm private send in your wallet…");
+      writeContract({
+        address: SHIELD_POOL_ADDRESS,
+        abi: shieldPoolAbi,
+        functionName: "transfer",
+        args: [
+          proofBytes,
+          fieldToBytes32(w.publicInputs.root),
+          fieldToBytes32(w.publicInputs.nullifier),
+          [
+            fieldToBytes32(w.publicInputs.newCommitment0),
+            fieldToBytes32(w.publicInputs.newCommitment1),
+          ],
+        ],
+        gas: SHIELD_GAS_LIMIT,
+        chainId: CHAIN,
+      });
+      setSuccessTitle("Private send submitted");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Private send failed");
+      setBusy(false);
+      setStatus(null);
+    }
+  }
+
+  function onImportNote() {
+    setError(null);
+    try {
+      const pack = JSON.parse(importText) as {
+        type?: string;
+        secret?: string;
+        commitment?: string;
+        amountWei?: string;
+        asset?: string;
+        pool?: string;
+        scheme?: string;
+      };
+      if (pack.type !== "gloam-private-note" || !pack.secret || !pack.amountWei) {
+        throw new Error("Not a valid Gloam note package.");
+      }
+      if (!SHIELD_POOL_ADDRESS || !address) {
+        throw new Error("Connect wallet first.");
+      }
+      const note: LocalNote = {
+        id: `imp-${Date.now()}`,
+        chainId: CHAIN,
+        pool: (pack.pool as `0x${string}`) || SHIELD_POOL_ADDRESS,
+        asset: (pack.asset as `0x${string}`) || ("0x0000000000000000000000000000000000000000" as const),
+        amountWei: pack.amountWei,
+        commitment: (pack.commitment || "0x") as `0x${string}`,
+        secret: pack.secret as `0x${string}`,
+        bound: true,
+        scheme: "poseidon",
+        from: address,
+        createdAt: Date.now(),
+        status: "open",
+        source: "local",
+        // leafIndex filled after resync by matching commitment — user may need resync
+      };
+      saveLocalNote(note);
+      refreshNotes();
+      setImportText("");
+      setStatus(
+        "Note imported. Resync the tree; after the sender’s tx confirms, you can cash out or send again."
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    }
+  }
+
+  const working = busy || isPending || confirming;
 
   return (
     <>
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-7">
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="relative h-40 border-b border-line">
+            <div className="relative h-36 border-b border-line sm:h-40">
               <AsciiImage
                 src="/ascii/move.png"
                 alt=""
@@ -239,244 +362,338 @@ export function MoveView() {
               <div className="absolute inset-0 bg-gradient-to-t from-panel via-panel/80 to-transparent" />
               <div className="absolute bottom-4 left-5">
                 <StatusPill tone={poseidonMode ? "lime" : "warn"}>
-                  {poseidonMode ? "Poseidon · unshield" : "Proofs not live"}
+                  {poseidonMode ? "Vault actions" : "Not on Poseidon pool"}
                 </StatusPill>
                 <p className="mt-2 font-display text-2xl text-foreground">
-                  {poseidonMode ? "Unshield" : "Private move"}
+                  Move
                 </p>
               </div>
             </div>
-            <div className="space-y-4 p-6">
+
+            <div className="space-y-5 p-5 sm:p-6">
               <p className="text-sm leading-relaxed text-mute">
-                {poseidonMode
-                  ? "Prove you own a note and exit to your wallet. Uses the real Poseidon circuit in the browser."
-                  : "Live pool is still keccak Phase-1. Deploy Poseidon pool + set NEXT_PUBLIC_POSEIDON_SHIELD_POOL to unlock unshield."}
+                Money stays in the Gloam vault.{" "}
+                <strong className="text-foreground">Private send</strong> creates
+                a payment ticket for someone else.{" "}
+                <strong className="text-foreground">Cash out</strong> returns
+                funds to your open wallet (that step is public).
               </p>
 
+              {/* Mode tabs */}
+              <div className="flex gap-1 rounded-lg border border-line p-1">
+                {(
+                  [
+                    ["send", "Private send"],
+                    ["cashout", "Cash out"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setMode(id);
+                      setError(null);
+                      setStatus(null);
+                    }}
+                    className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
+                      mode === id
+                        ? "bg-lime text-black"
+                        : "text-mute hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tree status */}
               <div className="rounded-xl border border-line bg-background px-4 py-3 text-sm">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                  Merkle tree · {scheme ?? HASH_SCHEME}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                    Vault tree
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void refreshTree()}
+                    className="text-xs text-lime hover:underline"
+                  >
+                    {treeLoading ? "Syncing…" : "Refresh"}
+                  </button>
+                </div>
+                <p className="mt-2 text-mute">
+                  Notes in vault:{" "}
+                  <span className="text-foreground">
+                    {treeLoading ? "…" : leafCount}
+                  </span>
+                  {" · "}
+                  Match:{" "}
+                  <span className="text-foreground">
+                    {matchesChain == null
+                      ? "…"
+                      : matchesChain
+                        ? "Yes"
+                        : "No"}
+                  </span>
                 </p>
-                <dl className="mt-2 space-y-1 text-mute">
-                  <div className="flex justify-between gap-2">
-                    <dt>Leaves</dt>
-                    <dd className="text-foreground">
-                      {treeLoading ? "…" : leafCount}
-                    </dd>
+                {treeError && (
+                  <p className="mt-1 text-xs text-red-500">{treeError}</p>
+                )}
+              </div>
+
+              {!poseidonMode && (
+                <p className="text-sm text-amber-600 dark:text-amber-500">
+                  App is not on the Poseidon vault. Check env defaults.
+                </p>
+              )}
+
+              {shieldLive && notes.length > 0 ? (
+                <>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Your vault notes
+                    </p>
+                    <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
+                      {notes.map((n) => (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedId(n.id)}
+                            className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm ${
+                              selected?.id === n.id
+                                ? "bg-lime/10 text-foreground"
+                                : "text-mute hover:text-foreground"
+                            }`}
+                          >
+                            <span>
+                              {isNativeAsset(n.asset)
+                                ? formatEth(BigInt(n.amountWei))
+                                : formatUnits(BigInt(n.amountWei), 18)}{" "}
+                              {assetLabel(n.asset)}
+                            </span>
+                            <span className="font-mono text-[10px]">
+                              #{n.leafIndex ?? "?"}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <div className="flex justify-between gap-2">
-                    <dt>Matches pool</dt>
-                    <dd className="text-foreground">
-                      {matchesChain == null
-                        ? "…"
-                        : matchesChain
-                          ? "Yes"
-                          : "No"}
-                    </dd>
-                  </div>
-                  {root && (
-                    <div className="flex justify-between gap-2">
-                      <dt>Root</dt>
-                      <dd className="font-mono text-[11px] text-foreground">
-                        {shortAddress(root, 6)}
-                      </dd>
+
+                  {mode === "send" && (
+                    <div className="space-y-3">
+                      <div>
+                        <label
+                          htmlFor="pay-amt"
+                          className="text-sm font-medium text-foreground"
+                        >
+                          Amount to send (stays in vault)
+                        </label>
+                        <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
+                          <input
+                            id="pay-amt"
+                            inputMode="decimal"
+                            value={sendAmount}
+                            onChange={(e) =>
+                              setSendAmount(
+                                e.target.value.replace(/[^0-9.]/g, "")
+                              )
+                            }
+                            placeholder="0.0"
+                            className="min-h-12 flex-1 bg-transparent px-4 text-lg outline-none"
+                          />
+                          <button
+                            type="button"
+                            className="border-l border-line px-3 text-xs text-lime"
+                            onClick={() => setSendAmount(maxEth)}
+                          >
+                            Max
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-mute">
+                          Rest of the note stays with you as change.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={
+                          !isConnected ||
+                          !onProduct ||
+                          !selected ||
+                          !matchesChain ||
+                          working
+                        }
+                        onClick={() => void onPrivateSend()}
+                        className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                      >
+                        {working && pendingAction.current === "send"
+                          ? status || "Working…"
+                          : "Private send"}
+                      </button>
+                      {shareBlob && (
+                        <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
+                          <p className="text-sm font-medium text-foreground">
+                            Share this with the recipient only
+                          </p>
+                          <p className="mt-1 text-xs text-mute">
+                            They import it under Move → Import note. Anyone with
+                            this text can cash out that amount.
+                          </p>
+                          <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-line bg-panel p-3 font-mono text-[10px] text-mute">
+                            {shareBlob}
+                          </pre>
+                          <button
+                            type="button"
+                            className="mt-2 text-xs text-lime hover:underline"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(shareBlob);
+                              setStatus("Copied to clipboard.");
+                            }}
+                          >
+                            Copy package
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
-                </dl>
-                {treeError && (
-                  <p className="mt-2 text-xs text-red-500">{treeError}</p>
-                )}
+
+                  {mode === "cashout" && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-mute">
+                        Withdraw the full selected note to your connected
+                        wallet. This exit is visible on the explorer.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={
+                          !isConnected ||
+                          !onProduct ||
+                          !selected ||
+                          !matchesChain ||
+                          working
+                        }
+                        onClick={() => void onCashOut()}
+                        className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                      >
+                        {working && pendingAction.current === "cashout"
+                          ? status || "Working…"
+                          : "Cash out to wallet"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-xl border border-line bg-background p-4 text-sm text-mute">
+                  <p className="text-foreground">No vault notes yet.</p>
+                  <p className="mt-1">
+                    <Link href="/app/shield" className="text-lime hover:underline">
+                      Shield
+                    </Link>{" "}
+                    first, or import a note someone sent you.
+                  </p>
+                </div>
+              )}
+
+              {/* Import */}
+              <div className="rounded-xl border border-line bg-background p-4">
+                <p className="text-sm font-medium text-foreground">
+                  Import a private note
+                </p>
+                <p className="mt-1 text-xs text-mute">
+                  Paste the package from a private send.
+                </p>
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows={4}
+                  className="mt-2 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
+                  placeholder='{ "type": "gloam-private-note", ... }'
+                />
                 <button
                   type="button"
-                  onClick={() => void refreshTree()}
-                  disabled={treeLoading}
-                  className="mt-3 inline-flex min-h-9 items-center rounded-lg border border-line px-3 text-xs text-foreground hover:border-lime/40 disabled:opacity-50"
+                  onClick={onImportNote}
+                  className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-line px-4 text-sm text-foreground hover:border-lime/40"
                 >
-                  {treeLoading ? "Syncing…" : "Resync tree"}
+                  Import
                 </button>
               </div>
 
-              {shieldLive && boundNotes.length > 0 ? (
-                <div className="rounded-xl border border-line bg-background px-4 py-3 text-sm">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                    Bound notes
-                  </p>
-                  <ul className="mt-2 divide-y divide-line">
-                    {boundNotes.map((n) => (
-                      <li key={n.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedId(n.id);
-                            setWitnessLog(null);
-                            setProveError(null);
-                          }}
-                          className={`flex w-full items-center justify-between gap-2 py-2.5 text-left ${
-                            selected?.id === n.id
-                              ? "text-lime"
-                              : "text-foreground"
-                          }`}
-                        >
-                          <span>
-                            {isNativeAsset(n.asset)
-                              ? formatEth(BigInt(n.amountWei))
-                              : formatUnits(BigInt(n.amountWei), 18)}{" "}
-                            {assetLabel(n.asset)}
-                            <span className="ml-2 font-mono text-[10px] text-mute">
-                              leaf #{n.leafIndex}
-                            </span>
-                          </span>
-                          {selected?.id === n.id && (
-                            <span className="text-[10px] text-lime">
-                              selected
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => void onBuildWitness()}
-                      disabled={!selected || !matchesChain}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-foreground hover:bg-lime/10 disabled:opacity-50"
-                    >
-                      Build witness
-                    </button>
-                    {poseidonMode ? (
-                      <button
-                        type="button"
-                        onClick={() => void onUnshield()}
-                        disabled={!canUnshield}
-                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
-                      >
-                        {proving
-                          ? "Proving…"
-                          : isPending
-                            ? "Confirm in wallet…"
-                            : confirming
-                              ? "Unshielding…"
-                              : "Prove & unshield"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          lastWitness && downloadWitnessJson(lastWitness)
-                        }
-                        disabled={
-                          !lastWitness?.checks.pathValid ||
-                          !lastWitness.checks.commitmentMatches
-                        }
-                        className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-line px-4 text-sm text-foreground hover:border-lime/40 disabled:opacity-50"
-                      >
-                        Download JSON
-                      </button>
-                    )}
-                  </div>
-
-                  {witnessLog && (
-                    <pre className="mt-3 overflow-x-auto rounded-lg border border-line bg-panel p-3 font-mono text-[10px] leading-relaxed text-mute">
-                      {witnessLog}
-                    </pre>
-                  )}
-                  {(proveError || writeError) && (
-                    <p role="alert" className="mt-2 text-sm text-red-500">
-                      {proveError || writeError?.message.slice(0, 200)}
-                    </p>
-                  )}
-                  {hash && !isSuccess && (
-                    <p className="mt-2 text-sm text-mute">
-                      Submitted…{" "}
-                      <a
-                        href={EXPLORER_TX(hash)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-lime hover:underline"
-                      >
-                        View tx
-                      </a>
-                    </p>
-                  )}
-                  <p className="mt-2 text-xs text-mute">
-                    Layout v{PROOF_LAYOUT_VERSION}
-                    {poseidonMode
-                      ? " · browser snark (dev keys)"
-                      : " · deploy Poseidon pool to unshield"}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-line bg-background px-4 py-3 text-sm text-mute">
-                  <p className="text-foreground">No bound notes ready.</p>
-                  <p className="mt-1">
-                    {poseidonMode
-                      ? "Shield on this pool with Poseidon notes first."
-                      : "Shield a bound note, or switch to Poseidon pool after deploy."}
-                  </p>
-                  {shieldLive && (
-                    <Link
-                      href="/app/shield"
-                      className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-lime px-4 text-sm font-semibold text-black"
-                    >
-                      Open shield
-                    </Link>
-                  )}
-                </div>
+              {(error || writeError) && (
+                <p role="alert" className="text-sm text-red-500">
+                  {error || writeError?.message.slice(0, 200)}
+                </p>
+              )}
+              {status && !error && (
+                <p className="text-sm text-mute">{status}</p>
+              )}
+              {hash && !isSuccess && (
+                <p className="text-sm text-mute">
+                  Submitted…{" "}
+                  <a
+                    href={EXPLORER_TX(hash)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-lime hover:underline"
+                  >
+                    View tx
+                  </a>
+                </p>
               )}
             </div>
           </div>
         </div>
 
         <aside className="space-y-4 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Pipeline
+          <div className="rounded-xl border border-line bg-panel p-5 text-sm">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+              Does it show on the explorer?
             </p>
-            <ul className="mt-3 space-y-2 text-foreground">
+            <ul className="mt-3 space-y-2 text-mute">
               <li>
-                <span className="text-lime">●</span> Poseidon circuit
+                <strong className="text-foreground">Shield / cash out</strong> —
+                yes, those edges are public.
               </li>
               <li>
-                <span className="text-lime">●</span> Solidity verifier
+                <strong className="text-foreground">Private send</strong> — the
+                chain sees a transfer proof, not “Alice paid Bob 0.01 ETH”.
               </li>
               <li>
-                <span className={poseidonMode ? "text-lime" : "text-mute"}>
-                  {poseidonMode ? "●" : "○"}
-                </span>{" "}
-                Poseidon pool {poseidonMode ? "active" : "pending deploy"}
-              </li>
-              <li>
-                <span className={poseidonMode ? "text-lime" : "text-mute"}>
-                  {poseidonMode ? "●" : "○"}
-                </span>{" "}
-                Unshield in app
+                Nothing is fully invisible; privacy is about what is hidden, not
+                erasing the chain.
               </li>
             </ul>
           </div>
           <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="text-foreground">
-              {poseidonMode
-                ? "You are on the Poseidon pool. Dev ceremony keys — not mainnet."
-                : "Keccak live pool remains separate. After deploy-phase2.mjs, set NEXT_PUBLIC_POSEIDON_SHIELD_POOL and NEXT_PUBLIC_HASH_SCHEME=poseidon."}
-            </p>
+            <p className="text-foreground">Need a note first?</p>
+            <Link
+              href="/app/shield"
+              className="mt-2 inline-flex min-h-10 items-center text-lime hover:underline"
+            >
+              Shield assets →
+            </Link>
           </div>
         </aside>
       </div>
 
       <SuccessModal
         open={showSuccess && Boolean(hash)}
-        title="Unshielded"
+        title={successTitle}
         body={
-          <p>
-            Funds returned to your wallet. Note marked recovered in this browser.
-          </p>
+          pendingAction.current === "send" ? (
+            <p>
+              Payment note is ready to share. Your change (if any) is saved in
+              this browser.
+            </p>
+          ) : (
+            <p>Funds should be back in your open wallet.</p>
+          )
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
-        onClose={() => setShowSuccess(false)}
+        onClose={() => {
+          setShowSuccess(false);
+          setStatus(null);
+        }}
       />
     </>
   );

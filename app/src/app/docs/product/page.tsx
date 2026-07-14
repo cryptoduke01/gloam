@@ -57,9 +57,9 @@ export default function DocsProductPage() {
             body: "Prove and withdraw with a real browser proof.",
           },
           {
-            n: "○",
+            n: "●",
             title: "Private send",
-            body: "Move value between notes without a public recipient graph.",
+            body: "Split a vault note into payment + change with a real proof (deploy dual verifier once).",
           },
           {
             n: "○",

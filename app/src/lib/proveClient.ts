@@ -15,10 +15,12 @@ export type Groth16Proof = {
   pi_c: string[];
 };
 
-const WASM_URL = "/circuits/unshield.wasm";
-const ZKEY_URL = "/circuits/unshield_final.zkey";
+const UNSHIELD_WASM = "/circuits/unshield.wasm";
+const UNSHIELD_ZKEY = "/circuits/unshield_final.zkey";
+const TRANSFER_WASM = "/circuits/transfer.wasm";
+const TRANSFER_ZKEY = "/circuits/transfer_final.zkey";
 
-/** Pack proof for UnshieldIVerifier: abi.encode(a, b, c) with G2 swap */
+/** Pack proof for IVerifier adapters: abi.encode(a, b, c) with G2 swap */
 export function packGroth16Proof(proof: Groth16Proof): Hex {
   const a: [bigint, bigint] = [BigInt(proof.pi_a[0]!), BigInt(proof.pi_a[1]!)];
   // Solidity expects G2 coords swapped vs snarkjs JSON
@@ -33,22 +35,34 @@ export function packGroth16Proof(proof: Groth16Proof): Hex {
   );
 }
 
-export async function proveUnshieldInBrowser(
-  circomInput: Record<string, string | string[]>
+async function fullProve(
+  circomInput: Record<string, string | string[]>,
+  wasm: string,
+  zkey: string
 ): Promise<{ proofBytes: Hex; publicSignals: string[]; proof: Groth16Proof }> {
-  // dynamic import — snarkjs is heavy
   const snarkjs = await import("snarkjs");
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     circomInput,
-    WASM_URL,
-    ZKEY_URL
+    wasm,
+    zkey
   );
-  const proofBytes = packGroth16Proof(proof as Groth16Proof);
   return {
-    proofBytes,
+    proofBytes: packGroth16Proof(proof as Groth16Proof),
     publicSignals: publicSignals as string[],
     proof: proof as Groth16Proof,
   };
+}
+
+export async function proveUnshieldInBrowser(
+  circomInput: Record<string, string | string[]>
+) {
+  return fullProve(circomInput, UNSHIELD_WASM, UNSHIELD_ZKEY);
+}
+
+export async function proveTransferInBrowser(
+  circomInput: Record<string, string | string[]>
+) {
+  return fullProve(circomInput, TRANSFER_WASM, TRANSFER_ZKEY);
 }
 
 export function fieldToBytes32(field: bigint | string): Hex {
