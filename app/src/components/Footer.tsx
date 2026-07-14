@@ -46,7 +46,7 @@ export function Footer() {
                 className="h-10 w-10 rounded-sm"
               />
               <div>
-                <p className="font-display text-2xl tracking-tight text-white">
+                <p className="text-xl font-semibold tracking-tight text-white">
                   Gloam
                 </p>
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-lime">

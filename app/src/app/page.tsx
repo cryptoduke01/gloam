@@ -8,14 +8,17 @@ const problems = [
   {
     title: "Public by default",
     body: "Every swap is a signal. Bots and copy traders read your book as it happens.",
+    src: "/ascii/IMG_1478.PNG",
   },
   {
     title: "Size gets farmed",
     body: "Show real size on a transparent AMM and the market prices you before settlement.",
+    src: "/ascii/IMG_1477.JPG",
   },
   {
     title: "No serious venue",
     body: "Retail apps list stock tokens. They will not ship private balances or private flow.",
+    src: "/ascii/shield.png",
   },
 ];
 
@@ -25,21 +28,18 @@ const steps = [
     title: "Shield",
     body: "Park assets in a shielded balance so the public graph stops tracking what you hold.",
     src: "/ascii/shield.png",
-    tone: "lime" as const,
   },
   {
     n: "02",
     title: "Move",
     body: "Send between shielded parties without publishing sender, size, and timing on the open tape.",
     src: "/ascii/move.png",
-    tone: "lime" as const,
   },
   {
     n: "03",
     title: "Trade",
     body: "Execute without showing your full hand. Stock tokens first on Robinhood Chain. Liquid markets next.",
     src: "/ascii/trade.png",
-    tone: "lime" as const,
   },
 ];
 
@@ -49,22 +49,19 @@ export default function Home() {
       <Header />
       <main className="flex-1">
         <section className="relative overflow-hidden border-b border-line">
-          <div className="pointer-events-none absolute inset-0">
-            <div className="ascii-fade absolute inset-0 opacity-50">
-              <AsciiImage
-                src="/ascii/IMG_1476.PNG"
-                alt=""
-                tone="paper"
-                priority
-                className="h-full min-h-[560px] w-full"
-                sizes="100vw"
-              />
-            </div>
-            <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/92 to-ink/55" />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/30 to-ink/70" />
+          <div className="pointer-events-none absolute inset-0 opacity-30">
+            <AsciiImage
+              src="/ascii/hero.png"
+              alt=""
+              priority
+              className="h-full min-h-[560px] w-full"
+              sizes="100vw"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/90 to-ink/50" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/50" />
           </div>
 
-          <div className="relative mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-12 lg:py-28">
+          <div className="relative mx-auto grid max-w-6xl gap-10 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-12 lg:items-center lg:py-28">
             <div className="lg:col-span-7">
               <p className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-lime">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-lime" />
@@ -94,27 +91,17 @@ export default function Home() {
                   Read the docs
                 </a>
               </div>
-              <ul className="mt-10 flex flex-wrap gap-2">
-                {["Shield", "Transfer", "Trade"].map((chip) => (
-                  <li
-                    key={chip}
-                    className="rounded-md border border-line bg-panel px-3 py-1.5 font-mono text-xs text-mute"
-                  >
-                    {chip}
-                  </li>
-                ))}
-              </ul>
             </div>
 
             <div className="lg:col-span-5">
-              <div className="relative aspect-[4/5] overflow-hidden rounded-lg border border-line bg-panel shadow-[0_0_60px_rgba(200,255,0,0.04)]">
+              <div className="relative aspect-square overflow-hidden rounded-lg border border-line bg-ink sm:aspect-[4/5]">
                 <AsciiImage
                   src="/ascii/IMG_1476.PNG"
-                  alt="Blind justice mark for private money"
-                  tone="paper"
+                  alt="Blind justice"
                   className="h-full w-full"
                   sizes="(max-width: 1024px) 100vw, 40vw"
                   priority
+                  fit="cover"
                 />
               </div>
             </div>
@@ -147,22 +134,15 @@ export default function Home() {
               not want a live feed of your intent.
             </p>
             <div className="mt-12 grid gap-4 md:grid-cols-3">
-              {problems.map((p, i) => (
+              {problems.map((p) => (
                 <article
                   key={p.title}
                   className="overflow-hidden rounded-lg border border-line bg-panel"
                 >
-                  <div className="relative h-36 border-b border-line">
+                  <div className="relative aspect-[4/3] w-full border-b border-line">
                     <AsciiImage
-                      src={
-                        i === 0
-                          ? "/ascii/IMG_1478.PNG"
-                          : i === 1
-                            ? "/ascii/IMG_1477.JPG"
-                            : "/ascii/neutral.png"
-                      }
+                      src={p.src}
                       alt=""
-                      tone={i < 2 ? "paper" : "white"}
                       className="h-full w-full"
                       sizes="33vw"
                     />
@@ -204,11 +184,10 @@ export default function Home() {
                       {s.body}
                     </p>
                   </div>
-                  <div className="relative aspect-[16/10] overflow-hidden rounded-lg border border-line bg-panel">
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-lg border border-line bg-ink">
                     <AsciiImage
                       src={s.src}
                       alt={`${s.title} illustration`}
-                      tone={s.tone}
                       className="h-full w-full"
                       sizes="(max-width: 1024px) 100vw, 50vw"
                     />
@@ -249,15 +228,14 @@ export default function Home() {
                 </li>
               </ul>
             </div>
-            <div className="relative aspect-[16/11] overflow-hidden rounded-lg border border-line">
+            <div className="relative aspect-[16/11] overflow-hidden rounded-lg border border-line bg-ink">
               <AsciiImage
-                src="/ascii/IMG_1475.JPG"
-                alt=""
-                tone="paper"
+                src="/ascii/rim.png"
+                alt="Coin rim"
                 className="h-full w-full"
                 sizes="50vw"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-transparent" />
               <p className="absolute bottom-5 left-5 right-5 font-display text-xl text-white sm:text-2xl">
                 Private by construction. Public only when you exit.
               </p>
@@ -302,13 +280,8 @@ export default function Home() {
             src="/ascii/optional-bleed.png"
             alt=""
             fill
-            className="ascii-base object-cover"
+            className="object-cover object-center"
             sizes="100vw"
-          />
-          <div
-            className="pointer-events-none absolute inset-0 mix-blend-multiply"
-            style={{ backgroundColor: "#c8ff00", opacity: 0.5 }}
-            aria-hidden
           />
           <div className="absolute inset-0 bg-gradient-to-b from-ink via-transparent to-ink" />
         </section>

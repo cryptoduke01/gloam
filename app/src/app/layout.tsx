@@ -13,7 +13,7 @@ const instrument = Instrument_Serif({
 
 export const metadata: Metadata = {
   title: {
-    default: "Gloam — Private money on Robinhood Chain",
+    default: "Gloam. Private money on Robinhood Chain",
     template: "%s · Gloam",
   },
   description:
@@ -28,9 +28,9 @@ export const metadata: Metadata = {
     apple: "/brand/logo.png",
   },
   openGraph: {
-    title: "Gloam — Private money on Robinhood Chain",
+    title: "Gloam. Private money on Robinhood Chain",
     description:
-      "Trade and move money privately onchain. Built for Robinhood Chain.",
+      "Trade and move money privately onchain on Robinhood Chain.",
     url: "https://gloam.trade",
     siteName: "Gloam",
     type: "website",
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     site: "@gloamtrade",
-    title: "Gloam",
+    title: "Gloam. Private money on Robinhood Chain",
     description: "Private money on Robinhood Chain.",
   },
   robots: { index: true, follow: true },

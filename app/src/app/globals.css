@@ -49,25 +49,6 @@ body {
   font-family: var(--font-instrument), ui-serif, Georgia, serif;
 }
 
-/* Dark ASCII plates: pure mono before multiply overlay */
-.ascii-base {
-  filter: grayscale(1) contrast(1.08) brightness(1.08);
-}
-
-.ascii-white {
-  filter: grayscale(1) contrast(1.06) brightness(1.05);
-}
-
-.ascii-fade {
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    black 10%,
-    black 80%,
-    transparent 100%
-  );
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
