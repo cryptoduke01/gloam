@@ -406,7 +406,10 @@ export function ShieldView() {
       return;
     }
 
-    const { secret, commitment } = makeNoteMaterial();
+    const { secret, commitment, nullifier } = makeNoteMaterial(
+      value,
+      assetAddress
+    );
     const note: LocalNote = {
       id: `${Date.now()}-${commitment.slice(0, 10)}`,
       chainId: PRODUCT_CHAIN_ID,
@@ -415,6 +418,8 @@ export function ShieldView() {
       amountWei: value.toString(),
       commitment,
       secret,
+      nullifier,
+      bound: true,
       from: address,
       createdAt: Date.now(),
       status: "open",
@@ -768,8 +773,13 @@ export function ShieldView() {
                         {n.leafIndex != null
                           ? `leaf #${n.leafIndex}`
                           : "leaf —"}{" "}
-                        · {n.source === "chain" ? "on-chain" : "local"} ·{" "}
-                        {shortAddress(n.commitment, 4)}
+                        ·{" "}
+                        {n.bound
+                          ? "bound"
+                          : n.source === "chain"
+                            ? "on-chain"
+                            : "local"}{" "}
+                        · {shortAddress(n.commitment, 4)}
                       </p>
                     </div>
                     {n.txHash && (

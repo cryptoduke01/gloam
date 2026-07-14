@@ -13,17 +13,15 @@ interface IERC20 {
 
 /**
  * @title ShieldPool
- * @notice Phase-1 shielded pool: real custody + Merkle commitments. ZK transfer/unshield need verifier.
+ * @notice Shielded pool: custody + Merkle commitments + proof-gated transfer/unshield.
  * @dev Testnet only. Not audited. Do not use with mainnet funds.
  *
- * Phase 1 (this file):
- *  - shield() pulls ETH/ERC-20 into the pool and inserts commitment into Merkle tree
- *  - tracks deposited[asset]
- *  - transfer/unshield require IVerifier (private path)
+ * Phase 1 (live RH testnet 0x2BD9…): custody + tree; verifier address(0).
+ * Phase 2 (this source): unshield/transfer public inputs bind asset, amount, recipient.
+ *         Redeploy when a real verifier is ready — do not set a mock always-true verifier
+ *         on a funded pool.
  *
- * Phase 2:
- *  - real circuit public inputs (asset, amount inside note)
- *  - Poseidon hash for circuit-friendly tree
+ * Note scheme: see NoteLib (commitment binds secret, amount, asset).
  */
 contract ShieldPool is IShieldPool {
     using IMT for IMT.Tree;
@@ -35,6 +33,9 @@ contract ShieldPool is IShieldPool {
     mapping(address => uint256) public override deposited;
 
     address public owner;
+
+    /// @notice Bumped when proof public-input layout changes (app/circuits pin this).
+    uint256 public constant PROOF_LAYOUT_VERSION = 2;
 
     error NotOwner();
     error ZeroCommitment();
@@ -55,9 +56,8 @@ contract ShieldPool is IShieldPool {
     }
 
     /**
-     * @param verifier_ Real verifier only. Prefer address(0) on first testnet deploy
-     *        so transfer/unshield stay locked. Never set a mock that always returns true
-     *        on a pool that holds value — it can be drained.
+     * @param verifier_ Real verifier only. Prefer address(0) until circuits are ready.
+     *        Never set a mock that always returns true on a pool that holds value.
      */
     constructor(address verifier_) {
         owner = msg.sender;
@@ -80,7 +80,6 @@ contract ShieldPool is IShieldPool {
 
     /**
      * @notice Testnet recovery only. Pull assets out if verifier path is not ready.
-     * @dev Remove or renounce ownership before any mainnet-style trust assumptions.
      */
     function emergencyWithdraw(
         address asset,
@@ -116,8 +115,8 @@ contract ShieldPool is IShieldPool {
 
     /**
      * @notice Deposit public funds + register note commitment.
-     * @dev Note encryption / amount binding to commitment is offchain + circuit concern.
-     *      Phase-1 binds custody of `amount` of `asset` to the pool.
+     * @dev Prefer commitment = NoteLib.commitment(secret, amount, asset) so Phase-2
+     *      circuits can open the note. Phase-1 random commitments still insert.
      */
     function shield(
         address asset,
@@ -150,7 +149,7 @@ contract ShieldPool is IShieldPool {
         bytes32 nullifier,
         bytes32[2] calldata newCommitments
     ) external override {
-        _requireProof(proof, root, nullifier);
+        _requireTransferProof(proof, root, nullifier, newCommitments);
         if (spent[nullifier]) revert AlreadySpent();
         spent[nullifier] = true;
 
@@ -164,7 +163,8 @@ contract ShieldPool is IShieldPool {
 
     /**
      * @notice Exit to public balance after valid unshield proof.
-     * @dev Circuit must enforce amount/asset match the spent note (Phase 2 public inputs).
+     * @dev Circuit must enforce: note at `root` opens to (amount, asset), nullifier
+     *      derived from secret, and recipient is the authorized `to`.
      */
     function unshield(
         bytes calldata proof,
@@ -176,7 +176,7 @@ contract ShieldPool is IShieldPool {
     ) external override {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
-        _requireProof(proof, root, nullifier);
+        _requireUnshieldProof(proof, root, nullifier, asset, to, amount);
         if (spent[nullifier]) revert AlreadySpent();
         spent[nullifier] = true;
 
@@ -187,17 +187,40 @@ contract ShieldPool is IShieldPool {
         emit Unshielded(nullifier, asset, to, amount);
     }
 
-    function _requireProof(
+    /// Transfer public inputs: [root, nullifier, newC0, newC1]
+    function _requireTransferProof(
         bytes calldata proof,
         bytes32 root,
-        bytes32 nullifier
+        bytes32 nullifier,
+        bytes32[2] calldata newCommitments
     ) internal view {
         if (address(verifier) == address(0)) revert VerifierNotSet();
         if (!tree.isKnownRoot(root)) revert UnknownRoot();
-        // Phase 2: include amount + asset in public inputs so proofs bind the note.
-        uint256[] memory inputs = new uint256[](2);
+        uint256[] memory inputs = new uint256[](4);
         inputs[0] = uint256(root);
         inputs[1] = uint256(nullifier);
+        inputs[2] = uint256(newCommitments[0]);
+        inputs[3] = uint256(newCommitments[1]);
+        if (!verifier.verify(proof, inputs)) revert InvalidProof();
+    }
+
+    /// Unshield public inputs: [root, nullifier, asset, amount, to]
+    function _requireUnshieldProof(
+        bytes calldata proof,
+        bytes32 root,
+        bytes32 nullifier,
+        address asset,
+        address to,
+        uint256 amount
+    ) internal view {
+        if (address(verifier) == address(0)) revert VerifierNotSet();
+        if (!tree.isKnownRoot(root)) revert UnknownRoot();
+        uint256[] memory inputs = new uint256[](5);
+        inputs[0] = uint256(root);
+        inputs[1] = uint256(nullifier);
+        inputs[2] = uint256(uint160(asset));
+        inputs[3] = amount;
+        inputs[4] = uint256(uint160(to));
         if (!verifier.verify(proof, inputs)) revert InvalidProof();
     }
 

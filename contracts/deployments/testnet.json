@@ -13,5 +13,8 @@
     "owner": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
     "deployedAt": "2026-07-14"
   },
-  "notes": "Phase-1 ShieldPool on RH testnet. Verifier is address(0): transfer/unshield locked. Owner can emergencyWithdraw. Do not treat as production privacy."
+  "proofLayoutOnChain": 1,
+  "proofLayoutSource": 2,
+  "notes": "Phase-1 live: verifier=0, shield works. Source is Phase-2 layout (amount/asset bound unshield inputs) — redeploy when real verifier ready. Never set always-true mock verifier on funded pool."
 }
+

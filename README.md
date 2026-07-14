@@ -95,8 +95,10 @@ No purple crypto fog.
 ### Status
 
 - **Product:** testnet-only until the private rails hold  
-- **Shield deposit:** live on RH testnet  
-- **Next:** real verifier + circuits → private move / unshield  
+- **Shield deposit:** live on RH testnet (ETH + stocks)  
+- **Phase 2 source:** bound notes + proof public-input layout; circuits scaffolded  
+- **Next:** implement unshield circuit → deploy real verifier → private move / unshield UI  
+
 
 
 ---

@@ -1,4 +1,4 @@
-# Shield architecture (v0)
+# Shield architecture (v1)
 
 ## Goal
 
@@ -13,7 +13,7 @@ User wallet
     │
     └─ private path ─► ShieldPool ──► IVerifier
                            │
-                           ├ commitments[]  (notes)
+                           ├ commitments (Merkle leaves)
                            ├ spent nullifiers
                            └ currentRoot
 ```
@@ -23,30 +23,51 @@ User wallet
 | Phase | What ships | Custody |
 | --- | --- | --- |
 | **0** | Interfaces + scaffold | Commitments only |
-| **1 (now)** | ERC-20/ETH pull on `shield`, keccak Merkle tree, `deposited[]`, unshield payout | **Pool holds assets** |
-| **2** | Real verifier + circuits (transfer / unshield proofs bind amount) | Full private move |
+| **1 (live RH testnet)** | ETH/ERC-20 `shield`, keccak Merkle, `deposited[]` | **Pool holds assets** · verifier = 0 |
+| **2 (source ready)** | NoteLib binding · unshield/transfer public inputs bind amount/asset/recipient · circuits spec | Redeploy + real verifier next |
 | **3** | Private trade adapter | Intent hidden until exit |
 
-## Why not invent circuits on day one
+### Live deploy (Phase 1)
 
-Prefer battle-tested EVM privacy patterns (Railgun-class ideas: commitments, nullifiers, Merkle roots, ZK proofs). Scaffold matches that shape so we can plug a real verifier without rewriting the app model.
+| | |
+| --- | --- |
+| ShieldPool | `0x2BD98196D90AB45D58843B4c8B8809aa34343d35` |
+| Chain | 46630 |
+| Proof layout on-chain | v1 (root + nullifier only if verifier were set) |
+| Source proof layout | **v2** (`PROOF_LAYOUT_VERSION = 2`) — needs redeploy |
 
-## App integration (later)
+See [deployments/testnet.json](./deployments/testnet.json).
+
+### Note scheme (Phase 2)
 
 ```
-app/src/lib/shield.ts     → ABIs + addresses from deployments/testnet.json
-app/.../ShieldView.tsx    → call shield() only when Verifier set + audits ok
+commitment = keccak256(secret || amount || asset)
+nullifier  = keccak256(secret || commitment)
 ```
 
-Until then UI stays: **“Not live”**.
+Solidity: `src/lib/NoteLib.sol` · App: `app/src/lib/note.ts` · Circuits: `circuits/`
+
+### Proof public inputs (v2)
+
+**Unshield:** `[root, nullifier, asset, amount, to]`  
+**Transfer:** `[root, nullifier, newC0, newC1]`
+
+## App integration
+
+```
+app/src/lib/shield.ts   → pool address, ABI, gas
+app/src/lib/note.ts     → bound commitments (new deposits)
+app/.../ShieldView.tsx  → live deposit
+app/.../MoveView.tsx    → status until prover ships
+```
 
 ## Threat model (short)
 
-- **Hidden (goal):** amount, private graph, trade size while shielded  
+- **Hidden (goal):** amount while shielded, private graph  
 - **Visible:** shield/unshield edges, contract calls, proof verification  
-- **Out of scope as magic:** malware, coerced keys, tiny anonymity set  
+- **Never:** mock verifier that always returns true on a funded pool  
 
 ## Testnet policy
 
 - Chain ID **46630** only for Gloam private deploys until private path works  
-- No mainnet deploys of ShieldPool until audits + real verifier  
+- No mainnet ShieldPool until audits + real verifier  

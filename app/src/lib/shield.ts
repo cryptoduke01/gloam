@@ -3,16 +3,10 @@
  * Private transfer / unshield need a real verifier (not deployed yet).
  */
 
-import {
-  keccak256,
-  toHex,
-  zeroAddress,
-  type Address,
-  type Hex,
-  type PublicClient,
-} from "viem";
+import { zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { PRODUCT_CHAIN_ID } from "./chain";
 import { TESTNET_STOCK_TOKENS } from "./tokens";
+import { makeBoundNote } from "./note";
 
 /** Live RH testnet deploy (see contracts/deployments/testnet.json) */
 export const TESTNET_SHIELD_POOL =
@@ -104,6 +98,46 @@ export const shieldPoolAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "unshield",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "root", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
+      { name: "asset", type: "address" },
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "transfer",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "root", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
+      { name: "newCommitments", type: "bytes32[2]" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "PROOF_LAYOUT_VERSION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isKnownRoot",
+    stateMutability: "view",
+    inputs: [{ name: "root", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
     type: "event",
     name: "Shielded",
     inputs: [
@@ -112,6 +146,24 @@ export const shieldPoolAbi = [
       { name: "amount", type: "uint256", indexed: false },
       { name: "leafIndex", type: "uint256", indexed: false },
       { name: "from", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "Unshielded",
+    inputs: [
+      { name: "nullifier", type: "bytes32", indexed: true },
+      { name: "asset", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Transferred",
+    inputs: [
+      { name: "nullifier", type: "bytes32", indexed: true },
+      { name: "newCommitments", type: "bytes32[2]", indexed: false },
     ],
   },
 ] as const;
@@ -149,13 +201,15 @@ function shortAsset(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-/** Fresh random secret + commitment for a phase-1 note */
-export function makeNoteMaterial(): { secret: Hex; commitment: Hex } {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const secret = toHex(bytes);
-  const commitment = keccak256(secret);
-  return { secret, commitment };
+/**
+ * Bound note for shield() — amount/asset locked in commitment (Phase 2 ready).
+ * Prefer this over random unbound commitments.
+ */
+export function makeNoteMaterial(
+  amount: bigint,
+  asset: Address = NATIVE_ASSET
+): { secret: Hex; commitment: Hex; nullifier: Hex } {
+  return makeBoundNote(amount, asset);
 }
 
 export type LocalNote = {
@@ -167,6 +221,10 @@ export type LocalNote = {
   commitment: Hex;
   /** Empty when reconstructed from chain only */
   secret: Hex;
+  /** Precomputed for unshield when secret is known */
+  nullifier?: Hex;
+  /** true when commitment = NoteLib(secret, amount, asset) */
+  bound?: boolean;
   leafIndex?: number;
   txHash?: Hex;
   from?: Address;
