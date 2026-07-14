@@ -2,21 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePublicClient } from "wagmi";
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import { PRODUCT_CHAIN_ID } from "@/lib/chain";
 import {
+  SHIELD_POOL_ADDRESS,
+  activeSpendableNotes,
   confirmedNotes,
   fetchChainShieldNotes,
   loadLocalNotes,
+  markNoteRecovered,
   mergeNotes,
+  shieldPoolAbi,
   sumByAsset,
   sumEthWei,
   type LocalNote,
 } from "@/lib/shield";
 
 /**
- * Local notes + on-chain Shielded events for the connected address.
- * Chain sync means a new browser still sees deposit history (public edges).
+ * Local notes + chain history. Balance only counts notes with a local secret
+ * that are not spent on-chain.
  */
 export function useLocalShieldNotes(address?: string | null) {
   const publicClient = usePublicClient({ chainId: PRODUCT_CHAIN_ID });
@@ -30,6 +34,40 @@ export function useLocalShieldNotes(address?: string | null) {
     setReady(true);
   }, [address]);
 
+  const reconcileSpent = useCallback(
+    async (notes: LocalNote[]) => {
+      if (!publicClient || !SHIELD_POOL_ADDRESS) return;
+      const candidates = notes.filter(
+        (n) =>
+          n.nullifier &&
+          n.nullifier !== "0x" &&
+          n.status !== "recovered" &&
+          n.secret &&
+          n.secret !== "0x"
+      );
+      for (const n of candidates) {
+        try {
+          const spent = (await publicClient.readContract({
+            address: SHIELD_POOL_ADDRESS,
+            abi: shieldPoolAbi,
+            functionName: "isSpent",
+            args: [n.nullifier as Hex],
+          })) as boolean;
+          if (spent) {
+            markNoteRecovered(n.id);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      // reload after marks
+      if (candidates.length) {
+        setLocal(loadLocalNotes(address));
+      }
+    },
+    [publicClient, address]
+  );
+
   const syncChain = useCallback(async () => {
     if (!publicClient || !address) {
       setChain([]);
@@ -42,10 +80,38 @@ export function useLocalShieldNotes(address?: string | null) {
         address as Address
       );
       setChain(rows);
+      const merged = mergeNotes(loadLocalNotes(address), rows);
+      await reconcileSpent(merged);
+      // If vault holds 0 ETH, clear stale local ETH notes (ghost balances)
+      if (SHIELD_POOL_ADDRESS) {
+        try {
+          const ethInPool = (await publicClient.readContract({
+            address: SHIELD_POOL_ADDRESS,
+            abi: shieldPoolAbi,
+            functionName: "deposited",
+            args: ["0x0000000000000000000000000000000000000000"],
+          })) as bigint;
+          if (ethInPool === BigInt(0)) {
+            const locals = loadLocalNotes(address);
+            for (const n of locals) {
+              if (
+                n.status !== "recovered" &&
+                (!n.asset ||
+                  n.asset === "0x0000000000000000000000000000000000000000")
+              ) {
+                markNoteRecovered(n.id);
+              }
+            }
+            setLocal(loadLocalNotes(address));
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     } finally {
       setSyncing(false);
     }
-  }, [publicClient, address]);
+  }, [publicClient, address, reconcileSpent]);
 
   const refresh = useCallback(() => {
     refreshLocal();
@@ -73,13 +139,17 @@ export function useLocalShieldNotes(address?: string | null) {
   }, [refreshLocal, refresh]);
 
   const notes = useMemo(() => mergeNotes(local, chain), [local, chain]);
-  const open = useMemo(() => confirmedNotes(notes), [notes]);
+  /** Spendable vault notes (have secret, not recovered/spent) */
+  const open = useMemo(() => activeSpendableNotes(notes), [notes]);
+  /** Deposit history including chain-only rows */
+  const history = useMemo(() => confirmedNotes(notes), [notes]);
   const shieldedWei = useMemo(() => sumEthWei(notes), [notes]);
   const byAsset = useMemo(() => sumByAsset(notes), [notes]);
 
   return {
     notes,
     open,
+    history,
     shieldedWei,
     byAsset,
     ready,

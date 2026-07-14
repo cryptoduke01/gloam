@@ -10,7 +10,7 @@ export default function ShieldPage() {
   return (
     <AppShell
       title="Shield"
-      subtitle="Put ETH in the pool. See it on Portfolio. Private take-out comes next."
+      subtitle="Deposit into the vault. Then Move to private-send or cash out."
     >
       <ShieldView />
     </AppShell>

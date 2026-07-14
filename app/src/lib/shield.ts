@@ -254,9 +254,19 @@ export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => Boolean(n.txHash) && n.status !== "recovered");
 }
 
-/** ETH only (native asset) */
+/**
+ * Notes you can still spend (have a local secret). Chain-only history rows
+ * do not count as balance — they linger after unshield/transfer.
+ */
+export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
+  return confirmedNotes(notes).filter(
+    (n) => Boolean(n.secret) && n.secret !== "0x" && n.secret.length > 10
+  );
+}
+
+/** ETH only (native asset) — spendable notes only */
 export function sumEthWei(notes: LocalNote[]): bigint {
-  return confirmedNotes(notes)
+  return activeSpendableNotes(notes)
     .filter((n) => isNativeAsset(n.asset))
     .reduce((s, n) => s + BigInt(n.amountWei || "0"), BigInt(0));
 }
@@ -268,7 +278,7 @@ export function sumNoteWei(notes: LocalNote[]): bigint {
 
 export function sumByAsset(notes: LocalNote[]): Map<string, bigint> {
   const m = new Map<string, bigint>();
-  for (const n of confirmedNotes(notes)) {
+  for (const n of activeSpendableNotes(notes)) {
     const k = n.asset.toLowerCase();
     m.set(k, (m.get(k) ?? BigInt(0)) + BigInt(n.amountWei || "0"));
   }
@@ -343,6 +353,11 @@ export function updateLocalNote(
   } catch {
     /* ignore */
   }
+}
+
+/** Clear ghost balances after cash-out / private send when nullifier was spent. */
+export function markNoteRecovered(id: string) {
+  updateLocalNote(id, { status: "recovered" });
 }
 
 /** Merge browser notes with on-chain Shielded events (prefer local secrets). */

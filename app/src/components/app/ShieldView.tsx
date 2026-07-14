@@ -537,58 +537,13 @@ export function ShieldView() {
 
   const busy = isPending || confirming;
 
+  const hasActiveShield = openNotes.length > 0;
+
   return (
     <>
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-7">
-          <div className="rounded-xl border border-line bg-panel p-5 sm:p-6">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-              What is this?
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-foreground">
-              Shield moves ETH or faucet stock tokens from your wallet into
-              Gloam’s pool. The chain records a deposit; this browser keeps your
-              note.
-            </p>
-            <ol className="mt-3 space-y-1.5 text-sm text-mute">
-              <li>
-                <span className="text-lime">1</span> Wallet balance goes down
-              </li>
-              <li>
-                <span className="text-lime">2</span> Pool balance goes up
-              </li>
-              <li>
-                <span className="text-lime">3</span> Private send / take-out —
-                next
-              </li>
-            </ol>
-          </div>
-
-          {(shieldedWei > BigInt(0) || assetRows.length > 0) && (
-            <div className="rounded-xl border border-lime/30 bg-lime/5 p-5">
-              <StatusPill tone="lime">Your money is here</StatusPill>
-              <div className="mt-3 space-y-1">
-                {assetRows.map((r) => (
-                  <p key={r.asset} className="font-display text-2xl text-foreground">
-                    {isNativeAsset(r.asset)
-                      ? formatEth(r.amount)
-                      : formatUnits(r.amount, 18)}{" "}
-                    <span className="text-lg text-mute">{r.label}</span>
-                  </p>
-                ))}
-              </div>
-              {myShieldUsd && shieldedWei > BigInt(0) && (
-                <p className="mt-1 text-sm text-mute">
-                  ETH ≈ {myShieldUsd}
-                </p>
-              )}
-              <p className="mt-2 text-sm text-mute">
-                Not spendable in Send/Trade until exit ships. History also loads
-                from chain{syncing ? "…" : ""}.
-              </p>
-            </div>
-          )}
-
+          {/* Deposit form first — primary action */}
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="relative h-36 border-b border-line sm:h-40">
               <AsciiImage
@@ -701,18 +656,13 @@ export function ShieldView() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-line bg-background px-4 py-3 text-xs leading-relaxed text-mute">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                  Before you deposit
-                </p>
-                <ul className="mt-2 space-y-1.5">
-                  <li>Real testnet assets into a real contract.</li>
-                  <li>
-                    Stocks need one approve, then shield (two wallet pops).
-                  </li>
-                  <li>Private take-out is not open yet.</li>
-                </ul>
-              </div>
+              <p className="text-xs text-mute">
+                Stocks need approve + shield (two wallet confirms). Then use{" "}
+                <Link href="/app/move" className="text-lime hover:underline">
+                  Move
+                </Link>{" "}
+                to private-send or cash out.
+              </p>
 
               {!isConnected || !onProduct ? (
                 <WalletMenu />
@@ -817,7 +767,7 @@ export function ShieldView() {
             <div className="rounded-xl border border-amber-500/30 bg-panel p-5">
               <StatusPill tone="warn">Owner · testnet</StatusPill>
               <p className="mt-3 text-sm text-foreground">
-                Pull{" "}
+                Emergency pull of pool{" "}
                 <strong>
                   {poolSelected != null
                     ? isNativeAsset(assetAddress)
@@ -825,8 +775,8 @@ export function ShieldView() {
                       : formatUnits(poolSelected, 18)
                     : "…"}{" "}
                   {symbol}
-                </strong>{" "}
-                from the pool for the selected asset (emergency recovery).
+                </strong>
+                .
               </p>
               <button
                 type="button"
@@ -840,18 +790,6 @@ export function ShieldView() {
                     ? "Pulling…"
                     : `Pull pool ${symbol}`}
               </button>
-            </div>
-          )}
-
-          {!isOwner && openNotes.length > 0 && (
-            <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                Getting it out
-              </p>
-              <p className="mt-2 text-foreground">
-                User unshield is not live. Deposits sit in the pool until private
-                exit ships.
-              </p>
             </div>
           )}
         </div>
@@ -874,27 +812,48 @@ export function ShieldView() {
 
           <div className="rounded-xl border border-line bg-panel p-5">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Your shielded
+              Your vault (this browser)
             </p>
-            {assetRows.length === 0 ? (
-              <p className="mt-2 font-display text-2xl text-mute">None yet</p>
+            {!hasActiveShield ? (
+              <>
+                <p className="mt-2 font-display text-2xl text-mute">None</p>
+                <p className="mt-1 text-xs text-mute">
+                  No active notes with a local secret. Deposit below, or import
+                  a note on Move.
+                </p>
+              </>
             ) : (
-              <ul className="mt-2 space-y-1">
-                {assetRows.map((r) => (
-                  <li key={r.asset} className="font-display text-xl text-foreground">
-                    {isNativeAsset(r.asset)
-                      ? formatEth(r.amount)
-                      : formatUnits(r.amount, 18)}{" "}
-                    <span className="text-base text-mute">{r.label}</span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="mt-2 space-y-1">
+                  {assetRows.map((r) => (
+                    <li
+                      key={r.asset}
+                      className="font-display text-xl text-foreground"
+                    >
+                      {isNativeAsset(r.asset)
+                        ? formatEth(r.amount)
+                        : formatUnits(r.amount, 18)}{" "}
+                      <span className="text-base text-mute">{r.label}</span>
+                    </li>
+                  ))}
+                </ul>
+                {myShieldUsd && (
+                  <p className="mt-1 text-sm text-mute">ETH ≈ {myShieldUsd}</p>
+                )}
+                <p className="mt-2 text-xs text-mute">
+                  Use{" "}
+                  <Link href="/app/move" className="text-lime hover:underline">
+                    Move
+                  </Link>{" "}
+                  to private-send or cash out.
+                </p>
+              </>
             )}
             <Link
               href="/app"
               className="mt-3 inline-block text-xs text-lime hover:underline"
             >
-              See on portfolio →
+              Portfolio →
             </Link>
           </div>
 
@@ -904,13 +863,9 @@ export function ShieldView() {
             </p>
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between gap-3">
-                <dt className="text-mute">ETH in pool</dt>
-                <dd className="font-medium text-foreground">
-                  {poolEth != null ? formatEth(poolEth) : "…"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-mute">{symbol} in pool</dt>
+                <dt className="text-mute">
+                  {isNativeAsset(assetAddress) ? "ETH held" : `${symbol} held`}
+                </dt>
                 <dd className="font-medium text-foreground">
                   {poolSelected != null
                     ? isNativeAsset(assetAddress)
@@ -919,16 +874,24 @@ export function ShieldView() {
                     : "…"}
                 </dd>
               </div>
+              {!isNativeAsset(assetAddress) && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-mute">ETH held</dt>
+                  <dd className="font-medium text-foreground">
+                    {poolEth != null ? formatEth(poolEth) : "…"}
+                  </dd>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
-                <dt className="text-mute">Total notes</dt>
+                <dt className="text-mute">Leaves in tree</dt>
                 <dd className="font-medium text-foreground">
                   {nextIndex != null ? nextIndex.toString() : "…"}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="text-mute">Private exit</dt>
+                <dt className="text-mute">Verifier</dt>
                 <dd className="font-medium text-foreground">
-                  {verifierLive ? "Verifier set" : "Closed"}
+                  {verifierLive ? "Live" : "Off"}
                 </dd>
               </div>
             </dl>
@@ -947,21 +910,31 @@ export function ShieldView() {
             </a>
           </div>
 
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Roadmap
+          {/* Explainer — side, not above the form */}
+          <div className="rounded-xl border border-line bg-panel p-5 text-sm">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+              What is shield?
             </p>
-            <ul className="mt-2 space-y-1.5 text-foreground">
+            <p className="mt-2 leading-relaxed text-mute">
+              Deposit into Gloam’s vault. Your open wallet balance drops; the
+              pool holds the asset. This browser keeps your note so you can
+              private-send or cash out later.
+            </p>
+            <ol className="mt-3 space-y-1.5 text-mute">
               <li>
-                <span className="text-lime">●</span> Deposit ETH + stocks
+                <span className="text-lime">1</span> Wallet goes down
               </li>
               <li>
-                <span className="text-mute">○</span> Private move
+                <span className="text-lime">2</span> Vault goes up
               </li>
               <li>
-                <span className="text-mute">○</span> Private take-out
+                <span className="text-lime">3</span>{" "}
+                <Link href="/app/move" className="text-lime hover:underline">
+                  Move
+                </Link>{" "}
+                to send or cash out
               </li>
-            </ul>
+            </ol>
           </div>
 
           <a
