@@ -22,7 +22,7 @@ Stocks. Memes. Same rails. Money that can sit, move, and trade without printing 
 
 Gloam is private money on **Robinhood Chain** — not a dark theme on a public DEX.
 
-**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts, **shield ETH** into the live pool.
+**Works today (testnet):** connect, portfolio, send ETH, send faucet stock tokens, live marks, charts, **shield ETH + faucet stocks** into the live pool (history syncs from chain).
 
 **Still closed:** private transfer, private unshield, private trade. Those need a real verifier + proofs. We do not fake them.
 

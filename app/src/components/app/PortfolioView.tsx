@@ -8,6 +8,7 @@ import {
   useChainId,
   useReadContracts,
 } from "wagmi";
+import { formatUnits } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import {
   EXPLORER_TX,
@@ -25,7 +26,11 @@ import {
   formatUsd,
 } from "@/lib/markets";
 import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
-import { isShieldDeployed } from "@/lib/shield";
+import {
+  assetLabel,
+  isNativeAsset,
+  isShieldDeployed,
+} from "@/lib/shield";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { WalletMenu } from "./WalletMenu";
@@ -41,7 +46,8 @@ export function PortfolioView() {
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
   const markets = marketData?.markets ?? [];
-  const { open: shieldNotes, shieldedWei } = useLocalShieldNotes(address);
+  const { open: shieldNotes, shieldedWei, byAsset, syncing } =
+    useLocalShieldNotes(address);
   const shieldLive = isShieldDeployed();
 
   const { data: bal, isLoading } = useBalance({
@@ -92,17 +98,53 @@ export function PortfolioView() {
     );
   }, [tokenBals, markets, settings.hideZeroBalances]);
 
+  const shieldRows = useMemo(() => {
+    const rows: {
+      asset: string;
+      label: string;
+      amount: bigint;
+      usd: number | null;
+    }[] = [];
+    byAsset.forEach((amount, asset) => {
+      if (amount <= BigInt(0)) return;
+      const label = assetLabel(asset);
+      let usd: number | null = null;
+      if (isNativeAsset(asset) && ethUsd != null) {
+        usd = (Number(amount) / 1e18) * ethUsd;
+      } else {
+        const tok = TESTNET_STOCK_TOKENS.find(
+          (t) => t.address.toLowerCase() === asset.toLowerCase()
+        );
+        const m = tok ? markets.find((x) => x.id === tok.id) : null;
+        if (m?.mark) usd = (Number(amount) / 1e18) * m.mark;
+      }
+      rows.push({ asset, label, amount, usd });
+    });
+    return rows.sort((a, b) => {
+      if (isNativeAsset(a.asset)) return -1;
+      if (isNativeAsset(b.asset)) return 1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [byAsset, ethUsd, markets]);
+
   const ethAmt = bal ? Number(bal.value) / 1e18 : 0;
-  const shieldAmt = Number(shieldedWei) / 1e18;
+  const shieldEthUsd =
+    ethUsd != null && shieldedWei > BigInt(0)
+      ? (Number(shieldedWei) / 1e18) * ethUsd
+      : 0;
+  const shieldStocksUsd = shieldRows
+    .filter((r) => !isNativeAsset(r.asset))
+    .reduce((s, r) => s + (r.usd ?? 0), 0);
   const ethUsdVal = ethUsd != null ? ethAmt * ethUsd : null;
-  const shieldUsdVal = ethUsd != null ? shieldAmt * ethUsd : null;
   const stocksUsd = positions.reduce((s, p) => s + p.usd, 0);
   const totalUsd =
     ethUsdVal != null
-      ? ethUsdVal + stocksUsd + (shieldUsdVal ?? 0)
-      : stocksUsd > 0 || shieldAmt > 0
-        ? stocksUsd + (shieldUsdVal ?? 0)
+      ? ethUsdVal + stocksUsd + shieldEthUsd + shieldStocksUsd
+      : stocksUsd + shieldStocksUsd > 0
+        ? stocksUsd + shieldEthUsd + shieldStocksUsd
         : null;
+
+  const hasShield = shieldRows.length > 0;
 
   return (
     <div className="space-y-6">
@@ -143,12 +185,13 @@ export function PortfolioView() {
               {isConnected && (
                 <p className="mt-1 text-sm text-mute">
                   {formatEth(bal?.value ?? BigInt(0))} wallet
-                  {shieldedWei > BigInt(0)
-                    ? ` · ${formatEth(shieldedWei)} shielded`
+                  {hasShield
+                    ? ` · ${shieldRows.map((r) => `${r.label}`).join(", ")} shielded`
                     : ""}
                   {stocksUsd > 0
                     ? ` · ${positions.filter((p) => p.raw > BigInt(0)).length} stocks`
                     : ""}
+                  {syncing ? " · syncing…" : ""}
                 </p>
               )}
             </div>
@@ -182,25 +225,40 @@ export function PortfolioView() {
               </p>
               {!isConnected ? (
                 <p className="mt-2 font-display text-2xl text-mute">—</p>
+              ) : !hasShield ? (
+                <>
+                  <p className="mt-2 font-display text-2xl text-foreground">0</p>
+                  <p className="mt-0.5 text-xs text-mute">
+                    {shieldLive ? "Deposit on Shield" : "Not live"}
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="mt-2 font-display text-2xl text-foreground">
-                    {formatEth(shieldedWei)}
+                    {shieldRows.length === 1
+                      ? isNativeAsset(shieldRows[0].asset)
+                        ? formatEth(shieldRows[0].amount)
+                        : formatUnits(shieldRows[0].amount, 18)
+                      : `${shieldRows.length} assets`}
                   </p>
-                  {shieldUsdVal != null &&
-                    settings.showUsd &&
-                    shieldedWei > BigInt(0) && (
+                  <p className="mt-0.5 text-xs text-mute">
+                    {shieldRows
+                      .map(
+                        (r) =>
+                          `${
+                            isNativeAsset(r.asset)
+                              ? formatEth(r.amount)
+                              : formatUnits(r.amount, 18)
+                          } ${r.label}`
+                      )
+                      .join(" · ")}
+                  </p>
+                  {settings.showUsd &&
+                    shieldEthUsd + shieldStocksUsd > 0 && (
                       <p className="mt-0.5 text-sm text-mute">
-                        {formatUsd(shieldUsdVal)}
+                        {formatUsd(shieldEthUsd + shieldStocksUsd)}
                       </p>
                     )}
-                  <p className="mt-0.5 text-xs text-mute">
-                    {shieldNotes.length > 0
-                      ? `${shieldNotes.length} note${shieldNotes.length === 1 ? "" : "s"} · this browser`
-                      : shieldLive
-                        ? "None yet · deposit on Shield"
-                        : "Not live"}
-                  </p>
                 </>
               )}
             </div>
@@ -217,14 +275,10 @@ export function PortfolioView() {
             </div>
           </div>
 
-          {isConnected && shieldedWei > BigInt(0) && (
+          {isConnected && hasShield && (
             <div className="border-t border-line bg-lime/5 px-5 py-3 sm:px-6">
               <p className="text-sm text-foreground">
-                <span className="font-medium">{formatEth(shieldedWei)} ETH</span>
-                {shieldUsdVal != null && settings.showUsd
-                  ? ` (≈ ${formatUsd(shieldUsdVal)})`
-                  : ""}{" "}
-                sits in the shield pool — not in your wallet.{" "}
+                Shielded assets sit in the pool — not in Send/Trade.{" "}
                 <Link href="/app/shield" className="text-lime hover:underline">
                   Manage on Shield →
                 </Link>
@@ -294,23 +348,27 @@ export function PortfolioView() {
         <div>
           <div className="mb-3 flex items-center justify-between">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Shielded notes
+              Shielded deposits
             </p>
             <StatusPill tone="lime">In pool</StatusPill>
           </div>
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <ul>
-              {shieldNotes.slice(0, 6).map((n) => (
+              {shieldNotes.slice(0, 8).map((n) => (
                 <li
                   key={n.id}
                   className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 last:border-0"
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">
-                      {formatEth(BigInt(n.amountWei))} ETH
+                      {isNativeAsset(n.asset)
+                        ? formatEth(BigInt(n.amountWei))
+                        : formatUnits(BigInt(n.amountWei), 18)}{" "}
+                      {assetLabel(n.asset)}
                     </p>
                     <p className="mt-0.5 font-mono text-[11px] text-mute">
                       {n.leafIndex != null ? `leaf #${n.leafIndex}` : "note"} ·{" "}
+                      {n.source === "chain" ? "on-chain" : "local"} ·{" "}
                       {shortAddress(n.commitment, 4)}
                     </p>
                   </div>
@@ -387,12 +445,22 @@ export function PortfolioView() {
                       </p>
                     )}
                   </div>
-                  <Link
-                    href={`/app/trade?market=${p.id}`}
-                    className="hidden min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-lime/50 sm:inline-flex"
-                  >
-                    Trade
-                  </Link>
+                  <div className="hidden gap-1 sm:flex">
+                    {shieldLive && (
+                      <Link
+                        href="/app/shield"
+                        className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
+                      >
+                        Shield
+                      </Link>
+                    )}
+                    <Link
+                      href={`/app/trade?market=${p.id}`}
+                      className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-lime/50"
+                    >
+                      Trade
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
