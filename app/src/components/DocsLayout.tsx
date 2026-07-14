@@ -164,7 +164,7 @@ export function DocsLayout({
                 <ul className="mt-3 space-y-2">
                   {(
                     quickLinks ?? [
-                      { href: "/#waitlist", label: "Launch testnet" },
+                      { href: "/app", label: "Open testnet" },
                       { href: "/whitepaper", label: "Whitepaper" },
                       { href: "/", label: "Main site" },
                       {

@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  webpack: (config) => {
+    // WalletConnect optional deps — silence missing optional modules
+    config.externals.push("pino-pretty", "encoding");
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+    return config;
+  },
 };
 
 export default nextConfig;

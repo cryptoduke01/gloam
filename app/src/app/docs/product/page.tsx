@@ -30,16 +30,18 @@ export default function DocsProductPage() {
           <strong>Whitepaper</strong> — <code>gloam.trade/whitepaper</code>
         </li>
         <li>
-          <strong>Product</strong> — <code>testnet.gloam.trade</code> then{" "}
-          <code>app.gloam.trade</code>
+          <strong>Testnet product</strong> — <code>gloam.trade/app</code>
         </li>
       </ul>
 
       <h2>Vertical slices</h2>
       <ol>
-        <li>Wallet connect on Robinhood Chain (testnet → mainnet)</li>
+        <li>
+          <strong>Live:</strong> wallet connect on Robinhood Chain testnet
+          (46630), portfolio, markets catalog, product shell
+        </li>
         <li>Public swap path so the app is never an empty shell</li>
-        <li>Shield / private transfer vertical slice</li>
+        <li>Shield / private transfer vertical slice (real proofs)</li>
         <li>Private trade path for stock tokens and meme markets</li>
         <li>Guardrails, audits, anonymity-set health, mainnet gates</li>
       </ol>

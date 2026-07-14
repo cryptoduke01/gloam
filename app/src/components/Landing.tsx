@@ -104,7 +104,7 @@ export function Landing() {
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <MotionPress>
                   <Link
-                    href="#waitlist"
+                    href="/app"
                     className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
                   >
                     Launch testnet
@@ -373,20 +373,18 @@ export function Landing() {
                 Everything on Robinhood. Privately.
               </h2>
               <p className="mt-2 max-w-xl text-sm text-black/70">
-                Stocks. Memes. Shield, transfer, and trade on Robinhood Chain.
-                No mock fills. No theatrical privacy. Testnet first.
+                Stocks. Memes. Shield, transfer, and trade. Testnet product is
+                live — connect, explore, no mock private fills.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <MotionPress>
-                <a
-                  href="https://x.com/gloamtrade"
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href="/app"
                   className="inline-flex min-h-11 items-center rounded-md bg-black px-5 text-sm font-semibold text-white hover:opacity-90"
                 >
-                  Follow @gloamtrade
-                </a>
+                  Open testnet
+                </Link>
               </MotionPress>
               <MotionPress>
                 <Link

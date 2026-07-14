@@ -2,10 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 
 const product = [
+  { href: "/app", label: "Testnet app" },
   { href: "/#product", label: "Product" },
   { href: "/#encryption", label: "Encryption" },
   { href: "/#how", label: "How it works" },
-  { href: "/#chain", label: "Robinhood Chain" },
   { href: "/docs", label: "Documentation" },
   { href: "/whitepaper", label: "Whitepaper" },
 ];

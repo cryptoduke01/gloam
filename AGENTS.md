@@ -9,7 +9,7 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - Domain: `gloam.trade` (single host)
 - Docs: `gloam.trade/docs`
 - Whitepaper: `gloam.trade/whitepaper`
-- App (later): `app.gloam.trade`
+- Testnet product: `gloam.trade/app`
 - X: `@gloamtrade`
 - Vercel: one project, Root Directory = `app`
 
