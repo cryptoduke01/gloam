@@ -96,11 +96,32 @@ circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield
 # see scripts in package history / snarkjs docs; keys land in build/
 ```
 
-### Scaffold verifier (generated)
+### Verifiers
 
-`src/verifiers/ScaffoldUnshieldVerifier.sol` + `ScaffoldIVerifier.sol` adapt snarkjs → `IVerifier`.
+| Contract | Circuit | Safe on live keccak pool? |
+| --- | --- | --- |
+| `ScaffoldUnshieldVerifier` | old placeholder | **No** |
+| `UnshieldVerifier` | **real** Poseidon note+Merkle (5363 constraints) | **No** — needs Poseidon tree pool |
+| `RejectVerifier` | always false | Yes (locks exits) |
 
-**Never `setVerifier` these on a funded pool.** The circuit is a placeholder (no note open / Merkle). They exist so the compile → prove → Solidity path is proven end-to-end.
+### Real circuit (current `unshield/unshield.circom`)
+
+```
+commitment = Poseidon(secret, amount, asset)
+nullifier  = Poseidon(secret, commitment)
+root       = PoseidonMerkle(commitment, path…)
+```
+
+Proven end-to-end with snarkjs (`OK!` on real-input.json).  
+App helpers: `app/src/lib/notePoseidon.ts`, `merklePoseidon.ts`, `proverPoseidon.ts`.
+
+### Next deploy path
+
+1. Deploy Poseidon2 + Poseidon3 (`scripts/deploy-poseidon.mjs`)
+2. Deploy ShieldPool with Poseidon tree (source: `IncrementalMerkleTreePoseidon`)
+3. Deploy `UnshieldIVerifier` wrapping `UnshieldVerifier`
+4. `setVerifier` on the **new** pool only
+5. Production powers-of-tau ceremony before real funds
 
 ## Safety
 

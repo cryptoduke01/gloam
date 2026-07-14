@@ -1,21 +1,74 @@
 pragma circom 2.1.6;
 
-/*
- * Gloam unshield — SCAFFOLD (does not compile into production keys yet).
+/**
+ * Gloam unshield — REAL constraints (Poseidon).
  *
- * Live ShieldPool uses keccak Merkle + NoteLib keccak commitments.
- * Production circuits usually use Poseidon; either:
- *   A) migrate pool tree + NoteLib to Poseidon (preferred for snarks), or
- *   B) use a keccak gadget (heavy) matching Solidity bit-for-bit.
+ * Public (PROOF_LAYOUT_VERSION = 2):
+ *   root, nullifier, asset, amount, recipient
  *
- * Public inputs order MUST match ShieldPool PROOF_LAYOUT_VERSION = 2:
- *   [root, nullifier, asset, amount, recipient]
+ * Private:
+ *   secret, pathElements[levels], pathIndices[levels]
  *
- * Install circom, then flesh out Poseidon Merkle + note openers.
+ * Note scheme (must match app/src/lib/note.ts + NoteLibPoseidon.sol):
+ *   commitment = Poseidon(secret, amount, asset)
+ *   nullifier  = Poseidon(secret, commitment)
+ *
+ * Merkle: Poseidon(left, right), pathIndices 0 = current is left child.
+ *
+ * On-chain pool for this scheme is the Poseidon tree (next deploy).
+ * Live RH keccak pool is Phase-1 only — do not set this verifier there without matching tree.
  */
 
-// template Poseidon(n) — from circomlib when vendored
-// template MerkleTreeChecker(levels) — from circomlib when vendored
+include "circomlib/circuits/poseidon.circom";
+
+template HashLeftRight() {
+    signal input left;
+    signal input right;
+    signal output hash;
+
+    component h = Poseidon(2);
+    h.inputs[0] <== left;
+    h.inputs[1] <== right;
+    hash <== h.out;
+}
+
+// s = 0: out = [in[0], in[1]]; s = 1: out = [in[1], in[0]]
+template DualMux() {
+    signal input in[2];
+    signal input s;
+    signal output out[2];
+
+    s * (1 - s) === 0;
+    out[0] <== (in[1] - in[0]) * s + in[0];
+    out[1] <== (in[0] - in[1]) * s + in[1];
+}
+
+template MerkleTreeChecker(levels) {
+    signal input leaf;
+    signal input root;
+    signal input pathElements[levels];
+    signal input pathIndices[levels];
+
+    component selectors[levels];
+    component hashers[levels];
+
+    signal hashes[levels + 1];
+    hashes[0] <== leaf;
+
+    for (var i = 0; i < levels; i++) {
+        selectors[i] = DualMux();
+        selectors[i].in[0] <== hashes[i];
+        selectors[i].in[1] <== pathElements[i];
+        selectors[i].s <== pathIndices[i];
+
+        hashers[i] = HashLeftRight();
+        hashers[i].left <== selectors[i].out[0];
+        hashers[i].right <== selectors[i].out[1];
+        hashes[i + 1] <== hashers[i].hash;
+    }
+
+    root === hashes[levels];
+}
 
 template Unshield(levels) {
     // ── public ──
@@ -30,23 +83,46 @@ template Unshield(levels) {
     signal input pathElements[levels];
     signal input pathIndices[levels];
 
-    // Placeholder constraints so the template is well-formed.
-    // Replace with: commitment <== Poseidon([secret, amount, asset]);
-    //               nullifier <== Poseidon([secret, commitment]);
-    //               MerkleTreeChecker(levels)(commitment, pathElements, pathIndices, root);
+    // 1) Open note
+    component commitH = Poseidon(3);
+    commitH.inputs[0] <== secret;
+    commitH.inputs[1] <== amount;
+    commitH.inputs[2] <== asset;
 
-    signal secret_sq;
-    secret_sq <== secret * secret;
+    // 2) Nullifier binds secret + commitment
+    component nullH = Poseidon(2);
+    nullH.inputs[0] <== secret;
+    nullH.inputs[1] <== commitH.out;
+    nullifier === nullH.out;
 
-    // Force public inputs to be used (avoid optimized-out)
-    signal pub_sum;
-    pub_sum <== root + nullifier + asset + amount + recipient;
-    signal pub_sq;
-    pub_sq <== pub_sum * pub_sum;
+    // 3) Merkle membership
+    component tree = MerkleTreeChecker(levels);
+    tree.leaf <== commitH.out;
+    tree.root <== root;
+    for (var i = 0; i < levels; i++) {
+        tree.pathElements[i] <== pathElements[i];
+        tree.pathIndices[i] <== pathIndices[i];
+    }
 
-    // Dummy path touch
-    signal path0;
-    path0 <== pathElements[0] * pathIndices[0];
+    // 4) Recipient is public (used by verifier public inputs / pool payout)
+    signal recipientSquare;
+    recipientSquare <== recipient * recipient;
+
+    // 5) Secret non-zero
+    component isz = IsZero();
+    isz.in <== secret;
+    isz.out === 0;
 }
 
+// Minimal IsZero (avoid extra includes if path breaks)
+template IsZero() {
+    signal input in;
+    signal output out;
+    signal inv;
+    inv <-- in != 0 ? 1/in : 0;
+    out <== -in*inv + 1;
+    in*out === 0;
+}
+
+// Depth 20 matches pool capacity 2^20
 component main {public [root, nullifier, asset, amount, recipient]} = Unshield(20);

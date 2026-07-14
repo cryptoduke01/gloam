@@ -1,13 +1,18 @@
 {
   "name": "@gloam/circuits",
   "private": true,
-  "version": "0.1.0",
-  "description": "Gloam unshield/transfer circuits (scaffold). Install circom + snarkjs to build.",
+  "version": "0.2.0",
+  "description": "Gloam Poseidon unshield circuit + snarkjs pipeline",
   "scripts": {
     "check-tools": "node scripts/check-tools.js",
+    "compile": "mkdir -p build/unshield && circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield -l node_modules",
     "sample-input": "node scripts/export-sample-input.js",
-    "compile:unshield": "mkdir -p build/unshield && circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield -l node_modules",
-    "build:unshield": "npm run check-tools && npm run compile:unshield",
+    "gen-real-input": "node scripts/gen-real-input.mjs",
     "info": "node scripts/check-tools.js"
+  },
+  "dependencies": {
+    "circomlib": "2.0.5",
+    "circomlibjs": "0.1.7",
+    "snarkjs": "0.7.5"
   }
 }

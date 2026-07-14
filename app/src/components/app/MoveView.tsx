@@ -254,31 +254,30 @@ export function MoveView() {
           </p>
           <ul className="mt-3 space-y-2 text-foreground">
             <li>
-              <span className="text-lime">●</span> Bound notes
+              <span className="text-lime">●</span> Bound notes (keccak live)
             </li>
             <li>
-              <span className="text-lime">●</span> Tree sync + Merkle path
+              <span className="text-lime">●</span> Tree sync + path
             </li>
             <li>
-              <span className="text-lime">●</span> Unshield witness pack
+              <span className="text-lime">●</span> Poseidon circuit (real)
             </li>
             <li>
-              <span className="text-mute">○</span> Circom/snark prove
+              <span className="text-lime">●</span> snarkjs + Solidity verifier
             </li>
             <li>
-              <span className="text-mute">○</span> On-chain verifier
+              <span className="text-mute">○</span> Poseidon pool deploy
             </li>
             <li>
-              <span className="text-mute">○</span> unshield() tx
+              <span className="text-mute">○</span> unshield() in app
             </li>
           </ul>
         </div>
         <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
           <p className="text-foreground">
-            Circuits live under{" "}
-            <code className="text-lime">contracts/circuits/</code>. Tree is
-            keccak (matches the live pool). Snarks may later migrate to Poseidon
-            with a new deploy.
+            Real unshield circuit uses Poseidon notes + Merkle. Live RH pool is
+            still keccak Phase-1 — next step is a Poseidon pool deploy, then the
+            app unshield button.
           </p>
         </div>
       </aside>

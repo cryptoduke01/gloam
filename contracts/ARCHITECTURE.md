@@ -38,14 +38,28 @@ User wallet
 
 See [deployments/testnet.json](./deployments/testnet.json).
 
-### Note scheme (Phase 2)
+### Note scheme (Phase 2 — Poseidon, circuit-ready)
 
 ```
-commitment = keccak256(secret || amount || asset)
-nullifier  = keccak256(secret || commitment)
+commitment = Poseidon(secret, amount, asset)
+nullifier  = Poseidon(secret, commitment)
+Merkle     = Poseidon(left, right)  // depth 20
 ```
 
-Solidity: `src/lib/NoteLib.sol` · App: `app/src/lib/note.ts` · Circuits: `circuits/`
+| Piece | Location |
+| --- | --- |
+| Circuit | `circuits/unshield/unshield.circom` (**real constraints**, ~5.3k) |
+| Verifier | `src/verifiers/UnshieldVerifier.sol` + `UnshieldIVerifier` |
+| Solidity tree | `IncrementalMerkleTreePoseidon.sol` |
+| App | `notePoseidon.ts`, `merklePoseidon.ts`, `proverPoseidon.ts` |
+
+**Live RH pool `0x2BD9…` is still keccak Phase-1.** Poseidon verifier must not be set on it. Next deploy: Poseidon hashers → Poseidon pool → setVerifier.
+
+### Legacy keccak notes (Phase-1 app)
+
+```
+commitment = keccak256(secret || amount || asset)  // NoteLib.sol / note.ts
+```
 
 ### Proof public inputs (v2)
 
