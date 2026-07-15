@@ -52,6 +52,16 @@ import {
   rotateReceiveIdentity,
   type ReceiveIdentity,
 } from "@/lib/receiveTag";
+import {
+  fetchPaymentMemos,
+  isPayMemoLive,
+  MEMO_GAS_LIMIT,
+  PAY_MEMO_ADDRESS,
+  PAY_MEMO_DEPLOY_BLOCK,
+  payMemoAbi,
+  ticketToMemoBytes,
+  type ScannedMemo,
+} from "@/lib/payMemo";
 import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
@@ -105,6 +115,11 @@ export function MoveView() {
   const [myIdentity, setMyIdentity] = useState<ReceiveIdentity | null>(null);
   const [tagCopied, setTagCopied] = useState(false);
   const [shareLocked, setShareLocked] = useState(false);
+  const [inbox, setInbox] = useState<
+    { memo: ScannedMemo; label: string; ticket: string }[]
+  >([]);
+  const [inboxStatus, setInboxStatus] = useState<string | null>(null);
+  const [memoPosted, setMemoPosted] = useState(false);
 
   const {
     writeContract,
@@ -120,21 +135,43 @@ export function MoveView() {
   });
 
   const handledHash = useRef<string | null>(null);
-  const pendingAction = useRef<"send" | "cashout" | null>(null);
+  const pendingAction = useRef<"send" | "cashout" | "memo" | null>(null);
   const spentNoteId = useRef<string | null>(null);
   /** Change only — never store the payment note on the sender */
   const pendingChange = useRef<LocalNote | null>(null);
   const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
     null
   );
+  /** After direct pay: post encrypted ticket on-chain (GloamPayMemo) */
+  const pendingMemo = useRef<{
+    paymentCommitment: Hex;
+    ticket: string;
+  } | null>(null);
 
-  // Confirm path: spend note, keep change for sender, publish share only after success
+  // Confirm path: transfer → optional on-chain memo → share UI
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
     handledHash.current = hash;
 
     void (async () => {
+      // Memo post finished
+      if (pendingAction.current === "memo") {
+        pendingAction.current = null;
+        pendingMemo.current = null;
+        setMemoPosted(true);
+        if (pendingShare.current) {
+          setShareBlob(pendingShare.current.blob);
+          setShareAmountLabel(pendingShare.current.amountLabel);
+          pendingShare.current = null;
+        }
+        setSuccessTitle("Private pay on-chain");
+        setShowSuccess(true);
+        setBusy(false);
+        setStatus(null);
+        return;
+      }
+
       if (spentNoteId.current) {
         updateLocalNote(spentNoteId.current, { status: "recovered" });
         spentNoteId.current = null;
@@ -163,20 +200,43 @@ export function MoveView() {
         pendingChange.current = null;
       }
 
-      // Payment note is NOT saved here — only the share package for the recipient
+      refreshNotes();
+      void refreshTree();
+
+      // Direct pay + memo board live → second tx posts ciphertext on-chain
+      if (
+        pendingMemo.current &&
+        isPayMemoLive() &&
+        PAY_MEMO_ADDRESS &&
+        pendingAction.current === "send"
+      ) {
+        const m = pendingMemo.current;
+        setStatus("Posting encrypted memo on-chain (no QR required for them)…");
+        pendingAction.current = "memo";
+        handledHash.current = null;
+        writeContract({
+          address: PAY_MEMO_ADDRESS,
+          abi: payMemoAbi,
+          functionName: "postMemo",
+          args: [m.paymentCommitment, ticketToMemoBytes(m.ticket)],
+          gas: MEMO_GAS_LIMIT,
+          chainId: CHAIN,
+        });
+        return;
+      }
+
+      pendingMemo.current = null;
       if (pendingShare.current) {
         setShareBlob(pendingShare.current.blob);
         setShareAmountLabel(pendingShare.current.amountLabel);
         pendingShare.current = null;
       }
 
-      refreshNotes();
-      void refreshTree();
       setShowSuccess(true);
       setBusy(false);
       setStatus(null);
     })();
-  }, [isSuccess, hash, refreshNotes, refreshTree, publicClient]);
+  }, [isSuccess, hash, refreshNotes, refreshTree, publicClient, writeContract]);
 
   // Wallet reject / tx fail: drop ephemeral payment secrets
   useEffect(() => {
@@ -185,6 +245,7 @@ export function MoveView() {
     setStatus(null);
     pendingChange.current = null;
     pendingShare.current = null;
+    pendingMemo.current = null;
     spentNoteId.current = null;
     setShareBlob(null);
   }, [writeError]);
@@ -361,8 +422,19 @@ export function MoveView() {
       };
       setShareLocked(locked);
       setShareBlob(null);
+      setMemoPosted(false);
 
-      setStatus("Confirm private send in your wallet…");
+      // Payment leaf commitment — for on-chain memo discovery
+      if (payStyle === "direct" && isPayMemoLive()) {
+        pendingMemo.current = {
+          paymentCommitment: fieldToBytes32(w.publicInputs.newCommitment0),
+          ticket: share,
+        };
+      } else {
+        pendingMemo.current = null;
+      }
+
+      setStatus("Confirm private pay in your wallet…");
       writeContract({
         address: SHIELD_POOL_ADDRESS,
         abi: shieldPoolAbi,
@@ -379,13 +451,62 @@ export function MoveView() {
         gas: SHIELD_GAS_LIMIT,
         chainId: CHAIN,
       });
-      setSuccessTitle("Private send submitted");
+      setSuccessTitle(
+        payStyle === "direct" && isPayMemoLive()
+          ? "Private pay — confirm memo next"
+          : "Private pay submitted"
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Private send failed");
       setBusy(false);
       setStatus(null);
       pendingChange.current = null;
       pendingShare.current = null;
+      pendingMemo.current = null;
+    }
+  }
+
+  async function scanInbox() {
+    if (!publicClient) {
+      setInboxStatus("Connect wallet / RPC first.");
+      return;
+    }
+    if (!isPayMemoLive()) {
+      setInboxStatus(
+        "On-chain memo board not deployed yet — paste ticket manually or deploy GloamPayMemo."
+      );
+      return;
+    }
+    setInboxStatus("Scanning chain for payments to your tag…");
+    setInbox([]);
+    try {
+      const memos = await fetchPaymentMemos(
+        publicClient,
+        PAY_MEMO_DEPLOY_BLOCK
+      );
+      const hits: { memo: ScannedMemo; label: string; ticket: string }[] = [];
+      for (const m of memos) {
+        try {
+          const pack = await decodeNotePackage(m.ticket, undefined, {
+            tryTagDecrypt: true,
+          });
+          hits.push({
+            memo: m,
+            ticket: m.ticket,
+            label: `${formatAmountEth(pack.amountWei)} ETH`,
+          });
+        } catch {
+          /* not for us */
+        }
+      }
+      setInbox(hits);
+      setInboxStatus(
+        hits.length
+          ? `Found ${hits.length} payment(s) for your tag.`
+          : "No new on-chain payments for this tag (or memo board empty)."
+      );
+    } catch (e) {
+      setInboxStatus(e instanceof Error ? e.message : "Inbox scan failed");
     }
   }
 
@@ -930,6 +1051,55 @@ export function MoveView() {
                   </div>
 
                   <div className="rounded-xl border border-line bg-background p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        Inbox (on-chain memos)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void scanInbox()}
+                        className="text-xs text-lime hover:underline"
+                      >
+                        Scan chain
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-mute">
+                      Solana-style discovery: when the sender posts a memo,
+                      payments appear here — no QR.{" "}
+                      {isPayMemoLive()
+                        ? "Memo board live."
+                        : "Memo board not deployed yet (paste ticket below)."}
+                    </p>
+                    {inboxStatus && (
+                      <p className="mt-2 text-xs text-mute">{inboxStatus}</p>
+                    )}
+                    {inbox.length > 0 && (
+                      <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+                        {inbox.map((row) => (
+                          <li
+                            key={row.memo.paymentCommitment}
+                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                          >
+                            <span className="text-foreground">{row.label}</span>
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-lime"
+                              onClick={() => {
+                                setImportText(row.ticket);
+                                setClaimPreview(
+                                  `Selected ${row.label} from inbox.`
+                                );
+                              }}
+                            >
+                              Use
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-line bg-background p-4">
                     <p className="text-sm font-medium text-foreground">
                       Claim a payment
                     </p>
@@ -1010,29 +1180,26 @@ export function MoveView() {
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-              Direct private pay (like Solflare / Zcash-style UX)
+              Why not identical to Solana private send?
             </p>
             <ul className="mt-3 space-y-2 text-mute">
               <li>
-                <strong className="text-foreground">Receive tag</strong> — sticky{" "}
-                <span className="font-mono">gloamr1…</span> (not a chain{" "}
-                <span className="font-mono">0x</span>).
+                <strong className="text-foreground">RH is EVM</strong> — Solana
+                wallets wire private send into the same address UX via their
+                stack (shielded program + memo). Same pattern is possible here.
               </li>
               <li>
-                <strong className="text-foreground">Direct pay</strong> — encrypt
-                ticket to their tag; only they open it.
+                <strong className="text-foreground">Gloam path</strong> — vault
+                proof (hidden who/how much) + receive tag + optional{" "}
+                <strong className="text-foreground">on-chain memo</strong> so
+                they Scan inbox (Solana-like discovery).
               </li>
               <li>
-                <strong className="text-foreground">On-chain</strong> — still a
-                vault transfer proof (not public Alice→Bob). Ciphertext handoff
-                is QR/share until on-chain memos land.
-              </li>
-              <li>
-                <strong className="text-foreground">Public send</strong> —{" "}
+                <strong className="text-foreground">Public 0x send</strong> —{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
-                  /app/send
-                </Link>
-                .
+                  Send
+                </Link>{" "}
+                remains the open-book path.
               </li>
             </ul>
           </div>
@@ -1052,11 +1219,13 @@ export function MoveView() {
         open={showSuccess && Boolean(hash)}
         title={successTitle}
         body={
-          pendingAction.current === "send" || shareBlob ? (
+          pendingAction.current === "send" ||
+          pendingAction.current === "memo" ||
+          shareBlob ? (
             <p>
-              Your payment ticket is below (QR / copy / share). Hand it to the
-              recipient only — it is bearer cash. Your vault change stays in
-              this browser. Do not reuse a ticket you already gave away.
+              {memoPosted
+                ? "Encrypted memo posted on-chain. Recipient can Scan chain under Receive — no QR required. Backup package still below."
+                : "Payment package below (QR / copy / share) if they need handoff. Your vault change stays in this browser."}
             </p>
           ) : (
             <p>Funds should be back in your open wallet.</p>

@@ -26,6 +26,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     section: "How it works",
     items: [
       { href: "/docs/encryption", label: "How shield works" },
+      { href: "/docs/private-pay", label: "Private pay" },
       { href: "/docs/privacy-model", label: "What stays private" },
       { href: "/docs/sealed-trade", label: "Sealed trade" },
       { href: "/docs/chain", label: "Robinhood Chain" },
