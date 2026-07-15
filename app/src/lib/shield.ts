@@ -10,14 +10,13 @@ import { makeBoundNote } from "./note";
 import {
   activeHashScheme,
   activePoolAddress,
+  TESTNET_POSEIDON_DEPLOY_BLOCK,
   type HashScheme,
 } from "./config";
 
 /** Live keccak RH testnet deploy */
 export const TESTNET_SHIELD_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
-
-import { TESTNET_POSEIDON_DEPLOY_BLOCK } from "./config";
 
 /** getLogs from pool deploy block (Poseidon default; override via env) */
 export const SHIELD_DEPLOY_BLOCK = BigInt(
