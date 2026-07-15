@@ -53,6 +53,13 @@ export function ConnectButton({ className = "" }: { className?: string }) {
 
   useEffect(() => setMounted(true), []);
 
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    void import("@/lib/track").then(({ track }) => {
+      track("wallet_connect", { chainId });
+    });
+  }, [isConnected, address, chainId]);
+
   async function onSwitch() {
     setNetErr(null);
     setBusy(true);
@@ -126,7 +133,12 @@ export function ConnectButton({ className = "" }: { className?: string }) {
     <div className={className}>
       <button
         type="button"
-        onClick={() => connector && connect({ connector })}
+        onClick={() => {
+          void import("@/lib/track").then(({ track }) => {
+            track("wallet_connect_click");
+          });
+          if (connector) connect({ connector });
+        }}
         disabled={!connector || isPending || isConnecting}
         className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
       >

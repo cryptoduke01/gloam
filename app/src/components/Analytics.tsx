@@ -35,8 +35,8 @@ export function Analytics() {
   useEffect(() => {
     if (!enabled) return;
     // Dynamic import keeps consent gate in one place for product track() too
-    void import("@/lib/track").then(({ track }) => {
-      track("pageview");
+    void import("@/lib/track").then(({ trackPageview }) => {
+      trackPageview();
     });
   }, [enabled]);
 

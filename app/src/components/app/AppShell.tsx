@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { WalletMenu } from "./WalletMenu";
 
@@ -32,6 +32,12 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    void import("@/lib/track").then(({ track }) => {
+      track("app_view", { title: title.slice(0, 40) });
+    });
+  }, [pathname, title]);
 
   return (
     <div className="flex min-h-full flex-col bg-background">

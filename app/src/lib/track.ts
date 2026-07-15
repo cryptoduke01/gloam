@@ -1,6 +1,8 @@
 /**
- * First-party product analytics (after cookie consent "all").
- * Events land on POST /api/collect — optional webhook + Vercel logs.
+ * Product analytics → POST /api/collect → traction store + /admin.
+ *
+ * Product funnel events always fire (first-party ops metrics).
+ * Marketing pageviews still respect cookie consent.
  */
 
 import { analyticsAllowed } from "@/lib/consent";
@@ -13,18 +15,8 @@ export type TrackPayload = {
   ts?: number;
 };
 
-export function track(event: string, meta?: TrackPayload["meta"]) {
+function send(body: TrackPayload) {
   if (typeof window === "undefined") return;
-  if (!analyticsAllowed()) return;
-
-  const body: TrackPayload = {
-    t: event,
-    path: window.location.pathname,
-    ref: document.referrer || null,
-    meta: meta ?? undefined,
-    ts: Date.now(),
-  };
-
   try {
     const json = JSON.stringify(body);
     if (navigator.sendBeacon) {
@@ -43,4 +35,27 @@ export function track(event: string, meta?: TrackPayload["meta"]) {
   } catch {
     /* ignore */
   }
+}
+
+/** Product / funnel events — always recorded for traction (no ad cookies). */
+export function track(
+  event: string,
+  meta?: TrackPayload["meta"],
+  opts?: { requireConsent?: boolean },
+) {
+  if (typeof window === "undefined") return;
+  if (opts?.requireConsent && !analyticsAllowed()) return;
+
+  send({
+    t: event,
+    path: window.location.pathname,
+    ref: document.referrer || null,
+    meta: meta ?? undefined,
+    ts: Date.now(),
+  });
+}
+
+/** Marketing pageviews — only after "Accept all". */
+export function trackPageview() {
+  track("pageview", undefined, { requireConsent: true });
 }

@@ -41,6 +41,12 @@ export function TestnetGate({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [open]);
 
+  useEffect(() => {
+    void import("@/lib/track").then(({ track }) => {
+      track(open ? "testnet_open" : "testnet_gate_view");
+    });
+  }, [open]);
+
   // Auto-reload once when the clock hits open so nested state is clean
   useEffect(() => {
     if (open) return;

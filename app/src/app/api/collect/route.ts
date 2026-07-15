@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordTractionEvent } from "@/lib/tractionStore";
 
 type Body = {
   t?: unknown;
@@ -9,13 +10,9 @@ type Body = {
 };
 
 /**
- * First-party analytics intake (after optional cookie consent).
- *
- * Where events go:
- * 1. Vercel function logs (always, truncated) — filter "gloam_traction"
- * 2. Optional TRACTION_WEBHOOK_URL (Discord/Slack/Make/n8n) — set in Vercel env
- *
- * On-chain traction is separate: explorer + spreadsheet (see team runbook).
+ * First-party analytics intake.
+ * Persists to traction store (memory + optional Upstash Redis).
+ * Optional TRACTION_WEBHOOK_URL for Discord/Slack.
  */
 export async function POST(req: Request) {
   try {
@@ -30,14 +27,14 @@ export async function POST(req: Request) {
       ref: typeof data.ref === "string" ? data.ref.slice(0, 300) : null,
       meta:
         data.meta && typeof data.meta === "object" && !Array.isArray(data.meta)
-          ? data.meta
+          ? (data.meta as Record<string, unknown>)
           : null,
       ts: typeof data.ts === "number" ? data.ts : Date.now(),
       ua: req.headers.get("user-agent")?.slice(0, 160) ?? null,
     };
 
-    // Searchable in Vercel → Logs
     console.info("gloam_traction", JSON.stringify(event));
+    await recordTractionEvent(event);
 
     const webhook = process.env.TRACTION_WEBHOOK_URL?.trim();
     if (webhook) {
@@ -54,7 +51,7 @@ export async function POST(req: Request) {
                 fields: [
                   {
                     name: "ref",
-                    value: event.ref?.slice(0, 200) || "—",
+                    value: (event.ref ?? "—").slice(0, 200),
                     inline: false,
                   },
                   {

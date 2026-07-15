@@ -172,6 +172,9 @@ export function MoveView() {
           pendingShare.current = null;
         }
         setSuccessTitle("Private pay on-chain");
+        void import("@/lib/track").then(({ track }) => {
+          track("private_pay_success");
+        });
         setShowSuccess(true);
         setBusy(false);
         setStatus(null);
@@ -323,6 +326,9 @@ export function MoveView() {
         chainId: CHAIN,
       });
       setSuccessTitle("Cashed out");
+      void import("@/lib/track").then(({ track }) => {
+        track("unshield_success");
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cash out failed");
       setBusy(false);
@@ -462,6 +468,9 @@ export function MoveView() {
           ? "Private pay — confirm memo next"
           : "Private pay submitted"
       );
+      void import("@/lib/track").then(({ track }) => {
+        track("private_send_submit");
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Private send failed");
       setBusy(false);
