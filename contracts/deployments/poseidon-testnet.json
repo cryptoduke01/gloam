@@ -5,41 +5,42 @@
   "explorer": "https://explorer.testnet.chain.robinhood.com",
   "hashScheme": "poseidon",
   "proofLayout": 2,
-  "deployBlock": 90260331,
+  "deployBlock": 90436718,
   "contracts": {
     "Poseidon2": "0xcc2d2D0f12324DcC32f781198664C92BB5200947",
     "Poseidon3": "0x3242C523B5101c436e1AC74224598335E4f8F054",
     "UnshieldVerifier": "0x1CdEf210C65616D7059397022BE3564fa742AED6",
     "UnshieldIVerifier": "0xa40eCfBbB91D53dc66bf18E312228790751c3034",
-    "ShieldPoolPoseidon": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+    "ShieldPoolPoseidon": "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F",
     "TransferVerifier": "0x281Fe05bbD9f777fd26E1fF88d5b3BF094894719",
     "TransferIVerifier": "0x73fe891fF323F7eBB730F8b6220fBc4D3d9648B1",
-    "DualProofVerifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C"
+    "DualProofVerifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C",
+    "SealedSwapVerifier": "0xE19a5a3CA4f7836811C5a87f2893b2A4C67AdF8D",
+    "SealedSwapIVerifier": "0x68C28ECD40320038bF8DE34Bb02064e12f602371",
+    "GloamPayMemo": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE"
+  },
+  "legacy": {
+    "ShieldPoolPoseidon_preSealed": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+    "deployBlock_preSealed": 90260331,
+    "keccakPool": "0x2BD98196D90AB45D58843B4c8B8809aa34343d35"
   },
   "deployer": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
-  "deployedAt": "2026-07-14T20:54:13.980Z",
+  "deployedAt": "2026-07-15T09:30:00.000Z",
+  "poolDeployTxExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0xb65eaf917144502e22b12885a4daecdb6dd1bddf2272405e2c4d17b463015366",
   "appEnv": {
-    "NEXT_PUBLIC_POSEIDON_SHIELD_POOL": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+    "NEXT_PUBLIC_POSEIDON_SHIELD_POOL": "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F",
     "NEXT_PUBLIC_HASH_SCHEME": "poseidon",
-    "NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK": "90260331"
-  },
-  "notes": "Phase-2 Poseidon pool. DualProofVerifier routes unshield (5 inputs) and transfer (4). Dev ceremony keys. Legacy keccak: 0x2BD98196D90AB45D58843B4c8B8809aa34343d35.",
-  "privateSend": true,
-  "verifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C",
-  "setVerifierTxExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0x72a8b58f9dd52295a7629d40ffbd1ca78c4c0b585b81acbcef377780f9994702",
-  "updatedAt": "2026-07-14T21:45:50.925Z",
-  "securityNote": "Dev ceremony zkeys in app/public/circuits — not production. No private keys in this file; addresses and explorer URLs only.",
-  "GloamPayMemo": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE",
-  "GloamPayMemoDeployBlock": 90421567,
-  "GloamPayMemoDeployTxExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0xcbe01bd406e77d781696cf8ef604a88f4f301972bdc5811377fea7dfc889296f",
-  "appEnvPayMemo": {
+    "NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK": "90436718",
     "NEXT_PUBLIC_PAY_MEMO": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE",
     "NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK": "90421567"
   },
-  "sealedSwap": {
-    "SealedSwapVerifier": "0xE19a5a3CA4f7836811C5a87f2893b2A4C67AdF8D",
-    "SealedSwapIVerifier": "0x68C28ECD40320038bF8DE34Bb02064e12f602371",
-    "deployedAtBlock": 90428991,
-    "note": "Verifiers live. Pool redeploy required for sealedSwap() - run DeployPoseidonPoolSealed.s.sol then update ShieldPoolPoseidon + deployBlock in this file and app config."
-  }
+  "features": {
+    "shield": true,
+    "unshield": true,
+    "privateSend": true,
+    "payMemo": true,
+    "sealedSwap": true
+  },
+  "notes": "Vault with sealedSwap + DualProofVerifier + SealedSwapIVerifier. Dev ceremony keys. New vault - re-shield funds. Old pool 0xA488 for history only.",
+  "securityNote": "Dev ceremony zkeys — not production. No private keys in this file."
 }

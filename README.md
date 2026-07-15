@@ -30,7 +30,8 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
 | Vault move | **Private send** — To (receive tag) + Amount; on-chain memo inbox (GloamPayMemo) |
 | Vault out | **Cash out** (unshield) with a real browser proof |
-| Vault trade | **Adapter:** cash out → public DEX swap → re-shield (swap edge still public) |
+| Vault trade | **Private trade** (sealed size on new vault) · adapter still available |
+
 | Note backup | Settings → export/import vault note secrets (this browser / JSON) |
 
 **Not yet:** sealed-size private trade (size stays hidden). Production ceremony keys for real money.
@@ -72,8 +73,8 @@ Chain ID **46630**.
 
 | | Phase 1 (keccak) | Phase 2 (Poseidon) **default** |
 | --- | --- | --- |
-| Pool | `0x2BD9…3d35` | `0xA488…c93B` |
-| Unshield / transfer | locked | live (dev keys) |
+| Pool | `0x2BD9…3d35` | `0x4F38…2D8F` (sealed) · legacy `0xA488…c93B` |
+| Unshield / transfer / sealed swap | locked | live (dev keys) |
 | Record | [testnet.json](./contracts/deployments/testnet.json) | [poseidon-testnet.json](./contracts/deployments/poseidon-testnet.json) |
 
 App defaults to **Poseidon**. Override with `NEXT_PUBLIC_HASH_SCHEME=keccak` for the old pool.

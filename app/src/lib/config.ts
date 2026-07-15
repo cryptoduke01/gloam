@@ -12,11 +12,15 @@ export type HashScheme = "keccak" | "poseidon";
 export const KECCAK_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** Phase-2 Poseidon pool — live RH testnet (see deployments/poseidon-testnet.json) */
+/** Phase-2 Poseidon pool — live RH testnet with sealedSwap (see deployments/poseidon-testnet.json) */
 export const TESTNET_POSEIDON_POOL =
-  "0xA488809a089F003A2B6E69daa65B0db79823c93B" as const satisfies Address;
+  "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F" as const satisfies Address;
 
-export const TESTNET_POSEIDON_DEPLOY_BLOCK = 90_260_331n;
+export const TESTNET_POSEIDON_DEPLOY_BLOCK = 90_436_718n;
+
+/** Prior Poseidon pool (pre-sealedSwap) — history only */
+export const LEGACY_POSEIDON_POOL =
+  "0xA488809a089F003A2B6E69daa65B0db79823c93B" as const satisfies Address;
 
 /** Env override, else hard-coded testnet Poseidon pool */
 export const POSEIDON_POOL: Address | null = (() => {
