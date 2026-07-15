@@ -66,8 +66,8 @@ export const ONBOARDING_STEPS = [
   },
   {
     id: "move",
-    title: "Create a payment ticket",
-    body: "Move → Pay ticket. No wallet address — hand off a code/QR.",
+    title: "Private pay (direct or ticket)",
+    body: "Copy your receive tag, or pay to someone else's tag / bearer ticket.",
     href: "/app/move",
   },
   {

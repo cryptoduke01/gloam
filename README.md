@@ -28,7 +28,7 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | --- | --- |
 | Public | Connect, portfolio, send ETH, send faucet stocks, markets, charts |
 | Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
-| Vault move | **Private send** — pay someone inside the vault (payment code + optional passphrase) |
+| Vault move | **Private pay** — direct to receive tag (`gloamr1…`) or bearer ticket + QR |
 | Vault out | **Cash out** (unshield) with a real browser proof |
 | Vault trade | **Adapter:** cash out → public DEX swap → re-shield (swap edge still public) |
 | Note backup | Settings → export/import vault note secrets (this browser / JSON) |

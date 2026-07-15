@@ -162,13 +162,28 @@ function expandCompact(obj: Record<string, unknown>): NotePackage | null {
 }
 
 /**
- * Parse legacy JSON, gloam1.*, or gloam1e.* (needs passphrase).
+ * Parse legacy JSON, gloam1.*, gloam1e.* (passphrase), or gloam2t.* (receive tag).
+ * For gloam2t, pass `tryTagDecrypt: true` to use this browser’s viewing key.
  */
 export async function decodeNotePackage(
   input: string,
-  passphrase?: string
+  passphrase?: string,
+  opts?: { tryTagDecrypt?: boolean }
 ): Promise<NotePackage> {
   const s = input.trim();
+
+  // Pay-to-tag sealed package — only recipient’s receive key opens it
+  if (s.startsWith("gloam2t.")) {
+    if (!opts?.tryTagDecrypt) {
+      throw new Error(
+        "This ticket is encrypted to a receive tag. Claim it in the browser that owns that tag."
+      );
+    }
+    const { decryptTicketWithLocalTag } = await import("./receiveTag");
+    const inner = await decryptTicketWithLocalTag(s);
+    // Recurse without tag prefix (inner is gloam1 / gloam1e / JSON)
+    return decodeNotePackage(inner, passphrase, { tryTagDecrypt: false });
+  }
 
   if (s.startsWith(PREFIX_ENC)) {
     if (!passphrase?.trim()) {
@@ -212,11 +227,18 @@ export async function decodeNotePackage(
     return pack;
   }
 
-  throw new Error("Paste a Gloam payment (gloam1… or the full package).");
+  throw new Error(
+    "Paste a Gloam payment (gloam1… / gloam1e… / gloam2t… or full package)."
+  );
 }
 
 export function isEncryptedPackage(input: string): boolean {
-  return input.trim().startsWith(PREFIX_ENC);
+  const t = input.trim();
+  return t.startsWith(PREFIX_ENC) || t.startsWith("gloam2t.");
+}
+
+export function isPayToTagSealed(input: string): boolean {
+  return input.trim().startsWith("gloam2t.");
 }
 
 export function formatAmountEth(wei: string): string {

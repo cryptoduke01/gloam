@@ -10,7 +10,7 @@ export default function MovePage() {
   return (
     <AppShell
       title="Move"
-      subtitle="Payment tickets inside the vault (no 0x address) — or cash out publicly."
+      subtitle="Direct pay to a Gloam receive tag, bearer tickets, or cash out."
     >
       <MoveView />
     </AppShell>

@@ -88,15 +88,28 @@ export function PaymentTicketShare({
   return (
     <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
       <p className="text-sm font-medium text-foreground">
-        Payment ticket ready
+        {code.startsWith("gloamr1.")
+          ? "Your receive tag"
+          : "Payment package ready"}
         {amountLabel ? ` · ${amountLabel} ETH` : ""}
-        {locked ? " · locked" : ""}
+        {locked ? " · encrypted" : ""}
       </p>
       <p className="mt-1 text-xs text-mute">
-        Not a wallet address. Hand this ticket off-app (message, AirDrop, QR).
-        They open <strong className="text-foreground">Move → Claim</strong>.
-        Anyone with the ticket
-        {locked ? " and passphrase" : ""} can spend it — treat it like cash.
+        {code.startsWith("gloamr1.") ? (
+          <>
+            Share this tag so others can{" "}
+            <strong className="text-foreground">Private pay → Direct</strong>{" "}
+            to you. Not a public chain address.
+          </>
+        ) : (
+          <>
+            Hand off off-app (message, AirDrop, QR). They open{" "}
+            <strong className="text-foreground">Move → Receive</strong>.
+            {locked
+              ? " Encrypted — only the intended key/passphrase opens it."
+              : " Bearer ticket — treat like cash."}
+          </>
+        )}
       </p>
 
       <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:items-start">
