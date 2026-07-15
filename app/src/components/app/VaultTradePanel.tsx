@@ -626,21 +626,22 @@ export function VaultTradePanel({
       <div className="space-y-4">
         <DevKeysBanner />
         <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-sm text-mute">
-          <p className="font-medium text-foreground">Vault trade adapter</p>
+          <p className="font-medium text-foreground">From vault (public market)</p>
           <p className="mt-1">
-            Holds stay in the vault; the <strong className="text-foreground">swap itself is public</strong>{" "}
-            (size shows on the explorer). Proceeds re-shield automatically.
-            Full sealed-size private trade comes later.
+            Cash out → swap on the open market → re-shield. The{" "}
+            <strong className="text-foreground">swap size is public</strong>.
+            For size-private trades, use the{" "}
+            <strong className="text-foreground">Private trade</strong> tab
+            instead (no DEX pool required).
           </p>
         </div>
 
         {!hasPool && (
           <p className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
-            No on-chain pool for {marketSymbol}. Pick an onchain market, or{" "}
-            <Link href="/app/move" className="text-lime hover:underline">
-              Move
-            </Link>{" "}
-            without trading.
+            No public swap market for {marketSymbol} on testnet yet (empty DEX
+            pair). That only blocks <em>this</em> path. Use{" "}
+            <strong className="text-foreground">Private trade</strong> for a
+            vault-only swap, or pick another market that has a pool.
           </p>
         )}
 

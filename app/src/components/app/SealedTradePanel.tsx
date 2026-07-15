@@ -49,10 +49,12 @@ import { WalletMenu } from "./WalletMenu";
 type Support = "checking" | "unsupported" | "ready" | "no_verifier";
 
 export function SealedTradePanel({
+  marketId,
   marketSymbol,
   tokenAddress,
   onUseAdapter,
 }: {
+  marketId?: string;
   marketSymbol: string;
   tokenAddress?: Address;
   onUseAdapter: () => void;
@@ -149,9 +151,13 @@ export function SealedTradePanel({
     if (selected && selected.id !== noteId) setNoteId(selected.id);
   }, [selected, noteId]);
 
+  // Prefer faucet token registry so private trade works even without a Uniswap pair
   const outToken =
     tokenAddress ??
-    TESTNET_STOCK_TOKENS.find((t) => t.symbol === marketSymbol)?.address;
+    TESTNET_STOCK_TOKENS.find((t) => t.id === marketId)?.address ??
+    TESTNET_STOCK_TOKENS.find(
+      (t) => t.symbol.toLowerCase() === marketSymbol.toLowerCase()
+    )?.address;
 
   useEffect(() => {
     if (!isSuccess || !hash) return;
@@ -379,9 +385,16 @@ export function SealedTradePanel({
             </div>
             <div className="space-y-4 p-5">
               <p className="text-xs text-mute">
-                Testnet rate is 1:1 for demos. The open market never sees your
-                exact size — only that a private trade happened.
+                This path does <strong className="text-foreground">not</strong>{" "}
+                need a public DEX pool for {marketSymbol}. Test rate is 1:1.
+                Size stays private; the open market only sees a vault proof.
               </p>
+              {!outToken && (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  Pick a stock in the list (TSLA, AMZN, …) so we know which
+                  vault token to pay out.
+                </p>
+              )}
 
               <div>
                 <p className="text-sm font-medium text-foreground">

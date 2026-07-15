@@ -496,6 +496,9 @@ export function TradeView() {
             }`}
           >
             From vault
+            <span className="mt-0.5 block text-[10px] font-normal opacity-80">
+              public swap
+            </span>
           </button>
         )}
         <button
@@ -503,11 +506,14 @@ export function TradeView() {
           onClick={() => setPathMode("sealed")}
           className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
             pathMode === "sealed"
-              ? "bg-foreground text-background"
+              ? "bg-lime text-black"
               : "text-mute hover:text-foreground"
           }`}
         >
           Private trade
+          <span className="mt-0.5 block text-[10px] font-normal opacity-80">
+            size hidden
+          </span>
         </button>
       </div>
 
@@ -652,6 +658,7 @@ export function TradeView() {
             />
           ) : pathMode === "sealed" ? (
             <SealedTradePanel
+              marketId={resolvedId}
               marketSymbol={market.symbol}
               tokenAddress={token}
               onUseAdapter={() => setPathMode("vault")}
