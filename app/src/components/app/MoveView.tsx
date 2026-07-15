@@ -588,6 +588,13 @@ export function MoveView() {
     });
   }, [mode]);
 
+  // Auto-scan inbox when opening Receive (if memo board live)
+  useEffect(() => {
+    if (mode !== "receive" || !publicClient || !isPayMemoLive()) return;
+    void scanInbox();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open-tab scan once per enter
+  }, [mode, publicClient]);
+
   // Live preview when pasting a ticket (amount only — not a full claim)
   useEffect(() => {
     const t = importText.trim();
@@ -670,26 +677,24 @@ export function MoveView() {
             <div className="space-y-5 p-5 sm:p-6">
               <DevKeysBanner />
               <p className="text-sm leading-relaxed text-mute">
-                <strong className="text-foreground">Direct private pay:</strong>{" "}
-                paste their <span className="font-mono">gloamr1…</span> receive
-                tag (like a shielded address). Or mint a{" "}
-                <strong className="text-foreground">bearer ticket</strong> for
-                cash-style handoff. Never a public{" "}
-                <span className="font-mono">0x</span>.
-              </p>
-              <p className="rounded-lg border border-line bg-background px-3 py-2 text-xs text-mute">
-                Public chain transfer to a wallet address →{" "}
+                <strong className="text-foreground">Private send</strong> uses
+                the same shape as a normal send:{" "}
+                <strong className="text-foreground">To</strong> (their Gloam tag)
+                + <strong className="text-foreground">Amount</strong> + confirm.
+                Under the hood: vault proof + encrypted on-chain memo
+                {isPayMemoLive() ? " (live)" : ""}. Not a public{" "}
+                <span className="font-mono">0x</span> transfer — use{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
                   Send
-                </Link>
-                .
+                </Link>{" "}
+                for that.
               </p>
 
               {/* Mode tabs */}
               <div className="flex gap-1 rounded-lg border border-line p-1">
                 {(
                   [
-                    ["send", "Private pay"],
+                    ["send", "Send privately"],
                     ["receive", "Receive"],
                     ["cashout", "Cash out"],
                   ] as const
@@ -801,73 +806,38 @@ export function MoveView() {
 
                   {mode === "send" && (
                     <div className="space-y-3">
-                      <div className="flex gap-1 rounded-lg border border-line p-1">
-                        <button
-                          type="button"
-                          onClick={() => setPayStyle("direct")}
-                          className={`min-h-9 flex-1 rounded-md text-xs font-medium ${
-                            payStyle === "direct"
-                              ? "bg-lime text-black"
-                              : "text-mute"
-                          }`}
+                      {/* Same mental model as public Send: To + Amount */}
+                      <div>
+                        <label
+                          htmlFor="recv-tag"
+                          className="text-sm font-medium text-foreground"
                         >
-                          Direct (to tag)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPayStyle("bearer")}
-                          className={`min-h-9 flex-1 rounded-md text-xs font-medium ${
-                            payStyle === "bearer"
-                              ? "bg-lime text-black"
-                              : "text-mute"
-                          }`}
-                        >
-                          Bearer ticket
-                        </button>
+                          To
+                        </label>
+                        <input
+                          id="recv-tag"
+                          value={recipientTag}
+                          onChange={(e) => {
+                            const v = e.target.value.trim();
+                            setRecipientTag(v);
+                            if (v.startsWith("gloamr1.")) setPayStyle("direct");
+                            else if (v === "") setPayStyle("direct");
+                          }}
+                          placeholder="Their gloamr1… receive tag"
+                          className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 font-mono text-sm outline-none focus:border-lime"
+                        />
+                        <p className="mt-1 text-xs text-mute">
+                          Same as “send to address” — but a private Gloam tag
+                          from Move → Receive. Leave empty only for advanced
+                          bearer tickets.
+                        </p>
                       </div>
-                      <div className="rounded-lg border border-lime/20 bg-lime/5 px-3 py-2 text-xs text-mute">
-                        {payStyle === "direct" ? (
-                          <>
-                            <strong className="text-foreground">Direct:</strong>{" "}
-                            paste their receive tag. Ticket encrypts to their
-                            key only — Solflare-style pay-to-shielded-address
-                            UX. Hand off the sealed package (QR/share).
-                          </>
-                        ) : (
-                          <>
-                            <strong className="text-foreground">Bearer:</strong>{" "}
-                            anyone with the ticket (and optional passphrase)
-                            can claim — like cash.
-                          </>
-                        )}
-                      </div>
-                      {payStyle === "direct" && (
-                        <div>
-                          <label
-                            htmlFor="recv-tag"
-                            className="text-sm font-medium text-foreground"
-                          >
-                            Their receive tag
-                          </label>
-                          <input
-                            id="recv-tag"
-                            value={recipientTag}
-                            onChange={(e) => setRecipientTag(e.target.value.trim())}
-                            placeholder="gloamr1.…"
-                            className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 font-mono text-xs outline-none focus:border-lime"
-                          />
-                          <p className="mt-1 text-xs text-mute">
-                            They copy this from Move → Receive. Not a chain{" "}
-                            <span className="font-mono">0x</span> address.
-                          </p>
-                        </div>
-                      )}
                       <div>
                         <label
                           htmlFor="pay-amt"
                           className="text-sm font-medium text-foreground"
                         >
-                          Amount (stays in vault)
+                          Amount
                         </label>
                         <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
                           <input
@@ -891,29 +861,46 @@ export function MoveView() {
                           </button>
                         </div>
                         <p className="mt-1 text-xs text-mute">
-                          Leftover stays with you as vault change.
+                          Stays in the vault. Change returns to you as a new
+                          note.
                         </p>
                       </div>
-                      {payStyle === "bearer" && (
+                      {!recipientTag.trim() && (
                         <div>
-                          <label
-                            htmlFor="send-pass"
-                            className="text-sm font-medium text-foreground"
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPayStyle((s) =>
+                                s === "bearer" ? "direct" : "bearer"
+                              )
+                            }
+                            className="text-xs text-mute hover:text-lime"
                           >
-                            Lock with passphrase{" "}
-                            <span className="font-normal text-mute">
-                              (optional)
-                            </span>
-                          </label>
-                          <input
-                            id="send-pass"
-                            type="text"
-                            autoComplete="off"
-                            value={sendPassphrase}
-                            onChange={(e) => setSendPassphrase(e.target.value)}
-                            placeholder="e.g. coffee-tuesday"
-                            className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
-                          />
+                            {payStyle === "bearer"
+                              ? "← Back to pay by tag"
+                              : "Advanced: bearer ticket (no tag) →"}
+                          </button>
+                          {payStyle === "bearer" && (
+                            <div className="mt-2">
+                              <label
+                                htmlFor="send-pass"
+                                className="text-sm font-medium text-foreground"
+                              >
+                                Optional passphrase
+                              </label>
+                              <input
+                                id="send-pass"
+                                type="text"
+                                autoComplete="off"
+                                value={sendPassphrase}
+                                onChange={(e) =>
+                                  setSendPassphrase(e.target.value)
+                                }
+                                placeholder="e.g. coffee-tuesday"
+                                className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                       <button
@@ -924,17 +911,26 @@ export function MoveView() {
                           !selected ||
                           !matchesChain ||
                           working ||
-                          (payStyle === "direct" && !recipientTag.trim())
+                          (payStyle !== "bearer" && !recipientTag.trim())
                         }
-                        onClick={() => void onPrivateSend()}
+                        onClick={() => {
+                          if (recipientTag.trim()) setPayStyle("direct");
+                          void onPrivateSend();
+                        }}
                         className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                       >
-                        {working && pendingAction.current === "send"
+                        {working &&
+                        (pendingAction.current === "send" ||
+                          pendingAction.current === "memo")
                           ? status || "Working…"
-                          : payStyle === "direct"
-                            ? "Private pay to tag"
-                            : "Create bearer ticket"}
+                          : "Send privately"}
                       </button>
+                      {isPayMemoLive() && (
+                        <p className="text-center text-[11px] text-mute">
+                          After confirm: vault transfer + on-chain memo so they
+                          can Scan inbox (no QR required).
+                        </p>
+                      )}
                       {shareBlob && (
                         <PaymentTicketShare
                           code={shareBlob}

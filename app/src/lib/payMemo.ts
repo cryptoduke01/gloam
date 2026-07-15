@@ -6,11 +6,15 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import { PRODUCT_CHAIN_ID } from "./chain";
 
-/** Set after forge deploy of GloamPayMemo on RH testnet */
+/** Live RH testnet deploy (see contracts/deployments/poseidon-testnet.json) */
+export const TESTNET_PAY_MEMO =
+  "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE" as const satisfies Address;
+
+/** Env override, else hard-coded testnet memo board */
 export const PAY_MEMO_ADDRESS: Address | null = (() => {
   const e = process.env.NEXT_PUBLIC_PAY_MEMO;
   if (e && e.startsWith("0x") && e.length === 42) return e as Address;
-  // Placeholder until deployed — feature no-ops when null
+  if (PRODUCT_CHAIN_ID === 46630) return TESTNET_PAY_MEMO;
   return null;
 })();
 
@@ -120,7 +124,7 @@ export async function fetchPaymentMemos(
 }
 
 export const PAY_MEMO_DEPLOY_BLOCK = BigInt(
-  process.env.NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK ?? "90260331"
+  process.env.NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK ?? "90421567"
 );
 
 export const MEMO_GAS_LIMIT = 200_000n;
