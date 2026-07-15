@@ -35,7 +35,7 @@ contract DeploySealedSwapStack is Script {
             ShieldPoolPoseidon(pool).setSealedSwapVerifier(address(adapter));
             console2.log("setSealedSwapVerifier on", pool);
         } else {
-            console2.log("POOL not set — only verifiers deployed");
+            console2.log("POOL not set - only verifiers deployed");
             console2.log("Redeploy pool with sealedSwap then setSealedSwapVerifier");
         }
 
