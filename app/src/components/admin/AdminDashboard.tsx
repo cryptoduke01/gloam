@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/Logo";
-import { EXPLORER_TX, EXPLORER_ADDRESS } from "@/lib/chain";
+import { EXPLORER_TX, EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
 
 type MetricsPayload = {
   ok: boolean;
@@ -42,11 +42,13 @@ type MetricsPayload = {
       count: number;
     }[];
     poolBalances?: { asset: string; symbol: string; deposited: string }[];
+    topShielders?: { address: string; shields: number; volumeEth: string }[];
     recentTxs?: {
       kind: string;
       txHash: string;
       blockNumber: string;
       detail: string;
+      from?: string;
     }[];
   };
   product?: {
@@ -71,6 +73,7 @@ export function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<MetricsPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<"overview" | "users" | "events">("overview");
 
   const load = useCallback(async () => {
     setLoadErr(null);
@@ -130,36 +133,69 @@ export function AdminDashboard() {
   }
 
   async function onLogout() {
-    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      credentials: "include",
+    });
     setAuthed(false);
     setData(null);
   }
 
   if (authed === null) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-background text-sm text-mute">
-        Checking session…
+      <div className="flex min-h-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <span className="livedot h-2 w-2 rounded-full bg-lime" />
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute">
+            Verifying session
+          </p>
+        </div>
       </div>
     );
   }
 
   if (!authed) {
     return (
-      <div className="flex min-h-full flex-col bg-background">
-        <header className="border-b border-line">
-          <div className="mx-auto flex h-14 max-w-md items-center px-5">
+      <div className="relative flex min-h-full flex-col overflow-hidden bg-background">
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          <div className="absolute left-1/2 top-1/3 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-lime/[0.06] blur-[120px]" />
+          <div
+            className="absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
+              backgroundSize: "48px 48px",
+              maskImage:
+                "radial-gradient(ellipse 60% 50% at 50% 40%, black, transparent)",
+            }}
+          />
+        </div>
+
+        <header className="relative border-b border-line/80">
+          <div className="mx-auto flex h-14 max-w-md items-center justify-between px-5">
             <Logo />
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+              Restricted
+            </span>
           </div>
         </header>
-        <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-12">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-lime">
-            Internal
+
+        <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-16">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+            Ops console
           </p>
-          <h1 className="mt-2 font-display text-3xl text-foreground">Admin</h1>
-          <p className="mt-2 text-sm text-mute">
-            Access code required. Traction metrics are not public.
+          <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground">
+            Traction
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-mute">
+            On-chain volume, unique wallets, and product funnel. Access code
+            required — not indexed, not public.
           </p>
-          <form onSubmit={onLogin} className="mt-8 space-y-4">
+
+          <form
+            onSubmit={onLogin}
+            className="mt-10 space-y-5 rounded-2xl border border-line bg-panel/90 p-6 shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_8%,transparent)] backdrop-blur-sm"
+          >
             <label className="block">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
                 Access code
@@ -169,34 +205,74 @@ export function AdminDashboard() {
                 autoComplete="current-password"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="mt-2 w-full rounded-md border border-line bg-panel px-3 py-3 text-sm text-foreground outline-none focus:border-lime"
+                placeholder="••••••••••••"
+                className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 font-mono text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
                 required
               />
             </label>
             {loginErr && (
-              <p className="text-sm text-red-400" role="alert">
+              <p
+                className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                role="alert"
+              >
                 {loginErr}
               </p>
             )}
             <button
               type="submit"
               disabled={busy}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "…" : "Enter"}
+              {busy ? "Checking…" : "Enter console"}
             </button>
           </form>
+          <p className="mt-6 text-center text-[11px] text-mute">
+            Set <code className="text-lime">ADMIN_ACCESS_CODE</code> on Vercel
+          </p>
         </main>
       </div>
     );
   }
 
-  const oc = data?.onchain && !("error" in data.onchain && data.onchain.error)
-    ? data.onchain
-    : null;
+  const oc =
+    data?.onchain && !("error" in data.onchain && data.onchain.error)
+      ? data.onchain
+      : null;
   const ocError =
     data?.onchain && "error" in data.onchain ? data.onchain.error : null;
   const product = data?.product;
+
+  const funnelBars = useMemo(() => {
+    const counters = product?.counters ?? {};
+    const keys = [
+      "testnet_gate_view",
+      "testnet_open",
+      "app_view",
+      "wallet_connect",
+      "shield_success",
+      "private_send_submit",
+      "private_pay_success",
+      "unshield_success",
+      "pageview",
+    ];
+    const rows = keys
+      .map((k) => ({ k, v: counters[k] ?? 0 }))
+      .filter((r) => r.v > 0 || counters[r.k] != null);
+    const max = Math.max(1, ...rows.map((r) => r.v));
+    return rows.map((r) => ({ ...r, pct: (r.v / max) * 100 }));
+  }, [product?.counters]);
+
+  const activityBars = useMemo(() => {
+    if (!oc) return [];
+    const rows = [
+      { k: "Shields", v: oc.shields ?? 0 },
+      { k: "Transfers", v: oc.transfers ?? 0 },
+      { k: "Unshields", v: oc.unshields ?? 0 },
+      { k: "Sealed", v: oc.sealedSwaps ?? 0 },
+    ];
+    const max = Math.max(1, ...rows.map((r) => r.v));
+    return rows.map((r) => ({ ...r, pct: (r.v / max) * 100 }));
+  }, [oc]);
 
   return (
     <div className="min-h-full bg-background">
@@ -204,11 +280,14 @@ export function AdminDashboard() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <Logo />
-            <span className="rounded-full border border-lime/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <span className="rounded-full border border-lime/40 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
               Admin
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="hidden font-mono text-[10px] text-mute sm:inline">
+              {product?.backend === "redis" ? "redis" : "memory"} · auto 45s
+            </span>
             <button
               type="button"
               onClick={() => void load()}
@@ -227,238 +306,349 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-10 px-5 py-10 sm:px-8">
+      <main className="mx-auto max-w-6xl space-y-8 px-5 py-8 sm:px-8 sm:py-10">
         {loadErr && (
-          <p className="rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {loadErr}
           </p>
         )}
 
-        <section>
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-            Launch gate
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Stat
-              label="Public open"
-              value={data?.launch?.open ? "Yes" : "No"}
-            />
-            <Stat
-              label="Opens at (UTC)"
-              value={
-                data?.launch?.opensAt
-                  ? new Date(data.launch.opensAt).toLocaleString()
-                  : "—"
-              }
-            />
-            <Stat
-              label="Force open"
-              value={data?.launch?.forceOpen ? "On" : "Off"}
-            />
-          </div>
-          <p className="mt-2 text-[11px] text-mute">
-            Generated {data?.generatedAt ?? "—"} · auto-refresh 45s
-          </p>
-        </section>
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-2 border-b border-line pb-3">
+          {(
+            [
+              ["overview", "Overview"],
+              ["users", "Wallets"],
+              ["events", "Product events"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                tab === id
+                  ? "bg-lime/15 font-medium text-foreground"
+                  : "text-mute hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-        <section>
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-                On-chain (source of truth)
-              </p>
-              <h2 className="mt-1 font-display text-2xl text-foreground">
-                Pool activity
-              </h2>
+        {tab === "overview" && (
+          <>
+            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Kpi
+                label="Unique shielders"
+                value={String(oc?.uniqueShielders ?? 0)}
+                sub="on-chain"
+              />
+              <Kpi
+                label="Shield volume"
+                value={`${oc?.shieldVolumeEth ?? "0"} ETH`}
+                sub="native only"
+              />
+              <Kpi
+                label="Private sends"
+                value={String(oc?.transfers ?? 0)}
+                sub="Transferred events"
+              />
+              <Kpi
+                label="Product events"
+                value={String(product?.totalEvents ?? 0)}
+                sub={product?.backend ?? "—"}
+              />
+            </section>
+
+            <section className="grid gap-3 sm:grid-cols-3">
+              <Kpi
+                label="Public open"
+                value={data?.launch?.open ? "Yes" : "No"}
+                sub={
+                  data?.launch?.opensAt
+                    ? new Date(data.launch.opensAt).toLocaleString()
+                    : "—"
+                }
+              />
+              <Kpi
+                label="Note slots"
+                value={String(oc?.notes ?? 0)}
+                sub={`block ${oc?.latestBlock ?? "—"}`}
+              />
+              <Kpi
+                label="Unshield vol"
+                value={`${oc?.unshieldVolumeEth ?? "0"} ETH`}
+                sub={`${oc?.unshields ?? 0} exits`}
+              />
+            </section>
+
+            {ocError && (
+              <p className="text-sm text-red-400">On-chain: {ocError}</p>
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Panel title="On-chain activity">
+                <BarChart rows={activityBars} />
+              </Panel>
+              <Panel title="Product funnel">
+                {funnelBars.length === 0 ? (
+                  <p className="text-sm text-mute">No product events yet</p>
+                ) : (
+                  <BarChart rows={funnelBars.map((r) => ({ k: r.k, v: r.v, pct: r.pct }))} />
+                )}
+              </Panel>
             </div>
-            {oc?.pool && (
-              <a
-                href={EXPLORER_ADDRESS(oc.pool)}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[11px] text-mute hover:text-lime"
-              >
-                {oc.pool.slice(0, 10)}… → explorer
-              </a>
+
+            {(oc?.poolBalances?.length ?? 0) > 0 && (
+              <Panel title="Pool balances (deposited)">
+                <DataTable
+                  headers={["Asset", "Amount"]}
+                  rows={(oc?.poolBalances ?? []).map((r) => [
+                    r.symbol,
+                    r.deposited,
+                  ])}
+                />
+              </Panel>
             )}
-          </div>
-          {ocError && (
-            <p className="mt-3 text-sm text-red-400">On-chain error: {ocError}</p>
-          )}
-          {oc && (
-            <>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Stat label="Unique shielders" value={String(oc.uniqueShielders ?? 0)} />
-                <Stat label="Shields" value={String(oc.shields ?? 0)} />
-                <Stat label="Private sends" value={String(oc.transfers ?? 0)} />
-                <Stat label="Unshields" value={String(oc.unshields ?? 0)} />
-                <Stat label="Sealed swaps" value={String(oc.sealedSwaps ?? 0)} />
-                <Stat label="Note slots (nextIndex)" value={String(oc.notes ?? 0)} />
-                <Stat label="Shield vol (ETH)" value={oc.shieldVolumeEth ?? "0"} />
-                <Stat label="Unshield vol (ETH)" value={oc.unshieldVolumeEth ?? "0"} />
-              </div>
 
-              {(oc.poolBalances?.length ?? 0) > 0 && (
-                <div className="mt-6">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                    Pool balances (deposited)
-                  </p>
-                  <div className="mt-2 overflow-x-auto rounded-lg border border-line">
-                    <table className="w-full text-left text-sm">
-                      <thead className="border-b border-line bg-panel text-[11px] text-mute">
-                        <tr>
-                          <th className="px-3 py-2 font-medium">Asset</th>
-                          <th className="px-3 py-2 font-medium">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {oc.poolBalances!.map((r) => (
-                          <tr key={r.asset} className="border-b border-line last:border-0">
-                            <td className="px-3 py-2 text-foreground">{r.symbol}</td>
-                            <td className="tnum px-3 py-2 text-mute">{r.deposited}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-6">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Recent txs
-                </p>
-                <ul className="mt-2 max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line bg-panel p-3 text-xs">
-                  {(oc.recentTxs ?? []).length === 0 && (
-                    <li className="text-mute">No events yet</li>
-                  )}
-                  {(oc.recentTxs ?? []).map((tx) => (
-                    <li
-                      key={`${tx.txHash}-${tx.kind}-${tx.blockNumber}`}
-                      className="flex flex-wrap items-center gap-2 text-mute"
+            <Panel
+              title="Recent txs"
+              action={
+                oc?.pool ? (
+                  <a
+                    href={EXPLORER_ADDRESS(oc.pool)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[11px] text-lime hover:underline"
+                  >
+                    Pool →
+                  </a>
+                ) : null
+              }
+            >
+              <DataTable
+                headers={["Kind", "Detail", "Address", "Tx", "Block"]}
+                rows={(oc?.recentTxs ?? []).map((tx) => [
+                  tx.kind,
+                  tx.detail,
+                  tx.from ? (
+                    <a
+                      key="a"
+                      href={EXPLORER_ADDRESS(tx.from)}
+                      className="font-mono text-mute hover:text-lime"
+                      target="_blank"
+                      rel="noreferrer"
                     >
-                      <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] uppercase text-lime">
-                        {tx.kind}
-                      </span>
-                      <span className="text-foreground">{tx.detail}</span>
-                      <a
-                        href={EXPLORER_TX(tx.txHash)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-mono hover:text-lime"
-                      >
-                        {tx.txHash.slice(0, 10)}…
-                      </a>
-                      <span className="tnum">#{tx.blockNumber}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          )}
-        </section>
+                      {shortAddress(tx.from, 4)}
+                    </a>
+                  ) : (
+                    "—"
+                  ),
+                  <a
+                    key="t"
+                    href={EXPLORER_TX(tx.txHash)}
+                    className="font-mono text-mute hover:text-lime"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {tx.txHash.slice(0, 10)}…
+                  </a>,
+                  `#${tx.blockNumber}`,
+                ])}
+                empty="No on-chain events yet"
+              />
+            </Panel>
+          </>
+        )}
 
-        <section>
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-            Product events
-          </p>
-          <h2 className="mt-1 font-display text-2xl text-foreground">
-            App funnel
-          </h2>
-          <p className="mt-1 text-sm text-mute">
-            Backend:{" "}
-            <span className="text-foreground">
-              {product?.backend ?? "—"}
-            </span>
-            {product?.backend === "memory" && (
-              <span>
-                {" "}
-                · set Upstash Redis for durable counts across deploys
-              </span>
-            )}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat
-              label="Total events"
-              value={String(product?.totalEvents ?? 0)}
-            />
-            {Object.entries(product?.counters ?? {})
-              .filter(([k]) => k !== "total")
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 11)
-              .map(([k, v]) => (
-                <Stat key={k} label={k} value={String(v)} />
-              ))}
-          </div>
-          <div className="mt-6">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-              Recent product events
+        {tab === "users" && (
+          <Panel title="Shielders (by activity)">
+            <p className="mb-4 text-sm text-mute">
+              Unique addresses that called shield. Volume ETH is native
+              deposits only (not stock tokens).
             </p>
-            <ul className="mt-2 max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line bg-panel p-3 text-xs">
-              {(product?.recent ?? []).length === 0 && (
-                <li className="text-mute">No product events yet</li>
-              )}
-              {(product?.recent ?? []).map((ev, i) => (
-                <li
-                  key={`${ev.ts}-${ev.t}-${i}`}
-                  className="flex flex-wrap gap-2 text-mute"
+            <DataTable
+              headers={["#", "Address", "Shields", "ETH vol", "Explorer"]}
+              rows={(oc?.topShielders ?? []).map((u, i) => [
+                String(i + 1),
+                <span key="addr" className="font-mono text-xs text-foreground">
+                  {u.address}
+                </span>,
+                String(u.shields),
+                u.volumeEth,
+                <a
+                  key="ex"
+                  href={EXPLORER_ADDRESS(u.address)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-lime hover:underline"
                 >
-                  <span className="font-mono text-lime">{ev.t}</span>
-                  <span>{ev.path}</span>
-                  <span className="tnum">
-                    {new Date(ev.ts).toLocaleString()}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+                  View
+                </a>,
+              ])}
+              empty="No shielders yet"
+            />
+          </Panel>
+        )}
 
-        <section className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-            How big teams do this
-          </p>
-          <ul className="mt-3 list-disc space-y-1.5 pl-5">
-            <li>
-              <strong className="text-foreground">On-chain</strong> = users &amp;
-              volume truth (what we show above from the pool).
-            </li>
-            <li>
-              <strong className="text-foreground">Product analytics</strong> =
-              PostHog / Mixpanel / Amplitude — we use first-party{" "}
-              <code className="text-lime">/api/collect</code> + optional Redis.
-            </li>
-            <li>
-              <strong className="text-foreground">Durable store</strong>: free{" "}
-              <a
-                href="https://upstash.com"
-                className="text-lime hover:underline"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Upstash Redis
-              </a>{" "}
-              env vars (see .env.example).
-            </li>
-          </ul>
-          <p className="mt-4">
-            <Link href="/app" className="text-lime hover:underline">
-              Open testnet app →
-            </Link>
-          </p>
-        </section>
+        {tab === "events" && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Object.entries(product?.counters ?? {})
+                .filter(([k]) => k !== "total")
+                .sort((a, b) => b[1] - a[1])
+                .map(([k, v]) => (
+                  <Kpi key={k} label={k} value={String(v)} sub="count" />
+                ))}
+            </div>
+            <Panel title="Event stream">
+              <DataTable
+                headers={["Event", "Path", "Time"]}
+                rows={(product?.recent ?? []).map((ev) => [
+                  <span key="t" className="font-mono text-lime">
+                    {ev.t}
+                  </span>,
+                  ev.path ?? "—",
+                  new Date(ev.ts).toLocaleString(),
+                ])}
+                empty="No product events — open /app to generate traffic"
+              />
+            </Panel>
+            {product?.backend === "memory" && (
+              <p className="text-sm text-mute">
+                Backend is memory. Set Upstash{" "}
+                <code className="text-lime">UPSTASH_REDIS_REST_*</code> and
+                redeploy for durable counts.
+              </p>
+            )}
+          </>
+        )}
+
+        <p className="text-[11px] text-mute">
+          Generated {data?.generatedAt ?? "—"} ·{" "}
+          <Link href="/app" className="text-lime hover:underline">
+            Open app
+          </Link>
+        </p>
       </main>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Kpi({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-4 py-3">
+    <div className="rounded-xl border border-line bg-panel px-4 py-4">
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
         {label}
       </p>
-      <p className="tnum mt-1 text-xl font-medium text-foreground">{value}</p>
+      <p className="tnum mt-1.5 text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+        {value}
+      </p>
+      {sub && <p className="mt-1 text-[11px] text-mute">{sub}</p>}
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-line bg-panel p-4 sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 className="font-display text-lg text-foreground">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function BarChart({
+  rows,
+}: {
+  rows: { k: string; v: number; pct: number }[];
+}) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-mute">No data</p>;
+  }
+  return (
+    <ul className="space-y-3">
+      {rows.map((r) => (
+        <li key={r.k}>
+          <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+            <span className="truncate font-mono text-mute">{r.k}</span>
+            <span className="tnum shrink-0 text-foreground">{r.v}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-background">
+            <div
+              className="h-full rounded-full bg-lime transition-[width] duration-500"
+              style={{ width: `${Math.max(r.pct, r.v > 0 ? 4 : 0)}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DataTable({
+  headers,
+  rows,
+  empty,
+}: {
+  headers: string[];
+  rows: React.ReactNode[][];
+  empty?: string;
+}) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-mute">{empty ?? "No rows"}</p>;
+  }
+  return (
+    <div className="overflow-x-auto rounded-lg border border-line">
+      <table className="w-full min-w-[480px] text-left text-sm">
+        <thead className="border-b border-line bg-background/80">
+          <tr>
+            {headers.map((h) => (
+              <th
+                key={h}
+                className="px-3 py-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-mute"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr
+              key={i}
+              className="border-b border-line last:border-0 hover:bg-background/40"
+            >
+              {row.map((cell, j) => (
+                <td key={j} className="px-3 py-2.5 text-mute">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

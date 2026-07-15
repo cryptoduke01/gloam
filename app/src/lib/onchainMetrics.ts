@@ -88,11 +88,17 @@ export type OnchainMetrics = {
   shieldVolumeByAsset: { asset: string; symbol: string; amount: string; count: number }[];
   unshieldVolumeByAsset: { asset: string; symbol: string; amount: string; count: number }[];
   poolBalances: { asset: string; symbol: string; deposited: string }[];
+  topShielders: {
+    address: string;
+    shields: number;
+    volumeEth: string;
+  }[];
   recentTxs: {
     kind: string;
     txHash: string;
     blockNumber: string;
     detail: string;
+    from?: string;
   }[];
 };
 
@@ -131,6 +137,7 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
     shieldVolumeByAsset: [],
     unshieldVolumeByAsset: [],
     poolBalances: [],
+    topShielders: [],
     recentTxs: [],
   };
   if (!pool) return empty;
@@ -204,6 +211,10 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
     ]);
 
   const shielders = new Set<string>();
+  const shielderStats = new Map<
+    string,
+    { shields: number; volumeEth: bigint }
+  >();
   const shieldByAsset = new Map<string, { amount: bigint; count: number }>();
   let shieldEth = 0n;
   const recentTxs: OnchainMetrics["recentTxs"] = [];
@@ -214,7 +225,18 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
       asset?: Address;
       amount?: bigint;
     };
-    if (args.from) shielders.add(args.from.toLowerCase());
+    const from = args.from?.toLowerCase();
+    if (from) {
+      shielders.add(from);
+      const st = shielderStats.get(from) ?? { shields: 0, volumeEth: 0n };
+      st.shields += 1;
+      const asset = (args.asset ?? NATIVE_ASSET) as Address;
+      const amount = args.amount ?? 0n;
+      if (asset.toLowerCase() === NATIVE_ASSET.toLowerCase()) {
+        st.volumeEth += amount;
+      }
+      shielderStats.set(from, st);
+    }
     const asset = (args.asset ?? NATIVE_ASSET) as Address;
     const amount = args.amount ?? 0n;
     const key = asset.toLowerCase();
@@ -229,6 +251,7 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
         txHash: log.transactionHash as Hex,
         blockNumber: String(log.blockNumber ?? 0n),
         detail: fmtAmount(asset, amount),
+        from: args.from,
       });
     }
   }
@@ -258,6 +281,7 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
         txHash: log.transactionHash as Hex,
         blockNumber: String(log.blockNumber ?? 0n),
         detail: fmtAmount(asset, amount),
+        from: args.to,
       });
     }
   }
@@ -318,6 +342,15 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
       count: v.count,
     }));
 
+  const topShielders = [...shielderStats.entries()]
+    .map(([address, st]) => ({
+      address,
+      shields: st.shields,
+      volumeEth: formatEther(st.volumeEth),
+    }))
+    .sort((a, b) => b.shields - a.shields)
+    .slice(0, 50);
+
   return {
     pool,
     chainId: robinhoodTestnet.id,
@@ -335,6 +368,7 @@ export async function fetchOnchainMetrics(): Promise<OnchainMetrics> {
     shieldVolumeByAsset: mapVol(shieldByAsset),
     unshieldVolumeByAsset: mapVol(unshieldByAsset),
     poolBalances,
+    topShielders,
     recentTxs: recentTxs.slice(0, 40),
   };
 }

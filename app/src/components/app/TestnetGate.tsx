@@ -16,6 +16,9 @@ import { AsciiImage } from "@/components/AsciiImage";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
+const DEMO_X_URL =
+  "https://x.com/dukedotsol/status/2077117792520634789";
+
 const plates = [
   {
     src: "/ascii/shield.png",
@@ -120,241 +123,198 @@ export function TestnetGate({ children }: { children: ReactNode }) {
     <div className="flex min-h-full flex-col bg-background">
       <Header />
 
-      <main className="relative flex-1 overflow-hidden">
-        {/* Background dither + grid */}
-        <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <AsciiImage
-            src="/ascii/hero.png"
-            alt=""
-            tone="plate"
-            priority
-            className="h-full min-h-[100%] w-full opacity-[0.22]"
-            sizes="100vw"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-background via-background/88 to-background" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-transparent to-background/80" />
-          <div className="absolute -right-20 top-24 h-[380px] w-[380px] rounded-full bg-lime/[0.07] blur-[100px]" />
-          <div className="absolute -left-16 bottom-32 h-[260px] w-[260px] rounded-full bg-lime/[0.04] blur-[80px]" />
+      <main className="relative flex flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+          <div className="absolute -right-24 top-0 h-[420px] w-[420px] rounded-full bg-lime/[0.06] blur-[110px]" />
+          <div className="absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-lime/[0.04] blur-[90px]" />
         </div>
 
-        <div className="relative mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16 lg:py-20">
-          <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-10">
-            {/* Copy + timer */}
-            <motion.div
-              className="lg:col-span-6"
-              initial={reduce ? false : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, ease }}
+        <div className="relative mx-auto grid w-full max-w-6xl flex-1 items-center gap-10 px-5 py-10 sm:px-8 sm:py-14 lg:grid-cols-12 lg:gap-12 lg:py-16">
+          {/* Left: copy + timer */}
+          <motion.div
+            className="flex flex-col justify-center lg:col-span-5"
+            initial={reduce ? false : { opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+                <span className="livedot h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_10px_var(--lime)]" />
+                Public testnet
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                RH · 46630
+              </span>
+            </div>
+
+            <h1 className="mt-5 font-display text-[2.4rem] leading-[1.04] tracking-tight text-foreground sm:text-5xl lg:text-[3.1rem]">
+              Unlocking private money on Robinhood
+            </h1>
+            <p className="mt-4 max-w-md text-base leading-relaxed text-mute">
+              Shield, private pay, cash out with ZK proofs — live when the clock
+              hits zero. Prep with the guide so you&apos;re ready on open.
+            </p>
+            <p className="mt-2 font-mono text-[11px] text-mute">
+              Opens · {opensLabel}
+            </p>
+
+            <div
+              className="mt-8 grid grid-cols-4 gap-2"
+              role="timer"
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel/90 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-lime backdrop-blur-sm">
-                  <span className="livedot h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_10px_var(--lime)]" />
-                  Public testnet
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Robinhood Chain · 46630
-                </span>
-              </div>
+              {(
+                [
+                  ["Days", parts.d],
+                  ["Hours", parts.h],
+                  ["Mins", parts.m],
+                  ["Secs", parts.s],
+                ] as const
+              ).map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-line bg-panel px-2 py-3.5 sm:px-3 sm:py-4"
+                >
+                  <p className="tnum font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+                    {pad(value)}
+                  </p>
+                  <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-mute">
+                    {label}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-              <h1 className="mt-5 font-display text-[2.35rem] leading-[1.05] tracking-tight text-foreground sm:text-5xl lg:text-[3.25rem]">
-                Unlocking private money on Robinhood
-              </h1>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-mute sm:text-lg">
-                Shield balances, private pay, cash out with ZK proofs, and trade
-                paths — live when the clock hits zero. Prep with the guide so
-                you&apos;re ready on open.
-              </p>
-              <p className="mt-2 font-mono text-[11px] text-mute">
-                Opens · {opensLabel}
-              </p>
-
-              <div
-                className="mt-8 grid grid-cols-4 gap-2 sm:gap-3"
-                role="timer"
-                aria-live="polite"
-                aria-atomic="true"
-                aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/docs/testnet"
+                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
               >
-                {(
-                  [
-                    ["Days", parts.d],
-                    ["Hours", parts.h],
-                    ["Mins", parts.m],
-                    ["Secs", parts.s],
-                  ] as const
-                ).map(([label, value]) => (
-                  <motion.div
-                    key={label}
-                    className="lift rounded-xl border border-line bg-panel/95 px-2 py-4 backdrop-blur-sm sm:px-3"
-                    whileHover={reduce ? undefined : { y: -2 }}
+                Testnet guide
+              </Link>
+              <a
+                href={DEMO_X_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+                Watch demo on X
+              </a>
+            </div>
+
+            <a
+              href="https://x.com/gloamtrade"
+              target="_blank"
+              rel="noreferrer"
+              className="lift mt-6 flex items-start gap-3.5 rounded-xl border border-line bg-panel p-4 transition-colors hover:border-lime/40"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
+                <XIcon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 text-left">
+                <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                  Updates
+                </span>
+                <span className="mt-0.5 block text-sm font-medium text-foreground">
+                  Look out for updates on X
+                </span>
+                <span className="mt-1 block text-sm leading-relaxed text-mute">
+                  Go-live pings and clips at{" "}
+                  <span className="text-foreground">@gloamtrade</span>. Follow
+                  so you don&apos;t miss unlock.
+                </span>
+              </span>
+              <span className="ml-auto shrink-0 self-center text-lime">→</span>
+            </a>
+          </motion.div>
+
+          {/* Right: hero dither frame — fills column height cleanly */}
+          <motion.div
+            className="flex min-h-0 flex-col lg:col-span-7"
+            initial={reduce ? false : { opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.06, ease }}
+          >
+            <div className="flex min-h-[min(62vh,560px)] flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_12%,transparent)]">
+              <div className="relative min-h-0 flex-1">
+                {plates.map((p, i) => (
+                  <div
+                    key={p.src}
+                    className={`absolute inset-0 transition-opacity duration-700 ${
+                      i === activePlate ? "opacity-100" : "opacity-0"
+                    }`}
                   >
-                    <p className="tnum font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                      {pad(value)}
-                    </p>
-                    <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-mute">
-                      {label}
-                    </p>
-                  </motion.div>
+                    <AsciiImage
+                      src={p.src}
+                      alt={p.title}
+                      tone="plate"
+                      fit="cover"
+                      priority={i === 0}
+                      className="h-full w-full"
+                      sizes="(max-width: 1024px) 100vw, 55vw"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+                        {String(i + 1).padStart(2, "0")} · Preview
+                      </p>
+                      <p className="mt-1 font-display text-2xl text-white sm:text-3xl">
+                        {p.title}
+                      </p>
+                      <p className="mt-1 max-w-md text-sm text-white/70">
+                        {p.body}
+                      </p>
+                    </div>
+                  </div>
                 ))}
               </div>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link
-                  href="/docs/testnet"
-                  className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
-                >
-                  Testnet guide
-                </Link>
-                <Link
-                  href="/docs"
-                  className="inline-flex min-h-11 items-center rounded-md border border-line bg-panel/80 px-5 text-sm font-medium text-foreground hover:border-mute"
-                >
-                  Docs
-                </Link>
-                <Link
-                  href="/whitepaper"
-                  className="inline-flex min-h-11 items-center rounded-md border border-line px-5 text-sm font-medium text-foreground hover:border-mute"
-                >
-                  Whitepaper
-                </Link>
+              <div className="grid shrink-0 grid-cols-3 divide-x divide-line border-t border-line">
+                {plates.map((p, i) => (
+                  <button
+                    key={p.title}
+                    type="button"
+                    onClick={() => setActivePlate(i)}
+                    className={`min-h-14 px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime ${
+                      i === activePlate
+                        ? "bg-lime/10 text-foreground"
+                        : "bg-background/50 text-mute hover:bg-panel hover:text-foreground"
+                    }`}
+                    aria-pressed={i === activePlate}
+                  >
+                    <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-lime">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-medium">
+                      {p.title}
+                    </span>
+                  </button>
+                ))}
               </div>
-
-              {/* X updates card */}
+            </div>
+            <p className="mt-3 text-center text-xs text-mute lg:text-left">
+              Walkthrough in the{" "}
+              <Link
+                href="/docs/testnet"
+                className="text-lime underline-offset-2 hover:underline"
+              >
+                testnet guide
+              </Link>
+              . Demo video on{" "}
               <a
-                href="https://x.com/gloamtrade"
+                href={DEMO_X_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="lift mt-8 flex items-start gap-4 rounded-xl border border-line bg-panel/90 p-4 backdrop-blur-sm transition-colors hover:border-lime/40"
+                className="text-lime underline-offset-2 hover:underline"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
-                  <XIcon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 text-left">
-                  <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                    Updates
-                  </span>
-                  <span className="mt-1 block text-sm font-medium text-foreground">
-                    Look out for updates on X
-                  </span>
-                  <span className="mt-1 block text-sm leading-relaxed text-mute">
-                    Open announcements, demo clips, and go-live pings land first
-                    at{" "}
-                    <span className="text-foreground">@gloamtrade</span>. Follow
-                    so you don&apos;t miss unlock.
-                  </span>
-                </span>
-                <span className="ml-auto shrink-0 self-center font-mono text-xs text-lime">
-                  →
-                </span>
+                X
               </a>
-            </motion.div>
-
-            {/* Interactive dither plates */}
-            <motion.div
-              className="lg:col-span-6"
-              initial={reduce ? false : { opacity: 0, x: 18 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.5, delay: 0.06, ease }}
-            >
-              <div className="overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_10%,transparent)]">
-                <div className="relative aspect-[4/3] w-full border-b border-line">
-                  {plates.map((p, i) => (
-                    <div
-                      key={p.src}
-                      className={`absolute inset-0 transition-opacity duration-700 ${
-                        i === activePlate ? "opacity-100" : "opacity-0"
-                      }`}
-                    >
-                      <AsciiImage
-                        src={p.src}
-                        alt={p.title}
-                        tone="plate"
-                        priority={i === 0}
-                        className="h-full w-full"
-                        sizes="(max-width: 1024px) 100vw, 50vw"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-0 p-5">
-                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-                          {String(i + 1).padStart(2, "0")} · Preview
-                        </p>
-                        <p className="mt-1 font-display text-2xl text-white">
-                          {p.title}
-                        </p>
-                        <p className="mt-1 max-w-sm text-sm text-white/75">
-                          {p.body}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-3 divide-x divide-line">
-                  {plates.map((p, i) => (
-                    <button
-                      key={p.title}
-                      type="button"
-                      onClick={() => setActivePlate(i)}
-                      className={`min-h-14 px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime ${
-                        i === activePlate
-                          ? "bg-lime/10 text-foreground"
-                          : "bg-background/40 text-mute hover:bg-panel hover:text-foreground"
-                      }`}
-                      aria-pressed={i === activePlate}
-                    >
-                      <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-lime">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span className="mt-0.5 block text-sm font-medium">
-                        {p.title}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <p className="mt-4 text-center text-xs text-mute sm:text-left">
-                Full walkthrough in the{" "}
-                <Link
-                  href="/docs/testnet"
-                  className="text-lime underline-offset-2 hover:underline"
-                >
-                  testnet guide
-                </Link>
-                , including wallet setup, faucet, shield → pay → cash out.
-              </p>
-            </motion.div>
-          </div>
-
-          {/* Bottom strip of small dithers */}
-          <div className="mt-14 grid gap-3 sm:grid-cols-3">
-            {plates.map((p, i) => (
-              <button
-                key={`tile-${p.title}`}
-                type="button"
-                onClick={() => setActivePlate(i)}
-                className="lift group overflow-hidden rounded-xl border border-line bg-panel text-left"
-              >
-                <div className="relative aspect-[16/9] w-full border-b border-line">
-                  <AsciiImage
-                    src={p.src}
-                    alt=""
-                    tone="plate"
-                    className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]"
-                    sizes="33vw"
-                  />
-                </div>
-                <div className="p-4">
-                  <p className="font-display text-lg text-foreground">
-                    {p.title}
-                  </p>
-                  <p className="mt-1 text-sm leading-relaxed text-mute">
-                    {p.body}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
+              .
+            </p>
+          </motion.div>
         </div>
       </main>
 

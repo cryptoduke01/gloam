@@ -39,42 +39,40 @@ export default function DocsTestnetPage() {
 
       <h2 id="demo">Demo video</h2>
       <p>
-        A walkthrough of shield → private pay → cash out will live here. Until
-        the file is published, follow the steps below or watch for the post on{" "}
+        X does not offer a site embed for posts, so the walkthrough opens in a
+        new tab on X. Watch the demo, then follow the steps below on testnet.
+      </p>
+      <div className="not-prose my-6 overflow-hidden rounded-xl border border-line bg-panel">
+        <div className="flex flex-col items-start gap-3 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+              Demo on X
+            </p>
+            <p className="mt-2 max-w-md text-sm text-mute">
+              Shield → private pay → cash out walkthrough (posted by the team).
+            </p>
+          </div>
+          <a
+            href="https://x.com/dukedotsol/status/2077117792520634789"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90"
+          >
+            Watch demo on X →
+          </a>
+        </div>
+      </div>
+      <p className="!text-sm !text-mute">
+        Also follow{" "}
         <a
           href="https://x.com/gloamtrade"
           target="_blank"
           rel="noreferrer"
         >
           @gloamtrade
-        </a>
-        .
+        </a>{" "}
+        for go-live updates.
       </p>
-      <div className="not-prose my-6 overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="flex aspect-video flex-col items-center justify-center gap-2 px-6 text-center">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-            Video
-          </p>
-          <p className="max-w-sm text-sm text-mute">
-            Embed or link your demo here (YouTube unlisted, Vimeo, or{" "}
-            <code className="text-lime">/public/demo/</code>
-            ). Announce the drop on X when it goes live.
-          </p>
-          <a
-            href="https://x.com/gloamtrade"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"
-          >
-            Watch for demo on @gloamtrade →
-          </a>
-        </div>
-      </div>
-      {/* When ready, replace the box above with e.g.:
-      <div className="aspect-video overflow-hidden rounded-xl border border-line">
-        <iframe ... src="https://www.youtube.com/embed/VIDEO_ID" ... />
-      </div>
-      */}
 
       <h2 id="what-you-get">What you can do on testnet</h2>
       <FlowDiagram
