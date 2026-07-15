@@ -10,8 +10,16 @@ export function NetworkPulse() {
   const onProduct = chainId === PRODUCT_CHAIN_ID;
 
   if (onProduct) {
-    return <StatusPill tone="lime">Testnet</StatusPill>;
+    return (
+      <StatusPill tone="lime" dot>
+        Testnet
+      </StatusPill>
+    );
   }
 
-  return <StatusPill tone="warn">Wrong network</StatusPill>;
+  return (
+    <StatusPill tone="warn" dot>
+      Wrong network
+    </StatusPill>
+  );
 }

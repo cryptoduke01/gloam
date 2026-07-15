@@ -53,9 +53,11 @@ export function AppShell({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                  data-active={active}
+                  aria-current={active ? "page" : undefined}
+                  className={`nav-underline rounded-md px-3 py-2 text-sm transition-colors ${
                     active
-                      ? "bg-panel text-foreground"
+                      ? "text-foreground"
                       : "text-mute hover:text-foreground"
                   }`}
                 >
@@ -116,12 +118,13 @@ export function AppShell({
       </header>
 
       <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="rise mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-              Gloam
-            </p>
-            <h1 className="mt-1 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+            <span
+              className="block h-px w-8 bg-lime"
+              aria-hidden
+            />
+            <h1 className="mt-4 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
               {title}
             </h1>
             {subtitle && (
@@ -131,7 +134,7 @@ export function AppShell({
             )}
           </div>
         </div>
-        {children}
+        <div className="rise rise-1">{children}</div>
       </div>
 
       <footer className="border-t border-line">

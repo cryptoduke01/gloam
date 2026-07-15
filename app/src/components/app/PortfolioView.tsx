@@ -175,7 +175,7 @@ export function PortfolioView() {
             <div className="absolute inset-0 bg-panel/30" />
             <div className="absolute bottom-4 left-4 right-4 sm:bottom-5 sm:left-5">
               <StatusPill tone="lime">Portfolio</StatusPill>
-              <p className="mt-2 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+              <p className="tnum mt-2 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
                 {totalUsd != null && settings.showUsd
                   ? formatUsd(totalUsd)
                   : isConnected
@@ -437,7 +437,11 @@ export function PortfolioView() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-foreground">{p.symbol}</p>
-                      {p.live && <StatusPill tone="lime">Live</StatusPill>}
+                      {p.live && (
+                        <StatusPill tone="lime" dot>
+                          Live
+                        </StatusPill>
+                      )}
                     </div>
                     <p className="text-xs text-mute">{p.name}</p>
                   </div>
@@ -454,7 +458,7 @@ export function PortfolioView() {
                     height={28}
                   />
                   <div className="w-24 text-right">
-                    <p className="font-mono text-sm text-foreground">
+                    <p className="tnum font-mono text-sm text-foreground">
                       {formatTokenAmount(p.raw)}
                     </p>
                     {settings.showUsd && p.mark > 0 && (
