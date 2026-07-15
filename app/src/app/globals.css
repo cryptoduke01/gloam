@@ -181,6 +181,19 @@ html[data-theme="light"] .ascii-ink {
   animation-delay: 0.1s;
 }
 
+/* Token page marquee */
+@keyframes token-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.token-marquee-track {
+  animation: token-marquee 36s linear infinite;
+}
+
 /* Live status dot — soft breathing pulse */
 @keyframes gloam-livedot {
   0%,
@@ -238,5 +251,8 @@ html[data-theme="light"] .ascii-ink {
   }
   .nav-underline::after {
     transition: none;
+  }
+  .token-marquee-track {
+    animation: none !important;
   }
 }

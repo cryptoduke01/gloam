@@ -36,6 +36,8 @@ export const metadata: Metadata = {
     "tokenized stocks",
     "memecoins",
     "private meme trading",
+    "GLOAM",
+    "$GLOAM",
   ],
   icons: {
     icon: [

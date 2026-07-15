@@ -8,6 +8,7 @@ import { Logo } from "./Logo";
 const links = [
   { href: "/docs", label: "Docs" },
   { href: "/whitepaper", label: "Whitepaper" },
+  { href: "/token", label: "$GLOAM" },
 ];
 
 export function Header() {

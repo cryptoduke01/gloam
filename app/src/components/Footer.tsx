@@ -8,6 +8,7 @@ const product = [
   { href: "/#how", label: "How it works" },
   { href: "/docs", label: "Documentation" },
   { href: "/whitepaper", label: "Whitepaper" },
+  { href: "/token", label: "$GLOAM token" },
 ];
 
 const company = [
