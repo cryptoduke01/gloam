@@ -32,7 +32,8 @@ contract DeploySealedSwapStack is Script {
 
         address pool = vm.envOr("POOL", address(0));
         if (pool != address(0)) {
-            ShieldPoolPoseidon(pool).setSealedSwapVerifier(address(adapter));
+            // Pool has payable receive() - cast for interface call
+            ShieldPoolPoseidon(payable(pool)).setSealedSwapVerifier(address(adapter));
             console2.log("setSealedSwapVerifier on", pool);
         } else {
             console2.log("POOL not set - only verifiers deployed");
