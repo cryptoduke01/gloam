@@ -118,12 +118,6 @@ export function Landing() {
                     Whitepaper
                   </Link>
                 </MotionPress>
-                <Link
-                  href="/token"
-                  className="inline-flex min-h-11 items-center px-1 font-mono text-xs uppercase tracking-[0.14em] text-mute underline-offset-4 hover:text-lime hover:underline"
-                >
-                  $GLOAM
-                </Link>
               </div>
             </motion.div>
 

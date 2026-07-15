@@ -8,11 +8,9 @@ const product = [
   { href: "/#how", label: "How it works" },
   { href: "/docs", label: "Documentation" },
   { href: "/whitepaper", label: "Whitepaper" },
-  { href: "/token", label: "$GLOAM token" },
 ];
 
 const company = [
-  { href: "/token", label: "$GLOAM" },
   { href: "https://x.com/gloamtrade", label: "X / Twitter", external: true },
   { href: "/disclosures", label: "Risk disclosures" },
 ];
@@ -86,23 +84,11 @@ export function Footer() {
             © {year} Gloam. Experimental software. Not investment, legal, or tax
             advice. Digital assets can go to zero. Privacy tools reduce public
             visibility. They do not make you invisible to law enforcement,
-            chain analysis at the edges, or your own operational mistakes.{" "}
-            <Link href="/token" className="text-foreground/80 underline-offset-2 hover:text-lime hover:underline">
-              $GLOAM
-            </Link>{" "}
-            is not launched — see the token page for status.
+            chain analysis at the edges, or your own operational mistakes.
           </p>
-          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-            <Link
-              href="/token"
-              className="font-mono text-[10px] uppercase tracking-[0.18em] text-lime transition-colors hover:text-foreground"
-            >
-              $GLOAM · /token
-            </Link>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-mute">
-              gloam.trade
-            </p>
-          </div>
+          <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-mute">
+            gloam.trade
+          </p>
         </div>
       </div>
     </footer>

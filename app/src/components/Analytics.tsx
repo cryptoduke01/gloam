@@ -34,30 +34,10 @@ export function Analytics() {
 
   useEffect(() => {
     if (!enabled) return;
-
-    // First-party pageview beacon (no third-party until you plug GA/Plausible)
-    const body = JSON.stringify({
-      t: "pageview",
-      path: window.location.pathname,
-      ref: document.referrer || null,
-      ts: Date.now(),
+    // Dynamic import keeps consent gate in one place for product track() too
+    void import("@/lib/track").then(({ track }) => {
+      track("pageview");
     });
-    try {
-      // Prefer sendBeacon; falls back silently
-      if (navigator.sendBeacon) {
-        const blob = new Blob([body], { type: "application/json" });
-        navigator.sendBeacon("/api/collect", blob);
-      } else {
-        void fetch("/api/collect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-          keepalive: true,
-        });
-      }
-    } catch {
-      /* ignore */
-    }
   }, [enabled]);
 
   return null;

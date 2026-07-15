@@ -313,6 +313,9 @@ export function ShieldView() {
     void refetchTok();
     void refetchAllow();
     void refetchPool();
+    void import("@/lib/track").then(({ track }) => {
+      track("shield_success", { asset: sentLabel.slice(0, 32) });
+    });
     setSuccessTitle("Shielded");
     setSuccessBody(
       <>

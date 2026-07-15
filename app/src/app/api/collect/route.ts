@@ -1,16 +1,80 @@
 import { NextResponse } from "next/server";
 
+type Body = {
+  t?: unknown;
+  path?: unknown;
+  ref?: unknown;
+  meta?: unknown;
+  ts?: unknown;
+};
+
 /**
- * First-party analytics intake. Only called after optional cookie consent.
- * Currently acknowledges events; wire to a store/provider when ready.
+ * First-party analytics intake (after optional cookie consent).
+ *
+ * Where events go:
+ * 1. Vercel function logs (always, truncated) — filter "gloam_traction"
+ * 2. Optional TRACTION_WEBHOOK_URL (Discord/Slack/Make/n8n) — set in Vercel env
+ *
+ * On-chain traction is separate: explorer + spreadsheet (see team runbook).
  */
 export async function POST(req: Request) {
   try {
-    const data = await req.json().catch(() => null);
-    if (!data || typeof data !== "object") {
+    const data = (await req.json().catch(() => null)) as Body | null;
+    if (!data || typeof data !== "object" || typeof data.t !== "string") {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
-    // Intentionally minimal — no PII logging in v1
+
+    const event = {
+      t: data.t.slice(0, 64),
+      path: typeof data.path === "string" ? data.path.slice(0, 200) : null,
+      ref: typeof data.ref === "string" ? data.ref.slice(0, 300) : null,
+      meta:
+        data.meta && typeof data.meta === "object" && !Array.isArray(data.meta)
+          ? data.meta
+          : null,
+      ts: typeof data.ts === "number" ? data.ts : Date.now(),
+      ua: req.headers.get("user-agent")?.slice(0, 160) ?? null,
+    };
+
+    // Searchable in Vercel → Logs
+    console.info("gloam_traction", JSON.stringify(event));
+
+    const webhook = process.env.TRACTION_WEBHOOK_URL?.trim();
+    if (webhook) {
+      try {
+        await fetch(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: `**${event.t}** \`${event.path ?? ""}\``,
+            embeds: [
+              {
+                title: event.t,
+                description: event.path ?? "",
+                fields: [
+                  {
+                    name: "ref",
+                    value: event.ref?.slice(0, 200) || "—",
+                    inline: false,
+                  },
+                  {
+                    name: "meta",
+                    value: event.meta
+                      ? JSON.stringify(event.meta).slice(0, 500)
+                      : "—",
+                    inline: false,
+                  },
+                ],
+                timestamp: new Date(event.ts).toISOString(),
+              },
+            ],
+          }),
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ ok: false }, { status: 500 });
