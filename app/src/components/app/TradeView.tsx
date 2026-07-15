@@ -654,10 +654,20 @@ export function TradeView() {
               <p className="font-display text-2xl text-foreground">
                 Sealed trade
               </p>
+              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                Status: circuit draft (v0)
+              </p>
               <p className="mt-3 leading-relaxed">
-                Goal: execute without broadcasting full size as free signal.
-                Requires new settlement design (intents, vault-native pool, or
-                hybrid) plus production keys. Nothing to click yet — by design.
+                Goal: swap without broadcasting full size. Circuit source is in
+                the repo (
+                <code className="text-foreground">
+                  sealedSwap.circom
+                </code>
+                ) — proves spend + fixed-rate out + change, with{" "}
+                <strong className="text-foreground">size private</strong> and
+                only <code className="text-foreground">amountOutMin</code>{" "}
+                public. Next: compile zkey, settlement contract, then a real
+                prove button. No fake fills.
               </p>
               <ul className="mt-4 list-inside list-disc space-y-1">
                 <li>
@@ -666,16 +676,16 @@ export function TradeView() {
                     className="text-lime hover:underline"
                     onClick={() => setPathMode("vault")}
                   >
-                    Use vault adapter
+                    Vault adapter now
                   </button>{" "}
-                  (hold private, swap public)
+                  — swap edge still public
                 </li>
                 <li>
                   <a
                     href="/docs/sealed-trade"
                     className="text-lime hover:underline"
                   >
-                    Read sealed trade plan
+                    Sealed trade plan
                   </a>
                 </li>
                 <li>
@@ -683,7 +693,7 @@ export function TradeView() {
                     href="/docs/production"
                     className="text-lime hover:underline"
                   >
-                    Production gate
+                    Production keys gate
                   </a>
                 </li>
               </ul>

@@ -3,7 +3,7 @@
  * After vault transfer, sender posts encrypted ticket; recipient scans logs.
  */
 
-import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import type { Address, Hex, PublicClient } from "viem";
 import { PRODUCT_CHAIN_ID } from "./chain";
 
 /** Live RH testnet deploy (see contracts/deployments/poseidon-testnet.json) */

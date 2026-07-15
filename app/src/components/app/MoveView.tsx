@@ -53,6 +53,11 @@ import {
   type ReceiveIdentity,
 } from "@/lib/receiveTag";
 import {
+  loadContacts,
+  upsertContact,
+  type GloamContact,
+} from "@/lib/contacts";
+import {
   fetchPaymentMemos,
   isPayMemoLive,
   MEMO_GAS_LIMIT,
@@ -120,6 +125,7 @@ export function MoveView() {
   >([]);
   const [inboxStatus, setInboxStatus] = useState<string | null>(null);
   const [memoPosted, setMemoPosted] = useState(false);
+  const [contacts, setContacts] = useState<GloamContact[]>([]);
 
   const {
     writeContract,
@@ -586,6 +592,7 @@ export function MoveView() {
     void getOrCreateReceiveIdentity().then(setMyIdentity).catch(() => {
       /* crypto unavailable */
     });
+    if (mode === "send") setContacts(loadContacts());
   }, [mode]);
 
   // Auto-scan inbox when opening Receive (if memo board live)
@@ -827,10 +834,39 @@ export function MoveView() {
                           className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 font-mono text-sm outline-none focus:border-lime"
                         />
                         <p className="mt-1 text-xs text-mute">
-                          Same as “send to address” — but a private Gloam tag
-                          from Move → Receive. Leave empty only for advanced
-                          bearer tickets.
+                          Same as “send to address” — private Gloam tag from
+                          their Move → Receive.
                         </p>
+                        {contacts.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {contacts.map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => setRecipientTag(c.tag)}
+                                className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mute hover:border-lime/40 hover:text-foreground"
+                              >
+                                {c.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {recipientTag.trim().startsWith("gloamr1.") && (
+                          <button
+                            type="button"
+                            className="mt-2 text-[11px] text-lime hover:underline"
+                            onClick={() => {
+                              const label =
+                                window.prompt("Save contact as", "Friend") ??
+                                "";
+                              if (!label.trim()) return;
+                              upsertContact(label, recipientTag);
+                              setContacts(loadContacts());
+                            }}
+                          >
+                            Save tag to contacts
+                          </button>
+                        )}
                       </div>
                       <div>
                         <label

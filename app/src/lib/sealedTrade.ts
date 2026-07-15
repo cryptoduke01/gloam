@@ -1,31 +1,37 @@
 /**
- * Sealed-size private trade — types only.
- * No prove path, no contracts. See contracts/SEALED_TRADE.md and /docs/sealed-trade.
+ * Sealed-size private trade status.
+ * Circuit: contracts/circuits/sealedSwap/sealedSwap.circom (compile next).
+ * Witness: buildSealedSwapWitness in proverSealedSwap.ts
+ * Settlement contract + zkey: not deployed.
  */
 
-export type SealedTradeStatus = "not_shipped";
+import { sealedSwapArtifactsReady } from "./proverSealedSwap";
 
-export const SEALED_TRADE_STATUS: SealedTradeStatus = "not_shipped";
+export type SealedTradeStatus =
+  | "circuit_draft"
+  | "artifacts_ready"
+  | "live";
 
-/** Candidate architectures (product language, not implementations). */
-export type SealedArchitecture = "intent_batch" | "vault_amm" | "hybrid";
-
-/**
- * Sketch of future public inputs — **not** wired to a circuit.
- * Final layout will change; do not build proofs against this.
- */
-export type SealedSwapPublicInputsSketch = {
-  root: string;
-  nullifierIn: string;
-  /** New note for the output asset */
-  newCommitmentOut: string;
-  assetIn: string;
-  assetOut: string;
-  /** Whether amountIn is public or only amountOutMin is public is TBD */
-  amountInPublic?: string;
-  amountOutMin: string;
-};
+export function sealedTradeStatus(): SealedTradeStatus {
+  if (sealedSwapArtifactsReady()) return "artifacts_ready";
+  return "circuit_draft";
+}
 
 export function sealedTradeReady(): boolean {
-  return false;
+  return sealedTradeStatus() === "live";
 }
+
+/** Public inputs for sealedSwap.circom (9 signals) */
+export type SealedSwapPublicInputs = {
+  root: string;
+  nullifier: string;
+  newCommitmentOut: string;
+  newCommitmentChange: string;
+  assetIn: string;
+  assetOut: string;
+  amountOutMin: string;
+  rateIn: string;
+  rateOut: string;
+};
+
+export type SealedArchitecture = "fixed_rate_v0" | "intent_batch" | "vault_amm";
