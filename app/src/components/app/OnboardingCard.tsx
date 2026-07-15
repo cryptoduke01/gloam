@@ -68,8 +68,7 @@ export function OnboardingCard({ compact = true }: { compact?: boolean }) {
       ) : (
         <>
           <p className="mt-2 text-xs leading-relaxed text-mute">
-            {remaining.length} step{remaining.length === 1 ? "" : "s"} left for
-            private hold &amp; pay. Dev keys only.
+            {`${remaining.length} step${remaining.length === 1 ? "" : "s"} left for private hold & pay. Dev keys only.`}
           </p>
           <ol className="mt-3 space-y-1.5">
             {ONBOARDING_STEPS.map((step, i) => {
@@ -119,9 +118,11 @@ export function OnboardingCard({ compact = true }: { compact?: boolean }) {
                         markOnboardingStep(step.id);
                         refresh();
                       }}
-                      className="shrink-0 text-mute hover:text-foreground"
+                      className="shrink-0 text-[11px] text-mute hover:text-foreground"
+                      aria-label={`Mark "${step.title}" done`}
+                      title="Mark done"
                     >
-                      ✓
+                      Mark done
                     </button>
                   )}
                 </li>

@@ -673,7 +673,7 @@ export function MoveView() {
               <div className="absolute inset-0 bg-gradient-to-t from-panel via-panel/80 to-transparent" />
               <div className="absolute bottom-4 left-5">
                 <StatusPill tone={poseidonMode ? "lime" : "warn"}>
-                  {poseidonMode ? "Vault actions" : "Not on Poseidon pool"}
+                  {poseidonMode ? "Vault actions" : "Vault not ready"}
                 </StatusPill>
                 <p className="mt-2 font-display text-2xl text-foreground">
                   Move
@@ -690,11 +690,11 @@ export function MoveView() {
                 + <strong className="text-foreground">Amount</strong> + confirm.
                 Under the hood: vault proof + encrypted on-chain memo
                 {isPayMemoLive() ? " (live)" : ""}. Not a public{" "}
-                <span className="font-mono">0x</span> transfer — use{" "}
+                <span className="font-mono">0x</span> transfer. For that, use{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
                   Send
-                </Link>{" "}
-                for that.
+                </Link>
+                .
               </p>
 
               {/* Mode tabs */}
@@ -763,7 +763,7 @@ export function MoveView() {
 
               {!poseidonMode && (
                 <p className="text-sm text-amber-600 dark:text-amber-500">
-                  App is not on the Poseidon vault. Check env defaults.
+                  The private vault isn’t connected right now. Try again shortly.
                 </p>
               )}
 
@@ -1016,8 +1016,8 @@ export function MoveView() {
                     <Link href="/app/shield" className="text-lime hover:underline">
                       Shield
                     </Link>{" "}
-                    first, or open <strong className="text-foreground">Claim</strong>{" "}
-                    to paste a payment ticket you received.
+                    first, or open <strong className="text-foreground">Receive</strong>{" "}
+                    to paste a payment ticket you were sent.
                   </p>
                 </div>
               ) : null}
@@ -1096,11 +1096,11 @@ export function MoveView() {
                       </button>
                     </div>
                     <p className="mt-1 text-xs text-mute">
-                      Solana-style discovery: when the sender posts a memo,
-                      payments appear here — no QR.{" "}
+                      When the sender posts a note, payments show up here
+                      automatically, no QR needed.{" "}
                       {isPayMemoLive()
-                        ? "Memo board live."
-                        : "Memo board not deployed yet (paste ticket below)."}
+                        ? "Inbox is live."
+                        : "Inbox not deployed yet — paste the ticket below."}
                     </p>
                     {inboxStatus && (
                       <p className="mt-2 text-xs text-mute">{inboxStatus}</p>
@@ -1212,26 +1212,25 @@ export function MoveView() {
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-              Why not identical to Solana private send?
+              How private send works
             </p>
             <ul className="mt-3 space-y-2 text-mute">
               <li>
-                <strong className="text-foreground">RH is EVM</strong> — Solana
-                wallets wire private send into the same address UX via their
-                stack (shielded program + memo). Same pattern is possible here.
+                <strong className="text-foreground">Pay to a tag</strong>, not a
+                public address. The amount and who sent it stay off the open
+                ledger.
               </li>
               <li>
-                <strong className="text-foreground">Gloam path</strong> — vault
-                proof (hidden who/how much) + receive tag + optional{" "}
-                <strong className="text-foreground">on-chain memo</strong> so
-                they Scan inbox (Solana-like discovery).
+                <strong className="text-foreground">The vault does the work.</strong>{" "}
+                A proof moves the money privately, and an optional on-chain
+                note lets them find the payment under Receive (no QR needed).
               </li>
               <li>
-                <strong className="text-foreground">Public 0x send</strong> —{" "}
+                <strong className="text-foreground">Want an open transfer?</strong>{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
                   Send
                 </Link>{" "}
-                remains the open-book path.
+                is the normal, public path.
               </li>
             </ul>
           </div>

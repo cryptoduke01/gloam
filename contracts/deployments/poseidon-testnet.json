@@ -35,5 +35,11 @@
   "appEnvPayMemo": {
     "NEXT_PUBLIC_PAY_MEMO": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE",
     "NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK": "90421567"
+  },
+  "sealedSwap": {
+    "SealedSwapVerifier": "0xE19a5a3CA4f7836811C5a87f2893b2A4C67AdF8D",
+    "SealedSwapIVerifier": "0x68C28ECD40320038bF8DE34Bb02064e12f602371",
+    "deployedAtBlock": 90428991,
+    "note": "Verifiers live. Pool redeploy required for sealedSwap() - run DeployPoseidonPoolSealed.s.sol then update ShieldPoolPoseidon + deployBlock in this file and app config."
   }
 }

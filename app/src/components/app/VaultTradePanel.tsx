@@ -556,7 +556,7 @@ export function VaultTradePanel({
 
     try {
       const path = await pathForLeaf(selected.leafIndex);
-      if (!path) throw new Error("Could not build Merkle path — resync tree.");
+      if (!path) throw new Error("Could not build the vault path. Refresh and try again.");
 
       const w = await buildPoseidonUnshieldWitness({
         secretHex: selected.secret,
