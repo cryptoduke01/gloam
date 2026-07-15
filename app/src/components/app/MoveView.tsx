@@ -667,6 +667,7 @@ export function MoveView() {
                 src="/ascii/move.png"
                 alt=""
                 tone="plate"
+                priority
                 className="h-full w-full opacity-50"
                 sizes="60vw"
               />

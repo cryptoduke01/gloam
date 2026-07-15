@@ -136,13 +136,13 @@ export function MarketsView() {
                 width={88}
                 height={32}
               />
-              <p className="font-mono text-sm text-foreground">
+              <p className="tnum font-mono text-sm text-foreground">
                 {settings.showUsd
                   ? formatUsd(m.mark)
                   : `$${formatMark(m.mark)}`}
               </p>
               <p
-                className={`text-sm ${
+                className={`tnum text-sm ${
                   m.change24h >= 0
                     ? "text-[var(--chart-up)]"
                     : "text-[var(--chart-down)]"

@@ -568,6 +568,7 @@ export function ShieldView() {
                 src="/ascii/shield.png"
                 alt=""
                 tone="plate"
+                priority
                 className="h-full w-full"
                 sizes="60vw"
               />

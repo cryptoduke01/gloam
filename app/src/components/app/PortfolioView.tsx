@@ -168,6 +168,7 @@ export function PortfolioView() {
               src="/ascii/shield.png"
               alt=""
               tone="plate"
+              priority
               className="h-full w-full opacity-40"
               sizes="60vw"
             />
