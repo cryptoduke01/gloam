@@ -40,6 +40,7 @@ import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { VaultTradePanel } from "./VaultTradePanel";
+import { SealedTradePanel } from "./SealedTradePanel";
 
 type Side = "buy" | "sell";
 type InputMode = "token" | "usd";
@@ -506,7 +507,7 @@ export function TradeView() {
               : "text-mute hover:text-foreground"
           }`}
         >
-          Sealed (soon)
+          Private trade
         </button>
       </div>
 
@@ -650,50 +651,11 @@ export function TradeView() {
               hasPool={hasPool}
             />
           ) : pathMode === "sealed" ? (
-            <div className="rounded-xl border border-line bg-panel p-6 text-sm text-mute">
-              <p className="font-display text-2xl text-foreground">
-                Sealed trade
-              </p>
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                Coming soon · size stays private
-              </p>
-              <p className="mt-3 leading-relaxed">
-                Private trade will swap inside the vault without showing your
-                full size on the open market. Proof keys exist (dev/testnet);
-                the live vault still needs an upgrade to settle those trades.
-                Until then, use{" "}
-                <strong className="text-foreground">From vault</strong> — that
-                path works today but the swap step is public.
-              </p>
-              <ul className="mt-4 list-inside list-disc space-y-1">
-                <li>
-                  <button
-                    type="button"
-                    className="text-lime hover:underline"
-                    onClick={() => setPathMode("vault")}
-                  >
-                    Vault adapter now
-                  </button>{" "}
-                  — swap edge still public
-                </li>
-                <li>
-                  <a
-                    href="/docs/sealed-trade"
-                    className="text-lime hover:underline"
-                  >
-                    Sealed trade plan
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="/docs/production"
-                    className="text-lime hover:underline"
-                  >
-                    Production keys gate
-                  </a>
-                </li>
-              </ul>
-            </div>
+            <SealedTradePanel
+              marketSymbol={market.symbol}
+              tokenAddress={token}
+              onUseAdapter={() => setPathMode("vault")}
+            />
           ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">

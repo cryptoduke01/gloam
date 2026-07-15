@@ -112,7 +112,7 @@ export async function syncShieldTree(
 ): Promise<SyncedTree | null> {
   if (!SHIELD_POOL_ADDRESS) return null;
 
-  const [shieldLogs, transferLogs] = await Promise.all([
+  const [shieldLogs, transferLogs, sealedLogs] = await Promise.all([
     getLogsChunked(client, {
       address: SHIELD_POOL_ADDRESS,
       event: {
@@ -140,6 +140,22 @@ export async function syncShieldTree(
       },
       fromBlock: SHIELD_DEPLOY_BLOCK,
     }),
+    // Older pools have no SealedSwapped — empty on failure
+    getLogsChunked(client, {
+      address: SHIELD_POOL_ADDRESS,
+      event: {
+        type: "event",
+        name: "SealedSwapped",
+        inputs: [
+          { name: "nullifier", type: "bytes32", indexed: true },
+          { name: "assetIn", type: "address", indexed: true },
+          { name: "assetOut", type: "address", indexed: true },
+          { name: "newCommitmentOut", type: "bytes32", indexed: false },
+          { name: "newCommitmentChange", type: "bytes32", indexed: false },
+        ],
+      },
+      fromBlock: SHIELD_DEPLOY_BLOCK,
+    }).catch(() => [] as DecodedLog[]),
   ]);
 
   const inserts: OrderedInsert[] = [];
@@ -183,6 +199,34 @@ export async function syncShieldTree(
     });
     inserts.push({
       commitment: pair[1],
+      kind: "transfer",
+      txHash: meta.txHash,
+      blockNumber: meta.blockNumber,
+      logIndex: meta.logIndex,
+      subIndex: 1,
+    });
+  }
+
+  // Sealed swap: out note then change note (same insert order as contract)
+  for (const log of sealedLogs) {
+    const args = log.args as {
+      newCommitmentOut?: Hex;
+      newCommitmentChange?: Hex;
+      assetOut?: Address;
+    };
+    if (!args.newCommitmentOut || !args.newCommitmentChange) continue;
+    const meta = logKey(log);
+    inserts.push({
+      commitment: args.newCommitmentOut,
+      kind: "transfer",
+      asset: args.assetOut,
+      txHash: meta.txHash,
+      blockNumber: meta.blockNumber,
+      logIndex: meta.logIndex,
+      subIndex: 0,
+    });
+    inserts.push({
+      commitment: args.newCommitmentChange,
       kind: "transfer",
       txHash: meta.txHash,
       blockNumber: meta.blockNumber,
