@@ -38,6 +38,13 @@ export default function DocsOverviewPage() {
       <PoolPicture title="One picture" />
 
       <h2 id="try">Try it (2 minutes)</h2>
+      <p>
+        Full walkthrough:{" "}
+        <Link href="/docs/testnet">
+          <strong>Testnet guide</strong>
+        </Link>
+        .
+      </p>
       <ol>
         <li>
           Open <Link href="/app">/app</Link> and connect a wallet on Robinhood
@@ -109,6 +116,9 @@ export default function DocsOverviewPage() {
 
       <h2 id="read-next">Read next</h2>
       <ul>
+        <li>
+          <Link href="/docs/testnet">Testnet guide (full)</Link>
+        </li>
         <li>
           <Link href="/docs/encryption">How shield works (simple)</Link>
         </li>

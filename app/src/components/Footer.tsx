@@ -7,6 +7,7 @@ const product = [
   { href: "/#encryption", label: "Encryption" },
   { href: "/#how", label: "How it works" },
   { href: "/docs", label: "Documentation" },
+  { href: "/docs/testnet", label: "Testnet guide" },
   { href: "/whitepaper", label: "Whitepaper" },
   { href: "/token", label: "$GLOAM token" },
 ];

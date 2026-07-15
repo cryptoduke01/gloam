@@ -40,6 +40,10 @@ export default function DocsProductPage() {
           <strong>Docs</strong> — gloam.trade/docs
         </li>
         <li>
+          <strong>Testnet guide</strong> —{" "}
+          <Link href="/docs/testnet">gloam.trade/docs/testnet</Link>
+        </li>
+        <li>
           <strong>Whitepaper</strong> — gloam.trade/whitepaper
         </li>
         <li>

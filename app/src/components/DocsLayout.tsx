@@ -19,6 +19,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     section: "Start here",
     items: [
       { href: "/docs", label: "Overview" },
+      { href: "/docs/testnet", label: "Testnet guide" },
       { href: "/docs/product", label: "What ships when" },
     ],
   },
@@ -172,6 +173,7 @@ export function DocsLayout({
                   {(
                     quickLinks ?? [
                       { href: "/app", label: "Open testnet" },
+                      { href: "/docs/testnet", label: "Testnet guide" },
                       { href: "/whitepaper", label: "Whitepaper" },
                       { href: "/token", label: "$GLOAM token" },
                       { href: "/", label: "Main site" },
