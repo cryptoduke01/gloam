@@ -18,7 +18,14 @@ export default function DocsProductPage() {
         { label: "App", value: "gloam.trade/app" },
         { label: "Docs", value: "/docs" },
         { label: "Paper", value: "/whitepaper" },
+        { label: "Token", value: "/token · not live" },
         { label: "X", value: "@gloamtrade" },
+      ]}
+      quickLinks={[
+        { href: "/app", label: "Open testnet" },
+        { href: "/token", label: "$GLOAM token" },
+        { href: "/whitepaper", label: "Whitepaper" },
+        { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
       <h2>Where things live</h2>
@@ -34,6 +41,10 @@ export default function DocsProductPage() {
         </li>
         <li>
           <strong>Whitepaper</strong> — gloam.trade/whitepaper
+        </li>
+        <li>
+          <strong>$GLOAM</strong> —{" "}
+          <Link href="/token">gloam.trade/token</Link> (prepared, not launched)
         </li>
       </ul>
 
@@ -75,6 +86,11 @@ export default function DocsProductPage() {
             n: "○",
             title: "Production keys + mainnet",
             body: "Ceremony, audit, ops. Blocked until the production gate checklist is green.",
+          },
+          {
+            n: "○",
+            title: "$GLOAM token",
+            body: "Ticker prepared at /token. No live contract until product, trust, and utility gates close.",
           },
         ]}
       />

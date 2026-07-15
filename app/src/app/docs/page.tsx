@@ -92,7 +92,20 @@ export default function DocsOverviewPage() {
         <li>
           <Link href="/docs/production">Production ceremony keys / mainnet</Link>
         </li>
+        <li>
+          <Link href="/token">$GLOAM token</Link> — prepared page only; not
+          launched, no live contract
+        </li>
       </ul>
+
+      <h2 id="token">$GLOAM</h2>
+      <p>
+        The protocol asset ticker is <strong>$GLOAM</strong>. There is no
+        tradable contract yet. Status, planned utility, and the launch checklist
+        live on the{" "}
+        <Link href="/token">token page</Link>. Product and privacy work without
+        a token.
+      </p>
 
       <h2 id="read-next">Read next</h2>
       <ul>
@@ -113,6 +126,9 @@ export default function DocsOverviewPage() {
         </li>
         <li>
           <Link href="/whitepaper">Whitepaper</Link>
+        </li>
+        <li>
+          <Link href="/token">$GLOAM token</Link>
         </li>
       </ul>
     </DocsLayout>

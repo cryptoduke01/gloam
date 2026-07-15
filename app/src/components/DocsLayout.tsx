@@ -38,6 +38,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     items: [
       { href: "/docs/production", label: "Production gate" },
       { href: "/whitepaper", label: "Whitepaper" },
+      { href: "/token", label: "$GLOAM token" },
     ],
   },
 ];
@@ -172,6 +173,7 @@ export function DocsLayout({
                     quickLinks ?? [
                       { href: "/app", label: "Open testnet" },
                       { href: "/whitepaper", label: "Whitepaper" },
+                      { href: "/token", label: "$GLOAM token" },
                       { href: "/", label: "Main site" },
                       {
                         href: "https://x.com/gloamtrade",
