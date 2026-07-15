@@ -50,7 +50,6 @@ import {
   isReceiveTag,
   encryptTicketForTag,
   rotateReceiveIdentity,
-  shortTag,
   type ReceiveIdentity,
 } from "@/lib/receiveTag";
 import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
