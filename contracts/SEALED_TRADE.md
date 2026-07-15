@@ -27,12 +27,19 @@ spend note secrets, `amountIn`, `amountSwap`, `amountOut`, change, Merkle path
 **App witness builder:** `app/src/lib/proverSealedSwap.ts` (`buildSealedSwapWitness`)  
 **Artifacts ready?** `sealedSwapArtifactsReady() === false` until wasm/zkey published.
 
+## Settlement (source ready)
+
+- `SealedSwapVerifier.sol` + `SealedSwapIVerifier.sol` (9 public inputs)
+- `ShieldPoolPoseidon.sealedSwap(...)` + `setSealedSwapVerifier`
+- Deploy script: `script/DeploySealedSwapVerifier.s.sol`
+- **Live RH pool** is an older bytecode without `sealedSwap` until redeploy + `setSealedSwapVerifier`
+
 ## Next engineering steps
 
-1. `circom` compile + Powers of Tau contribution → `sealed_swap.wasm` / zkey  
-2. Solidity verifier + `SealedSwap` settlement on pool inventory (or adapter)  
-3. Wire DualProof-style router or new pool method  
-4. Trade UI: real prove button (only after 1–3)
+1. Deploy sealed swap verifiers on RH testnet  
+2. Redeploy Poseidon pool (or migrate) with `sealedSwap` + set verifier  
+3. App: sealed trade form that proves + calls `sealedSwap` (only if pool supports it)  
+4. Seed inventory for both assets so unshield after swap stays solvent
 
 ## Adapter (live)
 

@@ -655,16 +655,15 @@ export function TradeView() {
                 Sealed trade
               </p>
               <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                Status: proofs ready · settlement next
+                Coming soon · size stays private
               </p>
               <p className="mt-3 leading-relaxed">
-                Dev proving keys for sealed swap are in the app (
-                <code className="text-foreground">sealed_swap*.zkey</code>
-                ). The circuit keeps{" "}
-                <strong className="text-foreground">trade size private</strong>{" "}
-                (only min out + rates public). On-chain settlement is{" "}
-                <strong className="text-foreground">not deployed</strong> — no
-                fake swap button. Use the vault adapter until settlement lands.
+                Private trade will swap inside the vault without showing your
+                full size on the open market. Proof keys exist (dev/testnet);
+                the live vault still needs an upgrade to settle those trades.
+                Until then, use{" "}
+                <strong className="text-foreground">From vault</strong> — that
+                path works today but the swap step is public.
               </p>
               <ul className="mt-4 list-inside list-disc space-y-1">
                 <li>

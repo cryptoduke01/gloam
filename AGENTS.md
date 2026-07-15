@@ -14,6 +14,10 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - Vercel: one project, Root Directory = `app`
 - Contracts: `contracts/` (Foundry) — ShieldPool scaffold; testnet only
 
+## Audits
+
+- Claude grand audit prompt: [`AUDITS/CLAUDE_GRAND_AUDIT_PROMPT.md`](./AUDITS/CLAUDE_GRAND_AUDIT_PROMPT.md)
+
 ## Rules
 
 - Real privacy (shielded balances / private txs) — never fake or mock success.

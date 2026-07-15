@@ -23,6 +23,8 @@ contract ShieldPoolPoseidon is IShieldPool {
     using IMT for IMT.Tree;
 
     IVerifier public verifier;
+    /// @notice Optional sealed-swap verifier (9 public inputs). Separate from dual unshield/transfer.
+    IVerifier public sealedSwapVerifier;
     IPoseidon2 public immutable poseidon2;
     IMT.Tree private tree;
 
@@ -33,6 +35,14 @@ contract ShieldPoolPoseidon is IShieldPool {
 
     uint256 public constant PROOF_LAYOUT_VERSION = 2;
     string public constant HASH_SCHEME = "poseidon";
+
+    event SealedSwapped(
+        bytes32 indexed nullifier,
+        address indexed assetIn,
+        address indexed assetOut,
+        bytes32 newCommitmentOut,
+        bytes32 newCommitmentChange
+    );
 
     error NotOwner();
     error ZeroCommitment();
@@ -46,6 +56,7 @@ contract ShieldPoolPoseidon is IShieldPool {
     error InvalidMsgValue();
     error InsufficientPoolBalance();
     error FeeOnTransferNotSupported();
+    error SameAsset();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -70,6 +81,10 @@ contract ShieldPoolPoseidon is IShieldPool {
 
     function setVerifier(address verifier_) external onlyOwner {
         verifier = IVerifier(verifier_);
+    }
+
+    function setSealedSwapVerifier(address verifier_) external onlyOwner {
+        sealedSwapVerifier = IVerifier(verifier_);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -147,6 +162,57 @@ contract ShieldPoolPoseidon is IShieldPool {
         emit Transferred(nullifier, newCommitments);
     }
 
+    /**
+     * @notice Private-size swap: spend assetIn note → assetOut note + assetIn change.
+     * @dev Public inputs (9): root, nullifier, newCOut, newCChange, assetIn, assetOut,
+     *      amountOutMin, rateIn, rateOut. Actual size is private in the circuit.
+     *      Pool must already hold assetOut for later unshields (inventory / LP seed).
+     *      Live RH pool may not have this method until redeploy — check code version.
+     */
+    function sealedSwap(
+        bytes calldata proof,
+        bytes32 root,
+        bytes32 nullifier,
+        bytes32 newCommitmentOut,
+        bytes32 newCommitmentChange,
+        address assetIn,
+        address assetOut,
+        uint256 amountOutMin,
+        uint256 rateIn,
+        uint256 rateOut
+    ) external {
+        if (assetIn == assetOut) revert SameAsset();
+        if (rateIn == 0 || rateOut == 0) revert InvalidAmount();
+        _requireSealedSwapProof(
+            proof,
+            root,
+            nullifier,
+            newCommitmentOut,
+            newCommitmentChange,
+            assetIn,
+            assetOut,
+            amountOutMin,
+            rateIn,
+            rateOut
+        );
+        if (spent[nullifier]) revert AlreadySpent();
+        spent[nullifier] = true;
+
+        if (newCommitmentOut == bytes32(0) || newCommitmentChange == bytes32(0)) {
+            revert ZeroCommitment();
+        }
+        tree.insert(uint256(newCommitmentOut));
+        tree.insert(uint256(newCommitmentChange));
+
+        emit SealedSwapped(
+            nullifier,
+            assetIn,
+            assetOut,
+            newCommitmentOut,
+            newCommitmentChange
+        );
+    }
+
     function unshield(
         bytes calldata proof,
         bytes32 root,
@@ -201,6 +267,33 @@ contract ShieldPoolPoseidon is IShieldPool {
         inputs[3] = amount;
         inputs[4] = uint256(uint160(to));
         if (!verifier.verify(proof, inputs)) revert InvalidProof();
+    }
+
+    function _requireSealedSwapProof(
+        bytes calldata proof,
+        bytes32 root,
+        bytes32 nullifier,
+        bytes32 newCommitmentOut,
+        bytes32 newCommitmentChange,
+        address assetIn,
+        address assetOut,
+        uint256 amountOutMin,
+        uint256 rateIn,
+        uint256 rateOut
+    ) internal view {
+        if (address(sealedSwapVerifier) == address(0)) revert VerifierNotSet();
+        if (!tree.isKnownRoot(uint256(root))) revert UnknownRoot();
+        uint256[] memory inputs = new uint256[](9);
+        inputs[0] = uint256(root);
+        inputs[1] = uint256(nullifier);
+        inputs[2] = uint256(newCommitmentOut);
+        inputs[3] = uint256(newCommitmentChange);
+        inputs[4] = uint256(uint160(assetIn));
+        inputs[5] = uint256(uint160(assetOut));
+        inputs[6] = amountOutMin;
+        inputs[7] = rateIn;
+        inputs[8] = rateOut;
+        if (!sealedSwapVerifier.verify(proof, inputs)) revert InvalidProof();
     }
 
     function _pullERC20(address from, uint256 amount, address asset) internal {
