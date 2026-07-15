@@ -150,7 +150,7 @@ export async function buildSealedSwapWitness(args: {
   };
 }
 
-/** True once sealed_swap.wasm + zkey are published under /public/circuits */
+/** Dev zkey/wasm shipped under /public/circuits — settlement still not live */
 export function sealedSwapArtifactsReady(): boolean {
-  return false;
+  return true;
 }

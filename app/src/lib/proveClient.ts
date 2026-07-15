@@ -9,6 +9,7 @@ import {
   type Hex,
 } from "viem";
 import {
+  assertSealedSwapArtifacts,
   assertTransferArtifacts,
   assertUnshieldArtifacts,
   CIRCUIT_ARTIFACTS,
@@ -70,6 +71,17 @@ export async function proveTransferInBrowser(
 ) {
   await assertTransferArtifacts();
   return fullProve(circomInput, TRANSFER_WASM, TRANSFER_ZKEY);
+}
+
+const SEALED_SWAP_WASM = CIRCUIT_ARTIFACTS.sealedSwapWasm.path;
+const SEALED_SWAP_ZKEY = CIRCUIT_ARTIFACTS.sealedSwapZkey.path;
+
+/** Prove sealed swap (dev keys). Settlement contract not live yet. */
+export async function proveSealedSwapInBrowser(
+  circomInput: Record<string, string | string[]>
+) {
+  await assertSealedSwapArtifacts();
+  return fullProve(circomInput, SEALED_SWAP_WASM, SEALED_SWAP_ZKEY);
 }
 
 export function fieldToBytes32(field: bigint | string): Hex {

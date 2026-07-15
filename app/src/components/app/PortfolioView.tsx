@@ -161,8 +161,6 @@ export function PortfolioView() {
         </a>
       </div>
 
-      <OnboardingCard />
-
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="overflow-hidden rounded-xl border border-line bg-panel lg:col-span-8">
           <div className="relative h-40 border-b border-line sm:h-44">
@@ -355,7 +353,8 @@ export function PortfolioView() {
           )}
         </div>
 
-        <div className="lg:col-span-4">
+        <div className="space-y-4 lg:col-span-4">
+          <OnboardingCard />
           <ActivityFeed />
         </div>
       </div>

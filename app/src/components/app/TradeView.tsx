@@ -655,19 +655,16 @@ export function TradeView() {
                 Sealed trade
               </p>
               <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                Status: circuit draft (v0)
+                Status: proofs ready · settlement next
               </p>
               <p className="mt-3 leading-relaxed">
-                Goal: swap without broadcasting full size. Circuit source is in
-                the repo (
-                <code className="text-foreground">
-                  sealedSwap.circom
-                </code>
-                ) — proves spend + fixed-rate out + change, with{" "}
-                <strong className="text-foreground">size private</strong> and
-                only <code className="text-foreground">amountOutMin</code>{" "}
-                public. Next: compile zkey, settlement contract, then a real
-                prove button. No fake fills.
+                Dev proving keys for sealed swap are in the app (
+                <code className="text-foreground">sealed_swap*.zkey</code>
+                ). The circuit keeps{" "}
+                <strong className="text-foreground">trade size private</strong>{" "}
+                (only min out + rates public). On-chain settlement is{" "}
+                <strong className="text-foreground">not deployed</strong> — no
+                fake swap button. Use the vault adapter until settlement lands.
               </p>
               <ul className="mt-4 list-inside list-disc space-y-1">
                 <li>

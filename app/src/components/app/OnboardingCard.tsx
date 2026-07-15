@@ -11,7 +11,10 @@ import {
   type OnboardingState,
 } from "@/lib/onboarding";
 
-export function OnboardingCard() {
+/**
+ * Quiet “getting started” note — lives in the portfolio sidebar, not a hero banner.
+ */
+export function OnboardingCard({ compact = true }: { compact?: boolean }) {
   const [state, setState] = useState<OnboardingState | null>(null);
 
   useEffect(() => {
@@ -25,19 +28,24 @@ export function OnboardingCard() {
   if (!state || state.dismissed) return null;
 
   const remaining = ONBOARDING_STEPS.filter((s) => !state.done.includes(s.id));
+  const next = remaining[0] ?? null;
 
   return (
-    <div className="rounded-xl border border-lime/30 bg-lime/5 p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <aside
+      className={`rounded-xl border border-line bg-panel text-sm ${
+        compact ? "p-4" : "p-5"
+      }`}
+      aria-label="Getting started"
+    >
+      <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-            Start here · testnet
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            Side note · testnet
           </p>
-          <p className="mt-1 font-display text-xl text-foreground">
-            Four steps to the private path
-          </p>
-          <p className="mt-1 text-sm text-mute">
-            Dev proving keys — play money only. Dismiss anytime.
+          <p className="mt-1 text-sm font-medium text-foreground">
+            {remaining.length === 0
+              ? "You’re set"
+              : "Getting started"}
           </p>
         </div>
         <button
@@ -46,99 +54,82 @@ export function OnboardingCard() {
             dismissOnboarding();
             refresh();
           }}
-          className="text-xs text-mute hover:text-foreground"
+          className="shrink-0 text-[11px] text-mute hover:text-foreground"
+          aria-label="Dismiss getting started"
         >
           Dismiss
         </button>
       </div>
 
-      <ol className="mt-4 space-y-2">
-        {ONBOARDING_STEPS.map((step, i) => {
-          const done = state.done.includes(step.id);
-          const href =
-            step.href === "external:faucet" ? FAUCET_URL : step.href;
-          const external = step.href === "external:faucet";
-          return (
-            <li
-              key={step.id}
-              className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-sm ${
-                done
-                  ? "border-line/60 bg-background/40 text-mute"
-                  : "border-line bg-background"
-              }`}
-            >
-              <div className="min-w-0">
-                <p
-                  className={`font-medium ${
+      {remaining.length === 0 ? (
+        <p className="mt-2 text-xs leading-relaxed text-mute">
+          Vault path ready. Dismiss this note anytime.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-xs leading-relaxed text-mute">
+            {remaining.length} step{remaining.length === 1 ? "" : "s"} left for
+            private hold &amp; pay. Dev keys only.
+          </p>
+          <ol className="mt-3 space-y-1.5">
+            {ONBOARDING_STEPS.map((step, i) => {
+              const done = state.done.includes(step.id);
+              const isNext = next?.id === step.id;
+              return (
+                <li
+                  key={step.id}
+                  className={`flex items-center justify-between gap-2 text-xs ${
                     done ? "text-mute line-through" : "text-foreground"
                   }`}
                 >
-                  {i + 1}. {step.title}
-                </p>
-                <p className="text-xs text-mute">{step.body}</p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                {!done && (
-                  <>
-                    {external ? (
+                  <span className="min-w-0 truncate">
+                    <span className="text-mute">{i + 1}.</span> {step.title}
+                  </span>
+                  {!done && isNext && (
+                    step.href === "external:faucet" ? (
                       <a
-                        href={href}
+                        href={FAUCET_URL}
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => {
                           markOnboardingStep(step.id);
                           refresh();
                         }}
-                        className="inline-flex min-h-9 items-center rounded-md bg-lime px-3 text-xs font-semibold text-black"
+                        className="shrink-0 text-lime hover:underline"
                       >
                         Open
                       </a>
                     ) : (
                       <Link
-                        href={href}
+                        href={step.href}
                         onClick={() => {
                           markOnboardingStep(step.id);
                           refresh();
                         }}
-                        className="inline-flex min-h-9 items-center rounded-md bg-lime px-3 text-xs font-semibold text-black"
+                        className="shrink-0 text-lime hover:underline"
                       >
                         Go
                       </Link>
-                    )}
-                  </>
-                )}
-                {!done && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      markOnboardingStep(step.id);
-                      refresh();
-                    }}
-                    className="inline-flex min-h-9 items-center rounded-md border border-line px-2 text-xs text-mute hover:text-foreground"
-                  >
-                    Done
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      {remaining.length === 0 && (
-        <p className="mt-3 text-sm text-foreground">
-          Checklist complete.{" "}
-          <button
-            type="button"
-            className="text-lime hover:underline"
-            onClick={() => {
-              dismissOnboarding();
-              refresh();
-            }}
-          >
-            Hide this card
-          </button>
-        </p>
+                    )
+                  )}
+                  {!done && !isNext && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markOnboardingStep(step.id);
+                        refresh();
+                      }}
+                      className="shrink-0 text-mute hover:text-foreground"
+                    >
+                      ✓
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </>
       )}
-    </div>
+    </aside>
   );
 }

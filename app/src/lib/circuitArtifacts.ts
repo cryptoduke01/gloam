@@ -29,6 +29,16 @@ export const CIRCUIT_ARTIFACTS = {
     sha256:
       "d0455992378084fdb8a7f85eea5f5395c6dd281ca5b6525d63cfc9c95097da78",
   },
+  sealedSwapWasm: {
+    path: "/circuits/sealed_swap.wasm",
+    sha256:
+      "8e1f8f2e331da4f8ad8c0fccf39ae68123189fd1202c42b5d8ce548fa89fd33d",
+  },
+  sealedSwapZkey: {
+    path: "/circuits/sealed_swap_final.zkey",
+    sha256:
+      "c9672678325e77cf4416c96fef9bba2f839e57b2f35aed09d869ae293875dd8e",
+  },
 } as const;
 
 function hexSha256(buf: ArrayBuffer): string {
@@ -84,6 +94,17 @@ export async function assertTransferArtifacts(): Promise<void> {
   await assertArtifactIntegrity(
     CIRCUIT_ARTIFACTS.transferZkey.path,
     CIRCUIT_ARTIFACTS.transferZkey.sha256
+  );
+}
+
+export async function assertSealedSwapArtifacts(): Promise<void> {
+  await assertArtifactIntegrity(
+    CIRCUIT_ARTIFACTS.sealedSwapWasm.path,
+    CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256
+  );
+  await assertArtifactIntegrity(
+    CIRCUIT_ARTIFACTS.sealedSwapZkey.path,
+    CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256
   );
 }
 

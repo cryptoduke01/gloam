@@ -18,9 +18,9 @@ pragma circom 2.1.6;
  * Does NOT yet call a DEX. Settlement contract must credit assetOut inventory.
  */
 
-include "circomlib/circuits/poseidon.circom";
-include "circomlib/circuits/comparators.circom";
+// merkle_poseidon pulls poseidon; add comparators once for GreaterEqThan
 include "../common/merkle_poseidon.circom";
+include "circomlib/circuits/comparators.circom";
 
 template SealedSwap(levels) {
     // ── public ──
@@ -76,8 +76,8 @@ template SealedSwap(levels) {
     rhs <== amountSwap * rateIn;
     lhs === rhs;
 
-    // 6) Slippage: amountOut >= amountOutMin
-    component gte = GreaterEqThan(64);
+    // 6) Slippage: amountOut >= amountOutMin (252-bit for wei-scale amounts)
+    component gte = GreaterEqThan(252);
     gte.in[0] <== amountOut;
     gte.in[1] <== amountOutMin;
     gte.out === 1;

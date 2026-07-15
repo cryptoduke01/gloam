@@ -20,6 +20,7 @@ import {
 import {
   CIRCUIT_ARTIFACTS,
   PROVING_CEREMONY,
+  assertSealedSwapArtifacts,
   assertTransferArtifacts,
   assertUnshieldArtifacts,
 } from "@/lib/circuitArtifacts";
@@ -508,8 +509,10 @@ export function SettingsView() {
             [
               ["unshield zkey", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
               ["transfer zkey", CIRCUIT_ARTIFACTS.transferZkey.sha256],
+              ["sealed swap zkey", CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256],
               ["unshield wasm", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
               ["transfer wasm", CIRCUIT_ARTIFACTS.transferWasm.sha256],
+              ["sealed swap wasm", CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256],
             ] as const
           ).map(([label, hash]) => (
             <li key={label}>
@@ -530,7 +533,8 @@ export function SettingsView() {
               try {
                 await assertUnshieldArtifacts();
                 await assertTransferArtifacts();
-                setIntegrityMsg("All four artifacts match expected SHA-256.");
+                await assertSealedSwapArtifacts();
+                setIntegrityMsg("All six artifacts match expected SHA-256.");
               } catch (e) {
                 setIntegrityMsg(
                   e instanceof Error ? e.message : "Integrity check failed"

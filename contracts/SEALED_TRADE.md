@@ -1,6 +1,6 @@
 # Sealed-size private trade
 
-**Status:** circuit draft (`circuits/sealedSwap/sealedSwap.circom`). Not compiled / not deployed. Vault trade adapter remains the only executable trade path.
+**Status:** circuit **compiled** + dev zkey in `app/public/circuits/sealed_swap*`. Settlement contract **not** deployed — adapter is the only executable trade.
 
 ## Goal
 

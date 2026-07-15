@@ -13,6 +13,7 @@ export type SealedTradeStatus =
   | "live";
 
 export function sealedTradeStatus(): SealedTradeStatus {
+  // Artifacts ready for browser prove; no on-chain sealedSwap yet → not "live"
   if (sealedSwapArtifactsReady()) return "artifacts_ready";
   return "circuit_draft";
 }
