@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import nextDynamic from "next/dynamic";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -10,23 +10,9 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const AdminDashboard = nextDynamic(
-  () =>
-    import("@/components/admin/AdminDashboard").then((m) => m.AdminDashboard),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex min-h-full items-center justify-center bg-background">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute">
-          Loading admin…
-        </p>
-      </div>
-    ),
-  },
-);
-
 export default async function AdminPage() {
-  // Opt into request-time rendering (avoids stale static /admin shell on Vercel)
+  // Request-time render so Vercel doesn't serve a stale static shell
   await headers();
+  // AdminDashboard is a Client Component ("use client") — no next/dynamic ssr:false needed
   return <AdminDashboard />;
 }
