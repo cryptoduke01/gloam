@@ -129,8 +129,8 @@ export function TestnetGate({ children }: { children: ReactNode }) {
           <div className="absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-lime/[0.04] blur-[90px]" />
         </div>
 
-        <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col gap-14 px-5 py-12 sm:gap-16 sm:px-8 sm:py-16 lg:gap-20 lg:py-20">
-          {/* Layer 1 — copy, timer, CTAs (full width) */}
+        <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-5 py-12 sm:gap-14 sm:px-8 sm:py-16 lg:gap-16 lg:py-20">
+          {/* Layer 1 — headline + copy + CTAs + pronounced countdown */}
           <motion.div
             className="w-full"
             initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -151,37 +151,43 @@ export function TestnetGate({ children }: { children: ReactNode }) {
               Unlocking private money on Robinhood
             </h1>
 
-            <div className="mt-8 flex flex-col gap-10 lg:mt-10 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
-              <div className="max-w-xl">
-                <p className="text-base leading-relaxed text-mute sm:text-lg sm:leading-relaxed">
-                  Shield, private pay, cash out with ZK proofs — live when the
-                  clock hits zero. Prep with the guide so you&apos;re ready on
-                  open.
-                </p>
-                <p className="mt-4 font-mono text-[11px] text-mute">
-                  Opens · {opensLabel}
-                </p>
-                <div className="mt-8 flex flex-wrap items-center gap-3.5">
-                  <Link
-                    href="/docs/testnet"
-                    className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
-                  >
-                    Testnet guide
-                  </Link>
-                  <a
-                    href={DEMO_X_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
-                  >
-                    <XIcon className="h-3.5 w-3.5" />
-                    Watch demo on X
-                  </a>
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-mute sm:mt-7 sm:text-lg">
+              Shield, private pay, cash out with ZK proofs — live when the clock
+              hits zero. Prep with the guide so you&apos;re ready on open.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3.5">
+              <Link
+                href="/docs/testnet"
+                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+              >
+                Testnet guide
+              </Link>
+              <a
+                href={DEMO_X_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+                Watch demo on X
+              </a>
+            </div>
+
+            {/* Countdown — full-width, high contrast */}
+            <div className="mt-12 sm:mt-14">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+                    Opens in
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-mute">
+                    {opensLabel}
+                  </p>
                 </div>
               </div>
-
               <div
-                className="grid w-full max-w-md grid-cols-4 gap-3 sm:gap-3.5 lg:max-w-lg lg:shrink-0"
+                className="mt-4 grid grid-cols-4 gap-2.5 sm:gap-4"
                 role="timer"
                 aria-live="polite"
                 aria-atomic="true"
@@ -197,46 +203,21 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                 ).map(([label, value]) => (
                   <div
                     key={label}
-                    className="rounded-xl border border-line bg-panel px-2 py-4 sm:px-3 sm:py-5"
+                    className="rounded-2xl border border-lime/35 bg-panel px-2 py-5 text-center shadow-[0_0_40px_-12px_color-mix(in_srgb,var(--lime)_45%,transparent)] sm:px-4 sm:py-7"
                   >
-                    <p className="tnum font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+                    <p className="tnum font-display text-4xl leading-none tracking-tight text-lime sm:text-5xl lg:text-6xl">
                       {pad(value)}
                     </p>
-                    <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-mute">
+                    <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-mute sm:text-[11px]">
                       {label}
                     </p>
                   </div>
                 ))}
               </div>
             </div>
-
-            <a
-              href="https://x.com/gloamtrade"
-              target="_blank"
-              rel="noreferrer"
-              className="lift mt-10 flex w-full max-w-2xl items-start gap-4 rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40 sm:mt-12"
-            >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
-                <XIcon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 text-left">
-                <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                  Updates
-                </span>
-                <span className="mt-1 block text-sm font-medium text-foreground">
-                  Look out for updates on X
-                </span>
-                <span className="mt-1.5 block text-sm leading-relaxed text-mute">
-                  Go-live pings and clips at{" "}
-                  <span className="text-foreground">@gloamtrade</span>. Follow
-                  so you don&apos;t miss unlock.
-                </span>
-              </span>
-              <span className="ml-auto shrink-0 self-center text-lime">→</span>
-            </a>
           </motion.div>
 
-          {/* Layer 2 — preview plate (full width below) */}
+          {/* Layer 2 — preview plate (above X updates) */}
           <motion.div
             className="w-full"
             initial={reduce ? false : { opacity: 0, y: 18 }}
@@ -300,6 +281,39 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                 ))}
               </div>
             </div>
+          </motion.div>
+
+          {/* Layer 3 — X updates (below preview) */}
+          <motion.div
+            className="w-full"
+            initial={reduce ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.12, ease }}
+          >
+            <a
+              href="https://x.com/gloamtrade"
+              target="_blank"
+              rel="noreferrer"
+              className="lift flex w-full max-w-2xl items-start gap-4 rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
+                <XIcon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 text-left">
+                <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                  Updates
+                </span>
+                <span className="mt-1 block text-sm font-medium text-foreground">
+                  Look out for updates on X
+                </span>
+                <span className="mt-1.5 block text-sm leading-relaxed text-mute">
+                  Go-live pings and clips at{" "}
+                  <span className="text-foreground">@gloamtrade</span>. Follow
+                  so you don&apos;t miss unlock.
+                </span>
+              </span>
+              <span className="ml-auto shrink-0 self-center text-lime">→</span>
+            </a>
           </motion.div>
         </div>
       </main>
