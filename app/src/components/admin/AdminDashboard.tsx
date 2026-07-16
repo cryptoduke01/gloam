@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+  type FormEvent,
+} from "react";
 import { Logo } from "@/components/Logo";
 import { EXPLORER_TX, EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
 
@@ -141,7 +148,7 @@ export function AdminDashboard() {
     return () => window.clearInterval(id);
   }, [authed, loadMetrics]);
 
-  async function onLogin(e: React.FormEvent) {
+  async function onLogin(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setLoginErr(null);
@@ -602,8 +609,8 @@ function Panel({
   action,
 }: {
   title: string;
-  children: React.ReactNode;
-  action?: React.ReactNode;
+  children: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-line bg-panel p-4 sm:p-5">
@@ -650,7 +657,7 @@ function DataTable({
   empty,
 }: {
   headers: string[];
-  rows: React.ReactNode[][];
+  rows: ReactNode[][];
   empty?: string;
 }) {
   if (rows.length === 0) {
