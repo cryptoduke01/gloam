@@ -129,10 +129,10 @@ export function TestnetGate({ children }: { children: ReactNode }) {
           <div className="absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-lime/[0.04] blur-[90px]" />
         </div>
 
-        <div className="relative mx-auto grid w-full max-w-6xl flex-1 items-center gap-14 px-5 py-12 sm:gap-16 sm:px-8 sm:py-16 lg:grid-cols-12 lg:gap-20 lg:py-20">
-          {/* Left: copy + timer — generous vertical rhythm */}
+        <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col gap-14 px-5 py-12 sm:gap-16 sm:px-8 sm:py-16 lg:gap-20 lg:py-20">
+          {/* Layer 1 — copy, timer, CTAs (full width) */}
           <motion.div
-            className="flex flex-col justify-center gap-0 lg:col-span-5 lg:pr-4"
+            className="w-full"
             initial={reduce ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease }}
@@ -147,69 +147,74 @@ export function TestnetGate({ children }: { children: ReactNode }) {
               </span>
             </div>
 
-            <h1 className="mt-7 font-display text-[2.4rem] leading-[1.08] tracking-tight text-foreground sm:mt-8 sm:text-5xl lg:text-[3.1rem]">
+            <h1 className="mt-8 max-w-4xl font-display text-[2.5rem] leading-[1.08] tracking-tight text-foreground sm:mt-10 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.06]">
               Unlocking private money on Robinhood
             </h1>
-            <p className="mt-5 max-w-md text-base leading-relaxed text-mute sm:mt-6 sm:text-[1.05rem] sm:leading-relaxed">
-              Shield, private pay, cash out with ZK proofs — live when the clock
-              hits zero. Prep with the guide so you&apos;re ready on open.
-            </p>
-            <p className="mt-3 font-mono text-[11px] text-mute">
-              Opens · {opensLabel}
-            </p>
 
-            <div
-              className="mt-10 grid grid-cols-4 gap-3 sm:mt-12 sm:gap-3.5"
-              role="timer"
-              aria-live="polite"
-              aria-atomic="true"
-              aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
-            >
-              {(
-                [
-                  ["Days", parts.d],
-                  ["Hours", parts.h],
-                  ["Mins", parts.m],
-                  ["Secs", parts.s],
-                ] as const
-              ).map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-line bg-panel px-2 py-4 sm:px-3 sm:py-5"
-                >
-                  <p className="tnum font-display text-2xl tracking-tight text-foreground sm:text-3xl">
-                    {pad(value)}
-                  </p>
-                  <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-mute">
-                    {label}
-                  </p>
+            <div className="mt-8 flex flex-col gap-10 lg:mt-10 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+              <div className="max-w-xl">
+                <p className="text-base leading-relaxed text-mute sm:text-lg sm:leading-relaxed">
+                  Shield, private pay, cash out with ZK proofs — live when the
+                  clock hits zero. Prep with the guide so you&apos;re ready on
+                  open.
+                </p>
+                <p className="mt-4 font-mono text-[11px] text-mute">
+                  Opens · {opensLabel}
+                </p>
+                <div className="mt-8 flex flex-wrap items-center gap-3.5">
+                  <Link
+                    href="/docs/testnet"
+                    className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+                  >
+                    Testnet guide
+                  </Link>
+                  <a
+                    href={DEMO_X_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                    Watch demo on X
+                  </a>
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-3.5 sm:mt-12">
-              <Link
-                href="/docs/testnet"
-                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+              <div
+                className="grid w-full max-w-md grid-cols-4 gap-3 sm:gap-3.5 lg:max-w-lg lg:shrink-0"
+                role="timer"
+                aria-live="polite"
+                aria-atomic="true"
+                aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
               >
-                Testnet guide
-              </Link>
-              <a
-                href={DEMO_X_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-                Watch demo on X
-              </a>
+                {(
+                  [
+                    ["Days", parts.d],
+                    ["Hours", parts.h],
+                    ["Mins", parts.m],
+                    ["Secs", parts.s],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-line bg-panel px-2 py-4 sm:px-3 sm:py-5"
+                  >
+                    <p className="tnum font-display text-2xl tracking-tight text-foreground sm:text-3xl">
+                      {pad(value)}
+                    </p>
+                    <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-mute">
+                      {label}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <a
               href="https://x.com/gloamtrade"
               target="_blank"
               rel="noreferrer"
-              className="lift mt-10 flex items-start gap-4 rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40 sm:mt-12"
+              className="lift mt-10 flex w-full max-w-2xl items-start gap-4 rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40 sm:mt-12"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
                 <XIcon className="h-4 w-4" />
@@ -231,15 +236,15 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             </a>
           </motion.div>
 
-          {/* Right: hero dither frame */}
+          {/* Layer 2 — preview plate (full width below) */}
           <motion.div
-            className="flex min-h-0 flex-col lg:col-span-7"
-            initial={reduce ? false : { opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.06, ease }}
+            className="w-full"
+            initial={reduce ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.08, ease }}
           >
-            <div className="flex min-h-[min(58vh,520px)] flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_12%,transparent)]">
-              <div className="relative min-h-0 flex-1">
+            <div className="flex min-h-[min(48vh,440px)] w-full flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_12%,transparent)] sm:min-h-[min(52vh,480px)]">
+              <div className="relative min-h-[min(40vh,360px)] flex-1 sm:min-h-[min(44vh,400px)]">
                 {plates.map((p, i) => (
                   <div
                     key={p.src}
@@ -254,17 +259,17 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                       fit="cover"
                       priority={i === 0}
                       className="h-full w-full"
-                      sizes="(max-width: 1024px) 100vw, 55vw"
+                      sizes="100vw"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-7">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
                       <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
                         {String(i + 1).padStart(2, "0")} · Preview
                       </p>
                       <p className="mt-1.5 font-display text-2xl text-white sm:text-3xl">
                         {p.title}
                       </p>
-                      <p className="mt-2 max-w-md text-sm leading-relaxed text-white/70">
+                      <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70 sm:text-base">
                         {p.body}
                       </p>
                     </div>
@@ -278,7 +283,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                     key={p.title}
                     type="button"
                     onClick={() => setActivePlate(i)}
-                    className={`min-h-16 px-3 py-3.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime ${
+                    className={`min-h-16 px-4 py-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime sm:px-6 ${
                       i === activePlate
                         ? "bg-lime/10 text-foreground"
                         : "bg-background/50 text-mute hover:bg-panel hover:text-foreground"
@@ -288,32 +293,13 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                     <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-lime">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <span className="mt-1 block text-sm font-medium">
+                    <span className="mt-1 block text-sm font-medium sm:text-base">
                       {p.title}
                     </span>
                   </button>
                 ))}
               </div>
             </div>
-            <p className="mt-5 text-center text-xs leading-relaxed text-mute lg:text-left">
-              Walkthrough in the{" "}
-              <Link
-                href="/docs/testnet"
-                className="text-lime underline-offset-2 hover:underline"
-              >
-                testnet guide
-              </Link>
-              . Demo video on{" "}
-              <a
-                href={DEMO_X_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="text-lime underline-offset-2 hover:underline"
-              >
-                X
-              </a>
-              .
-            </p>
           </motion.div>
         </div>
       </main>
