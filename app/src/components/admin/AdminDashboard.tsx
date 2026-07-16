@@ -185,99 +185,7 @@ export function AdminDashboard() {
     setData(null);
   }
 
-  if (authed === null) {
-    return (
-      <div className="flex min-h-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <span className="livedot h-2 w-2 rounded-full bg-lime" />
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute">
-            Verifying session
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return (
-      <div className="relative flex min-h-full flex-col overflow-hidden bg-background">
-        <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <div className="absolute left-1/2 top-1/3 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-lime/[0.06] blur-[120px]" />
-          <div
-            className="absolute inset-0 opacity-40"
-            style={{
-              backgroundImage:
-                "linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px)",
-              backgroundSize: "48px 48px",
-              maskImage:
-                "radial-gradient(ellipse 60% 50% at 50% 40%, black, transparent)",
-            }}
-          />
-        </div>
-
-        <header className="relative border-b border-line/80">
-          <div className="mx-auto flex h-14 max-w-md items-center justify-between px-5">
-            <Logo />
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
-              Restricted
-            </span>
-          </div>
-        </header>
-
-        <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-16">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
-            Ops console
-          </p>
-          <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground">
-            Traction
-          </h1>
-          <p className="mt-3 text-sm leading-relaxed text-mute">
-            On-chain volume, unique wallets, and product funnel. Access code
-            required — not indexed, not public.
-          </p>
-
-          <form
-            onSubmit={onLogin}
-            className="mt-10 space-y-5 rounded-2xl border border-line bg-panel/90 p-6 shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_8%,transparent)] backdrop-blur-sm"
-          >
-            <label className="block">
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                Access code
-              </span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="••••••••••••"
-                className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 font-mono text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
-                required
-              />
-            </label>
-            {loginErr && (
-              <p
-                className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-                role="alert"
-              >
-                {loginErr}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? "Checking…" : "Enter console"}
-            </button>
-          </form>
-          <p className="mt-6 text-center text-[11px] text-mute">
-            Set <code className="text-lime">ADMIN_ACCESS_CODE</code> on Vercel
-          </p>
-        </main>
-      </div>
-    );
-  }
-
+  // Hooks must run every render (before any early return) — React #310
   const oc =
     data?.onchain && !("error" in data.onchain && data.onchain.error)
       ? data.onchain
@@ -317,6 +225,91 @@ export function AdminDashboard() {
     const max = Math.max(1, ...rows.map((r) => r.v));
     return rows.map((r) => ({ ...r, pct: (r.v / max) * 100 }));
   }, [oc]);
+
+  if (authed === null) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <span className="livedot h-2 w-2 rounded-full bg-lime" />
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute">
+            Verifying session
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authed) {
+    return (
+      <div className="relative flex min-h-dvh flex-col bg-background">
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          <div className="absolute left-1/2 top-[42%] h-[480px] w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime/[0.07] blur-[120px]" />
+        </div>
+
+        <header className="relative z-10 border-b border-line">
+          <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-5 sm:px-6">
+            <Logo />
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+              Restricted
+            </span>
+          </div>
+        </header>
+
+        <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 py-12">
+          <div className="w-full max-w-md">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+              Ops console
+            </p>
+            <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
+              Traction
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-mute">
+              On-chain volume, unique wallets, and product funnel. Access code
+              required. Not public.
+            </p>
+
+            <form
+              onSubmit={onLogin}
+              className="mt-8 space-y-5 rounded-2xl border border-line bg-panel p-6 sm:p-7"
+            >
+              <label className="block">
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                  Access code
+                </span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 font-mono text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
+                  required
+                />
+              </label>
+              {loginErr && (
+                <p
+                  className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                  role="alert"
+                >
+                  {loginErr}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "Checking…" : "Enter console"}
+              </button>
+            </form>
+            <p className="mt-6 text-center text-[11px] text-mute">
+              Set <code className="text-lime">ADMIN_ACCESS_CODE</code> on Vercel
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-background">
