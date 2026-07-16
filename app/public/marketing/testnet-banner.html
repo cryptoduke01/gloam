@@ -27,94 +27,67 @@
       overflow: hidden;
     }
 
-    /* Ambient lime */
     .amb-r {
       position: absolute;
-      right: -120px;
-      top: 50%;
-      width: 900px;
-      height: 900px;
+      right: -80px;
+      top: 40%;
+      width: 1100px;
+      height: 1100px;
       transform: translateY(-50%);
-      background: radial-gradient(circle, rgba(200, 255, 0, 0.11) 0%, rgba(200, 255, 0, 0.03) 42%, transparent 68%);
+      background: radial-gradient(circle, rgba(200, 255, 0, 0.12) 0%, rgba(200, 255, 0, 0.03) 45%, transparent 70%);
       pointer-events: none;
-    }
-    .amb-l {
-      position: absolute;
-      left: -160px;
-      bottom: -200px;
-      width: 700px;
-      height: 700px;
-      background: radial-gradient(circle, rgba(200, 255, 0, 0.05) 0%, transparent 65%);
-      pointer-events: none;
+      z-index: 0;
     }
 
-    /* Classic fine frame */
-    .frame-line {
-      position: absolute;
-      inset: 56px;
-      border: 1px solid rgba(200, 255, 0, 0.22);
-      pointer-events: none;
-      z-index: 4;
-    }
-    .frame-line-2 {
-      position: absolute;
-      inset: 72px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      pointer-events: none;
-      z-index: 4;
-    }
-
-    /* Art column */
+    /* Art as atmospheric right field, not a hard panel */
     .art {
       position: absolute;
       top: 0;
       right: 0;
       bottom: 0;
-      width: 48%;
+      width: 58%;
       z-index: 1;
     }
     .art-img {
       position: absolute;
       inset: 0;
-      background: #000 url("hero.png") center / cover no-repeat;
-      filter: contrast(1.1) brightness(1.08);
+      background: #000 url("hero.png") 55% center / cover no-repeat;
+      filter: contrast(1.08) brightness(1.06);
     }
     .art-lime {
       position: absolute;
       inset: 0;
       background: #c8ff00;
       mix-blend-mode: multiply;
-      opacity: 0.72;
+      opacity: 0.7;
     }
     .art-scrim {
       position: absolute;
       inset: 0;
       background:
-        linear-gradient(90deg, #000 0%, rgba(0,0,0,0.88) 8%, rgba(0,0,0,0.2) 32%, transparent 48%),
-        linear-gradient(180deg, rgba(0,0,0,0.25) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.55) 100%);
-    }
-    .art-divider {
-      position: absolute;
-      left: 0;
-      top: 72px;
-      bottom: 72px;
-      width: 1px;
-      background: linear-gradient(
-        180deg,
-        transparent,
-        rgba(200, 255, 0, 0.35) 20%,
-        rgba(200, 255, 0, 0.35) 80%,
-        transparent
-      );
-      z-index: 2;
+        linear-gradient(90deg,
+          #000 0%,
+          rgba(0,0,0,0.97) 12%,
+          rgba(0,0,0,0.75) 28%,
+          rgba(0,0,0,0.25) 48%,
+          transparent 62%),
+        linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 25%, transparent 75%, rgba(0,0,0,0.5) 100%);
     }
 
+    .frame-line {
+      position: absolute;
+      inset: 48px;
+      border: 1px solid rgba(200, 255, 0, 0.2);
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Full living space for type */
     .content {
       position: relative;
-      z-index: 3;
+      z-index: 4;
       height: 100%;
-      width: 54%;
-      padding: 120px 80px 120px 120px;
+      padding: 100px 100px 100px 120px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -123,27 +96,23 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 18px;
     }
     .brand img {
-      width: 64px;
-      height: 64px;
+      width: 56px;
+      height: 56px;
       border-radius: 6px;
       display: block;
     }
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
     .brand-name {
       font-family: "Instrument Serif", Georgia, serif;
-      font-size: 42px;
+      font-size: 40px;
       line-height: 1;
       letter-spacing: -0.02em;
       color: #fff;
     }
     .brand-tag {
+      margin-top: 6px;
       font-size: 13px;
       font-weight: 500;
       letter-spacing: 0.28em;
@@ -151,11 +120,11 @@
       color: #c8ff00;
     }
 
-    .mid {
+    .hero-block {
+      max-width: 72%;
       display: flex;
       flex-direction: column;
-      gap: 36px;
-      margin-top: -20px;
+      gap: 32px;
     }
 
     .pill {
@@ -183,13 +152,11 @@
     h1 {
       font-family: "Instrument Serif", Georgia, serif;
       font-weight: 400;
-      font-size: 118px;
-      line-height: 0.98;
-      letter-spacing: -0.03em;
+      font-size: 132px;
+      line-height: 0.96;
+      letter-spacing: -0.035em;
       color: #fff;
-    }
-    h1 .line {
-      display: block;
+      max-width: none;
     }
     h1 .accent {
       font-style: italic;
@@ -197,50 +164,54 @@
     }
 
     .lede {
-      max-width: 18em;
-      font-size: 26px;
+      max-width: 22em;
+      font-size: 28px;
       font-weight: 400;
-      line-height: 1.45;
-      letter-spacing: -0.01em;
-      color: #a3a3a3;
+      line-height: 1.4;
+      letter-spacing: -0.015em;
+      color: #b0b0b0;
     }
 
     .bottom {
       display: flex;
-      flex-direction: column;
-      gap: 28px;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 48px;
+      max-width: 78%;
     }
 
+    .meta-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
     .rule {
-      width: 64px;
+      width: 72px;
       height: 2px;
       background: #c8ff00;
     }
-
     .meta {
       display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .meta-row {
-      display: grid;
-      grid-template-columns: 100px 1fr;
-      gap: 16px;
+      flex-wrap: wrap;
       align-items: baseline;
-      font-size: 18px;
-      letter-spacing: 0.06em;
+      gap: 12px 40px;
+    }
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     .meta-k {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
-      letter-spacing: 0.2em;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
       color: #737373;
     }
     .meta-v {
+      font-size: 22px;
       font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: 0.04em;
       color: #f5f5f5;
     }
     .meta-v em {
@@ -250,15 +221,15 @@
 
     .foot {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 28px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
       font-size: 16px;
       font-weight: 500;
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: #737373;
+      flex-shrink: 0;
     }
     .foot .site {
       color: #c8ff00;
@@ -268,51 +239,48 @@
 <body>
   <div class="frame">
     <div class="amb-r"></div>
-    <div class="amb-l"></div>
     <div class="frame-line"></div>
-    <div class="frame-line-2"></div>
 
     <div class="art" aria-hidden="true">
       <div class="art-img"></div>
       <div class="art-lime"></div>
       <div class="art-scrim"></div>
-      <div class="art-divider"></div>
     </div>
 
     <div class="content">
       <div class="brand">
-        <img src="logo.png" alt="" width="64" height="64" />
-        <div class="brand-text">
+        <img src="logo.png" alt="" width="56" height="56" />
+        <div>
           <div class="brand-name">Gloam</div>
           <div class="brand-tag">Private money</div>
         </div>
       </div>
 
-      <div class="mid">
+      <div class="hero-block">
         <div class="pill">
           <span class="pill-dot"></span>
           Coming soon
         </div>
         <h1>
-          <span class="line">Testnet</span>
-          <span class="line">goes <span class="accent">live</span></span>
-          <span class="line">soon</span>
+          Testnet goes <span class="accent">live</span> soon
         </h1>
         <p class="lede">
-          Private shield, send, and cash out — ready when the clock hits zero.
+          Private shield, send, and cash out. Ready when the clock hits zero.
         </p>
       </div>
 
       <div class="bottom">
-        <div class="rule"></div>
-        <div class="meta">
-          <div class="meta-row">
-            <span class="meta-k">Opens</span>
-            <span class="meta-v"><em>Thu 16 Jul</em> · 14:00 WAT</span>
-          </div>
-          <div class="meta-row">
-            <span class="meta-k">Where</span>
-            <span class="meta-v">gloam.trade/app</span>
+        <div class="meta-wrap">
+          <div class="rule"></div>
+          <div class="meta">
+            <div class="meta-item">
+              <span class="meta-k">Opens</span>
+              <span class="meta-v"><em>Thu 16 Jul</em> · 14:00 WAT</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-k">App</span>
+              <span class="meta-v">gloam.trade/app</span>
+            </div>
           </div>
         </div>
         <div class="foot">
