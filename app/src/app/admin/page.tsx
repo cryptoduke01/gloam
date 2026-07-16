@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import nextDynamic from "next/dynamic";
 
 export const metadata: Metadata = {
@@ -6,8 +7,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** Always render on demand — avoid stale static shell for auth UI */
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const AdminDashboard = nextDynamic(
   () =>
@@ -24,6 +25,8 @@ const AdminDashboard = nextDynamic(
   },
 );
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  // Opt into request-time rendering (avoids stale static /admin shell on Vercel)
+  await headers();
   return <AdminDashboard />;
 }
