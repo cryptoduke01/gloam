@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gloam — Testnet banner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1200px;
+      height: 675px;
+      overflow: hidden;
+      background: #000;
+    }
+    .frame {
+      position: relative;
+      width: 1200px;
+      height: 675px;
+      background: #050505;
+      color: #fff;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      overflow: hidden;
+    }
+
+    /* Classic double-rule border */
+    .outer {
+      position: absolute;
+      inset: 28px;
+      border: 1px solid rgba(200, 255, 0, 0.28);
+    }
+    .inner {
+      position: absolute;
+      inset: 36px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Soft lime atmosphere */
+    .glow {
+      position: absolute;
+      width: 520px;
+      height: 520px;
+      right: -80px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: radial-gradient(circle, rgba(200, 255, 0, 0.14) 0%, rgba(200, 255, 0, 0.04) 40%, transparent 70%);
+      pointer-events: none;
+    }
+    .glow-l {
+      position: absolute;
+      width: 360px;
+      height: 360px;
+      left: -100px;
+      bottom: -80px;
+      background: radial-gradient(circle, rgba(200, 255, 0, 0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Dither hero wash on right */
+    .art {
+      position: absolute;
+      right: 48px;
+      top: 48px;
+      bottom: 48px;
+      width: 42%;
+      opacity: 0.55;
+      overflow: hidden;
+      border-left: 1px solid rgba(200, 255, 0, 0.12);
+    }
+    .art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      filter: contrast(1.08) brightness(1.05);
+      mix-blend-mode: screen;
+    }
+    .art-tint {
+      position: absolute;
+      inset: 0;
+      background: #c8ff00;
+      mix-blend-mode: multiply;
+      opacity: 0.55;
+    }
+    .art-fade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, #050505 0%, transparent 28%, transparent 100%),
+                  linear-gradient(180deg, transparent 60%, #050505 100%);
+    }
+
+    .content {
+      position: absolute;
+      left: 64px;
+      top: 64px;
+      bottom: 64px;
+      right: 48%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      z-index: 2;
+    }
+
+    .top {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      display: block;
+    }
+    .brand-name {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+      color: #fff;
+      line-height: 1;
+    }
+    .brand-sub {
+      margin-top: 4px;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #c8ff00;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      align-self: flex-start;
+      padding: 8px 14px;
+      border: 1px solid rgba(200, 255, 0, 0.35);
+      background: rgba(200, 255, 0, 0.06);
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #c8ff00;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #c8ff00;
+      box-shadow: 0 0 12px #c8ff00;
+    }
+
+    h1 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: 64px;
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+      color: #fff;
+      max-width: 10ch;
+    }
+    h1 em {
+      font-style: italic;
+      color: #c8ff00;
+    }
+
+    .lede {
+      margin-top: 6px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: #a3a3a3;
+      max-width: 32ch;
+      letter-spacing: 0.01em;
+    }
+
+    .bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .rule {
+      width: 48px;
+      height: 1px;
+      background: #c8ff00;
+      opacity: 0.7;
+    }
+
+    .meta {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .meta-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .meta-k {
+      color: #737373;
+      min-width: 72px;
+    }
+    .meta-v {
+      color: #e5e5e5;
+      letter-spacing: 0.12em;
+    }
+    .meta-v strong {
+      color: #c8ff00;
+      font-weight: 500;
+    }
+
+    .foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #737373;
+    }
+    .foot span.accent {
+      color: #c8ff00;
+      letter-spacing: 0.18em;
+    }
+
+    /* Corner ornaments */
+    .orn {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      z-index: 3;
+      border-color: rgba(200, 255, 0, 0.45);
+      border-style: solid;
+    }
+    .orn.tl { top: 28px; left: 28px; border-width: 1px 0 0 1px; }
+    .orn.tr { top: 28px; right: 28px; border-width: 1px 1px 0 0; }
+    .orn.bl { bottom: 28px; left: 28px; border-width: 0 0 1px 1px; }
+    .orn.br { bottom: 28px; right: 28px; border-width: 0 1px 1px 0; }
+  </style>
+</head>
+<body>
+  <div class="frame" id="banner">
+    <div class="glow"></div>
+    <div class="glow-l"></div>
+    <div class="outer"></div>
+    <div class="inner"></div>
+    <div class="orn tl"></div>
+    <div class="orn tr"></div>
+    <div class="orn bl"></div>
+    <div class="orn br"></div>
+
+    <div class="art">
+      <img src="hero.png" alt="" />
+      <div class="art-tint"></div>
+      <div class="art-fade"></div>
+    </div>
+
+    <div class="content">
+      <div class="top">
+        <div class="brand">
+          <img src="logo.png" alt="" />
+          <div>
+            <div class="brand-name">Gloam</div>
+            <div class="brand-sub">Private money</div>
+          </div>
+        </div>
+
+        <div class="eyebrow">
+          <span class="dot"></span>
+          Announcement
+        </div>
+
+        <div>
+          <h1>Testnet<br />going <em>live</em><br />soon</h1>
+          <p class="lede">
+            Shield. Private pay. Cash out with proofs. On Robinhood Chain.
+          </p>
+        </div>
+      </div>
+
+      <div class="bottom">
+        <div class="rule"></div>
+        <div class="meta">
+          <div class="meta-row">
+            <span class="meta-k">Opens</span>
+            <span class="meta-v"><strong>Thu 16 Jul</strong> · 14:00 WAT</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-k">Network</span>
+            <span class="meta-v">Robinhood Chain · 46630</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-k">App</span>
+            <span class="meta-v">gloam.trade/app</span>
+          </div>
+        </div>
+        <div class="foot">
+          <span>@gloamtrade</span>
+          <span class="accent">gloam.trade</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
