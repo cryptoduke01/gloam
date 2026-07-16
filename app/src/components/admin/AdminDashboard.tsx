@@ -75,7 +75,33 @@ export function AdminDashboard() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "users" | "events">("overview");
 
-  const load = useCallback(async () => {
+  const checkSession = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/session", { credentials: "include" });
+      if (res.status === 503) {
+        setAuthed(false);
+        setLoginErr("ADMIN_ACCESS_CODE is not set on the server.");
+        return false;
+      }
+      if (res.status === 401) {
+        setAuthed(false);
+        return false;
+      }
+      if (!res.ok) {
+        setAuthed(false);
+        setLoginErr("Could not verify session.");
+        return false;
+      }
+      setAuthed(true);
+      return true;
+    } catch {
+      setAuthed(false);
+      setLoginErr("Network error checking session.");
+      return false;
+    }
+  }, []);
+
+  const loadMetrics = useCallback(async () => {
     setLoadErr(null);
     try {
       const res = await fetch("/api/admin/metrics", { credentials: "include" });
@@ -84,27 +110,36 @@ export function AdminDashboard() {
         setData(null);
         return;
       }
-      const json = (await res.json()) as MetricsPayload;
+      // Session is valid if we got past 401 — don't freeze on metrics failure
+      setAuthed(true);
       if (!res.ok) {
-        setLoadErr(json.error ?? "Failed to load");
+        const json = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setLoadErr(json?.error ?? `Metrics failed (${res.status})`);
         return;
       }
-      setAuthed(true);
+      const json = (await res.json()) as MetricsPayload;
       setData(json);
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : "Network error");
+      // Keep dashboard shell if session was already true
+      setLoadErr(e instanceof Error ? e.message : "Network error loading metrics");
+      setAuthed((prev) => (prev === null ? false : prev));
     }
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void (async () => {
+      const ok = await checkSession();
+      if (ok) await loadMetrics();
+    })();
+  }, [checkSession, loadMetrics]);
 
   useEffect(() => {
     if (!authed) return;
-    const id = window.setInterval(() => void load(), 45_000);
+    const id = window.setInterval(() => void loadMetrics(), 45_000);
     return () => window.clearInterval(id);
-  }, [authed, load]);
+  }, [authed, loadMetrics]);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -120,13 +155,15 @@ export function AdminDashboard() {
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok) {
         setLoginErr(json.error ?? "Login failed");
+        setAuthed(false);
         return;
       }
       setCode("");
       setAuthed(true);
-      await load();
+      await loadMetrics();
     } catch {
       setLoginErr("Network error");
+      setAuthed(false);
     } finally {
       setBusy(false);
     }
@@ -290,7 +327,7 @@ export function AdminDashboard() {
             </span>
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void loadMetrics()}
               className="rounded-md border border-line px-3 py-2 text-xs text-mute hover:text-foreground"
             >
               Refresh

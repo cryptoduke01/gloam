@@ -26,10 +26,17 @@ export function verifyAdminCode(code: string): boolean {
   const s = secret();
   if (!s || !code) return false;
   try {
-    const a = Buffer.from(code);
-    const b = Buffer.from(s);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
+    // Constant-time compare without length leak via padding
+    const a = Buffer.from(code.normalize("NFKC"));
+    const b = Buffer.from(s.normalize("NFKC"));
+    const len = Math.max(a.length, b.length, 1);
+    const ap = Buffer.alloc(len);
+    const bp = Buffer.alloc(len);
+    a.copy(ap);
+    b.copy(bp);
+    const sameLen = a.length === b.length;
+    const sameBytes = timingSafeEqual(ap, bp);
+    return sameLen && sameBytes;
   } catch {
     return false;
   }
