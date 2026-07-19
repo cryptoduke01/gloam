@@ -45,17 +45,25 @@ function Toggle({
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
       onClick={() => onChange(!on)}
       className="flex h-full w-full flex-col justify-between gap-3 rounded-xl border border-line bg-background/40 p-4 text-left transition-colors hover:border-mute"
     >
       <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {hint && <p className="mt-1 text-xs leading-relaxed text-mute">{hint}</p>}
+        <p className="text-sm font-medium text-foreground" aria-hidden>
+          {label}
+        </p>
+        {hint && (
+          <p className="mt-1 text-xs leading-relaxed text-mute">{hint}</p>
+        )}
       </div>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
           on ? "bg-lime" : "bg-line"
         }`}
+        aria-hidden
       >
         <span
           className={`absolute top-0.5 h-6 w-6 rounded-full bg-background shadow transition-transform ${

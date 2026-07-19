@@ -46,10 +46,10 @@ export function Header() {
         </nav>
         <div className="flex items-center gap-2">
           <Link
-            href="/app"
+            href="/app/trade?path=sealed"
             className="hidden min-h-10 items-center rounded-md bg-lime px-4 text-sm font-medium text-black transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime sm:inline-flex"
           >
-            Launch testnet
+            Private trade
           </Link>
           <button
             type="button"
@@ -95,11 +95,11 @@ export function Header() {
                 </motion.div>
               ))}
               <Link
-                href="/app"
+                href="/app/trade?path=sealed"
                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-black"
                 onClick={() => setOpen(false)}
               >
-                Launch testnet
+                Private trade
               </Link>
             </nav>
           </motion.div>
