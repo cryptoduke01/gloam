@@ -18,7 +18,7 @@ export default function DocsPrivatePayPage() {
         { label: "Chain", value: "RH EVM" },
         { label: "Direct", value: "Receive tag" },
         { label: "Discovery", value: "Memo + scan" },
-        { label: "Zcash clone", value: "Not 1:1" },
+        { label: "Also", value: "Private trade" },
       ]}
     >
       <h2>Why Solana private send “feels” like public send</h2>
@@ -79,22 +79,25 @@ export default function DocsPrivatePayPage() {
         </li>
         <li>
           <strong>Gloam</strong> = private rails for{" "}
-          <em>RH stock tokens / RWA / ETH</em> — hold, pay, eventually sealed
-          trade — next to open settlement on the same chain RH cares about.
+          <em>RH stock tokens / RWA / ETH</em> — hold, private pay, and private
+          trade (testnet live) next to open settlement on the same chain RH
+          cares about.
         </li>
       </ul>
       <p>What still gates a full Zcash-class experience:</p>
       <ul>
         <li>Production trusted setup (not dev zkeys)</li>
-        <li>Richer on-chain note ciphertexts + indexing (memo board is step 1)</li>
+        <li>Stronger public-input privacy on trade rates / pair</li>
         <li>Anonymity set / usage</li>
         <li>Audit before real money</li>
       </ul>
 
       <h2>Try it</h2>
       <p>
-        <Link href="/app/move">Move</Link> — Private pay → Direct · Receive tag
-        · Scan inbox when memo is live.
+        <Link href="/app/move">Move</Link> — private pay ·{" "}
+        <Link href="/app/trade?path=sealed">Private trade</Link> — size
+        privacy on ·{" "}
+        <Link href="/docs/privacy-model">Privacy model</Link>.
       </p>
     </DocsLayout>
   );

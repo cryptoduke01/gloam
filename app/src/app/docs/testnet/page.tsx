@@ -19,14 +19,15 @@ export default function DocsTestnetPage() {
         { label: "App", value: "/app" },
         { label: "Chain ID", value: "46630" },
         { label: "Network", value: "RH testnet" },
-        { label: "Faucet", value: "Official RH" },
+        { label: "Vault", value: "Sealed live" },
         { label: "Keys", value: "Dev ceremony" },
         { label: "Value", value: "Play money only" },
       ]}
       quickLinks={[
         { href: "/app", label: "Open testnet app" },
-        { href: "/docs/private-pay", label: "Private pay docs" },
-        { href: "/docs/encryption", label: "How shield works" },
+        { href: "/app/trade?path=sealed", label: "Private trade" },
+        { href: "/docs/sealed-trade", label: "Sealed trade docs" },
+        { href: "/docs/privacy-model", label: "Privacy model" },
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
@@ -95,13 +96,13 @@ export default function DocsTestnetPage() {
           },
           {
             n: "4",
-            title: "Move",
-            body: "Private send (payment code) or cash out with a browser ZK proof.",
+            title: "Private rails",
+            body: "Private send (Move) and private trade (size privacy on). Cash out only when you want a public exit.",
           },
           {
             n: "5",
             title: "Trade paths",
-            body: "Public wallet swaps, or vault adapter (cash out → swap → re-shield). Sealed-size trade where enabled.",
+            body: "Prefer Private trade (no DEX). Via market needs a pool. Wallet path is fully public.",
           },
         ]}
       />
@@ -289,22 +290,42 @@ export default function DocsTestnetPage() {
       <h2 id="trade">7. Trade paths</h2>
       <ul>
         <li>
-          <strong>Public trade</strong> —{" "}
-          <Link href="/app/trade">Trade</Link> from the open wallet when a pool
-          exists.
+          <strong>Private trade (preferred)</strong> —{" "}
+          <Link href="/app/trade?path=sealed">Trade → Private</Link>. Vault ETH
+          → vault stock. Size privacy on by default (min-out floor). No DEX
+          pool required. See{" "}
+          <Link href="/docs/sealed-trade">sealed trade</Link>.
         </li>
         <li>
-          <strong>From vault (adapter)</strong> — cash out → public swap →
-          re-shield. Intent on the swap edge is still public.
+          <strong>Wallet</strong> — public swaps / transfers from the open
+          wallet when a pool exists.
         </li>
         <li>
-          <strong>Sealed / private trade</strong> — where the sealed verifier is
-          live, size is not fully broadcast the same way. See{" "}
-          <Link href="/docs/sealed-trade">sealed trade</Link>. If a path says no
-          pool for a ticker, try another asset or the private trade tab when
-          available.
+          <strong>Via market</strong> — cash out → public swap → re-shield. Size
+          is public on the swap edge. Many faucet pairs have empty pools; use
+          Private instead.
         </li>
       </ul>
+
+      <h2 id="private-trade">7b. Private trade walkthrough</h2>
+      <ol>
+        <li>
+          <Link href="/app/shield">Shield ETH</Link> (not only stock tokens).
+        </li>
+        <li>
+          Open{" "}
+          <Link href="/app/trade?path=sealed">Trade → Private</Link> and pick
+          TSLA / AMZN / etc.
+        </li>
+        <li>
+          Leave <strong>Max size privacy</strong> on. Enter amount or Max →
+          prove → confirm wallet.
+        </li>
+        <li>
+          Explorer shows a vault <code>sealedSwap</code>, not a Uniswap fill.
+          Cash out later publishes amount — stay in vault to stay private.
+        </li>
+      </ol>
 
       <h2 id="settings">8. Settings & backups</h2>
       <ul>
@@ -326,11 +347,11 @@ export default function DocsTestnetPage() {
       <ol>
         <li>Wallet on chain ID 46630</li>
         <li>Faucet ETH (+ stocks if needed)</li>
-        <li>Shield a small amount</li>
+        <li>Shield a small amount of ETH</li>
+        <li>Private trade (size privacy on) → explorer sealedSwap</li>
         <li>Private send to yourself or a friend + import package</li>
-        <li>Cash out a dust amount once</li>
-        <li>Optional: one vault adapter swap on a liquid pair</li>
-        <li>Export note backup</li>
+        <li>Optional: cash out dust once (public amount — intentional)</li>
+        <li>Export note backup (Settings)</li>
         <li>
           Report bugs via{" "}
           <a
