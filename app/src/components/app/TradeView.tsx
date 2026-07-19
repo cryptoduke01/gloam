@@ -592,6 +592,11 @@ export function TradeView() {
             </div>
           </div>
           <ul className="max-h-[32rem] overflow-y-auto">
+            {list.length === 0 && (
+              <li className="px-4 py-8 text-center text-sm text-mute">
+                No markets in this filter. Try Onchain or All.
+              </li>
+            )}
             {list.map((m) => (
               <li key={m.id}>
                 <button
@@ -607,7 +612,11 @@ export function TradeView() {
                     <p className="font-medium text-foreground">{m.symbol}</p>
                     <p className="truncate text-xs text-mute">
                       {m.name}
-                      {m.address ? " · onchain" : ""}
+                      {m.privateReady
+                        ? " · private"
+                        : m.address
+                          ? " · onchain"
+                          : ""}
                     </p>
                   </div>
                   <Sparkline
