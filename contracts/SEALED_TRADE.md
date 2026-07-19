@@ -34,11 +34,27 @@ spend note secrets, `amountIn`, `amountSwap`, `amountOut`, change, Merkle path
 - `ShieldPoolPoseidon.sealedSwap(...)` + `setSealedSwapVerifier`
 - Deploy record: `deployments/poseidon-testnet.json` (`features.sealedSwap: true`)
 
+## Vault inventory
+
+`sealedSwap` does **not** move `deposited[asset]`. Cash-out still needs the pool to hold the asset.
+
+Seed throwaway inventory (needs faucet tokens + `DEPLOYER_PK`):
+
+```bash
+export DEPLOYER_PK=0x...
+export RH_TESTNET_RPC=https://rpc.testnet.chain.robinhood.com
+# optional: TOKEN_AMT=1000000000000000000  (1e18 per stock)
+forge script script/SeedVaultInventory.s.sol \
+  --rpc-url $RH_TESTNET_RPC --broadcast --gas-estimate-multiplier 200 -vvvv
+```
+
+App UI shows `deposited` on private trade and blocks cash-out when inventory is short.
+
 ## Next engineering steps
 
 1. Replace display-mark rates with oracle-bound or pool-bound pricing  
 2. Production multi-party ceremony keys (see `PRODUCTION.md`)  
-3. Seed inventory so unshield after swap stays solvent for both assets  
+3. Run / automate inventory seed when faucet tokens are available  
 4. Ethereum expansion once RH private rails are battle-tested  
 
 ## Adapter (live forever)
