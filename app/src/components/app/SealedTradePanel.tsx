@@ -43,7 +43,7 @@ import { fieldToBytes32, proveSealedSwapInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { formatUsd } from "@/lib/markets";
 import {
-  estimateSealedOut,
+  exactSealedAmounts,
   fallbackOneToOneRates,
   formatSealedAmount,
   marksToSealedRates,
@@ -80,6 +80,9 @@ export function SealedTradePanel({
     pathForLeaf,
     leafIndexForCommitment,
     refresh: refreshTree,
+    loading: treeLoading,
+    error: treeError,
+    leafCount,
   } = useShieldTree();
   const { data: marketsData } = useLiveMarkets();
 
@@ -222,14 +225,16 @@ export function SealedTradePanel({
   }, [marketsData, marketId, marketSymbol]);
 
   const amountSwapPreview = safeParseEther(amount);
-  const expectedOut =
+  const exactPreview =
     amountSwapPreview != null && amountSwapPreview > 0n
-      ? estimateSealedOut(
+      ? exactSealedAmounts(
           amountSwapPreview,
           rateQuote.rateIn,
           rateQuote.rateOut
         )
-      : 0n;
+      : null;
+  const expectedOut = exactPreview?.amountOut ?? 0n;
+  const amountSwapExact = exactPreview?.amountSwap ?? 0n;
 
   const { deposited: poolOutDeposited } = usePoolDeposited(outToken);
   const inventoryShort =
@@ -284,18 +289,24 @@ export function SealedTradePanel({
       setError("This vault is not ready for private trade yet.");
       return;
     }
-    if (matchesChain === false) {
-      setError("Vault tree out of sync — refresh and try again.");
-      return;
-    }
 
-    const amountSwap = safeParseEther(amount);
-    if (amountSwap === null || amountSwap <= 0n) {
+    const amountWanted = safeParseEther(amount);
+    if (amountWanted === null || amountWanted <= 0n) {
       setError("Enter a valid amount.");
       return;
     }
-    if (amountSwap > BigInt(selected.amountWei)) {
+    if (amountWanted > BigInt(selected.amountWei)) {
       setError("Amount is larger than this vault note.");
+      return;
+    }
+
+    const exact = exactSealedAmounts(
+      amountWanted,
+      rateQuote.rateIn,
+      rateQuote.rateOut
+    );
+    if (!exact) {
+      setError("Could not fit this size to the rate. Try Max or a smaller amount.");
       return;
     }
 
@@ -305,30 +316,51 @@ export function SealedTradePanel({
     spentNoteId.current = selected.id;
 
     try {
-      const path = await pathForLeaf(selected.leafIndex!);
+      // Fresh tree so path matches currentRoot (inventory seeds + new shields)
+      setStatus("Syncing vault tree…");
+      await refreshTree();
+
+      let leafIdx = selected.leafIndex;
+      if (leafIdx == null) {
+        leafIdx = leafIndexForCommitment(selected.commitment) ?? undefined;
+      }
+      if (leafIdx == null) {
+        throw new Error(
+          "ETH note is not linked to the vault tree. Shield ETH again on this browser, or Move → Refresh tree."
+        );
+      }
+
+      const path = await pathForLeaf(leafIdx);
       if (!path) throw new Error("Could not build vault path — refresh tree.");
 
-      setStatus("Building private trade proof… 10–30s is normal.");
+      setStatus("Building private trade proof… 10–40s is normal.");
       // Public rates from display marks (not an on-chain oracle). Size stays private.
+      // amountSwap/amountOut adjusted so circuit product is exact (no DEX involved).
       const { rateIn, rateOut } = rateQuote;
-      const amountOut = estimateSealedOut(amountSwap, rateIn, rateOut);
-      if (amountOut <= 0n) {
-        throw new Error("Rate produced zero output. Check market marks.");
-      }
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
-        amountSwap,
+        amountSwap: exact.amountSwap,
         assetIn: NATIVE_ASSET,
         assetOut: outToken,
-        amountOutMin: amountOut,
+        amountOutMin: exact.amountOut,
         rateIn,
         rateOut,
         path: path as PoseidonMerklePath,
       });
       if (w.blocker) throw new Error(w.blocker);
 
-      const { proofBytes } = await proveSealedSwapInBrowser(w.circomInput);
+      let proofBytes: `0x${string}`;
+      try {
+        ({ proofBytes } = await proveSealedSwapInBrowser(w.circomInput));
+      } catch (pe) {
+        const msg = pe instanceof Error ? pe.message : String(pe);
+        throw new Error(
+          msg.includes("Assert") || msg.includes("Error in template")
+            ? "Proof failed (circuit assert). Usually a rate/path mismatch — refresh tree and try Max."
+            : `Proof failed: ${msg.slice(0, 160)}`
+        );
+      }
 
       pendingOut.current = {
         id: `ss-out-${Date.now()}`,
@@ -365,6 +397,7 @@ export function SealedTradePanel({
           : null;
 
       setStatus("Confirm private trade in your wallet…");
+      // Sealed swap verifies a larger proof than plain shield — give headroom
       writeContract({
         address: SHIELD_POOL_ADDRESS,
         abi: shieldPoolAbi,
@@ -381,7 +414,7 @@ export function SealedTradePanel({
           w.publicInputs.rateIn,
           w.publicInputs.rateOut,
         ],
-        gas: SHIELD_GAS_LIMIT * 2n,
+        gas: SHIELD_GAS_LIMIT * 5n,
         chainId: CHAIN,
       });
     } catch (e) {
@@ -390,6 +423,7 @@ export function SealedTradePanel({
       setStatus(null);
       pendingOut.current = null;
       pendingChange.current = null;
+      spentNoteId.current = null;
     }
   }
 
@@ -469,10 +503,36 @@ export function SealedTradePanel({
             <div className="space-y-4 p-5">
               <p className="text-xs text-mute">
                 This path does <strong className="text-foreground">not</strong>{" "}
-                need a public DEX pool for {marketSymbol}. Rate uses display
-                marks (not an on-chain oracle). Size stays private; the open
-                market only sees a vault proof.
+                need a public DEX pool for {marketSymbol}. Empty DEX pairs only
+                block <strong className="text-foreground">From vault</strong>.
+                Rate uses display marks (not an on-chain oracle). Size stays
+                private.
               </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
+                <span>
+                  Vault tree:{" "}
+                  {treeLoading
+                    ? "syncing…"
+                    : treeError
+                      ? "error"
+                      : matchesChain === false
+                        ? "mismatch"
+                        : `${leafCount} leaves`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void refreshTree()}
+                  disabled={treeLoading || working}
+                  className="text-lime hover:underline disabled:opacity-50"
+                >
+                  Refresh tree
+                </button>
+              </div>
+              {treeError && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  {treeError}
+                </p>
+              )}
               {!outToken && (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
                   Pick a stock in the list (TSLA, AMZN, …) so we know which
@@ -571,7 +631,8 @@ export function SealedTradePanel({
                 </div>
                 <p className="mt-1 text-xs text-mute">
                   Leftover ETH stays in your vault as change. You receive{" "}
-                  {marketSymbol} as a new vault note.
+                  {marketSymbol} as a new vault note. Size may nudge slightly so
+                  the proof math is exact.
                 </p>
               </div>
 
@@ -584,6 +645,14 @@ export function SealedTradePanel({
                       : `— ${marketSymbol}`}
                   </span>
                 </div>
+                {amountSwapExact > 0n &&
+                  amountSwapPreview != null &&
+                  amountSwapExact !== amountSwapPreview && (
+                    <p className="mt-1 text-[11px] text-mute">
+                      Exact trade size {formatSealedAmount(amountSwapExact)} ETH
+                      (nudge for proof).
+                    </p>
+                  )}
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
                   <span>
                     {rateQuote.source === "fallback_1_1"
@@ -641,12 +710,15 @@ export function SealedTradePanel({
                     working ||
                     !selected ||
                     !outToken ||
-                    matchesChain === false
+                    !exactPreview ||
+                    treeLoading
                   }
                   onClick={() => void onSealedSwap()}
                   className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                 >
-                  {working ? status || "Working…" : `Trade privately → ${marketSymbol}`}
+                  {working
+                    ? status || "Working…"
+                    : `Trade privately → ${marketSymbol}`}
                 </button>
               )}
 

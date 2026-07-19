@@ -11,6 +11,7 @@ import {
 } from "./notePoseidon";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { fieldToHex, hexToField, toField } from "./poseidon";
+import { exactSealedAmounts } from "./sealedRates";
 import { NATIVE_ASSET } from "./shield";
 
 export type SealedSwapWitness = {
@@ -58,21 +59,33 @@ export async function buildSealedSwapWitness(args: {
   path: PoseidonMerklePath;
 }): Promise<SealedSwapWitness> {
   const assetIn = args.assetIn ?? NATIVE_ASSET;
-  const amountChange = args.amountIn - args.amountSwap;
   let blocker: string | null = null;
 
-  if (args.amountSwap <= 0n || amountChange < 0n) {
+  if (args.rateOut === 0n || args.rateIn === 0n) {
+    blocker = "rateIn/rateOut cannot be zero.";
+  }
+
+  // Exact product for circuit: amountOut * rateOut === amountSwap * rateIn
+  const exact =
+    !blocker &&
+    exactSealedAmounts(args.amountSwap, args.rateIn, args.rateOut);
+  if (!blocker && !exact) {
+    blocker = "Could not fit this size to the rate (try Max or a round amount).";
+  }
+
+  const amountSwap = exact ? exact.amountSwap : 0n;
+  const amountOut = exact ? exact.amountOut : 0n;
+  const amountChange = args.amountIn - amountSwap;
+
+  if (!blocker && (amountSwap <= 0n || amountChange < 0n)) {
     blocker = "Invalid swap size.";
   }
 
-  // amountOut from rate: amountOut = amountSwap * rateIn / rateOut
-  if (args.rateOut === 0n) blocker = "rateOut cannot be zero.";
-  const amountOut =
-    args.rateOut === 0n
-      ? 0n
-      : (args.amountSwap * args.rateIn) / args.rateOut;
+  // amountOutMin from caller is usually the pre-exact estimate; clamp to actual
+  const amountOutMin =
+    args.amountOutMin > amountOut ? amountOut : args.amountOutMin;
 
-  if (!blocker && amountOut < args.amountOutMin) {
+  if (!blocker && amountOut < amountOutMin) {
     blocker = "Output below minimum (slippage).";
   }
 
@@ -107,7 +120,7 @@ export async function buildSealedSwapWitness(args: {
     newCommitmentChange: newCommitmentChange.toString(),
     assetIn: toField(BigInt(assetIn)).toString(),
     assetOut: toField(BigInt(args.assetOut)).toString(),
-    amountOutMin: args.amountOutMin.toString(),
+    amountOutMin: amountOutMin.toString(),
     rateIn: args.rateIn.toString(),
     rateOut: args.rateOut.toString(),
     secretIn: secretIn.toString(),
@@ -118,7 +131,7 @@ export async function buildSealedSwapWitness(args: {
     amountOut: amountOut.toString(),
     secretChange: secretChange.toString(),
     amountChange: amountChange.toString(),
-    amountSwap: args.amountSwap.toString(),
+    amountSwap: amountSwap.toString(),
   };
 
   return {
@@ -129,7 +142,7 @@ export async function buildSealedSwapWitness(args: {
       newCommitmentChange,
       assetIn: toField(BigInt(assetIn)),
       assetOut: toField(BigInt(args.assetOut)),
-      amountOutMin: args.amountOutMin,
+      amountOutMin,
       rateIn: args.rateIn,
       rateOut: args.rateOut,
     },

@@ -1,11 +1,10 @@
 /**
  * Public sealed-swap rates for testnet.
  *
- * Circuit constraint: amountOut * rateOut === amountSwap * rateIn
- * so amountOut = amountSwap * rateIn / rateOut (integer division).
+ * Circuit constraint (exact): amountOut * rateOut === amountSwap * rateIn
+ * Floor division alone is NOT enough — remainder breaks the proof.
  *
  * Rates are display marks (Yahoo / CoinGecko), not an on-chain oracle.
- * Honest: anyone can pass any public rateIn/rateOut; inventory risk is on the pool.
  */
 
 /** USD scale for integer rates (6 decimals is enough for stock marks). */
@@ -63,6 +62,9 @@ export function fallbackOneToOneRates(): SealedRateQuote {
   };
 }
 
+/**
+ * Floor estimate only (for UI). Prefer exactSealedAmounts for proofs.
+ */
 export function estimateSealedOut(
   amountSwap: bigint,
   rateIn: bigint,
@@ -70,6 +72,45 @@ export function estimateSealedOut(
 ): bigint {
   if (rateOut === 0n || amountSwap <= 0n) return 0n;
   return (amountSwap * rateIn) / rateOut;
+}
+
+/**
+ * Pick amountSwap ≤ wanted and amountOut so the circuit equality holds exactly:
+ *   amountOut * rateOut === amountSwap * rateIn
+ *
+ * Without this, mark-based rates almost always leave a remainder and snarkjs
+ * fails with Assert Failed (not a DEX problem).
+ */
+export function exactSealedAmounts(
+  amountSwapWanted: bigint,
+  rateIn: bigint,
+  rateOut: bigint
+): { amountSwap: bigint; amountOut: bigint } | null {
+  if (amountSwapWanted <= 0n || rateIn <= 0n || rateOut <= 0n) return null;
+
+  let amountOut = (amountSwapWanted * rateIn) / rateOut;
+  if (amountOut <= 0n) return null;
+
+  // Walk amountOut down until amountOut * rateOut is divisible by rateIn
+  // and amountSwap = product / rateIn stays within the note.
+  // Bound steps so a pathological rate pair cannot hang the UI.
+  const maxSteps = 10_000n;
+  let steps = 0n;
+  while (amountOut > 0n && steps < maxSteps) {
+    const product = amountOut * rateOut;
+    if (product % rateIn === 0n) {
+      const amountSwap = product / rateIn;
+      if (amountSwap > 0n && amountSwap <= amountSwapWanted) {
+        // Final safety: exact equality
+        if (amountOut * rateOut === amountSwap * rateIn) {
+          return { amountSwap, amountOut };
+        }
+      }
+    }
+    amountOut -= 1n;
+    steps += 1n;
+  }
+  return null;
 }
 
 /** Format wei as a short human amount (assumes 18 decimals). */
