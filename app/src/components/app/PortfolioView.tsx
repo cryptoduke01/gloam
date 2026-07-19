@@ -279,9 +279,16 @@ export function PortfolioView() {
           {isConnected && hasShield && (
             <div className="border-t border-line bg-lime/5 px-5 py-3 sm:px-6">
               <p className="text-sm text-foreground">
-                Vault money stays private until you cash out.{" "}
+                Vault is private until you cash out.{" "}
+                <Link
+                  href="/app/trade?path=sealed"
+                  className="font-semibold text-lime hover:underline"
+                >
+                  Private trade
+                </Link>
+                {" · "}
                 <Link href="/app/move" className="text-lime hover:underline">
-                  Private send or cash out
+                  Private send
                 </Link>
                 {" · "}
                 <Link href="/app/shield" className="text-lime hover:underline">
@@ -344,10 +351,10 @@ export function PortfolioView() {
                   </span>
                 )}
                 <Link
-                  href="/app/trade"
+                  href="/app/trade?path=sealed"
                   className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
                 >
-                  Trade
+                  Private
                 </Link>
               </div>
             </div>

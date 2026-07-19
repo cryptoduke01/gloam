@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { shortAddress } from "@/lib/chain";
 import {
   SHIELD_POOL_ADDRESS,
@@ -19,18 +19,20 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
     useShieldTree();
   const [sealed, setSealed] = useState<"checking" | "ready" | "off">("checking");
 
-  const check = useCallback(async () => {
-    if (!isShieldDeployed()) {
-      setSealed("off");
-      return;
-    }
-    const r = await readVaultSealedReadiness();
-    setSealed(r.status === "ready" ? "ready" : "off");
-  }, []);
-
   useEffect(() => {
-    void check();
-  }, [check]);
+    let cancelled = false;
+    void (async () => {
+      if (!isShieldDeployed()) {
+        if (!cancelled) setSealed("off");
+        return;
+      }
+      const r = await readVaultSealedReadiness();
+      if (!cancelled) setSealed(r.status === "ready" ? "ready" : "off");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!isShieldDeployed()) return null;
 
@@ -55,8 +57,11 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           <button
             type="button"
             onClick={() => {
-              void check();
-              void refresh();
+              void (async () => {
+                const r = await readVaultSealedReadiness();
+                setSealed(r.status === "ready" ? "ready" : "off");
+                await refresh();
+              })();
             }}
             className="text-lime hover:underline"
           >
@@ -93,8 +98,11 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           <button
             type="button"
             onClick={() => {
-              void check();
-              void refresh();
+              void (async () => {
+                const r = await readVaultSealedReadiness();
+                setSealed(r.status === "ready" ? "ready" : "off");
+                await refresh();
+              })();
             }}
             className="text-xs text-lime hover:underline"
           >

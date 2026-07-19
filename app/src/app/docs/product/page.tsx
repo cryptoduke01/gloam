@@ -83,8 +83,8 @@ export default function DocsProductPage() {
           },
           {
             n: "●",
-            title: "Sealed-size private trade",
-            body: "Vault-settled private trade on testnet (display-mark rates, dev keys). See sealed-trade docs.",
+            title: "Private trade (size privacy)",
+            body: "Vault-settled sealedSwap on testnet. Max size privacy on by default (min-out floor). Dev keys.",
           },
           {
             n: "○",

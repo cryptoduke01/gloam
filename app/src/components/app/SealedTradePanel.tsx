@@ -29,7 +29,7 @@ import { useShieldTree } from "@/hooks/useShieldTree";
 import {
   HASH_SCHEME,
   NATIVE_ASSET,
-  SHIELD_GAS_LIMIT,
+  SEALED_SWAP_GAS_LIMIT,
   SHIELD_POOL_ADDRESS,
   assetLabel,
   isNativeAsset,
@@ -89,6 +89,7 @@ export function SealedTradePanel({
     error: treeError,
     leafCount,
   } = useShieldTree();
+  // leafIndexForCommitment used after sealedSwap success to bind new notes
   const { data: marketsData } = useLiveMarkets();
 
   const [support, setSupport] = useState<Support>("checking");
@@ -241,18 +242,6 @@ export function SealedTradePanel({
     poolOutDeposited != null &&
     poolOutDeposited < expectedOut;
 
-  // Brief spinner so typing amount never feels dead
-  const [quoteFlash, setQuoteFlash] = useState(false);
-  useEffect(() => {
-    if (!amountEntered) {
-      setQuoteFlash(false);
-      return;
-    }
-    setQuoteFlash(true);
-    const t = setTimeout(() => setQuoteFlash(false), 220);
-    return () => clearTimeout(t);
-  }, [amount, amountEntered, rateQuote.rateIn, rateQuote.rateOut]);
-
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
@@ -262,29 +251,54 @@ export function SealedTradePanel({
       updateLocalNote(spentNoteId.current, { status: "recovered" });
       spentNoteId.current = null;
     }
-    if (pendingOut.current) {
-      saveLocalNote({ ...pendingOut.current, txHash: hash });
-      pendingOut.current = null;
-    }
-    if (pendingChange.current) {
-      saveLocalNote({ ...pendingChange.current, txHash: hash });
-      pendingChange.current = null;
-    }
-    refreshNotes();
-    void refreshTree();
-    setShowSuccess(true);
-    setBusy(false);
-    setStatus(null);
-    void import("@/lib/track").then(({ track }) => {
-      track("sealed_swap_success", { asset: marketSymbol.slice(0, 12) });
-    });
-  }, [isSuccess, hash, refreshNotes, refreshTree, marketSymbol]);
+    void (async () => {
+      await refreshTree();
+      // Attach leaf indices so Move/Private trade can spend new notes immediately
+      const out = pendingOut.current;
+      const chg = pendingChange.current;
+      if (out) {
+        const idx = leafIndexForCommitment(out.commitment);
+        saveLocalNote({
+          ...out,
+          txHash: hash,
+          leafIndex: idx ?? out.leafIndex,
+        });
+        pendingOut.current = null;
+      }
+      if (chg) {
+        const idx = leafIndexForCommitment(chg.commitment);
+        saveLocalNote({
+          ...chg,
+          txHash: hash,
+          leafIndex: idx ?? chg.leafIndex,
+        });
+        pendingChange.current = null;
+      }
+      refreshNotes();
+      setShowSuccess(true);
+      setBusy(false);
+      setStatus(null);
+      void import("@/lib/track").then(({ track }) => {
+        track("sealed_swap_success", { asset: marketSymbol.slice(0, 12) });
+      });
+    })();
+  }, [
+    isSuccess,
+    hash,
+    refreshNotes,
+    refreshTree,
+    marketSymbol,
+    leafIndexForCommitment,
+  ]);
 
   useEffect(() => {
     if (!writeError) return;
-    setBusy(false);
-    setStatus(null);
-    setError(writeError.message.slice(0, 180));
+    const msg = writeError.message.slice(0, 180);
+    queueMicrotask(() => {
+      setBusy(false);
+      setStatus(null);
+      setError(msg);
+    });
   }, [writeError]);
 
   async function onSealedSwap() {
@@ -426,7 +440,7 @@ export function SealedTradePanel({
           w.publicInputs.rateIn,
           w.publicInputs.rateOut,
         ],
-        gas: SHIELD_GAS_LIMIT * 5n,
+        gas: SEALED_SWAP_GAS_LIMIT,
         chainId: CHAIN,
       });
       void import("@/lib/track").then(({ track }) => {
@@ -655,22 +669,15 @@ export function SealedTradePanel({
               <div className="rounded-xl border border-line bg-background/60 px-4 py-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-mute">You get (est.)</span>
-                  <span className="font-medium text-foreground tabular-nums">
-                    {quoteFlash ? (
-                      <span className="inline-flex items-center gap-2 text-mute">
-                        <span
-                          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-lime"
-                          aria-hidden
-                        />
-                        Pricing…
-                      </span>
-                    ) : expectedOut > 0n ? (
-                      `${formatSealedAmount(expectedOut)} ${marketSymbol}`
-                    ) : amountEntered ? (
-                      `Can't price — try Max`
-                    ) : (
-                      `— ${marketSymbol}`
-                    )}
+                  <span
+                    key={`${amount}-${expectedOut.toString()}`}
+                    className="font-medium text-foreground tabular-nums animate-in fade-in duration-200"
+                  >
+                    {expectedOut > 0n
+                      ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
+                      : amountEntered
+                        ? `Can't price — try Max`
+                        : `— ${marketSymbol}`}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">

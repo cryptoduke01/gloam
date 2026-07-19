@@ -211,7 +211,10 @@ export const shieldPoolAbi = [
 ] as const;
 
 /** RH L2 gas headroom */
-export const SHIELD_GAS_LIMIT = 500_000n;
+/** Poseidon verify + tree insert — 500k was tight; unshield/transfer need headroom */
+export const SHIELD_GAS_LIMIT = 1_500_000n;
+/** Sealed swap proof verify is heavier */
+export const SEALED_SWAP_GAS_LIMIT = 2_500_000n;
 export const EMERGENCY_GAS_LIMIT = 200_000n;
 export const APPROVE_GAS_LIMIT = 120_000n;
 

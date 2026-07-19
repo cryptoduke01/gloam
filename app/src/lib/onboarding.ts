@@ -71,6 +71,12 @@ export const ONBOARDING_STEPS = [
     href: "/app/move",
   },
   {
+    id: "private-trade",
+    title: "Private trade",
+    body: "Sell vault ETH for vault stock with size privacy on.",
+    href: "/app/trade?path=sealed",
+  },
+  {
     id: "backup",
     title: "Back up vault notes",
     body: "Export (preferably locked) so clearing the browser does not lose secrets.",
