@@ -19,7 +19,7 @@ const steps = [
     label: "Shield",
     sub: "Enter vault",
     detail:
-      "You deposit into Gloam’s pool. A commitment is written on-chain; the secret stays in your browser.",
+      "You deposit into Gloam’s vault. A fingerprint of the deposit is written on-chain; the secret stays in your browser.",
   },
   {
     id: "note",

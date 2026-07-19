@@ -40,7 +40,7 @@ export function coarsenMarkUsd(usd: number): number {
   return Math.round(usd * 100) / 100;
 }
 
-/** What a chain observer can learn from a sealedSwap tx (honest). */
+/** What a chain observer can learn from a sealed private trade (honest). */
 export const SEALED_PRIVACY_FACTS = {
   hidden: [
     "Trade size (amount in / amount out)",
@@ -48,13 +48,13 @@ export const SEALED_PRIVACY_FACTS = {
     "Who holds which vault note after the trade",
   ],
   public: [
-    "That a vault sealedSwap happened",
+    "That a private trade happened on the vault",
     "Asset pair (e.g. ETH → TSLA)",
     "Public rate ratio used in the proof",
     "Caller address (wallet that submitted the tx)",
-    "Nullifier and new commitment hashes (opaque)",
+    "Opaque note fingerprints (not spendable alone)",
   ],
   cashOutReveals: [
-    "Cash out (unshield) publishes asset, amount, and destination — by design",
+    "Cash out publishes asset, amount, and destination — by design",
   ],
 } as const;

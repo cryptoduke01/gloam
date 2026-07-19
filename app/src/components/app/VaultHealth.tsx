@@ -40,7 +40,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
         <span>
-          Vault {HASH_SCHEME}
+          Privacy vault
           {SHIELD_POOL_ADDRESS
             ? ` · ${shortAddress(SHIELD_POOL_ADDRESS, 4)}`
             : ""}
@@ -82,8 +82,8 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           <p className="mt-1 text-mute">
             {SHIELD_POOL_ADDRESS
               ? shortAddress(SHIELD_POOL_ADDRESS, 6)
-              : "not configured"}{" "}
-            · {HASH_SCHEME}
+              : "not configured"}
+            {HASH_SCHEME !== "poseidon" ? ` · ${HASH_SCHEME}` : ""}
             {treeLoading
               ? " · syncing tree…"
               : treeError

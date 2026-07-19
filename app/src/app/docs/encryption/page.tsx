@@ -53,7 +53,7 @@ export default function DocsEncryptionPage() {
           {
             n: "2",
             title: "You shield",
-            body: "You send assets to the pool contract. A “commitment” (a fingerprint of your deposit) is written on-chain.",
+            body: "You send assets to the vault contract. A fingerprint of your deposit is written on-chain.",
           },
           {
             n: "3",

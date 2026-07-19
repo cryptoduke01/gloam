@@ -372,18 +372,18 @@ export function Landing() {
             <div className="flex flex-wrap gap-3">
               <MotionPress>
                 <Link
-                  href="/app"
+                  href="/app/trade?path=sealed"
                   className="inline-flex min-h-11 items-center rounded-md bg-black px-5 text-sm font-semibold text-white hover:opacity-90"
                 >
-                  Open testnet
+                  Private trade
                 </Link>
               </MotionPress>
               <MotionPress>
                 <Link
-                  href="/docs"
+                  href="/app"
                   className="inline-flex min-h-11 items-center rounded-md border border-black/25 px-5 text-sm font-medium text-black hover:bg-black/5"
                 >
-                  Docs
+                  Open app
                 </Link>
               </MotionPress>
             </div>

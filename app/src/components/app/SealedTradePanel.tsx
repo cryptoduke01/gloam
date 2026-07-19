@@ -662,6 +662,7 @@ export function SealedTradePanel({
                   <button
                     type="button"
                     className="border-l border-line px-3 text-xs text-lime"
+                    aria-label="Use full note amount"
                     onClick={() =>
                       selected &&
                       setAmount(formatEther(BigInt(selected.amountWei)))
