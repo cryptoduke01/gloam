@@ -10,36 +10,9 @@ import {
 } from "wagmi";
 import {
   PRODUCT_CHAIN_ID,
-  RH_TESTNET_WALLET_PARAMS,
+  ensureRhTestnetWallet,
   shortAddress,
 } from "@/lib/chain";
-
-async function ensureRhTestnet() {
-  const eth = (
-    window as Window & {
-      ethereum?: {
-        request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      };
-    }
-  ).ethereum;
-  if (!eth?.request) return;
-  try {
-    await eth.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: RH_TESTNET_WALLET_PARAMS.chainId }],
-    });
-  } catch (err) {
-    const code = (err as { code?: number })?.code;
-    if (code === 4902) {
-      await eth.request({
-        method: "wallet_addEthereumChain",
-        params: [RH_TESTNET_WALLET_PARAMS],
-      });
-    } else {
-      throw err;
-    }
-  }
-}
 
 export function ConnectButton({ className = "" }: { className?: string }) {
   const { address, isConnected, isConnecting } = useAccount();
@@ -67,7 +40,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
       try {
         await switchChain({ chainId: PRODUCT_CHAIN_ID });
       } catch {
-        await ensureRhTestnet();
+        await ensureRhTestnetWallet();
         await switchChain({ chainId: PRODUCT_CHAIN_ID });
       }
     } catch (e) {

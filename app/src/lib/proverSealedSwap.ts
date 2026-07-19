@@ -30,12 +30,14 @@ export type SealedSwapWitness = {
   outNote: {
     secret: Hex;
     commitment: Hex;
+    nullifier: Hex;
     amountWei: string;
     asset: Address;
   };
   changeNote: {
     secret: Hex;
     commitment: Hex;
+    nullifier: Hex;
     amountWei: string;
     asset: Address;
   };
@@ -112,6 +114,11 @@ export async function buildSealedSwapWitness(args: {
     amountChange,
     assetIn
   );
+  const nullifierOut = await noteNullifierPoseidon(secretOut, newCommitmentOut);
+  const nullifierChange = await noteNullifierPoseidon(
+    secretChange,
+    newCommitmentChange
+  );
 
   const circomInput = {
     root: args.path.root.toString(),
@@ -150,12 +157,14 @@ export async function buildSealedSwapWitness(args: {
     outNote: {
       secret: fieldToHex(secretOut),
       commitment: fieldToHex(newCommitmentOut),
+      nullifier: fieldToHex(nullifierOut),
       amountWei: amountOut.toString(),
       asset: args.assetOut,
     },
     changeNote: {
       secret: fieldToHex(secretChange),
       commitment: fieldToHex(newCommitmentChange),
+      nullifier: fieldToHex(nullifierChange),
       amountWei: amountChange.toString(),
       asset: assetIn,
     },

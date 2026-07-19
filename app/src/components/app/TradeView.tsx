@@ -65,7 +65,9 @@ export function TradeView() {
   const [marketId, setMarketId] = useState(searchMarket ?? "tsla");
   const [amount, setAmount] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("token");
-  const [filter, setFilter] = useState<"all" | "onchain" | "stocks">("onchain");
+  const [filter, setFilter] = useState<"all" | "onchain" | "private" | "stocks">(
+    "private"
+  );
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<"swap" | "transfer">("transfer");
   const [pathMode, setPathMode] = useState<PathMode>(() => {
@@ -121,6 +123,8 @@ export function TradeView() {
   const list = useMemo(() => {
     if (filter === "all") return markets;
     if (filter === "onchain") return markets.filter((m) => Boolean(m.address));
+    if (filter === "private")
+      return markets.filter((m) => Boolean(m.privateReady));
     return markets.filter((m) => m.kind === "stock");
   }, [filter, markets]);
 
@@ -566,8 +570,9 @@ export function TradeView() {
             <div className="flex flex-wrap gap-1">
               {(
                 [
-                  ["all", "All"],
+                  ["private", "Private"],
                   ["onchain", "Onchain"],
+                  ["all", "All"],
                   ["stocks", "Stocks"],
                 ] as const
               ).map(([f, label]) => (

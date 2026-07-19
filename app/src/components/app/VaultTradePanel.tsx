@@ -12,7 +12,6 @@ import {
   useAccount,
   useBalance,
   useChainId,
-  usePublicClient,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -51,6 +50,7 @@ import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { fieldToBytes32, proveUnshieldInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
+import { getRhPublicClient } from "@/lib/rhClient";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
@@ -92,7 +92,6 @@ export function VaultTradePanel({
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const onProduct = chainId === CHAIN;
-  const publicClient = usePublicClient({ chainId: CHAIN });
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     matchesChain,
@@ -290,9 +289,10 @@ export function VaultTradePanel({
     amount: bigint;
     asset: Address;
   }> {
-    if (!address || !publicClient) {
+    if (!address) {
       throw new Error("Wallet not ready.");
     }
+    const publicClient = getRhPublicClient();
     if (plan.side === "buy") {
       const bal = (await publicClient.readContract({
         address: plan.token,
@@ -333,7 +333,8 @@ export function VaultTradePanel({
   }
 
   async function runReshield(plan: Plan) {
-    if (!address || !SHIELD_POOL_ADDRESS || !publicClient) return;
+    if (!address || !SHIELD_POOL_ADDRESS) return;
+    const publicClient = getRhPublicClient();
 
     const { amount, asset } = await measureProceeds(plan);
     if (amount <= 0n) {
@@ -416,7 +417,8 @@ export function VaultTradePanel({
           void refetchTok();
 
           if (plan.side === "sell") {
-            if (!publicClient || !address) return;
+            if (!address) return;
+            const publicClient = getRhPublicClient();
             const allowance = (await publicClient.readContract({
               address: plan.token,
               abi: erc20Abi,
