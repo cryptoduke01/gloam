@@ -27,7 +27,7 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | Path | What you can do |
 | --- | --- |
 | Public | Connect, portfolio, send ETH, send faucet stocks, markets, charts |
-| Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
+| Vault in | **Shield** ETH + faucet stocks into the live sealed vault |
 | Vault move | **Private send** — To (receive tag) + Amount; on-chain memo inbox (GloamPayMemo) |
 | Vault out | **Cash out** (unshield) with a real browser proof |
 | Vault trade | **Private trade** (size privacy on by default) · via-market adapter if DEX pool exists |
@@ -48,7 +48,7 @@ gloam/
 ```
 
 Public path needs **no** Gloam contracts.  
-Private path needs **ShieldPool + dual verifier + circuits**.
+Private path needs **ShieldPoolPoseidon + verifiers + circuits** (transfer, unshield, sealed swap).
 
 ---
 
@@ -102,7 +102,7 @@ No purple crypto fog.
 ### Status
 
 - **Product:** testnet-only  
-- **Poseidon pool:** shield · private send · cash out · sealed private trade · vault trade adapter  
+- **Sealed vault (`0x4F38…`):** shield · private send · cash out · private trade · via-market adapter  
 - **Keys:** dev ceremony (see [docs/production](https://gloam.trade/docs/production), `contracts/PRODUCTION.md`)  
 - **Privacy stack:** shield · private send · sealed private trade (size floor) · cash out public  
 - **Next:** stronger public-input privacy · production ceremony · Ethereum expansion  

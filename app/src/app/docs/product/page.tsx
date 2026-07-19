@@ -64,7 +64,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Shield",
-            body: "Deposit ETH and faucet stocks into the live Poseidon pool.",
+            body: "Deposit ETH and faucet stocks into the live privacy vault.",
           },
           {
             n: "●",

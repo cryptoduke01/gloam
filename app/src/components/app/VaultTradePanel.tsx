@@ -520,7 +520,7 @@ export function VaultTradePanel({
       return;
     }
     if (!poseidonMode || !shieldLive) {
-      setError("Vault trade needs the live Poseidon pool.");
+      setError("Vault trade needs the live privacy vault.");
       return;
     }
     if (!onProduct) {
@@ -620,7 +620,7 @@ export function VaultTradePanel({
   if (!shieldLive || !poseidonMode) {
     return (
       <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-        Vault trade needs the Poseidon pool. Shield is not configured.
+        Vault trade needs the privacy vault. Shield is not configured.
       </div>
     );
   }

@@ -2,8 +2,10 @@
  * Rebuild ShieldPool Merkle tree from on-chain insertions:
  *   - Shielded → one leaf (commitment)
  *   - Transferred → two leaves (payment, change) in that order
+ *   - SealedSwapped → two leaves (out, change) in that order
  *
- * Private send only emits Transferred — ignoring it makes root mismatch.
+ * Private send only emits Transferred; private trade only SealedSwapped —
+ * ignoring either makes root mismatch after those txs.
  */
 
 import type { Address, Hex, Log, PublicClient } from "viem";
@@ -22,7 +24,7 @@ import { fieldToHex, hexToField } from "./poseidon";
 export type ChainLeaf = {
   leafIndex: number;
   commitment: Hex;
-  /** shield | transfer-pay | transfer-change */
+  /** shield | transfer (pay/change) | sealed swap out/change (also "transfer") */
   kind: "shield" | "transfer";
   asset?: Address;
   amount?: bigint;

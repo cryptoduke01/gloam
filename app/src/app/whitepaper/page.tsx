@@ -241,7 +241,7 @@ export default function WhitepaperPage() {
           {
             n: "2",
             title: "Shield",
-            body: "Deposit ETH or faucet stock tokens into the Poseidon pool.",
+            body: "Deposit ETH or faucet stock tokens into the privacy vault.",
           },
           {
             n: "3",
@@ -266,13 +266,16 @@ export default function WhitepaperPage() {
       <p>
         Public-input layouts are versioned. Unshield binds root, nullifier,
         asset, amount, and recipient. Transfer binds root, nullifier, and two
-        new commitments. The dual verifier routes by public-input length so a
-        single pool configuration can support both actions.
+        new commitments. Sealed swap binds root, nullifier, two new commitments,
+        assets, a public min-out floor, and fixed rate numerators — the app
+        defaults min-out to a floor so trade size is not printed as min-out.
+        The dual verifier routes transfer/unshield by public-input length; sealed
+        swap uses a dedicated verifier on the sealed vault.
       </p>
       <p>
         An earlier keccak-based pool remains on testnet for historical deposits
-        only. The product path is the Poseidon pool with unshield and transfer
-        verifiers enabled.
+        only. The product path is the sealed Poseidon vault with unshield,
+        transfer, and sealed-swap verifiers enabled (dev keys).
       </p>
 
       <h2 id="threat">7. Threat model</h2>
@@ -310,7 +313,7 @@ export default function WhitepaperPage() {
         <li>Wallet connection restricted to Robinhood Chain testnet</li>
         <li>Portfolio with wallet ETH, shielded balances, and faucet stocks</li>
         <li>Public send and stock token transfer paths</li>
-        <li>Shield deposits into the Poseidon pool</li>
+        <li>Shield deposits into the privacy vault</li>
         <li>Private send (transfer) and cash-out (unshield) with browser proofs</li>
         <li>Note import for payment packages received off-app</li>
         <li>
