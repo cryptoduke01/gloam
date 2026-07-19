@@ -44,6 +44,7 @@ import { fieldToBytes32, proveSealedSwapInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { formatUsd } from "@/lib/markets";
 import {
+  estimateSealedOut,
   exactSealedAmounts,
   fallbackOneToOneRates,
   formatSealedAmount,
@@ -201,22 +202,46 @@ export function SealedTradePanel({
   }, [marketsData, marketId, marketSymbol]);
 
   const amountSwapPreview = safeParseEther(amount);
-  const exactPreview =
-    amountSwapPreview != null && amountSwapPreview > 0n
-      ? exactSealedAmounts(
-          amountSwapPreview,
+  const amountEntered =
+    amountSwapPreview != null && amountSwapPreview > 0n;
+
+  // Floor estimate always (instant UI). Exact fit for the circuit proof.
+  const roughOut =
+    amountEntered
+      ? estimateSealedOut(
+          amountSwapPreview!,
           rateQuote.rateIn,
           rateQuote.rateOut
         )
-      : null;
-  const expectedOut = exactPreview?.amountOut ?? 0n;
+      : 0n;
+  const exactPreview = amountEntered
+    ? exactSealedAmounts(
+        amountSwapPreview!,
+        rateQuote.rateIn,
+        rateQuote.rateOut
+      )
+    : null;
+  const expectedOut = exactPreview?.amountOut ?? roughOut;
   const amountSwapExact = exactPreview?.amountSwap ?? 0n;
+  const quoteReady = Boolean(exactPreview && exactPreview.amountOut > 0n);
 
   const { deposited: poolOutDeposited } = usePoolDeposited(outToken);
   const inventoryShort =
     expectedOut > 0n &&
     poolOutDeposited != null &&
     poolOutDeposited < expectedOut;
+
+  // Brief spinner so typing amount never feels dead
+  const [quoteFlash, setQuoteFlash] = useState(false);
+  useEffect(() => {
+    if (!amountEntered) {
+      setQuoteFlash(false);
+      return;
+    }
+    setQuoteFlash(true);
+    const t = setTimeout(() => setQuoteFlash(false), 220);
+    return () => clearTimeout(t);
+  }, [amount, amountEntered, rateQuote.rateIn, rateQuote.rateOut]);
 
   useEffect(() => {
     if (!isSuccess || !hash) return;
@@ -589,10 +614,22 @@ export function SealedTradePanel({
               <div className="rounded-xl border border-line bg-background/60 px-4 py-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-mute">You get (est.)</span>
-                  <span className="font-medium text-foreground">
-                    {expectedOut > 0n
-                      ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
-                      : `— ${marketSymbol}`}
+                  <span className="font-medium text-foreground tabular-nums">
+                    {quoteFlash ? (
+                      <span className="inline-flex items-center gap-2 text-mute">
+                        <span
+                          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-lime"
+                          aria-hidden
+                        />
+                        Pricing…
+                      </span>
+                    ) : expectedOut > 0n ? (
+                      `${formatSealedAmount(expectedOut)} ${marketSymbol}`
+                    ) : amountEntered ? (
+                      `Can't price — try Max`
+                    ) : (
+                      `— ${marketSymbol}`
+                    )}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
@@ -607,7 +644,8 @@ export function SealedTradePanel({
                     {rateQuote.source === "live" ? "Live marks" : "Marks"}
                   </StatusPill>
                 </div>
-                {amountSwapExact > 0n &&
+                {quoteReady &&
+                  amountSwapExact > 0n &&
                   amountSwapPreview != null &&
                   amountSwapExact !== amountSwapPreview && (
                     <p className="mt-1 text-[11px] text-mute">
@@ -656,22 +694,49 @@ export function SealedTradePanel({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={
-                    working ||
-                    !selected ||
-                    !outToken ||
-                    !exactPreview ||
-                    treeLoading
-                  }
-                  onClick={() => void onSealedSwap()}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
-                >
-                  {working
-                    ? status || "Working…"
-                    : `Buy ${marketSymbol} privately`}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    disabled={
+                      working ||
+                      !selected ||
+                      !outToken ||
+                      !amountEntered ||
+                      !quoteReady ||
+                      treeLoading
+                    }
+                    onClick={() => void onSealedSwap()}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                  >
+                    {working ? (
+                      <>
+                        <span
+                          className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
+                          aria-hidden
+                        />
+                        {status || "Working…"}
+                      </>
+                    ) : (
+                      `Buy ${marketSymbol} privately`
+                    )}
+                  </button>
+                  {!working && selected && amountEntered && !quoteReady && (
+                    <p className="text-center text-xs text-amber-600 dark:text-amber-400">
+                      Could not lock a proof size for that amount. Tap Max and
+                      try again.
+                    </p>
+                  )}
+                  {!working && !selected && (
+                    <p className="text-center text-xs text-mute">
+                      Select a vault ETH note above.
+                    </p>
+                  )}
+                  {!working && selected && !amountEntered && (
+                    <p className="text-center text-xs text-mute">
+                      Enter how much ETH to sell (or Max).
+                    </p>
+                  )}
+                </>
               )}
 
               {error && (

@@ -2,28 +2,22 @@
  * Public sealed-swap rates for testnet.
  *
  * Circuit constraint (exact): amountOut * rateOut === amountSwap * rateIn
- * Floor division alone is NOT enough — remainder breaks the proof.
  *
  * Rates are display marks (Yahoo / CoinGecko), not an on-chain oracle.
  */
 
-/** USD scale for integer rates (6 decimals is enough for stock marks). */
-export const SEALED_RATE_SCALE = 1_000_000;
+/** USD cents scale keeps rates small and exact-math friendly. */
+export const SEALED_RATE_SCALE = 100;
 
 export type SealedRateQuote = {
   rateIn: bigint;
   rateOut: bigint;
   ethUsd: number;
   outUsd: number;
-  /** true when both legs came from live marks */
   live: boolean;
   source: "live" | "static" | "fallback_1_1";
 };
 
-/**
- * Convert USD marks into circuit rates.
- * amountOut (18-dec out token) ≈ amountSwap (wei ETH) * ethUsd / outUsd
- */
 export function marksToSealedRates(
   ethUsd: number,
   outUsd: number,
@@ -37,9 +31,9 @@ export function marksToSealedRates(
   ) {
     return null;
   }
-  const rateIn = BigInt(Math.round(ethUsd * SEALED_RATE_SCALE));
-  const rateOut = BigInt(Math.round(outUsd * SEALED_RATE_SCALE));
-  if (rateIn === 0n || rateOut === 0n) return null;
+  // Integer cents (or fixed 2dp) — avoids giant steps from 1e6 scale
+  const rateIn = BigInt(Math.max(1, Math.round(ethUsd * SEALED_RATE_SCALE)));
+  const rateOut = BigInt(Math.max(1, Math.round(outUsd * SEALED_RATE_SCALE)));
   return {
     rateIn,
     rateOut,
@@ -50,7 +44,6 @@ export function marksToSealedRates(
   };
 }
 
-/** Fixed 1:1 demo rates when marks are missing. */
 export function fallbackOneToOneRates(): SealedRateQuote {
   return {
     rateIn: 1n,
@@ -62,9 +55,7 @@ export function fallbackOneToOneRates(): SealedRateQuote {
   };
 }
 
-/**
- * Floor estimate only (for UI). Prefer exactSealedAmounts for proofs.
- */
+/** Floor estimate for display only. */
 export function estimateSealedOut(
   amountSwap: bigint,
   rateIn: bigint,
@@ -74,12 +65,23 @@ export function estimateSealedOut(
   return (amountSwap * rateIn) / rateOut;
 }
 
+function gcd(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a;
+  let y = b < 0n ? -b : b;
+  while (y !== 0n) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x;
+}
+
 /**
- * Pick amountSwap ≤ wanted and amountOut so the circuit equality holds exactly:
+ * O(1) exact fit for circuit equality:
  *   amountOut * rateOut === amountSwap * rateIn
+ * with amountSwap ≤ wanted.
  *
- * Without this, mark-based rates almost always leave a remainder and snarkjs
- * fails with Assert Failed (not a DEX problem).
+ * amountOut must be a multiple of (rateIn / gcd(rateIn, rateOut)).
  */
 export function exactSealedAmounts(
   amountSwapWanted: bigint,
@@ -88,32 +90,24 @@ export function exactSealedAmounts(
 ): { amountSwap: bigint; amountOut: bigint } | null {
   if (amountSwapWanted <= 0n || rateIn <= 0n || rateOut <= 0n) return null;
 
+  const g = gcd(rateIn, rateOut);
+  const step = rateIn / g; // minimal positive amountOut that can be exact
+
   let amountOut = (amountSwapWanted * rateIn) / rateOut;
   if (amountOut <= 0n) return null;
 
-  // Walk amountOut down until amountOut * rateOut is divisible by rateIn
-  // and amountSwap = product / rateIn stays within the note.
-  // Bound steps so a pathological rate pair cannot hang the UI.
-  const maxSteps = 10_000n;
-  let steps = 0n;
-  while (amountOut > 0n && steps < maxSteps) {
-    const product = amountOut * rateOut;
-    if (product % rateIn === 0n) {
-      const amountSwap = product / rateIn;
-      if (amountSwap > 0n && amountSwap <= amountSwapWanted) {
-        // Final safety: exact equality
-        if (amountOut * rateOut === amountSwap * rateIn) {
-          return { amountSwap, amountOut };
-        }
-      }
-    }
-    amountOut -= 1n;
-    steps += 1n;
-  }
-  return null;
+  // Round down to multiple of step
+  amountOut = (amountOut / step) * step;
+  if (amountOut <= 0n) return null;
+
+  // Exact by construction: amountOut * rateOut is divisible by rateIn
+  const amountSwap = (amountOut * rateOut) / rateIn;
+  if (amountSwap <= 0n || amountSwap > amountSwapWanted) return null;
+  if (amountOut * rateOut !== amountSwap * rateIn) return null;
+
+  return { amountSwap, amountOut };
 }
 
-/** Format wei as a short human amount (assumes 18 decimals). */
 export function formatSealedAmount(wei: bigint, maxFrac = 4): string {
   if (wei === 0n) return "0";
   const neg = wei < 0n;
