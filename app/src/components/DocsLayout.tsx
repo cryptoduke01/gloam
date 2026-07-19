@@ -28,8 +28,8 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     items: [
       { href: "/docs/encryption", label: "How shield works" },
       { href: "/docs/private-pay", label: "Private pay" },
+      { href: "/docs/sealed-trade", label: "Private trade" },
       { href: "/docs/privacy-model", label: "What stays private" },
-      { href: "/docs/sealed-trade", label: "Sealed trade" },
       { href: "/docs/chain", label: "Robinhood Chain" },
       { href: "/docs/data", label: "Prices & oracles" },
     ],
@@ -173,10 +173,11 @@ export function DocsLayout({
                   {(
                     quickLinks ?? [
                       { href: "/app", label: "Open testnet" },
+                      { href: "/app/trade?path=sealed", label: "Private trade" },
                       { href: "/docs/testnet", label: "Testnet guide" },
+                      { href: "/docs/privacy-model", label: "Privacy model" },
                       { href: "/whitepaper", label: "Whitepaper" },
                       { href: "/token", label: "$GLOAM token" },
-                      { href: "/", label: "Main site" },
                       {
                         href: "https://x.com/gloamtrade",
                         label: "@gloamtrade",

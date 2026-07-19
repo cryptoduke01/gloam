@@ -973,7 +973,8 @@ export function MoveView() {
                           !isConnected ||
                           !onProduct ||
                           !selected ||
-                          !matchesChain ||
+                          matchesChain === false ||
+                          treeLoading ||
                           working ||
                           (payStyle !== "bearer" && !recipientTag.trim())
                         }
@@ -981,14 +982,29 @@ export function MoveView() {
                           if (recipientTag.trim()) setPayStyle("direct");
                           void onPrivateSend();
                         }}
-                        className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                       >
                         {working &&
                         (pendingAction.current === "send" ||
-                          pendingAction.current === "memo")
-                          ? status || "Working…"
-                          : "Send privately"}
+                          pendingAction.current === "memo") ? (
+                          <>
+                            <span
+                              className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
+                              aria-hidden
+                            />
+                            {status || "Working…"}
+                          </>
+                        ) : treeLoading ? (
+                          "Syncing vault…"
+                        ) : (
+                          "Send privately"
+                        )}
                       </button>
+                      {matchesChain === false && (
+                        <p className="text-center text-xs text-amber-600 dark:text-amber-400">
+                          Vault tree mismatch — tap Refresh above, then retry.
+                        </p>
+                      )}
                       {isPayMemoLive() && (
                         <p className="text-center text-[11px] text-mute">
                           After confirm: vault transfer + on-chain memo so they
@@ -1049,7 +1065,8 @@ export function MoveView() {
                           !isConnected ||
                           !onProduct ||
                           !selected ||
-                          !matchesChain ||
+                          matchesChain === false ||
+                          treeLoading ||
                           working ||
                           selected?.leafIndex == null ||
                           cashOutInventoryShort

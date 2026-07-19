@@ -85,7 +85,7 @@ export function ActivityFeed() {
                     <p className="font-medium text-foreground">
                       {zero
                         ? out
-                          ? "Contract call"
+                          ? "Contract (vault / other)"
                           : "Incoming call"
                         : out
                           ? "Sent"
