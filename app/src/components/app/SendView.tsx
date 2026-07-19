@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   useAccount,
   useBalance,
@@ -321,16 +322,17 @@ export function SendView() {
         </aside>
       </div>
 
-      {/* Review modal */}
-      {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Review modal (portaled so AppShell animations cannot offset it) */}
+      {showPreview &&
+        createPortal(
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             className="absolute inset-0 bg-black/70 backdrop-blur-md"
             aria-label="Close"
             onClick={() => setShowPreview(false)}
           />
-          <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <div className="relative z-[1] w-full max-w-sm max-h-[min(90vh,640px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
             <div className="h-1 bg-lime" />
             <div className="px-6 py-6">
               <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
@@ -378,7 +380,8 @@ export function SendView() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <SuccessModal

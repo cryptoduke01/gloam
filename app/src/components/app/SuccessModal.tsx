@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 
+/**
+ * Success dialog portaled to document.body so AppShell `.rise` transforms
+ * cannot pin fixed positioning mid-page.
+ */
 export function SuccessModal({
   open,
   title,
@@ -21,25 +26,31 @@ export function SuccessModal({
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="success-title"
@@ -53,12 +64,11 @@ export function SuccessModal({
         animate={{ opacity: 1 }}
       />
       <motion.div
-        className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
-        initial={reduce ? false : { opacity: 0, y: 16, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="relative z-[1] w-full max-w-sm max-h-[min(90vh,640px)] overflow-y-auto overflow-x-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        initial={reduce ? false : { opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
         transition={{ type: "spring", stiffness: 380, damping: 28 }}
       >
-        {/* Accent rail */}
         <div className="h-1 w-full bg-lime" />
 
         <div className="flex flex-col items-center px-8 pb-8 pt-10 text-center">
@@ -66,7 +76,12 @@ export function SuccessModal({
             className="relative flex h-20 w-20 items-center justify-center rounded-full bg-lime shadow-[0_0_40px_rgba(200,255,0,0.45)]"
             initial={reduce ? false : { scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 420, damping: 18, delay: 0.05 }}
+            transition={{
+              type: "spring",
+              stiffness: 420,
+              damping: 18,
+              delay: 0.05,
+            }}
           >
             <svg
               width="40"
@@ -83,7 +98,11 @@ export function SuccessModal({
                 strokeLinejoin="round"
                 initial={reduce ? false : { pathLength: 0 }}
                 animate={{ pathLength: 1 }}
-                transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                transition={{
+                  duration: 0.45,
+                  delay: 0.15,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
               />
             </svg>
           </motion.div>
@@ -122,6 +141,7 @@ export function SuccessModal({
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

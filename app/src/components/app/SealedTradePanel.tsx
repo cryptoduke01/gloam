@@ -154,6 +154,35 @@ export function SealedTradePanel({
       .filter((n) => n.leafIndex != null);
   }, [open, poseidonMode, leafIndexForCommitment]);
 
+  const ethNotesMissingIndex = useMemo(() => {
+    return open.filter(
+      (n) =>
+        n.bound &&
+        n.secret &&
+        n.secret !== "0x" &&
+        isNativeAsset(n.asset) &&
+        (!poseidonMode || n.scheme === "poseidon" || !n.scheme) &&
+        n.leafIndex == null &&
+        leafIndexForCommitment(n.commitment) == null
+    ).length;
+  }, [open, poseidonMode, leafIndexForCommitment]);
+
+  const stockNotesInVault = useMemo(() => {
+    return open.filter(
+      (n) =>
+        n.bound &&
+        n.secret &&
+        n.secret !== "0x" &&
+        !isNativeAsset(n.asset) &&
+        (!poseidonMode || n.scheme === "poseidon" || !n.scheme)
+    ).length;
+  }, [open, poseidonMode]);
+
+  // Keep vault tree fresh so new shields get leaf paths
+  useEffect(() => {
+    if (support === "ready") void refreshTree();
+  }, [support, refreshTree]);
+
   const selected =
     ethNotes.find((n) => n.id === noteId) ?? ethNotes[0] ?? null;
 
@@ -456,13 +485,34 @@ export function SealedTradePanel({
                   From (vault ETH note)
                 </p>
                 {ethNotes.length === 0 ? (
-                  <p className="mt-2 text-sm text-mute">
-                    No ETH in the vault.{" "}
-                    <Link href="/app/shield" className="text-lime hover:underline">
-                      Shield
-                    </Link>{" "}
-                    first.
-                  </p>
+                  <div className="mt-2 space-y-2 text-sm text-mute">
+                    <p>
+                      Private trade spends <strong className="text-foreground">vault ETH</strong>, not
+                      stock notes.{" "}
+                      <Link
+                        href="/app/shield"
+                        className="text-lime hover:underline"
+                      >
+                        Shield ETH
+                      </Link>{" "}
+                      first, then come back here.
+                    </p>
+                    {stockNotesInVault > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        You have {stockNotesInVault} stock note
+                        {stockNotesInVault === 1 ? "" : "s"} in the vault.
+                        Those are outputs (or for Move / cash out), not the
+                        input for this tab.
+                      </p>
+                    )}
+                    {ethNotesMissingIndex > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Found vault ETH that is not linked to the tree yet. Tap
+                        refresh on Move, or wait a few seconds and reopen this
+                        tab.
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
                     {ethNotes.map((n) => (

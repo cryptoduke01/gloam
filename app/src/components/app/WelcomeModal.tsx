@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gloam_testnet_welcome_v1";
 
 export function WelcomeModal() {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     try {
@@ -26,11 +32,11 @@ export function WelcomeModal() {
     setOpen(false);
   }
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="welcome-title"
@@ -41,7 +47,7 @@ export function WelcomeModal() {
         aria-label="Dismiss welcome"
         onClick={dismiss}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_18%,transparent),0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="relative z-[1] w-full max-w-md max-h-[min(90vh,720px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_18%,transparent),0_24px_80px_rgba(0,0,0,0.55)]">
         <div className="border-b border-line bg-background/60 px-6 py-5">
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
             Gloam testnet
@@ -74,9 +80,10 @@ export function WelcomeModal() {
               .
             </li>
             <li>
-              <strong className="text-foreground">Shield</strong> →{" "}
-              <strong className="text-foreground">Move</strong> (private pay or
-              cash out) → optional trade.
+              <strong className="text-foreground">Shield ETH</strong> →{" "}
+              <strong className="text-foreground">Trade → Private trade</strong>{" "}
+              (size hidden) or <strong className="text-foreground">Move</strong>{" "}
+              to pay / cash out.
             </li>
           </ol>
           <p className="text-xs leading-relaxed text-mute">
@@ -102,6 +109,7 @@ export function WelcomeModal() {
           </Link>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

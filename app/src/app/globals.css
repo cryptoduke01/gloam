@@ -161,18 +161,17 @@ html[data-theme="light"] .ascii-ink {
 }
 
 /* Editorial entrance for app views — staggered rise */
+/* Opacity-only rise: transform on ancestors breaks position:fixed modals. */
 @keyframes gloam-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 .rise {
-  animation: gloam-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: gloam-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .rise-1 {
   animation-delay: 0.05s;

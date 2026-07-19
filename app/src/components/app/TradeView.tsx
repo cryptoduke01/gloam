@@ -88,6 +88,27 @@ export function TradeView() {
     }
   }, [searchMarket, markets]);
 
+  // Sync path tab from URL; default private-ready markets to sealed
+  useEffect(() => {
+    if (pathParam === "sealed" || pathParam === "private") {
+      setPathMode("sealed");
+      return;
+    }
+    if (pathParam === "vault" && shieldLive) {
+      setPathMode("vault");
+      return;
+    }
+    if (pathParam === "public") {
+      setPathMode("public");
+      return;
+    }
+    // No path param: open sealed when this market can private-trade
+    const m = markets.find((x) => x.id === (searchMarket ?? marketId));
+    if (m?.privateReady && shieldLive) {
+      setPathMode("sealed");
+    }
+  }, [pathParam, searchMarket, marketId, markets, shieldLive]);
+
   const resolvedId = markets.some((m) => m.id === marketId)
     ? marketId
     : markets.find((m) => m.address)?.id ?? markets[0]?.id ?? "tsla";
@@ -527,18 +548,15 @@ export function TradeView() {
         </div>
       )}
       {pathMode === "sealed" && (
-        <div className="rounded-xl border border-line bg-panel px-4 py-4 text-sm text-mute">
-          <p className="font-medium text-foreground">
-            Sealed-size private trade is not shipped
-          </p>
-          <p className="mt-2">
-            We will not put a fake private swap here. Today: public wallet or
-            vault adapter (swap edge still public). Design options and gate:{" "}
-            <a href="/docs/sealed-trade" className="text-lime hover:underline">
-              sealed trade docs
-            </a>
-            .
-          </p>
+        <div className="rounded-xl border border-lime/30 bg-lime/5 px-4 py-3 text-sm text-mute">
+          <strong className="text-foreground">Private trade</strong> spends
+          vault ETH and pays out vault {market?.symbol ?? "stock"}. Size stays
+          private. Needs vault ETH (not stock notes) and live inventory for the
+          out asset.{" "}
+          <a href="/docs/sealed-trade" className="text-lime hover:underline">
+            How it works
+          </a>
+          .
         </div>
       )}
 

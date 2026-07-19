@@ -324,10 +324,16 @@ export function ShieldView() {
           the vault.
         </p>
         <p className="mt-2">
-          Open <strong className="text-foreground">Move</strong> to private-send
-          or cash out ·{" "}
-          <strong className="text-foreground">Trade → From vault</strong> to
-          swap.
+          <strong className="text-foreground">Move</strong> to private-send or
+          cash out. For size-private stock trades, shield{" "}
+          <strong className="text-foreground">ETH</strong>, then{" "}
+          <a
+            href="/app/trade?market=tsla&path=sealed"
+            className="text-lime hover:underline"
+          >
+            Trade → Private trade
+          </a>
+          .
         </p>
       </>
     );
