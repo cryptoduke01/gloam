@@ -9,21 +9,22 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
-type Filter = "all" | "onchain" | "stocks";
+type Filter = "all" | "onchain" | "private" | "stocks";
 
 /** Testnet-only markets. No mainnet memes mixed in. */
 export function MarketsView() {
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<Filter>("all");
+  const [kind, setKind] = useState<Filter>("private");
   const { data, isFetching, isError, refetch } = useLiveMarkets();
   const markets = data?.markets ?? [];
   const liveCount = data?.meta?.liveCount ?? 0;
-  const showType = kind === "all";
+  const showType = kind === "all" || kind === "private";
 
   const rows = useMemo(() => {
     return markets.filter((m) => {
       if (kind === "onchain" && !m.address) return false;
+      if (kind === "private" && !m.privateReady) return false;
       if (kind === "stocks" && m.kind !== "stock") return false;
       if (!q.trim()) return true;
       const s = q.toLowerCase();
@@ -35,8 +36,9 @@ export function MarketsView() {
   }, [q, kind, markets]);
 
   const filters: { id: Filter; label: string }[] = [
-    { id: "all", label: "All" },
+    { id: "private", label: "Private" },
     { id: "onchain", label: "Onchain" },
+    { id: "all", label: "All" },
     { id: "stocks", label: "Stocks" },
   ];
 

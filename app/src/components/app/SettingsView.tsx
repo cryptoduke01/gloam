@@ -345,7 +345,13 @@ export function SettingsView() {
         </p>
         <p className="mt-2 text-sm text-mute">
           Secrets live in this browser. Export before clearing site data.
-          Prefer a passphrase lock so a stolen file is not free money.
+          Prefer a passphrase lock so a stolen file is not free money. Losing
+          this backup loses vault access — privacy does not include recovery
+          magic.
+        </p>
+        <p className="mt-2 text-xs text-mute">
+          Privacy path: shield → private trade / private send. Cash out
+          publishes amount on the explorer by design.
         </p>
         <label
           htmlFor="backup-pass"
