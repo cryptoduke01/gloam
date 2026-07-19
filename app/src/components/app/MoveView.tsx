@@ -1296,30 +1296,39 @@ export function MoveView() {
             <ul className="mt-3 space-y-2 text-mute">
               <li>
                 <strong className="text-foreground">Pay to a tag</strong>, not a
-                public address. The amount and who sent it stay off the open
-                ledger.
+                public address. Size stays off the open ledger.
               </li>
               <li>
-                <strong className="text-foreground">The vault does the work.</strong>{" "}
-                A proof moves the money privately, and an optional on-chain
-                note lets them find the payment under Receive (no QR needed).
+                <strong className="text-foreground">Vault proof + encrypted memo.</strong>{" "}
+                They find it under Receive — no QR required when memos are live.
               </li>
               <li>
-                <strong className="text-foreground">Want an open transfer?</strong>{" "}
-                <Link href="/app/send" className="text-lime hover:underline">
-                  Send
+                <strong className="text-foreground">Cash out</strong> publishes
+                amount.{" "}
+                <Link
+                  href="/app/trade?path=sealed"
+                  className="text-lime hover:underline"
+                >
+                  Private trade
                 </Link>{" "}
-                is the normal, public path.
+                keeps size private.
               </li>
             </ul>
           </div>
           <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="text-foreground">Need a note first?</p>
+            <p className="text-foreground">Need a vault note first?</p>
             <Link
               href="/app/shield"
               className="mt-2 inline-flex min-h-10 items-center text-lime hover:underline"
             >
-              Shield assets →
+              Shield →
+            </Link>
+            {" · "}
+            <Link
+              href="/app/trade?path=sealed"
+              className="mt-2 inline-flex min-h-10 items-center text-lime hover:underline"
+            >
+              Private trade →
             </Link>
           </div>
         </aside>
@@ -1338,7 +1347,10 @@ export function MoveView() {
                 : "Payment package below (QR / copy / share) if they need handoff. Your vault change stays in this browser."}
             </p>
           ) : (
-            <p>Funds should be back in your open wallet.</p>
+            <p>
+              Funds should be back in your open wallet. That amount is public on
+              the explorer — only cash out when you need the open balance.
+            </p>
           )
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}
