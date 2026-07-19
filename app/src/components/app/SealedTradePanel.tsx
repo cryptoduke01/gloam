@@ -671,7 +671,7 @@ export function SealedTradePanel({
                   <span className="text-mute">You get (est.)</span>
                   <span
                     key={`${amount}-${expectedOut.toString()}`}
-                    className="font-medium text-foreground tabular-nums animate-in fade-in duration-200"
+                    className="font-medium text-foreground tabular-nums"
                   >
                     {expectedOut > 0n
                       ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
