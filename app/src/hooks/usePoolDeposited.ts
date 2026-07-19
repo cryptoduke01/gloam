@@ -1,39 +1,48 @@
 "use client";
 
-import { useReadContract } from "wagmi";
+import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
-import { PRODUCT_CHAIN_ID } from "@/lib/chain";
-import {
-  SHIELD_POOL_ADDRESS,
-  isShieldDeployed,
-  shieldPoolAbi,
-} from "@/lib/shield";
+import { isShieldDeployed } from "@/lib/shield";
+import { readPoolDeposited } from "@/lib/vaultStatus";
 
 /**
  * Pool inventory for an asset (`deposited[asset]`).
- * Cash-out (unshield) needs this balance; sealed swap does not move it.
+ * Uses dedicated RH RPC — works with wallet disconnected or on another chain.
  */
 export function usePoolDeposited(asset: Address | undefined | null) {
-  const enabled = Boolean(
-    isShieldDeployed() && SHIELD_POOL_ADDRESS && asset
-  );
+  const [deposited, setDeposited] = useState<bigint | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
 
-  const q = useReadContract({
-    address: SHIELD_POOL_ADDRESS ?? undefined,
-    abi: shieldPoolAbi,
-    functionName: "deposited",
-    args: asset ? [asset] : undefined,
-    chainId: PRODUCT_CHAIN_ID,
-    query: {
-      enabled,
-      refetchInterval: 12_000,
-    },
-  });
+  const refetch = useCallback(async () => {
+    if (!isShieldDeployed() || !asset) {
+      setDeposited(null);
+      return;
+    }
+    setIsLoading(true);
+    setIsError(false);
+    try {
+      const d = await readPoolDeposited(asset);
+      setDeposited(d);
+      if (d === null) setIsError(true);
+    } catch {
+      setIsError(true);
+      setDeposited(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [asset]);
+
+  useEffect(() => {
+    void refetch();
+    const t = setInterval(() => void refetch(), 12_000);
+    return () => clearInterval(t);
+  }, [refetch]);
 
   return {
-    deposited: (q.data as bigint | undefined) ?? null,
-    isLoading: q.isLoading,
-    isError: q.isError,
-    refetch: q.refetch,
+    deposited,
+    isLoading,
+    isError,
+    refetch,
   };
 }

@@ -74,3 +74,43 @@ export const RH_TESTNET_WALLET_PARAMS = {
   rpcUrls: [...robinhoodTestnet.rpcUrls.default.http],
   blockExplorerUrls: [robinhoodTestnet.blockExplorers.default.url],
 } as const;
+
+/**
+ * Ask the injected wallet to add + switch to Robinhood testnet.
+ * Use when the user is connected on the wrong network for writes.
+ */
+export async function ensureRhTestnetWallet(): Promise<boolean> {
+  const eth = (
+    globalThis as unknown as {
+      ethereum?: {
+        request: (args: {
+          method: string;
+          params?: unknown[];
+        }) => Promise<unknown>;
+      };
+    }
+  ).ethereum;
+  if (!eth?.request) return false;
+  try {
+    await eth.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: RH_TESTNET_WALLET_PARAMS.chainId }],
+    });
+    return true;
+  } catch (e) {
+    const code = (e as { code?: number })?.code;
+    // 4902 = chain not added
+    if (code === 4902 || code === -32603) {
+      try {
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [RH_TESTNET_WALLET_PARAMS],
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+}

@@ -5,19 +5,19 @@
  * Size stays private. Rates from display marks (exact circuit product).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   useAccount,
   useChainId,
-  usePublicClient,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { formatEther, zeroAddress, type Address } from "viem";
+import { formatEther, type Address } from "viem";
 import {
   EXPLORER_TX,
   PRODUCT_CHAIN_ID as CHAIN,
+  ensureRhTestnetWallet,
   formatEth,
   shortAddress,
 } from "@/lib/chain";
@@ -50,6 +50,7 @@ import {
   marksToSealedRates,
 } from "@/lib/sealedRates";
 import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
+import { readVaultSealedReadiness } from "@/lib/vaultStatus";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
@@ -73,7 +74,6 @@ export function SealedTradePanel({
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const onProduct = chainId === CHAIN;
-  const publicClient = usePublicClient({ chainId: CHAIN });
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     pathForLeaf,
@@ -111,47 +111,22 @@ export function SealedTradePanel({
     chainId: CHAIN,
   });
 
-  // Detect sealed swap readiness — never say "old vault" just because RPC isn't ready
-  useEffect(() => {
-    if (!SHIELD_POOL_ADDRESS || !shieldLive || !poseidonMode) {
+  // Dedicated RH RPC — works with wallet off or on another chain
+  const checkVault = useCallback(async () => {
+    if (!shieldLive || !poseidonMode) {
       setSupport("offline");
       return;
     }
-    if (!publicClient) {
-      setSupport("checking");
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const read = () =>
-        publicClient.readContract({
-          address: SHIELD_POOL_ADDRESS!,
-          abi: shieldPoolAbi,
-          functionName: "sealedSwapVerifier",
-        }) as Promise<Address>;
+    setSupport("checking");
+    const r = await readVaultSealedReadiness();
+    if (r.status === "ready") setSupport("ready");
+    else if (r.status === "no_verifier") setSupport("no_verifier");
+    else setSupport("offline");
+  }, [shieldLive, poseidonMode]);
 
-      try {
-        const v = await read();
-        if (cancelled) return;
-        if (!v || v === zeroAddress) setSupport("no_verifier");
-        else setSupport("ready");
-      } catch {
-        // brief retry — transient RPC / hydration
-        try {
-          await new Promise((r) => setTimeout(r, 600));
-          const v = await read();
-          if (cancelled) return;
-          if (!v || v === zeroAddress) setSupport("no_verifier");
-          else setSupport("ready");
-        } catch {
-          if (!cancelled) setSupport("offline");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [publicClient, shieldLive, poseidonMode]);
+  useEffect(() => {
+    void checkVault();
+  }, [checkVault]);
 
   const ethNotes = useMemo(() => {
     return open
@@ -451,30 +426,18 @@ export function SealedTradePanel({
               Can&apos;t reach the vault
             </p>
             <p className="mt-2 leading-relaxed">
-              Switch your wallet to Robinhood testnet (chain 46630), then retry.
-              This is not a DEX issue.
+              The app talks to Robinhood testnet RPC directly (wallet network
+              does not matter for this check). Retry, or wait a few seconds if
+              the RPC is flaky.
             </p>
+            {SHIELD_POOL_ADDRESS && (
+              <p className="mt-2 font-mono text-[10px] text-mute">
+                pool {shortAddress(SHIELD_POOL_ADDRESS, 6)}
+              </p>
+            )}
             <button
               type="button"
-              onClick={() => {
-                setSupport("checking");
-                // re-run effect by toggling — force remount path
-                void (async () => {
-                  if (!publicClient || !SHIELD_POOL_ADDRESS) return;
-                  try {
-                    const v = (await publicClient.readContract({
-                      address: SHIELD_POOL_ADDRESS,
-                      abi: shieldPoolAbi,
-                      functionName: "sealedSwapVerifier",
-                    })) as Address;
-                    setSupport(
-                      !v || v === zeroAddress ? "no_verifier" : "ready"
-                    );
-                  } catch {
-                    setSupport("offline");
-                  }
-                })();
-              }}
+              onClick={() => void checkVault()}
               className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
             >
               Retry
@@ -670,12 +633,27 @@ export function SealedTradePanel({
                 </p>
               )}
 
-              {!isConnected || !onProduct ? (
+              {!isConnected ? (
                 <div className="space-y-2">
                   <p className="text-xs text-mute">
-                    Connect on Robinhood testnet (46630).
+                    Connect a wallet to sign the trade. Vault reads work without
+                    it.
                   </p>
                   <WalletMenu />
+                </div>
+              ) : !onProduct ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-mute">
+                    Wallet is on the wrong network. Switch to Robinhood testnet
+                    (46630) to sign.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void ensureRhTestnetWallet()}
+                    className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+                  >
+                    Switch to Robinhood testnet
+                  </button>
                 </div>
               ) : (
                 <button

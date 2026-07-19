@@ -1,26 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { usePublicClient } from "wagmi";
-import { PRODUCT_CHAIN_ID } from "@/lib/chain";
 import {
   assertTreeMatchesChain,
   syncShieldTree,
   type SyncedTree,
 } from "@/lib/treeSync";
+import { getRhPublicClient } from "@/lib/rhClient";
 import { isShieldDeployed } from "@/lib/shield";
 import type { MerklePath } from "@/lib/merkle";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 
+/**
+ * Vault Merkle tree — uses dedicated RH RPC (not wallet network).
+ */
 export function useShieldTree() {
-  const publicClient = usePublicClient({ chainId: PRODUCT_CHAIN_ID });
   const [synced, setSynced] = useState<SyncedTree | null>(null);
   const [matchesChain, setMatchesChain] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!publicClient || !isShieldDeployed()) {
+    if (!isShieldDeployed()) {
       setSynced(null);
       setMatchesChain(null);
       return;
@@ -28,6 +29,7 @@ export function useShieldTree() {
     setLoading(true);
     setError(null);
     try {
+      const publicClient = getRhPublicClient();
       const tree = await syncShieldTree(publicClient);
       setSynced(tree);
       if (tree) {
@@ -44,7 +46,7 @@ export function useShieldTree() {
     } finally {
       setLoading(false);
     }
-  }, [publicClient]);
+  }, []);
 
   useEffect(() => {
     void refresh();
