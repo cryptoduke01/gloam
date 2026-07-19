@@ -30,11 +30,11 @@ Gloam is private money on **Robinhood Chain** — not a dark theme on a public D
 | Vault in | **Shield** ETH + faucet stocks into the live Poseidon pool |
 | Vault move | **Private send** — To (receive tag) + Amount; on-chain memo inbox (GloamPayMemo) |
 | Vault out | **Cash out** (unshield) with a real browser proof |
-| Vault trade | **Private trade** (sealed size, fixed 1:1 test rate) · adapter still available |
+| Vault trade | **Private trade** (sealed size, display-mark rates) · adapter still available |
 
 | Note backup | Settings → export/import vault note secrets (this browser / JSON) |
 
-**Not yet:** real rates / oracles for sealed trade. Production ceremony keys for real money. Ethereum expansion.
+**Not yet:** on-chain oracle rates for sealed trade. Production ceremony keys for real money. Ethereum expansion.
 
 ---
 
@@ -104,7 +104,7 @@ No purple crypto fog.
 - **Product:** testnet-only  
 - **Poseidon pool:** shield · private send · cash out · sealed private trade · vault trade adapter  
 - **Keys:** dev ceremony (see [docs/production](https://gloam.trade/docs/production), `contracts/PRODUCTION.md`)  
-- **Next:** real sealed rates · production ceremony · Ethereum expansion  
+- **Next:** on-chain sealed rates · production ceremony · Ethereum expansion  
 
 ---
 

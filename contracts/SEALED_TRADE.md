@@ -1,6 +1,6 @@
 # Sealed-size private trade
 
-**Status:** circuit compiled · dev zkey in `app/public/circuits/sealed_swap*` · settlement **live** on RH testnet Poseidon vault `0x4F38…2D8F` with sealed swap verifiers (see `deployments/poseidon-testnet.json`). Test rates are fixed 1:1. Dev ceremony keys only.
+**Status:** circuit compiled · dev zkey in `app/public/circuits/sealed_swap*` · settlement **live** on RH testnet Poseidon vault `0x4F38…2D8F` with sealed swap verifiers (see `deployments/poseidon-testnet.json`). App rates use **display marks** (Yahoo/CG → public `rateIn`/`rateOut`); not an on-chain oracle. Dev ceremony keys only.
 
 ## Goal
 
@@ -36,7 +36,7 @@ spend note secrets, `amountIn`, `amountSwap`, `amountOut`, change, Merkle path
 
 ## Next engineering steps
 
-1. Replace fixed 1:1 rates with oracle-bound or pool-bound pricing  
+1. Replace display-mark rates with oracle-bound or pool-bound pricing  
 2. Production multi-party ceremony keys (see `PRODUCTION.md`)  
 3. Seed inventory so unshield after swap stays solvent for both assets  
 4. Ethereum expansion once RH private rails are battle-tested  

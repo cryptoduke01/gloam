@@ -43,8 +43,9 @@ export default function DocsSealedTradePage() {
         ]}
       />
       <p>
-        Testnet rate is fixed <strong>1:1</strong> for demos. Dev ceremony keys
-        only. See{" "}
+        Testnet rates use <strong>display marks</strong> (Yahoo / CoinGecko for
+        the UI), not an on-chain oracle. If marks fail to load, the app falls
+        back to 1:1. Dev ceremony keys only. See{" "}
         <Link href="/docs/production">Production gate</Link> before real money.
       </p>
 
@@ -84,8 +85,8 @@ export default function DocsSealedTradePage() {
       <h2>What ships next</h2>
       <ol>
         <li>
-          <strong>Real rates</strong> — leave fixed 1:1 testnet rates for
-          oracle-bound or pool-bound pricing.
+          <strong>On-chain rates</strong> — replace display-mark rates with
+          oracle-bound or pool-bound pricing (Pyth / AMM).
         </li>
         <li>
           <strong>Production ceremony keys</strong> — multi-party proving keys

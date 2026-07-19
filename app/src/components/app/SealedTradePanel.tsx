@@ -22,6 +22,7 @@ import {
 } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
+import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import {
   HASH_SCHEME,
@@ -39,6 +40,13 @@ import {
 import { buildSealedSwapWitness } from "@/lib/proverSealedSwap";
 import { fieldToBytes32, proveSealedSwapInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
+import { formatUsd } from "@/lib/markets";
+import {
+  estimateSealedOut,
+  fallbackOneToOneRates,
+  formatSealedAmount,
+  marksToSealedRates,
+} from "@/lib/sealedRates";
 import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
 import { sealedTradeStatus } from "@/lib/sealedTrade";
 import { DevKeysBanner } from "./DevKeysBanner";
@@ -72,6 +80,7 @@ export function SealedTradePanel({
     leafIndexForCommitment,
     refresh: refreshTree,
   } = useShieldTree();
+  const { data: marketsData } = useLiveMarkets();
 
   const [support, setSupport] = useState<Support>("checking");
   const [noteId, setNoteId] = useState<string | null>(null);
@@ -159,6 +168,39 @@ export function SealedTradePanel({
       (t) => t.symbol.toLowerCase() === marketSymbol.toLowerCase()
     )?.address;
 
+  const rateQuote = useMemo(() => {
+    const markets = marketsData?.markets ?? [];
+    const ethM =
+      markets.find((m) => m.id === "eth") ??
+      markets.find((m) => m.symbol === "ETH");
+    const outM =
+      markets.find((m) => m.id === marketId) ??
+      markets.find(
+        (m) => m.symbol.toLowerCase() === marketSymbol.toLowerCase()
+      );
+    const ethUsd = marketsData?.ethUsd ?? ethM?.mark ?? null;
+    const outUsd = outM?.mark ?? null;
+    const bothLive =
+      ethM?.source === "live" && outM?.source === "live" && ethUsd != null;
+    if (ethUsd != null && outUsd != null && ethUsd > 0 && outUsd > 0) {
+      return (
+        marksToSealedRates(ethUsd, outUsd, bothLive ? "live" : "static") ??
+        fallbackOneToOneRates()
+      );
+    }
+    return fallbackOneToOneRates();
+  }, [marketsData, marketId, marketSymbol]);
+
+  const amountSwapPreview = safeParseEther(amount);
+  const expectedOut =
+    amountSwapPreview != null && amountSwapPreview > 0n
+      ? estimateSealedOut(
+          amountSwapPreview,
+          rateQuote.rateIn,
+          rateQuote.rateOut
+        )
+      : 0n;
+
   useEffect(() => {
     if (!isSuccess || !hash) return;
     if (handledHash.current === hash) return;
@@ -231,16 +273,21 @@ export function SealedTradePanel({
       if (!path) throw new Error("Could not build vault path — refresh tree.");
 
       setStatus("Building private trade proof… 10–30s is normal.");
-      // 1:1 testnet rate (rateIn = rateOut = 1)
+      // Public rates from display marks (not an on-chain oracle). Size stays private.
+      const { rateIn, rateOut } = rateQuote;
+      const amountOut = estimateSealedOut(amountSwap, rateIn, rateOut);
+      if (amountOut <= 0n) {
+        throw new Error("Rate produced zero output. Check market marks.");
+      }
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
         amountSwap,
         assetIn: NATIVE_ASSET,
         assetOut: outToken,
-        amountOutMin: amountSwap, // 1:1, min = swap size
-        rateIn: 1n,
-        rateOut: 1n,
+        amountOutMin: amountOut,
+        rateIn,
+        rateOut,
         path: path as PoseidonMerklePath,
       });
       if (w.blocker) throw new Error(w.blocker);
@@ -386,8 +433,9 @@ export function SealedTradePanel({
             <div className="space-y-4 p-5">
               <p className="text-xs text-mute">
                 This path does <strong className="text-foreground">not</strong>{" "}
-                need a public DEX pool for {marketSymbol}. Test rate is 1:1.
-                Size stays private; the open market only sees a vault proof.
+                need a public DEX pool for {marketSymbol}. Rate uses display
+                marks (not an on-chain oracle). Size stays private; the open
+                market only sees a vault proof.
               </p>
               {!outToken && (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
@@ -466,8 +514,35 @@ export function SealedTradePanel({
                 </div>
                 <p className="mt-1 text-xs text-mute">
                   Leftover ETH stays in your vault as change. You receive{" "}
-                  {marketSymbol} in the vault (1:1 test rate).
+                  {marketSymbol} as a new vault note.
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-line bg-background/60 px-4 py-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-mute">You receive (est.)</span>
+                  <span className="font-medium text-foreground">
+                    {expectedOut > 0n
+                      ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
+                      : `— ${marketSymbol}`}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
+                  <span>
+                    {rateQuote.source === "fallback_1_1"
+                      ? "1:1 fallback rate"
+                      : `${formatUsd(rateQuote.ethUsd)} ETH · ${formatUsd(rateQuote.outUsd)} ${marketSymbol}`}
+                  </span>
+                  <StatusPill
+                    tone={rateQuote.source === "live" ? "lime" : "mute"}
+                  >
+                    {rateQuote.source === "live"
+                      ? "Live marks"
+                      : rateQuote.source === "static"
+                        ? "Static marks"
+                        : "1:1"}
+                  </StatusPill>
+                </div>
               </div>
 
               {!isConnected || !onProduct ? (

@@ -34,7 +34,7 @@ export type Market = MarketDef & LiveQuote;
  * - ETH for gas / USD conversion
  */
 export const MARKET_DEFS: MarketDef[] = [
-  // Onchain faucet tokens
+  // Onchain faucet tokens (sealed private trade on RH testnet vault)
   {
     id: "tsla",
     symbol: "TSLA",
@@ -43,7 +43,7 @@ export const MARKET_DEFS: MarketDef[] = [
     yahoo: "TSLA",
     address: "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
     fallbackMark: 250,
-    privateReady: false,
+    privateReady: true,
   },
   {
     id: "amzn",
@@ -53,7 +53,7 @@ export const MARKET_DEFS: MarketDef[] = [
     yahoo: "AMZN",
     address: "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
     fallbackMark: 190,
-    privateReady: false,
+    privateReady: true,
   },
   {
     id: "pltr",
@@ -63,7 +63,7 @@ export const MARKET_DEFS: MarketDef[] = [
     yahoo: "PLTR",
     address: "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
     fallbackMark: 80,
-    privateReady: false,
+    privateReady: true,
   },
   {
     id: "nflx",
@@ -73,7 +73,7 @@ export const MARKET_DEFS: MarketDef[] = [
     yahoo: "NFLX",
     address: "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
     fallbackMark: 900,
-    privateReady: false,
+    privateReady: true,
   },
   {
     id: "amd",
@@ -83,7 +83,7 @@ export const MARKET_DEFS: MarketDef[] = [
     yahoo: "AMD",
     address: "0x71178BAc73cBeb415514eB542a8995b82669778d",
     fallbackMark: 120,
-    privateReady: false,
+    privateReady: true,
   },
   // Equity watchlist (marks only — not on RH testnet yet)
   {
