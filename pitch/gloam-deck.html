@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Gloam · Pitch</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.cdnfonts.com/css/overused-grotesk" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#000000;
+    --lime:#c8ff00;
+    --white:#ffffff;
+    --mute:#9a9a9a;
+    --line:#1c1c1c;
+    --panel:#0b0b0b;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  @page{ size:1280px 720px; margin:0; }
+  html,body{ background:var(--ink); }
+  /* Font 1: Overused Grotesk for everything that is not a big headline */
+  body{
+    font-family:"Overused Grotesk","Plus Jakarta Sans",system-ui,-apple-system,sans-serif;
+    color:var(--white);
+    -webkit-font-smoothing:antialiased;
+  }
+  /* Font 2: Instrument Serif for display headlines only */
+  .display{ font-family:"Instrument Serif",Georgia,serif; font-weight:400; letter-spacing:-0.01em; }
+
+  .slide{
+    position:relative;
+    width:1280px; height:720px;
+    overflow:hidden;
+    background:var(--ink);
+    padding:76px 92px 40px;
+    page-break-after:always;
+    display:flex; flex-direction:column;
+  }
+  .slide:last-child{ page-break-after:auto; }
+  .content{ display:flex; flex-direction:column; }
+
+  .eyebrow{
+    font-size:13px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; color:var(--lime);
+    display:flex; align-items:center; gap:14px;
+  }
+  .eyebrow::before{ content:""; display:block; width:32px; height:2px; background:var(--lime); }
+
+  h1.title{ font-size:64px; line-height:1.05; margin-top:22px; }
+  h2.title{ font-size:52px; line-height:1.06; margin-top:20px; }
+  .lede{ font-size:23px; line-height:1.5; color:#cfcfcf; margin-top:22px; max-width:920px; }
+  .lede b{ color:var(--white); font-weight:600; }
+
+  .foot{
+    margin-top:auto;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:12px; font-weight:600; letter-spacing:0.18em; text-transform:uppercase; color:#6a6a6a;
+    border-top:1px solid var(--line); padding-top:16px;
+  }
+  .foot .brand{ color:var(--lime); }
+
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-top:40px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:38px; }
+  .card{ border:1px solid var(--line); background:var(--panel); border-radius:16px; padding:28px; }
+  .card .num{ font-size:12px; font-weight:600; color:var(--lime); letter-spacing:0.16em; text-transform:uppercase; }
+  .card h3{ font-family:"Instrument Serif",Georgia,serif; font-weight:400; font-size:29px; margin-top:12px; }
+  .card p{ font-size:17px; line-height:1.5; color:var(--mute); margin-top:10px; }
+
+  ul.bullets{ list-style:none; margin-top:32px; display:flex; flex-direction:column; gap:18px; max-width:960px; }
+  ul.bullets li{ font-size:22px; line-height:1.42; color:#dcdcdc; display:flex; gap:15px; }
+  ul.bullets li::before{ content:"\2192"; color:var(--lime); flex:none; }
+  ul.bullets li b{ color:var(--white); font-weight:600; }
+
+  /* cover */
+  .cover .content{ margin:auto 0; }
+  .cover .wordmark{ display:flex; align-items:center; gap:18px; }
+  .cover .logo{ width:66px; height:66px; border-radius:15px; display:block; }
+  .cover .wordmark span{ font-family:"Instrument Serif",Georgia,serif; font-size:42px; }
+  .cover h1{ font-size:86px; line-height:1.0; margin-top:38px; max-width:1010px; }
+  .cover .sub{ font-size:25px; color:var(--mute); margin-top:26px; max-width:780px; line-height:1.45; }
+  .cover .glow{
+    position:absolute; width:820px; height:820px; right:-260px; top:-320px; border-radius:50%;
+    background:radial-gradient(circle, rgba(200,255,0,0.15), rgba(200,255,0,0) 62%);
+  }
+
+  /* roadmap */
+  .road{ display:flex; flex-direction:column; margin-top:34px; }
+  .road .step{ display:grid; grid-template-columns:150px 1fr; gap:26px; padding:18px 0; border-top:1px solid var(--line); align-items:baseline; }
+  .road .step:last-child{ border-bottom:1px solid var(--line); }
+  .road .when{ font-size:13px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:var(--lime); }
+  .road .what{ font-size:22px; color:#e6e6e6; }
+  .road .what small{ display:block; color:var(--mute); font-size:16px; margin-top:5px; }
+  .road .step.hi .what{ color:var(--lime); }
+
+  /* close */
+  .close .content{ margin:auto 0; }
+  .close .rule{ width:44px; height:2px; background:var(--lime); }
+  .close h1{ font-size:96px; line-height:1.0; margin-top:26px; }
+  .close .tagline{ font-size:19px; color:var(--mute); margin-top:22px; }
+  .close .links{ margin-top:30px; display:flex; gap:34px; font-size:20px; }
+  .close .links a{ color:var(--lime); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<!-- 1 · Cover -->
+<section class="slide cover">
+  <div class="glow"></div>
+  <div class="content">
+    <div class="wordmark">
+      <img class="logo" src="./logo.png" alt="Gloam" />
+      <span>Gloam</span>
+    </div>
+    <h1 class="display">Trade Everything on Robinhood Privately</h1>
+    <p class="sub">Buy stocks and crypto onchain without showing the world your every move.</p>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>@gloamtrade · gloam.trade/docs</span></div>
+</section>
+
+<!-- 2 · Problem -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">The problem</div>
+    <h1 class="title display">Onchain, everyone can<br/>see everything</h1>
+    <ul class="bullets">
+      <li>Every trade you make is public. Anyone can see <b>what you bought, how much, and when</b>.</li>
+      <li>The moment a big player moves, they get <b>copied and front run</b> before they even settle.</li>
+      <li>There is still <b>no private way</b> to trade the stocks and tokens people actually want.</li>
+    </ul>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>The problem</span></div>
+</section>
+
+<!-- 3 · Solution -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">The solution</div>
+    <h1 class="title display">A private way to<br/>trade everything</h1>
+    <p class="lede">Gloam lets you hold, send, and trade onchain in private. Your balances and your trades stay yours. You only become visible when <b>you</b> choose to.</p>
+    <div class="grid3">
+      <div class="card"><div class="num">01</div><h3>Private by default</h3><p>Your money and moves stay off the public feed.</p></div>
+      <div class="card"><div class="num">02</div><h3>Everything in one place</h3><p>Stocks and crypto on the same private rails.</p></div>
+      <div class="card"><div class="num">03</div><h3>You stay in control</h3><p>Go public only when you decide to cash out.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>The solution</span></div>
+</section>
+
+<!-- 4 · How it works -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">How it works</div>
+    <h1 class="title display">Three simple steps</h1>
+    <div class="grid3">
+      <div class="card"><div class="num">Step 01</div><h3>Deposit</h3><p>Move money into your private balance. It leaves the public view.</p></div>
+      <div class="card"><div class="num">Step 02</div><h3>Send</h3><p>Pay anyone privately. They receive it, the world does not see it.</p></div>
+      <div class="card"><div class="num">Step 03</div><h3>Trade</h3><p>Buy and sell without broadcasting your size to the market.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>How it works</span></div>
+</section>
+
+<!-- 5 · Why now -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">Why now</div>
+    <h1 class="title display">Built where the<br/>market is heading</h1>
+    <ul class="bullets">
+      <li>Real world assets and tokenized stocks are moving onchain <b>faster every month</b>.</li>
+      <li>Robinhood Chain is where those assets and a <b>huge retail audience</b> are landing.</li>
+      <li>Privacy is the one thing missing, and the piece <b>nobody else is building</b>.</li>
+    </ul>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>Why now</span></div>
+</section>
+
+<!-- 6 · Traction -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">Where we are</div>
+    <h1 class="title display">Live and working today</h1>
+    <ul class="bullets">
+      <li>The full private flow is <b>live on our test network</b>: deposit, private send, cash out, and private trade.</li>
+      <li>Private trade keeps <b>size sealed</b> in the vault. Test rates for now; real pricing next.</li>
+      <li>Built fast, shipping weekly, with a <b>clear path to Ethereum and public launch</b>.</li>
+    </ul>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>Where we are</span></div>
+</section>
+
+<!-- 7 · Roadmap -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">What's next</div>
+    <h1 class="title display">The path from here</h1>
+    <div class="road">
+      <div class="step"><div class="when">Now</div><div class="what">Private balances, send, cash out, private trade<small>Live on the test network today.</small></div></div>
+      <div class="step"><div class="when">Next</div><div class="what">Real rates and production keys<small>Leave test rates. Harden for real money.</small></div></div>
+      <div class="step hi"><div class="when">Then</div><div class="what">Expansion to Ethereum<small>The largest onchain market and audience in crypto.</small></div></div>
+      <div class="step"><div class="when">Then</div><div class="what">Public launch<small>Open to everyone, with real assets.</small></div></div>
+    </div>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>Roadmap</span></div>
+</section>
+
+<!-- 8 · Opportunity -->
+<section class="slide">
+  <div class="content">
+    <div class="eyebrow">The opportunity</div>
+    <h1 class="title display">Distribution meets a<br/>first mover product</h1>
+    <div class="grid2">
+      <div class="card">
+        <div class="num">What you bring</div>
+        <h3>Reach</h3>
+        <p>The largest show on X and a network reaching <b style="color:#fff">1 to 4 billion views a month</b>. A direct line to the exact audience this is built for, right as we open the Ethereum chapter.</p>
+      </div>
+      <div class="card">
+        <div class="num">What we're exploring</div>
+        <h3>Partnership and investment</h3>
+        <p>Back the round and launch on Ethereum together. Co-market the release and put private trading in front of millions of the right people.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>The opportunity</span></div>
+</section>
+
+<!-- 9 · Close -->
+<section class="slide close">
+  <div class="content">
+    <div class="rule"></div>
+    <h1 class="display">Let's build the private<br/>way to trade.</h1>
+    <p class="tagline">Black. Lime. Private by design.</p>
+    <div class="links">
+      <a href="https://gloam.trade">gloam.trade</a>
+      <a href="https://gloam.trade/docs">gloam.trade/docs</a>
+      <a href="https://x.com/gloamtrade">@gloamtrade</a>
+    </div>
+  </div>
+  <div class="foot"><span class="brand">gloam.trade</span><span>Trade Everything on Robinhood Privately</span></div>
+</section>
+
+</body>
+</html>

@@ -82,14 +82,19 @@ export default function DocsProductPage() {
             body: "From vault: cash out → public DEX swap → re-shield. Hold private; swap edge still public.",
           },
           {
-            n: "○",
+            n: "●",
             title: "Sealed-size private trade",
-            body: "Swap without broadcasting full size. See sealed-trade docs — not shipped.",
+            body: "Vault-settled private trade on testnet (fixed 1:1 rates, dev keys). See sealed-trade docs.",
           },
           {
             n: "○",
-            title: "Production keys + mainnet",
-            body: "Ceremony, audit, ops. Blocked until the production gate checklist is green.",
+            title: "Real rates + production keys",
+            body: "Oracle-bound pricing, multi-party ceremony, audit. Blocked until the production gate is green.",
+          },
+          {
+            n: "○",
+            title: "Ethereum expansion",
+            body: "Same private rails on Ethereum after RH testnet rails are solid.",
           },
           {
             n: "○",

@@ -1,8 +1,9 @@
 /**
  * Sealed-size private trade status.
- * Circuit: contracts/circuits/sealedSwap/sealedSwap.circom (compile next).
+ * Circuit: contracts/circuits/sealedSwap/sealedSwap.circom
  * Witness: buildSealedSwapWitness in proverSealedSwap.ts
- * Settlement contract + zkey: not deployed.
+ * Browser prove: proveSealedSwapInBrowser in proveClient.ts
+ * Settlement: ShieldPoolPoseidon.sealedSwap on RH testnet (see poseidon-testnet.json)
  */
 
 import { sealedSwapArtifactsReady } from "./proverSealedSwap";
@@ -12,9 +13,13 @@ export type SealedTradeStatus =
   | "artifacts_ready"
   | "live";
 
+/**
+ * Static product status for docs / banners.
+ * On-chain readiness is still re-checked in SealedTradePanel (verifier address).
+ */
 export function sealedTradeStatus(): SealedTradeStatus {
-  // Artifacts ready for browser prove; no on-chain sealedSwap yet → not "live"
-  if (sealedSwapArtifactsReady()) return "artifacts_ready";
+  // Dev wasm/zkey shipped; sealed vault + verifier live on RH testnet.
+  if (sealedSwapArtifactsReady()) return "live";
   return "circuit_draft";
 }
 

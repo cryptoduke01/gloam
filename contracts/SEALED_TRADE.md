@@ -1,6 +1,6 @@
 # Sealed-size private trade
 
-**Status:** circuit **compiled** + dev zkey in `app/public/circuits/sealed_swap*`. Settlement contract **not** deployed — adapter is the only executable trade.
+**Status:** circuit compiled · dev zkey in `app/public/circuits/sealed_swap*` · settlement **live** on RH testnet Poseidon vault `0x4F38…2D8F` with sealed swap verifiers (see `deployments/poseidon-testnet.json`). Test rates are fixed 1:1. Dev ceremony keys only.
 
 ## Goal
 
@@ -25,27 +25,27 @@ spend note secrets, `amountIn`, `amountSwap`, `amountOut`, change, Merkle path
 - Poseidon commitments for out + change notes
 
 **App witness builder:** `app/src/lib/proverSealedSwap.ts` (`buildSealedSwapWitness`)  
-**Artifacts ready?** `sealedSwapArtifactsReady() === false` until wasm/zkey published.
+**Browser prove:** `proveSealedSwapInBrowser` in `app/src/lib/proveClient.ts`  
+**UI:** `app/src/components/app/SealedTradePanel.tsx` (checks `sealedSwapVerifier` on-chain)
 
-## Settlement (source ready)
+## Settlement (live on testnet)
 
 - `SealedSwapVerifier.sol` + `SealedSwapIVerifier.sol` (9 public inputs)
 - `ShieldPoolPoseidon.sealedSwap(...)` + `setSealedSwapVerifier`
-- Deploy script: `script/DeploySealedSwapVerifier.s.sol`
-- **Live RH pool** is an older bytecode without `sealedSwap` until redeploy + `setSealedSwapVerifier`
+- Deploy record: `deployments/poseidon-testnet.json` (`features.sealedSwap: true`)
 
 ## Next engineering steps
 
-1. Deploy sealed swap verifiers on RH testnet  
-2. Redeploy Poseidon pool (or migrate) with `sealedSwap` + set verifier  
-3. App: sealed trade form that proves + calls `sealedSwap` (only if pool supports it)  
-4. Seed inventory for both assets so unshield after swap stays solvent
+1. Replace fixed 1:1 rates with oracle-bound or pool-bound pricing  
+2. Production multi-party ceremony keys (see `PRODUCTION.md`)  
+3. Seed inventory so unshield after swap stays solvent for both assets  
+4. Ethereum expansion once RH private rails are battle-tested  
 
-## Adapter (live)
+## Adapter (live forever)
 
-Cash out → public DEX → re-shield. Size **is** public on the swap edge. Honest fallback forever for thin books.
+Cash out → public DEX → re-shield. Size **is** public on the swap edge. Honest fallback for thin books.
 
-## Explicit non-goals for circuit draft
+## Explicit non-goals for v0
 
 - Fake private swap UI  
 - Mainnet / production keys  

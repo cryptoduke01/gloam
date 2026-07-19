@@ -6,24 +6,51 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Sealed-size private trade",
   description:
-    "What sealed private trade means on Gloam, what the vault adapter does today, and design options next.",
+    "What sealed private trade means on Gloam, what is live on testnet today, and what still ships next.",
 };
 
 export default function DocsSealedTradePage() {
   return (
     <DocsLayout
       title="Sealed-size private trade"
-      lede="Goal: trade without printing full size to the public book. Not shipped. The vault trade adapter is a stepping stone."
+      lede="Goal: trade without printing full size to the public book. Live on Robinhood Chain testnet with fixed rates and dev proving keys. Real rates and production keys still ship next."
       glance={[
-        { label: "Today", value: "Adapter (public swap)" },
+        { label: "Today", value: "Sealed path + adapter" },
         { label: "Goal", value: "Size sealed" },
-        { label: "Status", value: "Design" },
+        { label: "Status", value: "Testnet live" },
         { label: "Fake fills", value: "Never" },
       ]}
     >
       <h2>What lives today</h2>
       <FlowDiagram
-        title="Vault trade adapter"
+        title="Private trade (sealed path)"
+        steps={[
+          {
+            n: "1",
+            title: "Pick a vault note",
+            body: "Spend a shielded ETH note you already hold in the vault.",
+          },
+          {
+            n: "2",
+            title: "Prove the trade",
+            body: "Browser builds a sealed-swap proof. Size stays private; the chain only sees a vault proof.",
+          },
+          {
+            n: "3",
+            title: "Settle in vault",
+            body: "You receive the out asset as a new vault note, plus change. No public DEX hop.",
+          },
+        ]}
+      />
+      <p>
+        Testnet rate is fixed <strong>1:1</strong> for demos. Dev ceremony keys
+        only. See{" "}
+        <Link href="/docs/production">Production gate</Link> before real money.
+      </p>
+
+      <h2>Vault trade adapter (fallback)</h2>
+      <FlowDiagram
+        title="From vault (public swap step)"
         steps={[
           {
             n: "1",
@@ -33,7 +60,7 @@ export default function DocsSealedTradePage() {
           {
             n: "2",
             title: "Swap",
-            body: "Public DEX swap — size and pair are visible on the explorer.",
+            body: "Public DEX swap. Size and pair are visible on the explorer.",
           },
           {
             n: "3",
@@ -43,43 +70,45 @@ export default function DocsSealedTradePage() {
         ]}
       />
       <p>
-        Useful: you do not leave inventory sitting public forever.{" "}
-        <strong>Not</strong> sealed trade: the swap edge still leaks size.
+        Useful on thin books. <strong>Not</strong> sealed trade: the swap edge
+        still leaks size. The product shows both paths honestly.
       </p>
 
       <h2>What “sealed” means</h2>
       <ul>
         <li>Public observers cannot read your trade size as free signal</li>
         <li>Settlement still ends on-chain (we do not claim invisibility)</li>
-        <li>No theatrical “private success” without a real mechanism</li>
+        <li>No theatrical “private success” without a real proof</li>
       </ul>
 
-      <h2>Design options (next engineering)</h2>
+      <h2>What ships next</h2>
       <ol>
         <li>
-          <strong>Intent + batch settlement</strong> — users post sealed
-          intents; a matcher settles net flows so individual sizes blur in a
-          batch.
+          <strong>Real rates</strong> — leave fixed 1:1 testnet rates for
+          oracle-bound or pool-bound pricing.
         </li>
         <li>
-          <strong>Vault-native pool</strong> — AMM or RFQ that spends notes and
-          mints notes without an intermediate public wallet hop.
+          <strong>Production ceremony keys</strong> — multi-party proving keys
+          before any mainnet value.
         </li>
         <li>
-          <strong>Hybrid</strong> — adapter for thin markets; sealed path when
-          liquidity and circuits support it.
+          <strong>Ethereum expansion</strong> — same private rails where the
+          largest onchain audience already sits.
+        </li>
+        <li>
+          <strong>Deeper liquidity design</strong> — intent batching or
+          vault-native pool when books are thin.
         </li>
       </ol>
       <p>
-        Each option needs circuits (or TEE/intent infra), liquidity design, and
-        the same production-key gate as the rest of the private path. See{" "}
+        Each step keeps the same rule: no fake private fills. See{" "}
         <Link href="/docs/production">Production gate</Link>.
       </p>
 
       <h2>What we will not do</h2>
       <ul>
         <li>Hide a public swap behind a “private” button</li>
-        <li>Ship sealed UI before proofs/settlement exist</li>
+        <li>Claim production readiness on dev proving keys</li>
         <li>Promise dark-pool guarantees on thin testnet liquidity</li>
       </ul>
 
@@ -89,17 +118,24 @@ export default function DocsSealedTradePage() {
           Engineering design: <code>contracts/SEALED_TRADE.md</code>
         </li>
         <li>
-          Type placeholders only: <code>app/src/lib/sealedTrade.ts</code> (
-          <code>sealedTradeReady() === false</code>)
+          Status helper: <code>app/src/lib/sealedTrade.ts</code> (
+          <code>sealedTradeReady() === true</code> when artifacts ship; panel
+          still checks the on-chain verifier)
         </li>
         <li>
-          Production keys gate: <Link href="/docs/production">/docs/production</Link>
+          UI: <code>app/src/components/app/SealedTradePanel.tsx</code>
+        </li>
+        <li>
+          Production keys gate:{" "}
+          <Link href="/docs/production">/docs/production</Link>
         </li>
       </ul>
 
       <p>
-        Try the adapter:{" "}
-        <Link href="/app/trade?path=vault">Trade → From vault</Link>. Hold/move:{" "}
+        Try it:{" "}
+        <Link href="/app/trade?path=private">Trade → Private trade</Link>.
+        Adapter fallback:{" "}
+        <Link href="/app/trade?path=vault">From vault</Link>. Hold/move:{" "}
         <Link href="/app/move">Move</Link>.
       </p>
     </DocsLayout>

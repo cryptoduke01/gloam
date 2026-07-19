@@ -76,7 +76,7 @@ export async function proveTransferInBrowser(
 const SEALED_SWAP_WASM = CIRCUIT_ARTIFACTS.sealedSwapWasm.path;
 const SEALED_SWAP_ZKEY = CIRCUIT_ARTIFACTS.sealedSwapZkey.path;
 
-/** Prove sealed swap (dev keys). Settlement contract not live yet. */
+/** Prove sealed swap (dev keys). Settlement live on RH testnet Poseidon vault. */
 export async function proveSealedSwapInBrowser(
   circomInput: Record<string, string | string[]>
 ) {

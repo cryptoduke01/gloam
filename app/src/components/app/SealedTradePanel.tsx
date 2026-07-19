@@ -348,7 +348,7 @@ export function SealedTradePanel({
                 : "Vault has the method, but the private-trade checker is not set yet (owner must attach the verifier)."}
             </p>
             <p className="mt-2 text-xs">
-              Until then, use the vault path that works today — the swap step is
+              Until then, use the vault path that works today. The swap step is
               still public on the market.
             </p>
             <button

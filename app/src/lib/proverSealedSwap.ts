@@ -1,6 +1,6 @@
 /**
- * Witness builder for sealedSwap.circom (not wired to snarkjs artifacts yet).
- * When zkey/wasm ship, proveSealedSwapInBrowser will mirror proveTransferInBrowser.
+ * Witness builder for sealedSwap.circom.
+ * Prove path: proveSealedSwapInBrowser in proveClient.ts (dev zkey/wasm under /public/circuits).
  */
 
 import type { Address, Hex } from "viem";
@@ -150,7 +150,7 @@ export async function buildSealedSwapWitness(args: {
   };
 }
 
-/** Dev zkey/wasm shipped under /public/circuits — settlement still not live */
+/** Dev zkey/wasm shipped under /public/circuits (settlement live on RH testnet vault). */
 export function sealedSwapArtifactsReady(): boolean {
   return true;
 }
