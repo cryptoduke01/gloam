@@ -314,8 +314,8 @@ export default function WhitepaperPage() {
         <li>Private send (transfer) and cash-out (unshield) with browser proofs</li>
         <li>Note import for payment packages received off-app</li>
         <li>
-          Vault trade adapter (cash out → public swap → re-shield); sealed-size
-          private trade remains future work
+          Private trade (sealedSwap): vault ETH → vault stock with size privacy
+          defaults; via-market adapter when a public pool exists
         </li>
       </ul>
       <p>
@@ -353,16 +353,16 @@ export default function WhitepaperPage() {
       <ol>
         <li>
           <strong>Complete (testnet):</strong> public path, shield, unshield,
-          private send circuit and dual verifier, client proof path.
+          private send, sealed private trade (size privacy on by default),
+          dual/sealed verifiers, client proofs.
         </li>
         <li>
-          <strong>Near term:</strong> UX clarity for non-specialists; safer note
-          handoff (encryption to a viewing key); operational monitoring of the
-          anonymity set.
+          <strong>Near term:</strong> stronger public-input privacy; anonymity
+          set growth; operational monitoring; inventory ops.
         </li>
         <li>
-          <strong>Mid term:</strong> sealed-size private trade (hide swap size
-          on the open book); deeper liquidity routing for stocks and memes.
+          <strong>Mid term:</strong> oracle-bound rates; deeper liquidity for
+          stocks and memes; multi-chain expansion after RH rails are solid.
         </li>
         <li>
           <strong>Production gate:</strong> independent review, production
