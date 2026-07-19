@@ -29,6 +29,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
+import { VaultHealth } from "./VaultHealth";
 
 function Toggle({
   on,
@@ -497,6 +498,15 @@ export function SettingsView() {
             {backupMsg}
           </p>
         )}
+      </section>
+
+      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          Vault health
+        </p>
+        <div className="mt-3">
+          <VaultHealth />
+        </div>
       </section>
 
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
