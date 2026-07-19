@@ -114,13 +114,16 @@ export function MarketsView() {
                 <p className="text-xs text-mute">{m.name}</p>
               </div>
               {showType && (
-                <div>
+                <div className="flex flex-wrap gap-1">
                   {m.address ? (
                     <StatusPill tone="lime">Onchain</StatusPill>
                   ) : m.kind === "native" ? (
                     <StatusPill>Gas</StatusPill>
                   ) : (
                     <StatusPill>Watch</StatusPill>
+                  )}
+                  {m.privateReady && (
+                    <StatusPill tone="lime">Private</StatusPill>
                   )}
                 </div>
               )}
@@ -152,10 +155,18 @@ export function MarketsView() {
                 {m.change24h}%
               </p>
               <Link
-                href={`/app/trade?market=${m.id}`}
-                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-lime/50 sm:justify-self-end"
+                href={
+                  m.privateReady
+                    ? `/app/trade?market=${m.id}&path=sealed`
+                    : `/app/trade?market=${m.id}`
+                }
+                className={`inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-sm sm:justify-self-end ${
+                  m.privateReady
+                    ? "bg-lime font-semibold text-black hover:opacity-90"
+                    : "border border-line text-foreground hover:border-lime/50"
+                }`}
               >
-                Trade
+                {m.privateReady ? "Private" : "Trade"}
               </Link>
             </li>
           ))}

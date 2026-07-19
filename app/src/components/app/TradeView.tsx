@@ -69,7 +69,8 @@ export function TradeView() {
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<"swap" | "transfer">("transfer");
   const [pathMode, setPathMode] = useState<PathMode>(() => {
-    if (pathParam === "sealed") return "sealed";
+    // path=private is an alias for sealed private trade
+    if (pathParam === "sealed" || pathParam === "private") return "sealed";
     if (pathParam === "vault" && shieldLive) return "vault";
     return "public";
   });
