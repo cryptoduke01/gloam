@@ -281,6 +281,10 @@ export function SealedTradePanel({
       void import("@/lib/track").then(({ track }) => {
         track("sealed_swap_success", { asset: marketSymbol.slice(0, 12) });
       });
+      void import("@/lib/onboarding").then(({ markOnboardingStep }) => {
+        markOnboardingStep("private-trade");
+        markOnboardingStep("shield");
+      });
     })();
   }, [
     isSuccess,

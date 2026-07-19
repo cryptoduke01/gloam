@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   useAccount,
   useChainId,
-  usePublicClient,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
@@ -15,6 +14,7 @@ import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { formatSealedAmount } from "@/lib/sealedRates";
+import { getRhPublicClient } from "@/lib/rhClient";
 import {
   HASH_SCHEME,
   SHIELD_GAS_LIMIT,
@@ -91,7 +91,6 @@ export function MoveView() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const onProduct = chainId === CHAIN;
-  const publicClient = usePublicClient({ chainId: CHAIN });
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     loading: treeLoading,
@@ -178,6 +177,10 @@ export function MoveView() {
         void import("@/lib/track").then(({ track }) => {
           track("private_pay_success");
         });
+        void import("@/lib/onboarding").then(({ markOnboardingStep }) => {
+          markOnboardingStep("move");
+          markOnboardingStep("shield");
+        });
         setShowSuccess(true);
         setBusy(false);
         setStatus(null);
@@ -191,9 +194,9 @@ export function MoveView() {
 
       // Resolve leaf index from chain tree (safe if others inserted mid-flight)
       let changeLeaf: number | undefined;
-      if (pendingChange.current && publicClient) {
+      if (pendingChange.current) {
         try {
-          const tree = await syncShieldTree(publicClient);
+          const tree = await syncShieldTree(getRhPublicClient());
           const idx = tree?.indexByCommitment.get(
             pendingChange.current.commitment.toLowerCase()
           );
@@ -248,7 +251,7 @@ export function MoveView() {
       setBusy(false);
       setStatus(null);
     })();
-  }, [isSuccess, hash, refreshNotes, refreshTree, publicClient, writeContract]);
+  }, [isSuccess, hash, refreshNotes, refreshTree, writeContract]);
 
   // Wallet reject / tx fail: drop ephemeral payment secrets
   useEffect(() => {
@@ -351,6 +354,7 @@ export function MoveView() {
       void import("@/lib/track").then(({ track }) => {
         track("unshield_success");
       });
+      // cash out is intentional exit — no onboarding mark
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cash out failed");
       setBusy(false);
@@ -504,10 +508,6 @@ export function MoveView() {
   }
 
   async function scanInbox() {
-    if (!publicClient) {
-      setInboxStatus("Connect wallet / RPC first.");
-      return;
-    }
     if (!isPayMemoLive()) {
       setInboxStatus(
         "On-chain memo board not deployed yet — paste ticket manually or deploy GloamPayMemo."
@@ -518,7 +518,7 @@ export function MoveView() {
     setInbox([]);
     try {
       const memos = await fetchPaymentMemos(
-        publicClient,
+        getRhPublicClient(),
         PAY_MEMO_DEPLOY_BLOCK
       );
       const hits: { memo: ScannedMemo; label: string; ticket: string }[] = [];
@@ -628,10 +628,10 @@ export function MoveView() {
 
   // Auto-scan inbox when opening Receive (if memo board live)
   useEffect(() => {
-    if (mode !== "receive" || !publicClient || !isPayMemoLive()) return;
+    if (mode !== "receive" || !isPayMemoLive()) return;
     void scanInbox();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-tab scan once per enter
-  }, [mode, publicClient]);
+  }, [mode]);
 
   // Live preview when pasting a ticket (amount only — not a full claim)
   useEffect(() => {

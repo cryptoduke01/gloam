@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePublicClient } from "wagmi";
 import type { Address, Hex } from "viem";
-import { PRODUCT_CHAIN_ID } from "@/lib/chain";
+import { getRhPublicClient } from "@/lib/rhClient";
 import {
   SHIELD_POOL_ADDRESS,
   activeSpendableNotes,
@@ -22,9 +21,10 @@ import {
 /**
  * Local notes + chain history. Balance only counts notes with a local secret
  * that are not spent on-chain.
+ *
+ * Uses dedicated RH RPC — not the wallet network.
  */
 export function useLocalShieldNotes(address?: string | null) {
-  const publicClient = usePublicClient({ chainId: PRODUCT_CHAIN_ID });
   const [local, setLocal] = useState<LocalNote[]>([]);
   const [chain, setChain] = useState<LocalNote[]>([]);
   const [ready, setReady] = useState(false);
@@ -39,7 +39,8 @@ export function useLocalShieldNotes(address?: string | null) {
 
   const reconcileSpent = useCallback(
     async (notes: LocalNote[]) => {
-      if (!publicClient || !SHIELD_POOL_ADDRESS) return;
+      if (!SHIELD_POOL_ADDRESS) return;
+      const publicClient = getRhPublicClient();
       const candidates = notes.filter(
         (n) =>
           n.nullifier &&
@@ -69,16 +70,17 @@ export function useLocalShieldNotes(address?: string | null) {
         setLocal(loadLocalNotes(address));
       }
     },
-    [publicClient, address]
+    [address]
   );
 
   const syncChain = useCallback(async () => {
-    if (!publicClient || !address) {
+    if (!address || !SHIELD_POOL_ADDRESS) {
       setChain([]);
       return;
     }
     setSyncing(true);
     try {
+      const publicClient = getRhPublicClient();
       const rows = await fetchChainShieldNotes(
         publicClient,
         address as Address
@@ -86,36 +88,34 @@ export function useLocalShieldNotes(address?: string | null) {
       setChain(rows);
       const merged = mergeNotes(loadLocalNotes(address), rows);
       await reconcileSpent(merged);
-      // If vault holds 0 ETH, clear stale local ETH notes (ghost balances)
-      if (SHIELD_POOL_ADDRESS) {
-        try {
-          const ethInPool = (await publicClient.readContract({
-            address: SHIELD_POOL_ADDRESS,
-            abi: shieldPoolAbi,
-            functionName: "deposited",
-            args: ["0x0000000000000000000000000000000000000000"],
-          })) as bigint;
-          if (ethInPool === BigInt(0)) {
-            const locals = loadLocalNotes(address);
-            for (const n of locals) {
-              if (
-                n.status !== "recovered" &&
-                (!n.asset ||
-                  n.asset === "0x0000000000000000000000000000000000000000")
-              ) {
-                markNoteRecovered(n.id);
-              }
+      // Ghost-note cleanup: only wipe local ETH if pool ETH inventory is zero
+      try {
+        const ethInPool = (await publicClient.readContract({
+          address: SHIELD_POOL_ADDRESS,
+          abi: shieldPoolAbi,
+          functionName: "deposited",
+          args: ["0x0000000000000000000000000000000000000000"],
+        })) as bigint;
+        if (ethInPool === BigInt(0)) {
+          const locals = loadLocalNotes(address);
+          for (const n of locals) {
+            if (
+              n.status !== "recovered" &&
+              (!n.asset ||
+                n.asset === "0x0000000000000000000000000000000000000000")
+            ) {
+              markNoteRecovered(n.id);
             }
-            setLocal(loadLocalNotes(address));
           }
-        } catch {
-          /* ignore */
+          setLocal(loadLocalNotes(address));
         }
+      } catch {
+        /* ignore */
       }
     } finally {
       setSyncing(false);
     }
-  }, [publicClient, address, reconcileSpent]);
+  }, [address, reconcileSpent]);
 
   const refresh = useCallback(() => {
     refreshLocal();
@@ -136,7 +136,6 @@ export function useLocalShieldNotes(address?: string | null) {
     };
     const onFocus = () => {
       const now = Date.now();
-      // Debounce focus re-sync (RPC / log load can be heavy)
       if (now - lastFocusSync.current < 15_000) {
         refreshLocal();
         return;
@@ -150,24 +149,31 @@ export function useLocalShieldNotes(address?: string | null) {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", onFocus);
     };
-  }, [refreshLocal, refresh]);
+  }, [refresh, refreshLocal]);
 
-  const notes = useMemo(() => mergeNotes(local, chain), [local, chain]);
-  /** Spendable vault notes (have secret, not recovered/spent) */
-  const open = useMemo(() => activeSpendableNotes(notes), [notes]);
-  /** Deposit history including chain-only rows */
-  const history = useMemo(() => confirmedNotes(notes), [notes]);
-  const shieldedWei = useMemo(() => sumEthWei(notes), [notes]);
-  const byAsset = useMemo(() => sumByAsset(notes), [notes]);
+  const merged = useMemo(
+    () => mergeNotes(local, chain),
+    [local, chain]
+  );
+  const open = useMemo(
+    () => activeSpendableNotes(merged),
+    [merged]
+  );
+  const confirmed = useMemo(() => confirmedNotes(merged), [merged]);
+  const byAsset = useMemo(() => sumByAsset(open), [open]);
+  const shieldedWei = useMemo(() => sumEthWei(open), [open]);
 
   return {
-    notes,
+    local,
+    chain,
+    merged,
     open,
-    history,
-    shieldedWei,
+    confirmed,
     byAsset,
+    shieldedWei,
     ready,
     syncing,
     refresh,
+    refreshLocal,
   };
 }

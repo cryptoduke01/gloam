@@ -341,6 +341,10 @@ export function ShieldView() {
       </>
     );
     setShowSuccess(true);
+    void import("@/lib/onboarding").then(({ markOnboardingStep }) => {
+      markOnboardingStep("shield");
+      markOnboardingStep("faucet");
+    });
   }, [
     isSuccess,
     hash,
