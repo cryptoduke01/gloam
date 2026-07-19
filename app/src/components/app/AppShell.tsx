@@ -11,7 +11,7 @@ import { WelcomeModal } from "./WelcomeModal";
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
   { href: "/app/send", label: "Send" },
-  { href: "/app/trade", label: "Trade" },
+  { href: "/app/trade?path=sealed", label: "Trade" },
   { href: "/app/markets", label: "Markets" },
   { href: "/app/shield", label: "Shield" },
   { href: "/app/move", label: "Move" }, // private send + cash out
@@ -19,7 +19,9 @@ const nav = [
 
 function isActive(pathname: string, href: string, exact?: boolean) {
   if (exact) return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+  // Nav hrefs may include query (?path=sealed) — match on path only
+  const pathOnly = href.split("?")[0] ?? href;
+  return pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
 }
 
 export function AppShell({
