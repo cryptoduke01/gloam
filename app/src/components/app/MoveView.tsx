@@ -75,6 +75,7 @@ import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
+import { VaultHealth } from "./VaultHealth";
 
 type Mode = "send" | "cashout" | "receive";
 /** Direct (pay to sticky tag) vs open bearer ticket */
@@ -713,19 +714,25 @@ export function MoveView() {
             </div>
 
             <div className="space-y-5 p-5 sm:p-6">
-              <DevKeysBanner />
+              <DevKeysBanner compact />
+              <VaultHealth compact />
               <p className="text-sm leading-relaxed text-mute">
-                <strong className="text-foreground">Private send</strong> uses
-                the same shape as a normal send:{" "}
-                <strong className="text-foreground">To</strong> (their Gloam tag)
-                + <strong className="text-foreground">Amount</strong> + confirm.
-                Under the hood: vault proof + encrypted on-chain memo
-                {isPayMemoLive() ? " (live)" : ""}. Not a public{" "}
-                <span className="font-mono">0x</span> transfer. For that, use{" "}
+                <strong className="text-foreground">Private send</strong>: To
+                (their tag) + Amount. Chain sees a vault transfer proof — not
+                “Alice paid Bob X”. Memo is encrypted
+                {isPayMemoLive() ? " (live inbox scan)" : ""}. For a public{" "}
+                <span className="font-mono">0x</span> transfer use{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
                   Send
                 </Link>
-                .
+                .{" "}
+                <Link
+                  href="/app/trade?path=sealed"
+                  className="text-lime hover:underline"
+                >
+                  Private trade
+                </Link>{" "}
+                keeps size off the book.
               </p>
 
               {/* Mode tabs */}
@@ -928,8 +935,8 @@ export function MoveView() {
                           </button>
                         </div>
                         <p className="mt-1 text-xs text-mute">
-                          Stays in the vault. Change returns to you as a new
-                          note.
+                          Stays in the vault. Amount is not a public transfer
+                          line. Change returns to you as a new note.
                         </p>
                       </div>
                       {!recipientTag.trim() && (
@@ -1010,13 +1017,31 @@ export function MoveView() {
 
                   {mode === "cashout" && (
                     <div className="space-y-3">
-                      <p className="text-sm text-mute">
-                        Withdraw the full selected note to your connected
-                        wallet. This exit is visible on the explorer.
-                      </p>
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-mute">
+                        <p className="font-medium text-foreground">
+                          Cash out ends privacy for this note
+                        </p>
+                        <p className="mt-1">
+                          The explorer will show asset, amount, and your wallet.
+                          Prefer private send or private trade if you want size
+                          to stay off the public book.
+                        </p>
+                      </div>
+                      {selected && (
+                        <p className="text-sm text-mute">
+                          Withdraw{" "}
+                          <strong className="text-foreground">
+                            {formatSealedAmount(BigInt(selected.amountWei))}{" "}
+                            {assetLabel(selected.asset)}
+                          </strong>{" "}
+                          to your connected wallet.
+                        </p>
+                      )}
                       {selected && poolForCashOut != null && (
                         <div className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-xs text-mute">
-                          <span>Vault inventory ({assetLabel(selected.asset)})</span>
+                          <span>
+                            Vault inventory ({assetLabel(selected.asset)})
+                          </span>
                           <span className="font-medium text-foreground">
                             {formatSealedAmount(poolForCashOut)}
                           </span>
@@ -1025,8 +1050,7 @@ export function MoveView() {
                       {cashOutInventoryShort && (
                         <p className="text-xs leading-relaxed text-amber-600 dark:text-amber-500">
                           Pool holds less than this note. Cash out will fail
-                          on-chain until more of this asset is shielded into
-                          the vault.
+                          until more of this asset is shielded into the vault.
                         </p>
                       )}
                       <button
@@ -1041,11 +1065,19 @@ export function MoveView() {
                           cashOutInventoryShort
                         }
                         onClick={() => void onCashOut()}
-                        className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
                       >
-                        {working && pendingAction.current === "cashout"
-                          ? status || "Working…"
-                          : "Cash out to wallet"}
+                        {working && pendingAction.current === "cashout" ? (
+                          <>
+                            <span
+                              className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
+                              aria-hidden
+                            />
+                            {status || "Working…"}
+                          </>
+                        ) : (
+                          "Cash out (public amount)"
+                        )}
                       </button>
                       {selected?.leafIndex == null && (
                         <p className="text-xs text-amber-600 dark:text-amber-500">

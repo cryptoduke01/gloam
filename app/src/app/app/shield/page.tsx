@@ -10,7 +10,7 @@ export default function ShieldPage() {
   return (
     <AppShell
       title="Shield"
-      subtitle="Put money in the vault. Then Move to pay privately or cash out."
+      subtitle="Enter the privacy vault. Then private send, private trade, or cash out (public amount)."
     >
       <ShieldView />
     </AppShell>

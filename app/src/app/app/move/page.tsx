@@ -10,7 +10,7 @@ export default function MovePage() {
   return (
     <AppShell
       title="Move"
-      subtitle="Private send: To (tag) + Amount, like a normal send, with the vault under the hood."
+      subtitle="Private send keeps amount off the public book. Cash out publishes size — stay in vault when you can."
     >
       <MoveView />
     </AppShell>

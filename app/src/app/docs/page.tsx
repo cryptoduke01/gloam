@@ -88,10 +88,10 @@ export default function DocsOverviewPage() {
         <li>Private send + payment codes (optional passphrase)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
         <li>
-          <Link href="/docs/sealed-trade">Sealed private trade</Link> (display
-          marks, vault inventory for cash-out)
+          <Link href="/docs/sealed-trade">Private trade</Link> — size privacy
+          on by default (min-out floor)
         </li>
-        <li>Vault trade adapter (public swap edge)</li>
+        <li>Vault trade adapter (public swap edge; needs DEX pool)</li>
         <li>Note backup (optional lock) in Settings</li>
       </ul>
 

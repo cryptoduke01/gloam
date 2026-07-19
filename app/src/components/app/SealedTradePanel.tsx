@@ -275,7 +275,10 @@ export function SealedTradePanel({
     setShowSuccess(true);
     setBusy(false);
     setStatus(null);
-  }, [isSuccess, hash, refreshNotes, refreshTree]);
+    void import("@/lib/track").then(({ track }) => {
+      track("sealed_swap_success", { asset: marketSymbol.slice(0, 12) });
+    });
+  }, [isSuccess, hash, refreshNotes, refreshTree, marketSymbol]);
 
   useEffect(() => {
     if (!writeError) return;

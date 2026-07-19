@@ -54,6 +54,7 @@ import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
+import { VaultHealth } from "./VaultHealth";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
@@ -594,6 +595,7 @@ export function ShieldView() {
 
             <form onSubmit={onSubmit} className="space-y-5 p-5 sm:p-6">
               <DevKeysBanner compact />
+              <VaultHealth compact />
               <div>
                 <p className="text-sm font-medium text-foreground">Asset</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
