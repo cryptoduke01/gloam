@@ -1,6 +1,6 @@
 # Gloam Contracts
 
-**Testnet-only** until private rails are real. Robinhood Chain testnet `46630`.
+**Testnet-only** until production ceremony + audit. Robinhood Chain testnet `46630`.
 
 ## Do we need contracts?
 
@@ -8,40 +8,50 @@
 | --- | --- |
 | Send ETH / ERC-20 | No — native + faucet tokens |
 | Public swap (when pools exist) | No — existing DEX router |
-| **Shield / private move / private trade** | **Yes — this package** |
+| **Shield / private send / private trade / cash out** | **Yes — this package** |
 
-## What we will deploy (order)
+## Live (RH testnet)
 
-1. **ShieldPool (Phase 1 — done in source)** — ETH/ERC-20 custody + keccak Merkle tree + unshield payout path
-2. **Verifier** — onchain check of ZK proofs (transfer / unshield stay locked until set)
-3. **Circuits** — bind amount/asset inside the note (Phase 2)
-4. **Trade adapter** (later) — private intent → settlement
+Product vault (sealed): **`0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F`**
 
-### Optional: seed testnet stock pools (swaps)
+Full addresses: [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json)
 
-```bash
-export DEPLOYER_PK=0x...   # wallet with faucet stocks + ETH
-forge script script/SeedTestnetLiquidity.s.sol --rpc-url https://rpc.testnet.chain.robinhood.com --broadcast
-```
+| Feature | Status |
+| --- | --- |
+| Shield / unshield / transfer | Live (dev keys) |
+| Sealed private trade | Live (dev keys) |
+| Pay memos | Live |
+| Production keys | Not yet |
 
 ## Stack
 
 - [Foundry](https://book.getfoundry.sh/) — `forge` / `cast` / `anvil`
-- Solidity `0.8.24+`
-- Target: Robinhood Chain testnet (Arbitrum Orbit EVM)
+- Solidity `0.8.24+`, `evm_version = shanghai` (RH faucet tokens use PUSH0)
+- Circom circuits under `circuits/`
 
 ## Commands
 
 ```bash
 cd contracts
-forge install   # after forge is installed
 forge build
 forge test
+
+# Seed vault inventory (need faucet stocks + DEPLOYER_PK)
+export DEPLOYER_PK=0x...
+export RH_TESTNET_RPC=https://rpc.testnet.chain.robinhood.com
+forge script script/SeedVaultInventory.s.sol \
+  --rpc-url $RH_TESTNET_RPC --broadcast --gas-estimate-multiplier 200 -vvvv
 ```
 
-Deploy scripts and addresses land in `deployments/testnet.json` when we ship.
+## Docs
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [SEALED_TRADE.md](./SEALED_TRADE.md)
+- [PRODUCTION.md](./PRODUCTION.md)
+- [AUDIT.md](./AUDIT.md)
 
 ## Honesty
 
-- No mock “private success” in the app until these contracts + proofs are live.
-- Public app keeps working without this package.
+- No mock “private success” in the app.
+- Public app paths work without this package.
+- Dev ceremony zkeys only until production gate.

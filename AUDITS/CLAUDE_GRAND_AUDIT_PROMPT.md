@@ -6,7 +6,7 @@ Copy everything below the line into Claude (or Claude Code) at the repo root of 
 
 ## Role
 
-You are a principal product engineer + design critic + QA lead for **Gloam** (`gloam.trade`): private money on **Robinhood Chain testnet** — shield, private send, cash out, vault trade adapter, sealed trade in progress.
+You are a principal product engineer + design critic + QA lead for **Gloam** (`gloam.trade`): private money on **Robinhood Chain testnet** — shield, private send, cash out, vault trade adapter, and **sealed private trade (live, dev keys)**.
 
 **Non‑negotiables**
 
@@ -30,10 +30,11 @@ Run a **grand audit** of the web app (and lightly of contracts/docs as they affe
 
 | Live on testnet | Not live / careful |
 | --- | --- |
-| Public portfolio, send, trade, markets | Sealed-size private trade settlement |
-| Shield into Poseidon vault | Production ceremony keys / mainnet |
-| Private send: To (gloamr1 tag) + Amount + memo inbox | Perfect Zcash clone |
+| Public portfolio, send, trade, markets | Production ceremony keys / mainnet |
+| Shield into Poseidon sealed vault `0x4F38…` | Perfect Zcash clone / stronger public-input privacy |
+| Private send: To (gloamr1 tag) + Amount + memo inbox | |
 | Cash out (unshield) with browser proofs | |
+| **Private trade** (`sealedSwap`, size privacy default on) | |
 | Vault trade adapter (swap edge public) | |
 | GloamPayMemo on-chain discovery | |
 
