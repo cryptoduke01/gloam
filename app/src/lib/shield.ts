@@ -10,7 +10,7 @@ import { makeBoundNote } from "./note";
 import {
   activeHashScheme,
   activePoolAddress,
-  TESTNET_POSEIDON_DEPLOY_BLOCK,
+  activeShieldDeployBlock,
   type HashScheme,
 } from "./config";
 
@@ -18,13 +18,8 @@ import {
 export const TESTNET_SHIELD_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** getLogs from pool deploy block (Poseidon default; override via env) */
-export const SHIELD_DEPLOY_BLOCK = BigInt(
-  process.env.NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK ??
-    (activeHashScheme() === "poseidon"
-      ? TESTNET_POSEIDON_DEPLOY_BLOCK.toString()
-      : "90232912")
-);
+/** getLogs from pool deploy block (sealed Poseidon default; rejects stale A488 env) */
+export const SHIELD_DEPLOY_BLOCK = activeShieldDeployBlock();
 
 export const HASH_SCHEME: HashScheme = activeHashScheme();
 
