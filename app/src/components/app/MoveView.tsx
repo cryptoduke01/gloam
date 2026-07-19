@@ -397,17 +397,7 @@ export function MoveView() {
       const { proofBytes } = await proveTransferInBrowser(w.circomInput);
 
       // Change stays with sender only. Payment secret goes solely into share package.
-      let changeNullifier: Hex | undefined;
       if (BigInt(w.changeNote.amountWei) > 0n) {
-        try {
-          const n = await noteNullifierPoseidon(
-            hexToField(w.changeNote.secret),
-            hexToField(w.changeNote.commitment)
-          );
-          changeNullifier = fieldToHex(n);
-        } catch {
-          /* optional for spend tracking */
-        }
         pendingChange.current = {
           id: `chg-${Date.now()}`,
           chainId: CHAIN,
@@ -416,7 +406,7 @@ export function MoveView() {
           amountWei: w.changeNote.amountWei,
           commitment: w.changeNote.commitment,
           secret: w.changeNote.secret,
-          nullifier: changeNullifier,
+          nullifier: w.changeNote.nullifier,
           bound: true,
           scheme: "poseidon",
           from: address,

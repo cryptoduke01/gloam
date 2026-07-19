@@ -46,7 +46,7 @@ const steps = [
   {
     n: "03",
     title: "Trade",
-    body: "Public wallet swaps, or vault adapter (cash out → swap → re-shield). Sealed-size private trade is next.",
+    body: "Private trade keeps size off the open book. Public wallet and via-market paths remain when you need them. Live on testnet.",
     src: "/ascii/trade.png",
   },
 ];

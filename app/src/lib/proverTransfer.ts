@@ -25,6 +25,7 @@ export type TransferWitness = {
   paymentNote: {
     secret: Hex;
     commitment: Hex;
+    nullifier: Hex;
     amountWei: string;
     asset: Address;
   };
@@ -32,6 +33,7 @@ export type TransferWitness = {
   changeNote: {
     secret: Hex;
     commitment: Hex;
+    nullifier: Hex;
     amountWei: string;
     asset: Address;
   };
@@ -74,6 +76,11 @@ export async function buildTransferWitness(args: {
     amountChange,
     asset
   );
+  const nullifierPay = await noteNullifierPoseidon(secretPay, newCommitment0);
+  const nullifierChange = await noteNullifierPoseidon(
+    secretChange,
+    newCommitment1
+  );
 
   let blocker: string | null = null;
   if (!commitmentMatches) blocker = "This note secret does not match the leaf.";
@@ -107,12 +114,14 @@ export async function buildTransferWitness(args: {
     paymentNote: {
       secret: fieldToHex(secretPay),
       commitment: fieldToHex(newCommitment0),
+      nullifier: fieldToHex(nullifierPay),
       amountWei: args.amountPay.toString(),
       asset,
     },
     changeNote: {
       secret: fieldToHex(secretChange),
       commitment: fieldToHex(newCommitment1),
+      nullifier: fieldToHex(nullifierChange),
       amountWei: amountChange.toString(),
       asset,
     },

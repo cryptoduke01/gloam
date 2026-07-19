@@ -25,7 +25,7 @@ const pack = {
   v: 1,
   t: "gloam-private-note",
   s: "poseidon",
-  p: "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+  p: "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F",
   a: "0x0000000000000000000000000000000000000000",
   w: "1000000000000000",
   k: "test-secret-not-a-key",

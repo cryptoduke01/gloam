@@ -45,7 +45,7 @@ export function ActivityFeed() {
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
           Public activity
         </p>
-        <StatusPill>Onchain</StatusPill>
+        <StatusPill>Open book</StatusPill>
       </div>
 
       {isLoading && (
@@ -58,7 +58,8 @@ export function ActivityFeed() {
       )}
       {!isLoading && !isError && txs.length === 0 && (
         <p className="px-4 py-6 text-sm text-mute">
-          No activity yet. Send ETH to see it here.
+          No public wallet activity yet. Vault private trade and private send
+          intentionally stay off this list.
         </p>
       )}
 
