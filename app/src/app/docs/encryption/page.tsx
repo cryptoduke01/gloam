@@ -18,8 +18,8 @@ export default function DocsEncryptionPage() {
       glance={[
         { label: "In", value: "Shield" },
         { label: "Move", value: "Private send" },
+        { label: "Trade", value: "Private trade" },
         { label: "Out", value: "Cash out" },
-        { label: "Network", value: "Testnet" },
       ]}
     >
       <h2>The short version</h2>
@@ -27,7 +27,10 @@ export default function DocsEncryptionPage() {
         <strong>Shield</strong> = put money into Gloam’s vault.
         <br />
         <strong>Private send</strong> = pay someone while funds stay in the
-        vault (share a payment code).
+        vault (share a payment tag).
+        <br />
+        <strong>Private trade</strong> = sell vault ETH for vault stock without
+        a public DEX hop (size privacy on by default).
         <br />
         <strong>Cash out</strong> = take it back to your open wallet with a
         proof that you own it.
@@ -59,8 +62,8 @@ export default function DocsEncryptionPage() {
           },
           {
             n: "4",
-            title: "You private-send or cash out",
-            body: "Private send splits a note into payment + change and hands the recipient a code. Cash out builds a proof and pays your open wallet.",
+            title: "You private-send, trade, or cash out",
+            body: "Private send splits a note into payment + change. Private trade swaps inside the vault. Cash out builds a proof and pays your open wallet.",
           },
         ]}
       />
@@ -72,7 +75,7 @@ export default function DocsEncryptionPage() {
       <ul>
         <li>That someone used the Gloam contract</li>
         <li>When money entered or left the vault (shield / cash out edges)</li>
-        <li>That a private transfer happened — not who paid whom how much</li>
+        <li>That a private transfer or private trade happened — not who paid whom how much (and not exact size when max size privacy is on)</li>
         <li>Not (goal) your exact private bag while it stays inside</li>
       </ul>
 

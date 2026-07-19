@@ -148,8 +148,8 @@ export function AppShell({
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p>
-            Testnet · dev proving keys. Shield, private send, cash out, vault
-            trade adapter.{" "}
+            Testnet · dev proving keys. Shield, private send, cash out, private
+            trade.{" "}
             <a href="/docs/production" className="text-lime hover:underline">
               Production gate
             </a>

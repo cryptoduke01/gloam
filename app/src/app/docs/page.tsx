@@ -18,7 +18,7 @@ export default function DocsOverviewPage() {
         { label: "Product", value: "gloam.trade/app" },
         { label: "Network", value: "RH testnet" },
         { label: "Chain ID", value: "46630" },
-        { label: "Live", value: "Vault + send" },
+        { label: "Live", value: "Vault + private trade" },
         { label: "Keys", value: "Dev ceremony" },
       ]}
     >
@@ -26,9 +26,9 @@ export default function DocsOverviewPage() {
       <p>
         Gloam is an app on <strong>Robinhood Chain</strong> where you can put
         assets into a shared vault (“shield”), pay privately inside the vault,
-        cash out with a real proof, and use a vault trade adapter. Goal: stocks
-        and memes can sit, move, and eventually trade more privately than a
-        normal public wallet.
+        trade privately (size privacy on by default), and cash out with a real
+        proof. Goal: stocks and memes can sit, move, and trade more privately
+        than a normal public wallet.
       </p>
       <p>
         Right now everything is <strong>testnet</strong> — play money,{" "}
@@ -54,8 +54,9 @@ export default function DocsOverviewPage() {
           <Link href="/app/shield">Shield</Link> a tiny amount of testnet ETH.
         </li>
         <li>
-          <Link href="/app/move">Move</Link> → private send or cash out with a
-          browser proof.
+          <Link href="/app/trade?path=sealed">Trade → Private</Link> sell vault
+          ETH for vault stock, or <Link href="/app/move">Move</Link> to pay /
+          cash out with a browser proof.
         </li>
       </ol>
 
@@ -65,17 +66,17 @@ export default function DocsOverviewPage() {
           {
             n: "1",
             title: "Shield",
-            body: "Deposit into the Gloam vault. Your wallet balance goes down; the pool holds the asset.",
+            body: "Deposit into the Gloam vault. Your wallet balance goes down; the vault holds the asset.",
           },
           {
             n: "2",
-            title: "Move",
-            body: "Private send (payment code) or cash out. Proofs run in your browser.",
+            title: "Private trade",
+            body: "Vault ETH → vault stock with size privacy on. No public DEX hop.",
           },
           {
             n: "3",
-            title: "Trade adapter",
-            body: "Optional: cash out → public swap → re-shield. Size still public on the swap edge.",
+            title: "Move",
+            body: "Private send (payment tag) or cash out. Proofs run in your browser.",
           },
         ]}
       />

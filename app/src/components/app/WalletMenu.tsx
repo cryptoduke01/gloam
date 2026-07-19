@@ -141,28 +141,36 @@ export function WalletMenu() {
           </div>
           <div className="p-1.5">
             <Link
-              href="/app/settings"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
-            >
-              Settings
-            </Link>
-            <Link
-              href="/app/send"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
-            >
-              Send
-            </Link>
-            <Link
               href="/app"
               role="menuitem"
               onClick={() => setOpen(false)}
               className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
             >
               Portfolio
+            </Link>
+            <Link
+              href="/app/trade?path=sealed"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
+            >
+              Private trade
+            </Link>
+            <Link
+              href="/app/move"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
+            >
+              Private send
+            </Link>
+            <Link
+              href="/app/settings"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex min-h-10 items-center rounded-lg px-3 text-sm text-foreground hover:bg-background"
+            >
+              Settings
             </Link>
             <button
               type="button"
