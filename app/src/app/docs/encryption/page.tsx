@@ -79,13 +79,16 @@ export default function DocsEncryptionPage() {
       <h2>What we do not claim</h2>
       <p>
         Cash out is not invisible — leaving the vault is a public moment.
-        Private send hides the payment details, not the fact that the vault was
-        used. Private trade is next.
+        Private send hides payment size and counterparty, not the fact that the
+        vault was used. Private trade hides size (default min-out floor) but
+        pair and caller remain public.
       </p>
 
       <p>
         Try it: <Link href="/app/shield">Shield</Link> →{" "}
-        <Link href="/app/move">Move</Link> (send or cash out).
+        <Link href="/app/move">Move</Link> (private send) or{" "}
+        <Link href="/app/trade?path=sealed">Private trade</Link> → cash out only
+        when you need the open wallet.
       </p>
     </DocsLayout>
   );

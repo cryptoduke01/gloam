@@ -39,8 +39,16 @@ export default function DocsChainPage() {
           <strong>Native gas</strong> — ETH
         </li>
         <li>
-          <strong>Public RPC (rate limited)</strong> —{" "}
+          <strong>Mainnet RPC (rate limited)</strong> —{" "}
           <code>https://rpc.mainnet.chain.robinhood.com</code>
+        </li>
+        <li>
+          <strong>Testnet RPC</strong> —{" "}
+          <code>https://rpc.testnet.chain.robinhood.com</code>
+        </li>
+        <li>
+          <strong>Testnet vault (sealed)</strong> —{" "}
+          <code>0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F</code>
         </li>
       </ul>
 

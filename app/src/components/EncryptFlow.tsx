@@ -3,39 +3,44 @@
 import { motion, useReducedMotion } from "framer-motion";
 
 /**
- * Arrow-style diagram: clear money → encrypt → shielded note → private move → only holder can read.
- * Built in code so labels stay exact (no image-model garble).
+ * Privacy stack flow — wallet → shield → note → private move/trade → cash out.
+ * Labels stay exact (no image-model garble).
  */
 const steps = [
   {
     id: "clear",
     label: "Your wallet",
     sub: "Open balance",
-    detail: "Normal wallet. Anyone who knows the address can see what it holds.",
+    detail:
+      "Normal wallet. Anyone who knows the address can see what it holds.",
   },
   {
     id: "encrypt",
     label: "Shield",
-    sub: "Deposit",
-    detail: "You send assets into Gloam’s pool. A fingerprint of the deposit is written on-chain.",
+    sub: "Enter vault",
+    detail:
+      "You deposit into Gloam’s pool. A commitment is written on-chain; the secret stays in your browser.",
   },
   {
     id: "note",
-    label: "Your note",
+    label: "Vault note",
     sub: "Private claim",
-    detail: "Your browser keeps the secret that proves the deposit is yours.",
+    detail:
+      "Your browser holds the secret that proves the deposit is yours. Export a backup.",
   },
   {
     id: "move",
-    label: "Private send",
-    sub: "Coming next",
-    detail: "Later: move value to someone else without a clear public path. Not fully live yet.",
+    label: "Private rails",
+    sub: "Send · trade",
+    detail:
+      "Private send and private trade settle in the vault. Size stays off the open book by default.",
   },
   {
     id: "read",
-    label: "Unshield",
-    sub: "Withdraw",
-    detail: "You prove ownership and money returns to a normal wallet. Exit is public on purpose.",
+    label: "Cash out",
+    sub: "Public exit",
+    detail:
+      "You prove ownership and money returns to a wallet. Exit publishes amount on purpose.",
   },
 ];
 
@@ -49,19 +54,19 @@ export function EncryptFlow() {
           How Gloam works
         </p>
         <p className="mt-1 text-sm text-mute">
-          Wallet → vault → note → (later private send) → withdraw.
+          Wallet → shield → vault note → private send / trade → cash out only
+          when you choose.
         </p>
       </div>
 
       {/* Desktop horizontal flow */}
-      <div className="hidden lg:block px-6 py-10">
+      <div className="hidden px-6 py-10 lg:block">
         <svg
           viewBox="0 0 1000 220"
           className="h-auto w-full"
           role="img"
-          aria-label="Flow from clear balance through encryption to private transfer"
+          aria-label="Flow from open wallet through vault privacy to cash out"
         >
-          {/* connecting line */}
           <line
             x1="80"
             y1="70"
@@ -78,110 +83,93 @@ export function EncryptFlow() {
                 {i < steps.length - 1 && (
                   <path
                     d={`M ${x + 52} 70 L ${x + 158} 70`}
-                    stroke="#c8ff00"
+                    stroke="currentColor"
+                    className="text-lime"
                     strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    opacity="0.55"
                     fill="none"
-                  />
-                )}
-                {i < steps.length - 1 && (
-                  <polygon
-                    points={`${x + 158},70 ${x + 150},65 ${x + 150},75`}
-                    fill="#c8ff00"
-                    opacity="0.8"
+                    markerEnd="url(#arrow)"
                   />
                 )}
                 <circle
                   cx={x}
                   cy={70}
-                  r={i === 1 || i === 2 ? 28 : 24}
-                  style={{
-                    fill: "var(--panel)",
-                    stroke: i === 1 || i === 2 ? "#c8ff00" : "var(--line)",
-                  }}
-                  strokeWidth={i === 1 || i === 2 ? 2 : 1}
+                  r="28"
+                  className="fill-panel stroke-lime"
+                  strokeWidth="2"
                 />
                 <text
                   x={x}
-                  y={74}
+                  y={76}
                   textAnchor="middle"
-                  style={{ fill: i === 1 || i === 2 ? "#c8ff00" : "var(--foreground)" }}
-                  fontSize="11"
-                  fontFamily="ui-monospace, monospace"
+                  className="fill-lime font-mono text-[11px]"
                 >
                   {String(i + 1).padStart(2, "0")}
                 </text>
                 <text
                   x={x}
-                  y={130}
+                  y={120}
                   textAnchor="middle"
-                  style={{ fill: "var(--foreground)" }}
-                  fontSize="13"
-                  fontFamily="Georgia, serif"
+                  className="fill-foreground text-[13px]"
+                  style={{ fontFamily: "var(--font-display), Georgia, serif" }}
                 >
                   {s.label}
                 </text>
                 <text
                   x={x}
-                  y={150}
+                  y={140}
                   textAnchor="middle"
-                  style={{ fill: "var(--mute)" }}
-                  fontSize="10"
-                  fontFamily="ui-monospace, monospace"
-                  letterSpacing="0.08em"
+                  className="fill-mute font-mono text-[9px] uppercase"
                 >
-                  {s.sub.toUpperCase()}
+                  {s.sub}
                 </text>
               </g>
             );
           })}
+          <defs>
+            <marker
+              id="arrow"
+              markerWidth="6"
+              markerHeight="6"
+              refX="5"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" className="fill-lime" />
+            </marker>
+          </defs>
         </svg>
       </div>
 
-      {/* Mobile / tablet stacked steps */}
+      {/* Mobile / tablet list */}
       <ol className="divide-y divide-line lg:hidden">
         {steps.map((s, i) => (
           <motion.li
             key={s.id}
-            className="flex gap-4 px-5 py-5 sm:px-6"
-            initial={reduce ? false : { opacity: 0, y: 10 }}
+            className="px-5 py-4 sm:px-6"
+            initial={reduce ? false : { opacity: 0, y: 8 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.4, delay: i * 0.05 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ delay: i * 0.05 }}
           >
-            <span
-              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] ${
-                i === 1 || i === 2
-                  ? "border-lime text-lime"
-                  : "border-line text-mute"
-              }`}
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <div>
-              <p className="font-display text-lg text-foreground">{s.label}</p>
-              <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-                {s.sub}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-mute">{s.detail}</p>
-            </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+              {String(i + 1).padStart(2, "0")} · {s.sub}
+            </p>
+            <p className="mt-1 font-display text-xl text-foreground">
+              {s.label}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-mute">{s.detail}</p>
           </motion.li>
         ))}
       </ol>
 
-      {/* Desktop detail row */}
-      <div className="hidden border-t border-line lg:grid lg:grid-cols-5">
-        {steps.map((s, i) => (
-          <div
-            key={s.id}
-            className={`px-4 py-5 text-xs leading-relaxed text-mute ${
-              i < steps.length - 1 ? "border-r border-line" : ""
-            }`}
-          >
-            {s.detail}
-          </div>
-        ))}
+      <div className="hidden border-t border-line px-6 py-4 lg:block">
+        <div className="grid grid-cols-5 gap-3">
+          {steps.map((s) => (
+            <p key={s.id} className="text-xs leading-relaxed text-mute">
+              {s.detail}
+            </p>
+          ))}
+        </div>
       </div>
     </div>
   );

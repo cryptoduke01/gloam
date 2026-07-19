@@ -12,6 +12,7 @@
     "build:docs": "pnpm --filter @gloam/docs build",
     "contracts:build": "cd contracts && forge build",
     "contracts:test": "cd contracts && forge test",
+    "smoke": "pnpm --filter @gloam/app smoke",
     "lint": "pnpm -r lint"
   },
   "engines": {

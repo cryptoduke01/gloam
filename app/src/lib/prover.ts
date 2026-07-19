@@ -1,6 +1,6 @@
 /**
- * Unshield / transfer prover surface.
- * Witness packing works today; ZK proof generation waits on circuits + keys.
+ * Legacy keccak unshield witness builder (Phase-1 pool).
+ * Product path uses Poseidon + proveUnshieldInBrowser / proveTransferInBrowser.
  */
 
 import type { Address, Hex } from "viem";
@@ -81,11 +81,10 @@ export function buildUnshieldWitness(args: BuildUnshieldArgs): UnshieldWitness {
     blocker = "Merkle path does not match root — resync the tree.";
   } else {
     blocker =
-      "ZK prover not shipped yet (circuit + proving key). Witness is ready.";
+      "Legacy keccak witness only. Product uses Poseidon prove*InBrowser.";
   }
 
-  const readyToProve =
-    commitmentMatches && pathValid && blocker.includes("ZK prover");
+  const readyToProve = false;
 
   return {
     publicInputs,
