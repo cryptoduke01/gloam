@@ -340,8 +340,20 @@ export function PortfolioView() {
                 )}
                 {shieldLive ? (
                   <Link
-                    href="/app/move"
+                    href="/app/trade?path=sealed"
                     className="inline-flex min-h-11 items-center justify-center rounded-xl border border-lime/40 px-3 text-sm font-medium text-lime hover:bg-lime/10 active:scale-[0.98]"
+                  >
+                    Private trade
+                  </Link>
+                ) : (
+                  <span className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm text-mute opacity-50">
+                    Private trade
+                  </span>
+                )}
+                {shieldLive ? (
+                  <Link
+                    href="/app/move"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
                   >
                     Move
                   </Link>
@@ -350,12 +362,6 @@ export function PortfolioView() {
                     Move
                   </span>
                 )}
-                <Link
-                  href="/app/trade?path=sealed"
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-3 text-sm font-medium text-foreground hover:border-mute active:scale-[0.98]"
-                >
-                  Private
-                </Link>
               </div>
             </div>
           )}
@@ -391,7 +397,9 @@ export function PortfolioView() {
                     </p>
                     <p className="mt-0.5 text-xs text-mute">
                       {n.leafIndex != null
-                        ? "Ready to move or cash out"
+                        ? isNativeAsset(n.asset)
+                          ? "Ready to private trade, send, or cash out"
+                          : "Ready to send or cash out"
                         : "Linking to vault…"}
                       {n.source === "local" && n.id.startsWith("imp-")
                         ? " · received"
@@ -409,9 +417,17 @@ export function PortfolioView() {
                         Tx
                       </a>
                     )}
+                    {isNativeAsset(n.asset) && (
+                      <Link
+                        href="/app/trade?path=sealed"
+                        className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
+                      >
+                        Trade
+                      </Link>
+                    )}
                     <Link
                       href="/app/move"
-                      className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
+                      className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-mute"
                     >
                       Move
                     </Link>
