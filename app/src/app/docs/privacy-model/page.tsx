@@ -40,14 +40,19 @@ export default function DocsPrivacyPage() {
             body: "Shield and cash out touch the public chain. Someone can see that the vault was used.",
           },
           {
-            n: "½",
-            title: "Vault trade adapter (live)",
-            body: "Cash out → swap → re-shield. Your bag can leave and re-enter the vault; the swap size is still public on that edge.",
+            n: "✓",
+            title: "Private trade (live)",
+            body: "Vault ETH → vault stock with a sealedSwap proof. Size is private by default (min-out floor, not your exact size). Pair and caller still public.",
           },
           {
-            n: "→",
-            title: "Not yet",
-            body: "Sealed-size private trade — swap without broadcasting full size — is not shipped.",
+            n: "½",
+            title: "Via market adapter",
+            body: "Cash out → public swap → re-shield. Swap size is public on that edge. Prefer Private trade when a pool is empty or you want size privacy.",
+          },
+          {
+            n: "!",
+            title: "Cash out",
+            body: "Unshield publishes asset, amount, and destination. Stay in the vault to stay private.",
           },
         ]}
       />
@@ -56,14 +61,18 @@ export default function DocsPrivacyPage() {
       <ul>
         <li>How much you hold while it is in the vault</li>
         <li>Who paid whom inside the vault (private send — live on testnet)</li>
-        <li>(Later) trade size during private execution</li>
+        <li>
+          Trade size on private trade (default max size privacy — see{" "}
+          <Link href="/docs/sealed-trade">sealed trade</Link>)
+        </li>
       </ul>
 
       <h2>The public can still see</h2>
       <ul>
-        <li>That someone used Gloam</li>
-        <li>When money went in or out of the vault</li>
-        <li>Timing clues if very few people use the system</li>
+        <li>That someone used Gloam (shield / sealedSwap / unshield txs)</li>
+        <li>Asset pair on a private trade (e.g. ETH → TSLA), not the size</li>
+        <li>When money went in or out of the vault (and amounts on cash out)</li>
+        <li>Caller address on each tx; timing clues if few people use the system</li>
       </ul>
 
       <h2>We will not promise</h2>

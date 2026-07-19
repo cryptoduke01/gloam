@@ -43,10 +43,18 @@ export default function DocsSealedTradePage() {
         ]}
       />
       <p>
-        Testnet rates use <strong>display marks</strong> (Yahoo / CoinGecko for
-        the UI), not an on-chain oracle. If marks fail to load, the app falls
-        back to 1:1. Dev ceremony keys only. See{" "}
-        <Link href="/docs/production">Production gate</Link> before real money.
+        Testnet rates use <strong>coarsened display marks</strong> (Yahoo /
+        CoinGecko for the UI), not an on-chain oracle. If marks fail, 1:1
+        fallback. Dev ceremony keys only.
+      </p>
+      <p>
+        <strong>Size privacy (default on):</strong> public{" "}
+        <code>amountOutMin</code> is a 1-wei floor, not your real output. Your
+        first private trade leaked size because min-out equaled the exact
+        amount — that is fixed. Rates and asset pair remain public. Cash out
+        still publishes amount. See{" "}
+        <Link href="/docs/privacy-model">privacy model</Link> ·{" "}
+        <Link href="/docs/production">production gate</Link>.
       </p>
 
       <h2>Vault trade adapter (fallback)</h2>
@@ -77,9 +85,15 @@ export default function DocsSealedTradePage() {
 
       <h2>What “sealed” means</h2>
       <ul>
-        <li>Public observers cannot read your trade size as free signal</li>
+        <li>
+          Public observers do not get your exact size as a free signal (with max
+          size privacy on)
+        </li>
         <li>Settlement still ends on-chain (we do not claim invisibility)</li>
         <li>No theatrical “private success” without a real proof</li>
+        <li>
+          Explorer shows <code>sealedSwap</code> + pair — not a Uniswap fill
+        </li>
       </ul>
 
       <h2>What ships next</h2>

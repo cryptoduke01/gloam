@@ -56,10 +56,10 @@ export default function DocsDataPage() {
         </li>
         <li>
           <strong>Sealed private trade</strong> — public{" "}
-          <code>rateIn</code> / <code>rateOut</code> inputs to the circuit,
-          currently filled from the same display marks (or 1:1 if marks fail).
-          Size stays private; the rate itself is visible on-chain in the
-          settlement call.
+          <code>rateIn</code> / <code>rateOut</code> (coarsened display marks).
+          Size is private: <code>amountOutMin</code> defaults to a 1-wei floor
+          so it does not equal your real output. Pair and caller are still
+          public.
         </li>
         <li>
           <strong>Vault inventory</strong> — cash out needs the pool to actually

@@ -1,6 +1,8 @@
 # Sealed-size private trade
 
-**Status:** circuit compiled · dev zkey in `app/public/circuits/sealed_swap*` · settlement **live** on RH testnet Poseidon vault `0x4F38…2D8F` with sealed swap verifiers (see `deployments/poseidon-testnet.json`). App rates use **display marks** (Yahoo/CG → public `rateIn`/`rateOut`); not an on-chain oracle. Dev ceremony keys only.
+**Status:** circuit compiled · dev zkey in `app/public/circuits/sealed_swap*` · settlement **live** on RH testnet Poseidon vault `0x4F38…2D8F` with sealed swap verifiers (see `deployments/poseidon-testnet.json`).
+
+**Privacy (app):** default `amountOutMin = 1` so public min-out does not equal real size (see `app/src/lib/privacy.ts`). Rates are coarsened display marks, still public. Assets and caller remain public. Dev ceremony keys only.
 
 ## Goal
 

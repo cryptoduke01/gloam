@@ -314,7 +314,9 @@ export function ShieldView() {
     void refetchAllow();
     void refetchPool();
     void import("@/lib/track").then(({ track }) => {
-      track("shield_success", { asset: sentLabel.slice(0, 32) });
+      track("shield_success", {
+        asset: sentLabel.replace(/[\d.]+/g, "").trim().slice(0, 16) || "asset",
+      });
     });
     setSuccessTitle("Shielded");
     setSuccessBody(

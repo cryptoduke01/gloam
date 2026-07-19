@@ -51,6 +51,11 @@ import {
   marksToSealedRates,
 } from "@/lib/sealedRates";
 import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
+import {
+  coarsenMarkUsd,
+  publicAmountOutMin,
+  type SizePrivacyMode,
+} from "@/lib/privacy";
 import { readVaultSealedReadiness } from "@/lib/vaultStatus";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { StatusPill } from "./StatusPill";
@@ -93,6 +98,8 @@ export function SealedTradePanel({
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** max = amountOutMin = 1 on-chain (size privacy). Default on — our moat. */
+  const [sizePrivacy, setSizePrivacy] = useState<SizePrivacyMode>("max");
 
   const spentNoteId = useRef<string | null>(null);
   const pendingOut = useRef<LocalNote | null>(null);
@@ -188,11 +195,14 @@ export function SealedTradePanel({
       markets.find(
         (m) => m.symbol.toLowerCase() === marketSymbol.toLowerCase()
       );
-    const ethUsd = marketsData?.ethUsd ?? ethM?.mark ?? null;
-    const outUsd = outM?.mark ?? null;
+    const ethUsdRaw = marketsData?.ethUsd ?? ethM?.mark ?? null;
+    const outUsdRaw = outM?.mark ?? null;
     const bothLive =
-      ethM?.source === "live" && outM?.source === "live" && ethUsd != null;
-    if (ethUsd != null && outUsd != null && ethUsd > 0 && outUsd > 0) {
+      ethM?.source === "live" && outM?.source === "live" && ethUsdRaw != null;
+    if (ethUsdRaw != null && outUsdRaw != null && ethUsdRaw > 0 && outUsdRaw > 0) {
+      // Coarsen marks so public rates are not a live tick fingerprint
+      const ethUsd = coarsenMarkUsd(ethUsdRaw);
+      const outUsd = coarsenMarkUsd(outUsdRaw);
       return (
         marksToSealedRates(ethUsd, outUsd, bothLive ? "live" : "static") ??
         fallbackOneToOneRates()
@@ -333,15 +343,17 @@ export function SealedTradePanel({
       const path = await pathForLeaf(leafIdx);
       if (!path) throw new Error("Vault sync failed. Tap Refresh and retry.");
 
-      setStatus("Building proof… 10–40 seconds is normal.");
+      setStatus("Building private proof… 10–40 seconds is normal.");
       const { rateIn, rateOut } = rateQuote;
+      // Do NOT publish exact amountOut as amountOutMin — that was the size leak.
+      const amountOutMin = publicAmountOutMin(exact.amountOut, sizePrivacy);
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
         amountSwap: exact.amountSwap,
         assetIn: NATIVE_ASSET,
         assetOut: outToken,
-        amountOutMin: exact.amountOut,
+        amountOutMin,
         rateIn,
         rateOut,
         path: path as PoseidonMerklePath,
@@ -413,6 +425,10 @@ export function SealedTradePanel({
         ],
         gas: SHIELD_GAS_LIMIT * 5n,
         chainId: CHAIN,
+      });
+      void import("@/lib/track").then(({ track }) => {
+        // No amounts — privacy stack
+        track("sealed_swap_submit", { asset: marketSymbol.slice(0, 12) });
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Private trade failed");
@@ -499,6 +515,28 @@ export function SealedTradePanel({
               </StatusPill>
             </div>
             <div className="space-y-4 p-5">
+              <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-xs leading-relaxed text-mute">
+                <p className="font-medium text-foreground">
+                  Size privacy {sizePrivacy === "max" ? "on" : "relaxed"}
+                </p>
+                <p className="mt-1">
+                  {sizePrivacy === "max"
+                    ? "On-chain min-out is a floor (1 wei), not your real size. Explorer sees the vault proof and pair — not how much you traded."
+                    : "Min-out uses loose slippage. Tighter floors can leak size magnitude on-chain."}
+                </p>
+                <label className="mt-2 flex cursor-pointer items-center gap-2 text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={sizePrivacy === "max"}
+                    onChange={(e) =>
+                      setSizePrivacy(e.target.checked ? "max" : "slippage")
+                    }
+                    className="accent-[var(--lime,#c8ff00)]"
+                  />
+                  Max size privacy (recommended)
+                </label>
+              </div>
+
               <ol className="list-decimal space-y-1 pl-5 text-xs text-mute">
                 <li>
                   <Link href="/app/shield" className="text-lime hover:underline">
@@ -770,8 +808,9 @@ export function SealedTradePanel({
         title="Private trade done"
         body={
           <p>
-            You received vault {marketSymbol}. Size was not shown as a normal
-            market swap. Use Move if you want to cash out later.
+            You received vault {marketSymbol}. Size stays out of the public
+            min-out. Explorer shows a vault proof, not a market fill. Cash out
+            later will publish amount by design — stay in vault to stay private.
           </p>
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}
