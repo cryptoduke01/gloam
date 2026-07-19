@@ -12,7 +12,13 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - Testnet product: `gloam.trade/app` (future host: `testnet.gloam.trade`)
 - X: `@gloamtrade`
 - Vercel: one project, Root Directory = `app`
-- Contracts: `contracts/` (Foundry) — ShieldPool scaffold; testnet only
+- Contracts: `contracts/` (Foundry) — ShieldPoolPoseidon sealed vault; RH testnet only
+- Sealed vault: `0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F` (never product-default `0xA488…`)
+
+## Live on testnet (dev keys)
+
+- Shield / private send / cash out / **private trade** (sealedSwap, size privacy default on)
+- App root: `app/` · never revive `docs.gloam.trade`
 
 ## Audits
 
@@ -22,8 +28,9 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 
 - Real privacy (shielded balances / private txs) — never fake or mock success.
 - **Public path** needs no Gloam contracts. **Private path** needs `contracts/`.
-- Product is **testnet-only** until private rails work. No mainnet mix-in.
+- Product is **testnet-only** until production ceremony + audit. No mainnet mix-in.
 - Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto slop.
 - Secrets server-side only.
 - If it does not serve private trading on RH chain, it waits.
 - Do **not** deploy `docs/` as a separate project or `docs.gloam.trade`.
+- Commit = commit + push to `main` for product work.
