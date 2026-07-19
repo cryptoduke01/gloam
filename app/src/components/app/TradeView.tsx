@@ -495,69 +495,66 @@ export function TradeView() {
         </span>
       </div>
 
+      {/* Private first — that's the product. Open-market paths are secondary. */}
       <div className="flex flex-wrap gap-1 rounded-xl border border-line bg-panel p-1">
         <button
           type="button"
-          onClick={() => setPathMode("public")}
-          className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
-            pathMode === "public"
-              ? "bg-lime text-black"
-              : "text-mute hover:text-foreground"
-          }`}
-        >
-          Public wallet
-        </button>
-        {shieldLive && (
-          <button
-            type="button"
-            onClick={() => setPathMode("vault")}
-            className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
-              pathMode === "vault"
-                ? "bg-lime text-black"
-                : "text-mute hover:text-foreground"
-            }`}
-          >
-            From vault
-            <span className="mt-0.5 block text-[10px] font-normal opacity-80">
-              public swap
-            </span>
-          </button>
-        )}
-        <button
-          type="button"
           onClick={() => setPathMode("sealed")}
-          className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-medium ${
+          className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
             pathMode === "sealed"
               ? "bg-lime text-black"
               : "text-mute hover:text-foreground"
           }`}
         >
-          Private trade
+          Private
           <span className="mt-0.5 block text-[10px] font-normal opacity-80">
-            size hidden
+            size hidden · no DEX
           </span>
         </button>
+        <button
+          type="button"
+          onClick={() => setPathMode("public")}
+          className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
+            pathMode === "public"
+              ? "bg-lime text-black"
+              : "text-mute hover:text-foreground"
+          }`}
+        >
+          Wallet
+          <span className="mt-0.5 block text-[10px] font-normal opacity-80">
+            public
+          </span>
+        </button>
+        {shieldLive && (
+          <button
+            type="button"
+            onClick={() => setPathMode("vault")}
+            className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
+              pathMode === "vault"
+                ? "bg-lime text-black"
+                : "text-mute hover:text-foreground"
+            }`}
+          >
+            Via market
+            <span className="mt-0.5 block text-[10px] font-normal opacity-80">
+              needs a pool
+            </span>
+          </button>
+        )}
       </div>
 
       {pathMode === "public" && (
-        <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
-          <strong className="text-foreground">Public path.</strong> Swaps use
-          your open wallet and show on the explorer. Use{" "}
-          <strong className="text-foreground">From vault</strong> to cash out →
-          swap → re-shield in one flow.
-        </div>
+        <p className="text-sm text-mute">
+          Trades from your open wallet. Everyone can see them on the explorer.
+        </p>
       )}
-      {pathMode === "sealed" && (
-        <div className="rounded-xl border border-lime/30 bg-lime/5 px-4 py-3 text-sm text-mute">
-          <strong className="text-foreground">Private trade</strong> spends
-          vault ETH and pays out vault {market?.symbol ?? "stock"}. Size stays
-          private. Needs vault ETH (not stock notes) and live inventory for the
-          out asset.{" "}
-          <a href="/docs/sealed-trade" className="text-lime hover:underline">
-            How it works
-          </a>
-          .
-        </div>
+      {pathMode === "vault" && (
+        <p className="text-sm text-mute">
+          Pulls from your vault, swaps on a public market, then can re-shield.
+          Needs a live DEX pool for this stock — many testnet pairs are empty.
+          Prefer <strong className="text-foreground">Private</strong> for TSLA
+          and other faucet stocks.
+        </p>
       )}
 
       <div className="grid gap-4 lg:grid-cols-12">
@@ -674,13 +671,13 @@ export function TradeView() {
               marketSymbol={market.symbol}
               tokenAddress={token}
               hasPool={hasPool}
+              onUsePrivate={() => setPathMode("sealed")}
             />
           ) : pathMode === "sealed" ? (
             <SealedTradePanel
               marketId={resolvedId}
               marketSymbol={market.symbol}
               tokenAddress={token}
-              onUseAdapter={() => setPathMode("vault")}
             />
           ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-panel">

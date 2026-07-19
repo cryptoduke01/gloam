@@ -79,11 +79,13 @@ export function VaultTradePanel({
   marketSymbol,
   tokenAddress,
   hasPool,
+  onUsePrivate,
 }: {
   marketId?: string;
   marketSymbol: string;
   tokenAddress?: Address;
   hasPool: boolean;
+  onUsePrivate?: () => void;
 }) {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
@@ -624,36 +626,53 @@ export function VaultTradePanel({
   return (
     <>
       <div className="space-y-4">
-        <DevKeysBanner />
-        <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-sm text-mute">
-          <p className="font-medium text-foreground">From vault (public market)</p>
-          <p className="mt-1">
-            Cash out → swap on the open market → re-shield. The{" "}
-            <strong className="text-foreground">swap size is public</strong>.
-            For size-private trades, use the{" "}
-            <strong className="text-foreground">Private trade</strong> tab
-            instead (no DEX pool required).
-          </p>
-        </div>
+        <DevKeysBanner compact />
 
         {!hasPool && (
-          <p className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">
-            No public swap market for {marketSymbol} on testnet yet (empty DEX
-            pair). That only blocks <em>this</em> path. Use{" "}
-            <strong className="text-foreground">Private trade</strong> for a
-            vault-only swap, or pick another market that has a pool.
-          </p>
+          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
+            <p className="font-display text-2xl text-foreground">
+              No public pool for {marketSymbol}
+            </p>
+            <p className="mt-2 leading-relaxed">
+              This tab needs an open market. Testnet doesn&apos;t have one for{" "}
+              {marketSymbol} yet. Use{" "}
+              <strong className="text-foreground">Private</strong> instead —
+              that path does not need a pool.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (onUsePrivate) onUsePrivate();
+                else {
+                  const u = new URL(window.location.href);
+                  u.searchParams.set("path", "sealed");
+                  window.location.href = u.toString();
+                }
+              }}
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+            >
+              Go to Private trade
+            </button>
+          </div>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-line bg-panel">
+        <div
+          className={`overflow-hidden rounded-xl border border-line bg-panel ${
+            !hasPool ? "opacity-40 pointer-events-none" : ""
+          }`}
+        >
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div>
               <p className="font-display text-2xl text-foreground">
                 {marketSymbol}
               </p>
-              <p className="text-sm text-mute">Trade from vault note</p>
+              <p className="text-sm text-mute">
+                Via public market (size visible)
+              </p>
             </div>
-            <StatusPill tone="lime">Adapter</StatusPill>
+            <StatusPill tone={hasPool ? "lime" : "mute"}>
+              {hasPool ? "Pool live" : "No pool"}
+            </StatusPill>
           </div>
 
           <div className="space-y-4 p-5">

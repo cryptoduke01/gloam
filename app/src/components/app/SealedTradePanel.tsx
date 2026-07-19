@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Private-size vault swap (sealed trade).
- * Enabled only when the vault contract supports sealedSwap + a non-zero verifier.
+ * Private trade: vault ETH → vault stock. No DEX.
+ * Size stays private. Rates from display marks (exact circuit product).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +19,7 @@ import {
   EXPLORER_TX,
   PRODUCT_CHAIN_ID as CHAIN,
   formatEth,
+  shortAddress,
 } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
@@ -49,24 +50,23 @@ import {
   marksToSealedRates,
 } from "@/lib/sealedRates";
 import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
-import { sealedTradeStatus } from "@/lib/sealedTrade";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
 
-type Support = "checking" | "unsupported" | "ready" | "no_verifier";
+type Support = "checking" | "ready" | "no_verifier" | "offline";
 
 export function SealedTradePanel({
   marketId,
   marketSymbol,
   tokenAddress,
-  onUseAdapter,
 }: {
   marketId?: string;
   marketSymbol: string;
   tokenAddress?: Address;
-  onUseAdapter: () => void;
+  /** kept for TradeView API compat; unused */
+  onUseAdapter?: () => void;
 }) {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
@@ -76,7 +76,6 @@ export function SealedTradePanel({
   const publicClient = usePublicClient({ chainId: CHAIN });
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
-    matchesChain,
     pathForLeaf,
     leafIndexForCommitment,
     refresh: refreshTree,
@@ -112,32 +111,47 @@ export function SealedTradePanel({
     chainId: CHAIN,
   });
 
-  // Detect sealedSwapVerifier on the live pool
+  // Detect sealed swap readiness — never say "old vault" just because RPC isn't ready
   useEffect(() => {
-    if (!publicClient || !SHIELD_POOL_ADDRESS || !shieldLive) {
-      setSupport("unsupported");
+    if (!SHIELD_POOL_ADDRESS || !shieldLive || !poseidonMode) {
+      setSupport("offline");
+      return;
+    }
+    if (!publicClient) {
+      setSupport("checking");
       return;
     }
     let cancelled = false;
     void (async () => {
-      try {
-        const v = (await publicClient.readContract({
-          address: SHIELD_POOL_ADDRESS,
+      const read = () =>
+        publicClient.readContract({
+          address: SHIELD_POOL_ADDRESS!,
           abi: shieldPoolAbi,
           functionName: "sealedSwapVerifier",
-        })) as Address;
+        }) as Promise<Address>;
+
+      try {
+        const v = await read();
         if (cancelled) return;
         if (!v || v === zeroAddress) setSupport("no_verifier");
         else setSupport("ready");
       } catch {
-        // Method missing on older pool bytecode
-        if (!cancelled) setSupport("unsupported");
+        // brief retry — transient RPC / hydration
+        try {
+          await new Promise((r) => setTimeout(r, 600));
+          const v = await read();
+          if (cancelled) return;
+          if (!v || v === zeroAddress) setSupport("no_verifier");
+          else setSupport("ready");
+        } catch {
+          if (!cancelled) setSupport("offline");
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [publicClient, shieldLive]);
+  }, [publicClient, shieldLive, poseidonMode]);
 
   const ethNotes = useMemo(() => {
     return open
@@ -170,18 +184,6 @@ export function SealedTradePanel({
     ).length;
   }, [open, poseidonMode, leafIndexForCommitment]);
 
-  const stockNotesInVault = useMemo(() => {
-    return open.filter(
-      (n) =>
-        n.bound &&
-        n.secret &&
-        n.secret !== "0x" &&
-        !isNativeAsset(n.asset) &&
-        (!poseidonMode || n.scheme === "poseidon" || !n.scheme)
-    ).length;
-  }, [open, poseidonMode]);
-
-  // Keep vault tree fresh so new shields get leaf paths
   useEffect(() => {
     if (support === "ready") void refreshTree();
   }, [support, refreshTree]);
@@ -193,7 +195,6 @@ export function SealedTradePanel({
     if (selected && selected.id !== noteId) setNoteId(selected.id);
   }, [selected, noteId]);
 
-  // Prefer faucet token registry so private trade works even without a Uniswap pair
   const outToken =
     tokenAddress ??
     TESTNET_STOCK_TOKENS.find((t) => t.id === marketId)?.address ??
@@ -282,21 +283,21 @@ export function SealedTradePanel({
       !outToken ||
       !poseidonMode
     ) {
-      setError("Pick a vault ETH note and a stock market.");
+      setError("Shield some ETH first, then pick a stock on the left.");
       return;
     }
     if (support !== "ready") {
-      setError("This vault is not ready for private trade yet.");
+      setError("Vault not ready yet. Wait a second and try again.");
       return;
     }
 
     const amountWanted = safeParseEther(amount);
     if (amountWanted === null || amountWanted <= 0n) {
-      setError("Enter a valid amount.");
+      setError("Enter an amount.");
       return;
     }
     if (amountWanted > BigInt(selected.amountWei)) {
-      setError("Amount is larger than this vault note.");
+      setError("That is more ETH than this vault note holds.");
       return;
     }
 
@@ -306,7 +307,7 @@ export function SealedTradePanel({
       rateQuote.rateOut
     );
     if (!exact) {
-      setError("Could not fit this size to the rate. Try Max or a smaller amount.");
+      setError("Try Max, or a slightly smaller amount.");
       return;
     }
 
@@ -316,8 +317,7 @@ export function SealedTradePanel({
     spentNoteId.current = selected.id;
 
     try {
-      // Fresh tree so path matches currentRoot (inventory seeds + new shields)
-      setStatus("Syncing vault tree…");
+      setStatus("Syncing vault…");
       await refreshTree();
 
       let leafIdx = selected.leafIndex;
@@ -326,16 +326,14 @@ export function SealedTradePanel({
       }
       if (leafIdx == null) {
         throw new Error(
-          "ETH note is not linked to the vault tree. Shield ETH again on this browser, or Move → Refresh tree."
+          "This ETH note is not linked yet. Open Shield, wait for confirm, then come back."
         );
       }
 
       const path = await pathForLeaf(leafIdx);
-      if (!path) throw new Error("Could not build vault path — refresh tree.");
+      if (!path) throw new Error("Vault sync failed. Tap Refresh and retry.");
 
-      setStatus("Building private trade proof… 10–40s is normal.");
-      // Public rates from display marks (not an on-chain oracle). Size stays private.
-      // amountSwap/amountOut adjusted so circuit product is exact (no DEX involved).
+      setStatus("Building proof… 10–40 seconds is normal.");
       const { rateIn, rateOut } = rateQuote;
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
@@ -357,8 +355,8 @@ export function SealedTradePanel({
         const msg = pe instanceof Error ? pe.message : String(pe);
         throw new Error(
           msg.includes("Assert") || msg.includes("Error in template")
-            ? "Proof failed (circuit assert). Usually a rate/path mismatch — refresh tree and try Max."
-            : `Proof failed: ${msg.slice(0, 160)}`
+            ? "Proof failed. Tap Refresh, then Max, and try again."
+            : `Proof failed: ${msg.slice(0, 140)}`
         );
       }
 
@@ -396,8 +394,7 @@ export function SealedTradePanel({
             }
           : null;
 
-      setStatus("Confirm private trade in your wallet…");
-      // Sealed swap verifies a larger proof than plain shield — give headroom
+      setStatus("Confirm in your wallet…");
       writeContract({
         address: SHIELD_POOL_ADDRESS,
         abi: shieldPoolAbi,
@@ -428,12 +425,11 @@ export function SealedTradePanel({
   }
 
   const working = busy || isPending || confirming;
-  const statusLabel = sealedTradeStatus();
 
   if (!shieldLive || !poseidonMode) {
     return (
       <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-        Private trade needs the live vault.
+        Private trade is not configured on this build.
       </div>
     );
   }
@@ -441,48 +437,59 @@ export function SealedTradePanel({
   return (
     <>
       <div className="space-y-4">
-        <DevKeysBanner />
+        <DevKeysBanner compact />
 
         {support === "checking" && (
           <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            Checking if this vault can settle private trades…
+            Connecting to the vault…
           </div>
         )}
 
-        {(support === "unsupported" || support === "no_verifier") && (
+        {support === "offline" && (
           <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
             <p className="font-display text-2xl text-foreground">
-              Private trade
+              Can&apos;t reach the vault
             </p>
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
-              {statusLabel === "artifacts_ready"
-                ? "Proofs ready · vault upgrade needed"
-                : "Not ready"}
-            </p>
-            <p className="mt-3 leading-relaxed">
-              {support === "unsupported"
-                ? "This vault is an older version. Private trade needs a vault upgrade (redeploy with sealed swap support)."
-                : "Vault has the method, but the private-trade checker is not set yet (owner must attach the verifier)."}
-            </p>
-            <p className="mt-2 text-xs">
-              Until then, use the vault path that works today. The swap step is
-              still public on the market.
+            <p className="mt-2 leading-relaxed">
+              Switch your wallet to Robinhood testnet (chain 46630), then retry.
+              This is not a DEX issue.
             </p>
             <button
               type="button"
-              onClick={onUseAdapter}
+              onClick={() => {
+                setSupport("checking");
+                // re-run effect by toggling — force remount path
+                void (async () => {
+                  if (!publicClient || !SHIELD_POOL_ADDRESS) return;
+                  try {
+                    const v = (await publicClient.readContract({
+                      address: SHIELD_POOL_ADDRESS,
+                      abi: shieldPoolAbi,
+                      functionName: "sealedSwapVerifier",
+                    })) as Address;
+                    setSupport(
+                      !v || v === zeroAddress ? "no_verifier" : "ready"
+                    );
+                  } catch {
+                    setSupport("offline");
+                  }
+                })();
+              }}
               className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
             >
-              Trade from vault (public swap step)
+              Retry
             </button>
-            <p className="mt-3 text-xs">
-              <Link href="/docs/sealed-trade" className="text-lime hover:underline">
-                How private trade works
-              </Link>
-              {" · "}
-              <Link href="/docs/production" className="text-lime hover:underline">
-                Before real money
-              </Link>
+          </div>
+        )}
+
+        {support === "no_verifier" && (
+          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
+            <p className="font-display text-2xl text-foreground">
+              Private trade offline
+            </p>
+            <p className="mt-2 leading-relaxed">
+              The vault is up, but the private-trade checker is not set. We need
+              to flip that on-chain. Use Shield / Move until then.
             </p>
           </div>
         )}
@@ -495,29 +502,36 @@ export function SealedTradePanel({
                   Private trade
                 </p>
                 <p className="text-sm text-mute">
-                  ETH → {marketSymbol} · size stays private
+                  Sell vault ETH for vault {marketSymbol}. Size stays private.
+                  No public market needed.
                 </p>
               </div>
-              <StatusPill tone="lime">Vault settle</StatusPill>
+              <StatusPill tone="lime" dot>
+                Ready
+              </StatusPill>
             </div>
             <div className="space-y-4 p-5">
-              <p className="text-xs text-mute">
-                This path does <strong className="text-foreground">not</strong>{" "}
-                need a public DEX pool for {marketSymbol}. Empty DEX pairs only
-                block <strong className="text-foreground">From vault</strong>.
-                Rate uses display marks (not an on-chain oracle). Size stays
-                private.
-              </p>
+              <ol className="list-decimal space-y-1 pl-5 text-xs text-mute">
+                <li>
+                  <Link href="/app/shield" className="text-lime hover:underline">
+                    Shield ETH
+                  </Link>{" "}
+                  into the vault (not stock)
+                </li>
+                <li>Pick how much ETH to sell below</li>
+                <li>Wait for the proof, confirm in your wallet</li>
+              </ol>
+
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
                 <span>
-                  Vault tree:{" "}
                   {treeLoading
-                    ? "syncing…"
+                    ? "Syncing vault…"
                     : treeError
-                      ? "error"
-                      : matchesChain === false
-                        ? "mismatch"
-                        : `${leafCount} leaves`}
+                      ? "Vault sync error"
+                      : `Vault ok · ${leafCount} notes on chain`}
+                  {SHIELD_POOL_ADDRESS
+                    ? ` · ${shortAddress(SHIELD_POOL_ADDRESS, 4)}`
+                    : ""}
                 </span>
                 <button
                   type="button"
@@ -525,51 +539,31 @@ export function SealedTradePanel({
                   disabled={treeLoading || working}
                   className="text-lime hover:underline disabled:opacity-50"
                 >
-                  Refresh tree
+                  Refresh
                 </button>
               </div>
-              {treeError && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  {treeError}
-                </p>
-              )}
-              {!outToken && (
-                <p className="text-xs text-amber-600 dark:text-amber-500">
-                  Pick a stock in the list (TSLA, AMZN, …) so we know which
-                  vault token to pay out.
-                </p>
-              )}
 
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  From (vault ETH note)
+                  Your vault ETH
                 </p>
                 {ethNotes.length === 0 ? (
-                  <div className="mt-2 space-y-2 text-sm text-mute">
+                  <div className="mt-2 rounded-xl border border-line bg-background/60 px-4 py-3 text-sm text-mute">
                     <p>
-                      Private trade spends <strong className="text-foreground">vault ETH</strong>, not
-                      stock notes.{" "}
-                      <Link
-                        href="/app/shield"
-                        className="text-lime hover:underline"
-                      >
-                        Shield ETH
-                      </Link>{" "}
-                      first, then come back here.
+                      No vault ETH yet. Private trade spends{" "}
+                      <strong className="text-foreground">ETH in the vault</strong>
+                      , not stock.
                     </p>
-                    {stockNotesInVault > 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        You have {stockNotesInVault} stock note
-                        {stockNotesInVault === 1 ? "" : "s"} in the vault.
-                        Those are outputs (or for Move / cash out), not the
-                        input for this tab.
-                      </p>
-                    )}
+                    <Link
+                      href="/app/shield"
+                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+                    >
+                      Shield ETH
+                    </Link>
                     {ethNotesMissingIndex > 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Found vault ETH that is not linked to the tree yet. Tap
-                        refresh on Move, or wait a few seconds and reopen this
-                        tab.
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        Found ETH notes that are not linked yet. Tap Refresh
+                        above.
                       </p>
                     )}
                   </div>
@@ -590,9 +584,7 @@ export function SealedTradePanel({
                           <span className="font-medium text-foreground">
                             {formatEth(BigInt(n.amountWei))} ETH
                           </span>
-                          <span className="text-xs">
-                            {assetLabel(n.asset)}
-                          </span>
+                          <span className="text-xs">{assetLabel(n.asset)}</span>
                         </button>
                       </li>
                     ))}
@@ -605,7 +597,7 @@ export function SealedTradePanel({
                   htmlFor="ss-amt"
                   className="text-sm font-medium text-foreground"
                 >
-                  Amount to trade
+                  ETH to sell
                 </label>
                 <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
                   <input
@@ -629,80 +621,62 @@ export function SealedTradePanel({
                     Max
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-mute">
-                  Leftover ETH stays in your vault as change. You receive{" "}
-                  {marketSymbol} as a new vault note. Size may nudge slightly so
-                  the proof math is exact.
-                </p>
               </div>
 
               <div className="rounded-xl border border-line bg-background/60 px-4 py-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-mute">You receive (est.)</span>
+                  <span className="text-mute">You get (est.)</span>
                   <span className="font-medium text-foreground">
                     {expectedOut > 0n
                       ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
                       : `— ${marketSymbol}`}
                   </span>
                 </div>
-                {amountSwapExact > 0n &&
-                  amountSwapPreview != null &&
-                  amountSwapExact !== amountSwapPreview && (
-                    <p className="mt-1 text-[11px] text-mute">
-                      Exact trade size {formatSealedAmount(amountSwapExact)} ETH
-                      (nudge for proof).
-                    </p>
-                  )}
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
                   <span>
                     {rateQuote.source === "fallback_1_1"
-                      ? "1:1 fallback rate"
+                      ? "1:1 test rate"
                       : `${formatUsd(rateQuote.ethUsd)} ETH · ${formatUsd(rateQuote.outUsd)} ${marketSymbol}`}
                   </span>
                   <StatusPill
                     tone={rateQuote.source === "live" ? "lime" : "mute"}
                   >
-                    {rateQuote.source === "live"
-                      ? "Live marks"
-                      : rateQuote.source === "static"
-                        ? "Static marks"
-                        : "1:1"}
+                    {rateQuote.source === "live" ? "Live marks" : "Marks"}
                   </StatusPill>
                 </div>
+                {amountSwapExact > 0n &&
+                  amountSwapPreview != null &&
+                  amountSwapExact !== amountSwapPreview && (
+                    <p className="mt-1 text-[11px] text-mute">
+                      Exact size {formatSealedAmount(amountSwapExact)} ETH for
+                      the proof.
+                    </p>
+                  )}
                 {poolOutDeposited != null && (
                   <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
-                    <span>Vault inventory ({marketSymbol})</span>
+                    <span>Pool can pay out</span>
                     <span className="font-medium text-foreground">
-                      {formatSealedAmount(poolOutDeposited)}
+                      {formatSealedAmount(poolOutDeposited)} {marketSymbol}
                     </span>
                   </div>
                 )}
               </div>
 
               {inventoryShort && (
-                <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-                  <p className="font-medium">
-                    Low vault inventory for {marketSymbol}
-                  </p>
-                  <p className="mt-1">
-                    Private trade can still settle a vault note, but cashing out
-                    that note needs the pool to hold enough {marketSymbol} (
-                    {formatSealedAmount(poolOutDeposited ?? 0n)} available, need{" "}
-                    {formatSealedAmount(expectedOut)}). Shield some{" "}
-                    {marketSymbol} first, or use From vault (public swap).
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onUseAdapter}
-                    className="mt-2 text-lime hover:underline"
-                  >
-                    Trade from vault instead
-                  </button>
-                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Pool has less {marketSymbol} than this trade. The private trade
+                  can still settle, but cashing out that stock later may fail
+                  until inventory is topped up.
+                </p>
               )}
 
               {!isConnected || !onProduct ? (
-                <WalletMenu />
+                <div className="space-y-2">
+                  <p className="text-xs text-mute">
+                    Connect on Robinhood testnet (46630).
+                  </p>
+                  <WalletMenu />
+                </div>
               ) : (
                 <button
                   type="button"
@@ -718,7 +692,7 @@ export function SealedTradePanel({
                 >
                   {working
                     ? status || "Working…"
-                    : `Trade privately → ${marketSymbol}`}
+                    : `Buy ${marketSymbol} privately`}
                 </button>
               )}
 
@@ -750,12 +724,11 @@ export function SealedTradePanel({
 
       <SuccessModal
         open={showSuccess}
-        title="Private trade submitted"
+        title="Private trade done"
         body={
           <p>
-            Your vault notes updated when the trade settles. Size was not posted
-            as a normal market swap. Cash out of the new {marketSymbol} note
-            still needs vault inventory for that asset.
+            You received vault {marketSymbol}. Size was not shown as a normal
+            market swap. Use Move if you want to cash out later.
           </p>
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}

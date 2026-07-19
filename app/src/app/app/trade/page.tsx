@@ -11,7 +11,7 @@ export default function TradePage() {
   return (
     <AppShell
       title="Trade"
-      subtitle="Public wallet, From vault (public swap), or Private trade (size hidden, vault ETH → stock)."
+      subtitle="Private: vault ETH → stock with size hidden. Wallet: public. Via market: needs a DEX pool."
     >
       <Suspense
         fallback={
