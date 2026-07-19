@@ -170,7 +170,7 @@ export default function WhitepaperPage() {
         </li>
         <li>
           <strong>Circuits</strong> — unshield (exit) and transfer (private
-          send / split) with public-input layouts bound to the pool.
+          send / split) with public-input layouts bound to the vault.
         </li>
         <li>
           <strong>Verifiers</strong> — Groth16 verifiers for each circuit,
@@ -214,7 +214,7 @@ export default function WhitepaperPage() {
       <h3>5.4 Actions</h3>
       <ul>
         <li>
-          <strong>Shield</strong> — public assets enter the pool; a commitment
+          <strong>Shield</strong> — public assets enter the vault; a commitment
           is inserted into the tree.
         </li>
         <li>

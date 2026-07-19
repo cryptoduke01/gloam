@@ -262,7 +262,7 @@ export default function DocsTestnetPage() {
         </li>
         <li>Confirm the on-chain transfer transaction.</li>
         <li>
-          Share the <strong>payment code / package</strong> with the recipient
+          Share the <strong>payment ticket / package</strong> with the recipient
           off-app (or via the share UI). Optional passphrase lock if offered.
         </li>
         <li>

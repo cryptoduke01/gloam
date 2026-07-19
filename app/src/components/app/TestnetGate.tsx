@@ -28,7 +28,7 @@ const plates = [
   {
     src: "/ascii/move.png",
     title: "Private pay",
-    body: "Send inside the pool with a payment code — not a public transfer.",
+    body: "Send inside the vault with a receive tag — not a public transfer.",
   },
   {
     src: "/ascii/trade.png",

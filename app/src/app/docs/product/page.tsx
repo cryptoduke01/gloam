@@ -69,7 +69,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Private send",
-            body: "Pay someone inside the vault. Share a compact payment code (optional passphrase lock).",
+            body: "Pay someone inside the vault. Share a receive tag or payment ticket (optional passphrase lock).",
           },
           {
             n: "●",

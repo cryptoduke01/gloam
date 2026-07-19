@@ -62,7 +62,7 @@ export default function DocsDataPage() {
           public.
         </li>
         <li>
-          <strong>Vault inventory</strong> — cash out needs the pool to actually
+          <strong>Vault inventory</strong> — cash out needs the vault to actually
           hold the asset (<code>deposited[asset]</code>). Private trade can mint
           a note; unshield still needs inventory.
         </li>
