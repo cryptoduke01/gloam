@@ -3,9 +3,9 @@ import Image from "next/image";
 
 const product = [
   { href: "/app", label: "Testnet app" },
-  { href: "/#product", label: "Product" },
-  { href: "/#encryption", label: "Encryption" },
-  { href: "/#how", label: "How it works" },
+  { href: "/app/trade?path=sealed", label: "Private trade" },
+  { href: "/app/move", label: "Private send" },
+  { href: "/docs/privacy-model", label: "Privacy model" },
   { href: "/docs", label: "Documentation" },
   { href: "/docs/testnet", label: "Testnet guide" },
   { href: "/whitepaper", label: "Whitepaper" },
@@ -69,7 +69,7 @@ export function Footer() {
                   Network
                 </p>
                 <p className="truncate text-sm text-foreground">
-                  Robinhood Chain · 4663
+                  RH testnet · 46630 · sealed vault live
                 </p>
               </div>
             </div>
