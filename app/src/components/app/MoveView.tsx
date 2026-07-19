@@ -12,7 +12,9 @@ import {
 import { formatEther, formatUnits, type Hex } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
+import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
+import { formatSealedAmount } from "@/lib/sealedRates";
 import {
   HASH_SCHEME,
   SHIELD_GAS_LIMIT,
@@ -284,9 +286,28 @@ export function MoveView() {
     ? formatEther(BigInt(selected.amountWei))
     : "0";
 
+  const cashOutAsset = selected?.asset as `0x${string}` | undefined;
+  const { deposited: poolForCashOut } = usePoolDeposited(
+    mode === "cashout" ? cashOutAsset : null
+  );
+  const cashOutAmount = selected ? BigInt(selected.amountWei) : 0n;
+  const cashOutInventoryShort =
+    mode === "cashout" &&
+    selected != null &&
+    poolForCashOut != null &&
+    poolForCashOut < cashOutAmount;
+
   async function onCashOut() {
     if (!selected || !address || !SHIELD_POOL_ADDRESS || !poseidonMode) return;
     setError(null);
+
+    if (poolForCashOut != null && poolForCashOut < BigInt(selected.amountWei)) {
+      setError(
+        `Vault inventory too low for this cash out (${formatSealedAmount(poolForCashOut)} available, need ${formatSealedAmount(BigInt(selected.amountWei))}). Someone must shield more of this asset first.`
+      );
+      return;
+    }
+
     setBusy(true);
     reset();
     handledHash.current = null;
@@ -993,6 +1014,21 @@ export function MoveView() {
                         Withdraw the full selected note to your connected
                         wallet. This exit is visible on the explorer.
                       </p>
+                      {selected && poolForCashOut != null && (
+                        <div className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-xs text-mute">
+                          <span>Vault inventory ({assetLabel(selected.asset)})</span>
+                          <span className="font-medium text-foreground">
+                            {formatSealedAmount(poolForCashOut)}
+                          </span>
+                        </div>
+                      )}
+                      {cashOutInventoryShort && (
+                        <p className="text-xs leading-relaxed text-amber-600 dark:text-amber-500">
+                          Pool holds less than this note. Cash out will fail
+                          on-chain until more of this asset is shielded into
+                          the vault.
+                        </p>
+                      )}
                       <button
                         type="button"
                         disabled={
@@ -1001,7 +1037,8 @@ export function MoveView() {
                           !selected ||
                           !matchesChain ||
                           working ||
-                          selected?.leafIndex == null
+                          selected?.leafIndex == null ||
+                          cashOutInventoryShort
                         }
                         onClick={() => void onCashOut()}
                         className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"

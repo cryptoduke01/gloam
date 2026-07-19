@@ -23,6 +23,7 @@ import {
 import { safeParseEther } from "@/lib/amount";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
+import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import {
   HASH_SCHEME,
@@ -200,6 +201,12 @@ export function SealedTradePanel({
           rateQuote.rateOut
         )
       : 0n;
+
+  const { deposited: poolOutDeposited } = usePoolDeposited(outToken);
+  const inventoryShort =
+    expectedOut > 0n &&
+    poolOutDeposited != null &&
+    poolOutDeposited < expectedOut;
 
   useEffect(() => {
     if (!isSuccess || !hash) return;
@@ -543,7 +550,37 @@ export function SealedTradePanel({
                         : "1:1"}
                   </StatusPill>
                 </div>
+                {poolOutDeposited != null && (
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
+                    <span>Vault inventory ({marketSymbol})</span>
+                    <span className="font-medium text-foreground">
+                      {formatSealedAmount(poolOutDeposited)}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              {inventoryShort && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                  <p className="font-medium">
+                    Low vault inventory for {marketSymbol}
+                  </p>
+                  <p className="mt-1">
+                    Private trade can still settle a vault note, but cashing out
+                    that note needs the pool to hold enough {marketSymbol} (
+                    {formatSealedAmount(poolOutDeposited ?? 0n)} available, need{" "}
+                    {formatSealedAmount(expectedOut)}). Shield some{" "}
+                    {marketSymbol} first, or use From vault (public swap).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onUseAdapter}
+                    className="mt-2 text-lime hover:underline"
+                  >
+                    Trade from vault instead
+                  </button>
+                </div>
+              )}
 
               {!isConnected || !onProduct ? (
                 <WalletMenu />
@@ -595,7 +632,8 @@ export function SealedTradePanel({
         body={
           <p>
             Your vault notes updated when the trade settles. Size was not posted
-            as a normal market swap.
+            as a normal market swap. Cash out of the new {marketSymbol} note
+            still needs vault inventory for that asset.
           </p>
         }
         primaryHref={hash ? EXPLORER_TX(hash) : undefined}

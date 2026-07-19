@@ -31,7 +31,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
       { href: "/docs/privacy-model", label: "What stays private" },
       { href: "/docs/sealed-trade", label: "Sealed trade" },
       { href: "/docs/chain", label: "Robinhood Chain" },
-      { href: "/docs/data", label: "Live data" },
+      { href: "/docs/data", label: "Prices & oracles" },
     ],
   },
   {

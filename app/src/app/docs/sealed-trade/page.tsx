@@ -86,7 +86,12 @@ export default function DocsSealedTradePage() {
       <ol>
         <li>
           <strong>On-chain rates</strong> — replace display-mark rates with
-          oracle-bound or pool-bound pricing (Pyth / AMM).
+          oracle-bound or pool-bound pricing (Pyth / AMM). Full write-up:{" "}
+          <Link href="/docs/data">Prices &amp; oracles</Link>.
+        </li>
+        <li>
+          <strong>Vault inventory</strong> — seed faucet stocks so cash-out after
+          a sealed trade does not fail for empty <code>deposited</code>.
         </li>
         <li>
           <strong>Production ceremony keys</strong> — multi-party proving keys

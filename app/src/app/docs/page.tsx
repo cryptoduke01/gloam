@@ -87,6 +87,10 @@ export default function DocsOverviewPage() {
         <li>Shield ETH + faucet stocks</li>
         <li>Private send + payment codes (optional passphrase)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
+        <li>
+          <Link href="/docs/sealed-trade">Sealed private trade</Link> (display
+          marks, vault inventory for cash-out)
+        </li>
         <li>Vault trade adapter (public swap edge)</li>
         <li>Note backup (optional lock) in Settings</li>
       </ul>
@@ -94,11 +98,13 @@ export default function DocsOverviewPage() {
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
         <li>
-          <Link href="/docs/sealed-trade">Sealed-size private trade</Link>
+          <Link href="/docs/data">On-chain price oracles</Link> (no Chainlink /
+          Pyth / RedStone wired)
         </li>
         <li>
           <Link href="/docs/production">Production ceremony keys / mainnet</Link>
         </li>
+        <li>Ethereum expansion (roadmap)</li>
         <li>
           <Link href="/token">$GLOAM token</Link> — prepared page only; not
           launched, no live contract
@@ -133,6 +139,9 @@ export default function DocsOverviewPage() {
         </li>
         <li>
           <Link href="/docs/sealed-trade">Sealed-size private trade</Link>
+        </li>
+        <li>
+          <Link href="/docs/data">Prices, data &amp; oracles</Link>
         </li>
         <li>
           <Link href="/whitepaper">Whitepaper</Link>
