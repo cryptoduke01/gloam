@@ -40,7 +40,7 @@ const steps = [
   {
     n: "02",
     title: "Move",
-    body: "Private send inside the vault — share a payment code, not a public transfer. Cash out only when you choose the light. Live on testnet.",
+    body: "Private send inside the vault — share a receive tag, not a public transfer. Cash out only when you choose the light. Live on testnet.",
     src: "/ascii/move.png",
   },
   {

@@ -248,7 +248,7 @@ export function ShieldView() {
       setSuccessBody(
         <>
           <p>
-            {assetLabel(assetAddress)} left the pool → owner wallet.
+            {assetLabel(assetAddress)} left the vault → owner wallet.
           </p>
           <p className="mt-2">Testnet recovery only.</p>
         </>
@@ -563,7 +563,7 @@ export function ShieldView() {
       <div className="rounded-xl border border-line bg-panel p-6">
         <StatusPill tone="warn">Not configured</StatusPill>
         <p className="mt-3 text-sm text-mute">
-          Shield pool address missing.
+          Privacy vault address missing.
         </p>
       </div>
     );

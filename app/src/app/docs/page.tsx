@@ -86,7 +86,7 @@ export default function DocsOverviewPage() {
         <li>Connect wallet, portfolio, markets</li>
         <li>Send ETH and faucet stock tokens (public)</li>
         <li>Shield ETH + faucet stocks</li>
-        <li>Private send + payment codes (optional passphrase)</li>
+        <li>Private send + receive tags (optional passphrase tickets)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
         <li>
           <Link href="/docs/sealed-trade">Private trade</Link> — size privacy

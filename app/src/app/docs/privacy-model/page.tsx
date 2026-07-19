@@ -32,7 +32,7 @@ export default function DocsPrivacyPage() {
           {
             n: "✓",
             title: "Private send (live)",
-            body: "Pay someone inside the vault with a payment code. The chain sees a transfer proof — not “Alice paid Bob 0.01 ETH”.",
+            body: "Pay someone inside the vault with a receive tag. The chain sees a transfer proof — not “Alice paid Bob 0.01 ETH”.",
           },
           {
             n: "!",
