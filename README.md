@@ -12,8 +12,10 @@ Stocks. Memes. Same rails. Money that can sit, move, and trade without printing 
 | --- | --- |
 | Site | [gloam.trade](https://gloam.trade) |
 | App | [gloam.trade/app](https://gloam.trade/app) |
+| Private trade | [gloam.trade/app/trade?path=sealed](https://gloam.trade/app/trade?path=sealed) |
 | Docs | [gloam.trade/docs](https://gloam.trade/docs) |
 | Paper | [gloam.trade/whitepaper](https://gloam.trade/whitepaper) |
+| Pitch | [gloam.trade/pitch](https://gloam.trade/pitch) |
 | X | [@gloamtrade](https://x.com/gloamtrade) |
 
 ---

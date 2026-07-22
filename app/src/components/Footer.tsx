@@ -13,6 +13,7 @@ const product = [
 ];
 
 const company = [
+  { href: "/pitch", label: "Pitch deck" },
   { href: "/token", label: "$GLOAM" },
   { href: "https://x.com/gloamtrade", label: "X / Twitter", external: true },
   { href: "/disclosures", label: "Risk disclosures" },

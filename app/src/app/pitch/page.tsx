@@ -298,7 +298,10 @@ export default function PitchPage() {
               <a href={PDF} download>
                 Download the deck
               </a>
-              <a href="https://gloam.trade/docs">gloam.trade/docs</a>
+              <a href="https://gloam.trade/app/trade?path=sealed">
+                Private trade (testnet)
+              </a>
+              <a href="https://gloam.trade/docs">Docs</a>
               <a href="https://x.com/gloamtrade">@gloamtrade</a>
             </div>
           </div>

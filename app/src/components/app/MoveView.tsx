@@ -1055,7 +1055,7 @@ export function MoveView() {
                       )}
                       {cashOutInventoryShort && (
                         <p className="text-xs leading-relaxed text-amber-600 dark:text-amber-500">
-                          Pool holds less than this note. Cash out will fail
+                          Vault holds less than this note. Cash out will fail
                           until more of this asset is shielded into the vault.
                         </p>
                       )}

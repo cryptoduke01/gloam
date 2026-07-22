@@ -152,8 +152,8 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             </h1>
 
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-mute sm:mt-7 sm:text-lg">
-              Shield, private pay, cash out with ZK proofs — live when the clock
-              hits zero. Prep with the guide so you&apos;re ready on open.
+              Shield, private send, private trade, cash out — live when the
+              clock hits zero. Prep with the guide so you&apos;re ready on open.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3.5">

@@ -496,7 +496,7 @@ export function SealedTradePanel({
             </p>
             {SHIELD_POOL_ADDRESS && (
               <p className="mt-2 font-mono text-[10px] text-mute">
-                pool {shortAddress(SHIELD_POOL_ADDRESS, 6)}
+                vault {shortAddress(SHIELD_POOL_ADDRESS, 6)}
               </p>
             )}
             <button
@@ -710,7 +710,7 @@ export function SealedTradePanel({
                   )}
                 {poolOutDeposited != null && (
                   <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
-                    <span>Pool can pay out</span>
+                    <span>Vault can cash out</span>
                     <span className="font-medium text-foreground">
                       {formatSealedAmount(poolOutDeposited)} {marketSymbol}
                     </span>
@@ -720,7 +720,7 @@ export function SealedTradePanel({
 
               {inventoryShort && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Pool has less {marketSymbol} than this trade. The private trade
+                  Vault holds less {marketSymbol} than this trade. Private trade
                   can still settle, but cashing out that stock later may fail
                   until inventory is topped up.
                 </p>

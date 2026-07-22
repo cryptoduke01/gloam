@@ -87,6 +87,7 @@ function Chip({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={`min-h-10 rounded-lg px-3 text-sm font-medium capitalize ${
         active
