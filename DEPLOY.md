@@ -20,6 +20,9 @@ If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at
 | Path | Content |
 | --- | --- |
 | `/` | Landing |
+| `/app` | Testnet product |
+| `/app/trade?path=sealed` | Private trade (default) |
+| `/pitch` | Pitch deck |
 | `/docs` | Docs overview (Arrow-style) |
 | `/docs/*` | encryption, privacy-model, chain, product |
 | `/whitepaper` | Whitepaper |
@@ -45,5 +48,7 @@ Defaults are hard-coded for the **sealed** Poseidon vault. You do not need env v
 | `NEXT_PUBLIC_POSEIDON_SHIELD_POOL` | `0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F` | `0xA488…` (pre-sealed; app remaps but clean env is better) |
 | `NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK` | `90436718` | `90260331` (old pool history) |
 | `NEXT_PUBLIC_HASH_SCHEME` | `poseidon` | `keccak` unless debugging Phase-1 |
+
+**Hygiene:** omit these envs entirely if the hard-coded sealed defaults are fine. Stale `0xA488…` or block `90260331` is remapped at runtime; Settings → vault health surfaces a remapped warning when that happens.
 
 Admin: `ADMIN_ACCESS_CODE` (server-only).

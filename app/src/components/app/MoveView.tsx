@@ -1043,21 +1043,44 @@ export function MoveView() {
                           to your connected wallet.
                         </p>
                       )}
-                      {selected && poolForCashOut != null && (
-                        <div className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-xs text-mute">
-                          <span>
-                            Vault inventory ({assetLabel(selected.asset)})
-                          </span>
-                          <span className="font-medium text-foreground">
-                            {formatSealedAmount(poolForCashOut)}
-                          </span>
+                      {selected && (
+                        <div
+                          className={`rounded-lg border px-3 py-2 text-xs ${
+                            cashOutInventoryShort
+                              ? "border-amber-500/40 bg-amber-500/5 text-mute"
+                              : poolForCashOut != null
+                                ? "border-lime/30 bg-lime/5 text-mute"
+                                : "border-line text-mute"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span>
+                              Vault inventory ({assetLabel(selected.asset)})
+                            </span>
+                            <span className="font-medium text-foreground">
+                              {poolForCashOut != null
+                                ? formatSealedAmount(poolForCashOut)
+                                : "Checking…"}
+                            </span>
+                          </div>
+                          {cashOutInventoryShort ? (
+                            <p className="mt-1.5 leading-relaxed text-amber-600 dark:text-amber-500">
+                              Not enough in the vault to pay this note. Cash out
+                              is blocked until more{" "}
+                              {assetLabel(selected.asset)} is shielded.{" "}
+                              <Link
+                                href="/app/shield"
+                                className="underline hover:text-foreground"
+                              >
+                                Shield more →
+                              </Link>
+                            </p>
+                          ) : poolForCashOut != null ? (
+                            <p className="mt-1.5 text-[11px] text-mute">
+                              Vault can cover this cash out.
+                            </p>
+                          ) : null}
                         </div>
-                      )}
-                      {cashOutInventoryShort && (
-                        <p className="text-xs leading-relaxed text-amber-600 dark:text-amber-500">
-                          Vault holds less than this note. Cash out will fail
-                          until more of this asset is shielded into the vault.
-                        </p>
                       )}
                       <button
                         type="button"
@@ -1082,6 +1105,8 @@ export function MoveView() {
                             />
                             {status || "Working…"}
                           </>
+                        ) : cashOutInventoryShort ? (
+                          "Cash out blocked — low inventory"
                         ) : (
                           "Cash out (public amount)"
                         )}

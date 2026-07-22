@@ -27,8 +27,8 @@ export default function DocsSealedTradePage() {
         steps={[
           {
             n: "1",
-            title: "Pick a vault note",
-            body: "Spend a shielded ETH note you already hold in the vault.",
+            title: "Pick direction + vault note",
+            body: "Buy (ETH → stock) or sell (stock → ETH). Spend a note you already hold in the vault.",
           },
           {
             n: "2",

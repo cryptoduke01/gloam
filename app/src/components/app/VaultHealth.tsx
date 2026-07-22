@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { shortAddress } from "@/lib/chain";
+import { useEffect, useMemo, useState } from "react";
+import { EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
+import { vaultEnvDiagnostics } from "@/lib/config";
 import {
   SHIELD_POOL_ADDRESS,
   HASH_SCHEME,
@@ -18,6 +19,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
   const { leafCount, loading: treeLoading, refresh, error: treeError } =
     useShieldTree();
   const [sealed, setSealed] = useState<"checking" | "ready" | "off">("checking");
+  const env = useMemo(() => vaultEnvDiagnostics(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +116,33 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         Stay in the vault for privacy. Shield, private send, and private trade
         keep size off the public book. Cash out publishes amount by design.
       </p>
+      {SHIELD_POOL_ADDRESS && (
+        <p className="mt-2 break-all font-mono text-[10px] text-mute">
+          {SHIELD_POOL_ADDRESS}
+          {" · block "}
+          {env.deployBlock.toString()}
+          {env.remappedFromLegacy || env.deployBlockRemapped
+            ? " · remapped from legacy env"
+            : ""}
+          {" · "}
+          <a
+            href={EXPLORER_ADDRESS(SHIELD_POOL_ADDRESS)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-lime hover:underline"
+          >
+            explorer
+          </a>
+        </p>
+      )}
+      {(env.remappedFromLegacy || env.deployBlockRemapped) && (
+        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
+          Vercel still has pre-sealed env values. App remaps to sealed vault{" "}
+          {shortAddress(env.productPool, 4)} — clean{" "}
+          <code className="text-foreground">NEXT_PUBLIC_POSEIDON_SHIELD_POOL</code>{" "}
+          and deploy block in Vercel when you can.
+        </p>
+      )}
     </div>
   );
 }

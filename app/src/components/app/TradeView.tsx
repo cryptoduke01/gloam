@@ -61,6 +61,7 @@ export function TradeView() {
 
   const searchMarket = search.get("market");
   const pathParam = search.get("path");
+  const sideParam = search.get("side"); // sealed trade: buy | sell
   const [side, setSide] = useState<Side>(settings.defaultSide);
   const [marketId, setMarketId] = useState(searchMarket ?? "tsla");
   const [amount, setAmount] = useState("");
@@ -692,6 +693,7 @@ export function TradeView() {
               marketId={resolvedId}
               marketSymbol={market.symbol}
               tokenAddress={token}
+              initialDir={sideParam === "sell" ? "sell" : "buy"}
             />
           ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-panel">

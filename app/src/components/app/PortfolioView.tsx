@@ -397,9 +397,7 @@ export function PortfolioView() {
                     </p>
                     <p className="mt-0.5 text-xs text-mute">
                       {n.leafIndex != null
-                        ? isNativeAsset(n.asset)
-                          ? "Ready to private trade, send, or cash out"
-                          : "Ready to send or cash out"
+                        ? "Ready to private trade, send, or cash out"
                         : "Linking to vault…"}
                       {n.source === "local" && n.id.startsWith("imp-")
                         ? " · received"
@@ -417,14 +415,22 @@ export function PortfolioView() {
                         Tx
                       </a>
                     )}
-                    {isNativeAsset(n.asset) && (
-                      <Link
-                        href="/app/trade?path=sealed"
-                        className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
-                      >
-                        Trade
-                      </Link>
-                    )}
+                    <Link
+                      href={
+                        isNativeAsset(n.asset)
+                          ? "/app/trade?path=sealed"
+                          : `/app/trade?path=sealed&side=sell&market=${
+                              TESTNET_STOCK_TOKENS.find(
+                                (t) =>
+                                  t.address.toLowerCase() ===
+                                  n.asset.toLowerCase()
+                              )?.id ?? "tsla"
+                            }`
+                      }
+                      className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
+                    >
+                      Trade
+                    </Link>
                     <Link
                       href="/app/move"
                       className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-mute"

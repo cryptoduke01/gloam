@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Private trade: vault ETH → vault stock. No DEX.
+ * Private trade: vault assetIn → vault assetOut. No DEX.
+ * Buy = ETH → stock · Sell = stock → ETH.
  * Size stays private. Rates from display marks (exact circuit product).
  */
 
@@ -63,15 +64,20 @@ import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
 
 type Support = "checking" | "ready" | "no_verifier" | "offline";
+/** Buy = vault ETH → vault stock · Sell = vault stock → vault ETH */
+type TradeDir = "buy" | "sell";
 
 export function SealedTradePanel({
   marketId,
   marketSymbol,
   tokenAddress,
+  initialDir = "buy",
 }: {
   marketId?: string;
   marketSymbol: string;
   tokenAddress?: Address;
+  /** buy = ETH→stock · sell = stock→ETH */
+  initialDir?: TradeDir;
   /** kept for TradeView API compat; unused */
   onUseAdapter?: () => void;
 }) {
@@ -93,6 +99,11 @@ export function SealedTradePanel({
   const { data: marketsData } = useLiveMarkets();
 
   const [support, setSupport] = useState<Support>("checking");
+  const [dir, setDir] = useState<TradeDir>(initialDir);
+
+  useEffect(() => {
+    setDir(initialDir);
+  }, [initialDir]);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -137,54 +148,73 @@ export function SealedTradePanel({
     void checkVault();
   }, [checkVault]);
 
-  const ethNotes = useMemo(() => {
+  const stockToken =
+    tokenAddress ??
+    TESTNET_STOCK_TOKENS.find((t) => t.id === marketId)?.address ??
+    TESTNET_STOCK_TOKENS.find(
+      (t) => t.symbol.toLowerCase() === marketSymbol.toLowerCase()
+    )?.address;
+
+  /** Circuit assetIn / assetOut for current direction */
+  const assetIn: Address =
+    dir === "buy" ? NATIVE_ASSET : (stockToken ?? NATIVE_ASSET);
+  const assetOut: Address =
+    dir === "buy" ? (stockToken ?? NATIVE_ASSET) : NATIVE_ASSET;
+  const inSymbol = dir === "buy" ? "ETH" : marketSymbol;
+  const outSymbol = dir === "buy" ? marketSymbol : "ETH";
+
+  const spendNotes = useMemo(() => {
     return open
-      .filter(
-        (n) =>
-          n.bound &&
-          n.secret &&
-          n.secret !== "0x" &&
-          isNativeAsset(n.asset) &&
-          (!poseidonMode || n.scheme === "poseidon" || !n.scheme)
-      )
+      .filter((n) => {
+        if (!n.bound || !n.secret || n.secret === "0x") return false;
+        if (poseidonMode && n.scheme && n.scheme !== "poseidon") return false;
+        if (dir === "buy") return isNativeAsset(n.asset);
+        if (!stockToken) return false;
+        return n.asset.toLowerCase() === stockToken.toLowerCase();
+      })
       .map((n) => {
         if (n.leafIndex != null) return n;
         const idx = leafIndexForCommitment(n.commitment);
         return idx != null ? { ...n, leafIndex: idx } : n;
       })
       .filter((n) => n.leafIndex != null);
-  }, [open, poseidonMode, leafIndexForCommitment]);
+  }, [open, poseidonMode, leafIndexForCommitment, dir, stockToken]);
 
-  const ethNotesMissingIndex = useMemo(() => {
-    return open.filter(
-      (n) =>
-        n.bound &&
-        n.secret &&
-        n.secret !== "0x" &&
-        isNativeAsset(n.asset) &&
-        (!poseidonMode || n.scheme === "poseidon" || !n.scheme) &&
-        n.leafIndex == null &&
-        leafIndexForCommitment(n.commitment) == null
-    ).length;
-  }, [open, poseidonMode, leafIndexForCommitment]);
+  const notesMissingIndex = useMemo(() => {
+    return open.filter((n) => {
+      if (!n.bound || !n.secret || n.secret === "0x") return false;
+      if (poseidonMode && n.scheme && n.scheme !== "poseidon") return false;
+      const assetOk =
+        dir === "buy"
+          ? isNativeAsset(n.asset)
+          : Boolean(
+              stockToken &&
+                n.asset.toLowerCase() === stockToken.toLowerCase()
+            );
+      if (!assetOk) return false;
+      return (
+        n.leafIndex == null && leafIndexForCommitment(n.commitment) == null
+      );
+    }).length;
+  }, [open, poseidonMode, leafIndexForCommitment, dir, stockToken]);
 
   useEffect(() => {
     if (support === "ready") void refreshTree();
   }, [support, refreshTree]);
 
+  // Reset note + amount when flipping buy/sell
+  useEffect(() => {
+    setNoteId(null);
+    setAmount("");
+    setError(null);
+  }, [dir]);
+
   const selected =
-    ethNotes.find((n) => n.id === noteId) ?? ethNotes[0] ?? null;
+    spendNotes.find((n) => n.id === noteId) ?? spendNotes[0] ?? null;
 
   useEffect(() => {
     if (selected && selected.id !== noteId) setNoteId(selected.id);
   }, [selected, noteId]);
-
-  const outToken =
-    tokenAddress ??
-    TESTNET_STOCK_TOKENS.find((t) => t.id === marketId)?.address ??
-    TESTNET_STOCK_TOKENS.find(
-      (t) => t.symbol.toLowerCase() === marketSymbol.toLowerCase()
-    )?.address;
 
   const rateQuote = useMemo(() => {
     const markets = marketsData?.markets ?? [];
@@ -200,17 +230,25 @@ export function SealedTradePanel({
     const outUsdRaw = outM?.mark ?? null;
     const bothLive =
       ethM?.source === "live" && outM?.source === "live" && ethUsdRaw != null;
-    if (ethUsdRaw != null && outUsdRaw != null && ethUsdRaw > 0 && outUsdRaw > 0) {
-      // Coarsen marks so public rates are not a live tick fingerprint
-      const ethUsd = coarsenMarkUsd(ethUsdRaw);
-      const outUsd = coarsenMarkUsd(outUsdRaw);
-      return (
-        marksToSealedRates(ethUsd, outUsd, bothLive ? "live" : "static") ??
-        fallbackOneToOneRates()
-      );
+    let base =
+      ethUsdRaw != null && outUsdRaw != null && ethUsdRaw > 0 && outUsdRaw > 0
+        ? marksToSealedRates(
+            coarsenMarkUsd(ethUsdRaw),
+            coarsenMarkUsd(outUsdRaw),
+            bothLive ? "live" : "static"
+          )
+        : null;
+    if (!base) base = fallbackOneToOneRates();
+    // Buy ETH→stock: rateIn=ETH, rateOut=stock. Sell stock→ETH: swap.
+    if (dir === "sell") {
+      return {
+        ...base,
+        rateIn: base.rateOut,
+        rateOut: base.rateIn,
+      };
     }
-    return fallbackOneToOneRates();
-  }, [marketsData, marketId, marketSymbol]);
+    return base;
+  }, [marketsData, marketId, marketSymbol, dir]);
 
   const amountSwapPreview = safeParseEther(amount);
   const amountEntered =
@@ -236,7 +274,12 @@ export function SealedTradePanel({
   const amountSwapExact = exactPreview?.amountSwap ?? 0n;
   const quoteReady = Boolean(exactPreview && exactPreview.amountOut > 0n);
 
-  const { deposited: poolOutDeposited } = usePoolDeposited(outToken);
+  const {
+    deposited: poolOutDeposited,
+    isLoading: invLoading,
+    refetch: refetchInv,
+  } = usePoolDeposited(assetOut);
+  // Inventory for the out asset (stock on buy, ETH on sell) — cash-out solvency later
   const inventoryShort =
     expectedOut > 0n &&
     poolOutDeposited != null &&
@@ -311,10 +354,14 @@ export function SealedTradePanel({
       !selected ||
       !address ||
       !SHIELD_POOL_ADDRESS ||
-      !outToken ||
+      !stockToken ||
       !poseidonMode
     ) {
-      setError("Shield some ETH first, then pick a stock on the left.");
+      setError(
+        dir === "buy"
+          ? "Shield some ETH first, then pick a stock on the left."
+          : `Shield some ${marketSymbol} first, or buy it privately.`
+      );
       return;
     }
     if (support !== "ready") {
@@ -328,7 +375,7 @@ export function SealedTradePanel({
       return;
     }
     if (amountWanted > BigInt(selected.amountWei)) {
-      setError("That is more ETH than this vault note holds.");
+      setError(`That is more ${inSymbol} than this vault note holds.`);
       return;
     }
 
@@ -357,7 +404,7 @@ export function SealedTradePanel({
       }
       if (leafIdx == null) {
         throw new Error(
-          "This ETH note is not linked yet. Open Shield, wait for confirm, then come back."
+          "This vault note is not linked yet. Open Shield, wait for confirm, then come back."
         );
       }
 
@@ -372,8 +419,8 @@ export function SealedTradePanel({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
         amountSwap: exact.amountSwap,
-        assetIn: NATIVE_ASSET,
-        assetOut: outToken,
+        assetIn,
+        assetOut,
         amountOutMin,
         rateIn,
         rateOut,
@@ -440,8 +487,8 @@ export function SealedTradePanel({
           fieldToBytes32(w.publicInputs.nullifier),
           fieldToBytes32(w.publicInputs.newCommitmentOut),
           fieldToBytes32(w.publicInputs.newCommitmentChange),
-          NATIVE_ASSET,
-          outToken,
+          assetIn,
+          assetOut,
           w.publicInputs.amountOutMin,
           w.publicInputs.rateIn,
           w.publicInputs.rateOut,
@@ -451,7 +498,10 @@ export function SealedTradePanel({
       });
       void import("@/lib/track").then(({ track }) => {
         // No amounts — privacy stack
-        track("sealed_swap_submit", { asset: marketSymbol.slice(0, 12) });
+        track("sealed_swap_submit", {
+          asset: marketSymbol.slice(0, 12),
+          dir,
+        });
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Private trade failed");
@@ -529,8 +579,8 @@ export function SealedTradePanel({
                   Private trade
                 </p>
                 <p className="text-sm text-mute">
-                  Sell vault ETH for vault {marketSymbol}. Size stays private.
-                  No public market needed.
+                  Vault {inSymbol} → vault {outSymbol}. Size stays private. No
+                  public market needed.
                 </p>
               </div>
               <StatusPill tone="lime" dot>
@@ -538,6 +588,37 @@ export function SealedTradePanel({
               </StatusPill>
             </div>
             <div className="space-y-4 p-5">
+              <div
+                className="flex gap-1 rounded-lg border border-line p-1"
+                role="group"
+                aria-label="Trade direction"
+              >
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setDir("buy")}
+                  className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
+                    dir === "buy"
+                      ? "bg-lime text-black"
+                      : "text-mute hover:text-foreground"
+                  }`}
+                >
+                  Buy {marketSymbol}
+                </button>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => setDir("sell")}
+                  className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
+                    dir === "sell"
+                      ? "bg-lime text-black"
+                      : "text-mute hover:text-foreground"
+                  }`}
+                >
+                  Sell {marketSymbol}
+                </button>
+              </div>
+
               <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-xs leading-relaxed text-mute">
                 <p className="font-medium text-foreground">
                   Size privacy {sizePrivacy === "max" ? "on" : "relaxed"}
@@ -563,11 +644,13 @@ export function SealedTradePanel({
               <ol className="list-decimal space-y-1 pl-5 text-xs text-mute">
                 <li>
                   <Link href="/app/shield" className="text-lime hover:underline">
-                    Shield ETH
+                    Shield {inSymbol}
                   </Link>{" "}
-                  into the vault (not stock)
+                  into the vault
                 </li>
-                <li>Pick how much ETH to sell below</li>
+                <li>
+                  Pick how much {inSymbol} to {dir === "buy" ? "spend" : "sell"}
+                </li>
                 <li>Wait for the proof, confirm in your wallet</li>
               </ol>
 
@@ -594,31 +677,41 @@ export function SealedTradePanel({
 
               <div>
                 <p className="text-sm font-medium text-foreground">
-                  Your vault ETH
+                  Your vault {inSymbol}
                 </p>
-                {ethNotes.length === 0 ? (
+                {spendNotes.length === 0 ? (
                   <div className="mt-2 rounded-xl border border-line bg-background/60 px-4 py-3 text-sm text-mute">
                     <p>
-                      No vault ETH yet. Private trade spends{" "}
-                      <strong className="text-foreground">ETH in the vault</strong>
-                      , not stock.
+                      No vault {inSymbol} yet. This side spends{" "}
+                      <strong className="text-foreground">
+                        {inSymbol} in the vault
+                      </strong>
+                      .
                     </p>
                     <Link
                       href="/app/shield"
                       className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
                     >
-                      Shield ETH
+                      Shield {inSymbol}
                     </Link>
-                    {ethNotesMissingIndex > 0 && (
+                    {dir === "sell" && (
+                      <button
+                        type="button"
+                        className="mt-2 w-full text-center text-xs text-lime hover:underline"
+                        onClick={() => setDir("buy")}
+                      >
+                        Or buy {marketSymbol} privately first
+                      </button>
+                    )}
+                    {notesMissingIndex > 0 && (
                       <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                        Found ETH notes that are not linked yet. Tap Refresh
-                        above.
+                        Found notes that are not linked yet. Tap Refresh above.
                       </p>
                     )}
                   </div>
                 ) : (
                   <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
-                    {ethNotes.map((n) => (
+                    {spendNotes.map((n) => (
                       <li key={n.id}>
                         <button
                           type="button"
@@ -631,7 +724,7 @@ export function SealedTradePanel({
                           }`}
                         >
                           <span className="font-medium text-foreground">
-                            {formatEth(BigInt(n.amountWei))} ETH
+                            {formatEth(BigInt(n.amountWei))} {inSymbol}
                           </span>
                           <span className="text-xs">{assetLabel(n.asset)}</span>
                         </button>
@@ -646,7 +739,7 @@ export function SealedTradePanel({
                   htmlFor="ss-amt"
                   className="text-sm font-medium text-foreground"
                 >
-                  ETH to sell
+                  {inSymbol} to {dir === "buy" ? "spend" : "sell"}
                 </label>
                 <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
                   <input
@@ -677,14 +770,14 @@ export function SealedTradePanel({
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-mute">You get (est.)</span>
                   <span
-                    key={`${amount}-${expectedOut.toString()}`}
+                    key={`${dir}-${amount}-${expectedOut.toString()}`}
                     className="font-medium text-foreground tabular-nums"
                   >
                     {expectedOut > 0n
-                      ? `${formatSealedAmount(expectedOut)} ${marketSymbol}`
+                      ? `${formatSealedAmount(expectedOut)} ${outSymbol}`
                       : amountEntered
                         ? `Can't price — try Max`
-                        : `— ${marketSymbol}`}
+                        : `— ${outSymbol}`}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
@@ -704,25 +797,37 @@ export function SealedTradePanel({
                   amountSwapPreview != null &&
                   amountSwapExact !== amountSwapPreview && (
                     <p className="mt-1 text-[11px] text-mute">
-                      Exact size {formatSealedAmount(amountSwapExact)} ETH for
-                      the proof.
+                      Exact size {formatSealedAmount(amountSwapExact)}{" "}
+                      {inSymbol} for the proof.
                     </p>
                   )}
-                {poolOutDeposited != null && (
-                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
-                    <span>Vault can cash out</span>
-                    <span className="font-medium text-foreground">
-                      {formatSealedAmount(poolOutDeposited)} {marketSymbol}
-                    </span>
-                  </div>
-                )}
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
+                  <span>Vault inventory ({outSymbol})</span>
+                  <span className="flex items-center gap-2 font-medium text-foreground">
+                    {invLoading
+                      ? "…"
+                      : poolOutDeposited != null
+                        ? formatSealedAmount(poolOutDeposited)
+                        : "—"}
+                    <button
+                      type="button"
+                      onClick={() => void refetchInv()}
+                      className="text-lime hover:underline"
+                    >
+                      Refresh
+                    </button>
+                  </span>
+                </div>
               </div>
 
               {inventoryShort && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Vault holds less {marketSymbol} than this trade. Private trade
-                  can still settle, but cashing out that stock later may fail
-                  until inventory is topped up.
+                  Vault holds less {outSymbol} than this trade. Private trade can
+                  still settle, but cashing out {outSymbol} later may fail until
+                  inventory is topped up.{" "}
+                  <Link href="/app/shield" className="underline">
+                    Shield more
+                  </Link>
                 </p>
               )}
 
@@ -755,7 +860,7 @@ export function SealedTradePanel({
                     disabled={
                       working ||
                       !selected ||
-                      !outToken ||
+                      !stockToken ||
                       !amountEntered ||
                       !quoteReady ||
                       treeLoading
@@ -771,8 +876,10 @@ export function SealedTradePanel({
                         />
                         {status || "Working…"}
                       </>
-                    ) : (
+                    ) : dir === "buy" ? (
                       `Buy ${marketSymbol} privately`
+                    ) : (
+                      `Sell ${marketSymbol} privately`
                     )}
                   </button>
                   {!working && selected && amountEntered && !quoteReady && (
@@ -825,9 +932,9 @@ export function SealedTradePanel({
         title="Private trade done"
         body={
           <p>
-            You received vault {marketSymbol}. Size stays out of the public
-            min-out. Explorer shows a vault proof, not a market fill. Cash out
-            later will publish amount by design — stay in vault to stay private.
+            You received vault {outSymbol}. Size stays out of the public min-out.
+            Explorer shows a vault proof, not a market fill. Cash out later will
+            publish amount by design — stay in vault to stay private.
             {hash ? (
               <>
                 {" "}

@@ -102,3 +102,37 @@ export function activeShieldDeployBlock(): bigint {
 export const UNSHIELD_ENABLED =
   process.env.NEXT_PUBLIC_UNSHIELD_ENABLED === "true" ||
   activeHashScheme() === "poseidon";
+
+/**
+ * Client diagnostics for Settings / deploy hygiene.
+ * Surfaces stale A488 envs that were remapped to the sealed vault.
+ */
+export function vaultEnvDiagnostics(): {
+  productPool: Address;
+  activePool: Address | null;
+  deployBlock: bigint;
+  hashScheme: HashScheme;
+  envPoolRaw: string | null;
+  remappedFromLegacy: boolean;
+  deployBlockRemapped: boolean;
+} {
+  const envPoolRaw = process.env.NEXT_PUBLIC_POSEIDON_SHIELD_POOL?.trim() || null;
+  const remappedFromLegacy = Boolean(
+    envPoolRaw && sameAddr(envPoolRaw, LEGACY_POSEIDON_POOL)
+  );
+  const rawBlock = process.env.NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK?.trim();
+  const deployBlockRemapped = Boolean(
+    rawBlock === String(LEGACY_POSEIDON_DEPLOY_BLOCK) &&
+      POSEIDON_POOL &&
+      sameAddr(POSEIDON_POOL, TESTNET_POSEIDON_POOL)
+  );
+  return {
+    productPool: TESTNET_POSEIDON_POOL,
+    activePool: activePoolAddress(),
+    deployBlock: activeShieldDeployBlock(),
+    hashScheme: activeHashScheme(),
+    envPoolRaw,
+    remappedFromLegacy,
+    deployBlockRemapped,
+  };
+}
