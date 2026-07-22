@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
 /**
@@ -121,16 +122,30 @@ export function SuccessModal({
           </div>
 
           <div className="mt-8 flex w-full flex-col gap-2 sm:flex-row">
-            {primaryHref && primaryLabel && (
-              <a
-                href={primaryHref}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90"
-              >
-                {primaryLabel}
-              </a>
-            )}
+            {primaryHref && primaryLabel && (() => {
+              const external =
+                primaryHref.startsWith("http") ||
+                primaryHref.startsWith("https");
+              const cls =
+                "inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90";
+              if (external) {
+                return (
+                  <a
+                    href={primaryHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cls}
+                  >
+                    {primaryLabel}
+                  </a>
+                );
+              }
+              return (
+                <Link href={primaryHref} onClick={onClose} className={cls}>
+                  {primaryLabel}
+                </Link>
+              );
+            })()}
             <button
               type="button"
               onClick={onClose}

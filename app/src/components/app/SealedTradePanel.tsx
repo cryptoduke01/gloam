@@ -828,10 +828,23 @@ export function SealedTradePanel({
             You received vault {marketSymbol}. Size stays out of the public
             min-out. Explorer shows a vault proof, not a market fill. Cash out
             later will publish amount by design — stay in vault to stay private.
+            {hash ? (
+              <>
+                {" "}
+                <a
+                  href={EXPLORER_TX(hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-lime hover:underline"
+                >
+                  View tx
+                </a>
+              </>
+            ) : null}
           </p>
         }
-        primaryHref={hash ? EXPLORER_TX(hash) : undefined}
-        primaryLabel="View on explorer"
+        primaryHref="/app"
+        primaryLabel="See portfolio"
         onClose={() => setShowSuccess(false)}
       />
     </>
