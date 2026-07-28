@@ -14,6 +14,9 @@ import {
   ensureRhTestnetWallet,
   shortAddress,
 } from "@/lib/chain";
+import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
+import { TurnkeyHeaderSignIn } from "./TurnkeyHeaderSignIn";
+import { ClientOnly } from "./ClientOnly";
 
 export function WalletMenu() {
   const { address, isConnected, isConnecting } = useAccount();
@@ -69,19 +72,40 @@ export function WalletMenu() {
         disabled
         className="inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm text-mute"
       >
-        Connect
+        {TURNKEY_ENABLED ? "Sign in" : "Connect"}
       </button>
     );
   }
 
   if (!isConnected || !address) {
-    const connector = connectors[0];
+    // Injected wallet (MetaMask, etc.) is the fallback, not the Turnkey connector.
+    const walletConnector =
+      connectors.find((c) => c.id !== "gloam-turnkey") ?? connectors[0];
+
+    if (TURNKEY_ENABLED) {
+      return (
+        <div className="flex items-center gap-3">
+          <ClientOnly>
+            <TurnkeyHeaderSignIn />
+          </ClientOnly>
+          <button
+            type="button"
+            onClick={() => walletConnector && connect({ connector: walletConnector })}
+            disabled={!walletConnector || isPending || isConnecting}
+            className="text-xs text-mute transition-colors hover:text-foreground disabled:opacity-60"
+          >
+            {isPending || isConnecting ? "Connecting…" : "Use a wallet"}
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div>
         <button
           type="button"
-          onClick={() => connector && connect({ connector })}
-          disabled={!connector || isPending || isConnecting}
+          onClick={() => walletConnector && connect({ connector: walletConnector })}
+          disabled={!walletConnector || isPending || isConnecting}
           className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
         >
           {isPending || isConnecting ? "Connecting…" : "Connect"}
