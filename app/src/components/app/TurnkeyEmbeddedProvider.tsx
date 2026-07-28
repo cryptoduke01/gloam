@@ -29,6 +29,26 @@ export function TurnkeyEmbeddedProvider({ children }: { children: ReactNode }) {
   const config: TurnkeyProviderConfig = {
     organizationId: ORG_ID!,
     authProxyConfigId: AUTH_PROXY_CONFIG_ID!,
+    ui: {
+      darkMode: true,
+      logoLight: "/brand/logo.png",
+      logoDark: "/brand/logo.png",
+      borderRadius: 14,
+      preferLargeActionButtons: true,
+      authModal: {
+        // We offer wallet connect ourselves ("Use a wallet"), so drop it here.
+        methods: { walletAuthEnabled: false },
+        methodOrder: ["email", "passkey"],
+      },
+      colors: {
+        dark: {
+          primary: "#c8ff00",
+          primaryText: "#000000",
+          modalBackground: "#0a0a0a",
+          modalText: "#ffffff",
+        },
+      },
+    },
   };
 
   return (

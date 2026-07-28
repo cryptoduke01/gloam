@@ -304,7 +304,7 @@ export function PortfolioView() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-mute">
                   {TURNKEY_ENABLED
-                    ? "Sign in with a passkey to get a Gloam wallet, or connect an existing one."
+                    ? "Sign in to load your balances."
                     : "Connect to load balances."}
                 </p>
                 <WalletMenu />
