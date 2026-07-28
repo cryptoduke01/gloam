@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Web3Provider } from "@/components/app/Web3Provider";
+import { TurnkeyEmbeddedProvider } from "@/components/app/TurnkeyEmbeddedProvider";
 
 export const metadata: Metadata = {
   title: {
@@ -15,5 +16,9 @@ export default function ProductLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <Web3Provider>{children}</Web3Provider>;
+  return (
+    <TurnkeyEmbeddedProvider>
+      <Web3Provider>{children}</Web3Provider>
+    </TurnkeyEmbeddedProvider>
+  );
 }

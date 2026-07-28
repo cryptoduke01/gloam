@@ -34,6 +34,8 @@ import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard } from "./OnboardingCard";
 import { WalletMenu } from "./WalletMenu";
+import { TurnkeyLoginButton } from "./TurnkeyLoginButton";
+import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
@@ -300,8 +302,25 @@ export function PortfolioView() {
 
           {!isConnected && (
             <div className="border-t border-line px-5 py-4 sm:px-6">
+              {TURNKEY_ENABLED && (
+                <div className="mb-4">
+                  <p className="text-sm text-foreground">
+                    New here? Create a Gloam wallet with a passkey.
+                  </p>
+                  <div className="mt-2 max-w-xs">
+                    <TurnkeyLoginButton />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-mute">
+                    Preview: sets up your embedded wallet. Trading through it lands next.
+                  </p>
+                </div>
+              )}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-mute">Connect to load balances.</p>
+                <p className="text-sm text-mute">
+                  {TURNKEY_ENABLED
+                    ? "Or connect an existing wallet to load balances."
+                    : "Connect to load balances."}
+                </p>
                 <WalletMenu />
               </div>
             </div>

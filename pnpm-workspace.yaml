@@ -1,4 +1,5 @@
 packages:
   - "app"
   - "docs"
+  - "mcp"
   # contracts/ is Foundry (forge), not a pnpm package
