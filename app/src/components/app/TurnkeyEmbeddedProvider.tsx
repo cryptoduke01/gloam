@@ -6,6 +6,8 @@ import {
   type TurnkeyProviderConfig,
 } from "@turnkey/react-wallet-kit";
 import "@turnkey/react-wallet-kit/styles.css";
+import { TurnkeyWagmiSync } from "./TurnkeyWagmiSync";
+import { ClientOnly } from "./ClientOnly";
 
 const ORG_ID = process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID;
 const AUTH_PROXY_CONFIG_ID =
@@ -36,6 +38,9 @@ export function TurnkeyEmbeddedProvider({ children }: { children: ReactNode }) {
         onError: (error) => console.error("Turnkey error:", error),
       }}
     >
+      <ClientOnly>
+        <TurnkeyWagmiSync />
+      </ClientOnly>
       {children}
     </TurnkeyProvider>
   );

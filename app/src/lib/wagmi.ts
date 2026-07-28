@@ -3,6 +3,7 @@
 import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { robinhoodTestnet } from "./chain";
+import { turnkeyConnector } from "./turnkeyConnector";
 
 /**
  * Product is **testnet-only** until stocks/swaps/privacy work end-to-end.
@@ -10,7 +11,7 @@ import { robinhoodTestnet } from "./chain";
  */
 export const wagmiConfig = createConfig({
   chains: [robinhoodTestnet],
-  connectors: [injected({ shimDisconnect: true })],
+  connectors: [injected({ shimDisconnect: true }), turnkeyConnector()],
   transports: {
     [robinhoodTestnet.id]: http("https://rpc.testnet.chain.robinhood.com"),
   },

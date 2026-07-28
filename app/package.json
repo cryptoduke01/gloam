@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.83.0",
     "@turnkey/react-wallet-kit": "^2.2.0",
+    "@turnkey/viem": "^0.14.32",
     "circomlibjs": "0.1.7",
     "framer-motion": "^12.42.2",
     "next": "16.2.10",
