@@ -133,12 +133,9 @@ export function Landing() {
         </section>
 
         <section className="border-b border-line bg-panel/60">
-          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-5">
+          <div className="mx-auto flex max-w-6xl items-center px-5 py-4 sm:px-8 sm:py-5">
             <p className="text-sm text-mute">
               Settles where tokenized equities already live: Robinhood Chain.
-            </p>
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-lime">
-              Chain ID 4663
             </p>
           </div>
         </section>

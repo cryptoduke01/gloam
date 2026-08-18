@@ -141,7 +141,7 @@ export default function OpenGraphImage() {
             }}
           >
             <div style={{ color: "#c8ff00", display: "flex" }}>gloam.trade</div>
-            <div style={{ color: "#666666", display: "flex" }}>CHAIN 4663</div>
+            <div style={{ color: "#666666", display: "flex" }}>ROBINHOOD CHAIN</div>
           </div>
         </div>
       </div>
