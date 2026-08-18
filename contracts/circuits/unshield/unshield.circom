@@ -20,6 +20,13 @@ pragma circom 2.1.6;
  */
 
 include "circomlib/circuits/poseidon.circom";
+include "circomlib/circuits/bitify.circom";
+
+// Max bits for any note amount. 128 bits (~3.4e38) is far above any real
+// token amount and far below the BN254 field (~2^253), so amounts can never
+// wrap the field when summed in transfer/sealedSwap conservation checks.
+// Kensho C2: without this bound a witness can inflate value via field overflow.
+function MAX_AMOUNT_BITS() { return 128; }
 
 template HashLeftRight() {
     signal input left;
@@ -83,6 +90,11 @@ template Unshield(levels) {
     signal input pathElements[levels];
     signal input pathIndices[levels];
 
+    // 0) Range-check amount so the note value is a real, in-range integer
+    // (defense in depth: keeps every note's amount < 2^128, matching transfer).
+    component amtBits = Num2Bits(MAX_AMOUNT_BITS());
+    amtBits.in <== amount;
+
     // 1) Open note
     component commitH = Poseidon(3);
     commitH.inputs[0] <== secret;
@@ -114,15 +126,7 @@ template Unshield(levels) {
     isz.out === 0;
 }
 
-// Minimal IsZero (avoid extra includes if path breaks)
-template IsZero() {
-    signal input in;
-    signal output out;
-    signal inv;
-    inv <-- in != 0 ? 1/in : 0;
-    out <== -in*inv + 1;
-    in*out === 0;
-}
+// IsZero is provided by circomlib/circuits/comparators.circom (via bitify include).
 
 // Depth 20 matches pool capacity 2^20
 component main {public [root, nullifier, asset, amount, recipient]} = Unshield(20);

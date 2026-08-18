@@ -76,6 +76,9 @@ library IncrementalMerkleTree {
         self.nextIndex = index + 1;
     }
 
+    /// @dev All historical roots stay valid permanently (via `knownRoots`); the
+    ///      `rootHistory` ring buffer is retained for off-chain observability only and is
+    ///      intentionally NOT the validity source, so in-flight proofs never expire.
     function isKnownRoot(Tree storage self, bytes32 root) internal view returns (bool) {
         if (root == bytes32(0)) return false;
         return self.knownRoots[root];

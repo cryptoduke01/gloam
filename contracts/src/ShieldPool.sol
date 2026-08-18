@@ -32,6 +32,9 @@ contract ShieldPool is IShieldPool {
     mapping(bytes32 => bool) public spent;
     mapping(address => uint256) public override deposited;
 
+    /// @notice Reject a commitment already inserted (double-shield → unspendable note footgun).
+    mapping(bytes32 => bool) public commitmentSeen;
+
     address public owner;
 
     /// @notice Bumped when proof public-input layout changes (app/circuits pin this).
@@ -49,6 +52,7 @@ contract ShieldPool is IShieldPool {
     error InvalidMsgValue();
     error InsufficientPoolBalance();
     error FeeOnTransferNotSupported();
+    error DuplicateCommitment();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -125,6 +129,8 @@ contract ShieldPool is IShieldPool {
     ) external payable override {
         if (commitment == bytes32(0)) revert ZeroCommitment();
         if (amount == 0) revert InvalidAmount();
+        if (commitmentSeen[commitment]) revert DuplicateCommitment();
+        commitmentSeen[commitment] = true;
 
         if (asset == address(0)) {
             if (msg.value != amount) revert InvalidMsgValue();
@@ -155,6 +161,8 @@ contract ShieldPool is IShieldPool {
 
         for (uint256 i = 0; i < 2; i++) {
             if (newCommitments[i] == bytes32(0)) revert ZeroCommitment();
+            if (commitmentSeen[newCommitments[i]]) revert DuplicateCommitment();
+            commitmentSeen[newCommitments[i]] = true;
             tree.insert(newCommitments[i]);
         }
 

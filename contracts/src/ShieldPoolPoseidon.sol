@@ -25,11 +25,32 @@ contract ShieldPoolPoseidon is IShieldPool {
     IVerifier public verifier;
     /// @notice Optional sealed-swap verifier (9 public inputs). Separate from dual unshield/transfer.
     IVerifier public sealedSwapVerifier;
+    /// @notice Optional shield (deposit) verifier: binds the inserted commitment to the
+    ///         public (commitment, amount, asset). While address(0), shield() trusts the
+    ///         client — which lets a depositor embed a larger amount than they send (C1).
+    ///         Once set, plain shield() is blocked and shieldBound() (proof required) is the
+    ///         only deposit path, closing the value-binding gap.
+    IVerifier public shieldVerifier;
     IPoseidon2 public immutable poseidon2;
     IMT.Tree private tree;
 
     mapping(bytes32 => bool) public spent;
     mapping(address => uint256) public override deposited;
+
+    /// @notice Reject a commitment that has already been inserted (double-shield footgun).
+    mapping(bytes32 => bool) public commitmentSeen;
+
+    /// @notice Owner-approved sealed-swap rate per (assetIn, assetOut) direction.
+    /// @dev The circuit only proves amountOut*rateOut == amountSwap*rateIn; it does NOT
+    ///      constrain the rate itself. Without an on-chain check the caller can pass any
+    ///      rateIn/rateOut and mint an assetOut note worth far more than the assetIn spent,
+    ///      then unshield the pool's assetOut inventory (Kensho C3). Pin the rate here.
+    struct SwapRate {
+        uint128 rateIn;
+        uint128 rateOut;
+        bool enabled;
+    }
+    mapping(address => mapping(address => SwapRate)) public swapRate;
 
     address public owner;
 
@@ -42,6 +63,14 @@ contract ShieldPoolPoseidon is IShieldPool {
         address indexed assetOut,
         bytes32 newCommitmentOut,
         bytes32 newCommitmentChange
+    );
+
+    event SwapRateSet(
+        address indexed assetIn,
+        address indexed assetOut,
+        uint128 rateIn,
+        uint128 rateOut,
+        bool enabled
     );
 
     error NotOwner();
@@ -57,6 +86,9 @@ contract ShieldPoolPoseidon is IShieldPool {
     error InsufficientPoolBalance();
     error FeeOnTransferNotSupported();
     error SameAsset();
+    error RateNotAllowed();
+    error DuplicateCommitment();
+    error ShieldProofRequired();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -85,6 +117,30 @@ contract ShieldPoolPoseidon is IShieldPool {
 
     function setSealedSwapVerifier(address verifier_) external onlyOwner {
         sealedSwapVerifier = IVerifier(verifier_);
+    }
+
+    /// @notice Enable value-bound deposits. Once set, plain shield() is blocked and
+    ///         callers must use shieldBound() with a proof binding commitment↔amount↔asset.
+    function setShieldVerifier(address verifier_) external onlyOwner {
+        shieldVerifier = IVerifier(verifier_);
+    }
+
+    /**
+     * @notice Set the only rate a sealed swap may use for a given direction.
+     * @dev The circuit does not constrain the rate; this is the on-chain price
+     *      anchor. Set enabled=false to pause a pair. Later replaceable by an oracle.
+     */
+    function setSwapRate(
+        address assetIn,
+        address assetOut,
+        uint128 rateIn_,
+        uint128 rateOut_,
+        bool enabled_
+    ) external onlyOwner {
+        if (assetIn == assetOut) revert SameAsset();
+        if (enabled_ && (rateIn_ == 0 || rateOut_ == 0)) revert InvalidAmount();
+        swapRate[assetIn][assetOut] = SwapRate(rateIn_, rateOut_, enabled_);
+        emit SwapRateSet(assetIn, assetOut, rateIn_, rateOut_, enabled_);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -120,13 +176,49 @@ contract ShieldPoolPoseidon is IShieldPool {
         return spent[nullifier];
     }
 
+    /**
+     * @notice Trust-the-client deposit. Blocked once a shieldVerifier is configured.
+     * @dev While shieldVerifier == address(0) this preserves legacy/testnet behavior,
+     *      but the commitment is NOT bound to `amount` (C1). Prefer shieldBound().
+     */
     function shield(
         address asset,
         uint256 amount,
         bytes32 commitment
     ) external payable override {
+        if (address(shieldVerifier) != address(0)) revert ShieldProofRequired();
+        _shield(asset, amount, commitment);
+    }
+
+    /**
+     * @notice Value-bound deposit. Requires a proof that `commitment` opens to the
+     *         PUBLIC (amount, asset) — so the note's value cannot exceed the funds sent.
+     * @param proof Groth16 proof for public inputs [commitment, amount, asset].
+     */
+    function shieldBound(
+        address asset,
+        uint256 amount,
+        bytes32 commitment,
+        bytes calldata proof
+    ) external payable {
+        if (address(shieldVerifier) == address(0)) revert VerifierNotSet();
+        uint256[] memory inputs = new uint256[](3);
+        inputs[0] = uint256(commitment);
+        inputs[1] = amount;
+        inputs[2] = uint256(uint160(asset));
+        if (!shieldVerifier.verify(proof, inputs)) revert InvalidProof();
+        _shield(asset, amount, commitment);
+    }
+
+    function _shield(
+        address asset,
+        uint256 amount,
+        bytes32 commitment
+    ) internal {
         if (commitment == bytes32(0)) revert ZeroCommitment();
         if (amount == 0) revert InvalidAmount();
+        if (commitmentSeen[commitment]) revert DuplicateCommitment();
+        commitmentSeen[commitment] = true;
 
         if (asset == address(0)) {
             if (msg.value != amount) revert InvalidMsgValue();
@@ -156,6 +248,8 @@ contract ShieldPoolPoseidon is IShieldPool {
 
         for (uint256 i = 0; i < 2; i++) {
             if (newCommitments[i] == bytes32(0)) revert ZeroCommitment();
+            if (commitmentSeen[newCommitments[i]]) revert DuplicateCommitment();
+            commitmentSeen[newCommitments[i]] = true;
             tree.insert(uint256(newCommitments[i]));
         }
 
@@ -183,6 +277,13 @@ contract ShieldPoolPoseidon is IShieldPool {
     ) external {
         if (assetIn == assetOut) revert SameAsset();
         if (rateIn == 0 || rateOut == 0) revert InvalidAmount();
+        // C3: the rate must match the owner-approved rate for this direction.
+        // rateIn/rateOut fit in uint128 (they are set that way); reject anything larger.
+        if (rateIn > type(uint128).max || rateOut > type(uint128).max) revert RateNotAllowed();
+        SwapRate memory sr = swapRate[assetIn][assetOut];
+        if (!sr.enabled || uint256(sr.rateIn) != rateIn || uint256(sr.rateOut) != rateOut) {
+            revert RateNotAllowed();
+        }
         _requireSealedSwapProof(
             proof,
             root,
@@ -201,6 +302,11 @@ contract ShieldPoolPoseidon is IShieldPool {
         if (newCommitmentOut == bytes32(0) || newCommitmentChange == bytes32(0)) {
             revert ZeroCommitment();
         }
+        if (commitmentSeen[newCommitmentOut] || commitmentSeen[newCommitmentChange]) {
+            revert DuplicateCommitment();
+        }
+        commitmentSeen[newCommitmentOut] = true;
+        commitmentSeen[newCommitmentChange] = true;
         tree.insert(uint256(newCommitmentOut));
         tree.insert(uint256(newCommitmentChange));
 
