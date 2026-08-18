@@ -74,6 +74,20 @@ export function Footer() {
                 </p>
               </div>
             </div>
+            <a
+              href="https://orynth.dev/projects/gloam"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 inline-block"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://orynth.dev/api/badge/gloam?theme=dark&style=default"
+                alt="Featured on Orynth"
+                width={260}
+                height={80}
+              />
+            </a>
           </div>
 
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-3 lg:col-span-7 lg:pl-8">
