@@ -13,14 +13,13 @@ const ease = [0.22, 1, 0.36, 1] as const;
 const specs = [
   { label: "Ticker", value: gloamToken.symbolDisplay },
   { label: "Network", value: gloamToken.chainLabel },
-  { label: "Chain ID", value: String(gloamToken.chainId) },
   { label: "Decimals", value: String(gloamToken.decimals) },
   { label: "Supply", value: gloamToken.totalSupplyLabel },
   {
     label: "Contract",
     value: gloamToken.contractAddress
       ? truncateAddr(gloamToken.contractAddress)
-      : "Pending",
+      : "Coming soon",
   },
 ];
 
@@ -80,22 +79,20 @@ export function TokenPage() {
                   {tokenStatusLabel()}
                 </span>
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Token · Prepared
+                  Token · {gloamToken.launch.kicker}
                 </span>
               </div>
 
               <div className="mt-8 grid gap-10 lg:grid-cols-12 lg:items-end">
                 <div className="lg:col-span-7">
-                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-mute">
-                    Protocol asset
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-lime">
+                    {gloamToken.launch.headline}
                   </p>
                   <h1 className="mt-2 font-display text-[3.25rem] leading-[0.95] tracking-tight text-foreground sm:text-7xl lg:text-[5.5rem]">
                     {gloamToken.symbolDisplay}
                   </h1>
                   <p className="mt-5 max-w-xl text-base leading-relaxed text-mute sm:text-lg">
-                    {gloamToken.tagline} Built for private hold, send, and trade —
-                    launched when the product and utility are ready, not when the
-                    feed demands a ticker.
+                    {gloamToken.launch.sub}
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <MotionPress>
@@ -222,7 +219,7 @@ export function TokenPage() {
             </MotionItem>
             <MotionItem>
               <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                A token for the private layer — when it earns one
+                A token for the private layer, when it earns one
               </h2>
             </MotionItem>
             <MotionItem>
@@ -258,6 +255,61 @@ export function TokenPage() {
           </div>
         </MotionSection>
 
+        {/* Tokenomics / distribution intent */}
+        <MotionSection className="border-b border-line">
+          <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-16">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <MotionItem>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-lime">
+                    Distribution
+                  </p>
+                </MotionItem>
+                <MotionItem>
+                  <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+                    Where supply is meant to go
+                  </h2>
+                </MotionItem>
+              </div>
+              <MotionItem>
+                <span className="rounded-md border border-line bg-panel px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                  Exact splits publish at launch
+                </span>
+              </MotionItem>
+            </div>
+            <MotionItem>
+              <p className="mt-4 max-w-2xl text-mute leading-relaxed">
+                Intent, in plain language, not final numbers. The total supply and
+                exact percentages go on-chain and on this page together, the moment
+                the contract is live.
+              </p>
+            </MotionItem>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+              {gloamToken.distribution.map((d, i) => (
+                <MotionCard
+                  key={d.label}
+                  className="relative overflow-hidden rounded-xl border border-line bg-panel p-6"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="h-px flex-1 bg-line" aria-hidden />
+                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                      TBA %
+                    </span>
+                  </div>
+                  <h3 className="mt-4 font-display text-xl text-foreground">
+                    {d.label}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-mute">{d.body}</p>
+                </MotionCard>
+              ))}
+            </div>
+          </div>
+        </MotionSection>
+
         {/* Roadmap */}
         <MotionSection className="border-b border-line bg-panel/30">
           <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8 sm:py-16">
@@ -273,7 +325,8 @@ export function TokenPage() {
             </MotionItem>
             <MotionItem>
               <p className="mt-3 max-w-xl text-sm text-mute leading-relaxed">
-                Four gates. We do not mint past a closed gate.
+                Product and security are live. Token launch is the next gate. We do
+                not mint past a closed one.
               </p>
             </MotionItem>
 
@@ -380,14 +433,14 @@ export function TokenPage() {
           </div>
           <div className="relative mx-auto max-w-6xl px-5 py-16 text-center sm:px-8 sm:py-20">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-lime">
-              Meanwhile
+              Coming soon
             </p>
             <h2 className="mt-3 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-              Trade privately. Token later.
+              The vault is live. $GLOAM is next.
             </h2>
             <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-mute">
-              The vault is live on testnet. $GLOAM lands here when gates close —
-              not as a side quest for attention.
+              Trade privately on testnet today. When $GLOAM launches, the contract
+              and supply land right here. Follow @gloamtrade so you catch it first.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link

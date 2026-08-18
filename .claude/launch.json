@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gloam-app",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@gloam/app", "dev"],
+      "port": 3000
+    }
+  ]
+}
