@@ -82,6 +82,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${instrument.variable} dark h-full antialiased`} suppressHydrationWarning>
       <head>
+        <meta
+          name="ory-verify"
+          content="orynth-d061bf2ee92a4996b6e3121097472653"
+        />
         <link
           href="https://fonts.cdnfonts.com/css/overused-grotesk"
           rel="stylesheet"
