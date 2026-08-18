@@ -14,10 +14,15 @@ const AUTH_PROXY_CONFIG_ID =
   process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID;
 
 /**
- * True only once both dashboard values are wired in .env.
- * Until then the provider is a passthrough so the app runs unchanged.
+ * Turnkey passkey sign-in is temporarily OFF.
+ * It was surfacing an error on the sign-in button, so we fall back to normal
+ * wallet connect for launch. The integration is left fully wired; re-enable it
+ * by setting NEXT_PUBLIC_TURNKEY_ENABLED=true (with the org + auth-proxy env
+ * vars present) once the passkey flow is fixed.
  */
-export const TURNKEY_ENABLED = Boolean(ORG_ID && AUTH_PROXY_CONFIG_ID);
+const FEATURE_FLAG = process.env.NEXT_PUBLIC_TURNKEY_ENABLED === "true";
+export const TURNKEY_ENABLED =
+  FEATURE_FLAG && Boolean(ORG_ID && AUTH_PROXY_CONFIG_ID);
 
 /**
  * Wraps the product app with Turnkey embedded wallets (passkey / email login).
