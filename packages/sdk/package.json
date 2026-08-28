@@ -21,10 +21,11 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc && node test/rates.selftest.mjs"
+    "test": "tsc && node test/rates.selftest.mjs && node test/note.selftest.mjs"
   },
   "dependencies": {
-    "viem": "^2.55.2"
+    "viem": "^2.55.2",
+    "circomlibjs": "0.1.7"
   },
   "devDependencies": {
     "@types/node": "^20",

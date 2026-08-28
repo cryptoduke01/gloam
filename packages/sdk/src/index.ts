@@ -25,3 +25,7 @@ export const SDK_VERSION = "0.0.1";
 export * from "./intents.js";
 export * from "./rates.js";
 export * from "./privacy.js";
+export * from "./constants.js";
+export * from "./poseidon.js";
+export * from "./note.js";
+export * from "./builders.js";
