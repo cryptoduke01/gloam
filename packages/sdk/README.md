@@ -28,12 +28,27 @@ pnpm --filter @gloam/sdk build
 - Adapters for the environment-bound parts: note storage, viewing keys, snarkjs
   artifact loading, and RPC — injected, so one core serves browser and node.
 
-## Quickstart (target — lands with the intent builders)
+## Quickstart
+
+Build an unsigned shield intent (real Poseidon note commitment, ready-to-sign
+exec args). No chain call, so it is safe to run anywhere:
+
+```bash
+pnpm --filter @gloam/sdk build
+node examples/shield-intent.mjs
+```
 
 ```ts
-import { shield, privateSend } from "@gloam/sdk";
-// shield ETH into the sealed vault, then privately send from a script on testnet.
+import { buildShieldIntent } from "@gloam/sdk";
+
+const intent = await buildShieldIntent({ amountWei: 10_000_000_000_000_000n }); // 0.01 ETH
+// intent.exec = { poolAddress, fn: "shield", valueWei, args: [asset, amount, commitment] }
+// intent.note.secret must be persisted to spend the note later.
 ```
+
+Sign `intent.exec` with any wallet or the agent server and broadcast on RH
+testnet. The `privateSend`, `unshield`, and `privateTrade` builders (which carry
+a Groth16 proof) land as the prover core finishes porting.
 
 Contracts of record (RH testnet `46630`):
 
