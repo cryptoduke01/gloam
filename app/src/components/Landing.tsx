@@ -40,7 +40,7 @@ const steps = [
   {
     n: "02",
     title: "Move",
-    body: "Private send inside the vault — share a receive tag, not a public transfer. Cash out only when you choose the light. Live on testnet.",
+    body: "Private send inside the vault, share a receive tag, not a public transfer. Cash out only when you choose the light. Live on testnet.",
     src: "/ascii/move.png",
   },
   {
@@ -348,6 +348,75 @@ export function Landing() {
           </div>
         </MotionSection>
 
+        <MotionSection id="build" className="border-b border-line">
+          <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
+            <MotionItem>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-lime">
+                Build on Gloam
+              </p>
+            </MotionItem>
+            <MotionItem>
+              <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+                The privacy layer, as a primitive
+              </h2>
+            </MotionItem>
+            <MotionItem>
+              <p className="mt-3 max-w-2xl text-mute leading-relaxed">
+                One private path, exposed three ways. Any Robinhood Chain app or
+                AI agent can add shielded balances, private transfers, and
+                private trades. The vault app is the reference implementation.
+              </p>
+            </MotionItem>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              {[
+                {
+                  tag: "@gloam/sdk",
+                  title: "SDK",
+                  body: "Drop the private path into any app. Unsigned intents plus client proving, one shared core.",
+                  href: "/docs/sdk",
+                  cta: "Read the SDK docs",
+                },
+                {
+                  tag: "@gloam/mcp",
+                  title: "Agents",
+                  body: "An MCP server so an AI agent can shield and privately trade end to end, under policy.",
+                  href: "/docs/agents",
+                  cta: "Read the agent docs",
+                },
+                {
+                  tag: "Reference app",
+                  title: "Vault",
+                  body: "The live testnet product that proves the whole path. Shield, send, cash out, private trade.",
+                  href: "/app",
+                  cta: "Open the app",
+                },
+              ].map((s) => (
+                <MotionCard
+                  key={s.title}
+                  className="group flex flex-col rounded-xl border border-line bg-panel p-6"
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+                    {s.tag}
+                  </p>
+                  <h3 className="mt-3 font-display text-2xl text-foreground">
+                    {s.title}
+                  </h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-mute">
+                    {s.body}
+                  </p>
+                  <Link
+                    href={s.href}
+                    className="mt-5 inline-flex items-center text-sm font-medium text-lime hover:underline"
+                  >
+                    {s.cta} →
+                  </Link>
+                </MotionCard>
+              ))}
+            </div>
+          </div>
+        </MotionSection>
+
         <motion.section
           id="waitlist"
           className="border-b border-line bg-lime"
@@ -363,7 +432,7 @@ export function Landing() {
               </h2>
               <p className="mt-2 max-w-xl text-sm text-black/70">
                 Stocks. Memes. Shield, transfer, and trade. Testnet product is
-                live — connect, explore, no mock private fills.
+                live. Connect, explore, no mock private fills.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
