@@ -2,7 +2,7 @@
   "name": "gloam",
   "private": true,
   "version": "0.1.0",
-  "description": "Private money on Robinhood Chain",
+  "description": "The private-execution layer for Robinhood Chain: shielded balances, private transfers, and private trades that apps and agents plug into.",
   "scripts": {
     "dev": "pnpm --filter @gloam/app dev",
     "dev:app": "pnpm --filter @gloam/app dev",

@@ -1,114 +1,111 @@
+<div align="center">
+
 # Gloam
 
-**Trade Everything on Robinhood Privately.**
+### Private execution for Robinhood Chain. The privacy layer apps and agents build on.
 
-Stocks. Memes. Same rails. Money that can sit, move, and trade without printing your book to a public chain.
+[gloam.trade](https://gloam.trade) · [Testnet app](https://gloam.trade/app) · [Docs](https://gloam.trade/docs) · [Whitepaper](https://gloam.trade/whitepaper) · [@gloamtrade](https://x.com/gloamtrade)
 
----
+**Robinhood Chain** · testnet `46630` · testnet only, real privacy only
 
-### Live
+![Gloam](.github/assets/landing.png)
 
-| | |
-| --- | --- |
-| Site | [gloam.trade](https://gloam.trade) |
-| App | [gloam.trade/app](https://gloam.trade/app) |
-| Private trade | [gloam.trade/app/trade?path=sealed](https://gloam.trade/app/trade?path=sealed) |
-| Docs | [gloam.trade/docs](https://gloam.trade/docs) |
-| Paper | [gloam.trade/whitepaper](https://gloam.trade/whitepaper) |
-| Pitch | [gloam.trade/pitch](https://gloam.trade/pitch) |
-| X | [@gloamtrade](https://x.com/gloamtrade) |
+</div>
 
 ---
 
-### What this is
+Robinhood Chain puts tokenized stocks and crypto on the same rails. Every move on it is public: your holdings, your size, your timing. Gloam is the sealed chamber. Shield a balance, move it privately, and trade it without printing your book to the street. Not a dark theme on a public DEX, a private-execution primitive other apps and AI agents plug into.
 
-Gloam is private money on **Robinhood Chain** — not a dark theme on a public DEX.
+## The layer
 
-**Works today (testnet):**
+One private path, exposed three ways. The vault app is the reference implementation, not the whole product.
+
+| Surface | What it is | Package |
+| --- | --- | --- |
+| **SDK** | Drop shielded balances, private transfers, and private trades into any Robinhood Chain app. Unsigned intents + client proving. | [`@gloam/sdk`](./packages/sdk) |
+| **Agents** | An MCP server so an AI agent can shield and privately trade end to end, under policy. | [`@gloam/mcp`](./mcp) |
+| **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
+
+All three share one core: the Poseidon note scheme, a depth-20 Merkle tree, circom witness builders, and the canonical intent shape (`shield`, `privateSend`, `unshield`, `privateTrade`).
+
+## Private trade, size hidden
+
+Vault ETH into vault TSLA with the amount off the open book. On-chain min-out is a 1-wei floor, so the explorer sees a proof and an asset pair, never your size.
+
+![Private trade](.github/assets/private-trade.png)
+
+## Works today (testnet, real ZK proofs)
 
 | Path | What you can do |
 | --- | --- |
-| Public | Connect, portfolio, send ETH, send faucet stocks, markets, charts |
-| Vault in | **Shield** ETH + faucet stocks into the live sealed vault |
-| Vault move | **Private send** — To (receive tag) + Amount; on-chain memo inbox (GloamPayMemo) |
-| Vault out | **Cash out** (unshield) with a real browser proof |
-| Vault trade | **Private trade** (size privacy on by default) · via-market adapter if DEX pool exists |
+| **Shield** | Deposit ETH + faucet stock tokens into the live sealed vault |
+| **Private send** | Send inside the vault to a receive tag; on-chain encrypted memo inbox (`GloamPayMemo`) |
+| **Cash out** | Unshield to a public balance with a real browser-generated Groth16 proof |
+| **Private trade** | `sealedSwap` with size privacy on by default |
 
-| Note backup | Settings → export/import vault note secrets (this browser / JSON) |
+Every private action is proof-gated on-chain. No mock fills, no theatrical privacy. If a path cannot be private yet, it waits.
 
-**Not yet:** on-chain oracle rates. Production ceremony keys. Ethereum expansion.
+![Reference app](.github/assets/app.png)
 
----
+## Robinhood Chain native
 
-### Repo layout
+Robinhood Chain is an **Arbitrum Orbit L2** on the Nitro stack (mainnet live since July 2026), ETH gas, Ethereum blob DA. Gloam is built for what the chain actually ships:
+
+- **Chainlink oracles from block zero.** RH Chain prices ~95 tokenized equities on-chain via Chainlink Data Feeds. Gloam binds sealed-trade rates to `AggregatorV3Interface.latestRoundData()` with staleness, sequencer-uptime, and `oraclePaused()` checks, so the settlement price is provably fair, not an app-set mark.
+- **Tokenized stocks are ERC-20s** (18 decimals, ERC-8056 Total-Return value). Gloam shields the canonical set (TSLA, NVDA, AAPL, AMZN, and more) and quotes in **USDG**.
+- **Groth16 runs native.** bn254 pairing precompiles are present and the 96 KB max code size fits large verifier contracts, so private-transfer and private-trade proofs verify with no special infra.
+- **First-class ERC-4337.** Account abstraction + paymasters open the door to gasless private transactions (buying gas can deanonymize).
+
+## Trust
+
+Privacy earns the mainnet gate only when it is auditable and correct.
+
+- **Selective disclosure, not a mixer.** Viewing keys let a holder prove balance or history to a counterparty or auditor without revealing everything. The answer for a regulated-sponsor chain.
+- **Self-audited.** A Kensho pass found three criticals in the sealed pool (value-binding at shield, circuit field-overflow, caller-set swap rate), each fixed with a witness-level or on-chain proof of concept. See [`contracts/audit/`](./contracts/audit). The hardened pool redeploys with a fresh Groth16 ceremony before mainnet.
+
+## Architecture
 
 ```
 gloam/
-  app/         Marketing + product UI (Next.js) → Vercel root: app
-  contracts/   ShieldPool (Foundry) — private path
-  docs/        Legacy package — do not deploy
+  packages/sdk/   @gloam/sdk  the private path as a reusable package
+  mcp/            @gloam/mcp  agent server (plan + signed execution)
+  app/            Next.js reference app + docs → Vercel root: app
+  contracts/      Foundry · ShieldPoolPoseidon sealed vault, verifiers, circuits
 ```
 
-Public path needs **no** Gloam contracts.  
-Private path needs **ShieldPoolPoseidon + verifiers + circuits** (transfer, unshield, sealed swap).
+**Contracts (RH testnet 46630)**
 
----
+| Role | Address |
+| --- | --- |
+| Sealed vault `ShieldPoolPoseidon` | [`0x4F38…2D8F`](https://explorer.testnet.chain.robinhood.com/address/0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F) |
+| Pay memo `GloamPayMemo` | [`0x689e…5DCE`](https://explorer.testnet.chain.robinhood.com/address/0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE) |
 
-### Local
+Circuits (Groth16 + Poseidon + depth-20 Merkle membership): `transfer`, `unshield`, `sealedSwap`. Never product-default the legacy pre-sealed `0xA488…` pool. Details in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md).
+
+## Local
 
 ```bash
 pnpm install
-pnpm dev:app          # http://localhost:3000
+pnpm dev:app                          # http://localhost:3000 (reference app)
 
-# contracts (Foundry)
-cd contracts && forge test
+cd contracts && forge test            # contracts
+node app/scripts/merkle-selftest.mjs  # privacy self-tests (SDK parity spec)
+pnpm --filter @gloam/sdk test         # SDK core self-test
+pnpm --filter @gloam/mcp build        # agent server
 ```
 
-Deploy the site with Vercel: **Root Directory = `app`**, leave Output Directory empty.
+Testnet ETH + stock tokens: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/). Deploy the site with Vercel: Root Directory `app`, empty Output Directory.
 
-Testnet ETH: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/)  
-Chain ID **46630**.
+## Guardrails
 
----
-
-### Contracts (private path)
-
-| | Phase 1 (keccak) | Phase 2 (Poseidon) **default** |
-| --- | --- | --- |
-| Pool | `0x2BD9…3d35` | `0x4F38…2D8F` (sealed) · legacy `0xA488…c93B` |
-| Unshield / transfer / sealed swap | locked | live (dev keys) |
-| Record | [testnet.json](./contracts/deployments/testnet.json) | [poseidon-testnet.json](./contracts/deployments/poseidon-testnet.json) |
-
-App defaults to **Poseidon**. Override with `NEXT_PUBLIC_HASH_SCHEME=keccak` for the old pool.
-
-```bash
-cd contracts && forge test
-# phase-2 redeploy: circuits/scripts/deploy-phase2.mjs
-```
-
-Details: [contracts/ARCHITECTURE.md](./contracts/ARCHITECTURE.md)
+- Testnet only until a production ceremony + external audit. Mainnet `4663` blocked in-product.
+- Real privacy only. Never fake or mock a private success.
+- Selective disclosure over opacity. Viewing-key auditability is the point.
+- Secrets server-side only. Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto fog.
+- One Vercel project, Root Directory `app`. Never deploy `docs/`.
 
 ---
 
-### Security
-
-See [SECURITY.md](./SECURITY.md). No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Circuit zkeys are **dev ceremony** artifacts (secret scanners may false-positive).
-
-### Brand
-
-Black. Lime `#C8FF00`. White. Instrument Serif + Overused Grotesk.  
-No purple crypto fog.
-
----
-
-### Status
-
-- **Product:** testnet-only  
-- **Sealed vault (`0x4F38…`):** shield · private send · cash out · private trade · via-market adapter  
-- **Keys:** dev ceremony (see [docs/production](https://gloam.trade/docs/production), `contracts/PRODUCTION.md`)  
-- **Privacy stack:** shield · private send · sealed private trade (size floor) · cash out public  
-- **Next:** stronger public-input privacy · production ceremony · Ethereum expansion  
-
----
+No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Circuit zkeys are dev-ceremony artifacts. See [`SECURITY.md`](./SECURITY.md).
 
 Private / all rights reserved until stated otherwise.
