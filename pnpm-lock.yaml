@@ -134,6 +134,19 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/sdk:
+    dependencies:
+      viem:
+        specifier: ^2.55.2
+        version: 2.55.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
 packages:
 
   '@adraffy/ens-normalize@1.11.1':
