@@ -24,6 +24,13 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     ],
   },
   {
+    section: "Build on Gloam",
+    items: [
+      { href: "/docs/sdk", label: "SDK" },
+      { href: "/docs/agents", label: "Agents" },
+    ],
+  },
+  {
     section: "How it works",
     items: [
       { href: "/docs/encryption", label: "How shield works" },
