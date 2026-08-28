@@ -23,3 +23,5 @@
 export const SDK_VERSION = "0.0.1";
 
 export * from "./intents.js";
+export * from "./rates.js";
+export * from "./privacy.js";
