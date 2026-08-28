@@ -7,6 +7,9 @@ import path from "node:path";
  */
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, ".."),
+  // Compile the workspace SDK from source so there is no build-order dependency
+  // (Vercel builds only `app`). @gloam/sdk exports TS source; Next transpiles it.
+  transpilePackages: ["@gloam/sdk"],
   images: {
     formats: ["image/avif", "image/webp"],
   },
@@ -18,6 +21,13 @@ const nextConfig: NextConfig = {
       fs: false,
       net: false,
       tls: false,
+    };
+    // @gloam/sdk ships NodeNext TS source (".js" import specifiers). Let webpack
+    // resolve those to the ".ts" sources when transpiling the workspace package.
+    config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias || {}),
+      ".js": [".ts", ".tsx", ".js"],
+      ".mjs": [".mts", ".mjs"],
     };
     return config;
   },

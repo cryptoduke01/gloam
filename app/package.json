@@ -21,7 +21,8 @@
     "react-dom": "19.2.4",
     "snarkjs": "0.7.5",
     "viem": "^2.31.7",
-    "wagmi": "^2.15.6"
+    "wagmi": "^2.15.6",
+    "@gloam/sdk": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

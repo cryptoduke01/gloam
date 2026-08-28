@@ -10,6 +10,9 @@ importers:
 
   app:
     dependencies:
+      '@gloam/sdk':
+        specifier: workspace:*
+        version: link:../packages/sdk
       '@tanstack/react-query':
         specifier: ^5.83.0
         version: 5.83.0(react@19.2.4)
