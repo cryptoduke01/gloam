@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Header } from "./Header";
-import { Footer } from "./Footer";
 
 export type DocNavItem = {
   href: string;
@@ -55,6 +53,23 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function Mark({ size = 20 }: { size?: number }) {
+  const notch = Math.round(size * 0.34);
+  const off = Math.round(size * 0.27);
+  return (
+    <span
+      aria-hidden
+      className="relative inline-block shrink-0 rounded-[6px] bg-[#121316]"
+      style={{ width: size, height: size }}
+    >
+      <span
+        className="absolute rounded-[2px] bg-[#F4F3EF]"
+        style={{ width: notch, height: notch, top: off, right: off }}
+      />
+    </span>
+  );
+}
+
 export function DocsLayout({
   title,
   lede,
@@ -71,19 +86,42 @@ export function DocsLayout({
   const pathname = usePathname();
 
   return (
-    <>
-      <Header />
-      <div className="border-b border-line bg-background">
+    <div className="min-h-screen bg-[#F4F3EF] text-[#121316]">
+      {/* light chrome */}
+      <header className="sticky top-0 z-40 border-b border-[#E5E3DD] bg-[#F4F3EF]/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+          <Link href="/" className="flex items-center gap-[10px]">
+            <Mark size={20} />
+            <span className="font-semibold tracking-[-0.01em]">Gloam</span>
+          </Link>
+          <nav className="flex items-center gap-6 text-sm text-[#6E6E76]">
+            <Link href="/docs" className="hover:text-[#121316]">
+              Docs
+            </Link>
+            <Link href="/whitepaper" className="hidden hover:text-[#121316] sm:inline">
+              Whitepaper
+            </Link>
+            <Link
+              href="/app"
+              className="rounded-[10px] bg-[#121316] px-4 py-2 text-[13px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+            >
+              Open app
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      <div className="border-b border-[#E5E3DD]">
         <div className="mx-auto grid max-w-6xl gap-0 lg:grid-cols-[220px_minmax(0,1fr)_220px]">
           {/* Left nav */}
-          <aside className="hidden border-r border-line lg:block">
+          <aside className="hidden border-r border-[#E5E3DD] lg:block">
             <nav
               className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto px-5 py-10"
               aria-label="Docs"
             >
               {nav.map((group) => (
                 <div key={group.section} className="mb-8">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                     {group.section}
                   </p>
                   <ul className="mt-3 space-y-1">
@@ -95,8 +133,8 @@ export function DocsLayout({
                             href={item.href}
                             className={`block rounded-md px-2 py-1.5 text-sm transition-colors ${
                               active
-                                ? "bg-panel font-medium text-foreground"
-                                : "text-mute hover:bg-panel/80 hover:text-foreground"
+                                ? "bg-black/[0.05] font-medium text-[#121316]"
+                                : "text-[#6E6E76] hover:bg-black/[0.03] hover:text-[#121316]"
                             }`}
                           >
                             {item.label}
@@ -112,7 +150,6 @@ export function DocsLayout({
 
           {/* Main */}
           <main className="min-w-0 px-5 py-10 sm:px-8 sm:py-14">
-            {/* Mobile TOC */}
             <div className="mb-8 flex flex-wrap gap-2 lg:hidden">
               {nav.flatMap((g) => g.items).map((item) => {
                 const active = isActive(pathname, item.href);
@@ -122,8 +159,8 @@ export function DocsLayout({
                     href={item.href}
                     className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                       active
-                        ? "border-lime/50 bg-panel text-foreground"
-                        : "border-line text-mute hover:border-mute hover:text-foreground"
+                        ? "border-[#3B3766]/40 bg-white text-[#121316]"
+                        : "border-[#E5E3DD] text-[#6E6E76] hover:border-[#cfccc4] hover:text-[#121316]"
                     }`}
                   >
                     {item.label.replace(/^\d+\.\s*/, "")}
@@ -132,14 +169,14 @@ export function DocsLayout({
               })}
             </div>
 
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
               Documentation
             </p>
-            <h1 className="mt-3 max-w-2xl font-display text-4xl leading-[1.1] tracking-tight text-foreground sm:text-5xl">
+            <h1 className="mt-3 max-w-2xl text-4xl font-[800] leading-[1.02] tracking-[-0.035em] sm:text-5xl">
               {title}
             </h1>
             {lede && (
-              <p className="mt-5 max-w-2xl text-base leading-relaxed text-mute sm:text-lg">
+              <p className="mt-5 max-w-2xl text-base leading-relaxed text-[#565660] sm:text-lg">
                 {lede}
               </p>
             )}
@@ -149,21 +186,21 @@ export function DocsLayout({
           </main>
 
           {/* Right rail */}
-          <aside className="hidden border-l border-line xl:block">
+          <aside className="hidden border-l border-[#E5E3DD] xl:block">
             <div className="sticky top-16 space-y-6 px-5 py-10">
               {glance && glance.length > 0 && (
-                <div className="rounded-lg border border-line bg-panel p-4">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+                <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                     At a glance
                   </p>
                   <dl className="mt-4 space-y-3">
                     {glance.map((row) => (
                       <div
                         key={row.label}
-                        className="flex items-baseline justify-between gap-3 border-b border-line pb-2 last:border-0 last:pb-0"
+                        className="flex items-baseline justify-between gap-3 border-b border-[#E5E3DD] pb-2 last:border-0 last:pb-0"
                       >
-                        <dt className="text-xs text-mute">{row.label}</dt>
-                        <dd className="text-right text-xs font-medium text-foreground">
+                        <dt className="text-xs text-[#6E6E76]">{row.label}</dt>
+                        <dd className="text-right text-xs font-medium text-[#121316]">
                           {row.value}
                         </dd>
                       </div>
@@ -171,8 +208,8 @@ export function DocsLayout({
                   </dl>
                 </div>
               )}
-              <div className="rounded-lg border border-line bg-panel p-4">
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+              <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                   Quick links
                 </p>
                 <ul className="mt-3 space-y-2">
@@ -183,10 +220,7 @@ export function DocsLayout({
                       { href: "/docs/testnet", label: "Testnet guide" },
                       { href: "/docs/privacy-model", label: "Privacy model" },
                       { href: "/whitepaper", label: "Whitepaper" },
-                      {
-                        href: "https://x.com/gloamtrade",
-                        label: "@gloamtrade",
-                      },
+                      { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
                     ]
                   ).map((l) => (
                     <li key={l.href}>
@@ -195,18 +229,18 @@ export function DocsLayout({
                           href={l.href}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center justify-between text-sm text-mute transition-colors hover:text-foreground"
+                          className="flex items-center justify-between text-sm text-[#6E6E76] transition-colors hover:text-[#121316]"
                         >
                           {l.label}
-                          <span className="text-lime">→</span>
+                          <span className="text-[#3B3766]">→</span>
                         </a>
                       ) : (
                         <Link
                           href={l.href}
-                          className="flex items-center justify-between text-sm text-mute transition-colors hover:text-foreground"
+                          className="flex items-center justify-between text-sm text-[#6E6E76] transition-colors hover:text-[#121316]"
                         >
                           {l.label}
-                          <span className="text-lime">→</span>
+                          <span className="text-[#3B3766]">→</span>
                         </Link>
                       )}
                     </li>
@@ -217,7 +251,30 @@ export function DocsLayout({
           </aside>
         </div>
       </div>
-      <Footer />
-    </>
+
+      {/* light footer */}
+      <footer className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className="flex items-center gap-[10px]">
+          <Mark size={18} />
+          <span>Gloam · Robinhood Chain</span>
+        </div>
+        <div className="flex items-center gap-6">
+          <Link href="/docs" className="hover:text-[#121316]">
+            Docs
+          </Link>
+          <Link href="/whitepaper" className="hover:text-[#121316]">
+            Whitepaper
+          </Link>
+          <a
+            href="https://x.com/gloamtrade"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-[#121316]"
+          >
+            @gloamtrade
+          </a>
+        </div>
+      </footer>
+    </div>
   );
 }

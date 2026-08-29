@@ -143,7 +143,7 @@ function SealedVaultCard() {
 
 export function Landing() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#F4F3EF] text-[#121316]">
+    <div className="relative min-h-screen bg-[#F4F3EF] text-[#121316]">
       {/* twilight atmosphere */}
       <div
         aria-hidden
@@ -156,7 +156,7 @@ export function Landing() {
 
       <div className="relative z-[2] mx-auto max-w-6xl px-6">
         {/* nav */}
-        <nav className="mt-5 flex items-center justify-between gap-5 rounded-[14px] border border-[#E5E3DD] bg-white/70 px-[18px] py-[10px] shadow-[0_1px_2px_rgba(18,19,22,0.05),0_8px_24px_-16px_rgba(18,19,22,0.18)] backdrop-blur-md">
+        <nav className="sticky top-4 z-50 mt-4 flex items-center justify-between gap-5 rounded-[14px] border border-[#E5E3DD] bg-white/80 px-[18px] py-[10px] shadow-[0_1px_2px_rgba(18,19,22,0.05),0_8px_24px_-16px_rgba(18,19,22,0.18)] backdrop-blur-xl">
           <Link href="/" className="flex items-center gap-[10px]">
             <Mark size={22} />
             <span className="text-[16px] font-semibold tracking-[-0.01em]">
@@ -218,17 +218,6 @@ export function Landing() {
                 How it works
               </Link>
             </div>
-            <div className="mt-9 flex items-center gap-[22px] text-[12.5px] text-[#6E6E76]">
-              <span>
-                <b className="font-semibold text-[#121316]">3</b>
-                {" criticals found & fixed"}
-              </span>
-              <span className="h-[26px] w-px bg-[#E5E3DD]" />
-              <span>
-                Real ZK proofs ·{" "}
-                <b className="font-semibold text-[#121316]">no mock fills</b>
-              </span>
-            </div>
           </div>
 
           <SealedVaultCard />
@@ -283,7 +272,7 @@ export function Landing() {
         <footer className="flex flex-col gap-4 border-t border-[#E5E3DD] py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-[10px]">
             <Mark size={18} />
-            <span>Gloam · Robinhood Chain testnet 46630</span>
+            <span>Gloam · Robinhood Chain</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="/docs" className="hover:text-[#121316]">
