@@ -545,7 +545,7 @@ export function SealedTradePanel({
               the RPC is flaky.
             </p>
             {SHIELD_POOL_ADDRESS && (
-              <p className="mt-2 font-mono text-[10px] text-mute">
+              <p className="mt-2 text-[10px] text-mute">
                 vault {shortAddress(SHIELD_POOL_ADDRESS, 6)}
               </p>
             )}

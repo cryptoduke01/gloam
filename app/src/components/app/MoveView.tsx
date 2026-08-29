@@ -711,7 +711,7 @@ export function MoveView() {
                 (their tag) + Amount. Chain sees a vault transfer proof — not
                 “Alice paid Bob X”. Memo is encrypted
                 {isPayMemoLive() ? " (live inbox scan)" : ""}. For a public{" "}
-                <span className="font-mono">0x</span> transfer use{" "}
+                <span className="">0x</span> transfer use{" "}
                 <Link href="/app/send" className="text-lime hover:underline">
                   Send
                 </Link>
@@ -758,7 +758,7 @@ export function MoveView() {
               {/* Tree status */}
               <div className="rounded-xl border border-line bg-background px-4 py-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                     Vault tree
                   </p>
                   <button
@@ -830,7 +830,7 @@ export function MoveView() {
                                 </span>
                               )}
                             </span>
-                            <span className="font-mono text-[10px]">
+                            <span className="text-[10px]">
                               #{n.leafIndex ?? "?"}
                             </span>
                           </button>
@@ -859,7 +859,7 @@ export function MoveView() {
                             else if (v === "") setPayStyle("direct");
                           }}
                           placeholder="Their gloamr1… receive tag"
-                          className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 font-mono text-sm outline-none focus:border-lime"
+                          className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                         />
                         <p className="mt-1 text-xs text-mute">
                           Same as “send to address” — private Gloam tag from
@@ -1147,7 +1147,7 @@ export function MoveView() {
                     </p>
                     {myIdentity ? (
                       <>
-                        <div className="mt-3 break-all rounded-lg border border-line bg-panel p-3 font-mono text-[10px] text-mute">
+                        <div className="mt-3 break-all rounded-lg border border-line bg-panel p-3 text-[10px] text-mute">
                           {myIdentity.tag}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -1248,15 +1248,15 @@ export function MoveView() {
                     </p>
                     <p className="mt-1 text-xs text-mute">
                       Paste{" "}
-                      <span className="font-mono">gloam2t…</span> (to your tag),{" "}
-                      <span className="font-mono">gloam1…</span>, or locked{" "}
-                      <span className="font-mono">gloam1e…</span>.
+                      <span className="">gloam2t…</span> (to your tag),{" "}
+                      <span className="">gloam1…</span>, or locked{" "}
+                      <span className="">gloam1e…</span>.
                     </p>
                     <textarea
                       value={importText}
                       onChange={(e) => setImportText(e.target.value)}
                       rows={4}
-                      className="mt-3 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
+                      className="mt-3 w-full rounded-md border border-line bg-transparent p-3 text-[11px] outline-none focus:border-lime"
                       placeholder="gloam2t.… / gloam1.… / gloam1e.…"
                     />
                     {claimPreview && (
@@ -1322,7 +1322,7 @@ export function MoveView() {
 
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               How private send works
             </p>
             <ul className="mt-3 space-y-2 text-mute">

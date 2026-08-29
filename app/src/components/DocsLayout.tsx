@@ -121,7 +121,7 @@ export function DocsLayout({
             >
               {nav.map((group) => (
                 <div key={group.section} className="mb-8">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                     {group.section}
                   </p>
                   <ul className="mt-3 space-y-1">
@@ -169,10 +169,10 @@ export function DocsLayout({
               })}
             </div>
 
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
               Documentation
             </p>
-            <h1 className="mt-3 max-w-2xl text-4xl font-[800] leading-[1.02] tracking-[-0.035em] sm:text-5xl">
+            <h1 className="mt-3 max-w-2xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
               {title}
             </h1>
             {lede && (
@@ -190,7 +190,7 @@ export function DocsLayout({
             <div className="sticky top-16 space-y-6 px-5 py-10">
               {glance && glance.length > 0 && (
                 <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                     At a glance
                   </p>
                   <dl className="mt-4 space-y-3">
@@ -209,7 +209,7 @@ export function DocsLayout({
                 </div>
               )}
               <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
                   Quick links
                 </p>
                 <ul className="mt-3 space-y-2">

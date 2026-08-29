@@ -108,7 +108,7 @@ export function SuccessModal({
             </svg>
           </motion.div>
 
-          <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+          <p className="mt-6 text-[10px] uppercase tracking-[0.2em] text-lime">
             Confirmed
           </p>
           <h2

@@ -41,10 +41,10 @@ export function LegalLayout({
       </header>
 
       <main className="mx-auto max-w-3xl px-5 py-14 sm:px-8">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
+        <p className="text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
           Legal
         </p>
-        <h1 className="mt-2 text-4xl font-[800] leading-[1.02] tracking-[-0.035em] sm:text-5xl">
+        <h1 className="mt-2 text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
           {title}
         </h1>
         <p className="mt-3 text-sm text-[#6E6E76]">Last updated {updated}</p>

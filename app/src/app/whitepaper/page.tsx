@@ -415,7 +415,7 @@ export default function WhitepaperPage() {
         shield, move, and eventually trade without printing every private
         calculation to the street.
       </p>
-      <p className="!font-mono !text-[11px] !uppercase !tracking-[0.14em] !text-lime">
+      <p className="!!text-[11px] !uppercase !tracking-[0.14em] !text-lime">
         gloam.trade · testnet · @gloamtrade
       </p>
     </DocsLayout>

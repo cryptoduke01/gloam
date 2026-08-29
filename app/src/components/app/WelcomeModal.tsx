@@ -49,7 +49,7 @@ export function WelcomeModal() {
       />
       <div className="relative z-[1] w-full max-w-md max-h-[min(90vh,720px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_18%,transparent),0_24px_80px_rgba(0,0,0,0.55)]">
         <div className="border-b border-line bg-background/60 px-6 py-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
             Gloam testnet
           </p>
           <h2

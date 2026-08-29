@@ -46,7 +46,7 @@ export default function DocsTestnetPage() {
       <div className="not-prose my-6 overflow-hidden rounded-xl border border-line bg-panel">
         <div className="flex flex-col items-start gap-3 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
               Demo on X
             </p>
             <p className="mt-2 max-w-md text-sm text-mute">

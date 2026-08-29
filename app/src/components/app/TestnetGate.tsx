@@ -138,11 +138,11 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             transition={{ duration: 0.45, ease }}
           >
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+              <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-lime">
                 <span className="livedot h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_10px_var(--lime)]" />
                 Public testnet
               </span>
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-mute">
                 RH · 46630
               </span>
             </div>
@@ -178,10 +178,10 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             <div className="mt-12 sm:mt-14">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
                     Opens in
                   </p>
-                  <p className="mt-1 font-mono text-[11px] text-mute">
+                  <p className="mt-1 text-[11px] text-mute">
                     {opensLabel}
                   </p>
                 </div>
@@ -208,7 +208,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                     <p className="tnum font-display text-4xl leading-none tracking-tight text-lime sm:text-5xl lg:text-6xl">
                       {pad(value)}
                     </p>
-                    <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-mute sm:text-[11px]">
+                    <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-mute sm:text-[11px]">
                       {label}
                     </p>
                   </div>
@@ -244,7 +244,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
                         {String(i + 1).padStart(2, "0")} · Preview
                       </p>
                       <p className="mt-1.5 font-display text-2xl text-white sm:text-3xl">
@@ -271,7 +271,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                     }`}
                     aria-pressed={i === activePlate}
                   >
-                    <span className="block font-mono text-[9px] uppercase tracking-[0.14em] text-lime">
+                    <span className="block text-[9px] uppercase tracking-[0.14em] text-lime">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     <span className="mt-1 block text-sm font-medium sm:text-base">
@@ -300,7 +300,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
                 <XIcon className="h-4 w-4" />
               </span>
               <span className="min-w-0 text-left">
-                <span className="block font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                <span className="block text-[10px] uppercase tracking-[0.14em] text-lime">
                   Updates
                 </span>
                 <span className="mt-1 block text-sm font-medium text-foreground">

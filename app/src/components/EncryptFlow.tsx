@@ -50,7 +50,7 @@ export function EncryptFlow() {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel">
       <div className="border-b border-line px-5 py-4 sm:px-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+        <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
           How Gloam works
         </p>
         <p className="mt-1 text-sm text-mute">
@@ -101,7 +101,7 @@ export function EncryptFlow() {
                   x={x}
                   y={76}
                   textAnchor="middle"
-                  className="fill-lime font-mono text-[11px]"
+                  className="fill-lime text-[11px]"
                 >
                   {String(i + 1).padStart(2, "0")}
                 </text>
@@ -118,7 +118,7 @@ export function EncryptFlow() {
                   x={x}
                   y={140}
                   textAnchor="middle"
-                  className="fill-mute font-mono text-[9px] uppercase"
+                  className="fill-mute text-[9px] uppercase"
                 >
                   {s.sub}
                 </text>
@@ -151,7 +151,7 @@ export function EncryptFlow() {
             viewport={{ once: true, margin: "-40px" }}
             transition={{ delay: i * 0.05 }}
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               {String(i + 1).padStart(2, "0")} · {s.sub}
             </p>
             <p className="mt-1 font-display text-xl text-foreground">

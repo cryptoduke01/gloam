@@ -201,7 +201,7 @@ export function PortfolioView() {
 
           <div className="grid gap-4 p-5 sm:grid-cols-3 sm:p-6">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                 Wallet ETH
               </p>
               {!isConnected ? (
@@ -222,7 +222,7 @@ export function PortfolioView() {
               )}
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                 Vault
               </p>
               {!isConnected ? (
@@ -265,7 +265,7 @@ export function PortfolioView() {
               )}
             </div>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                 Stocks
               </p>
               <p className="mt-2 font-display text-2xl text-foreground">
@@ -381,7 +381,7 @@ export function PortfolioView() {
       {shieldNotes.length > 0 && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               In the vault
             </p>
             <StatusPill tone="lime">Private</StatusPill>
@@ -452,7 +452,7 @@ export function PortfolioView() {
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Holdings
           </p>
           <StatusPill tone="lime">Onchain</StatusPill>
@@ -493,7 +493,7 @@ export function PortfolioView() {
                     height={28}
                   />
                   <div className="w-24 text-right">
-                    <p className="tnum font-mono text-sm text-foreground">
+                    <p className="tnum text-sm text-foreground">
                       {formatTokenAmount(p.raw)}
                     </p>
                     {settings.showUsd && p.mark > 0 && (

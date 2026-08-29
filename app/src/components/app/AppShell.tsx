@@ -49,7 +49,7 @@ export function AppShell({
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
           <div className="flex items-center gap-4">
             <Logo />
-            <span className="hidden rounded-full border border-lime/40 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-lime sm:inline">
+            <span className="hidden rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime sm:inline">
               Testnet
             </span>
           </div>
@@ -156,7 +156,7 @@ export function AppShell({
               Production gate
             </a>
           </p>
-          <p className="font-mono uppercase tracking-[0.12em]">gloam.trade</p>
+          <p className="uppercase tracking-[0.12em]">gloam.trade</p>
         </div>
       </footer>
     </div>

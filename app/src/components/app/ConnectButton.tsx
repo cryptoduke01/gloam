@@ -85,7 +85,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
     }
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className="hidden items-center gap-1.5 font-mono text-xs text-mute sm:inline-flex">
+        <span className="hidden items-center gap-1.5 text-xs text-mute sm:inline-flex">
           <span className="h-1.5 w-1.5 rounded-full bg-lime" aria-hidden />
           {shortAddress(address)}
         </span>

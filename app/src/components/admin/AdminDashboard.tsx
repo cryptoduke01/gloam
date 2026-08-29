@@ -231,7 +231,7 @@ export function AdminDashboard() {
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <span className="livedot h-2 w-2 rounded-full bg-lime" />
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-mute">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-mute">
             Verifying session
           </p>
         </div>
@@ -249,7 +249,7 @@ export function AdminDashboard() {
         <header className="relative z-10 border-b border-line">
           <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-5 sm:px-6">
             <Logo />
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
               Restricted
             </span>
           </div>
@@ -257,7 +257,7 @@ export function AdminDashboard() {
 
         <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 py-12">
           <div className="w-full max-w-md">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
               Ops console
             </p>
             <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
@@ -273,7 +273,7 @@ export function AdminDashboard() {
               className="mt-8 space-y-5 rounded-2xl border border-line bg-panel p-6 sm:p-7"
             >
               <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                <span className="text-[10px] uppercase tracking-[0.14em] text-mute">
                   Access code
                 </span>
                 <input
@@ -282,7 +282,7 @@ export function AdminDashboard() {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="••••••••••••"
-                  className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 font-mono text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
+                  className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
                   required
                 />
               </label>
@@ -317,12 +317,12 @@ export function AdminDashboard() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <Logo />
-            <span className="rounded-full border border-lime/40 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <span className="rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime">
               Admin
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden font-mono text-[10px] text-mute sm:inline">
+            <span className="hidden text-[10px] text-mute sm:inline">
               {product?.backend === "redis" ? "redis" : "memory"} · auto 45s
             </span>
             <button
@@ -458,7 +458,7 @@ export function AdminDashboard() {
                     href={EXPLORER_ADDRESS(oc.pool)}
                     target="_blank"
                     rel="noreferrer"
-                    className="font-mono text-[11px] text-lime hover:underline"
+                    className="text-[11px] text-lime hover:underline"
                   >
                     Pool →
                   </a>
@@ -474,7 +474,7 @@ export function AdminDashboard() {
                     <a
                       key="a"
                       href={EXPLORER_ADDRESS(tx.from)}
-                      className="font-mono text-mute hover:text-lime"
+                      className="text-mute hover:text-lime"
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -486,7 +486,7 @@ export function AdminDashboard() {
                   <a
                     key="t"
                     href={EXPLORER_TX(tx.txHash)}
-                    className="font-mono text-mute hover:text-lime"
+                    className="text-mute hover:text-lime"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -510,7 +510,7 @@ export function AdminDashboard() {
               headers={["#", "Address", "Shields", "ETH vol", "Explorer"]}
               rows={(oc?.topShielders ?? []).map((u, i) => [
                 String(i + 1),
-                <span key="addr" className="font-mono text-xs text-foreground">
+                <span key="addr" className="text-xs text-foreground">
                   {u.address}
                 </span>,
                 String(u.shields),
@@ -544,7 +544,7 @@ export function AdminDashboard() {
               <DataTable
                 headers={["Event", "Path", "Time"]}
                 rows={(product?.recent ?? []).map((ev) => [
-                  <span key="t" className="font-mono text-lime">
+                  <span key="t" className="text-lime">
                     {ev.t}
                   </span>,
                   ev.path ?? "—",
@@ -585,7 +585,7 @@ function Kpi({
 }) {
   return (
     <div className="rounded-xl border border-line bg-panel px-4 py-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
         {label}
       </p>
       <p className="tnum mt-1.5 text-xl font-medium tracking-tight text-foreground sm:text-2xl">
@@ -629,7 +629,7 @@ function BarChart({
       {rows.map((r) => (
         <li key={r.k}>
           <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-            <span className="truncate font-mono text-mute">{r.k}</span>
+            <span className="truncate text-mute">{r.k}</span>
             <span className="tnum shrink-0 text-foreground">{r.v}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-background">
@@ -664,7 +664,7 @@ function DataTable({
             {headers.map((h) => (
               <th
                 key={h}
-                className="px-3 py-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-mute"
+                className="px-3 py-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-mute"
               >
                 {h}
               </th>

@@ -39,7 +39,7 @@ export function OnboardingCard({ compact = true }: { compact?: boolean }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Side note · testnet
           </p>
           <p className="mt-1 text-sm font-medium text-foreground">

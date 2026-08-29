@@ -682,7 +682,7 @@ export function ShieldView() {
                     }
                     className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
                   />
-                  <span className="flex items-center border-l border-line px-4 font-mono text-sm text-mute">
+                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
                     {symbol}
                   </span>
                 </div>
@@ -750,7 +750,7 @@ export function ShieldView() {
           {openNotes.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-line bg-panel">
               <div className="flex items-center justify-between border-b border-line px-5 py-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                   Your deposits
                 </p>
                 {syncing && (
@@ -825,7 +825,7 @@ export function ShieldView() {
 
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Wallet · {symbol}
             </p>
             <p className="mt-2 font-display text-3xl text-foreground">
@@ -840,7 +840,7 @@ export function ShieldView() {
           </div>
 
           <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Your vault (this browser)
             </p>
             {!hasActiveShield ? (
@@ -887,7 +887,7 @@ export function ShieldView() {
           </div>
 
           <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Pool
             </p>
             <dl className="mt-3 space-y-2 text-sm">
@@ -925,7 +925,7 @@ export function ShieldView() {
               </div>
             </dl>
             {currentRoot && (
-              <p className="mt-3 break-all font-mono text-[10px] text-mute">
+              <p className="mt-3 break-all text-[10px] text-mute">
                 root {currentRoot.slice(0, 18)}…
               </p>
             )}
@@ -941,7 +941,7 @@ export function ShieldView() {
 
           {/* Explainer — side, not above the form */}
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               What is shield?
             </p>
             <p className="mt-2 leading-relaxed text-mute">
@@ -972,7 +972,7 @@ export function ShieldView() {
             rel="noreferrer"
             className="block rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               Need assets?
             </p>
             <p className="mt-2 text-sm text-mute">Faucet for ETH + stocks →</p>

@@ -78,7 +78,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
     <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
             Privacy vault
           </p>
           <p className="mt-1 text-mute">
@@ -117,7 +117,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         keep size off the public book. Cash out publishes amount by design.
       </p>
       {SHIELD_POOL_ADDRESS && (
-        <p className="mt-2 break-all font-mono text-[10px] text-mute">
+        <p className="mt-2 break-all text-[10px] text-mute">
           {SHIELD_POOL_ADDRESS}
           {" · block "}
           {env.deployBlock.toString()}

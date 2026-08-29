@@ -27,7 +27,7 @@ export function AddressChip({
       type="button"
       onClick={copy}
       title={copied ? "Copied" : "Copy address"}
-      className={`group inline-flex items-center gap-1.5 rounded-md font-mono text-[11px] text-mute transition-colors hover:text-foreground ${className}`}
+      className={`group inline-flex items-center gap-1.5 rounded-md text-[11px] text-mute transition-colors hover:text-foreground ${className}`}
     >
       <span>{shortAddress(address, 4)}</span>
       <span className="inline-flex h-5 w-5 items-center justify-center rounded text-mute group-hover:text-lime">

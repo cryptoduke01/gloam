@@ -126,7 +126,7 @@ export function PaymentTicketShare({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="max-h-28 overflow-y-auto break-all rounded-lg border border-line bg-panel p-3 font-mono text-[10px] text-mute">
+          <div className="max-h-28 overflow-y-auto break-all rounded-lg border border-line bg-panel p-3 text-[10px] text-mute">
             {code}
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">

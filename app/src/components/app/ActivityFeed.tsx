@@ -42,7 +42,7 @@ export function ActivityFeed() {
   return (
     <div className="flex max-h-[min(28rem,70vh)] flex-col overflow-hidden rounded-xl border border-line bg-panel lg:sticky lg:top-20">
       <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Public activity
         </p>
         <StatusPill>Open book</StatusPill>
@@ -91,10 +91,10 @@ export function ActivityFeed() {
                           ? "Sent"
                           : "Received"}{" "}
                       {!zero && (
-                        <span className="font-mono">{eth} ETH</span>
+                        <span className="">{eth} ETH</span>
                       )}
                     </p>
-                    <p className="truncate font-mono text-[11px] text-mute">
+                    <p className="truncate text-[11px] text-mute">
                       {out ? "to" : "from"}{" "}
                       {shortAddress(out ? tx.to : tx.from, 4)}
                     </p>
@@ -122,7 +122,7 @@ export function ActivityFeed() {
             >
               ←
             </button>
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-mute">
               {page + 1} / {pageCount}
               <span className="ml-2 normal-case tracking-normal text-mute/80">
                 ({txs.length} tx)

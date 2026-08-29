@@ -162,7 +162,7 @@ export function SettingsView() {
       {/* Top row: wallet + appearance */}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Wallet
           </p>
           {!isConnected || !address ? (
@@ -174,7 +174,7 @@ export function SettingsView() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              <p className="break-all font-mono text-xs text-foreground sm:text-sm">
+              <p className="break-all text-xs text-foreground sm:text-sm">
                 {address}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -211,7 +211,7 @@ export function SettingsView() {
         </section>
 
         <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Appearance
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -230,7 +230,7 @@ export function SettingsView() {
 
       {/* Trading grid */}
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Trading
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -310,7 +310,7 @@ export function SettingsView() {
       {/* Network + faucet */}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Network
           </p>
           <p className="mt-2 font-display text-xl text-foreground">
@@ -330,7 +330,7 @@ export function SettingsView() {
         </section>
 
         <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Faucet
           </p>
           <p className="mt-2 font-display text-xl text-foreground">
@@ -350,7 +350,7 @@ export function SettingsView() {
 
       {/* Vault note backup — secrets leave this browser only when you export */}
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Vault notes backup
         </p>
         <p className="mt-2 text-sm text-mute">
@@ -465,7 +465,7 @@ export function SettingsView() {
           onChange={(e) => setBackupImport(e.target.value)}
           rows={3}
           placeholder='Paste JSON or gloambak1.… locked backup'
-          className="mt-2 w-full rounded-md border border-line bg-transparent p-3 font-mono text-[11px] outline-none focus:border-lime"
+          className="mt-2 w-full rounded-md border border-line bg-transparent p-3 text-[11px] outline-none focus:border-lime"
         />
         <button
           type="button"
@@ -510,7 +510,7 @@ export function SettingsView() {
       </section>
 
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Vault health
         </p>
         <div className="mt-3">
@@ -519,7 +519,7 @@ export function SettingsView() {
       </section>
 
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Proving artifacts
         </p>
         <p className="mt-2 text-sm text-mute">
@@ -529,7 +529,7 @@ export function SettingsView() {
             ? " — not for real money."
             : " — production fingerprints."}
         </p>
-        <ul className="mt-3 space-y-1 font-mono text-[11px] text-mute">
+        <ul className="mt-3 space-y-1 text-[11px] text-mute">
           {(
             [
               ["unshield zkey", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],

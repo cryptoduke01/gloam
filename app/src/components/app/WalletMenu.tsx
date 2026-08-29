@@ -141,7 +141,7 @@ export function WalletMenu() {
           className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line bg-panel px-3 text-sm text-foreground hover:border-mute"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-lime" aria-hidden />
-          <span className="font-mono text-xs sm:text-sm">
+          <span className="text-xs sm:text-sm">
             {shortAddress(address)}
           </span>
           <span className="text-mute" aria-hidden>
@@ -156,10 +156,10 @@ export function WalletMenu() {
           className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-panel shadow-[var(--shadow-dock)]"
         >
           <div className="border-b border-line px-3 py-2.5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Wallet
             </p>
-            <p className="mt-1 truncate font-mono text-xs text-foreground">
+            <p className="mt-1 truncate text-xs text-foreground">
               {shortAddress(address, 6)}
             </p>
           </div>

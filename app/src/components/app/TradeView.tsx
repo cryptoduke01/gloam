@@ -565,7 +565,7 @@ export function TradeView() {
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="rounded-xl border border-line bg-panel lg:col-span-4">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Markets
             </p>
             <div className="flex flex-wrap gap-1">
@@ -633,7 +633,7 @@ export function TradeView() {
                     height={28}
                   />
                   <div className="w-20 text-right">
-                    <p className="font-mono text-sm text-foreground">
+                    <p className="text-sm text-foreground">
                       {settings.showUsd
                         ? formatUsd(m.mark)
                         : `$${formatMark(m.mark)}`}
@@ -824,7 +824,7 @@ export function TradeView() {
                     }
                     className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
                   />
-                  <span className="flex items-center border-l border-line px-4 font-mono text-sm text-mute">
+                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
                     {inputMode === "usd" ? "USD" : market.symbol}
                   </span>
                 </div>
@@ -869,7 +869,7 @@ export function TradeView() {
                     value={to}
                     onChange={(e) => setTo(e.target.value.trim())}
                     placeholder="0x…"
-                    className="mt-2 min-h-11 w-full rounded-lg border border-line bg-transparent px-4 font-mono text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
+                    className="mt-2 min-h-11 w-full rounded-lg border border-line bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
                   />
                 </div>
               )}
@@ -928,7 +928,7 @@ export function TradeView() {
 
         <aside className="space-y-4 lg:col-span-3">
           <div className="rounded-xl border border-line bg-panel p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Mark
             </p>
             <p className="mt-2 font-display text-2xl text-foreground">
@@ -975,7 +975,7 @@ export function TradeView() {
             {lastHash && (
               <>
                 {" "}
-                <span className="font-mono text-foreground">
+                <span className="text-foreground">
                   {shortAddress(lastHash, 4)}
                 </span>
               </>

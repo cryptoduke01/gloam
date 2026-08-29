@@ -96,7 +96,7 @@ export function MarketsView() {
 
       <div className="overflow-hidden rounded-xl border border-line bg-panel">
         <div
-          className={`hidden gap-4 border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.12em] text-mute sm:grid ${grid}`}
+          className={`hidden gap-4 border-b border-line px-4 py-3 text-[10px] uppercase tracking-[0.12em] text-mute sm:grid ${grid}`}
         >
           <span>Market</span>
           {showType && <span>Type</span>}
@@ -141,7 +141,7 @@ export function MarketsView() {
                 width={88}
                 height={32}
               />
-              <p className="tnum font-mono text-sm text-foreground">
+              <p className="tnum text-sm text-foreground">
                 {settings.showUsd
                   ? formatUsd(m.mark)
                   : `$${formatMark(m.mark)}`}

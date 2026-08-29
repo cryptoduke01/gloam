@@ -9,7 +9,7 @@ export default function AdminError({
 }) {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-background px-5 text-center">
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-lime">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-lime">
         Admin
       </p>
       <h1 className="font-display text-3xl text-foreground">Something broke</h1>

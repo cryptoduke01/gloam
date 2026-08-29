@@ -23,7 +23,7 @@ export function ReceiveCard() {
   return (
     <div className="rounded-xl border border-line bg-panel p-5">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Receive
         </p>
         <StatusPill tone="lime">Public address</StatusPill>
@@ -32,7 +32,7 @@ export function ReceiveCard() {
         <p className="mt-3 text-sm text-mute">Connect to show your deposit address.</p>
       ) : (
         <>
-          <p className="mt-3 break-all font-mono text-sm text-foreground">
+          <p className="mt-3 break-all text-sm text-foreground">
             {address}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">

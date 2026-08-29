@@ -170,7 +170,7 @@ export function SendView() {
                   placeholder="0x…"
                   value={to}
                   onChange={(e) => setTo(e.target.value.trim())}
-                  className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 font-mono text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
+                  className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
                 />
               </div>
 
@@ -206,7 +206,7 @@ export function SendView() {
                     }
                     className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
                   />
-                  <span className="flex items-center border-l border-line px-4 font-mono text-sm text-mute">
+                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
                     ETH
                   </span>
                 </div>
@@ -218,7 +218,7 @@ export function SendView() {
               {/* Live preview card */}
               {validPreview && (
                 <div className="rounded-xl border border-lime/30 bg-background px-4 py-3">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
                     Preview
                   </p>
                   <div className="mt-2 flex items-baseline justify-between gap-3">
@@ -229,7 +229,7 @@ export function SendView() {
                       <p className="text-sm text-mute">{usdHint}</p>
                     )}
                   </div>
-                  <p className="mt-1 font-mono text-xs text-mute">
+                  <p className="mt-1 text-xs text-mute">
                     → {shortAddress(to, 6)}
                   </p>
                   <p className="mt-2 text-xs text-mute">
@@ -283,7 +283,7 @@ export function SendView() {
 
         <aside className="space-y-4 lg:col-span-5">
           <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Balance
             </p>
             <p className="mt-2 font-display text-3xl text-foreground">
@@ -297,7 +297,7 @@ export function SendView() {
             )}
           </div>
           <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
               Mode
             </p>
             <p className="mt-2 text-sm text-foreground">
@@ -314,7 +314,7 @@ export function SendView() {
             rel="noreferrer"
             className="block rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
           >
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               Need more ETH?
             </p>
             <p className="mt-2 text-sm text-mute">Open faucet →</p>
@@ -335,7 +335,7 @@ export function SendView() {
           <div className="relative z-[1] w-full max-w-sm max-h-[min(90vh,640px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
             <div className="h-1 bg-lime" />
             <div className="px-6 py-6">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
                 Review
               </p>
               <h2 className="mt-2 font-display text-2xl text-foreground">
@@ -353,7 +353,7 @@ export function SendView() {
                 </div>
                 <div className="flex justify-between gap-4 border-b border-line pb-2">
                   <dt className="text-mute">To</dt>
-                  <dd className="font-mono text-foreground">
+                  <dd className="text-foreground">
                     {shortAddress(to, 6)}
                   </dd>
                 </div>
@@ -394,7 +394,7 @@ export function SendView() {
                 {sentAmount || "—"} ETH
               </span>{" "}
               to{" "}
-              <span className="font-mono text-foreground">
+              <span className="text-foreground">
                 {sentTo ? shortAddress(sentTo, 5) : "—"}
               </span>
             </p>

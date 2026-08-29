@@ -40,7 +40,7 @@ export function PriceChart({
     <div className="rounded-xl border border-line bg-panel p-4 sm:p-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
             Price
           </p>
           <p className="mt-1 font-display text-3xl text-foreground">
@@ -48,7 +48,7 @@ export function PriceChart({
           </p>
         </div>
         <p
-          className={`rounded-full px-2.5 py-1 font-mono text-sm font-medium ${
+          className={`rounded-full px-2.5 py-1 text-sm font-medium ${
             up
               ? "bg-[color-mix(in_srgb,var(--chart-up)_18%,transparent)] text-[var(--chart-up)]"
               : "bg-[color-mix(in_srgb,var(--chart-down)_15%,transparent)] text-[var(--chart-down)]"

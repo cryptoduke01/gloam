@@ -52,7 +52,7 @@ export function Footer() {
                 <p className="text-xl font-semibold tracking-tight text-foreground">
                   Gloam
                 </p>
-                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-lime">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-lime">
                   Private money
                 </p>
               </div>
@@ -64,7 +64,7 @@ export function Footer() {
             <div className="mt-8 flex items-center gap-3 border border-line bg-panel px-4 py-3">
               <span className="h-2 w-2 shrink-0 rounded-full bg-lime shadow-[0_0_12px_#c8ff00]" />
               <div className="min-w-0">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
                   Network
                 </p>
                 <p className="truncate text-sm text-foreground">
@@ -102,7 +102,7 @@ export function Footer() {
             visibility. They do not make you invisible to law enforcement,
             chain analysis at the edges, or your own operational mistakes.
           </p>
-          <p className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-mute">
+          <p className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-mute">
             gloam.trade
           </p>
         </div>
@@ -120,7 +120,7 @@ function FooterCol({
 }) {
   return (
     <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
         {title}
       </p>
       <ul className="mt-4 space-y-2.5">

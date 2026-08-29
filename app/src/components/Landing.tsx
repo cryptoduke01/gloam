@@ -132,7 +132,7 @@ function SealedVaultCard() {
       </div>
 
       <div className="flex items-center justify-between border-t border-[#E5E3DD] bg-[#FAFAF8] px-[18px] py-[13px] text-xs">
-        <span className="font-mono text-[#6E6E76]">proof 0x1356…f983ffd</span>
+        <span className="text-[#6E6E76]">proof 0x1356…f983ffd</span>
         <span className="flex items-center gap-1.5 font-semibold text-[#2E7D53]">
           ✓ verified onchain
         </span>
@@ -192,7 +192,7 @@ export function Landing() {
               <span className="h-[7px] w-[7px] rounded-full bg-[#2E7D53] shadow-[0_0_0_3px_rgba(46,125,83,0.14)]" />
               Live on Robinhood Chain testnet
             </p>
-            <h1 className="text-[clamp(44px,6.4vw,80px)] font-[800] leading-[0.95] tracking-[-0.04em] text-balance">
+            <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
               <br />
               <span className="text-[#6E6E76]">Reveal nothing.</span>

@@ -1,16 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Serif } from "next/font/google";
 import { Analytics } from "@/components/Analytics";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
-
-const instrument = Instrument_Serif({
-  variable: "--font-instrument",
-  subsets: ["latin"],
-  weight: "400",
-  display: "swap",
-});
 
 const siteTitle = "Trade Everything on Robinhood Privately · Gloam";
 const siteDescription =
@@ -79,18 +71,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${instrument.variable} dark h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className="dark h-full antialiased" suppressHydrationWarning>
       <head>
         <meta
           name="ory-verify"
           content="orynth-d061bf2ee92a4996b6e3121097472653"
         />
-        {/* Main typeface: Avant Garde. Jost is the free geometric stand-in until the
-            licensed Avant Garde Gothic (or URW Gothic clone) is self-hosted. */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
+        {/* Main typeface: ITC Avant Garde Gothic Pro (Adobe Fonts / Typekit). */}
+        <link rel="stylesheet" href="https://use.typekit.net/xnn3str.css" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('gloam_theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.dataset.theme=t;d.classList.add(t);d.classList.remove(t==='dark'?'light':'dark')}catch(e){}})()`,
@@ -99,7 +87,7 @@ export default function RootLayout({
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"
-        style={{ fontFamily: '"Jost", system-ui, sans-serif' }}
+        style={{ fontFamily: '"itc-avant-garde-gothic-pro", system-ui, sans-serif' }}
       >
         <ThemeProvider>
           {children}

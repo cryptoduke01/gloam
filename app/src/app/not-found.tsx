@@ -5,10 +5,10 @@ export default function NotFound() {
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#F4F3EF] px-6 text-center text-[#121316]">
       <div className="twilight-atmos pointer-events-none fixed inset-0 z-0" aria-hidden />
       <div className="relative z-10">
-        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#3B3766]">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-[#3B3766]">
           Error 404
         </p>
-        <h1 className="mt-4 text-[clamp(64px,14vw,140px)] font-[800] leading-none tracking-[-0.04em]">
+        <h1 className="mt-4 text-[clamp(64px,14vw,140px)] font-bold leading-none tracking-[-0.04em]">
           404
         </h1>
         <p className="mx-auto mt-5 max-w-md text-[17px] text-[#565660]">
