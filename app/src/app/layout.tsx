@@ -86,8 +86,10 @@ export default function RootLayout({
           name="ory-verify"
           content="orynth-d061bf2ee92a4996b6e3121097472653"
         />
+        {/* Main typeface: Avant Garde. Jost is the free geometric stand-in until the
+            licensed Avant Garde Gothic (or URW Gothic clone) is self-hosted. */}
         <link
-          href="https://fonts.cdnfonts.com/css/overused-grotesk"
+          href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
         <script
@@ -98,7 +100,7 @@ export default function RootLayout({
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"
-        style={{ fontFamily: '"Overused Grotesk", system-ui, sans-serif' }}
+        style={{ fontFamily: '"Jost", system-ui, sans-serif' }}
       >
         <ThemeProvider>
           {children}

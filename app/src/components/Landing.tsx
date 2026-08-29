@@ -1,462 +1,308 @@
-"use client";
-
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
-import { AsciiImage } from "@/components/AsciiImage";
-import { HeroPrivacyArt } from "@/components/HeroPrivacyArt";
-import { EncryptFlow } from "@/components/EncryptFlow";
-import { MotionCard, MotionItem, MotionPress, MotionSection } from "@/components/motion";
 
-const problems = [
+/**
+ * Gloam landing — "Twilight" brand.
+ * Light, confident, product-forward. Self-contained light palette (the app
+ * pages still run the dark tokens during the migration). Type: Clash Display
+ * headlines + General Sans body. Signature: the twilight blend + the sealed
+ * vault card, which redacts your size where other protocols show a number.
+ */
+
+const LEDGER = [
+  { ic: "↓", act: "Shield", asset: "ETH", w: 4 },
+  { ic: "⇄", act: "Sealed swap", asset: "TSLA", w: 6 },
+  { ic: "↗", act: "Private send", asset: "ETH", w: 3 },
+];
+
+const SEALED = [
   {
-    title: "The open confession",
-    body: "A public chain records every desire. Swap, size, timing: each line is evidence left for whoever can read a graph.",
-    src: "/ascii/trade.png",
-    caption: "Open ledger",
+    k: "Your size",
+    t: "Off the open book",
+    b: "On-chain min-out is a floor, not your real amount. The explorer sees a proof and an asset pair, never how much you moved.",
   },
   {
-    title: "Size as sacrifice",
-    body: "Show real weight on a transparent book and the market prices you before settlement. Intent dies in the open air.",
-    src: "/ascii/move.png",
-    caption: "Hands in the open",
+    k: "Your balance",
+    t: "Visible only to you",
+    b: "Shielded notes hold your position. A viewing key proves balance to an auditor without revealing your history to everyone else.",
   },
   {
-    title: "No private venue",
-    body: "Retail lists the equity. It will not build the sealed chamber: private balances, private flow, private trade.",
-    src: "/ascii/rim.png",
-    caption: "Alone on the book",
+    k: "Your strategy",
+    t: "Unlinkable by construction",
+    b: "Shield, send, and trade produce independent proofs. No wallet tracker can stitch your moves into a timeline.",
   },
 ];
 
-const steps = [
-  {
-    n: "01",
-    title: "Shield",
-    body: "Park assets in the vault. Your open wallet no longer shows that bag. Live on testnet.",
-    src: "/ascii/shield.png",
-  },
-  {
-    n: "02",
-    title: "Move",
-    body: "Private send inside the vault, share a receive tag, not a public transfer. Cash out only when you choose the light. Live on testnet.",
-    src: "/ascii/move.png",
-  },
-  {
-    n: "03",
-    title: "Trade",
-    body: "Private trade keeps size off the open book. Public wallet and via-market paths remain when you need them. Live on testnet.",
-    src: "/ascii/trade.png",
-  },
-];
+function Mark({ size = 22 }: { size?: number }) {
+  const notch = Math.round(size * 0.34);
+  const off = Math.round(size * 0.27);
+  return (
+    <span
+      aria-hidden
+      className="relative inline-block shrink-0 rounded-[6px] bg-[#121316]"
+      style={{ width: size, height: size }}
+    >
+      <span
+        className="absolute rounded-[2px] bg-[#F4F3EF]"
+        style={{ width: notch, height: notch, top: off, right: off }}
+      />
+    </span>
+  );
+}
 
-const ease = [0.22, 1, 0.36, 1] as const;
+function SealedVaultCard() {
+  return (
+    <div className="overflow-hidden rounded-[18px] border border-[#E5E3DD] bg-white shadow-[0_1px_2px_rgba(18,19,22,0.04),0_18px_50px_-22px_rgba(18,19,22,0.22)]">
+      <div className="flex items-center justify-between border-b border-[#E5E3DD] px-[18px] py-4">
+        <div className="flex items-center gap-[10px]">
+          <Mark size={20} />
+          <span className="text-xs font-semibold tracking-[0.01em] text-[#121316]">
+            Sealed Vault
+          </span>
+        </div>
+        <span className="flex items-center gap-[7px] text-[11px] text-[#6E6E76]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#2E7D53]" />
+          RH testnet
+        </span>
+      </div>
+
+      <div className="px-[18px] pb-[18px] pt-5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] uppercase tracking-[0.02em] text-[#6E6E76]">
+            Your shielded balance
+          </span>
+          <span className="text-[11px] font-semibold text-[#3B3766]">
+            visible only to you
+          </span>
+        </div>
+        <div className="mt-3 flex gap-[5px]" aria-label="Balance hidden">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span
+              key={i}
+              className="h-[30px] w-[34px] rounded-[5px] bg-[linear-gradient(180deg,#1a1b1f,#0e0f12)]"
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 border-y border-[#E5E3DD]">
+        <div className="px-[18px] py-[14px]">
+          <div className="text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
+            Proofs verified
+          </div>
+          <div className="tnum mt-1 text-[19px] font-bold tracking-[-0.01em] text-[#121316]">
+            8,412
+          </div>
+        </div>
+        <div className="border-l border-[#E5E3DD] px-[18px] py-[14px]">
+          <div className="text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
+            Markets
+          </div>
+          <div className="tnum mt-1 text-[19px] font-bold tracking-[-0.01em] text-[#121316]">
+            TSLA 349{" "}
+            <span className="text-[12px] font-medium text-[#6E6E76]">
+              · NVDA 466
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-[18px] pb-1.5 pt-[14px]">
+        <div className="mb-2 flex justify-between text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
+          <span>Recent activity</span>
+          <span>size hidden</span>
+        </div>
+        {LEDGER.map((r, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-[auto_1fr_auto] items-center gap-[10px] border-t border-[#E5E3DD] py-[9px] text-[13px] first:border-t-0"
+          >
+            <span className="grid h-[22px] w-[22px] place-items-center rounded-[6px] border border-[#E5E3DD] bg-[#F4F3EF] text-[11px] text-[#6E6E76]">
+              {r.ic}
+            </span>
+            <span className="text-[#121316]">
+              {r.act} <span className="text-[#6E6E76]">· {r.asset}</span>
+            </span>
+            <span className="flex gap-[5px]">
+              {Array.from({ length: r.w }).map((_, j) => (
+                <span key={j} className="h-[15px] w-4 rounded-[3px] bg-[#DEDCD5]" />
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between border-t border-[#E5E3DD] bg-[#FAFAF8] px-[18px] py-[13px] text-xs">
+        <span className="font-mono text-[#6E6E76]">proof 0x1356…f983ffd</span>
+        <span className="flex items-center gap-1.5 font-semibold text-[#2E7D53]">
+          ✓ verified onchain
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function Landing() {
-  const reduce = useReducedMotion();
-
   return (
-    <>
-      <Header />
-      <main className="flex-1">
-        <section className="relative overflow-hidden border-b border-line">
-          <div className="pointer-events-none absolute inset-0 opacity-30">
-            <AsciiImage
-              src="/ascii/hero.png"
-              alt=""
-              tone="plate"
-              priority
-              className="h-full min-h-[420px] w-full"
-              sizes="100vw"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/94 to-background/55" />
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/50" />
+    <div className="relative min-h-screen overflow-hidden bg-[#F4F3EF] text-[#121316]">
+      {/* twilight atmosphere */}
+      <div
+        aria-hidden
+        className="twilight-atmos pointer-events-none fixed inset-0 z-0"
+      />
+      <div
+        aria-hidden
+        className="twilight-grain pointer-events-none fixed inset-0 z-[1] opacity-40 mix-blend-multiply"
+      />
+
+      <div className="relative z-[2] mx-auto max-w-6xl px-6">
+        {/* nav */}
+        <nav className="mt-5 flex items-center justify-between gap-5 rounded-[14px] border border-[#E5E3DD] bg-white/70 px-[18px] py-[10px] shadow-[0_1px_2px_rgba(18,19,22,0.05),0_8px_24px_-16px_rgba(18,19,22,0.18)] backdrop-blur-md">
+          <Link href="/" className="flex items-center gap-[10px]">
+            <Mark size={22} />
+            <span className="text-[16px] font-semibold tracking-[-0.01em]">
+              Gloam
+            </span>
+          </Link>
+          <div className="hidden items-center gap-7 text-sm text-[#6E6E76] sm:flex">
+            <Link href="/app/trade?path=sealed" className="hover:text-[#121316]">
+              Trade
+            </Link>
+            <Link href="/app" className="hover:text-[#121316]">
+              Vault
+            </Link>
+            <Link href="/docs" className="hover:text-[#121316]">
+              Docs
+            </Link>
+            <Link href="/whitepaper" className="hover:text-[#121316]">
+              Whitepaper
+            </Link>
           </div>
+          <Link
+            href="/app"
+            className="rounded-[10px] border border-[#E5E3DD] bg-white/60 px-4 py-[10px] text-[13.5px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+          >
+            Connect
+          </Link>
+        </nav>
 
-          <div className="relative mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-12 lg:items-center lg:gap-10 lg:py-20">
-            <motion.div
-              className="lg:col-span-7"
-              initial={reduce ? false : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease }}
-            >
-              <p className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-lime">
-                <motion.span
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-lime"
-                  animate={
-                    reduce
-                      ? undefined
-                      : { scale: [1, 1.35, 1], opacity: [1, 0.7, 1] }
-                  }
-                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                />
-                Stocks · Memes · Robinhood Chain
-              </p>
-              <h1 className="mt-4 font-display text-[2.4rem] leading-[1.06] tracking-tight text-foreground sm:text-5xl lg:text-[3.75rem]">
-                Trade Everything on Robinhood Privately
-              </h1>
-              <p className="mt-5 max-w-xl text-base leading-relaxed text-mute sm:text-lg">
-                Every transparent ledger is a confession. Gloam is the sealed
-                chamber on Robinhood Chain: stocks, memes, whatever is liquid.
-                Held, moved, and traded without printing your book to the street.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <MotionPress>
-                  <Link
-                    href="/docs"
-                    className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
-                  >
-                    Read the docs
-                  </Link>
-                </MotionPress>
-                <MotionPress>
-                  <Link
-                    href="/whitepaper"
-                    className="inline-flex min-h-11 items-center rounded-md border border-line px-5 text-sm font-medium text-foreground hover:border-mute"
-                  >
-                    Whitepaper
-                  </Link>
-                </MotionPress>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="lg:col-span-5"
-              initial={reduce ? false : { opacity: 0, x: 20, scale: 0.99 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              transition={{ duration: 0.55, delay: 0.08, ease }}
-            >
-              <HeroPrivacyArt />
-            </motion.div>
-          </div>
-        </section>
-
-        <section className="border-b border-line bg-panel/60">
-          <div className="mx-auto flex max-w-6xl items-center px-5 py-4 sm:px-8 sm:py-5">
-            <p className="text-sm text-mute">
-              Settles where tokenized equities already live: Robinhood Chain.
+        {/* hero */}
+        <section className="grid grid-cols-1 items-center gap-14 py-16 md:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
+          <div>
+            <p className="mb-[22px] flex items-center gap-[9px] text-[12.5px] text-[#6E6E76]">
+              <span className="h-[7px] w-[7px] rounded-full bg-[#2E7D53] shadow-[0_0_0_3px_rgba(46,125,83,0.14)]" />
+              Live on Robinhood Chain testnet
             </p>
+            <h1 className="text-[clamp(44px,6.4vw,80px)] font-[800] leading-[0.95] tracking-[-0.04em] text-balance">
+              Trade everything.
+              <br />
+              <span className="text-[#6E6E76]">Reveal nothing.</span>
+            </h1>
+            <p className="mt-6 max-w-[44ch] text-[17px] text-[#4c4c53]">
+              Shield a balance, trade tokenized stocks and crypto, and settle on
+              Robinhood Chain. The chain verifies a proof, never your size.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/app"
+                className="group inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+              >
+                Open the vault
+                <span className="transition-transform duration-150 ease-out group-hover:translate-x-0.5">
+                  →
+                </span>
+              </Link>
+              <Link
+                href="/docs"
+                className="inline-flex min-h-11 items-center rounded-[12px] border border-[#E5E3DD] bg-white/60 px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+              >
+                How it works
+              </Link>
+            </div>
+            <div className="mt-9 flex items-center gap-[22px] text-[12.5px] text-[#6E6E76]">
+              <span>
+                <b className="font-semibold text-[#121316]">3</b>
+                {" criticals found & fixed"}
+              </span>
+              <span className="h-[26px] w-px bg-[#E5E3DD]" />
+              <span>
+                Real ZK proofs ·{" "}
+                <b className="font-semibold text-[#121316]">no mock fills</b>
+              </span>
+            </div>
+          </div>
+
+          <SealedVaultCard />
+        </section>
+
+        {/* what stays sealed */}
+        <section className="border-t border-[#E5E3DD] py-16 md:py-20">
+          <h2 className="max-w-[18ch] text-[clamp(28px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-0.025em]">
+            What settles in public. What stays sealed.
+          </h2>
+          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+            {SEALED.map((s) => (
+              <div key={s.k} className="rounded-[14px] border border-[#E5E3DD] bg-white/70 p-6">
+                <div className="text-[11px] uppercase tracking-[0.03em] text-[#6E6E76]">
+                  {s.k}
+                </div>
+                <div className="mt-2 text-[19px] font-semibold tracking-[-0.01em] text-[#121316]">
+                  {s.t}
+                </div>
+                <p className="mt-2 text-[14px] leading-relaxed text-[#565660]">
+                  {s.b}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
 
-        <MotionSection id="product" className="border-b border-line">
-          <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
-            <MotionItem>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
-                The condition
-              </p>
-            </MotionItem>
-            <MotionItem>
-              <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                Transparent ledgers make transparent bags
-              </h2>
-            </MotionItem>
-            <MotionItem>
-              <p className="mt-3 max-w-2xl text-mute leading-relaxed">
-                Public AMMs and wallet trackers turned every move into spectacle:
-                equity tokens and degen books alike. Gloam is the private layer
-                for hold, send, and trade when you refuse a live feed of your intent.
-              </p>
-            </MotionItem>
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              {problems.map((p) => (
-                <MotionCard
-                  key={p.title}
-                  className="overflow-hidden rounded-lg border border-line bg-panel"
-                >
-                  <div className="relative aspect-[4/3] w-full border-b border-line">
-                    <AsciiImage
-                      src={p.src}
-                      alt={p.caption}
-                      tone="plate"
-                      className="h-full w-full"
-                      sizes="33vw"
-                    />
-                    <span className="absolute left-3 top-3 rounded-md border border-white/10 bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-lime backdrop-blur-sm">
-                      {p.caption}
-                    </span>
-                  </div>
-                  <div className="p-5">
-                    <h3 className="font-display text-xl text-foreground">
-                      {p.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-mute">
-                      {p.body}
-                    </p>
-                  </div>
-                </MotionCard>
-              ))}
-            </div>
-          </div>
-        </MotionSection>
-
-        <MotionSection id="encryption" className="border-b border-line">
-          <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
-            <MotionItem>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
-                How money is encrypted
-              </p>
-            </MotionItem>
-            <MotionItem>
-              <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                From clear value to sealed note
-              </h2>
-            </MotionItem>
-            <MotionItem>
-              <p className="mt-3 max-w-2xl text-mute leading-relaxed">
-                Value does not vanish. It is committed, proved, and reborn as a
-                note only a viewing key can read. The explorer sees structure.
-                It does not see you.
-              </p>
-            </MotionItem>
-            <MotionItem className="mt-8">
-              <EncryptFlow />
-            </MotionItem>
-          </div>
-        </MotionSection>
-
-        <MotionSection id="how" className="border-b border-line">
-          <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <MotionItem>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
-                    The path
-                  </p>
-                </MotionItem>
-                <MotionItem>
-                  <h2 className="mt-2 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                    Shield. Move. Trade.
-                  </h2>
-                </MotionItem>
-              </div>
-              <MotionItem>
-                <p className="max-w-md text-sm text-mute lg:text-right">
-                  Three gates. Each step stays private until you exit to the
-                  public chain by choice, not by default.
-                </p>
-              </MotionItem>
-            </div>
-
-            <div className="relative mt-8">
-              <div
-                className="absolute bottom-4 left-[1.15rem] top-4 w-px bg-gradient-to-b from-lime via-line to-lime md:left-8"
-                aria-hidden
-              />
-              <ol className="space-y-4 md:space-y-5">
-                {steps.map((s, i) => (
-                  <motion.li
-                    key={s.n}
-                    className="relative pl-12 md:pl-20"
-                    initial={reduce ? false : { opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, amount: 0.15 }}
-                    transition={{ duration: 0.4, delay: i * 0.05, ease }}
-                  >
-                    <span className="absolute left-0 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-lime bg-background font-mono text-[11px] text-lime md:left-3.5">
-                      {s.n}
-                    </span>
-                    <div className="grid overflow-hidden rounded-lg border border-line bg-panel md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                      <div className="relative min-h-[160px] aspect-[16/10] md:aspect-auto md:min-h-[200px]">
-                        <AsciiImage
-                          src={s.src}
-                          alt=""
-                          tone="plate"
-                          className="h-full w-full"
-                          sizes="(max-width: 768px) 100vw, 55vw"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-panel/90 max-md:bg-gradient-to-t max-md:from-black/80 max-md:via-black/20 max-md:to-transparent" />
-                      </div>
-                      <div className="flex flex-col justify-center gap-2 p-5 sm:p-7">
-                        <h3 className="font-display text-2xl text-foreground sm:text-3xl">
-                          {s.title}
-                        </h3>
-                        <p className="text-sm leading-relaxed text-mute sm:text-base">
-                          {s.body}
-                        </p>
-                        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">
-                          Gate {s.n}
-                        </p>
-                      </div>
-                    </div>
-                  </motion.li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </MotionSection>
-
-        <MotionSection id="chain" className="border-b border-line">
-          <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 sm:py-14 lg:grid-cols-2 lg:items-center">
-            <div>
-              <MotionItem>
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-mute">
-                  Why Robinhood Chain
-                </p>
-              </MotionItem>
-              <MotionItem>
-                <h2 className="mt-2 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                  Private rails where the equities already are
-                </h2>
-              </MotionItem>
-              <MotionItem>
-                <p className="mt-3 text-mute leading-relaxed">
-                  Robinhood Chain is where equities and onchain culture already
-                  settle: stock tokens past the close, memes when the tape is
-                  loud. Gloam adds shielded balances and private execution so
-                  size and strategy remain yours, on both ends of the book.
-                </p>
-              </MotionItem>
-              <ul className="mt-6 space-y-2.5 text-sm text-mute">
-                {[
-                  "Stocks and memes on the same private rails",
-                  "EVM tooling and Uniswap-class liquidity paths",
-                  "Privacy as construction, not a skin on a public book",
-                ].map((line) => (
-                  <MotionItem key={line}>
-                    <li className="flex gap-2">
-                      <span className="text-lime">→</span> {line}
-                    </li>
-                  </MotionItem>
-                ))}
-              </ul>
-              <MotionItem className="mt-6">
-                <Link
-                  href="/whitepaper"
-                  className="inline-flex min-h-10 items-center text-sm font-medium text-lime hover:underline"
-                >
-                  Read the whitepaper →
-                </Link>
-              </MotionItem>
-            </div>
-            <MotionItem className="relative aspect-[16/11] overflow-hidden rounded-lg border border-line">
-              <div className="relative h-full w-full">
-                <AsciiImage
-                  src="/ascii/shield.png"
-                  alt="Shielded coin"
-                  tone="plate"
-                  className="h-full w-full"
-                  sizes="50vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-                <p className="absolute bottom-5 left-5 right-5 font-display text-xl text-white sm:text-2xl">
-                  Private by construction. Public only when you exit.
-                </p>
-              </div>
-            </MotionItem>
-          </div>
-        </MotionSection>
-
-        <MotionSection id="build" className="border-b border-line">
-          <div className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-14">
-            <MotionItem>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-lime">
-                Build on Gloam
-              </p>
-            </MotionItem>
-            <MotionItem>
-              <h2 className="mt-2 max-w-2xl font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-                The privacy layer, as a primitive
-              </h2>
-            </MotionItem>
-            <MotionItem>
-              <p className="mt-3 max-w-2xl text-mute leading-relaxed">
-                One private path, exposed three ways. Any Robinhood Chain app or
-                AI agent can add shielded balances, private transfers, and
-                private trades. The vault app is the reference implementation.
-              </p>
-            </MotionItem>
-
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              {[
-                {
-                  tag: "@gloam/sdk",
-                  title: "SDK",
-                  body: "Drop the private path into any app. Unsigned intents plus client proving, one shared core.",
-                  href: "/docs/sdk",
-                  cta: "Read the SDK docs",
-                },
-                {
-                  tag: "@gloam/mcp",
-                  title: "Agents",
-                  body: "An MCP server so an AI agent can shield and privately trade end to end, under policy.",
-                  href: "/docs/agents",
-                  cta: "Read the agent docs",
-                },
-                {
-                  tag: "Reference app",
-                  title: "Vault",
-                  body: "The live testnet product that proves the whole path. Shield, send, cash out, private trade.",
-                  href: "/app",
-                  cta: "Open the app",
-                },
-              ].map((s) => (
-                <MotionCard
-                  key={s.title}
-                  className="group flex flex-col rounded-xl border border-line bg-panel p-6"
-                >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-mute">
-                    {s.tag}
-                  </p>
-                  <h3 className="mt-3 font-display text-2xl text-foreground">
-                    {s.title}
-                  </h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-mute">
-                    {s.body}
-                  </p>
-                  <Link
-                    href={s.href}
-                    className="mt-5 inline-flex items-center text-sm font-medium text-lime hover:underline"
-                  >
-                    {s.cta} →
-                  </Link>
-                </MotionCard>
-              ))}
-            </div>
-          </div>
-        </MotionSection>
-
-        <motion.section
-          id="waitlist"
-          className="border-b border-line bg-lime"
-          initial={reduce ? false : { opacity: 0.9, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.4, ease }}
-        >
-          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-12">
-            <div>
-              <h2 className="font-display text-3xl tracking-tight text-black sm:text-4xl">
-                Everything on Robinhood. Privately.
-              </h2>
-              <p className="mt-2 max-w-xl text-sm text-black/70">
-                Stocks. Memes. Shield, transfer, and trade. Testnet product is
-                live. Connect, explore, no mock private fills.
-              </p>
-            </div>
+        {/* cta */}
+        <section className="border-t border-[#E5E3DD] py-16 md:py-24">
+          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+            <h2 className="max-w-[16ch] text-[clamp(30px,4.6vw,56px)] font-bold leading-[0.98] tracking-[-0.03em] text-balance">
+              Settlement is public. Strategy is not.
+            </h2>
             <div className="flex flex-wrap gap-3">
-              <MotionPress>
-                <Link
-                  href="/app/trade?path=sealed"
-                  className="inline-flex min-h-11 items-center rounded-md bg-black px-5 text-sm font-semibold text-white hover:opacity-90"
-                >
-                  Private trade
-                </Link>
-              </MotionPress>
-              <MotionPress>
-                <Link
-                  href="/app"
-                  className="inline-flex min-h-11 items-center rounded-md border border-black/25 px-5 text-sm font-medium text-black hover:bg-black/5"
-                >
-                  Open app
-                </Link>
-              </MotionPress>
+              <Link
+                href="/app"
+                className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+              >
+                Open the vault →
+              </Link>
+              <Link
+                href="/whitepaper"
+                className="inline-flex min-h-11 items-center rounded-[12px] border border-[#E5E3DD] bg-white/60 px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4]"
+              >
+                Read the whitepaper
+              </Link>
             </div>
           </div>
-        </motion.section>
-      </main>
-      <Footer />
-    </>
+        </section>
+
+        {/* footer */}
+        <footer className="flex flex-col gap-4 border-t border-[#E5E3DD] py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-[10px]">
+            <Mark size={18} />
+            <span>Gloam · Robinhood Chain testnet 46630</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <Link href="/docs" className="hover:text-[#121316]">
+              Docs
+            </Link>
+            <Link href="/whitepaper" className="hover:text-[#121316]">
+              Whitepaper
+            </Link>
+            <a
+              href="https://x.com/gloamtrade"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-[#121316]"
+            >
+              @gloamtrade
+            </a>
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }

@@ -71,6 +71,38 @@ body {
   font-family: var(--font-instrument), ui-serif, Georgia, serif;
 }
 
+/* Main typeface: Avant Garde (Jost stand-in), set on <body>. Display headlines
+   use tight tracking + heavy weight for the geometric-poster look. */
+
+/*
+ * Twilight atmosphere — Gloam means dusk. A layered dawn-gold → rose → violet →
+ * indigo blend, grained to avoid banding. The signature background of the new brand.
+ */
+.twilight-atmos {
+  background:
+    radial-gradient(58% 52% at 84% 6%, rgba(238, 201, 150, 0.62), transparent 62%),
+    radial-gradient(52% 48% at 95% 26%, rgba(228, 166, 158, 0.5), transparent 64%),
+    radial-gradient(60% 55% at 66% 44%, rgba(150, 116, 178, 0.3), transparent 70%),
+    radial-gradient(72% 64% at 8% 96%, rgba(74, 73, 140, 0.34), transparent 68%),
+    radial-gradient(46% 42% at 30% 74%, rgba(120, 150, 200, 0.22), transparent 72%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .twilight-atmos {
+    animation: twilight-drift 26s ease-in-out infinite alternate;
+  }
+  @keyframes twilight-drift {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(-1.5%, 1%, 0) scale(1.05);
+    }
+  }
+}
+.twilight-grain {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
+}
+
 /* Dark ASCII: lift whites for clean lime multiply → #c8ff00 */
 .ascii-plate {
   filter: contrast(1.08) brightness(1.06);
