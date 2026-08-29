@@ -46,7 +46,6 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     items: [
       { href: "/docs/production", label: "Production gate" },
       { href: "/whitepaper", label: "Whitepaper" },
-      { href: "/token", label: "$GLOAM token" },
     ],
   },
 ];
@@ -184,7 +183,6 @@ export function DocsLayout({
                       { href: "/docs/testnet", label: "Testnet guide" },
                       { href: "/docs/privacy-model", label: "Privacy model" },
                       { href: "/whitepaper", label: "Whitepaper" },
-                      { href: "/token", label: "$GLOAM token" },
                       {
                         href: "https://x.com/gloamtrade",
                         label: "@gloamtrade",

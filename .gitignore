@@ -40,3 +40,6 @@ next-env.d.ts
 /tok.json
 /orynth-screenshots/
 *.tmp
+
+# local editor/agent config
+/.claude/

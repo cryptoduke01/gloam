@@ -9,7 +9,6 @@ const links = [
   { href: "/docs", label: "Docs" },
   { href: "/docs/privacy-model", label: "Privacy" },
   { href: "/whitepaper", label: "Whitepaper" },
-  { href: "/token", label: "Token" },
   { href: "/app/trade?path=sealed", label: "Private trade" },
 ];
 

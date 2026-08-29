@@ -415,8 +415,8 @@ export default function DocsTestnetPage() {
           depend on anonymity set size.
         </li>
         <li>
-          $GLOAM is not required to use the testnet. Token status:{" "}
-          <Link href="/token">/token</Link> (docs / whitepaper only for detail).
+          $GLOAM is not required to use the testnet. It is not launched (see
+          the whitepaper for detail).
         </li>
       </ul>
 

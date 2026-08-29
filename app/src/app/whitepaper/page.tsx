@@ -25,7 +25,6 @@ export default function WhitepaperPage() {
       quickLinks={[
         { href: "/docs", label: "Documentation" },
         { href: "/app", label: "Testnet app" },
-        { href: "/token", label: "$GLOAM token" },
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
@@ -34,7 +33,7 @@ export default function WhitepaperPage() {
         shipped testnet capability, and intentional non-claims. It is not an
         offer of securities, a guarantee of mainnet timelines, a promise of
         absolute anonymity, or a solicitation to purchase tokens. Official{" "}
-        <Link href="/token">$GLOAM</Link> status lives on the token page only.
+        $GLOAM status is announced through official channels only.
       </p>
 
       <h2 id="abstract">1. Abstract</h2>
@@ -322,19 +321,17 @@ export default function WhitepaperPage() {
         </li>
       </ul>
       <p>
-        Documentation, this whitepaper, and the token page live on the same
+        Documentation and this whitepaper live on the same
         origin (
         <Link href="/docs">/docs</Link>,{" "}
-        <Link href="/whitepaper">/whitepaper</Link>,{" "}
-        <Link href="/token">/token</Link>
+        <Link href="/whitepaper">/whitepaper</Link>
         ). Marketing site and product share branding: black, lime, white.
       </p>
 
       <h2 id="token">9. $GLOAM (protocol asset)</h2>
       <p>
         Gloam reserves the ticker <strong>$GLOAM</strong> as a future
-        coordination asset for the private rails on Robinhood Chain. The public
-        page at <Link href="/token">gloam.trade/token</Link> states status
+        coordination asset for the private rails on Robinhood Chain. Status is stated
         honestly: <strong>not launched</strong>. There is no tradable contract
         address until product, trust (audits / production keys), and utility
         design gates are closed.
@@ -343,8 +340,8 @@ export default function WhitepaperPage() {
         Planned roles are design targets only: protocol alignment, fee or access
         economics once mainnet volume is real, parameter voice after audits, and
         ecosystem gravity for partners and builders. This whitepaper does not
-        define supply, unlocks, or distribution. Those details will appear on the
-        token page before any mint. The vault, private pay, and sealed trade
+        define supply, unlocks, or distribution. Those details will be published
+        before any mint. The vault, private pay, and sealed trade
         paths are useful without a token.
       </p>
       <p>
@@ -373,8 +370,8 @@ export default function WhitepaperPage() {
           explicit readiness criteria.
         </li>
         <li>
-          <strong>$GLOAM:</strong> publish utility and supply on{" "}
-          <Link href="/token">/token</Link>, then deploy only after the above
+          <strong>$GLOAM:</strong> publish utility and supply,
+          then deploy only after the above
           gates — not as a substitute for shipping privacy.
         </li>
       </ol>
@@ -397,8 +394,8 @@ export default function WhitepaperPage() {
         <li>Thin anonymity sets in early usage</li>
         <li>L2 and bridge operational risk of the underlying chain</li>
         <li>
-          Premature or unofficial “$GLOAM” contracts — only trust{" "}
-          <Link href="/token">/token</Link> and official channels
+          Premature or unofficial “$GLOAM” contracts, only trust
+          official channels
         </li>
       </ul>
 
@@ -407,7 +404,7 @@ export default function WhitepaperPage() {
         Gloam does not claim mainnet readiness, insurance of funds, legal
         immunity, or invisibility from investigation. Testnet assets have no
         real-world value. Nothing in this paper is investment advice.{" "}
-        <Link href="/token">$GLOAM</Link> is not live; this paper is not a token
+        $GLOAM is not live; this paper is not a token
         sale.
       </p>
 
@@ -419,7 +416,7 @@ export default function WhitepaperPage() {
         calculation to the street.
       </p>
       <p className="!font-mono !text-[11px] !uppercase !tracking-[0.14em] !text-lime">
-        gloam.trade · /token · testnet · @gloamtrade
+        gloam.trade · testnet · @gloamtrade
       </p>
     </DocsLayout>
   );

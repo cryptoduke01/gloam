@@ -86,7 +86,7 @@ export default function DocsPrivacyPage() {
       <p>
         More detail: <Link href="/docs/encryption">How shield works</Link> ·{" "}
         <Link href="/whitepaper">Whitepaper</Link>. Token status:{" "}
-        <Link href="/token">$GLOAM</Link> (not launched).
+        $GLOAM (not launched).
       </p>
     </DocsLayout>
   );

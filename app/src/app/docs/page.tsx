@@ -107,7 +107,7 @@ export default function DocsOverviewPage() {
         </li>
         <li>Ethereum expansion (roadmap)</li>
         <li>
-          <Link href="/token">$GLOAM token</Link> — prepared page only; not
+          $GLOAM token — prepared page only; not
           launched, no live contract
         </li>
       </ul>
@@ -115,10 +115,8 @@ export default function DocsOverviewPage() {
       <h2 id="token">$GLOAM</h2>
       <p>
         The protocol asset ticker is <strong>$GLOAM</strong>. There is no
-        tradable contract yet. Status, planned utility, and the launch checklist
-        live on the{" "}
-        <Link href="/token">token page</Link>. Product and privacy work without
-        a token.
+        tradable contract yet. Status and planned utility will be published through official
+        channels. Product and privacy work without a token.
       </p>
 
       <h2 id="read-next">Read next</h2>
@@ -148,7 +146,7 @@ export default function DocsOverviewPage() {
           <Link href="/whitepaper">Whitepaper</Link>
         </li>
         <li>
-          <Link href="/token">$GLOAM token</Link>
+          $GLOAM token
         </li>
       </ul>
     </DocsLayout>
