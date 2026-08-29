@@ -177,6 +177,40 @@ html[data-theme="light"] .ascii-ink {
   border-radius: 4px;
 }
 
+/* Legal pages — light. Overrides inline dark tokens via higher specificity. */
+.prose-legal h2 {
+  margin-top: 2rem;
+  font-family: "Jost", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  color: #121316;
+}
+.prose-legal h3 {
+  margin-top: 1.5rem;
+  font-weight: 600;
+  color: #121316;
+}
+.prose-legal p,
+.prose-legal li {
+  color: #565660;
+}
+.prose-legal strong {
+  color: #121316;
+  font-weight: 600;
+}
+.prose-legal a {
+  color: #3b3766;
+}
+.prose-legal ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-legal ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
 /* Tabular figures so money + quantities align in columns */
 .tnum {
   font-variant-numeric: tabular-nums;
