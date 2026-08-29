@@ -1,13 +1,12 @@
 /**
- * Browser snarkjs fullProve for Poseidon unshield / transfer.
- * Artifacts in /public/circuits (dev ceremony — replace for production).
+ * Browser snarkjs fullProve for the Poseidon circuits (unshield, transfer,
+ * sealedSwap). Artifacts under /public/circuits (dev ceremony, replace for
+ * production). Proof packing and field helpers come from @gloam/sdk; this file
+ * is the browser-specific proving glue.
  */
 
-import {
-  encodeAbiParameters,
-  parseAbiParameters,
-  type Hex,
-} from "viem";
+import type { Hex } from "viem";
+import { packGroth16Proof, type Groth16Proof } from "@gloam/sdk";
 import {
   assertSealedSwapArtifacts,
   assertTransferArtifacts,
@@ -15,31 +14,15 @@ import {
   CIRCUIT_ARTIFACTS,
 } from "./circuitArtifacts";
 
-export type Groth16Proof = {
-  pi_a: string[];
-  pi_b: string[][];
-  pi_c: string[];
-};
+export { fieldToBytes32 } from "@gloam/sdk";
+export type { Groth16Proof };
 
 const UNSHIELD_WASM = CIRCUIT_ARTIFACTS.unshieldWasm.path;
 const UNSHIELD_ZKEY = CIRCUIT_ARTIFACTS.unshieldZkey.path;
 const TRANSFER_WASM = CIRCUIT_ARTIFACTS.transferWasm.path;
 const TRANSFER_ZKEY = CIRCUIT_ARTIFACTS.transferZkey.path;
-
-/** Pack proof for IVerifier adapters: abi.encode(a, b, c) with G2 swap */
-export function packGroth16Proof(proof: Groth16Proof): Hex {
-  const a: [bigint, bigint] = [BigInt(proof.pi_a[0]!), BigInt(proof.pi_a[1]!)];
-  // Solidity expects G2 coords swapped vs snarkjs JSON
-  const b: [[bigint, bigint], [bigint, bigint]] = [
-    [BigInt(proof.pi_b[0]![1]!), BigInt(proof.pi_b[0]![0]!)],
-    [BigInt(proof.pi_b[1]![1]!), BigInt(proof.pi_b[1]![0]!)],
-  ];
-  const c: [bigint, bigint] = [BigInt(proof.pi_c[0]!), BigInt(proof.pi_c[1]!)];
-  return encodeAbiParameters(
-    parseAbiParameters("uint256[2], uint256[2][2], uint256[2]"),
-    [a, b, c]
-  );
-}
+const SEALED_SWAP_WASM = CIRCUIT_ARTIFACTS.sealedSwapWasm.path;
+const SEALED_SWAP_ZKEY = CIRCUIT_ARTIFACTS.sealedSwapZkey.path;
 
 async function fullProve(
   circomInput: Record<string, string | string[]>,
@@ -73,18 +56,10 @@ export async function proveTransferInBrowser(
   return fullProve(circomInput, TRANSFER_WASM, TRANSFER_ZKEY);
 }
 
-const SEALED_SWAP_WASM = CIRCUIT_ARTIFACTS.sealedSwapWasm.path;
-const SEALED_SWAP_ZKEY = CIRCUIT_ARTIFACTS.sealedSwapZkey.path;
-
-/** Prove sealed swap (dev keys). Settlement live on RH testnet Poseidon vault. */
+/** Prove sealed swap (dev keys). Settlement live on the RH testnet Poseidon vault. */
 export async function proveSealedSwapInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
   await assertSealedSwapArtifacts();
   return fullProve(circomInput, SEALED_SWAP_WASM, SEALED_SWAP_ZKEY);
-}
-
-export function fieldToBytes32(field: bigint | string): Hex {
-  const v = typeof field === "bigint" ? field : BigInt(field);
-  return `0x${v.toString(16).padStart(64, "0")}` as Hex;
 }

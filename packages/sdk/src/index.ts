@@ -28,4 +28,7 @@ export * from "./privacy.js";
 export * from "./constants.js";
 export * from "./poseidon.js";
 export * from "./note.js";
+export * from "./merkle.js";
+export * from "./proof.js";
+export * from "./witness.js";
 export * from "./builders.js";
