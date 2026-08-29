@@ -21,7 +21,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc && node test/rates.selftest.mjs && node test/note.selftest.mjs && node test/witness.selftest.mjs"
+    "test": "tsc && node test/rates.selftest.mjs && node test/note.selftest.mjs && node test/witness.selftest.mjs && node test/intents.selftest.mjs"
   },
   "dependencies": {
     "viem": "^2.55.2",
@@ -30,5 +30,13 @@
   "devDependencies": {
     "@types/node": "^20",
     "typescript": "^5"
+  },
+  "peerDependencies": {
+    "snarkjs": "*"
+  },
+  "peerDependenciesMeta": {
+    "snarkjs": {
+      "optional": true
+    }
   }
 }

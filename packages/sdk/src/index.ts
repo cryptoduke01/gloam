@@ -31,4 +31,5 @@ export * from "./note.js";
 export * from "./merkle.js";
 export * from "./proof.js";
 export * from "./witness.js";
+export * from "./prove.js";
 export * from "./builders.js";
