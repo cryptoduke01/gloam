@@ -34,5 +34,6 @@
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "description": "Gloam reference app: private execution on Robinhood Chain (Next.js). Marketing site + testnet vault + docs."
 }
