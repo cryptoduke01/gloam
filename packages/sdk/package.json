@@ -29,7 +29,8 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "typescript": "^5"
+    "typescript": "^5",
+    "snarkjs": "^0.7.5"
   },
   "peerDependencies": {
     "snarkjs": "*"

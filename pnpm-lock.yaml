@@ -149,6 +149,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
+      snarkjs:
+        specifier: ^0.7.5
+        version: 0.7.5
       typescript:
         specifier: ^5
         version: 5.9.3
