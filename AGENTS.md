@@ -32,5 +32,5 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto slop.
 - Secrets server-side only.
 - If it does not serve private trading on RH chain, it waits.
-- Do **not** deploy `docs/` as a separate project or `docs.gloam.trade`.
+- Docs live in-app (`app/src/app/docs`). Do **not** create a separate docs project or `docs.gloam.trade`.
 - Commit = commit + push to `main` for product work.

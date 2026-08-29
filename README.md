@@ -102,7 +102,7 @@ Testnet ETH + stock tokens: [faucet.testnet.chain.robinhood.com](https://faucet.
 - Real privacy only. Never fake or mock a private success.
 - Selective disclosure over opacity. Viewing-key auditability is the point.
 - Secrets server-side only. Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto fog.
-- One Vercel project, Root Directory `app`. Never deploy `docs/`.
+- One Vercel project, Root Directory `app`. Docs are in-app; no separate docs deployment.
 
 ---
 

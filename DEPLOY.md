@@ -35,9 +35,9 @@ If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at
 - Product today: `gloam.trade/app`
 - Later: point `testnet.gloam.trade` at the same project (rewrite `/` → `/app` or keep path). No second codebase required.
 
-## Note on `docs/` package
+## Docs
 
-The standalone `docs/` package is legacy. Do not deploy it. Canonical docs are in `app/src/app/docs` and `app/src/app/whitepaper`.
+Canonical docs live in the app at `app/src/app/docs` and `app/src/app/whitepaper` (served from `gloam.trade/docs`). The old standalone `docs/` package was legacy and has been removed.
 
 ## Testnet vault env (optional)
 

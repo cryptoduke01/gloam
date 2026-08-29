@@ -45,7 +45,7 @@ No purple crypto slop. Voice: dense, theoretical, premium.
 - pnpm monorepo, Node 20+
 - Next.js 16 App Router + Tailwind v4 + Framer Motion
 - Marketing + docs: `app/` only
-- `docs/` package is **legacy — do not deploy**
+- Docs live in-app at `app/src/app/docs` (the old standalone `docs/` package was removed)
 - App build: `next build --webpack`
 - Contracts: Foundry · `evm_version = shanghai`
 - OG: system fonts only, under Edge 1MB
