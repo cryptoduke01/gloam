@@ -10,7 +10,6 @@ import {
   useChainId,
 } from "wagmi";
 import { isAddress } from "viem";
-import { AsciiImage } from "@/components/AsciiImage";
 import {
   EXPLORER_TX,
   PRODUCT_CHAIN_ID,
@@ -18,12 +17,10 @@ import {
   shortAddress,
 } from "@/lib/chain";
 import { safeParseEther } from "@/lib/amount";
-import { FAUCET_URL } from "@/lib/faucet";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatUsd } from "@/lib/markets";
 import { WalletMenu } from "./WalletMenu";
-import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 
 export function SendView() {
@@ -133,256 +130,178 @@ export function SendView() {
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="relative h-36 border-b border-line sm:h-40">
-              <AsciiImage
-                src="/ascii/move.png"
-                alt=""
-                tone="plate"
-                className="h-full w-full"
-                sizes="60vw"
+      <div className="mx-auto max-w-xl space-y-4">
+        <form
+          onSubmit={onSubmit}
+          className="space-y-5 rounded-2xl border border-line bg-panel p-6"
+        >
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
+                You&apos;re sending
+              </span>
+              <span className="text-[11px] text-mute">On Robinhood testnet</span>
+            </div>
+            <div className="mt-3 flex items-end gap-3">
+              <input
+                id="send-amount"
+                inputMode="decimal"
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                className="min-w-0 flex-1 bg-transparent text-4xl font-semibold tracking-tight text-foreground outline-none placeholder:text-mute/40"
+                aria-label="Amount to send"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/80 to-panel/40" />
-              <div className="absolute bottom-4 left-5">
-                <StatusPill tone="lime">
-                  {settings.fastSend ? "Fast mode" : "Live"}
-                </StatusPill>
-                <p className="mt-2 font-display text-xl text-foreground sm:text-2xl">
-                  Send ETH
-                </p>
+              <span className="shrink-0 rounded-xl border border-line bg-background px-4 py-2.5 text-sm font-semibold text-foreground">
+                ETH
+              </span>
+            </div>
+            <div className="mt-2.5 flex items-center justify-between text-xs">
+              <span className="text-mute">{usdHint ? `≈ ${usdHint}` : ""}</span>
+              <button
+                type="button"
+                disabled={!isConnected}
+                onClick={() =>
+                  setAmount(maxEth === "<0.0001" ? "0" : maxEth.replace(/,/g, ""))
+                }
+                className="text-mute transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                Balance: {isConnected ? maxEth : "0"} ETH ·{" "}
+                <span className="font-medium text-lime">Max</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="send-to"
+              className="text-[11px] uppercase tracking-[0.16em] text-mute"
+            >
+              To
+            </label>
+            <input
+              id="send-to"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="0x…"
+              value={to}
+              onChange={(e) => setTo(e.target.value.trim())}
+              className="mt-2 min-h-12 w-full rounded-xl border border-line bg-background px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
+            />
+          </div>
+
+          {validPreview && (
+            <div className="rounded-xl border border-line bg-background/40 px-4 py-3 text-sm">
+              <div className="flex items-baseline justify-between">
+                <span className="text-mute">Sending</span>
+                <span className="font-medium text-foreground">
+                  {amount} ETH{usdHint ? ` · ${usdHint}` : ""}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-baseline justify-between">
+                <span className="text-mute">To</span>
+                <span className="text-foreground">{shortAddress(to, 6)}</span>
               </div>
             </div>
+          )}
 
-            <form onSubmit={onSubmit} className="space-y-5 p-5 sm:p-6">
-              <div>
-                <label
-                  htmlFor="send-to"
-                  className="text-sm font-medium text-foreground"
-                >
-                  To
-                </label>
-                <input
-                  id="send-to"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="0x…"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value.trim())}
-                  className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
-                />
-              </div>
+          {!isConnected || !onProduct ? (
+            <WalletMenu />
+          ) : (
+            <button
+              type="submit"
+              disabled={isPending || confirming}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
+            >
+              {isPending
+                ? "Confirm in wallet…"
+                : confirming
+                  ? "Sending…"
+                  : settings.fastSend
+                    ? "Send now"
+                    : "Review & send"}
+            </button>
+          )}
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="send-amount"
-                    className="text-sm font-medium text-foreground"
-                  >
-                    Amount
-                  </label>
-                  <button
-                    type="button"
-                    className="text-xs text-lime hover:underline disabled:opacity-40"
-                    disabled={!isConnected}
-                    onClick={() =>
-                      setAmount(
-                        maxEth === "<0.0001" ? "0" : maxEth.replace(/,/g, "")
-                      )
-                    }
-                  >
-                    Max {isConnected ? maxEth : ", "}
-                  </button>
-                </div>
-                <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
-                  <input
-                    id="send-amount"
-                    inputMode="decimal"
-                    placeholder="0.0"
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
-                  />
-                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
-                    ETH
-                  </span>
-                </div>
-                {usdHint && (
-                  <p className="mt-1.5 text-xs text-mute">≈ {usdHint}</p>
-                )}
-              </div>
-
-              {/* Live preview card */}
-              {validPreview && (
-                <div className="rounded-xl border border-lime/30 bg-background px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-                    Preview
-                  </p>
-                  <div className="mt-2 flex items-baseline justify-between gap-3">
-                    <p className="font-display text-2xl text-foreground">
-                      {amount} ETH
-                    </p>
-                    {usdHint && (
-                      <p className="text-sm text-mute">{usdHint}</p>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-mute">
-                    → {shortAddress(to, 6)}
-                  </p>
-                  <p className="mt-2 text-xs text-mute">
-                    {settings.fastSend
-                      ? "Fast mode: wallet confirms once, then settles."
-                      : "Review, then confirm in your wallet."}
-                  </p>
-                </div>
-              )}
-
-              {!isConnected || !onProduct ? (
-                <WalletMenu />
-              ) : (
-                <button
-                  type="submit"
-                  disabled={isPending || confirming}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
-                >
-                  {isPending
-                    ? "Confirm in wallet…"
-                    : confirming
-                      ? "Sending…"
-                      : settings.fastSend
-                        ? "Send now"
-                        : "Review & send"}
-                </button>
-              )}
-
-              {(formError || sendError) && (
-                <p role="alert" className="text-sm text-red-500">
-                  {formError || sendError?.message.slice(0, 160)}
-                </p>
-              )}
-
-              {hash && !isSuccess && (
-                <p className="text-sm text-mute">
-                  Submitted…{" "}
-                  <a
-                    href={EXPLORER_TX(hash)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-lime hover:underline"
-                  >
-                    View tx
-                  </a>
-                </p>
-              )}
-            </form>
-          </div>
-        </div>
-
-        <aside className="space-y-4 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Balance
+          {(formError || sendError) && (
+            <p role="alert" className="text-sm text-[#c0432f]">
+              {formError || sendError?.message.slice(0, 160)}
             </p>
-            <p className="mt-2 font-display text-3xl text-foreground">
-              {isConnected ? formatEth(bal?.value ?? BigInt(0)) : ", "}{" "}
-              <span className="text-lg text-mute">ETH</span>
+          )}
+          {hash && !isSuccess && (
+            <p className="text-sm text-mute">
+              Submitted…{" "}
+              <a
+                href={EXPLORER_TX(hash)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-lime hover:underline"
+              >
+                View tx
+              </a>
             </p>
-            {ethUsd && bal && (
-              <p className="mt-1 text-sm text-mute">
-                ≈ {formatUsd((Number(bal.value) / 1e18) * ethUsd)}
-              </p>
-            )}
-          </div>
-          <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Mode
-            </p>
-            <p className="mt-2 text-sm text-foreground">
-              {settings.fastSend ? "Fast send on" : "Review before send"}
-            </p>
-            <p className="mt-1 text-xs text-mute">
-              Change in Settings. Wallet still signs once, we never hold your
-              keys.
-            </p>
-          </div>
-          <a
-            href={FAUCET_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
-          >
-            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-              Need more ETH?
-            </p>
-            <p className="mt-2 text-sm text-mute">Open faucet →</p>
-          </a>
-        </aside>
+          )}
+        </form>
       </div>
 
-      {/* Review modal (portaled so AppShell animations cannot offset it) */}
       {showPreview &&
         createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/70 backdrop-blur-md"
-            aria-label="Close"
-            onClick={() => setShowPreview(false)}
-          />
-          <div className="relative z-[1] w-full max-w-sm max-h-[min(90vh,640px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-            <div className="h-1 bg-lime" />
-            <div className="px-6 py-6">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
-                Review
-              </p>
-              <h2 className="mt-2 font-display text-2xl text-foreground">
-                Confirm send
-              </h2>
-              <dl className="mt-5 space-y-3 text-sm">
-                <div className="flex justify-between gap-4 border-b border-line pb-2">
-                  <dt className="text-mute">Amount</dt>
-                  <dd className="font-medium text-foreground">
-                    {amount} ETH
-                    {usdHint ? (
-                      <span className="ml-1 text-mute">({usdHint})</span>
-                    ) : null}
-                  </dd>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
+              aria-label="Close"
+              onClick={() => setShowPreview(false)}
+            />
+            <div className="relative z-[1] w-full max-w-sm max-h-[min(90vh,640px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+              <div className="h-1 bg-lime" />
+              <div className="px-6 py-6">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
+                  Review
+                </p>
+                <h2 className="mt-2 font-display text-2xl text-foreground">
+                  Confirm send
+                </h2>
+                <dl className="mt-5 space-y-3 text-sm">
+                  <div className="flex justify-between gap-4 border-b border-line pb-2">
+                    <dt className="text-mute">Amount</dt>
+                    <dd className="font-medium text-foreground">
+                      {amount} ETH
+                      {usdHint ? (
+                        <span className="ml-1 text-mute">({usdHint})</span>
+                      ) : null}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 border-b border-line pb-2">
+                    <dt className="text-mute">To</dt>
+                    <dd className="text-foreground">{shortAddress(to, 6)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-mute">Network</dt>
+                    <dd className="text-foreground">Robinhood testnet</dd>
+                  </div>
+                </dl>
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={executeSend}
+                    className="inline-flex min-h-12 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90"
+                  >
+                    Confirm in wallet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line text-sm text-mute hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
                 </div>
-                <div className="flex justify-between gap-4 border-b border-line pb-2">
-                  <dt className="text-mute">To</dt>
-                  <dd className="text-foreground">
-                    {shortAddress(to, 6)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-mute">Network</dt>
-                  <dd className="text-foreground">Robinhood testnet</dd>
-                </div>
-              </dl>
-              <div className="mt-6 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={executeSend}
-                  className="inline-flex min-h-12 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90"
-                >
-                  Confirm in wallet
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(false)}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line text-sm text-mute hover:text-foreground"
-                >
-                  Cancel
-                </button>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        )}
 
       <SuccessModal
         open={showSuccess && Boolean(hash)}
@@ -391,11 +310,11 @@ export function SendView() {
           <>
             <p>
               <span className="font-medium text-foreground">
-                {sentAmount || ", "} ETH
+                {sentAmount || "0"} ETH
               </span>{" "}
               to{" "}
               <span className="text-foreground">
-                {sentTo ? shortAddress(sentTo, 5) : ", "}
+                {sentTo ? shortAddress(sentTo, 5) : ""}
               </span>
             </p>
             <p className="mt-2">Settled on testnet.</p>
