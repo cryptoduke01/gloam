@@ -248,6 +248,65 @@ export function Landing() {
           <SealedVaultCard />
         </section>
 
+        {/* the three moves, each with a house dither */}
+        <section className="border-t border-[#E5E3DD] py-16 md:py-20">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
+            How it works
+          </p>
+          <h2 className="mt-3 max-w-[20ch] text-[clamp(28px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-0.025em]">
+            Three moves. Every one sealed.
+          </h2>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                img: "/ascii/shield.png",
+                k: "01 · Shield",
+                t: "Into the vault",
+                b: "Park a balance in the vault. Your open wallet stops showing that bag.",
+              },
+              {
+                img: "/ascii/trade.png",
+                k: "02 · Trade",
+                t: "Size sealed",
+                b: "Trade tokenized stocks and crypto. The market never sees how much you moved.",
+              },
+              {
+                img: "/ascii/move.png",
+                k: "03 · Move",
+                t: "Send or cash out",
+                b: "Pay to a tag or cash out. A vault proof settles, never how much.",
+              },
+            ].map((m) => (
+              <div
+                key={m.k}
+                className="overflow-hidden rounded-[18px] border border-[#E5E3DD] bg-white/70"
+              >
+                <div className="aspect-[5/4] border-b border-[#E5E3DD]">
+                  <AsciiImage
+                    src={m.img}
+                    alt=""
+                    tone="plate"
+                    fit="cover"
+                    className="h-full w-full"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
+                </div>
+                <div className="p-6">
+                  <div className="text-[11px] uppercase tracking-[0.03em] text-[#6E6E76]">
+                    {m.k}
+                  </div>
+                  <div className="mt-1.5 text-[19px] font-semibold tracking-[-0.01em] text-[#121316]">
+                    {m.t}
+                  </div>
+                  <p className="mt-2 text-[14px] leading-relaxed text-[#565660]">
+                    {m.b}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* what stays sealed, over a faint ancient ledger engraving */}
         <section className="relative overflow-hidden border-t border-[#E5E3DD] py-16 md:py-20">
           <div
@@ -283,26 +342,61 @@ export function Landing() {
           </div>
         </section>
 
+        {/* the dark pool moment, raw engraving on dark */}
+        <section className="py-16 md:py-20">
+          <div className="relative overflow-hidden rounded-[22px] bg-[#121316] px-8 py-16 sm:px-12 md:px-16 md:py-24">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[56%] opacity-80 mix-blend-screen md:block"
+            >
+              <Image
+                src="/ascii/hero.png"
+                alt=""
+                fill
+                className="object-cover object-right"
+                sizes="55vw"
+              />
+            </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#121316] via-[#121316]/85 to-transparent"
+            />
+            <div className="relative max-w-[32ch]">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#8a8794]">
+                The oldest idea in markets
+              </p>
+              <h2 className="mt-4 text-[clamp(28px,4vw,48px)] font-bold leading-[1.02] tracking-[-0.03em] text-[#F4F3EF] text-balance">
+                A dark pool for everything onchain.
+              </h2>
+              <p className="mt-5 max-w-[42ch] text-[15px] leading-relaxed text-[#c9c7d0]">
+                Dark pools let large players trade without showing their hand.
+                Gloam brings that to tokenized stocks and crypto, sealed by a
+                proof and settled on Robinhood Chain.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* cta, the ancient blindfold: reveal nothing */}
         <section className="py-16 md:py-24">
           <div className="relative overflow-hidden rounded-[22px] border border-[#E5E3DD] bg-[#EFECE4] px-8 py-16 sm:px-12 md:px-16 md:py-24">
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[54%] opacity-95 mix-blend-multiply sm:block"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[42%] opacity-95 mix-blend-multiply md:block"
             >
               <Image
                 src="/ascii/IMG_1476.PNG"
                 alt=""
                 fill
                 className="object-contain object-right-bottom"
-                sizes="50vw"
+                sizes="45vw"
               />
             </div>
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#EFECE4] via-[#EFECE4]/85 to-transparent"
             />
-            <div className="relative max-w-[20ch]">
+            <div className="relative max-w-[34ch]">
               <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
                 Reveal nothing
               </p>
