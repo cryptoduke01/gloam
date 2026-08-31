@@ -4,7 +4,7 @@ import Link from "next/link";
  * Gloam landing — "Twilight" brand.
  * Light, confident, product-forward. Self-contained light palette (the app
  * pages still run the dark tokens during the migration). Type: Clash Display
- * headlines + General Sans body. Signature: the twilight blend + the sealed
+ * headlines + Aeonik body. Signature: the twilight blend + the sealed
  * vault card, which redacts your size where other protocols show a number.
  */
 

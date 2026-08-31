@@ -1,27 +1,16 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { AppShell } from "@/components/app/AppShell";
-import { TradeView } from "@/components/app/TradeView";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Trade",
-};
-
-export default function TradePage() {
-  return (
-    <AppShell
-      title="Trade"
-      subtitle="Private: vault ETH → stock with size hidden. Wallet: public. Via market: needs a DEX pool."
-    >
-      <Suspense
-        fallback={
-          <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
-            Loading markets…
-          </div>
-        }
-      >
-        <TradeView />
-      </Suspense>
-    </AppShell>
-  );
+// Trade now lives in the Vault hub. Preserve market/path/side params.
+export default async function TradePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+  }
+  params.set("tab", "trade");
+  redirect(`/app/vault?${params.toString()}`);
 }

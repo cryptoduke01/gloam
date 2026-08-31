@@ -10,11 +10,8 @@ import { WelcomeModal } from "./WelcomeModal";
 
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
-  { href: "/app/send", label: "Send" },
-  { href: "/app/trade?path=sealed", label: "Trade" },
+  { href: "/app/vault", label: "Vault" }, // shield · trade · send · cash out
   { href: "/app/markets", label: "Markets" },
-  { href: "/app/shield", label: "Shield" },
-  { href: "/app/move", label: "Move" }, // private send + cash out
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {

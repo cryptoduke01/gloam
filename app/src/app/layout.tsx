@@ -77,12 +77,20 @@ export default function RootLayout({
           name="ory-verify"
           content="orynth-d061bf2ee92a4996b6e3121097472653"
         />
-        {/* Main typeface: General Sans (Fontshare) — free Aeonik-family grotesque.
-            Drop-in for a licensed Aeonik Pro later via self-hosted @font-face. */}
-        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="" />
+        {/* Main typeface: Aeonik — self-hosted woff2 (see globals.css @font-face). */}
         <link
-          rel="stylesheet"
-          href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap"
+          rel="preload"
+          href="/fonts/Aeonik-Regular.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin=""
+        />
+        <link
+          rel="preload"
+          href="/fonts/Aeonik-Bold.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin=""
         />
         <script
           dangerouslySetInnerHTML={{
@@ -92,7 +100,7 @@ export default function RootLayout({
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"
-        style={{ fontFamily: '"General Sans", system-ui, sans-serif' }}
+        style={{ fontFamily: '"Aeonik", system-ui, sans-serif' }}
       >
         <ThemeProvider>
           {children}
