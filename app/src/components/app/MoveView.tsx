@@ -680,8 +680,8 @@ export function MoveView() {
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="space-y-4 lg:col-span-7">
+      <div className="mx-auto max-w-xl">
+        <div className="space-y-4">
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="space-y-5 p-5 sm:p-6">
               <DevKeysBanner compact />
@@ -714,40 +714,6 @@ export function MoveView() {
                     {label}
                   </button>
                 ))}
-              </div>
-
-              {/* Tree status */}
-              <div className="rounded-xl border border-line bg-background px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                    Vault tree
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void refreshTree()}
-                    className="text-xs text-lime hover:underline"
-                  >
-                    {treeLoading ? "Syncing…" : "Refresh"}
-                  </button>
-                </div>
-                <p className="mt-2 text-mute">
-                  Notes in vault:{" "}
-                  <span className="text-foreground">
-                    {treeLoading ? "…" : leafCount}
-                  </span>
-                  {" · "}
-                  Match:{" "}
-                  <span className="text-foreground">
-                    {matchesChain == null
-                      ? "…"
-                      : matchesChain
-                        ? "Yes"
-                        : "No"}
-                  </span>
-                </p>
-                {treeError && (
-                  <p className="mt-1 text-xs text-red-500">{treeError}</p>
-                )}
               </div>
 
               {!poseidonMode && (
@@ -1280,51 +1246,6 @@ export function MoveView() {
             </div>
           </div>
         </div>
-
-        <aside className="space-y-4 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-              How private send works
-            </p>
-            <ul className="mt-3 space-y-2 text-mute">
-              <li>
-                <strong className="text-foreground">Pay to a tag</strong>, not a
-                public address. Size stays off the open ledger.
-              </li>
-              <li>
-                <strong className="text-foreground">Vault proof + encrypted memo.</strong>{" "}
-                They find it under Receive, no QR required when memos are live.
-              </li>
-              <li>
-                <strong className="text-foreground">Cash out</strong> publishes
-                amount.{" "}
-                <Link
-                  href="/app/trade?path=sealed"
-                  className="text-lime hover:underline"
-                >
-                  Private trade
-                </Link>{" "}
-                keeps size private.
-              </li>
-            </ul>
-          </div>
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="text-foreground">Need a vault note first?</p>
-            <Link
-              href="/app/shield"
-              className="mt-2 inline-flex min-h-10 items-center text-lime hover:underline"
-            >
-              Shield →
-            </Link>
-            {" · "}
-            <Link
-              href="/app/trade?path=sealed"
-              className="mt-2 inline-flex min-h-10 items-center text-lime hover:underline"
-            >
-              Private trade →
-            </Link>
-          </div>
-        </aside>
       </div>
 
       <SuccessModal
