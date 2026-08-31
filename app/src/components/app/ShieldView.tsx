@@ -19,15 +19,12 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { AsciiImage } from "@/components/AsciiImage";
 import {
-  EXPLORER_ADDRESS,
   EXPLORER_TX,
   PRODUCT_CHAIN_ID,
   formatEth,
 } from "@/lib/chain";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
-import { FAUCET_URL } from "@/lib/faucet";
 import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
@@ -54,7 +51,6 @@ import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
-import { VaultHealth } from "./VaultHealth";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
@@ -575,409 +571,199 @@ export function ShieldView() {
 
   return (
     <>
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="space-y-4 lg:col-span-7">
-          {/* Deposit form first, primary action */}
-          <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="relative h-36 border-b border-line sm:h-40">
-              <AsciiImage
-                src="/ascii/shield.png"
-                alt=""
-                tone="plate"
-                priority
-                className="h-full w-full"
-                sizes="60vw"
+      <div className="mx-auto max-w-xl space-y-4">
+        <form
+          onSubmit={onSubmit}
+          className="space-y-5 rounded-2xl border border-line bg-panel p-6"
+        >
+          <DevKeysBanner compact />
+
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
+                You&apos;re shielding
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] font-medium text-lime">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
+                  <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
+                </svg>
+                Size sealed
+              </span>
+            </div>
+            <div className="mt-3 flex items-end gap-3">
+              <input
+                id="shield-amount"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                className="min-w-0 flex-1 bg-transparent text-4xl font-semibold tracking-tight text-foreground outline-none placeholder:text-mute/40"
+                aria-label="Amount to shield"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-panel via-panel/80 to-panel/40" />
-              <div className="absolute bottom-4 left-5">
-                <StatusPill tone="lime">Vault live</StatusPill>
-                <p className="mt-2 font-display text-xl text-foreground sm:text-2xl">
-                  Deposit
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={onSubmit} className="space-y-5 p-5 sm:p-6">
-              <DevKeysBanner compact />
-              <VaultHealth compact />
-              <div>
-                <p className="text-sm font-medium text-foreground">Asset</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAssetChoice("eth");
-                      setAmount("");
-                    }}
-                    className={`min-h-9 rounded-full px-3 text-xs font-medium ${
-                      assetChoice === "eth"
-                        ? "bg-lime text-background"
-                        : "border border-line text-mute hover:text-foreground"
-                    }`}
-                  >
-                    ETH
-                  </button>
-                  {TESTNET_STOCK_TOKENS.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        setAssetChoice(t.id);
-                        setAmount("");
-                      }}
-                      className={`min-h-9 rounded-full px-3 text-xs font-medium ${
-                        assetChoice === t.id
-                          ? "bg-lime text-background"
-                          : "border border-line text-mute hover:text-foreground"
-                      }`}
-                    >
-                      {t.symbol}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="shield-amount"
-                    className="text-sm font-medium text-foreground"
-                  >
-                    Amount
-                  </label>
-                  <button
-                    type="button"
-                    className="text-xs text-lime hover:underline disabled:opacity-40"
-                    disabled={!isConnected}
-                    onClick={() => {
-                      if (walletBalance === undefined) return;
-                      if (selectedToken) {
-                        setAmount(
-                          formatUnits(walletBalance, decimals).slice(0, 18)
-                        );
-                      } else {
-                        const leave = 50_000_000_000_000n;
-                        const v =
-                          walletBalance > leave
-                            ? walletBalance - leave
-                            : BigInt(0);
-                        setAmount(
-                          v === BigInt(0) ? "0" : formatEther(v).slice(0, 12)
-                        );
-                      }
-                    }}
-                  >
-                    Max {isConnected ? maxLabel : ", "}
-                  </button>
-                </div>
-                <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
-                  <input
-                    id="shield-amount"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    placeholder="0.0"
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
-                  />
-                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
-                    {symbol}
-                  </span>
-                </div>
-                {usdHint && (
-                  <p className="mt-1.5 text-xs text-mute">≈ {usdHint}</p>
-                )}
-              </div>
-
-              <p className="text-xs text-mute">
-                Deposit hides this amount from your open wallet. Stocks need two
-                confirms (approve, then shield). After that use{" "}
-                <Link href="/app/move" className="text-lime hover:underline">
-                  Move
-                </Link>{" "}
-                to private-send or cash out.
-              </p>
-
-              {!isConnected || !onProduct ? (
-                <WalletMenu />
-              ) : (
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+              <div className="relative shrink-0">
+                <select
+                  value={assetChoice}
+                  onChange={(e) => {
+                    setAssetChoice(e.target.value);
+                    setAmount("");
+                  }}
+                  className="min-h-11 cursor-pointer appearance-none rounded-xl border border-line bg-background px-4 pr-9 text-sm font-semibold text-foreground outline-none focus:border-lime"
+                  aria-label="Asset to shield"
                 >
-                  {isPending && pendingKind === "approve"
-                    ? "Approve in wallet…"
-                    : confirming && pendingKind === "approve"
-                      ? "Approving…"
-                      : isPending && pendingKind === "shield"
-                        ? "Confirm shield…"
-                        : confirming && pendingKind === "shield"
-                          ? "Shielding…"
-                          : selectedToken &&
-                              allowance !== undefined &&
-                              parseAmount() !== null &&
-                              (allowance as bigint) < (parseAmount() as bigint)
-                            ? `Approve & shield ${symbol}`
-                            : `Shield ${symbol}`}
-                </button>
-              )}
-
-              {(formError || writeError) && (
-                <p role="alert" className="text-sm text-red-500">
-                  {formError || writeError?.message.slice(0, 180)}
-                </p>
-              )}
-
-              {hash && !isSuccess && (
-                <p className="text-sm text-mute">
-                  Submitted…{" "}
-                  <a
-                    href={EXPLORER_TX(hash)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-lime hover:underline"
-                  >
-                    View tx
-                  </a>
-                </p>
-              )}
-            </form>
-          </div>
-
-          {openNotes.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-line bg-panel">
-              <div className="flex items-center justify-between border-b border-line px-5 py-3">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Your deposits
-                </p>
-                {syncing && (
-                  <span className="text-[10px] text-mute">Syncing chain…</span>
-                )}
+                  <option value="eth">ETH</option>
+                  {TESTNET_STOCK_TOKENS.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.symbol}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute">
+                  &#9662;
+                </span>
               </div>
-              <ul className="divide-y divide-line">
-                {openNotes.slice(0, 12).map((n) => (
-                  <li
-                    key={n.id}
-                    className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {isNativeAsset(n.asset)
-                          ? formatEth(BigInt(n.amountWei))
-                          : formatUnits(BigInt(n.amountWei), 18)}{" "}
-                        {assetLabel(n.asset)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-mute">
-                        {n.leafIndex != null
-                          ? "In vault · ready to move"
-                          : "Confirming on chain…"}
-                      </p>
-                    </div>
-                    {n.txHash && (
-                      <a
-                        href={EXPLORER_TX(n.txHash)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-lime hover:underline"
-                      >
-                        Tx
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
             </div>
-          )}
-
-          {isOwner && (
-            <div className="rounded-xl border border-amber-500/30 bg-panel p-5">
-              <StatusPill tone="warn">Owner · testnet</StatusPill>
-              <p className="mt-3 text-sm text-foreground">
-                Emergency pull of pool{" "}
-                <strong>
-                  {poolSelected != null
-                    ? isNativeAsset(assetAddress)
-                      ? formatEth(poolSelected)
-                      : formatUnits(poolSelected, 18)
-                    : "…"}{" "}
-                  {symbol}
-                </strong>
-                .
-              </p>
+            <div className="mt-2.5 flex items-center justify-between text-xs">
+              <span className="text-mute">{usdHint ? `≈ ${usdHint}` : ""}</span>
               <button
                 type="button"
-                disabled={busy || !poolSelected || poolSelected <= BigInt(0)}
-                onClick={onOwnerPull}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-amber-500/50 px-4 text-sm font-medium text-foreground hover:border-amber-500 disabled:opacity-50 sm:w-auto"
+                disabled={!isConnected}
+                onClick={() => {
+                  if (walletBalance === undefined) return;
+                  if (selectedToken) {
+                    setAmount(formatUnits(walletBalance, decimals).slice(0, 18));
+                  } else {
+                    const leave = 50_000_000_000_000n;
+                    const v =
+                      walletBalance > leave ? walletBalance - leave : BigInt(0);
+                    setAmount(v === BigInt(0) ? "0" : formatEther(v).slice(0, 12));
+                  }
+                }}
+                className="text-mute transition-colors hover:text-foreground disabled:opacity-40"
               >
-                {isPending && pendingKind === "pull"
-                  ? "Confirm in wallet…"
-                  : confirming && pendingKind === "pull"
-                    ? "Pulling…"
-                    : `Pull pool ${symbol}`}
+                Balance: {isConnected ? maxLabel : "0"} {symbol} ·{" "}
+                <span className="font-medium text-lime">Max</span>
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-line bg-background/40 px-4 py-3 text-sm">
+            <span className="text-mute">Shielding fee</span>
+            <span className="font-medium text-foreground">No fee</span>
+          </div>
+
+          {!isConnected || !onProduct ? (
+            <WalletMenu />
+          ) : (
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+            >
+              {isPending && pendingKind === "approve"
+                ? "Approve in wallet…"
+                : confirming && pendingKind === "approve"
+                  ? "Approving…"
+                  : isPending && pendingKind === "shield"
+                    ? "Confirm shield…"
+                    : confirming && pendingKind === "shield"
+                      ? "Shielding…"
+                      : selectedToken &&
+                          allowance !== undefined &&
+                          parseAmount() !== null &&
+                          (allowance as bigint) < (parseAmount() as bigint)
+                        ? `Approve & shield ${symbol}`
+                        : `Shield ${symbol}`}
+            </button>
           )}
-        </div>
 
-        <aside className="space-y-4 lg:col-span-5">
-          <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Wallet · {symbol}
+          {(formError || writeError) && (
+            <p role="alert" className="text-sm text-[#c0432f]">
+              {formError || writeError?.message.slice(0, 180)}
             </p>
-            <p className="mt-2 font-display text-3xl text-foreground">
-              {isConnected
-                ? walletBalance !== undefined
-                  ? selectedToken
-                    ? formatUnits(walletBalance, decimals)
-                    : formatEth(walletBalance)
-                  : "…"
-                : ", "}
+          )}
+          {hash && !isSuccess && (
+            <p className="text-sm text-mute">
+              Submitted…{" "}
+              <a
+                href={EXPLORER_TX(hash)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-lime hover:underline"
+              >
+                View tx
+              </a>
             </p>
+          )}
+
+          <p className="text-center text-xs leading-relaxed text-mute">
+            Your open wallet balance drops. Only you can see what is inside the
+            vault.
+          </p>
+        </form>
+
+        {hasActiveShield && (
+          <div className="rounded-2xl border border-line bg-[color-mix(in_srgb,var(--lime)_4%,var(--panel))] p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
+                In your vault
+              </span>
+              {syncing && <span className="text-[10px] text-mute">Syncing…</span>}
+            </div>
+            <ul className="mt-3 space-y-1.5">
+              {assetRows.map((r) => (
+                <li
+                  key={r.asset}
+                  className="tnum text-lg font-medium text-foreground"
+                >
+                  {isNativeAsset(r.asset)
+                    ? formatEth(r.amount)
+                    : formatUnits(r.amount, 18)}{" "}
+                  <span className="text-sm text-mute">{r.label}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex gap-4 text-xs">
+              <Link href="/app/vault?tab=send" className="text-lime hover:underline">
+                Send &#8594;
+              </Link>
+              <Link href="/app/vault?tab=move" className="text-lime hover:underline">
+                Cash out &#8594;
+              </Link>
+            </div>
           </div>
+        )}
 
-          <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Your vault (this browser)
+        {isOwner && (
+          <div className="rounded-2xl border border-line bg-panel p-5">
+            <StatusPill tone="warn">Owner &middot; testnet</StatusPill>
+            <p className="mt-3 text-sm text-foreground">
+              Emergency pull of pool{" "}
+              <strong>
+                {poolSelected != null
+                  ? isNativeAsset(assetAddress)
+                    ? formatEth(poolSelected)
+                    : formatUnits(poolSelected, 18)
+                  : "…"}{" "}
+                {symbol}
+              </strong>
+              .
             </p>
-            {!hasActiveShield ? (
-              <>
-                <p className="mt-2 font-display text-2xl text-mute">None</p>
-                <p className="mt-1 text-xs text-mute">
-                  No active notes with a local secret. Deposit below, or import
-                  a note on Move.
-                </p>
-              </>
-            ) : (
-              <>
-                <ul className="mt-2 space-y-1">
-                  {assetRows.map((r) => (
-                    <li
-                      key={r.asset}
-                      className="font-display text-xl text-foreground"
-                    >
-                      {isNativeAsset(r.asset)
-                        ? formatEth(r.amount)
-                        : formatUnits(r.amount, 18)}{" "}
-                      <span className="text-base text-mute">{r.label}</span>
-                    </li>
-                  ))}
-                </ul>
-                {myShieldUsd && (
-                  <p className="mt-1 text-sm text-mute">ETH ≈ {myShieldUsd}</p>
-                )}
-                <p className="mt-2 text-xs text-mute">
-                  Use{" "}
-                  <Link href="/app/move" className="text-lime hover:underline">
-                    Move
-                  </Link>{" "}
-                  to private-send or cash out.
-                </p>
-              </>
-            )}
-            <Link
-              href="/app"
-              className="mt-3 inline-block text-xs text-lime hover:underline"
+            <button
+              type="button"
+              disabled={busy || !poolSelected || poolSelected <= BigInt(0)}
+              onClick={onOwnerPull}
+              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-mute disabled:opacity-50"
             >
-              Portfolio →
-            </Link>
+              {isPending && pendingKind === "pull"
+                ? "Confirm in wallet…"
+                : confirming && pendingKind === "pull"
+                  ? "Pulling…"
+                  : `Pull pool ${symbol}`}
+            </button>
           </div>
-
-          <div className="rounded-xl border border-line bg-panel p-5">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Pool
-            </p>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-mute">
-                  {isNativeAsset(assetAddress) ? "ETH held" : `${symbol} held`}
-                </dt>
-                <dd className="font-medium text-foreground">
-                  {poolSelected != null
-                    ? isNativeAsset(assetAddress)
-                      ? formatEth(poolSelected)
-                      : formatUnits(poolSelected, 18)
-                    : "…"}
-                </dd>
-              </div>
-              {!isNativeAsset(assetAddress) && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-mute">ETH held</dt>
-                  <dd className="font-medium text-foreground">
-                    {poolEth != null ? formatEth(poolEth) : "…"}
-                  </dd>
-                </div>
-              )}
-              <div className="flex justify-between gap-3">
-                <dt className="text-mute">Leaves in tree</dt>
-                <dd className="font-medium text-foreground">
-                  {nextIndex != null ? nextIndex.toString() : "…"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-mute">Verifier</dt>
-                <dd className="font-medium text-foreground">
-                  {verifierLive ? "Live" : "Off"}
-                </dd>
-              </div>
-            </dl>
-            {currentRoot && (
-              <p className="mt-3 break-all text-[10px] text-mute">
-                root {currentRoot.slice(0, 18)}…
-              </p>
-            )}
-            <a
-              href={EXPLORER_ADDRESS(SHIELD_POOL_ADDRESS!)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-block text-xs text-lime hover:underline"
-            >
-              Pool on explorer →
-            </a>
-          </div>
-
-          {/* Explainer, side, not above the form */}
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-              What is shield?
-            </p>
-            <p className="mt-2 leading-relaxed text-mute">
-              Deposit into Gloam’s vault. Your open wallet balance drops; the
-              pool holds the asset. This browser keeps your note so you can
-              private-send or cash out later.
-            </p>
-            <ol className="mt-3 space-y-1.5 text-mute">
-              <li>
-                <span className="text-lime">1</span> Wallet goes down
-              </li>
-              <li>
-                <span className="text-lime">2</span> Vault goes up
-              </li>
-              <li>
-                <span className="text-lime">3</span>{" "}
-                <Link href="/app/move" className="text-lime hover:underline">
-                  Move
-                </Link>{" "}
-                to send or cash out
-              </li>
-            </ol>
-          </div>
-
-          <a
-            href={FAUCET_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="block rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
-          >
-            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-              Need assets?
-            </p>
-            <p className="mt-2 text-sm text-mute">Faucet for ETH + stocks →</p>
-          </a>
-        </aside>
+        )}
       </div>
 
       <SuccessModal
