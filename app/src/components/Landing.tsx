@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { AsciiImage } from "@/components/AsciiImage";
 
 /**
@@ -247,26 +248,25 @@ export function Landing() {
           <SealedVaultCard />
         </section>
 
-        {/* dithered art moment, the house texture */}
-        <section className="pb-14 md:pb-20">
-          <div className="overflow-hidden rounded-[18px] border border-[#E5E3DD]">
+        {/* what stays sealed, over a faint ancient ledger engraving */}
+        <section className="relative overflow-hidden border-t border-[#E5E3DD] py-16 md:py-20">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+          >
             <AsciiImage
-              src="/ascii/hero.png"
-              alt="Gloam"
+              src="/ascii/trade.png"
+              alt=""
               tone="plate"
               fit="cover"
-              className="aspect-[21/8] w-full"
+              className="h-full w-full"
               sizes="100vw"
             />
           </div>
-        </section>
-
-        {/* what stays sealed */}
-        <section className="border-t border-[#E5E3DD] py-16 md:py-20">
-          <h2 className="max-w-[18ch] text-[clamp(28px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-0.025em]">
+          <h2 className="relative max-w-[18ch] text-[clamp(28px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-0.025em]">
             What settles in public. What stays sealed.
           </h2>
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+          <div className="relative mt-10 grid gap-6 sm:grid-cols-3">
             {SEALED.map((s) => (
               <div key={s.k} className="rounded-[14px] border border-[#E5E3DD] bg-white/70 p-6">
                 <div className="text-[11px] uppercase tracking-[0.03em] text-[#6E6E76]">
@@ -283,25 +283,46 @@ export function Landing() {
           </div>
         </section>
 
-        {/* cta */}
-        <section className="border-t border-[#E5E3DD] py-16 md:py-24">
-          <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
-            <h2 className="max-w-[16ch] text-[clamp(30px,4.6vw,56px)] font-bold leading-[0.98] tracking-[-0.03em] text-balance">
-              Settlement is public. Strategy is not.
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href="/app"
-                className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
-              >
-                Open the vault →
-              </Link>
-              <Link
-                href="/whitepaper"
-                className="inline-flex min-h-11 items-center rounded-[12px] border border-[#E5E3DD] bg-white/60 px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4]"
-              >
-                Read the whitepaper
-              </Link>
+        {/* cta, the ancient blindfold: reveal nothing */}
+        <section className="py-16 md:py-24">
+          <div className="relative overflow-hidden rounded-[22px] border border-[#E5E3DD] bg-[#EFECE4] px-8 py-16 sm:px-12 md:px-16 md:py-24">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[54%] opacity-95 mix-blend-multiply sm:block"
+            >
+              <Image
+                src="/ascii/IMG_1476.PNG"
+                alt=""
+                fill
+                className="object-contain object-right-bottom"
+                sizes="50vw"
+              />
+            </div>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#EFECE4] via-[#EFECE4]/85 to-transparent"
+            />
+            <div className="relative max-w-[20ch]">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
+                Reveal nothing
+              </p>
+              <h2 className="mt-4 text-[clamp(30px,4.6vw,56px)] font-bold leading-[0.98] tracking-[-0.03em] text-balance">
+                Settlement is public. Strategy is not.
+              </h2>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/app"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+                >
+                  Open the vault →
+                </Link>
+                <Link
+                  href="/whitepaper"
+                  className="inline-flex min-h-11 items-center rounded-[12px] border border-[#E5E3DD] bg-white/60 px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4]"
+                >
+                  Read the whitepaper
+                </Link>
+              </div>
             </div>
           </div>
         </section>
