@@ -1,9 +1,9 @@
 .deck {
-  background: #000;
-  color: #fff;
+  background: #f4f3ef;
+  color: #121316;
   min-height: 100vh;
   overflow-x: hidden;
-  font-family: "Overused Grotesk", "Plus Jakarta Sans", system-ui, sans-serif;
+  font-family: "Aeonik", "Plus Jakarta Sans", system-ui, sans-serif;
 }
 
 /* top bar */
@@ -16,16 +16,16 @@
   justify-content: space-between;
   gap: 16px;
   padding: 13px clamp(20px, 5vw, 64px);
-  background: rgba(0, 0, 0, 0.82);
+  background: rgba(244, 243, 239, 0.85);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid #1c1c1c;
+  border-bottom: 1px solid #e5e3dd;
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
   text-decoration: none;
-  color: #fff;
+  color: #121316;
 }
 .brand img {
   width: 34px;
@@ -42,16 +42,16 @@
   gap: 18px;
 }
 .ghost {
-  color: #9a9a9a;
+  color: #6e6e76;
   text-decoration: none;
   font-size: 14px;
 }
 .ghost:hover {
-  color: #fff;
+  color: #121316;
 }
 .download {
-  background: #c8ff00;
-  color: #000;
+  background: #3b3766;
+  color: #f4f3ef;
   font-weight: 600;
   font-size: 14px;
   text-decoration: none;
@@ -65,7 +65,7 @@
 
 /* slides */
 .slide {
-  border-bottom: 1px solid #141414;
+  border-bottom: 1px solid #e5e3dd;
 }
 .inner {
   max-width: 1120px;
@@ -79,7 +79,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  color: #c8ff00;
+  color: #3b3766;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.18em;
@@ -89,7 +89,7 @@
   content: "";
   width: 32px;
   height: 2px;
-  background: #c8ff00;
+  background: #3b3766;
 }
 
 .title {
@@ -103,12 +103,12 @@
 .lede {
   font-size: clamp(1.1rem, 2.4vw, 1.45rem);
   line-height: 1.5;
-  color: #cfcfcf;
+  color: #565660;
   margin-top: 22px;
   max-width: 820px;
 }
 .lede b {
-  color: #fff;
+  color: #121316;
   font-weight: 600;
 }
 
@@ -119,13 +119,13 @@
   margin-top: 36px;
 }
 .card {
-  border: 1px solid #1c1c1c;
-  background: #0b0b0b;
+  border: 1px solid #e5e3dd;
+  background: #ffffff;
   border-radius: 16px;
   padding: 26px;
 }
 .num {
-  color: #c8ff00;
+  color: #3b3766;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -138,7 +138,7 @@
   margin-top: 10px;
 }
 .card p {
-  color: #9a9a9a;
+  color: #6e6e76;
   font-size: 1rem;
   line-height: 1.5;
   margin-top: 9px;
@@ -157,15 +157,15 @@
   gap: 14px;
   font-size: clamp(1.05rem, 2.2vw, 1.35rem);
   line-height: 1.42;
-  color: #dcdcdc;
+  color: #565660;
 }
 .bullets li::before {
   content: "\2192";
-  color: #c8ff00;
+  color: #3b3766;
   flex: none;
 }
 .bullets b {
-  color: #fff;
+  color: #121316;
   font-weight: 600;
 }
 
@@ -184,7 +184,7 @@
   right: -12%;
   top: -30%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(200, 255, 0, 0.14), rgba(200, 255, 0, 0) 62%);
+  background: radial-gradient(circle, rgba(150, 116, 178, 0.20), rgba(150, 116, 178, 0) 62%);
   pointer-events: none;
 }
 .wordmark {
@@ -212,7 +212,7 @@
 }
 .coverSub {
   font-size: clamp(1.15rem, 2.6vw, 1.5rem);
-  color: #9a9a9a;
+  color: #6e6e76;
   margin-top: 24px;
   max-width: 640px;
   line-height: 1.45;
@@ -240,24 +240,24 @@
   gap: 16px;
 }
 .legendRow {
-  border-left: 2px solid #c8ff00;
+  border-left: 2px solid #3b3766;
   padding-left: 16px;
 }
 .legendRow .k {
-  color: #c8ff00;
+  color: #3b3766;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .legendRow .v {
-  color: #dcdcdc;
+  color: #565660;
   font-size: clamp(0.95rem, 1.8vw, 1.05rem);
   line-height: 1.4;
   margin-top: 4px;
 }
 .note {
-  color: #6a6a6a;
+  color: #8a8a90;
   font-size: 0.8rem;
   margin-top: 22px;
 }
@@ -271,14 +271,14 @@
   grid-template-columns: 140px 1fr;
   gap: 22px;
   padding: 18px 0;
-  border-top: 1px solid #1c1c1c;
+  border-top: 1px solid #e5e3dd;
   align-items: baseline;
 }
 .step:last-child {
-  border-bottom: 1px solid #1c1c1c;
+  border-bottom: 1px solid #e5e3dd;
 }
 .when {
-  color: #c8ff00;
+  color: #3b3766;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -286,16 +286,16 @@
 }
 .what {
   font-size: clamp(1.1rem, 2.2vw, 1.4rem);
-  color: #e6e6e6;
+  color: #121316;
 }
 .what small {
   display: block;
-  color: #9a9a9a;
+  color: #6e6e76;
   font-size: 0.95rem;
   margin-top: 5px;
 }
 .hi .what {
-  color: #c8ff00;
+  color: #3b3766;
 }
 
 /* two column */
@@ -314,7 +314,7 @@
 .rule {
   width: 44px;
   height: 2px;
-  background: #c8ff00;
+  background: #3b3766;
 }
 .closeTitle {
   font-family: "Aeonik", system-ui, sans-serif;
@@ -324,7 +324,7 @@
   margin-top: 22px;
 }
 .tagline {
-  color: #9a9a9a;
+  color: #6e6e76;
   font-size: 1.1rem;
   margin-top: 20px;
 }
@@ -335,7 +335,7 @@
   margin-top: 26px;
 }
 .links a {
-  color: #c8ff00;
+  color: #3b3766;
   text-decoration: none;
   font-size: 1.1rem;
 }
@@ -348,7 +348,7 @@
   flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
-  color: #6a6a6a;
+  color: #8a8a90;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.16em;
@@ -358,7 +358,7 @@
   padding: 26px clamp(20px, 5vw, 64px) 48px;
 }
 .pageFoot .b {
-  color: #c8ff00;
+  color: #3b3766;
 }
 
 @media (max-width: 760px) {

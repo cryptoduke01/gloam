@@ -1,9 +1,23 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import styles from "./pitch.module.css";
 
 const PDF = "/pitch/Gloam-Pitch-Deck.pdf";
+
+function Mark({ size }: { size: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      aria-hidden
+      style={{ flex: "none" }}
+    >
+      <rect width="32" height="32" rx="9" fill="#121316" />
+      <rect x="11" y="11" width="10" height="10" rx="3" fill="#f4f3ef" />
+    </svg>
+  );
+}
 
 export const metadata: Metadata = {
   title: "Pitch",
@@ -24,7 +38,7 @@ export default function PitchPage() {
     <div className={styles.deck}>
       <header className={styles.bar}>
         <Link href="/" className={styles.brand}>
-          <Image src="/brand/logo.png" alt="" width={34} height={34} priority />
+          <Mark size={34} />
           <span>Gloam</span>
         </Link>
         <div className={styles.barRight}>
@@ -43,7 +57,7 @@ export default function PitchPage() {
           <div className={styles.glow} aria-hidden />
           <div className={styles.inner} style={{ position: "relative" }}>
             <div className={styles.wordmark}>
-              <Image src="/brand/logo.png" alt="" width={60} height={60} priority />
+              <Mark size={60} />
               <span>Gloam</span>
             </div>
             <h1 className={styles.coverTitle}>Trade Everything on Robinhood Privately</h1>
@@ -160,30 +174,30 @@ export default function PitchPage() {
             <div className={styles.market}>
               <div className={styles.bullseyeWrap}>
                 <svg className={styles.bullseye} viewBox="0 0 340 320" role="img" aria-label="TAM SAM SOM">
-                  <circle cx="170" cy="160" r="150" fill="rgba(200,255,0,0.045)" stroke="rgba(200,255,0,0.28)" strokeWidth="1.5" />
-                  <circle cx="170" cy="160" r="99" fill="rgba(200,255,0,0.09)" stroke="rgba(200,255,0,0.55)" strokeWidth="1.5" />
-                  <circle cx="170" cy="160" r="50" fill="#c8ff00" />
-                  <text x="170" y="36" textAnchor="middle" fill="#c8ff00" fontSize="13" fontWeight="700" letterSpacing="1.5">TAM</text>
-                  <text x="170" y="88" textAnchor="middle" fill="#c8ff00" fontSize="13" fontWeight="700" letterSpacing="1.5">SAM</text>
-                  <text x="170" y="165" textAnchor="middle" fill="#000000" fontSize="14" fontWeight="700" letterSpacing="1.5">SOM</text>
+                  <circle cx="170" cy="160" r="150" fill="rgba(59,55,102,0.06)" stroke="rgba(59,55,102,0.28)" strokeWidth="1.5" />
+                  <circle cx="170" cy="160" r="99" fill="rgba(59,55,102,0.12)" stroke="rgba(59,55,102,0.5)" strokeWidth="1.5" />
+                  <circle cx="170" cy="160" r="50" fill="#3b3766" />
+                  <text x="170" y="36" textAnchor="middle" fill="#3b3766" fontSize="13" fontWeight="700" letterSpacing="1.5">TAM</text>
+                  <text x="170" y="88" textAnchor="middle" fill="#3b3766" fontSize="13" fontWeight="700" letterSpacing="1.5">SAM</text>
+                  <text x="170" y="165" textAnchor="middle" fill="#f4f3ef" fontSize="14" fontWeight="700" letterSpacing="1.5">SOM</text>
                 </svg>
               </div>
               <div className={styles.legend}>
-                <div className={styles.legendRow} style={{ borderLeftColor: "#c8ff00" }}>
+                <div className={styles.legendRow} style={{ borderLeftColor: "#3b3766" }}>
                   <div className={styles.k}>TAM · $3T+ a year</div>
                   <div className={styles.v}>
                     All onchain trading, climbing as tokenized assets head toward $16T by
                     2030.
                   </div>
                 </div>
-                <div className={styles.legendRow} style={{ borderLeftColor: "rgba(200,255,0,0.55)" }}>
+                <div className={styles.legendRow} style={{ borderLeftColor: "rgba(59,55,102,0.5)" }}>
                   <div className={styles.k}>SAM · $250B a year</div>
                   <div className={styles.v}>
                     Privacy-sensitive trading on the EVM chains we serve, Robinhood Chain
                     and Ethereum.
                   </div>
                 </div>
-                <div className={styles.legendRow} style={{ borderLeftColor: "rgba(200,255,0,0.28)" }}>
+                <div className={styles.legendRow} style={{ borderLeftColor: "rgba(59,55,102,0.28)" }}>
                   <div className={styles.k}>SOM · $3B a year</div>
                   <div className={styles.v}>
                     Early capture in our first years, roughly $9M revenue at a 0.3% fee.
@@ -270,7 +284,7 @@ export default function PitchPage() {
                 <p>
                   Tokenized stocks and real world assets are moving onchain quickly. Every
                   serious trader eventually wants privacy, and almost{" "}
-                  <b style={{ color: "#fff" }}>no one offers it</b>.
+                  <b style={{ color: "#121316" }}>no one offers it</b>.
                 </p>
               </div>
               <div className={styles.card}>
@@ -278,7 +292,7 @@ export default function PitchPage() {
                 <h3>What it unlocks</h3>
                 <p>
                   Capital takes us through{" "}
-                  <b style={{ color: "#fff" }}>
+                  <b style={{ color: "#121316" }}>
                     security audit, mainnet launch, and expansion to Ethereum
                   </b>
                  , the deepest market in crypto, with growth behind it.
