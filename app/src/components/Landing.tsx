@@ -214,7 +214,7 @@ export function Landing() {
           <div>
             <p className="mb-5 flex items-center gap-2.5 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#3B3766]" />
-              The onchain dark pool
+              The private layer for Robinhood
             </p>
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
