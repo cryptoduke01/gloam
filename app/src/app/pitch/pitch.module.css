@@ -187,6 +187,23 @@
   background: radial-gradient(circle, rgba(150, 116, 178, 0.20), rgba(150, 116, 178, 0) 62%);
   pointer-events: none;
 }
+.coverArt {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 48%;
+  background: url("/ascii/bust-indigo.png") right center / contain no-repeat;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+@media (max-width: 760px) {
+  .coverArt {
+    display: none;
+  }
+}
+
 .wordmark {
   display: flex;
   align-items: center;

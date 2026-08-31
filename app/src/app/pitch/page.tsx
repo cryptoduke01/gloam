@@ -55,6 +55,7 @@ export default function PitchPage() {
         {/* 1 · Cover */}
         <section className={`${styles.slide} ${styles.cover}`} style={{ position: "relative" }}>
           <div className={styles.glow} aria-hidden />
+          <div className={styles.coverArt} aria-hidden />
           <div className={styles.inner} style={{ position: "relative" }}>
             <div className={styles.wordmark}>
               <Mark size={60} />
