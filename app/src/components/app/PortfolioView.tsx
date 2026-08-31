@@ -38,7 +38,7 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
-/* — small marks that carry the public / sealed duality — */
+/*, small marks that carry the public / sealed duality, */
 function EyeIcon({ className = "" }: { className?: string }) {
   return (
     <svg
@@ -266,7 +266,7 @@ export function PortfolioView() {
   const hasShield = shieldRows.length > 0;
   const stockCount = positions.filter((p) => p.raw > BigInt(0)).length;
 
-  // Public (wallet + onchain stocks) vs sealed (vault) split — the whole point.
+  // Public (wallet + onchain stocks) vs sealed (vault) split, the whole point.
   const publicUsd = (ethUsdVal ?? 0) + stocksUsd;
   const sealedUsd = shieldEthUsd + shieldStocksUsd;
   const totalKnown = publicUsd + sealedUsd;
@@ -278,16 +278,16 @@ export function PortfolioView() {
       ? formatUsd(totalUsd)
       : isConnected
         ? `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`
-        : "—";
+        : ", ";
 
   const walletValue = !isConnected
-    ? "—"
+    ? ", "
     : `${formatEth(bal?.value ?? BigInt(0))} ETH`;
   const walletSub =
     ethUsdVal != null && settings.showUsd ? formatUsd(ethUsdVal) : "Open wallet";
 
   const vaultValue = !isConnected
-    ? "—"
+    ? ", "
     : !hasShield
       ? "0"
       : shieldRows.length === 1
@@ -306,14 +306,14 @@ export function PortfolioView() {
       : "Size hidden onchain";
 
   const stocksValue = !isConnected
-    ? "—"
+    ? ", "
     : settings.showUsd && stocksUsd > 0
       ? formatUsd(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
   return (
     <div className="space-y-5">
-      {/* — Balance strip: total + public/sealed allocation + quick actions — */}
+      {/*, Balance strip: total + public/sealed allocation + quick actions, */}
       <div className="overflow-hidden rounded-2xl border border-line bg-panel">
         <div className="flex gap-6 p-6 max-lg:flex-col lg:items-center lg:justify-between lg:gap-10">
           <div className="min-w-0 flex-1">
@@ -414,7 +414,7 @@ export function PortfolioView() {
         )}
       </div>
 
-      {/* — Account cards: public wallet + sealed vault + public stocks — */}
+      {/*, Account cards: public wallet + sealed vault + public stocks, */}
       <div className="grid gap-4 sm:grid-cols-3">
         <AccountCard
           label="Wallet"
@@ -437,7 +437,7 @@ export function PortfolioView() {
         />
       </div>
 
-      {/* — Main split: holdings + sealed notes / rail — */}
+      {/*, Main split: holdings + sealed notes / rail, */}
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-8">
           {shieldNotes.length > 0 && (

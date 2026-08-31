@@ -1,5 +1,5 @@
 /**
- * On-chain traction from ShieldPool logs — source of truth for volume & users.
+ * On-chain traction from ShieldPool logs, source of truth for volume & users.
  */
 
 import {
@@ -56,7 +56,7 @@ async function getLogsChunked(
       })) as DecodedLog[];
       out.push(...chunk);
     } catch {
-      /* chunk failed — continue */
+      /* chunk failed, continue */
     }
   }
   return out;

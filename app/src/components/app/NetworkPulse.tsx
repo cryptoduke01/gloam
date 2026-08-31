@@ -5,7 +5,7 @@ import { useAccount, useChainId } from "wagmi";
 import { PRODUCT_CHAIN_ID, ensureRhTestnetWallet } from "@/lib/chain";
 import { StatusPill } from "./StatusPill";
 
-/** Minimal network status — one-tap fix when on the wrong chain. */
+/** Minimal network status, one-tap fix when on the wrong chain. */
 export function NetworkPulse() {
   const chainId = useChainId();
   const { isConnected } = useAccount();

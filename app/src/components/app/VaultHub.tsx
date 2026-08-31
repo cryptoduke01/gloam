@@ -8,7 +8,7 @@ import { SendView } from "./SendView";
 import { MoveView } from "./MoveView";
 
 /**
- * The Vault hub — one surface for every money move, the way Umbra collapses
+ * The Vault hub, one surface for every money move, the way Umbra collapses
  * Shield / Swap / Send / Withdraw onto a single card. Plain verbs, no jargon.
  * Each tab reuses the existing action view; the URL (?tab=) drives which shows,
  * so deep links and the views' own params keep working.
@@ -36,7 +36,7 @@ export function VaultHub() {
 
   return (
     <div className="space-y-5">
-      {/* action tabs — the one control that runs the whole vault */}
+      {/* action tabs, the one control that runs the whole vault */}
       <div
         role="tablist"
         aria-label="Vault actions"

@@ -6,7 +6,7 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Private pay on RH",
   description:
-    "How Gloam private pay compares to Solana private send and Zcash — and what is live on Robinhood Chain testnet.",
+    "How Gloam private pay compares to Solana private send and Zcash, and what is live on Robinhood Chain testnet.",
 };
 
 export default function DocsPrivatePayPage() {
@@ -24,14 +24,14 @@ export default function DocsPrivatePayPage() {
       <h2>Why Solana private send “feels” like public send</h2>
       <p>
         Wallets like Solflare hide the hard parts. You still pick a recipient
-        and an amount — under the hood they use a shielded program, encryption,
+        and an amount, under the hood they use a shielded program, encryption,
         and discovery so you are not pasting raw note secrets. The <em>UI</em>{" "}
         matches public send; the <em>settlement</em> is private.
       </p>
       <p>
         Robinhood Chain is <strong>EVM</strong>, not Solana. There is no
         built-in Elusiv/Light-style stack. That does <strong>not</strong> mean
-        the pattern is impossible — it means the app + contracts must implement
+        the pattern is impossible, it means the app + contracts must implement
         it (which is what Gloam is).
       </p>
 
@@ -79,7 +79,7 @@ export default function DocsPrivatePayPage() {
         </li>
         <li>
           <strong>Gloam</strong> = private rails for{" "}
-          <em>RH stock tokens / RWA / ETH</em> — hold, private pay, and private
+          <em>RH stock tokens / RWA / ETH</em>, hold, private pay, and private
           trade (testnet live) next to open settlement on the same chain RH
           cares about.
         </li>
@@ -94,8 +94,8 @@ export default function DocsPrivatePayPage() {
 
       <h2>Try it</h2>
       <p>
-        <Link href="/app/move">Move</Link> — private pay ·{" "}
-        <Link href="/app/trade?path=sealed">Private trade</Link> — size
+        <Link href="/app/move">Move</Link>, private pay ·{" "}
+        <Link href="/app/trade?path=sealed">Private trade</Link>, size
         privacy on ·{" "}
         <Link href="/docs/privacy-model">Privacy model</Link>.
       </p>

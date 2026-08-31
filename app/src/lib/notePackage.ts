@@ -1,6 +1,6 @@
 /**
  * Portable **payment tickets** for Gloam vault pay.
- * Not a traditional address transfer — bearer secret for a vault note.
+ * Not a traditional address transfer, bearer secret for a vault note.
  * - Compact: gloam1.<base64url>
  * - Optional passphrase: gloam1e.<base64url> (AES-GCM)
  * Still accepts legacy JSON for older shares.
@@ -47,7 +47,7 @@ function utf8Decode(b: Uint8Array): string {
   return new TextDecoder().decode(b);
 }
 
-/** Fresh ArrayBuffer-backed view — satisfies strict BufferSource typing (TS 5.x). */
+/** Fresh ArrayBuffer-backed view, satisfies strict BufferSource typing (TS 5.x). */
 function buf(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(bytes.byteLength);
   out.set(bytes);
@@ -70,7 +70,7 @@ export function buildNotePackage(args: {
     amountWei: args.amountWei,
     secret: args.secret,
     commitment: args.commitment,
-    message: "Gloam payment — import under Move → Receive. Keep secret.",
+    message: "Gloam payment, import under Move → Receive. Keep secret.",
   };
 }
 
@@ -172,7 +172,7 @@ export async function decodeNotePackage(
 ): Promise<NotePackage> {
   const s = input.trim();
 
-  // Pay-to-tag sealed package — only recipient’s receive key opens it
+  // Pay-to-tag sealed package, only recipient’s receive key opens it
   if (s.startsWith("gloam2t.")) {
     if (!opts?.tryTagDecrypt) {
       throw new Error(
@@ -187,7 +187,7 @@ export async function decodeNotePackage(
 
   if (s.startsWith(PREFIX_ENC)) {
     if (!passphrase?.trim()) {
-      throw new Error("This payment is locked — enter the passphrase from the sender.");
+      throw new Error("This payment is locked, enter the passphrase from the sender.");
     }
     const raw = b64urlDecode(s.slice(PREFIX_ENC.length));
     if (raw.length < 29) throw new Error("Corrupt locked payment.");

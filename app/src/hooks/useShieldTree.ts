@@ -12,7 +12,7 @@ import type { MerklePath } from "@/lib/merkle";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 
 /**
- * Vault Merkle tree — uses dedicated RH RPC (not wallet network).
+ * Vault Merkle tree, uses dedicated RH RPC (not wallet network).
  */
 export function useShieldTree() {
   const [synced, setSynced] = useState<SyncedTree | null>(null);

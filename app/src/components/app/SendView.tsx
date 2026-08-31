@@ -115,7 +115,7 @@ export function SendView() {
     }
     setFormError(null);
 
-    // Fast send: go straight to wallet (still needs one signature — non-custodial)
+    // Fast send: go straight to wallet (still needs one signature, non-custodial)
     if (settings.fastSend) {
       executeSend();
       return;
@@ -192,7 +192,7 @@ export function SendView() {
                       )
                     }
                   >
-                    Max {isConnected ? maxEth : "—"}
+                    Max {isConnected ? maxEth : ", "}
                   </button>
                 </div>
                 <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
@@ -287,7 +287,7 @@ export function SendView() {
               Balance
             </p>
             <p className="mt-2 font-display text-3xl text-foreground">
-              {isConnected ? formatEth(bal?.value ?? BigInt(0)) : "—"}{" "}
+              {isConnected ? formatEth(bal?.value ?? BigInt(0)) : ", "}{" "}
               <span className="text-lg text-mute">ETH</span>
             </p>
             {ethUsd && bal && (
@@ -304,7 +304,7 @@ export function SendView() {
               {settings.fastSend ? "Fast send on" : "Review before send"}
             </p>
             <p className="mt-1 text-xs text-mute">
-              Change in Settings. Wallet still signs once — we never hold your
+              Change in Settings. Wallet still signs once, we never hold your
               keys.
             </p>
           </div>
@@ -391,11 +391,11 @@ export function SendView() {
           <>
             <p>
               <span className="font-medium text-foreground">
-                {sentAmount || "—"} ETH
+                {sentAmount || ", "} ETH
               </span>{" "}
               to{" "}
               <span className="text-foreground">
-                {sentTo ? shortAddress(sentTo, 5) : "—"}
+                {sentTo ? shortAddress(sentTo, 5) : ", "}
               </span>
             </p>
             <p className="mt-2">Settled on testnet.</p>

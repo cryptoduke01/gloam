@@ -51,7 +51,7 @@ export default function DocsSealedTradePage() {
         <strong>Size privacy (default on):</strong> public{" "}
         <code>amountOutMin</code> is a 1-wei floor, not your real output. Your
         first private trade leaked size because min-out equaled the exact
-        amount — that is fixed. Rates and asset pair remain public. Cash out
+        amount, that is fixed. Rates and asset pair remain public. Cash out
         still publishes amount. See{" "}
         <Link href="/docs/privacy-model">privacy model</Link> ·{" "}
         <Link href="/docs/production">production gate</Link>.
@@ -92,31 +92,31 @@ export default function DocsSealedTradePage() {
         <li>Settlement still ends on-chain (we do not claim invisibility)</li>
         <li>No theatrical “private success” without a real proof</li>
         <li>
-          Explorer shows <code>sealedSwap</code> + pair — not a Uniswap fill
+          Explorer shows <code>sealedSwap</code> + pair, not a Uniswap fill
         </li>
       </ul>
 
       <h2>What ships next</h2>
       <ol>
         <li>
-          <strong>On-chain rates</strong> — replace display-mark rates with
+          <strong>On-chain rates</strong>, replace display-mark rates with
           oracle-bound or pool-bound pricing (Pyth / AMM). Full write-up:{" "}
           <Link href="/docs/data">Prices &amp; oracles</Link>.
         </li>
         <li>
-          <strong>Vault inventory</strong> — seed faucet stocks so cash-out after
+          <strong>Vault inventory</strong>, seed faucet stocks so cash-out after
           a sealed trade does not fail for empty <code>deposited</code>.
         </li>
         <li>
-          <strong>Production ceremony keys</strong> — multi-party proving keys
+          <strong>Production ceremony keys</strong>, multi-party proving keys
           before any mainnet value.
         </li>
         <li>
-          <strong>Ethereum expansion</strong> — same private rails where the
+          <strong>Ethereum expansion</strong>, same private rails where the
           largest onchain audience already sits.
         </li>
         <li>
-          <strong>Deeper liquidity design</strong> — intent batching or
+          <strong>Deeper liquidity design</strong>, intent batching or
           vault-native pool when books are thin.
         </li>
       </ol>

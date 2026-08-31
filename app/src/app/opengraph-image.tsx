@@ -1,10 +1,10 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Gloam — trade everything, reveal nothing";
+export const alt = "Gloam, trade everything, reveal nothing";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-/** Twilight OG card — light paper, ink type, crescent mark. System fonts only. */
+/** Twilight OG card, light paper, ink type, crescent mark. System fonts only. */
 export default function OpenGraphImage() {
   return new ImageResponse(
     (
@@ -27,7 +27,7 @@ export default function OpenGraphImage() {
             height: "100%",
           }}
         >
-          {/* brand lockup — crescent mark + wordmark */}
+          {/* brand lockup, crescent mark + wordmark */}
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div
               style={{

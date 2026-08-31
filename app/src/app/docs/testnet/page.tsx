@@ -7,14 +7,14 @@ import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 export const metadata: Metadata = {
   title: "Testnet guide",
   description:
-    "Full Gloam public testnet guide — wallet setup, faucet, shield, private pay, cash out, trade, demo video, and troubleshooting on Robinhood Chain.",
+    "Full Gloam public testnet guide, wallet setup, faucet, shield, private pay, cash out, trade, demo video, and troubleshooting on Robinhood Chain.",
 };
 
 export default function DocsTestnetPage() {
   return (
     <DocsLayout
       title="Testnet guide"
-      lede="Everything you need to use Gloam on Robinhood Chain testnet — from wallet setup to private pay. Bookmark this page for launch day."
+      lede="Everything you need to use Gloam on Robinhood Chain testnet, from wallet setup to private pay. Bookmark this page for launch day."
       glance={[
         { label: "App", value: "/app" },
         { label: "Chain ID", value: "46630" },
@@ -139,23 +139,23 @@ export default function DocsTestnetPage() {
         <Link href="/app">
           <strong>/app</strong>
         </Link>
-        , click <strong>Connect wallet</strong>, then use{" "}
+       , click <strong>Connect wallet</strong>, then use{" "}
         <strong>Add / switch RH testnet</strong> if the wallet is on the wrong
         chain. Gloam targets:
       </p>
       <ul>
         <li>
-          <strong>Chain ID</strong> — <code>46630</code>
+          <strong>Chain ID</strong>, <code>46630</code>
         </li>
         <li>
-          <strong>Name</strong> — Robinhood Chain Testnet
+          <strong>Name</strong>, Robinhood Chain Testnet
         </li>
         <li>
-          <strong>RPC</strong> —{" "}
+          <strong>RPC</strong>, {" "}
           <code>https://rpc.testnet.chain.robinhood.com</code>
         </li>
         <li>
-          <strong>Explorer</strong> —{" "}
+          <strong>Explorer</strong>, {" "}
           <a
             href="https://explorer.testnet.chain.robinhood.com"
             target="_blank"
@@ -165,7 +165,7 @@ export default function DocsTestnetPage() {
           </a>
         </li>
         <li>
-          <strong>Native currency</strong> — ETH (testnet only)
+          <strong>Native currency</strong>, ETH (testnet only)
         </li>
       </ul>
       <p>
@@ -195,7 +195,7 @@ export default function DocsTestnetPage() {
           Claim testnet ETH for gas and sample stock tokens (e.g. TSLA, AMZN
           test assets) when offered.
         </li>
-        <li>Typical limit: once per 24 hours — plan your demo flow.</li>
+        <li>Typical limit: once per 24 hours, plan your demo flow.</li>
       </ul>
       <p>
         After claiming, open <Link href="/app">Portfolio</Link> and confirm ETH
@@ -208,14 +208,14 @@ export default function DocsTestnetPage() {
       </p>
       <ul>
         <li>
-          <strong>Open wallet</strong> — public balances on RH testnet.
+          <strong>Open wallet</strong>, public balances on RH testnet.
         </li>
         <li>
-          <strong>Vault (private)</strong> — notes you control locally after
+          <strong>Vault (private)</strong>, notes you control locally after
           shield / private receive. Back up notes in Settings if prompted.
         </li>
         <li>
-          <strong>Stocks / markets</strong> — discovery; not all pairs have deep
+          <strong>Stocks / markets</strong>, discovery; not all pairs have deep
           DEX liquidity on testnet.
         </li>
       </ul>
@@ -258,7 +258,7 @@ export default function DocsTestnetPage() {
           recipient package path.
         </li>
         <li>
-          Browser builds a ZK proof (can take a while — keep the tab open).
+          Browser builds a ZK proof (can take a while, keep the tab open).
         </li>
         <li>Confirm the on-chain transfer transaction.</li>
         <li>
@@ -290,18 +290,18 @@ export default function DocsTestnetPage() {
       <h2 id="trade">7. Trade paths</h2>
       <ul>
         <li>
-          <strong>Private trade (preferred)</strong> —{" "}
+          <strong>Private trade (preferred)</strong>, {" "}
           <Link href="/app/trade?path=sealed">Trade → Private</Link>. Vault ETH
           → vault stock. Size privacy on by default (min-out floor). No DEX
           pool required. See{" "}
           <Link href="/docs/sealed-trade">sealed trade</Link>.
         </li>
         <li>
-          <strong>Wallet</strong> — public swaps / transfers from the open
+          <strong>Wallet</strong>, public swaps / transfers from the open
           wallet when a pool exists.
         </li>
         <li>
-          <strong>Via market</strong> — cash out → public swap → re-shield. Size
+          <strong>Via market</strong>, cash out → public swap → re-shield. Size
           is public on the swap edge. Many faucet pairs have empty pools; use
           Private instead.
         </li>
@@ -323,14 +323,14 @@ export default function DocsTestnetPage() {
         </li>
         <li>
           Explorer shows a vault <code>sealedSwap</code>, not a Uniswap fill.
-          Cash out later publishes amount — stay in vault to stay private.
+          Cash out later publishes amount, stay in vault to stay private.
         </li>
       </ol>
 
       <h2 id="settings">8. Settings & backups</h2>
       <ul>
         <li>
-          <Link href="/app/settings">Settings</Link> — note backup (optional
+          <Link href="/app/settings">Settings</Link>, note backup (optional
           lock), trading prefs, diagnostics.
         </li>
         <li>
@@ -350,7 +350,7 @@ export default function DocsTestnetPage() {
         <li>Shield a small amount of ETH</li>
         <li>Private trade (size privacy on) → explorer sealedSwap</li>
         <li>Private send to yourself or a friend + import package</li>
-        <li>Optional: cash out dust once (public amount — intentional)</li>
+        <li>Optional: cash out dust once (public amount, intentional)</li>
         <li>Export note backup (Settings)</li>
         <li>
           Report bugs via{" "}
@@ -368,36 +368,36 @@ export default function DocsTestnetPage() {
       <h2 id="troubleshooting">Troubleshooting</h2>
       <ul>
         <li>
-          <strong>Wrong network</strong> — use Add / switch RH testnet; chain
+          <strong>Wrong network</strong>, use Add / switch RH testnet; chain
           ID must be 46630.
         </li>
         <li>
-          <strong>Proof stuck / failed</strong> — reload, try a smaller note,
+          <strong>Proof stuck / failed</strong>, reload, try a smaller note,
           use a stronger machine, ensure only one tab is proving.
         </li>
         <li>
-          <strong>Root / tree mismatch</strong> — wait a few seconds and retry;
+          <strong>Root / tree mismatch</strong>, wait a few seconds and retry;
           another user may have inserted leaves. Refresh the app.
         </li>
         <li>
-          <strong>No vault balance after shield</strong> — confirm tx success on
+          <strong>No vault balance after shield</strong>, confirm tx success on
           explorer; hard-refresh; check you did not clear site data mid-flow.
         </li>
         <li>
-          <strong>Payment not showing for recipient</strong> — they must import
+          <strong>Payment not showing for recipient</strong>, they must import
           the package; sender still has spent nullifier so resending the same
           note fails.
         </li>
         <li>
-          <strong>No DEX pool for stock</strong> — testnet liquidity is thin;
+          <strong>No DEX pool for stock</strong>, testnet liquidity is thin;
           use ETH pairs or private trade paths when available.
         </li>
         <li>
-          <strong>RPC rate limits</strong> — wait and retry; public RH RPC is
+          <strong>RPC rate limits</strong>, wait and retry; public RH RPC is
           shared.
         </li>
         <li>
-          <strong>App shows countdown</strong> — public open is timed; follow
+          <strong>App shows countdown</strong>, public open is timed; follow
           @gloamtrade or read this guide until unlock. Founders may use early
           access if issued.
         </li>

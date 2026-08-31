@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         This Privacy Policy describes how Gloam (“we,” “us”) handles information
         in connection with gloam.trade and related Services. Blockchain
         transactions you broadcast are public by nature unless a privacy
-        protocol applies — and even then, guarantees are limited.
+        protocol applies, and even then, guarantees are limited.
       </p>
       <h2 className="font-display text-2xl text-foreground">1. Information we may collect</h2>
       <p>

@@ -16,7 +16,7 @@ const nav = [
 
 function isActive(pathname: string, href: string, exact?: boolean) {
   if (exact) return pathname === href;
-  // Nav hrefs may include query (?path=sealed) — match on path only
+  // Nav hrefs may include query (?path=sealed), match on path only
   const pathOnly = href.split("?")[0] ?? href;
   return pathname === pathOnly || pathname.startsWith(`${pathOnly}/`);
 }

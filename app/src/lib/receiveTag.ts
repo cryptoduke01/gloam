@@ -1,5 +1,5 @@
 /**
- * Sticky Gloam receive tags — “direct” private pay like a shielded address.
+ * Sticky Gloam receive tags, “direct” private pay like a shielded address.
  *
  * Recipient publishes:  gloamr1.<b64url SPKI>
  * Sender encrypts ticket to tag → gloam2t.<b64url payload>
@@ -35,7 +35,7 @@ function buf(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
 }
 
 export type ReceiveIdentity = {
-  /** Share this — like a shielded receive address */
+  /** Share this, like a shielded receive address */
   tag: string;
   createdAt: number;
 };
@@ -173,7 +173,7 @@ async function ecdhAesKey(
 
 /**
  * Encrypt a payment ticket JSON string for a receive tag.
- * Returns gloam2t.… for handoff (QR/share) — only tag owner can open.
+ * Returns gloam2t.… for handoff (QR/share), only tag owner can open.
  */
 export async function encryptTicketForTag(
   plainTicketJsonOrGloam1: string,
@@ -223,7 +223,7 @@ export async function decryptTicketWithLocalTag(
   }
   const stored = loadStored();
   if (!stored) {
-    throw new Error("No receive tag in this browser — generate one under Claim.");
+    throw new Error("No receive tag in this browser, generate one under Claim.");
   }
   const raw = b64urlDecode(s.slice(PAY_TO_TAG_PREFIX.length));
   if (raw.length < 2 + 12 + 16) throw new Error("Corrupt pay-to-tag package.");
@@ -247,7 +247,7 @@ export async function decryptTicketWithLocalTag(
     return new TextDecoder().decode(plain);
   } catch {
     throw new Error(
-      "Could not open this ticket with your tag — it was encrypted for someone else."
+      "Could not open this ticket with your tag, it was encrypted for someone else."
     );
   }
 }

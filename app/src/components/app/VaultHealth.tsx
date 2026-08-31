@@ -13,7 +13,7 @@ import { useShieldTree } from "@/hooks/useShieldTree";
 import { StatusPill } from "./StatusPill";
 
 /**
- * Always-on vault status — dedicated RH RPC, no wallet required.
+ * Always-on vault status, dedicated RH RPC, no wallet required.
  */
 export function VaultHealth({ compact = false }: { compact?: boolean }) {
   const { leafCount, loading: treeLoading, refresh, error: treeError } =
@@ -138,7 +138,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
       {(env.remappedFromLegacy || env.deployBlockRemapped) && (
         <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
           Vercel still has pre-sealed env values. App remaps to sealed vault{" "}
-          {shortAddress(env.productPool, 4)} — clean{" "}
+          {shortAddress(env.productPool, 4)}, clean{" "}
           <code className="text-foreground">NEXT_PUBLIC_POSEIDON_SHIELD_POOL</code>{" "}
           and deploy block in Vercel when you can.
         </p>

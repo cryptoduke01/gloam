@@ -14,7 +14,7 @@ export function useMotionSafe() {
   return !reduce;
 }
 
-/** Subtle entrance — never leave long opacity-0 voids on scroll. */
+/** Subtle entrance, never leave long opacity-0 voids on scroll. */
 export const fadeUp: Variants = {
   hidden: { opacity: 0, y: 12 },
   show: {
@@ -48,7 +48,7 @@ export function MotionSection({
   children: ReactNode;
   className?: string;
   id?: string;
-  /** @deprecated ignored — kept for call-site compatibility */
+  /** @deprecated ignored, kept for call-site compatibility */
   delay?: number;
 }) {
   return (

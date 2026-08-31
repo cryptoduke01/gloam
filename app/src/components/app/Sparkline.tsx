@@ -1,6 +1,6 @@
 "use client";
 
-/** Tiny price path — theme-aware stroke. */
+/** Tiny price path, theme-aware stroke. */
 export function Sparkline({
   points,
   up,
@@ -19,9 +19,7 @@ export function Sparkline({
       <div
         className={`flex items-center justify-center text-[10px] text-mute ${className}`}
         style={{ width, height }}
-      >
-        —
-      </div>
+      >, </div>
     );
   }
 

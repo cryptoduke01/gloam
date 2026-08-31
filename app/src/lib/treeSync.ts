@@ -4,8 +4,7 @@
  *   - Transferred → two leaves (payment, change) in that order
  *   - SealedSwapped → two leaves (out, change) in that order
  *
- * Private send only emits Transferred; private trade only SealedSwapped —
- * ignoring either makes root mismatch after those txs.
+ * Private send only emits Transferred; private trade only SealedSwapped, * ignoring either makes root mismatch after those txs.
  */
 
 import type { Address, Hex, Log, PublicClient } from "viem";
@@ -67,7 +66,7 @@ function logKey(log: Log) {
   };
 }
 
-/** Many public RPCs cap eth_getLogs range — walk in chunks. */
+/** Many public RPCs cap eth_getLogs range, walk in chunks. */
 const LOG_CHUNK = 40_000n;
 
 type DecodedLog = Log & {
@@ -142,7 +141,7 @@ export async function syncShieldTree(
       },
       fromBlock: SHIELD_DEPLOY_BLOCK,
     }),
-    // Older pools have no SealedSwapped — empty on failure
+    // Older pools have no SealedSwapped, empty on failure
     getLogsChunked(client, {
       address: SHIELD_POOL_ADDRESS,
       event: {

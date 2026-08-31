@@ -1,5 +1,5 @@
 /**
- * Phase-2 note crypto — must match contracts/src/lib/NoteLib.sol
+ * Phase-2 note crypto, must match contracts/src/lib/NoteLib.sol
  * commitment = keccak256(secret || amount || asset)  // abi.encodePacked
  * nullifier  = keccak256(secret || commitment)
  */
@@ -38,7 +38,7 @@ export function randomSecret(): Hex {
   return toHex(bytes);
 }
 
-/** Bound commitment — required for future unshield proofs */
+/** Bound commitment, required for future unshield proofs */
 export function noteCommitment(
   secret: Hex,
   amount: bigint,

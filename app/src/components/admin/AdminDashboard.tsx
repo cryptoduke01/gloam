@@ -117,7 +117,7 @@ export function AdminDashboard() {
         setData(null);
         return;
       }
-      // Session is valid if we got past 401 — don't freeze on metrics failure
+      // Session is valid if we got past 401, don't freeze on metrics failure
       setAuthed(true);
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as {
@@ -185,7 +185,7 @@ export function AdminDashboard() {
     setData(null);
   }
 
-  // Hooks must run every render (before any early return) — React #310
+  // Hooks must run every render (before any early return), React #310
   const oc =
     data?.onchain && !("error" in data.onchain && data.onchain.error)
       ? data.onchain
@@ -395,7 +395,7 @@ export function AdminDashboard() {
               <Kpi
                 label="Product events"
                 value={String(product?.totalEvents ?? 0)}
-                sub={product?.backend ?? "—"}
+                sub={product?.backend ?? ", "}
               />
             </section>
 
@@ -406,13 +406,13 @@ export function AdminDashboard() {
                 sub={
                   data?.launch?.opensAt
                     ? new Date(data.launch.opensAt).toLocaleString()
-                    : "—"
+                    : ", "
                 }
               />
               <Kpi
                 label="Note slots"
                 value={String(oc?.notes ?? 0)}
-                sub={`block ${oc?.latestBlock ?? "—"}`}
+                sub={`block ${oc?.latestBlock ?? ", "}`}
               />
               <Kpi
                 label="Unshield vol"
@@ -481,7 +481,7 @@ export function AdminDashboard() {
                       {shortAddress(tx.from, 4)}
                     </a>
                   ) : (
-                    "—"
+                    ", "
                   ),
                   <a
                     key="t"
@@ -547,10 +547,10 @@ export function AdminDashboard() {
                   <span key="t" className="text-lime">
                     {ev.t}
                   </span>,
-                  ev.path ?? "—",
+                  ev.path ?? ", ",
                   new Date(ev.ts).toLocaleString(),
                 ])}
-                empty="No product events — open /app to generate traffic"
+                empty="No product events, open /app to generate traffic"
               />
             </Panel>
             {product?.backend === "memory" && (
@@ -564,7 +564,7 @@ export function AdminDashboard() {
         )}
 
         <p className="text-[11px] text-mute">
-          Generated {data?.generatedAt ?? "—"} ·{" "}
+          Generated {data?.generatedAt ?? ", "} ·{" "}
           <Link href="/app" className="text-lime hover:underline">
             Open app
           </Link>

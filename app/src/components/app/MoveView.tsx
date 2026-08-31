@@ -145,7 +145,7 @@ export function MoveView() {
   const handledHash = useRef<string | null>(null);
   const pendingAction = useRef<"send" | "cashout" | "memo" | null>(null);
   const spentNoteId = useRef<string | null>(null);
-  /** Change only — never store the payment note on the sender */
+  /** Change only, never store the payment note on the sender */
   const pendingChange = useRef<LocalNote | null>(null);
   const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
     null
@@ -202,7 +202,7 @@ export function MoveView() {
           );
           if (idx != null) changeLeaf = idx;
         } catch {
-          /* leafIndex optional — path resolved on next sync */
+          /* leafIndex optional, path resolved on next sync */
         }
       }
 
@@ -321,7 +321,7 @@ export function MoveView() {
 
     try {
       const path = await pathForLeaf(selected.leafIndex!);
-      if (!path) throw new Error("Could not build path — resync the tree.");
+      if (!path) throw new Error("Could not build path, resync the tree.");
       setStatus("Building proof… this can take 10–30 seconds.");
       const w = await buildPoseidonUnshieldWitness({
         secretHex: selected.secret,
@@ -354,7 +354,7 @@ export function MoveView() {
       void import("@/lib/track").then(({ track }) => {
         track("unshield_success");
       });
-      // cash out is intentional exit — no onboarding mark
+      // cash out is intentional exit, no onboarding mark
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cash out failed");
       setBusy(false);
@@ -382,7 +382,7 @@ export function MoveView() {
       }
 
       const path = await pathForLeaf(selected.leafIndex!);
-      if (!path) throw new Error("Could not build path — resync the tree.");
+      if (!path) throw new Error("Could not build path, resync the tree.");
 
       setStatus("Building private send proof…");
       const w = await buildTransferWitness({
@@ -452,7 +452,7 @@ export function MoveView() {
       setShareBlob(null);
       setMemoPosted(false);
 
-      // Payment leaf commitment — for on-chain memo discovery
+      // Payment leaf commitment, for on-chain memo discovery
       if (payStyle === "direct" && isPayMemoLive()) {
         pendingMemo.current = {
           paymentCommitment: fieldToBytes32(w.publicInputs.newCommitment0),
@@ -481,7 +481,7 @@ export function MoveView() {
       });
       setSuccessTitle(
         payStyle === "direct" && isPayMemoLive()
-          ? "Private pay — confirm memo next"
+          ? "Private pay, confirm memo next"
           : "Private pay submitted"
       );
       void import("@/lib/track").then(({ track }) => {
@@ -500,7 +500,7 @@ export function MoveView() {
   async function scanInbox() {
     if (!isPayMemoLive()) {
       setInboxStatus(
-        "On-chain memo board not deployed yet — paste ticket manually or deploy GloamPayMemo."
+        "On-chain memo board not deployed yet, paste ticket manually or deploy GloamPayMemo."
       );
       return;
     }
@@ -598,7 +598,7 @@ export function MoveView() {
       const ethLabel = formatAmountEth(pack.amountWei);
       setImportOk(
         idx != null
-          ? `Got ${ethLabel} ETH in the vault — open Cash out when ready.`
+          ? `Got ${ethLabel} ETH in the vault, open Cash out when ready.`
           : `Got ${ethLabel} ETH. Tap Refresh on the vault tree, then Cash out.`
       );
       setMode("cashout");
@@ -623,7 +623,7 @@ export function MoveView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-tab scan once per enter
   }, [mode]);
 
-  // Live preview when pasting a ticket (amount only — not a full claim)
+  // Live preview when pasting a ticket (amount only, not a full claim)
   useEffect(() => {
     const t = importText.trim();
     if (!t || mode !== "receive") {
@@ -640,14 +640,14 @@ export function MoveView() {
             });
             if (!cancelled) {
               setClaimPreview(
-                `Encrypted to your tag · ${formatAmountEth(pack.amountWei)} ETH — ready to claim.`
+                `Encrypted to your tag · ${formatAmountEth(pack.amountWei)} ETH, ready to claim.`
               );
             }
             return;
           }
           if (isEncryptedPackage(t) && !importPassphrase.trim()) {
             if (!cancelled) {
-              setClaimPreview("Passphrase-locked ticket — enter the phrase to preview.");
+              setClaimPreview("Passphrase-locked ticket, enter the phrase to preview.");
             }
             return;
           }
@@ -708,7 +708,7 @@ export function MoveView() {
               <VaultHealth compact />
               <p className="text-sm leading-relaxed text-mute">
                 <strong className="text-foreground">Private send</strong>: To
-                (their tag) + Amount. Chain sees a vault transfer proof — not
+                (their tag) + Amount. Chain sees a vault transfer proof, not
                 “Alice paid Bob X”. Memo is encrypted
                 {isPayMemoLive() ? " (live inbox scan)" : ""}. For a public{" "}
                 <span className="">0x</span> transfer use{" "}
@@ -862,7 +862,7 @@ export function MoveView() {
                           className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                         />
                         <p className="mt-1 text-xs text-mute">
-                          Same as “send to address” — private Gloam tag from
+                          Same as “send to address”, private Gloam tag from
                           their Move → Receive.
                         </p>
                         {contacts.length > 0 && (
@@ -1002,7 +1002,7 @@ export function MoveView() {
                       </button>
                       {matchesChain === false && (
                         <p className="text-center text-xs text-amber-600 dark:text-amber-400">
-                          Vault tree mismatch — tap Refresh above, then retry.
+                          Vault tree mismatch, tap Refresh above, then retry.
                         </p>
                       )}
                       {isPayMemoLive() && (
@@ -1106,14 +1106,14 @@ export function MoveView() {
                             {status || "Working…"}
                           </>
                         ) : cashOutInventoryShort ? (
-                          "Cash out blocked — low inventory"
+                          "Cash out blocked, low inventory"
                         ) : (
                           "Cash out (public amount)"
                         )}
                       </button>
                       {selected?.leafIndex == null && (
                         <p className="text-xs text-amber-600 dark:text-amber-500">
-                          Note not linked to the vault tree yet — tap Refresh
+                          Note not linked to the vault tree yet, tap Refresh
                           above.
                         </p>
                       )}
@@ -1140,7 +1140,7 @@ export function MoveView() {
                       Your receive tag (direct private pay)
                     </p>
                     <p className="mt-1 text-xs text-mute">
-                      Share this once — others paste it under Private pay →
+                      Share this once, others paste it under Private pay →
                       Direct. Encrypted tickets only open in{" "}
                       <strong className="text-foreground">this browser</strong>{" "}
                       (back up notes if you clear data).
@@ -1211,7 +1211,7 @@ export function MoveView() {
                       automatically, no QR needed.{" "}
                       {isPayMemoLive()
                         ? "Inbox is live."
-                        : "Inbox not deployed yet — paste the ticket below."}
+                        : "Inbox not deployed yet, paste the ticket below."}
                     </p>
                     {inboxStatus && (
                       <p className="mt-2 text-xs text-mute">{inboxStatus}</p>
@@ -1332,7 +1332,7 @@ export function MoveView() {
               </li>
               <li>
                 <strong className="text-foreground">Vault proof + encrypted memo.</strong>{" "}
-                They find it under Receive — no QR required when memos are live.
+                They find it under Receive, no QR required when memos are live.
               </li>
               <li>
                 <strong className="text-foreground">Cash out</strong> publishes
@@ -1375,13 +1375,13 @@ export function MoveView() {
           shareBlob ? (
             <p>
               {memoPosted
-                ? "Encrypted memo posted on-chain. Recipient can Scan chain under Receive — no QR required. Backup package still below."
+                ? "Encrypted memo posted on-chain. Recipient can Scan chain under Receive, no QR required. Backup package still below."
                 : "Payment package below (QR / copy / share) if they need handoff. Your vault change stays in this browser."}
             </p>
           ) : (
             <p>
               Funds should be back in your open wallet. That amount is public on
-              the explorer — only cash out when you need the open balance.
+              the explorer, only cash out when you need the open balance.
             </p>
           )
         }

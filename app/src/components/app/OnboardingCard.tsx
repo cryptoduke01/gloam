@@ -12,7 +12,7 @@ import {
 } from "@/lib/onboarding";
 
 /**
- * Quiet “getting started” note — lives in the portfolio sidebar, not a hero banner.
+ * Quiet “getting started” note, lives in the portfolio sidebar, not a hero banner.
  */
 export function OnboardingCard({ compact = true }: { compact?: boolean }) {
   const [state, setState] = useState<OnboardingState | null>(null);
@@ -68,7 +68,7 @@ export function OnboardingCard({ compact = true }: { compact?: boolean }) {
       ) : (
         <>
           <p className="mt-2 text-xs leading-relaxed text-mute">
-            {`${remaining.length} step${remaining.length === 1 ? "" : "s"} left — privacy vault path. Dev keys only.`}
+            {`${remaining.length} step${remaining.length === 1 ? "" : "s"} left, privacy vault path. Dev keys only.`}
           </p>
           <ol className="mt-3 space-y-1.5">
             {ONBOARDING_STEPS.map((step, i) => {

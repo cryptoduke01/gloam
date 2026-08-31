@@ -6,14 +6,14 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Production gate",
   description:
-    "What must be true before Gloam leaves testnet — ceremony keys, audit, ops.",
+    "What must be true before Gloam leaves testnet, ceremony keys, audit, ops.",
 };
 
 export default function DocsProductionPage() {
   return (
     <DocsLayout
       title="Production gate"
-      lede="Testnet is live. Mainnet and real money wait on this checklist — we will not skip it."
+      lede="Testnet is live. Mainnet and real money wait on this checklist, we will not skip it."
       glance={[
         { label: "Today", value: "Testnet + dev keys" },
         { label: "Keys", value: "Dev ceremony" },
@@ -24,7 +24,7 @@ export default function DocsProductionPage() {
       <h2>Why this page exists</h2>
       <p>
         The app proves unshield, private send, and private trade in the browser.
-        That is real cryptography — and still <strong>not</strong>{" "}
+        That is real cryptography, and still <strong>not</strong>{" "}
         production-safe while the proving keys come from a development trusted
         setup.
       </p>
@@ -74,7 +74,7 @@ export default function DocsProductionPage() {
         <li>Browser prove path with artifact hash checks</li>
         <li>Private send does not keep the payment note on the sender</li>
         <li>
-          Private trade (sealedSwap) live with size privacy defaults — see{" "}
+          Private trade (sealedSwap) live with size privacy defaults, see{" "}
           <Link href="/docs/sealed-trade">sealed trade</Link>
         </li>
         <li>Honest copy: via-market adapter ≠ private trade</li>

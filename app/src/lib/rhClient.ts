@@ -1,6 +1,6 @@
 /**
  * Dedicated Robinhood testnet public client.
- * Does NOT depend on wallet connection or wagmi chain selection — browser
+ * Does NOT depend on wallet connection or wagmi chain selection, browser
  * can always read the vault even when MetaMask is on another network.
  */
 

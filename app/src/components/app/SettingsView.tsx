@@ -284,7 +284,7 @@ export function SettingsView() {
             on={settings.fastSend}
             onChange={(v) => setSettings({ fastSend: v })}
             label="Fast send"
-            hint="Skip review — still one wallet confirm. We never hold keys."
+            hint="Skip review, still one wallet confirm. We never hold keys."
           />
         </div>
       </section>
@@ -330,7 +330,7 @@ export function SettingsView() {
         </section>
       </div>
 
-      {/* Vault note backup — secrets leave this browser only when you export */}
+      {/* Vault note backup, secrets leave this browser only when you export */}
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
         <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Vault notes backup
@@ -338,7 +338,7 @@ export function SettingsView() {
         <p className="mt-2 text-sm text-mute">
           Secrets live in this browser. Export before clearing site data.
           Prefer a passphrase lock so a stolen file is not free money. Losing
-          this backup loses vault access — privacy does not include recovery
+          this backup loses vault access, privacy does not include recovery
           magic.
         </p>
         <p className="mt-2 text-xs text-mute">
@@ -508,8 +508,8 @@ export function SettingsView() {
           Ceremony:{" "}
           <strong className="text-foreground">{PROVING_CEREMONY}</strong>
           {PROVING_CEREMONY === "dev"
-            ? " — not for real money."
-            : " — production fingerprints."}
+            ? ", not for real money."
+            : ", production fingerprints."}
         </p>
         <ul className="mt-3 space-y-1 text-[11px] text-mute">
           {(

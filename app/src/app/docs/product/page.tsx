@@ -6,7 +6,7 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "What ships when",
   description:
-    "Gloam product status — what is live on testnet, what is next, what we will not fake.",
+    "Gloam product status, what is live on testnet, what is next, what we will not fake.",
 };
 
 export default function DocsProductPage() {
@@ -30,20 +30,20 @@ export default function DocsProductPage() {
       <h2>Where things live</h2>
       <ul>
         <li>
-          <strong>Marketing</strong> — gloam.trade
+          <strong>Marketing</strong>, gloam.trade
         </li>
         <li>
-          <strong>App</strong> — gloam.trade/app
+          <strong>App</strong>, gloam.trade/app
         </li>
         <li>
-          <strong>Docs</strong> — gloam.trade/docs
+          <strong>Docs</strong>, gloam.trade/docs
         </li>
         <li>
-          <strong>Testnet guide</strong> —{" "}
+          <strong>Testnet guide</strong>, {" "}
           <Link href="/docs/testnet">gloam.trade/docs/testnet</Link>
         </li>
         <li>
-          <strong>Whitepaper</strong> — gloam.trade/whitepaper
+          <strong>Whitepaper</strong>, gloam.trade/whitepaper
         </li>
         <li>
           <strong>$GLOAM</strong>, not launched (no tradable contract yet)

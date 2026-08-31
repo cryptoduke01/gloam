@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Simple step diagram for docs/whitepaper — plain labels, brand lime accents.
+ * Simple step diagram for docs/whitepaper, plain labels, brand lime accents.
  */
 
 export type FlowStep = {
@@ -108,7 +108,7 @@ export function PoolPicture({
           </p>
           <p className="mt-3 font-display text-xl text-foreground">Open again</p>
           <p className="mt-2 text-sm text-mute">
-            Exit is public on purpose — money leaves the vault back to a wallet.
+            Exit is public on purpose, money leaves the vault back to a wallet.
           </p>
         </div>
       </div>

@@ -7,7 +7,7 @@ import { readPoolDeposited } from "@/lib/vaultStatus";
 
 /**
  * Pool inventory for an asset (`deposited[asset]`).
- * Uses dedicated RH RPC — works with wallet disconnected or on another chain.
+ * Uses dedicated RH RPC, works with wallet disconnected or on another chain.
  */
 export function usePoolDeposited(asset: Address | undefined | null) {
   const [deposited, setDeposited] = useState<bigint | null>(null);

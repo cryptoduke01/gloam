@@ -28,7 +28,7 @@ const plates = [
   {
     src: "/ascii/move.png",
     title: "Private pay",
-    body: "Send inside the vault with a receive tag — not a public transfer.",
+    body: "Send inside the vault with a receive tag, not a public transfer.",
   },
   {
     src: "/ascii/trade.png",
@@ -130,7 +130,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
         </div>
 
         <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-5 py-12 sm:gap-14 sm:px-8 sm:py-16 lg:gap-16 lg:py-20">
-          {/* Layer 1 — headline + copy + CTAs + pronounced countdown */}
+          {/* Layer 1, headline + copy + CTAs + pronounced countdown */}
           <motion.div
             className="w-full"
             initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -152,7 +152,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             </h1>
 
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-mute sm:mt-7 sm:text-lg">
-              Shield, private send, private trade, cash out — live when the
+              Shield, private send, private trade, cash out, live when the
               clock hits zero. Prep with the guide so you&apos;re ready on open.
             </p>
 
@@ -174,7 +174,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
               </a>
             </div>
 
-            {/* Countdown — full-width, high contrast */}
+            {/* Countdown, full-width, high contrast */}
             <div className="mt-12 sm:mt-14">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -217,7 +217,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             </div>
           </motion.div>
 
-          {/* Layer 2 — preview plate (above X updates) */}
+          {/* Layer 2, preview plate (above X updates) */}
           <motion.div
             className="w-full"
             initial={reduce ? false : { opacity: 0, y: 18 }}
@@ -283,7 +283,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             </div>
           </motion.div>
 
-          {/* Layer 3 — X updates (below preview) */}
+          {/* Layer 3, X updates (below preview) */}
           <motion.div
             className="w-full"
             initial={reduce ? false : { opacity: 0, y: 12 }}

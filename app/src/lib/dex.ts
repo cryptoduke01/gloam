@@ -1,6 +1,6 @@
 /**
  * Uniswap V2-style router on Robinhood Chain testnet.
- * Pairs for faucet stock tokens may be empty — UI falls back to token transfer.
+ * Pairs for faucet stock tokens may be empty, UI falls back to token transfer.
  */
 export const DEX_ROUTER =
   "0x97F1909638C0238fe4CCf1a57C1d8666b911Cb6f" as const;

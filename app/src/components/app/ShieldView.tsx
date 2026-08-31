@@ -393,7 +393,7 @@ export function ShieldView() {
     if (!SHIELD_POOL_ADDRESS) return;
     setPendingNote(note);
     setPendingKind("shield");
-    // Do not saveLocalNote until shield confirms — see receipt handler
+    // Do not saveLocalNote until shield confirms, see receipt handler
 
     if (selectedToken) {
       writeContract({
@@ -577,7 +577,7 @@ export function ShieldView() {
     <>
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-7">
-          {/* Deposit form first — primary action */}
+          {/* Deposit form first, primary action */}
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
             <div className="relative h-36 border-b border-line sm:h-40">
               <AsciiImage
@@ -667,7 +667,7 @@ export function ShieldView() {
                       }
                     }}
                   >
-                    Max {isConnected ? maxLabel : "—"}
+                    Max {isConnected ? maxLabel : ", "}
                   </button>
                 </div>
                 <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
@@ -835,7 +835,7 @@ export function ShieldView() {
                     ? formatUnits(walletBalance, decimals)
                     : formatEth(walletBalance)
                   : "…"
-                : "—"}
+                : ", "}
             </p>
           </div>
 
@@ -939,7 +939,7 @@ export function ShieldView() {
             </a>
           </div>
 
-          {/* Explainer — side, not above the form */}
+          {/* Explainer, side, not above the form */}
           <div className="rounded-xl border border-line bg-panel p-5 text-sm">
             <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
               What is shield?

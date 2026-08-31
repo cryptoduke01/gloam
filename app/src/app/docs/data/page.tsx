@@ -29,16 +29,16 @@ export default function DocsDataPage() {
       <h2 id="display">What prices you see in the app</h2>
       <ul>
         <li>
-          <strong>Stocks</strong> — Yahoo Finance chart API for the mark and
+          <strong>Stocks</strong>, Yahoo Finance chart API for the mark and
           sparkline (server-side). If Yahoo fails, the app falls back to a
           static catalog number.
         </li>
         <li>
-          <strong>ETH</strong> — CoinGecko simple price + 30-day chart for USD
+          <strong>ETH</strong>, CoinGecko simple price + 30-day chart for USD
           conversion and portfolio.
         </li>
         <li>
-          <strong>Memes (mainnet path)</strong> — DexScreener discovery is gated
+          <strong>Memes (mainnet path)</strong>, DexScreener discovery is gated
           off until mainnet product ships.
         </li>
       </ul>
@@ -50,19 +50,19 @@ export default function DocsDataPage() {
       <h2 id="execution">What sets execution price</h2>
       <ul>
         <li>
-          <strong>Public / adapter swaps</strong> — Uniswap-style router{" "}
+          <strong>Public / adapter swaps</strong>, Uniswap-style router{" "}
           <code>getAmountsOut</code> on the live AMM pool (spot price in that
           pool).
         </li>
         <li>
-          <strong>Sealed private trade</strong> — public{" "}
+          <strong>Sealed private trade</strong>, public{" "}
           <code>rateIn</code> / <code>rateOut</code> (coarsened display marks).
           Size is private: <code>amountOutMin</code> defaults to a 1-wei floor
           so it does not equal your real output. Pair and caller are still
           public.
         </li>
         <li>
-          <strong>Vault inventory</strong> — cash out needs the vault to actually
+          <strong>Vault inventory</strong>, cash out needs the vault to actually
           hold the asset (<code>deposited[asset]</code>). Private trade can mint
           a note; unshield still needs inventory.
         </li>
@@ -82,14 +82,14 @@ export default function DocsDataPage() {
       <h2 id="activity">Balances and history</h2>
       <ul>
         <li>
-          <strong>Wallet balances</strong> — on-chain (viem / wallet).
+          <strong>Wallet balances</strong>, on-chain (viem / wallet).
         </li>
         <li>
-          <strong>Vault notes</strong> — local secrets + on-chain tree; backup in
+          <strong>Vault notes</strong>, local secrets + on-chain tree; backup in
           Settings.
         </li>
         <li>
-          <strong>Public activity</strong> — explorer / RPC logs for open
+          <strong>Public activity</strong>, explorer / RPC logs for open
           transfers.
         </li>
       </ul>

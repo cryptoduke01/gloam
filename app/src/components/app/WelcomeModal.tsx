@@ -56,7 +56,7 @@ export function WelcomeModal() {
             id="welcome-title"
             className="mt-2 font-display text-3xl tracking-tight text-foreground"
           >
-            Welcome — you&apos;re live
+            Welcome, you&apos;re live
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
             Private money on Robinhood Chain. Play money only. Dev proving keys.
@@ -69,7 +69,7 @@ export function WelcomeModal() {
           <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
             <li>Connect a wallet and switch to Robinhood testnet.</li>
             <li>
-              Claim faucet ETH / stocks if needed — see the{" "}
+              Claim faucet ETH / stocks if needed, see the{" "}
               <Link
                 href="/docs/testnet"
                 className="text-lime underline-offset-2 hover:underline"

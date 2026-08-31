@@ -287,7 +287,7 @@ export function TradeView() {
     if (pendingKind === "approve") {
       setPendingKind(null);
       setError(null);
-      // will re-enable sell on next click with fresh allowance — auto sell:
+      // will re-enable sell on next click with fresh allowance, auto sell:
       // wait for allowance refetch via short delay then sell
       return;
     }
@@ -319,7 +319,7 @@ export function TradeView() {
     if (allowance === undefined || allowance < sellAmountIn) return;
     autoSellAfterApprove.current = false;
     if (!quoteOut || quoteOut <= 0n) {
-      setError("No quote — try again.");
+      setError("No quote, try again.");
       return;
     }
     setPendingKind("sell");
@@ -463,8 +463,8 @@ export function TradeView() {
   }
 
   const tokenBalFmt =
-    tokenBal !== undefined ? formatUnits(tokenBal, 18) : "—";
-  const ethBalFmt = ethBal ? formatEth(ethBal.value) : "—";
+    tokenBal !== undefined ? formatUnits(tokenBal, 18) : ", ";
+  const ethBalFmt = ethBal ? formatEth(ethBal.value) : ", ";
 
   if (!isFetched && markets.length === 0) {
     return (
@@ -521,7 +521,7 @@ export function TradeView() {
         </span>
       </div>
 
-      {/* How you trade — the public / sealed choice is the product's core.
+      {/* How you trade, the public / sealed choice is the product's core.
           Sealed active = indigo, public active = ink, matching the motif. */}
       <div>
         <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
@@ -589,7 +589,7 @@ export function TradeView() {
       {pathMode === "vault" && (
         <p className="text-sm text-mute">
           Pulls from your vault, swaps on a public market, then can re-shield.
-          Needs a live DEX pool for this stock — many testnet pairs are empty.
+          Needs a live DEX pool for this stock, many testnet pairs are empty.
           Prefer <strong className="text-foreground">Private</strong> for TSLA
           and other faucet stocks.
         </p>
@@ -869,11 +869,11 @@ export function TradeView() {
                         ? tokenAmt.toLocaleString(undefined, {
                             maximumFractionDigits: 4,
                           })
-                        : "—"}{" "}
+                        : ", "}{" "}
                       {market.symbol}
                     </span>
                   ) : (
-                    <span>≈ {usdAmt > 0 ? formatUsd(usdAmt) : "—"}</span>
+                    <span>≈ {usdAmt > 0 ? formatUsd(usdAmt) : ", "}</span>
                   )}
                   {side === "buy" && buyEthIn > 0n && (
                     <span>≈ {formatEth(buyEthIn, 5)} ETH</span>
@@ -918,7 +918,7 @@ export function TradeView() {
                         ? Number(tokenBalFmt).toLocaleString(undefined, {
                             maximumFractionDigits: 4,
                           })
-                        : "—"}{" "}
+                        : ", "}{" "}
                       {market.symbol}
                     </span>
                   </>

@@ -51,14 +51,14 @@ export async function POST(req: Request) {
                 fields: [
                   {
                     name: "ref",
-                    value: (event.ref ?? "—").slice(0, 200),
+                    value: (event.ref ?? ", ").slice(0, 200),
                     inline: false,
                   },
                   {
                     name: "meta",
                     value: event.meta
                       ? JSON.stringify(event.meta).slice(0, 500)
-                      : "—",
+                      : ", ",
                     inline: false,
                   },
                 ],

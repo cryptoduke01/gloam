@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 
 /**
- * Privacy stack flow — wallet → shield → note → private move/trade → cash out.
+ * Privacy stack flow, wallet → shield → note → private move/trade → cash out.
  * Labels stay exact (no image-model garble).
  */
 const steps = [

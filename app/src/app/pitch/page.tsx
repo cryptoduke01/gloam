@@ -8,7 +8,7 @@ const PDF = "/pitch/Gloam-Pitch-Deck.pdf";
 export const metadata: Metadata = {
   title: "Pitch",
   description:
-    "Gloam — a private way to trade everything onchain. Buy stocks and crypto on Robinhood Chain without showing the world your every move.",
+    "Gloam, a private way to trade everything onchain. Buy stocks and crypto on Robinhood Chain without showing the world your every move.",
   openGraph: {
     title: "Gloam · Pitch",
     description:
@@ -281,7 +281,7 @@ export default function PitchPage() {
                   <b style={{ color: "#fff" }}>
                     security audit, mainnet launch, and expansion to Ethereum
                   </b>
-                  , the deepest market in crypto, with growth behind it.
+                 , the deepest market in crypto, with growth behind it.
                 </p>
               </div>
             </div>

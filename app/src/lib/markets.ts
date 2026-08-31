@@ -85,7 +85,7 @@ export const MARKET_DEFS: MarketDef[] = [
     fallbackMark: 120,
     privateReady: true,
   },
-  // Equity watchlist (marks only — not on RH testnet yet)
+  // Equity watchlist (marks only, not on RH testnet yet)
   {
     id: "hood",
     symbol: "HOOD",
@@ -165,7 +165,7 @@ export const MARKETS: Market[] = MARKET_DEFS.map((d) => ({
   ...d,
   mark: d.fallbackMark,
   change24h: 0,
-  volume: "—",
+  volume: ", ",
   source: "static" as const,
   updatedAt: 0,
   spark: [],
@@ -190,7 +190,7 @@ export function formatMark(mark: number) {
 }
 
 export function formatUsd(n: number) {
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return ", ";
   if (n < 0.01 && n > 0) return "<$0.01";
   return n.toLocaleString(undefined, {
     style: "currency",

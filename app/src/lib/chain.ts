@@ -18,7 +18,7 @@ export const robinhood = defineChain({
   },
 });
 
-/** Robinhood Chain testnet — product default */
+/** Robinhood Chain testnet, product default */
 export const robinhoodTestnet = defineChain({
   id: 46630,
   name: "Robinhood Chain Testnet",

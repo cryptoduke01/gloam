@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-/** Gloam wordmark — inline crescent "dusk" mark + name. */
+/** Gloam wordmark, inline crescent "dusk" mark + name. */
 export function Logo({ className = "" }: { className?: string }) {
   return (
     <Link

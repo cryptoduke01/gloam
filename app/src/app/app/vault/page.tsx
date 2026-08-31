@@ -11,7 +11,7 @@ export default function VaultPage() {
   return (
     <AppShell
       title="Vault"
-      subtitle="Shield, trade, send, and cash out — one place. Your size stays sealed."
+      subtitle="Shield, trade, send, and cash out, all in one place. Your size stays sealed."
     >
       <Suspense
         fallback={

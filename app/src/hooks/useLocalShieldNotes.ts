@@ -22,7 +22,7 @@ import {
  * Local notes + chain history. Balance only counts notes with a local secret
  * that are not spent on-chain.
  *
- * Uses dedicated RH RPC — not the wallet network.
+ * Uses dedicated RH RPC, not the wallet network.
  */
 export function useLocalShieldNotes(address?: string | null) {
   const [local, setLocal] = useState<LocalNote[]>([]);

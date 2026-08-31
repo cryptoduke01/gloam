@@ -110,7 +110,7 @@ export function SealedTradePanel({
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
-  /** max = amountOutMin = 1 on-chain (size privacy). Default on — our moat. */
+  /** max = amountOutMin = 1 on-chain (size privacy). Default on, our moat. */
   const [sizePrivacy, setSizePrivacy] = useState<SizePrivacyMode>("max");
 
   const spentNoteId = useRef<string | null>(null);
@@ -131,7 +131,7 @@ export function SealedTradePanel({
     chainId: CHAIN,
   });
 
-  // Dedicated RH RPC — works with wallet off or on another chain
+  // Dedicated RH RPC, works with wallet off or on another chain
   const checkVault = useCallback(async () => {
     if (!shieldLive || !poseidonMode) {
       setSupport("offline");
@@ -279,7 +279,7 @@ export function SealedTradePanel({
     isLoading: invLoading,
     refetch: refetchInv,
   } = usePoolDeposited(assetOut);
-  // Inventory for the out asset (stock on buy, ETH on sell) — cash-out solvency later
+  // Inventory for the out asset (stock on buy, ETH on sell), cash-out solvency later
   const inventoryShort =
     expectedOut > 0n &&
     poolOutDeposited != null &&
@@ -413,7 +413,7 @@ export function SealedTradePanel({
 
       setStatus("Building private proof… 10–40 seconds is normal.");
       const { rateIn, rateOut } = rateQuote;
-      // Do NOT publish exact amountOut as amountOutMin — that was the size leak.
+      // Do NOT publish exact amountOut as amountOutMin, that was the size leak.
       const amountOutMin = publicAmountOutMin(exact.amountOut, sizePrivacy);
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
@@ -497,7 +497,7 @@ export function SealedTradePanel({
         chainId: CHAIN,
       });
       void import("@/lib/track").then(({ track }) => {
-        // No amounts — privacy stack
+        // No amounts, privacy stack
         track("sealed_swap_submit", {
           asset: marketSymbol.slice(0, 12),
           dir,
@@ -625,7 +625,7 @@ export function SealedTradePanel({
                 </p>
                 <p className="mt-1">
                   {sizePrivacy === "max"
-                    ? "On-chain min-out is a floor (1 wei), not your real size. Explorer sees the vault proof and pair — not how much you traded."
+                    ? "On-chain min-out is a floor (1 wei), not your real size. Explorer sees the vault proof and pair, not how much you traded."
                     : "Min-out uses loose slippage. Tighter floors can leak size magnitude on-chain."}
                 </p>
                 <label className="mt-2 flex cursor-pointer items-center gap-2 text-foreground">
@@ -776,8 +776,8 @@ export function SealedTradePanel({
                     {expectedOut > 0n
                       ? `${formatSealedAmount(expectedOut)} ${outSymbol}`
                       : amountEntered
-                        ? `Can't price — try Max`
-                        : `— ${outSymbol}`}
+                        ? `Can't price, try Max`
+                        : `, ${outSymbol}`}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
@@ -808,7 +808,7 @@ export function SealedTradePanel({
                       ? "…"
                       : poolOutDeposited != null
                         ? formatSealedAmount(poolOutDeposited)
-                        : "—"}
+                        : ", "}
                     <button
                       type="button"
                       onClick={() => void refetchInv()}
@@ -934,7 +934,7 @@ export function SealedTradePanel({
           <p>
             You received vault {outSymbol}. Size stays out of the public min-out.
             Explorer shows a vault proof, not a market fill. Cash out later will
-            publish amount by design — stay in vault to stay private.
+            publish amount by design, stay in vault to stay private.
             {hash ? (
               <>
                 {" "}

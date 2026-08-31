@@ -37,7 +37,7 @@ function send(body: TrackPayload) {
   }
 }
 
-/** Product / funnel events — always recorded for traction (no ad cookies). */
+/** Product / funnel events, always recorded for traction (no ad cookies). */
 export function track(
   event: string,
   meta?: TrackPayload["meta"],
@@ -55,7 +55,7 @@ export function track(
   });
 }
 
-/** Marketing pageviews — only after "Accept all". */
+/** Marketing pageviews, only after "Accept all". */
 export function trackPageview() {
   track("pageview", undefined, { requireConsent: true });
 }

@@ -1,6 +1,6 @@
 /**
  * Testnet launch timestamps (admin metrics / historical only).
- * Gate UI removed — /app is always open.
+ * Gate UI removed, /app is always open.
  */
 
 /** Public open: 2026-07-16 13:00 UTC */

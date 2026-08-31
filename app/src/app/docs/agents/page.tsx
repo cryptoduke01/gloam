@@ -4,7 +4,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "Agents",
   description:
-    "@gloam/mcp — an MCP server so an AI agent can shield and privately trade on Robinhood Chain, under policy.",
+    "@gloam/mcp, an MCP server so an AI agent can shield and privately trade on Robinhood Chain, under policy.",
 };
 
 export default function DocsAgentsPage() {

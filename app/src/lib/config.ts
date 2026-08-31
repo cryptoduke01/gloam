@@ -2,8 +2,7 @@
  * Product config: keccak Phase-1 pool vs Poseidon Phase-2 pool.
  * Default product path = sealed Poseidon vault on RH testnet.
  *
- * Stale Vercel envs that still point at pre-sealed pool 0xA488… are ignored —
- * that vault has no sealedSwap and breaks Private trade.
+ * Stale Vercel envs that still point at pre-sealed pool 0xA488… are ignored, * that vault has no sealedSwap and breaks Private trade.
  */
 
 import type { Address } from "viem";
@@ -15,13 +14,13 @@ export type HashScheme = "keccak" | "poseidon";
 export const KECCAK_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** Phase-2 Poseidon pool — live RH testnet with sealedSwap */
+/** Phase-2 Poseidon pool, live RH testnet with sealedSwap */
 export const TESTNET_POSEIDON_POOL =
   "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F" as const satisfies Address;
 
 export const TESTNET_POSEIDON_DEPLOY_BLOCK = 90_436_718n;
 
-/** Prior Poseidon pool (pre-sealedSwap) — history only, never product default */
+/** Prior Poseidon pool (pre-sealedSwap), history only, never product default */
 export const LEGACY_POSEIDON_POOL =
   "0xA488809a089F003A2B6E69daa65B0db79823c93B" as const satisfies Address;
 

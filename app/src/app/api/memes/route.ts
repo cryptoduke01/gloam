@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Product is testnet-only. RH mainnet memes (DexScreener) stay off until we ship mainnet.
- * Endpoint kept so clients don't 404 — returns empty + honest meta.
+ * Endpoint kept so clients don't 404, returns empty + honest meta.
  */
 export async function GET() {
   return NextResponse.json({

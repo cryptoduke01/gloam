@@ -18,7 +18,7 @@ export type UnshieldWitness = {
   /** Public inputs for IVerifier / ShieldPool.unshield */
   publicInputs: UnshieldPublicInputs;
   publicInputsUint: bigint[];
-  /** Private witness (never send to chain raw — only inside a proof) */
+  /** Private witness (never send to chain raw, only inside a proof) */
   private: {
     secret: Hex;
     pathElements: Hex[];
@@ -48,7 +48,7 @@ export type BuildUnshieldArgs = {
 
 /**
  * Build a full unshield witness from a bound note + Merkle path.
- * Does not generate a snark — that needs the circuit binary + proving key.
+ * Does not generate a snark, that needs the circuit binary + proving key.
  */
 export function buildUnshieldWitness(args: BuildUnshieldArgs): UnshieldWitness {
   const asset = args.asset ?? NATIVE_ASSET;
@@ -78,7 +78,7 @@ export function buildUnshieldWitness(args: BuildUnshieldArgs): UnshieldWitness {
     blocker =
       "Note secret does not open this leaf (unbound Phase-1 note or wrong secret).";
   } else if (!pathValid) {
-    blocker = "Merkle path does not match root — resync the tree.";
+    blocker = "Merkle path does not match root, resync the tree.";
   } else {
     blocker =
       "Legacy keccak witness only. Product uses Poseidon prove*InBrowser.";

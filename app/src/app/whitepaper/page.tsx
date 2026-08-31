@@ -6,14 +6,14 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Whitepaper",
   description:
-    "Gloam whitepaper: private money and trading infrastructure on Robinhood Chain — thesis, architecture, cryptography, threat model, and roadmap.",
+    "Gloam whitepaper: private money and trading infrastructure on Robinhood Chain, thesis, architecture, cryptography, threat model, and roadmap.",
 };
 
 export default function WhitepaperPage() {
   return (
     <DocsLayout
       title="Whitepaper"
-      lede="Trade Everything on Robinhood Privately. Technical and product thesis for Gloam — application-layer privacy on Robinhood Chain."
+      lede="Trade Everything on Robinhood Privately. Technical and product thesis for Gloam, application-layer privacy on Robinhood Chain."
       glance={[
         { label: "Version", value: "0.3" },
         { label: "Status", value: "Public draft" },
@@ -40,7 +40,7 @@ export default function WhitepaperPage() {
       <p>
         Public blockchains made settlement programmable and verifiable. They also
         made financial activity permanently legible. Wallet graphs, size, and
-        timing form a continuous record of intent — legible to bots, competitors,
+        timing form a continuous record of intent, legible to bots, competitors,
         counterparties, and anyone with an explorer.
       </p>
       <p>
@@ -65,7 +65,7 @@ export default function WhitepaperPage() {
         Open ledgers encode desire. A large swap is a signal of urgency. A
         repeated pattern of buys is a dossier. Address clustering tools turn a
         portfolio into a public narrative. For funds, market makers, and
-        sophisticated retail, this is not a feature — it is adverse selection
+        sophisticated retail, this is not a feature, it is adverse selection
         priced into every interaction.
       </p>
       <h3>2.2 Tokenized equities inherit the same exposure</h3>
@@ -81,14 +81,14 @@ export default function WhitepaperPage() {
         Retail and institutional venues will list stock tokens and chase
         cultural liquidity. Few will treat private balances and private flow as
         core product. Gloam targets that gap: one private venue for everything
-        that settles on Robinhood Chain — equities for size and legitimacy, memes
+        that settles on Robinhood Chain, equities for size and legitimacy, memes
         for volume and urgency, same cryptographic rails.
       </p>
 
       <h2 id="thesis">3. Thesis and principles</h2>
       <p>
         Gloam asserts that private hold, private move, and private trade are
-        first-class product requirements for serious on-chain markets — not
+        first-class product requirements for serious on-chain markets, not
         optional skins on a public DEX.
       </p>
       <ul>
@@ -98,7 +98,7 @@ export default function WhitepaperPage() {
         </li>
         <li>
           <strong>Battle-tested patterns.</strong> Commitments, nullifiers,
-          Merkle membership, and zero-knowledge proofs — not novel cryptography
+          Merkle membership, and zero-knowledge proofs, not novel cryptography
           invented for a launch tweet.
         </li>
         <li>
@@ -140,7 +140,7 @@ export default function WhitepaperPage() {
         that stays inside the vault.
       </p>
 
-      <PoolPicture title="Figure 1 — Wallet, vault, and exit" />
+      <PoolPicture title="Figure 1, Wallet, vault, and exit" />
 
       <h2 id="architecture">5. System architecture</h2>
       <h3>5.1 Placement</h3>
@@ -154,31 +154,31 @@ export default function WhitepaperPage() {
       <h3>5.2 Core components</h3>
       <ul>
         <li>
-          <strong>Client application</strong> — wallet connection, note
+          <strong>Client application</strong>, wallet connection, note
           material generation, Merkle path reconstruction from on-chain events,
           browser-side proof generation, and product UX.
         </li>
         <li>
-          <strong>ShieldPool (Poseidon)</strong> — holds assets, maintains the
+          <strong>ShieldPool (Poseidon)</strong>, holds assets, maintains the
           tree, accepts shield deposits, processes transfer and unshield with
           proof verification.
         </li>
         <li>
-          <strong>Hash and tree</strong> — Poseidon-based commitments and
+          <strong>Hash and tree</strong>, Poseidon-based commitments and
           Merkle structure aligned with circuit constraints.
         </li>
         <li>
-          <strong>Circuits</strong> — unshield (exit) and transfer (private
+          <strong>Circuits</strong>, unshield (exit) and transfer (private
           send / split) with public-input layouts bound to the vault.
         </li>
         <li>
-          <strong>Verifiers</strong> — Groth16 verifiers for each circuit,
+          <strong>Verifiers</strong>, Groth16 verifiers for each circuit,
           multiplexed so a single pool verifier can route by public-input arity.
         </li>
       </ul>
 
       <FlowDiagram
-        title="Figure 2 — Component sketch"
+        title="Figure 2, Component sketch"
         steps={[
           {
             n: "01",
@@ -213,23 +213,23 @@ export default function WhitepaperPage() {
       <h3>5.4 Actions</h3>
       <ul>
         <li>
-          <strong>Shield</strong> — public assets enter the vault; a commitment
+          <strong>Shield</strong>, public assets enter the vault; a commitment
           is inserted into the tree.
         </li>
         <li>
-          <strong>Transfer (private send)</strong> — spend one note, insert two
+          <strong>Transfer (private send)</strong>, spend one note, insert two
           new commitments (payment and change), conserve value for a single
           asset. The payment secret is conveyed out-of-band (import package) on
           testnet.
         </li>
         <li>
-          <strong>Unshield</strong> — prove ownership of a note and withdraw to
+          <strong>Unshield</strong>, prove ownership of a note and withdraw to
           a public address. Exit is a visible edge.
         </li>
       </ul>
 
       <FlowDiagram
-        title="Figure 3 — User loop (testnet today)"
+        title="Figure 3, User loop (testnet today)"
         subtitle="Real contracts. No simulated private fills."
         steps={[
           {
@@ -266,7 +266,7 @@ export default function WhitepaperPage() {
         Public-input layouts are versioned. Unshield binds root, nullifier,
         asset, amount, and recipient. Transfer binds root, nullifier, and two
         new commitments. Sealed swap binds root, nullifier, two new commitments,
-        assets, a public min-out floor, and fixed rate numerators — the app
+        assets, a public min-out floor, and fixed rate numerators, the app
         defaults min-out to a floor so trade size is not printed as min-out.
         The dual verifier routes transfer/unshield by public-input length; sealed
         swap uses a dedicated verifier on the sealed vault.
@@ -372,7 +372,7 @@ export default function WhitepaperPage() {
         <li>
           <strong>$GLOAM:</strong> publish utility and supply,
           then deploy only after the above
-          gates — not as a substitute for shipping privacy.
+          gates, not as a substitute for shipping privacy.
         </li>
       </ol>
 
@@ -381,7 +381,7 @@ export default function WhitepaperPage() {
         Broad privacy protocols target multi-chain or multi-asset general
         privacy. Gloam is intentionally narrow: Robinhood Chain, stocks and
         memes, product-led vault UX. Differentiation is venue and distribution
-        thesis — not a claim of novel cryptography relative to the broader
+        thesis, not a claim of novel cryptography relative to the broader
         privacy literature.
       </p>
 
@@ -411,7 +411,7 @@ export default function WhitepaperPage() {
       <h2 id="closing">14. Closing</h2>
       <p>
         Settlement will remain public. Strategy need not. Gloam builds the
-        sealed chamber beside the open book on Robinhood Chain — so holders can
+        sealed chamber beside the open book on Robinhood Chain, so holders can
         shield, move, and eventually trade without printing every private
         calculation to the street.
       </p>

@@ -1,5 +1,5 @@
 /**
- * On-chain payment memos (GloamPayMemo) — Zcash/Solana-style discovery.
+ * On-chain payment memos (GloamPayMemo), Zcash/Solana-style discovery.
  * After vault transfer, sender posts encrypted ticket; recipient scans logs.
  */
 

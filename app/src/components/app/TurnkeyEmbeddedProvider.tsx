@@ -26,7 +26,7 @@ export const TURNKEY_ENABLED =
 
 /**
  * Wraps the product app with Turnkey embedded wallets (passkey / email login).
- * Scoped to /app only — the marketing site never mounts this.
+ * Scoped to /app only, the marketing site never mounts this.
  */
 export function TurnkeyEmbeddedProvider({ children }: { children: ReactNode }) {
   if (!TURNKEY_ENABLED) return <>{children}</>;

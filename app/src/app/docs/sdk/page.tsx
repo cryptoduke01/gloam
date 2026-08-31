@@ -4,7 +4,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloam/sdk — add shielded balances, private transfers, and private trades to any Robinhood Chain app.",
+    "@gloam/sdk, add shielded balances, private transfers, and private trades to any Robinhood Chain app.",
 };
 
 export default function DocsSdkPage() {

@@ -107,7 +107,7 @@ export function VaultTradePanel({
   const [phase, setPhase] = useState<Phase>("idle");
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastHash, setLastHash] = useState<`0x${string}` | undefined>();
-  /** True after cash-out landed — show recovery links if later steps fail */
+  /** True after cash-out landed, show recovery links if later steps fail */
   const [needsRecovery, setNeedsRecovery] = useState(false);
 
   const planRef = useRef<Plan | null>(null);
@@ -339,7 +339,7 @@ export function VaultTradePanel({
     const { amount, asset } = await measureProceeds(plan);
     if (amount <= 0n) {
       throw new Error(
-        "Could not measure swap proceeds. Funds may be in your open wallet — use Shield manually."
+        "Could not measure swap proceeds. Funds may be in your open wallet, use Shield manually."
       );
     }
 
@@ -360,7 +360,7 @@ export function VaultTradePanel({
       status: "open",
       source: "local",
     };
-    // Hold in memory until shield confirms — avoids ghost notes on fail
+    // Hold in memory until shield confirms, avoids ghost notes on fail
     pendingReshield.current = { amount, asset, note };
 
     // ERC-20 shield needs pool allowance first
@@ -484,7 +484,7 @@ export function VaultTradePanel({
           e instanceof Error ? e.message : "Vault trade step failed";
         setError(
           unshieldDone.current
-            ? `${msg} Funds may already be in your open wallet — finish swap/Shield manually.`
+            ? `${msg} Funds may already be in your open wallet, finish swap/Shield manually.`
             : msg
         );
         setPipeline("idle");
@@ -498,7 +498,7 @@ export function VaultTradePanel({
     if (!writeError) return;
     setError(
       unshieldDone.current
-        ? `${writeError.message.slice(0, 120)} — if cash-out already landed, finish swap/Shield from wallet balances.`
+        ? `${writeError.message.slice(0, 120)}, if cash-out already landed, finish swap/Shield from wallet balances.`
         : writeError.message.slice(0, 160)
     );
     setPipeline("idle");
@@ -528,7 +528,7 @@ export function VaultTradePanel({
       return;
     }
     if (matchesChain === false) {
-      setError("Vault tree out of sync — open Move and refresh, then retry.");
+      setError("Vault tree out of sync, open Move and refresh, then retry.");
       return;
     }
     if (selected.leafIndex == null) {
@@ -638,8 +638,7 @@ export function VaultTradePanel({
             <p className="mt-2 leading-relaxed">
               This tab needs an open market. Testnet doesn&apos;t have one for{" "}
               {marketSymbol} yet. Use{" "}
-              <strong className="text-foreground">Private</strong> instead —
-              that path does not need a pool.
+              <strong className="text-foreground">Private</strong> instead, that path does not need a pool.
             </p>
             <button
               type="button"
@@ -803,7 +802,7 @@ export function VaultTradePanel({
                       type="button"
                       className="text-lime hover:underline"
                       onClick={() => {
-                        // parent TradeView pathMode — deep-link query
+                        // parent TradeView pathMode, deep-link query
                         window.location.href = "/app/trade?path=public";
                       }}
                     >

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /**
- * Gloam landing — "Twilight" brand.
+ * Gloam landing, "Twilight" brand.
  * Light, confident, product-forward. Self-contained light palette (the app
  * pages still run the dark tokens during the migration). Type: Clash Display
  * headlines + Aeonik body. Signature: the twilight blend + the sealed
@@ -85,7 +85,7 @@ function SealedVaultCard() {
         </span>
       </div>
 
-      {/* Balance — the whole point of the card. The number is redacted; the
+      {/* Balance, the whole point of the card. The number is redacted; the
           settlement is not. */}
       <div className="px-[18px] pb-[18px] pt-[18px]">
         <div className="flex items-center justify-between">
@@ -108,7 +108,7 @@ function SealedVaultCard() {
         </p>
       </div>
 
-      {/* Holdings — the assets are public, the sizes are not */}
+      {/* Holdings, the assets are public, the sizes are not */}
       <div className="border-y border-[#E5E3DD] px-[18px] py-[14px]">
         <div className="flex items-center justify-between text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
           <span>Holdings</span>
@@ -126,7 +126,7 @@ function SealedVaultCard() {
         </div>
       </div>
 
-      {/* Recent — plain language, sizes redacted */}
+      {/* Recent, plain language, sizes redacted */}
       <div className="px-[18px] pb-1.5 pt-[14px]">
         <div className="mb-2 text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
           Recent

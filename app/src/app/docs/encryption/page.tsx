@@ -7,7 +7,7 @@ import { EncryptFlow } from "@/components/EncryptFlow";
 export const metadata: Metadata = {
   title: "How shield works",
   description:
-    "Simple explanation of Gloam shield and unshield — deposit, private note, proof, withdraw.",
+    "Simple explanation of Gloam shield and unshield, deposit, private note, proof, withdraw.",
 };
 
 export default function DocsEncryptionPage() {
@@ -75,13 +75,13 @@ export default function DocsEncryptionPage() {
       <ul>
         <li>That someone used the Gloam contract</li>
         <li>When money entered or left the vault (shield / cash out edges)</li>
-        <li>That a private transfer or private trade happened — not who paid whom how much (and not exact size when max size privacy is on)</li>
+        <li>That a private transfer or private trade happened, not who paid whom how much (and not exact size when max size privacy is on)</li>
         <li>Not (goal) your exact private bag while it stays inside</li>
       </ul>
 
       <h2>What we do not claim</h2>
       <p>
-        Cash out is not invisible — leaving the vault is a public moment.
+        Cash out is not invisible, leaving the vault is a public moment.
         Private send hides payment size and counterparty, not the fact that the
         vault was used. Private trade hides size (default min-out floor) but
         pair and caller remain public.

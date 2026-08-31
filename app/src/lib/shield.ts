@@ -1,5 +1,5 @@
 /**
- * ShieldPool — RH testnet.
+ * ShieldPool, RH testnet.
  * keccak Phase-1 live pool OR Poseidon Phase-2 (env NEXT_PUBLIC_POSEIDON_SHIELD_POOL).
  */
 
@@ -211,7 +211,7 @@ export const shieldPoolAbi = [
 ] as const;
 
 /** RH L2 gas headroom */
-/** Poseidon verify + tree insert — 500k was tight; unshield/transfer need headroom */
+/** Poseidon verify + tree insert, 500k was tight; unshield/transfer need headroom */
 export const SHIELD_GAS_LIMIT = 1_500_000n;
 /** Sealed swap proof verify is heavier */
 export const SEALED_SWAP_GAS_LIMIT = 2_500_000n;
@@ -247,7 +247,7 @@ function shortAsset(addr: string) {
 }
 
 /**
- * Bound note for shield() — keccak scheme (legacy live pool).
+ * Bound note for shield(), keccak scheme (legacy live pool).
  * Poseidon notes: use makeBoundNotePoseidon from notePoseidon.ts
  */
 export function makeNoteMaterial(
@@ -389,7 +389,7 @@ export function importNotesBackup(
   }
 }
 
-/** ETH only (native asset) — spendable notes only */
+/** ETH only (native asset), spendable notes only */
 export function sumEthWei(notes: LocalNote[]): bigint {
   return activeSpendableNotes(notes)
     .filter((n) => isNativeAsset(n.asset))
@@ -571,7 +571,7 @@ export async function fetchChainShieldNotes(
         asset: (args.asset ?? NATIVE_ASSET) as Address,
         amountWei: (args.amount ?? BigInt(0)).toString(),
         commitment,
-        // chain-only row — no spend secret (placeholder, not a key)
+        // chain-only row, no spend secret (placeholder, not a key)
         secret: "0x" as Hex,
         leafIndex:
           args.leafIndex != null ? Number(args.leafIndex) : undefined,

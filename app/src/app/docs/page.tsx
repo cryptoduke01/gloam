@@ -6,14 +6,14 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Gloam docs — private money on Robinhood Chain, explained simply. Shield, unshield, what works on testnet.",
+    "Gloam docs, private money on Robinhood Chain, explained simply. Shield, unshield, what works on testnet.",
 };
 
 export default function DocsOverviewPage() {
   return (
     <DocsLayout
       title="Docs"
-      lede="Private money on Robinhood Chain — without the jargon wall. Start here."
+      lede="Private money on Robinhood Chain, without the jargon wall. Start here."
       glance={[
         { label: "Product", value: "gloam.trade/app" },
         { label: "Network", value: "RH testnet" },
@@ -31,7 +31,7 @@ export default function DocsOverviewPage() {
         than a normal public wallet.
       </p>
       <p>
-        Right now everything is <strong>testnet</strong> — play money,{" "}
+        Right now everything is <strong>testnet</strong>, play money,{" "}
         <strong>development proving keys</strong>. No real dollars.
       </p>
 
@@ -89,7 +89,7 @@ export default function DocsOverviewPage() {
         <li>Private send + receive tags (optional passphrase tickets)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
         <li>
-          <Link href="/docs/sealed-trade">Private trade</Link> — size privacy
+          <Link href="/docs/sealed-trade">Private trade</Link>, size privacy
           on by default (min-out floor)
         </li>
         <li>Vault trade adapter (public swap edge; needs DEX pool)</li>
@@ -107,7 +107,7 @@ export default function DocsOverviewPage() {
         </li>
         <li>Ethereum expansion (roadmap)</li>
         <li>
-          $GLOAM token — prepared page only; not
+          $GLOAM token, prepared page only; not
           launched, no live contract
         </li>
       </ul>

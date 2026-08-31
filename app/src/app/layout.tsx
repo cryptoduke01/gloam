@@ -77,7 +77,7 @@ export default function RootLayout({
           name="ory-verify"
           content="orynth-d061bf2ee92a4996b6e3121097472653"
         />
-        {/* Main typeface: Aeonik — self-hosted woff2 (see globals.css @font-face). */}
+        {/* Main typeface: Aeonik, self-hosted woff2 (see globals.css @font-face). */}
         <link
           rel="preload"
           href="/fonts/Aeonik-Regular.woff2"

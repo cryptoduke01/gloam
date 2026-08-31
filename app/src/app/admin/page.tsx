@@ -13,6 +13,6 @@ export const revalidate = 0;
 export default async function AdminPage() {
   // Request-time render so Vercel doesn't serve a stale static shell
   await headers();
-  // AdminDashboard is a Client Component ("use client") — no next/dynamic ssr:false needed
+  // AdminDashboard is a Client Component ("use client"), no next/dynamic ssr:false needed
   return <AdminDashboard />;
 }

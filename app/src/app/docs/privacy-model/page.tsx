@@ -6,7 +6,7 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "What stays private",
   description:
-    "Honest privacy model for Gloam — what we hide, what the public still sees, and what we will not promise.",
+    "Honest privacy model for Gloam, what we hide, what the public still sees, and what we will not promise.",
 };
 
 export default function DocsPrivacyPage() {
@@ -32,7 +32,7 @@ export default function DocsPrivacyPage() {
           {
             n: "✓",
             title: "Private send (live)",
-            body: "Pay someone inside the vault with a receive tag. The chain sees a transfer proof — not “Alice paid Bob 0.01 ETH”.",
+            body: "Pay someone inside the vault with a receive tag. The chain sees a transfer proof, not “Alice paid Bob 0.01 ETH”.",
           },
           {
             n: "!",
@@ -60,9 +60,9 @@ export default function DocsPrivacyPage() {
       <h2>We aim to hide</h2>
       <ul>
         <li>How much you hold while it is in the vault</li>
-        <li>Who paid whom inside the vault (private send — live on testnet)</li>
+        <li>Who paid whom inside the vault (private send, live on testnet)</li>
         <li>
-          Trade size on private trade (default max size privacy — see{" "}
+          Trade size on private trade (default max size privacy, see{" "}
           <Link href="/docs/sealed-trade">sealed trade</Link>)
         </li>
       </ul>

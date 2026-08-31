@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Share a Gloam payment ticket — not a wallet address.
+ * Share a Gloam payment ticket, not a wallet address.
  * QR is generated locally so the ticket never hits a third-party API.
  */
 
@@ -37,7 +37,7 @@ export function PaymentTicketShare({
         if (!cancelled) setQrDataUrl(url);
       } catch {
         if (!cancelled) {
-          setQrError("QR unavailable — copy the code instead.");
+          setQrError("QR unavailable, copy the code instead.");
         }
       }
     })();
@@ -72,7 +72,7 @@ export function PaymentTicketShare({
       await navigator.share({
         title: "Gloam payment ticket",
         text: locked
-          ? `Gloam vault payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. Code is locked — ask me for the passphrase separately.\n\n${code}`
+          ? `Gloam vault payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. Code is locked, ask me for the passphrase separately.\n\n${code}`
           : `Gloam vault payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. Claim under Move → Claim ticket.\n\n${code}`,
       });
       setShared(true);
@@ -106,8 +106,8 @@ export function PaymentTicketShare({
             Hand off off-app (message, AirDrop, QR). They open{" "}
             <strong className="text-foreground">Move → Receive</strong>.
             {locked
-              ? " Encrypted — only the intended key/passphrase opens it."
-              : " Bearer ticket — treat like cash."}
+              ? " Encrypted, only the intended key/passphrase opens it."
+              : " Bearer ticket, treat like cash."}
           </>
         )}
       </p>

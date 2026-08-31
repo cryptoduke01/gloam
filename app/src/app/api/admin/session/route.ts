@@ -4,7 +4,7 @@ import {
   isAdminAuthenticated,
 } from "@/lib/adminAuth";
 
-/** Lightweight session check — does not load on-chain metrics. */
+/** Lightweight session check, does not load on-chain metrics. */
 export async function GET() {
   if (!adminCodeConfigured()) {
     return NextResponse.json(

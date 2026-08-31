@@ -1,5 +1,5 @@
 /**
- * Keccak incremental Merkle tree — must match
+ * Keccak incremental Merkle tree, must match
  * contracts/src/lib/IncrementalMerkleTree.sol (DEPTH = 20).
  *
  * hash(left, right) = keccak256(abi.encodePacked(left, right))

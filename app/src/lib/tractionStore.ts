@@ -2,10 +2,10 @@
  * Product event store for /admin traction.
  *
  * Persistence:
- *  1. Upstash Redis REST (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) — durable
- *  2. In-process ring buffer — last N events (lost on cold start; fine for dev)
+ *  1. Upstash Redis REST (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN), durable
+ *  2. In-process ring buffer, last N events (lost on cold start; fine for dev)
  *
- * On-chain volume/users are separate (see onchainMetrics) — that is source of truth.
+ * On-chain volume/users are separate (see onchainMetrics), that is source of truth.
  */
 
 export type StoredEvent = {
@@ -60,7 +60,7 @@ export async function recordTractionEvent(ev: StoredEvent): Promise<void> {
     await redisCommand(["HINCRBY", REDIS_COUNTERS, ev.t, 1]);
     await redisCommand(["HINCRBY", REDIS_COUNTERS, "total", 1]);
   } catch {
-    /* non-fatal — memory still has it for this instance */
+    /* non-fatal, memory still has it for this instance */
   }
 }
 

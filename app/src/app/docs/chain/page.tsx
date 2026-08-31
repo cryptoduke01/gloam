@@ -3,7 +3,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 
 export const metadata: Metadata = {
   title: "Robinhood Chain",
-  description: "Gloam on Robinhood Chain — network details, chain ID, RPC.",
+  description: "Gloam on Robinhood Chain, network details, chain ID, RPC.",
 };
 
 export default function DocsChainPage() {
@@ -21,7 +21,7 @@ export default function DocsChainPage() {
       <h2>Network</h2>
       <p>
         Gloam targets Robinhood Chain, an Arbitrum Orbit L2 built for financial
-        services and real-world assets — and the surface where meme liquidity
+        services and real-world assets, and the surface where meme liquidity
         and stock tokens already live. EVM tooling and Uniswap-class paths
         exist. Gloam does not invent a new chain. It adds a private layer where
         the markets already are.
@@ -30,24 +30,24 @@ export default function DocsChainPage() {
       <h2>Parameters</h2>
       <ul>
         <li>
-          <strong>Mainnet chain ID</strong> — 4663
+          <strong>Mainnet chain ID</strong>, 4663
         </li>
         <li>
-          <strong>Testnet chain ID</strong> — 46630
+          <strong>Testnet chain ID</strong>, 46630
         </li>
         <li>
-          <strong>Native gas</strong> — ETH
+          <strong>Native gas</strong>, ETH
         </li>
         <li>
-          <strong>Mainnet RPC (rate limited)</strong> —{" "}
+          <strong>Mainnet RPC (rate limited)</strong>, {" "}
           <code>https://rpc.mainnet.chain.robinhood.com</code>
         </li>
         <li>
-          <strong>Testnet RPC</strong> —{" "}
+          <strong>Testnet RPC</strong>, {" "}
           <code>https://rpc.testnet.chain.robinhood.com</code>
         </li>
         <li>
-          <strong>Testnet vault (sealed)</strong> —{" "}
+          <strong>Testnet vault (sealed)</strong>, {" "}
           <code>0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F</code>
         </li>
       </ul>

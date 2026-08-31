@@ -1,6 +1,6 @@
 /**
  * Circuit artifacts in /public/circuits.
- * Ceremony: **dev** (Powers of Tau + single-party contribution) — not production.
+ * Ceremony: **dev** (Powers of Tau + single-party contribution), not production.
  * SHA-256 fingerprints for tamper detection at prove time.
  */
 
@@ -69,7 +69,7 @@ export async function assertArtifactIntegrity(
   const got = hexSha256(digest);
   if (got !== expectedSha256.toLowerCase()) {
     throw new Error(
-      `Circuit artifact hash mismatch for ${path}. Expected ${expectedSha256.slice(0, 12)}… got ${got.slice(0, 12)}… — refuse to prove.`
+      `Circuit artifact hash mismatch for ${path}. Expected ${expectedSha256.slice(0, 12)}… got ${got.slice(0, 12)}…, refuse to prove.`
     );
   }
   verified.add(key);
