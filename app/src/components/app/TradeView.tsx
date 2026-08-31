@@ -96,7 +96,9 @@ export function TradeView() {
     // path=private is an alias for sealed private trade
     if (pathParam === "sealed" || pathParam === "private") return "sealed";
     if (pathParam === "vault" && shieldLive) return "vault";
-    return "public";
+    if (pathParam === "public") return "public";
+    // Private-first: default to sealed when the vault is live.
+    return shieldLive ? "sealed" : "public";
   });
   const [error, setError] = useState<string | null>(null);
   const [successOpen, setSuccessOpen] = useState(false);
