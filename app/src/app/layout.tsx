@@ -4,9 +4,9 @@ import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
-const siteTitle = "Trade Everything on Robinhood Privately · Gloam";
+const siteTitle = "Gloam · The onchain dark pool";
 const siteDescription =
-  "Trade Everything on Robinhood Privately. Stocks, memes, shielded balances, private transfers, and private trading on Robinhood Chain.";
+  "Private markets for stocks and crypto. Shield a balance, then trade with your size sealed. Settlement is public, your strategy is not.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gloam.trade"),
@@ -20,15 +20,13 @@ export const metadata: Metadata = {
   creator: "Gloam",
   keywords: [
     "Gloam",
-    "Robinhood Chain",
-    "private money",
-    "shielded balances",
+    "onchain dark pool",
     "private trading",
     "tokenized stocks",
-    "memecoins",
-    "private meme trading",
-    "GLOAM",
-    "$GLOAM",
+    "shielded balances",
+    "private markets",
+    "private swaps",
+    "crypto privacy",
   ],
   icons: {
     icon: [

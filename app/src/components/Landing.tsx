@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AsciiImage } from "@/components/AsciiImage";
 
 /**
  * Gloam landing, "Twilight" brand.
@@ -211,14 +212,18 @@ export function Landing() {
         {/* hero */}
         <section className="grid grid-cols-1 items-center gap-14 py-16 md:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
           <div>
+            <p className="mb-5 flex items-center gap-2.5 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#3B3766]" />
+              The onchain dark pool
+            </p>
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
               <br />
               <span className="text-[#6E6E76]">Reveal nothing.</span>
             </h1>
             <p className="mt-6 max-w-[44ch] text-[17px] text-[#4c4c53]">
-              Shield a balance, trade tokenized stocks and crypto, and settle on
-              Robinhood Chain. The chain verifies a proof, never your size.
+              Shield a balance, then trade tokenized stocks and crypto with your
+              size sealed. The chain sees a proof, never how much you moved.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
@@ -240,6 +245,20 @@ export function Landing() {
           </div>
 
           <SealedVaultCard />
+        </section>
+
+        {/* dithered art moment, the house texture */}
+        <section className="pb-14 md:pb-20">
+          <div className="overflow-hidden rounded-[18px] border border-[#E5E3DD]">
+            <AsciiImage
+              src="/ascii/hero.png"
+              alt="Gloam"
+              tone="plate"
+              fit="cover"
+              className="aspect-[21/8] w-full"
+              sizes="100vw"
+            />
+          </div>
         </section>
 
         {/* what stays sealed */}
