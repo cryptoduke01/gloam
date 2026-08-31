@@ -177,10 +177,13 @@ html[data-theme="light"] .ascii-ink {
   border-radius: 4px;
 }
 
-/* Second face: Recoleta (Adobe Fonts) for warm serif display accents.
-   Add "recoleta" to the same Adobe web project to activate; falls back to serif. */
-.font-recoleta {
-  font-family: "recoleta", Georgia, "Times New Roman", serif;
+/* Single-typeface system: ITC Avant Garde Gothic Pro only. The "second voice"
+   comes from its own range — weight (100–700), case, and the oblique — not a
+   second family. `.font-accent` is that oblique display treatment. */
+.font-accent {
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 /* Legal pages — light. Overrides inline dark tokens via higher specificity. */
