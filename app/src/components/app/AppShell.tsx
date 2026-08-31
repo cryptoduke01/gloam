@@ -51,7 +51,7 @@ export function AppShell({
             </span>
           </div>
           <nav
-            className="flex items-center gap-1 max-md:hidden"
+            className="app-nav items-center gap-1"
             aria-label="Product"
           >
             {nav.map((item) => {
@@ -77,7 +77,7 @@ export function AppShell({
             <WalletMenu />
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line text-foreground md:hidden"
+              className="app-burger h-10 w-10 items-center justify-center rounded-md border border-line text-foreground"
               aria-label={open ? "Close menu" : "Open menu"}
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}

@@ -228,6 +228,23 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* App header nav: plain media queries so the desktop/mobile swap is immune to
+   the Tailwind dev class-order bug (max-md:hidden losing to a base display). */
+.app-nav {
+  display: flex;
+}
+.app-burger {
+  display: none;
+}
+@media (max-width: 767px) {
+  .app-nav {
+    display: none;
+  }
+  .app-burger {
+    display: inline-flex;
+  }
+}
+
 /* Legal pages, light. Overrides inline dark tokens via higher specificity. */
 .prose-legal h2 {
   margin-top: 2rem;
