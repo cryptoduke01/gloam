@@ -47,6 +47,27 @@ type InputMode = "token" | "usd";
 type TxKind = "transfer" | "approve" | "buy" | "sell" | null;
 type PathMode = "public" | "vault" | "sealed";
 
+function LockGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+function EyeGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
 export function TradeView() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -500,52 +521,64 @@ export function TradeView() {
         </span>
       </div>
 
-      {/* Private first — that's the product. Open-market paths are secondary. */}
-      <div className="flex flex-wrap gap-1 rounded-xl border border-line bg-panel p-1">
-        <button
-          type="button"
-          onClick={() => setPathMode("sealed")}
-          className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
-            pathMode === "sealed"
-              ? "bg-lime text-background"
-              : "text-mute hover:text-foreground"
-          }`}
-        >
-          Private
-          <span className="mt-0.5 block text-[10px] font-normal opacity-80">
-            size hidden · no DEX
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setPathMode("public")}
-          className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
-            pathMode === "public"
-              ? "bg-lime text-background"
-              : "text-mute hover:text-foreground"
-          }`}
-        >
-          Wallet
-          <span className="mt-0.5 block text-[10px] font-normal opacity-80">
-            public
-          </span>
-        </button>
-        {shieldLive && (
+      {/* How you trade — the public / sealed choice is the product's core.
+          Sealed active = indigo, public active = ink, matching the motif. */}
+      <div>
+        <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
+          How you trade
+        </span>
+        <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl border border-line bg-panel p-1.5 max-sm:grid-cols-1">
           <button
             type="button"
-            onClick={() => setPathMode("vault")}
-            className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
-              pathMode === "vault"
+            onClick={() => setPathMode("sealed")}
+            aria-pressed={pathMode === "sealed"}
+            className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
+              pathMode === "sealed"
                 ? "bg-lime text-background"
-                : "text-mute hover:text-foreground"
+                : "text-mute hover:bg-background hover:text-foreground"
             }`}
           >
-            Via market
-            <span className="mt-0.5 block text-[10px] font-normal opacity-80">
-              needs a pool
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              <LockGlyph />
+              Private
             </span>
+            <span className="text-[11px] opacity-80">Size sealed · no DEX</span>
           </button>
-        )}
+          <button
+            type="button"
+            onClick={() => setPathMode("public")}
+            aria-pressed={pathMode === "public"}
+            className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
+              pathMode === "public"
+                ? "bg-foreground text-background"
+                : "text-mute hover:bg-background hover:text-foreground"
+            }`}
+          >
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              <EyeGlyph />
+              Wallet
+            </span>
+            <span className="text-[11px] opacity-80">Public on the explorer</span>
+          </button>
+          {shieldLive && (
+            <button
+              type="button"
+              onClick={() => setPathMode("vault")}
+              aria-pressed={pathMode === "vault"}
+              className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
+                pathMode === "vault"
+                  ? "bg-foreground text-background"
+                  : "text-mute hover:bg-background hover:text-foreground"
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <EyeGlyph />
+                Via market
+              </span>
+              <span className="text-[11px] opacity-80">Public · needs a pool</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {pathMode === "public" && (
@@ -945,6 +978,18 @@ export function TradeView() {
               {market.change24h}%
             </p>
             <dl className="mt-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <dt className="text-mute">Visibility</dt>
+                <dd
+                  className={
+                    pathMode === "sealed"
+                      ? "font-medium text-lime"
+                      : "text-foreground"
+                  }
+                >
+                  {pathMode === "sealed" ? "Sealed · only you" : "Public"}
+                </dd>
+              </div>
               <div className="flex justify-between">
                 <dt className="text-mute">Network</dt>
                 <dd className="text-foreground">Testnet</dd>
