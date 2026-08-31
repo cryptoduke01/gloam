@@ -63,8 +63,7 @@ function Mark({ size = 20 }: { size?: number }) {
       className="shrink-0"
     >
       <rect width="32" height="32" rx="9" fill="#121316" />
-      <circle cx="15" cy="16" r="8" fill="#F4F3EF" />
-      <circle cx="19" cy="13" r="7" fill="#121316" />
+      <rect x="11" y="11" width="10" height="10" rx="3" fill="#F4F3EF" />
     </svg>
   );
 }

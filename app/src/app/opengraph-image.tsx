@@ -42,24 +42,12 @@ export default function OpenGraphImage() {
               <div
                 style={{
                   position: "absolute",
-                  left: 13,
-                  top: 15,
-                  width: 30,
-                  height: 30,
-                  borderRadius: "50%",
+                  left: 20,
+                  top: 20,
+                  width: 20,
+                  height: 20,
+                  borderRadius: 6,
                   background: "#F4F3EF",
-                  display: "flex",
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  left: 22,
-                  top: 11,
-                  width: 26,
-                  height: 26,
-                  borderRadius: "50%",
-                  background: "#121316",
                   display: "flex",
                 }}
               />
