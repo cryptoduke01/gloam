@@ -22,6 +22,10 @@ pragma circom 2.1.6;
 include "../common/merkle_poseidon.circom";
 include "circomlib/circuits/comparators.circom";
 
+// Kensho C2: bound every amount to < 2^128 so the conservation sum and the
+// rate product (amountOut*rateOut === amountSwap*rateIn) cannot wrap the field.
+function MAX_AMOUNT_BITS() { return 128; }
+
 template SealedSwap(levels) {
     // ── public ──
     signal input root;
@@ -65,6 +69,16 @@ template SealedSwap(levels) {
         tree.pathElements[i] <== pathElements[i];
         tree.pathIndices[i] <== pathIndices[i];
     }
+
+    // 3b) Range-check every amount so no sum/product can wrap the field (C2).
+    component rcIn = Num2Bits(MAX_AMOUNT_BITS());
+    rcIn.in <== amountIn;
+    component rcSwap = Num2Bits(MAX_AMOUNT_BITS());
+    rcSwap.in <== amountSwap;
+    component rcChange = Num2Bits(MAX_AMOUNT_BITS());
+    rcChange.in <== amountChange;
+    component rcOut = Num2Bits(MAX_AMOUNT_BITS());
+    rcOut.in <== amountOut;
 
     // 4) Conservation of assetIn
     amountIn === amountSwap + amountChange;

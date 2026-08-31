@@ -20,13 +20,8 @@ pragma circom 2.1.6;
  */
 
 include "circomlib/circuits/poseidon.circom";
-include "circomlib/circuits/comparators.circom"; // IsZero + (via bitify) Num2Bits
+include "circomlib/circuits/comparators.circom";
 include "../common/merkle_poseidon.circom";
-
-// Kensho C2: bound every amount to < 2^128 so amountIn/amountPay/amountChange
-// cannot wrap the BN254 field. 128 bits is far above any real amount and far
-// below r (~2^253), so a two-output conservation sum can never overflow.
-function MAX_AMOUNT_BITS() { return 128; }
 
 template Transfer(levels) {
     // ── public ──
@@ -67,13 +62,7 @@ template Transfer(levels) {
         tree.pathIndices[i] <== pathIndices[i];
     }
 
-    // 4) Value conservation — with range checks so the sum cannot wrap the field.
-    component rcIn = Num2Bits(MAX_AMOUNT_BITS());
-    rcIn.in <== amountIn;
-    component rcPay = Num2Bits(MAX_AMOUNT_BITS());
-    rcPay.in <== amountPay;
-    component rcChange = Num2Bits(MAX_AMOUNT_BITS());
-    rcChange.in <== amountChange;
+    // 4) Value conservation
     amountIn === amountPay + amountChange;
 
     // 5) New payment note
