@@ -396,14 +396,18 @@ export function Landing() {
               aria-hidden
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#EFECE4] via-[#EFECE4]/85 to-transparent"
             />
-            <div className="relative max-w-[34ch]">
+            <div className="relative max-w-[620px]">
               <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
                 Reveal nothing
               </p>
-              <h2 className="mt-4 text-[clamp(30px,4.6vw,56px)] font-bold leading-[0.98] tracking-[-0.03em] text-balance">
+              <h2 className="mt-4 text-[clamp(32px,4.8vw,58px)] font-bold leading-[0.99] tracking-[-0.03em] text-balance">
                 Settlement is public. Strategy is not.
               </h2>
-              <div className="mt-8 flex flex-wrap gap-3">
+              <p className="mt-6 max-w-[42ch] text-[16px] leading-relaxed text-[#565660]">
+                Anyone can verify that your vault settled. No one can see what
+                you hold, what you traded, or how much you moved.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/app"
                   className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"

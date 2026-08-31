@@ -156,7 +156,7 @@ body {
 /* Twilight ASCII: charcoal ink on paper (see AsciiImage indigo cast). */
 /* plate = dark source (white on black) inverted to ink on paper. */
 .ascii-plate {
-  filter: invert(1) grayscale(1) contrast(1.06) brightness(1.03);
+  filter: invert(1) grayscale(1) contrast(1.5) brightness(0.82);
 }
 /* ink = paper source (dark on light) kept, just desaturated. */
 .ascii-ink {

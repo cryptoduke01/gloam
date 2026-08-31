@@ -32,7 +32,7 @@ export function AsciiImage({
       : "object-cover object-center";
 
   return (
-    <div className={`relative overflow-hidden bg-[#EAE8E1] ${className}`}>
+    <div className={`relative overflow-hidden bg-[#E1DED6] ${className}`}>
       <Image
         src={src}
         alt={alt}
@@ -50,7 +50,7 @@ export function AsciiImage({
       {(tone === "plate" || tone === "ink") && (
         <div
           className="pointer-events-none absolute inset-0 mix-blend-multiply"
-          style={{ backgroundColor: "#3B3766", opacity: 0.16 }}
+          style={{ backgroundColor: "#3B3766", opacity: 0.24 }}
           aria-hidden
         />
       )}
