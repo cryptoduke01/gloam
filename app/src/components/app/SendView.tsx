@@ -246,7 +246,7 @@ export function SendView() {
                 <button
                   type="submit"
                   disabled={isPending || confirming}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
                 >
                   {isPending
                     ? "Confirm in wallet…"
@@ -366,7 +366,7 @@ export function SendView() {
                 <button
                   type="button"
                   onClick={executeSend}
-                  className="inline-flex min-h-12 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90"
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90"
                 >
                   Confirm in wallet
                 </button>

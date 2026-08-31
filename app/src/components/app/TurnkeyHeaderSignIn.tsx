@@ -26,7 +26,7 @@ export function TurnkeyHeaderSignIn() {
           setBusy(false);
         }
       }}
-      className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+      className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
     >
       {busy ? "Opening…" : "Sign in"}
     </button>

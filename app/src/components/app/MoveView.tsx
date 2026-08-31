@@ -746,7 +746,7 @@ export function MoveView() {
                     }}
                     className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
                       mode === id
-                        ? "bg-lime text-black"
+                        ? "bg-lime text-background"
                         : "text-mute hover:text-foreground"
                     }`}
                   >
@@ -982,7 +982,7 @@ export function MoveView() {
                           if (recipientTag.trim()) setPayStyle("direct");
                           void onPrivateSend();
                         }}
-                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
                       >
                         {working &&
                         (pendingAction.current === "send" ||
@@ -1095,7 +1095,7 @@ export function MoveView() {
                           cashOutInventoryShort
                         }
                         onClick={() => void onCashOut()}
-                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
                       >
                         {working && pendingAction.current === "cashout" ? (
                           <>
@@ -1287,7 +1287,7 @@ export function MoveView() {
                       type="button"
                       onClick={() => void onImportNote()}
                       disabled={!importText.trim() || !isConnected}
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
                     >
                       Claim into my vault
                     </button>

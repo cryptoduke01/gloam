@@ -54,7 +54,7 @@ export function AppShell({
             </span>
           </div>
           <nav
-            className="hidden items-center gap-1 md:flex"
+            className="flex items-center gap-1 max-md:hidden"
             aria-label="Product"
           >
             {nav.map((item) => {

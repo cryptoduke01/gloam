@@ -67,7 +67,7 @@ export function WelcomeModal() {
         <div className="space-y-3 px-6 py-5 text-sm text-mute">
           <p className="font-medium text-foreground">Quick path</p>
           <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
-            <li>Connect a wallet and switch to RH testnet (46630).</li>
+            <li>Connect a wallet and switch to Robinhood testnet.</li>
             <li>
               Claim faucet ETH / stocks if needed — see the{" "}
               <Link
@@ -96,7 +96,7 @@ export function WelcomeModal() {
           <button
             type="button"
             onClick={dismiss}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
           >
             Enter testnet
           </button>

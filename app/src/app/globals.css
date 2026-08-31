@@ -17,21 +17,26 @@ html[data-theme="dark"] {
   --chart-down: #f87171;
 }
 
+/*
+ * The product runs light-only now — the "Twilight" brand. The app views are
+ * token-driven, so remapping these light tokens repaints the whole workspace:
+ * paper ground, ink type, indigo accent (--lime is the accent slot), green for
+ * live/verified. Primary buttons are `bg-lime text-background` = indigo on paper.
+ */
 html.light,
 html[data-theme="light"] {
-  --ink: #0a0a0a;
-  --lime: #6b9a00;
-  --lime-dim: #5a8200;
-  --text: #0a0a0a;
-  --mute: #525252;
-  --line: #e4e4e4;
+  --ink: #121316;
+  --lime: #3b3766; /* twilight accent (indigo) — the app's primary/accent */
+  --lime-dim: #2f2c52;
+  --text: #121316;
+  --mute: #6e6e76;
+  --line: #e5e3dd;
   --panel: #ffffff;
-  --background: #f7f7f5;
-  --foreground: #0a0a0a;
-  --shadow-dock: 0 8px 28px rgba(0, 0, 0, 0.08);
-  /* Stronger contrast on paper backgrounds */
-  --chart-up: #4d7c0f;
-  --chart-down: #dc2626;
+  --background: #f4f3ef;
+  --foreground: #121316;
+  --shadow-dock: 0 10px 30px -12px rgba(18, 19, 22, 0.18);
+  --chart-up: #2e7d53;
+  --chart-down: #c0432f;
 }
 
 @theme inline {

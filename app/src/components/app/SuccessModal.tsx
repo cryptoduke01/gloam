@@ -127,7 +127,7 @@ export function SuccessModal({
                 primaryHref.startsWith("http") ||
                 primaryHref.startsWith("https");
               const cls =
-                "inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90";
+                "inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-background hover:opacity-90";
               if (external) {
                 return (
                   <a

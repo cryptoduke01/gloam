@@ -25,7 +25,6 @@ import {
   assertUnshieldArtifacts,
 } from "@/lib/circuitArtifacts";
 import { resetOnboarding } from "@/lib/onboarding";
-import { useTheme } from "@/components/ThemeProvider";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
@@ -91,7 +90,7 @@ function Chip({
       onClick={onClick}
       className={`min-h-10 rounded-lg px-3 text-sm font-medium capitalize ${
         active
-          ? "bg-lime text-black"
+          ? "bg-lime text-background"
           : "border border-line text-mute hover:text-foreground"
       }`}
     >
@@ -104,8 +103,7 @@ export function SettingsView() {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const chainId = useChainId();
-  const { theme, setTheme } = useTheme();
-  const { settings, setSettings, ready } = useTradingSettings();
+  const { settings, setSettings } = useTradingSettings();
   const [copied, setCopied] = useState(false);
   const [netMsg, setNetMsg] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
@@ -210,22 +208,6 @@ export function SettingsView() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-            Appearance
-          </p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Chip active={theme === "dark"} onClick={() => setTheme("dark")}>
-              Dark
-            </Chip>
-            <Chip active={theme === "light"} onClick={() => setTheme("light")}>
-              Light
-            </Chip>
-          </div>
-          <p className="mt-4 text-xs text-mute">
-            {ready ? "Preferences save on this device." : "Loading…"}
-          </p>
-        </section>
       </div>
 
       {/* Trading grid */}
@@ -322,7 +304,7 @@ export function SettingsView() {
           <button
             type="button"
             onClick={addNetwork}
-            className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90"
+            className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-background hover:opacity-90"
           >
             Add to wallet
           </button>
@@ -407,7 +389,7 @@ export function SettingsView() {
                 );
               }
             }}
-            className="inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-black disabled:opacity-50"
+            className="inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-background disabled:opacity-50"
           >
             Copy backup
           </button>

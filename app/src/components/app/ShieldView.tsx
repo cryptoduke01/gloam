@@ -611,7 +611,7 @@ export function ShieldView() {
                     }}
                     className={`min-h-9 rounded-full px-3 text-xs font-medium ${
                       assetChoice === "eth"
-                        ? "bg-lime text-black"
+                        ? "bg-lime text-background"
                         : "border border-line text-mute hover:text-foreground"
                     }`}
                   >
@@ -627,7 +627,7 @@ export function ShieldView() {
                       }}
                       className={`min-h-9 rounded-full px-3 text-xs font-medium ${
                         assetChoice === t.id
-                          ? "bg-lime text-black"
+                          ? "bg-lime text-background"
                           : "border border-line text-mute hover:text-foreground"
                       }`}
                     >
@@ -706,7 +706,7 @@ export function ShieldView() {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
                 >
                   {isPending && pendingKind === "approve"
                     ? "Approve in wallet…"

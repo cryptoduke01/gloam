@@ -78,7 +78,7 @@ export function MarketsView() {
               onClick={() => setKind(f.id)}
               className={`rounded-lg px-3 py-2 text-sm ${
                 kind === f.id
-                  ? "bg-lime text-black"
+                  ? "bg-lime text-background"
                   : "border border-line text-mute hover:text-foreground"
               }`}
             >
@@ -164,7 +164,7 @@ export function MarketsView() {
                 }
                 className={`inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-sm sm:justify-self-end ${
                   m.privateReady
-                    ? "bg-lime font-semibold text-black hover:opacity-90"
+                    ? "bg-lime font-semibold text-background hover:opacity-90"
                     : "border border-line text-foreground hover:border-lime/50"
                 }`}
               >

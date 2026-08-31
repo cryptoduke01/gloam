@@ -1,73 +1,42 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 
-type Theme = "dark" | "light";
+type Theme = "light";
 
+/**
+ * Gloam runs light-only now (the "Twilight" brand). This provider just pins the
+ * document to the light theme and keeps the old context API as light no-ops so
+ * any `useTheme()` consumers keep working.
+ */
 const ThemeContext = createContext<{
   theme: Theme;
   toggle: () => void;
   setTheme: (t: Theme) => void;
-} | null>(null);
-
-const KEY = "gloam_theme";
+}>({ theme: "light", toggle: () => {}, setTheme: () => {} });
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [ready, setReady] = useState(false);
-
   useEffect(() => {
+    const d = document.documentElement;
+    d.dataset.theme = "light";
+    d.classList.add("light");
+    d.classList.remove("dark");
     try {
-      const stored = localStorage.getItem(KEY) as Theme | null;
-      const preferred =
-        stored === "light" || stored === "dark"
-          ? stored
-          : window.matchMedia("(prefers-color-scheme: light)").matches
-            ? "light"
-            : "dark";
-      setThemeState(preferred);
-      document.documentElement.dataset.theme = preferred;
-      document.documentElement.classList.toggle("dark", preferred === "dark");
-      document.documentElement.classList.toggle("light", preferred === "light");
-    } catch {
-      document.documentElement.dataset.theme = "dark";
-      document.documentElement.classList.add("dark");
-    }
-    setReady(true);
-  }, []);
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    try {
-      localStorage.setItem(KEY, t);
+      localStorage.setItem("gloam_theme", "light");
     } catch {
       /* ignore */
     }
-    document.documentElement.dataset.theme = t;
-    document.documentElement.classList.toggle("dark", t === "dark");
-    document.documentElement.classList.toggle("light", t === "light");
   }, []);
 
-  const toggle = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
-
   return (
-    <ThemeContext.Provider value={{ theme: ready ? theme : "dark", toggle, setTheme }}>
+    <ThemeContext.Provider
+      value={{ theme: "light", toggle: () => {}, setTheme: () => {} }}
+    >
       {children}
     </ThemeContext.Provider>
   );
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme requires ThemeProvider");
-  return ctx;
+  return useContext(ThemeContext);
 }

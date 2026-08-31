@@ -19,7 +19,7 @@ export default function AdminError({
       <button
         type="button"
         onClick={reset}
-        className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black"
+        className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-background"
       >
         Try again
       </button>

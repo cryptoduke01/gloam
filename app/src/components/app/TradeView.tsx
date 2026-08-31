@@ -507,7 +507,7 @@ export function TradeView() {
           onClick={() => setPathMode("sealed")}
           className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
             pathMode === "sealed"
-              ? "bg-lime text-black"
+              ? "bg-lime text-background"
               : "text-mute hover:text-foreground"
           }`}
         >
@@ -521,7 +521,7 @@ export function TradeView() {
           onClick={() => setPathMode("public")}
           className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
             pathMode === "public"
-              ? "bg-lime text-black"
+              ? "bg-lime text-background"
               : "text-mute hover:text-foreground"
           }`}
         >
@@ -536,7 +536,7 @@ export function TradeView() {
             onClick={() => setPathMode("vault")}
             className={`min-h-11 flex-1 rounded-lg px-2 text-sm font-medium ${
               pathMode === "vault"
-                ? "bg-lime text-black"
+                ? "bg-lime text-background"
                 : "text-mute hover:text-foreground"
             }`}
           >
@@ -583,7 +583,7 @@ export function TradeView() {
                   onClick={() => setFilter(f)}
                   className={`rounded-md px-2 py-1 text-[11px] ${
                     filter === f
-                      ? "bg-lime text-black"
+                      ? "bg-lime text-background"
                       : "text-mute hover:text-foreground"
                   }`}
                 >
@@ -727,7 +727,7 @@ export function TradeView() {
                     disabled={!hasPool}
                     className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-40 ${
                       mode === "swap" && side === "buy"
-                        ? "bg-lime text-black"
+                        ? "bg-lime text-background"
                         : "border border-line text-mute"
                     }`}
                   >
@@ -898,7 +898,7 @@ export function TradeView() {
                 <button
                   type="submit"
                   disabled={busy || !hasToken}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
                 >
                   {busy
                     ? pendingKind === "approve"

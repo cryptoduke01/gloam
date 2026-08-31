@@ -327,7 +327,7 @@ export function PortfolioView() {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Link
                   href="/app/send"
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-lime px-3 text-sm font-semibold text-black hover:opacity-90 active:scale-[0.98]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-lime px-3 text-sm font-semibold text-background hover:opacity-90 active:scale-[0.98]"
                 >
                   Send
                 </Link>

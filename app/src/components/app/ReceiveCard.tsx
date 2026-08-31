@@ -39,7 +39,7 @@ export function ReceiveCard() {
             <button
               type="button"
               onClick={copy}
-              className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90"
+              className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90"
             >
               {copied ? "Copied" : "Copy address"}
             </button>

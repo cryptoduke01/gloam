@@ -148,7 +148,7 @@ export function PaymentTicketShare({
               <button
                 type="button"
                 onClick={() => void nativeShare()}
-                className="col-span-2 inline-flex min-h-10 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+                className="col-span-2 inline-flex min-h-10 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
               >
                 {shared ? "Shared" : "Share…"}
               </button>

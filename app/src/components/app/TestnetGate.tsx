@@ -159,7 +159,7 @@ export function TestnetGate({ children }: { children: ReactNode }) {
             <div className="mt-8 flex flex-wrap items-center gap-3.5">
               <Link
                 href="/docs/testnet"
-                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-background hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
               >
                 Testnet guide
               </Link>

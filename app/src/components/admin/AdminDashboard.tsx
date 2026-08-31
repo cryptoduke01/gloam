@@ -297,7 +297,7 @@ export function AdminDashboard() {
               <button
                 type="submit"
                 disabled={busy}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {busy ? "Checking…" : "Enter console"}
               </button>

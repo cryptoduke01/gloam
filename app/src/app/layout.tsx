@@ -71,7 +71,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark h-full antialiased" suppressHydrationWarning>
+    <html lang="en" className="light h-full antialiased" suppressHydrationWarning>
       <head>
         <meta
           name="ory-verify"
@@ -81,7 +81,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://use.typekit.net/xnn3str.css" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('gloam_theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}var d=document.documentElement;d.dataset.theme=t;d.classList.add(t);d.classList.remove(t==='dark'?'light':'dark')}catch(e){}})()`,
+            __html: `(function(){try{var d=document.documentElement;d.dataset.theme='light';d.classList.add('light');d.classList.remove('dark')}catch(e){}})()`,
           }}
         />
       </head>

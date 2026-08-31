@@ -57,7 +57,7 @@ export default function DocsTestnetPage() {
             href="https://x.com/dukedotsol/status/2077117792520634789"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-lime px-5 text-sm font-semibold text-black hover:opacity-90"
+            className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-lime px-5 text-sm font-semibold text-background hover:opacity-90"
           >
             Watch demo on X →
           </a>

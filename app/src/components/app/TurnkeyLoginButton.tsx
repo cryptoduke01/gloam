@@ -36,7 +36,7 @@ export function TurnkeyLoginButton() {
           setBusy(false);
         }
       }}
-      className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+      className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
     >
       {busy ? "Opening…" : "Sign in with passkey"}
     </button>

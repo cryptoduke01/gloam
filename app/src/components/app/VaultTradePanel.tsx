@@ -651,7 +651,7 @@ export function VaultTradePanel({
                   window.location.href = u.toString();
                 }
               }}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
             >
               Go to Private trade
             </button>
@@ -685,7 +685,7 @@ export function VaultTradePanel({
                 disabled={working}
                 className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-50 ${
                   side === "buy"
-                    ? "bg-lime text-black"
+                    ? "bg-lime text-background"
                     : "border border-line text-mute"
                 }`}
               >
@@ -783,7 +783,7 @@ export function VaultTradePanel({
                   matchesChain === false
                 }
                 onClick={() => void onStart()}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
               >
                 {working
                   ? status || stepLabel || "Working…"

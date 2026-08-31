@@ -106,7 +106,7 @@ export function WalletMenu() {
           type="button"
           onClick={() => walletConnector && connect({ connector: walletConnector })}
           disabled={!walletConnector || isPending || isConnecting}
-          className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+          className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
         >
           {isPending || isConnecting ? "Connecting…" : "Connect"}
         </button>
@@ -128,7 +128,7 @@ export function WalletMenu() {
           type="button"
           onClick={onSwitch}
           disabled={switching || busy}
-          className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+          className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
         >
           {switching || busy ? "Switching…" : "Switch network"}
         </button>

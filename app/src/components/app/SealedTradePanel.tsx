@@ -552,7 +552,7 @@ export function SealedTradePanel({
             <button
               type="button"
               onClick={() => void checkVault()}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
             >
               Retry
             </button>
@@ -599,7 +599,7 @@ export function SealedTradePanel({
                   onClick={() => setDir("buy")}
                   className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
                     dir === "buy"
-                      ? "bg-lime text-black"
+                      ? "bg-lime text-background"
                       : "text-mute hover:text-foreground"
                   }`}
                 >
@@ -611,7 +611,7 @@ export function SealedTradePanel({
                   onClick={() => setDir("sell")}
                   className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
                     dir === "sell"
-                      ? "bg-lime text-black"
+                      ? "bg-lime text-background"
                       : "text-mute hover:text-foreground"
                   }`}
                 >
@@ -690,7 +690,7 @@ export function SealedTradePanel({
                     </p>
                     <Link
                       href="/app/shield"
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
                     >
                       Shield {inSymbol}
                     </Link>
@@ -848,7 +848,7 @@ export function SealedTradePanel({
                   <button
                     type="button"
                     onClick={() => void ensureRhTestnetWallet()}
-                    className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-black"
+                    className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
                   >
                     Switch to Robinhood testnet
                   </button>
@@ -866,7 +866,7 @@ export function SealedTradePanel({
                       treeLoading
                     }
                     onClick={() => void onSealedSwap()}
-                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-black disabled:opacity-50"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
                   >
                     {working ? (
                       <>

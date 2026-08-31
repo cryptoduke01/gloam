@@ -73,7 +73,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
             type="button"
             onClick={onSwitch}
             disabled={switching || busy}
-            className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60"
+            className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
           >
             {switching || busy ? "Switching…" : "Add / switch RH testnet"}
           </button>
@@ -113,7 +113,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
           if (connector) connect({ connector });
         }}
         disabled={!connector || isPending || isConnecting}
-        className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+        className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
       >
         {isPending || isConnecting ? "Connecting…" : "Connect wallet"}
       </button>

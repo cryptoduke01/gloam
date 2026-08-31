@@ -41,7 +41,7 @@ export function CookiePreferences() {
         <button
           type="button"
           onClick={() => save("all")}
-          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-black hover:opacity-90"
+          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-background hover:opacity-90"
         >
           Accept analytics
         </button>
