@@ -1,19 +1,18 @@
 import Link from "next/link";
 
 function Mark({ size = 20 }: { size?: number }) {
-  const notch = Math.round(size * 0.34);
-  const off = Math.round(size * 0.27);
   return (
-    <span
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
       aria-hidden
-      className="relative inline-block shrink-0 rounded-[6px] bg-[#121316]"
-      style={{ width: size, height: size }}
+      className="shrink-0"
     >
-      <span
-        className="absolute rounded-[2px] bg-[#F4F3EF]"
-        style={{ width: notch, height: notch, top: off, right: off }}
-      />
-    </span>
+      <rect width="32" height="32" rx="9" fill="#121316" />
+      <circle cx="15" cy="16" r="8" fill="#F4F3EF" />
+      <circle cx="19" cy="13" r="7" fill="#121316" />
+    </svg>
   );
 }
 
@@ -64,7 +63,7 @@ export function LegalLayout({
       <footer className="mx-auto max-w-3xl px-5 py-8 text-[12.5px] text-[#6E6E76] sm:px-8">
         <div className="flex items-center gap-[10px] border-t border-[#E5E3DD] pt-6">
           <Mark size={18} />
-          <span>Gloam · Robinhood Chain</span>
+          <span>Gloam</span>
         </div>
       </footer>
     </div>

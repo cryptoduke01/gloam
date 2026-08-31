@@ -1,10 +1,10 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Trade Everything on Robinhood Privately · Gloam";
+export const alt = "Gloam — trade everything, reveal nothing";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-/** Lightweight OG card (system fonts only; under Edge 1MB). */
+/** Twilight OG card — light paper, ink type, crescent mark. System fonts only. */
 export default function OpenGraphImage() {
   return new ImageResponse(
     (
@@ -13,139 +13,124 @@ export default function OpenGraphImage() {
           width: "100%",
           height: "100%",
           display: "flex",
-          background: "#000000",
-          position: "relative",
+          background:
+            "linear-gradient(125deg, #F4F3EF 34%, #ECDCCB 72%, #D9C6D8 100%)",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: 8,
-            height: "100%",
-            background: "#c8ff00",
-            display: "flex",
-          }}
-        />
-
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            padding: "64px 72px",
+            padding: "68px 76px",
             width: "100%",
             height: "100%",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-            }}
-          >
+          {/* brand lockup — crescent mark + wordmark */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div
               style={{
-                width: 52,
-                height: 52,
-                borderRadius: 10,
-                background: "#c8ff00",
+                position: "relative",
+                width: 60,
+                height: 60,
+                borderRadius: 17,
+                background: "#121316",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#000000",
-                fontSize: 28,
-                fontWeight: 700,
-                fontFamily: "ui-sans-serif, system-ui, sans-serif",
               }}
             >
-              G
+              <div
+                style={{
+                  position: "absolute",
+                  left: 13,
+                  top: 15,
+                  width: 30,
+                  height: 30,
+                  borderRadius: "50%",
+                  background: "#F4F3EF",
+                  display: "flex",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  left: 22,
+                  top: 11,
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  background: "#121316",
+                  display: "flex",
+                }}
+              />
             </div>
             <div
               style={{
+                color: "#121316",
+                fontSize: 30,
+                fontWeight: 700,
+                letterSpacing: "-0.02em",
                 display: "flex",
-                flexDirection: "column",
-                gap: 4,
               }}
             >
-              <div
-                style={{
-                  color: "#ffffff",
-                  fontSize: 28,
-                  fontWeight: 600,
-                  fontFamily: "ui-sans-serif, system-ui, sans-serif",
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                Gloam
-              </div>
-              <div
-                style={{
-                  color: "#c8ff00",
-                  fontSize: 14,
-                  fontFamily: "ui-monospace, monospace",
-                  letterSpacing: "0.18em",
-                  textTransform: "uppercase" as const,
-                }}
-              >
-                Private money
-              </div>
+              Gloam
             </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 20,
-            }}
-          >
+          {/* headline */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             <div
               style={{
-                fontSize: 64,
-                lineHeight: 1.05,
-                color: "#ffffff",
-                maxWidth: 900,
-                fontFamily: "Georgia, Times New Roman, serif",
-                letterSpacing: "-0.03em",
+                fontSize: 88,
+                lineHeight: 0.98,
+                fontWeight: 700,
+                letterSpacing: "-0.04em",
                 display: "flex",
+                flexDirection: "column",
               }}
             >
-              Trade Everything on Robinhood Privately
+              <span style={{ color: "#121316", display: "flex" }}>
+                Trade everything.
+              </span>
+              <span style={{ color: "#6E6E76", display: "flex" }}>
+                Reveal nothing.
+              </span>
             </div>
             <div
               style={{
-                fontSize: 24,
-                color: "#a3a3a3",
-                maxWidth: 720,
-                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                fontSize: 26,
+                color: "#565660",
+                maxWidth: 760,
                 lineHeight: 1.4,
                 display: "flex",
               }}
             >
-              Stocks · Memes · Shielded balances
+              Shield a balance, trade tokenized stocks and crypto, and settle
+              on-chain. A proof is verified, never your size.
             </div>
           </div>
 
+          {/* footer */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              borderTop: "1px solid #1a1a1a",
-              paddingTop: 22,
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 16,
+              borderTop: "1px solid #E5E3DD",
+              paddingTop: 24,
+              fontSize: 20,
             }}
           >
-            <div style={{ color: "#c8ff00", display: "flex" }}>gloam.trade</div>
-            <div style={{ color: "#666666", display: "flex" }}>ROBINHOOD CHAIN</div>
+            <div style={{ color: "#121316", fontWeight: 600, display: "flex" }}>
+              gloam.trade
+            </div>
+            <div style={{ color: "#6E6E76", display: "flex" }}>
+              Private by construction
+            </div>
           </div>
         </div>
       </div>
     ),
-    { ...size }
+    { ...size },
   );
 }

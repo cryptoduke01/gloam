@@ -8,10 +8,12 @@ import Link from "next/link";
  * vault card, which redacts your size where other protocols show a number.
  */
 
-const LEDGER = [
-  { ic: "↓", act: "Shield", asset: "ETH", w: 4 },
-  { ic: "⇄", act: "Sealed swap", asset: "TSLA", w: 6 },
-  { ic: "↗", act: "Private send", asset: "ETH", w: 3 },
+const HOLDINGS = ["ETH", "TSLA", "NVDA", "AAPL"];
+
+const ACTIVITY = [
+  { ic: "↓", act: "Shielded", asset: "ETH", w: 4 },
+  { ic: "⇄", act: "Traded", asset: "TSLA", w: 6 },
+  { ic: "↗", act: "Sent", asset: "ETH", w: 3 },
 ];
 
 const SEALED = [
@@ -33,19 +35,38 @@ const SEALED = [
 ];
 
 function Mark({ size = 22 }: { size?: number }) {
-  const notch = Math.round(size * 0.34);
-  const off = Math.round(size * 0.27);
   return (
-    <span
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
       aria-hidden
-      className="relative inline-block shrink-0 rounded-[6px] bg-[#121316]"
-      style={{ width: size, height: size }}
+      className="shrink-0"
     >
-      <span
-        className="absolute rounded-[2px] bg-[#F4F3EF]"
-        style={{ width: notch, height: notch, top: off, right: off }}
+      <rect width="32" height="32" rx="9" fill="#121316" />
+      <circle cx="15" cy="16" r="8" fill="#F4F3EF" />
+      <circle cx="19" cy="13" r="7" fill="#121316" />
+    </svg>
+  );
+}
+
+function LockIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+    >
+      <rect x="4" y="10.5" width="16" height="10" rx="2.4" fill="currentColor" />
+      <path
+        d="M8 10.5V7a4 4 0 0 1 8 0v3.5"
+        stroke="currentColor"
+        strokeWidth="2"
       />
-    </span>
+    </svg>
   );
 }
 
@@ -56,62 +77,62 @@ function SealedVaultCard() {
         <div className="flex items-center gap-[10px]">
           <Mark size={20} />
           <span className="text-xs font-semibold tracking-[0.01em] text-[#121316]">
-            Sealed Vault
+            Your vault
           </span>
         </div>
         <span className="flex items-center gap-[7px] text-[11px] text-[#6E6E76]">
           <span className="h-1.5 w-1.5 rounded-full bg-[#2E7D53]" />
-          RH testnet
+          Testnet
         </span>
       </div>
 
-      <div className="px-[18px] pb-[18px] pt-5">
+      {/* Balance — the whole point of the card. The number is redacted; the
+          settlement is not. */}
+      <div className="px-[18px] pb-[18px] pt-[18px]">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase tracking-[0.02em] text-[#6E6E76]">
-            Your shielded balance
+          <span className="text-[11px] uppercase tracking-[0.03em] text-[#6E6E76]">
+            Balance
           </span>
-          <span className="text-[11px] font-semibold text-[#3B3766]">
-            visible only to you
+          <span className="flex items-center gap-[5px] text-[11px] font-medium text-[#3B3766]">
+            <LockIcon />
+            Only you can see this
           </span>
         </div>
-        <div className="mt-3 flex gap-[5px]" aria-label="Balance hidden">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="mt-3 flex items-center gap-2" aria-label="Balance hidden">
+          <span className="text-[26px] font-bold leading-none text-[#121316]">
+            $
+          </span>
+          <span className="h-[26px] max-w-[190px] flex-1 rounded-[6px] bg-[linear-gradient(180deg,#1a1b1f,#0e0f12)]" />
+        </div>
+        <p className="mt-2.5 text-[12.5px] leading-relaxed text-[#6E6E76]">
+          The chain confirms your vault settled. It never sees the number.
+        </p>
+      </div>
+
+      {/* Holdings — the assets are public, the sizes are not */}
+      <div className="border-y border-[#E5E3DD] px-[18px] py-[14px]">
+        <div className="flex items-center justify-between text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
+          <span>Holdings</span>
+          <span>amounts sealed</span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {HOLDINGS.map((h) => (
             <span
-              key={i}
-              className="h-[30px] w-[34px] rounded-[5px] bg-[linear-gradient(180deg,#1a1b1f,#0e0f12)]"
-            />
+              key={h}
+              className="rounded-[7px] border border-[#E5E3DD] bg-[#F4F3EF] px-2.5 py-1 text-[12px] font-medium text-[#121316]"
+            >
+              {h}
+            </span>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 border-y border-[#E5E3DD]">
-        <div className="px-[18px] py-[14px]">
-          <div className="text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
-            Proofs verified
-          </div>
-          <div className="tnum mt-1 text-[19px] font-bold tracking-[-0.01em] text-[#121316]">
-            8,412
-          </div>
-        </div>
-        <div className="border-l border-[#E5E3DD] px-[18px] py-[14px]">
-          <div className="text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
-            Markets
-          </div>
-          <div className="tnum mt-1 text-[19px] font-bold tracking-[-0.01em] text-[#121316]">
-            TSLA 349{" "}
-            <span className="text-[12px] font-medium text-[#6E6E76]">
-              · NVDA 466
-            </span>
-          </div>
-        </div>
-      </div>
-
+      {/* Recent — plain language, sizes redacted */}
       <div className="px-[18px] pb-1.5 pt-[14px]">
-        <div className="mb-2 flex justify-between text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
-          <span>Recent activity</span>
-          <span>size hidden</span>
+        <div className="mb-2 text-[10.5px] uppercase tracking-[0.03em] text-[#6E6E76]">
+          Recent
         </div>
-        {LEDGER.map((r, i) => (
+        {ACTIVITY.map((r, i) => (
           <div
             key={i}
             className="grid grid-cols-[auto_1fr_auto] items-center gap-[10px] border-t border-[#E5E3DD] py-[9px] text-[13px] first:border-t-0"
@@ -120,11 +141,14 @@ function SealedVaultCard() {
               {r.ic}
             </span>
             <span className="text-[#121316]">
-              {r.act} <span className="text-[#6E6E76]">· {r.asset}</span>
+              {r.act} <span className="text-[#6E6E76]">{r.asset}</span>
             </span>
             <span className="flex gap-[5px]">
               {Array.from({ length: r.w }).map((_, j) => (
-                <span key={j} className="h-[15px] w-4 rounded-[3px] bg-[#DEDCD5]" />
+                <span
+                  key={j}
+                  className="h-[15px] w-4 rounded-[3px] bg-[#DEDCD5]"
+                />
               ))}
             </span>
           </div>
@@ -132,9 +156,9 @@ function SealedVaultCard() {
       </div>
 
       <div className="flex items-center justify-between border-t border-[#E5E3DD] bg-[#FAFAF8] px-[18px] py-[13px] text-xs">
-        <span className="text-[#6E6E76]">proof 0x1356…f983ffd</span>
+        <span className="text-[#6E6E76]">Settled &amp; verified</span>
         <span className="flex items-center gap-1.5 font-semibold text-[#2E7D53]">
-          ✓ verified onchain
+          ✓ on-chain
         </span>
       </div>
     </div>
@@ -188,10 +212,6 @@ export function Landing() {
         {/* hero */}
         <section className="grid grid-cols-1 items-center gap-14 py-16 md:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
           <div>
-            <p className="mb-[22px] flex items-center gap-[9px] text-[12.5px] text-[#6E6E76]">
-              <span className="h-[7px] w-[7px] rounded-full bg-[#2E7D53] shadow-[0_0_0_3px_rgba(46,125,83,0.14)]" />
-              Live on Robinhood Chain testnet
-            </p>
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
               <br />
@@ -272,7 +292,7 @@ export function Landing() {
         <footer className="flex flex-col gap-4 border-t border-[#E5E3DD] py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-[10px]">
             <Mark size={18} />
-            <span>Gloam · Robinhood Chain</span>
+            <span>Gloam</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="/docs" className="hover:text-[#121316]">
