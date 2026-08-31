@@ -77,8 +77,13 @@ export default function RootLayout({
           name="ory-verify"
           content="orynth-d061bf2ee92a4996b6e3121097472653"
         />
-        {/* Main typeface: ITC Avant Garde Gothic Pro (Adobe Fonts / Typekit). */}
-        <link rel="stylesheet" href="https://use.typekit.net/xnn3str.css" />
+        {/* Main typeface: General Sans (Fontshare) — free Aeonik-family grotesque.
+            Drop-in for a licensed Aeonik Pro later via self-hosted @font-face. */}
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=general-sans@300,400,500,600,700&display=swap"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var d=document.documentElement;d.dataset.theme='light';d.classList.add('light');d.classList.remove('dark')}catch(e){}})()`,
@@ -87,7 +92,7 @@ export default function RootLayout({
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"
-        style={{ fontFamily: '"itc-avant-garde-gothic-pro", system-ui, sans-serif' }}
+        style={{ fontFamily: '"General Sans", system-ui, sans-serif' }}
       >
         <ThemeProvider>
           {children}
