@@ -128,21 +128,16 @@ export function AppShell({
       </header>
 
       <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="rise mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <span
-              className="block h-px w-8 bg-lime"
-              aria-hidden
-            />
-            <h1 className="mt-4 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className="mt-2 max-w-xl text-sm text-mute sm:text-base">
-                {subtitle}
-              </p>
-            )}
-          </div>
+        <div className="rise mb-7">
+          <span className="block h-px w-8 bg-lime" aria-hidden />
+          <h1 className="mt-4 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="mt-2 max-w-xl text-sm text-mute sm:text-base">
+              {subtitle}
+            </p>
+          )}
         </div>
         <div className="rise rise-1">{children}</div>
       </div>
