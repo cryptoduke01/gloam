@@ -1,8 +1,10 @@
 import Image from "next/image";
 
 /**
- * plate – dark ASCII (white on black) → brand lime via multiply
- * ink   – paper ASCII (dark on light) → invert then same lime multiply (matches plate)
+ * Twilight treatment: dithered art reads as charcoal ink on paper with a faint
+ * indigo cast (no more lime-on-black).
+ * plate – dark source (white on black) → inverted to ink on paper
+ * ink   – paper source (dark on light) → kept, just desaturated
  * raw   – untouched
  */
 export type AsciiTone = "plate" | "ink" | "raw";
@@ -30,7 +32,7 @@ export function AsciiImage({
       : "object-cover object-center";
 
   return (
-    <div className={`relative overflow-hidden bg-black ${className}`}>
+    <div className={`relative overflow-hidden bg-[#EAE8E1] ${className}`}>
       <Image
         src={src}
         alt={alt}
@@ -48,7 +50,7 @@ export function AsciiImage({
       {(tone === "plate" || tone === "ink") && (
         <div
           className="pointer-events-none absolute inset-0 mix-blend-multiply"
-          style={{ backgroundColor: "#c8ff00", opacity: 0.7 }}
+          style={{ backgroundColor: "#3B3766", opacity: 0.16 }}
           aria-hidden
         />
       )}

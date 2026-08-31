@@ -153,22 +153,14 @@ body {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
 }
 
-/* Dark ASCII: lift whites for clean lime multiply → #c8ff00 */
+/* Twilight ASCII: charcoal ink on paper (see AsciiImage indigo cast). */
+/* plate = dark source (white on black) inverted to ink on paper. */
 .ascii-plate {
-  filter: contrast(1.08) brightness(1.06);
+  filter: invert(1) grayscale(1) contrast(1.06) brightness(1.03);
 }
-
-/*
- * Paper ASCII → same pipeline as plate after invert
- * so hero justice matches coin plates (brand lime, not mint/gold).
- */
+/* ink = paper source (dark on light) kept, just desaturated. */
 .ascii-ink {
-  filter: invert(1) grayscale(1) contrast(1.12) brightness(1.08);
-}
-
-html.light .ascii-ink,
-html[data-theme="light"] .ascii-ink {
-  filter: invert(1) grayscale(1) contrast(1.08) brightness(1.04);
+  filter: grayscale(1) contrast(1.06);
 }
 
 /* Docs prose, light "Twilight" reading column. Avant Garde (Jost) headings. */
