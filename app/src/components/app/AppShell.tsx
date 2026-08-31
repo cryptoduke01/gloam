@@ -40,7 +40,16 @@ export function AppShell({
   }, [pathname, title]);
 
   return (
-    <div className="flex min-h-full flex-col bg-background">
+    <div className="relative flex min-h-full flex-col">
+      {/* faint ancient watermark, behind everything, app-margin only */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed bottom-0 right-0 -z-10 hidden h-[68vh] w-[42vw] max-w-2xl opacity-[0.06] mix-blend-multiply lg:block"
+        style={{
+          background:
+            "url(/ascii/bust-indigo.png) right bottom / contain no-repeat",
+        }}
+      />
       <WelcomeModal />
       <header className="sticky top-0 z-40 border-b border-line bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
