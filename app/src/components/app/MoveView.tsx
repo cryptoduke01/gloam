@@ -683,47 +683,8 @@ export function MoveView() {
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-7">
           <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="relative h-36 border-b border-line sm:h-40">
-              <AsciiImage
-                src="/ascii/move.png"
-                alt=""
-                tone="plate"
-                priority
-                className="h-full w-full opacity-50"
-                sizes="60vw"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-panel via-panel/80 to-transparent" />
-              <div className="absolute bottom-4 left-5">
-                <StatusPill tone={poseidonMode ? "lime" : "warn"}>
-                  {poseidonMode ? "Vault actions" : "Vault not ready"}
-                </StatusPill>
-                <p className="mt-2 font-display text-2xl text-foreground">
-                  Move
-                </p>
-              </div>
-            </div>
-
             <div className="space-y-5 p-5 sm:p-6">
               <DevKeysBanner compact />
-              <VaultHealth compact />
-              <p className="text-sm leading-relaxed text-mute">
-                <strong className="text-foreground">Private send</strong>: To
-                (their tag) + Amount. Chain sees a vault transfer proof, not
-                “Alice paid Bob X”. Memo is encrypted
-                {isPayMemoLive() ? " (live inbox scan)" : ""}. For a public{" "}
-                <span className="">0x</span> transfer use{" "}
-                <Link href="/app/send" className="text-lime hover:underline">
-                  Send
-                </Link>
-                .{" "}
-                <Link
-                  href="/app/trade?path=sealed"
-                  className="text-lime hover:underline"
-                >
-                  Private trade
-                </Link>{" "}
-                keeps size off the book.
-              </p>
 
               {/* Mode tabs */}
               <div className="flex gap-1 rounded-lg border border-line p-1">
