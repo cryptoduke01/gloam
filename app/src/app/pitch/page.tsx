@@ -14,7 +14,7 @@ function Mark({ size }: { size: number }) {
       style={{ flex: "none" }}
     >
       <rect width="32" height="32" rx="9" fill="#121316" />
-      <rect x="11" y="11" width="10" height="10" rx="3" fill="#f4f3ef" />
+      <rect x="15" y="4" width="12" height="12" rx="3.5" fill="#f4f3ef" />
     </svg>
   );
 }

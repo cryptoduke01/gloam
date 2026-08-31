@@ -15,7 +15,7 @@ export function Logo({ className = "" }: { className?: string }) {
         className="shrink-0"
       >
         <rect width="32" height="32" rx="9" fill="#121316" />
-        <rect x="11" y="11" width="10" height="10" rx="3" fill="#F4F3EF" />
+        <rect x="15" y="4" width="12" height="12" rx="3.5" fill="#F4F3EF" />
       </svg>
       <span className="text-lg font-semibold tracking-tight text-foreground">
         Gloam
