@@ -37,7 +37,7 @@ export default function DocsSdkReferencePage() {
         <code>{`import {
   buildShieldBoundIntent, buildUnshieldIntent, buildPrivateSendIntent,
   makeBoundNotePoseidon, artifactProver,
-  IncrementalMerkleTreePoseidon,
+  syncTree, IncrementalMerkleTreePoseidon,
   SEALED_VAULT, NATIVE_ASSET,
 } from "@gloam/sdk";`}</code>
       </pre>
@@ -264,6 +264,38 @@ type PoseidonMerklePath = {
 }
 pathToCircomInput(path: PoseidonMerklePath)  // -> circom-ready string fields`}</code>
       </pre>
+
+      {/* ─────────────────────────  sync  ───────────────────────── */}
+      <h2>Tree sync</h2>
+      <p>
+        A spend needs a membership path, which needs the current tree.{" "}
+        <code>syncTree</code> rebuilds it from chain — replaying{" "}
+        <code>Shielded</code>, <code>Transferred</code>, and{" "}
+        <code>SealedSwapped</code> leaves in on-chain order, so the root stays
+        correct after any transfer or swap. viem&apos;s <code>PublicClient</code>{" "}
+        is injected, so the same call works in the browser and in node.
+      </p>
+      <pre>
+        <code>{`syncTree(client: PublicClient, { pool, fromBlock?, chunkSize? }): Promise<SyncedTree>
+
+// true if the rebuilt root equals the pool's on-chain currentRoot()
+assertTreeMatchesChain(client, pool, synced): Promise<boolean>
+
+interface SyncedTree {
+  tree: IncrementalMerkleTreePoseidon;
+  leaves: ChainLeaf[];
+  root: Hex; leafCount: number;
+  indexByCommitment: Map<string, number>;
+  pathForLeaf(i: number): Promise<PoseidonMerklePath | null>;
+  pathForCommitment(c: Hex): Promise<PoseidonMerklePath | null>;  // the ergonomic path
+}`}</code>
+      </pre>
+      <p>
+        The usual flow: <code>const synced = await syncTree(client, {"{"} pool
+        {"}"})</code>, then hand{" "}
+        <code>await synced.pathForCommitment(note.commitment)</code> straight to{" "}
+        <code>buildUnshieldIntent</code> or <code>buildPrivateSendIntent</code>.
+      </p>
 
       {/* ─────────────────────────  witness  ───────────────────────── */}
       <h2>Witness builders</h2>

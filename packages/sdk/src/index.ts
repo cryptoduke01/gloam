@@ -8,6 +8,7 @@
  *
  *   note      note commitment + nullifier (Poseidon), field math
  *   merkle    depth-20 incremental Merkle tree + circom path builder
+ *   sync      rebuild the pool tree from chain -> membership paths for spends
  *   witness   unshield / transfer / sealedSwap witness builders
  *   prove     injected Groth16 prover (artifactProver) + proof packing
  *   rates     sealed-rate math + size-privacy policy (pure)
@@ -33,3 +34,4 @@ export * from "./proof.js";
 export * from "./witness.js";
 export * from "./prove.js";
 export * from "./builders.js";
+export * from "./sync.js";

@@ -159,20 +159,22 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
 
       <h2>5. Cash out</h2>
       <p>
-        To exit, rebuild the tree from the pool&apos;s <code>Shielded</code>{" "}
-        events, prove membership, and unshield. <code>buildUnshieldIntent</code>{" "}
-        builds the witness and proof; the amount, asset, and recipient become
-        public on exit (the source note stays unlinkable via the nullifier).
+        To exit, rebuild the tree from chain, prove membership, and unshield.{" "}
+        <code>syncTree</code> replays every leaf-inserting event in order (so the
+        root matches even after transfers); <code>buildUnshieldIntent</code>{" "}
+        builds the witness and proof. The amount, asset, and recipient become
+        public on exit — the source note stays unlinkable via the nullifier.
       </p>
       <pre>
-        <code>{`import { buildUnshieldIntent, IncrementalMerkleTreePoseidon } from "@gloam/sdk";
+        <code>{`import { buildUnshieldIntent, artifactProver, syncTree, SEALED_VAULT } from "@gloam/sdk";
 
-const tree = new IncrementalMerkleTreePoseidon();
-for (const leaf of leavesFromShieldedEvents) await tree.insert(leaf);
-const path = await tree.path(myLeafIndex);
+// rebuild the pool tree, then get this note's membership path by commitment
+const synced = await syncTree(publicClient, { pool: SEALED_VAULT, fromBlock });
+const path = await synced.pathForCommitment(note.commitment);
+if (!path) throw new Error("note not found in the tree yet");
 
 const exit = await buildUnshieldIntent({
-  secretHex: mySecret,
+  secretHex: note.secret,
   amountWei: parseEther("0.001"),
   to: account.address,
   path,

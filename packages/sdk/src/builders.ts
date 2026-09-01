@@ -13,7 +13,7 @@
 import type { Address } from "viem";
 import { NATIVE_ASSET, RH_TESTNET_CHAIN_ID, SEALED_VAULT } from "./constants.js";
 import { makeBoundNotePoseidon, type BoundNote } from "./note.js";
-import type { GloamIntent, TradeSide } from "./intents.js";
+import type { GloamIntent, IntentExec, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
 import { fieldToBytes32 } from "./proof.js";
 import type { Prover } from "./prove.js";
@@ -42,6 +42,8 @@ export interface ShieldIntentParams {
 export interface ShieldIntent extends GloamIntent<"shield"> {
   /** The freshly minted note. The caller MUST persist `note.secret` to spend later. */
   note: BoundNote;
+  /** Builders always resolve the call, so `exec` is guaranteed here. */
+  exec: IntentExec;
 }
 
 /**
@@ -148,7 +150,7 @@ export interface UnshieldIntentParams {
 /** Build a signed-ready unshield intent. exec.args match unshield(proof, root, nullifier, asset, to, amount). */
 export async function buildUnshieldIntent(
   params: UnshieldIntentParams
-): Promise<GloamIntent<"unshield">> {
+): Promise<GloamIntent<"unshield"> & { exec: IntentExec }> {
   const asset = params.asset ?? NATIVE_ASSET;
   const w = await buildPoseidonUnshieldWitness({
     secretHex: params.secretHex,
@@ -203,6 +205,7 @@ export interface PrivateSendIntent extends GloamIntent<"private_send"> {
   /** Payment note to hand the recipient; change note stays with the sender. */
   paymentNote: NoteExport;
   changeNote: NoteExport;
+  exec: IntentExec;
 }
 
 /** Build a signed-ready private-send intent. exec.args match transfer(proof, root, nullifier, [c0, c1]). */
@@ -271,6 +274,7 @@ export interface PrivateTradeIntentParams {
 export interface PrivateTradeIntent extends GloamIntent<"private_trade"> {
   outNote: NoteExport;
   changeNote: NoteExport;
+  exec: IntentExec;
 }
 
 /**
