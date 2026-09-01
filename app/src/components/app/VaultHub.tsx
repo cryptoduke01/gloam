@@ -6,6 +6,7 @@ import { ShieldView } from "./ShieldView";
 import { TradeView } from "./TradeView";
 import { SendView } from "./SendView";
 import { MoveView } from "./MoveView";
+import { VaultAside } from "./VaultAside";
 
 /**
  * The Vault hub, one surface for every money move, the way Umbra collapses
@@ -64,7 +65,7 @@ export function VaultHub() {
         })}
       </div>
 
-      {/* active action */}
+      {/* active action (left) + plain-language context rail (right) */}
       <Suspense
         fallback={
           <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
@@ -72,10 +73,15 @@ export function VaultHub() {
           </div>
         }
       >
-        {tab === "shield" && <ShieldView />}
-        {tab === "trade" && <TradeView />}
-        {tab === "send" && <SendView />}
-        {tab === "move" && <MoveView />}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="min-w-0">
+            {tab === "shield" && <ShieldView />}
+            {tab === "trade" && <TradeView />}
+            {tab === "send" && <SendView />}
+            {tab === "move" && <MoveView />}
+          </div>
+          <VaultAside tab={tab} />
+        </div>
       </Suspense>
     </div>
   );
