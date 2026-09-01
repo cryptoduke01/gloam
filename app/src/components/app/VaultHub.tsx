@@ -6,13 +6,12 @@ import { ShieldView } from "./ShieldView";
 import { TradeView } from "./TradeView";
 import { SendView } from "./SendView";
 import { MoveView } from "./MoveView";
-import { VaultAside } from "./VaultAside";
 
 /**
- * The Vault hub, one surface for every money move, the way Umbra collapses
- * Shield / Swap / Send / Withdraw onto a single card. Plain verbs, no jargon.
- * Each tab reuses the existing action view; the URL (?tab=) drives which shows,
- * so deep links and the views' own params keep working.
+ * The Vault hub, one surface for every money move. Actions live in a quiet
+ * vertical rail on the left (sticky on desktop, a horizontal scroller on mobile),
+ * and the active action gets the whole main column to breathe. No stacked panes
+ * over a boxed form. The URL (?tab=) drives which action shows.
  */
 const TABS = [
   { id: "shield", label: "Shield", hint: "Into the vault" },
@@ -36,51 +35,43 @@ export function VaultHub() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* action tabs, the one control that runs the whole vault */}
-      <div
-        role="tablist"
-        aria-label="Vault actions"
-        className="grid grid-cols-4 gap-1.5 rounded-2xl border border-line bg-panel p-1.5 max-sm:grid-cols-2"
-      >
+    <div className="grid gap-8 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-16">
+      <nav aria-label="Vault actions" className="vault-rail">
         {TABS.map((t) => {
           const active = t.id === tab;
           return (
             <button
               key={t.id}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-current={active ? "page" : undefined}
               onClick={() => select(t.id)}
-              className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-xl px-4 text-left transition-colors ${
+              className={`vault-rail-item flex flex-col gap-0.5 rounded-2xl px-4 py-3.5 text-left transition-colors ${
                 active
                   ? "bg-lime text-background"
-                  : "text-mute hover:bg-background hover:text-foreground"
+                  : "text-mute hover:bg-panel hover:text-foreground"
               }`}
             >
-              <span className="text-sm font-semibold">{t.label}</span>
-              <span className="text-[11px] opacity-80">{t.hint}</span>
+              <span className="text-[15px] font-semibold tracking-tight">
+                {t.label}
+              </span>
+              <span className="text-[12px] opacity-75">{t.hint}</span>
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* active action (left) + plain-language context rail (right) */}
       <Suspense
         fallback={
-          <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
+          <div className="rounded-2xl border border-line bg-panel p-8 text-sm text-mute">
             Loading…
           </div>
         }
       >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <div className="min-w-0">
-            {tab === "shield" && <ShieldView />}
-            {tab === "trade" && <TradeView />}
-            {tab === "send" && <SendView />}
-            {tab === "move" && <MoveView />}
-          </div>
-          <VaultAside tab={tab} />
+        <div className="min-w-0">
+          {tab === "shield" && <ShieldView />}
+          {tab === "trade" && <TradeView />}
+          {tab === "send" && <SendView />}
+          {tab === "move" && <MoveView />}
         </div>
       </Suspense>
     </div>

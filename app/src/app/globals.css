@@ -269,6 +269,34 @@ body {
   }
 }
 
+/* Vault action rail: horizontal scroller on mobile, sticky vertical rail on
+   desktop. Real media query, immune to the Tailwind dev class-order bug. */
+.vault-rail {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+.vault-rail-item {
+  flex: none;
+  min-width: 148px;
+}
+@media (min-width: 1024px) {
+  .vault-rail {
+    flex-direction: column;
+    gap: 0.375rem;
+    overflow: visible;
+    padding-bottom: 0;
+    position: sticky;
+    top: 6rem;
+    align-self: start;
+  }
+  .vault-rail-item {
+    min-width: 0;
+  }
+}
+
 /* Legal pages, light. Overrides inline dark tokens via higher specificity. */
 .prose-legal h2 {
   margin-top: 2rem;

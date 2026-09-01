@@ -149,15 +149,11 @@ export function AppShell({
       </div>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[11px] text-mute sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>
-            Testnet · dev proving keys. Shield, private send, cash out, private
-            trade.{" "}
-            <a href="/docs/production" className="text-lime hover:underline">
-              Production gate
-            </a>
-          </p>
-          <p className="uppercase tracking-[0.12em]">gloam.trade</p>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-8 text-[11px] text-mute sm:px-8">
+          <a href="/docs" className="transition-colors hover:text-foreground">
+            Docs
+          </a>
+          <p className="uppercase tracking-[0.16em]">gloam.trade</p>
         </div>
       </footer>
     </div>

@@ -124,9 +124,6 @@ export function MarketsView() {
                   ) : (
                     <StatusPill>Watch</StatusPill>
                   )}
-                  {m.privateReady && (
-                    <StatusPill tone="lime">Private</StatusPill>
-                  )}
                 </div>
               )}
               <Sparkline
@@ -168,7 +165,7 @@ export function MarketsView() {
                     : "border border-line text-foreground hover:border-lime/50"
                 }`}
               >
-                {m.privateReady ? "Private" : "Trade"}
+                Trade
               </Link>
             </li>
           ))}
