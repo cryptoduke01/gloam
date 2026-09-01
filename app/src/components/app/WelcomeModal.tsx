@@ -59,8 +59,8 @@ export function WelcomeModal() {
             Welcome, you&apos;re live
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Private money on Robinhood Chain. Play money only. Dev proving keys.
-            Don&apos;t use real funds.
+            Private money on Robinhood Chain. Testnet, play money only. Don&apos;t
+            use real funds.
           </p>
         </div>
 
