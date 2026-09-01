@@ -11,7 +11,7 @@ import {Script, console2} from "forge-std/Script.sol";
  *
  *   export DEPLOYER_PK=0x...
  *   export RH_TESTNET_RPC=https://rpc.testnet.chain.robinhood.com
- *   # optional: SHIELD_POOL=0x4F38…  TOKEN_AMT=1000000000000000000  ETH_AMT=0
+ *   # optional: SHIELD_POOL=0xaEbB…  TOKEN_AMT=1000000000000000000  ETH_AMT=0
  *
  *   forge script script/SeedVaultInventory.s.sol \
  *     --rpc-url $RH_TESTNET_RPC --broadcast --gas-estimate-multiplier 200 -vvvv
@@ -19,6 +19,7 @@ import {Script, console2} from "forge-std/Script.sol";
 interface IShieldPool {
     function shield(address asset, uint256 amount, bytes32 commitment) external payable;
     function deposited(address asset) external view returns (uint256);
+    function shieldVerifier() external view returns (address);
 }
 
 interface IERC20 {
@@ -28,7 +29,10 @@ interface IERC20 {
 }
 
 contract SeedVaultInventory is Script {
-    address constant DEFAULT_POOL = 0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F;
+    // Hardened Poseidon pool (C1/C2/C3). NEVER point this at the drainable
+    // pre-C1 pool 0x4F38…12D8F (audit H-P1) — it has no shieldVerifier and is
+    // unhardenable in place.
+    address constant DEFAULT_POOL = 0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834;
 
     address constant TSLA = 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E;
     address constant AMZN = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02;
@@ -44,6 +48,16 @@ contract SeedVaultInventory is Script {
         uint256 ethAmt = vm.envOr("ETH_AMT", uint256(0));
 
         IShieldPool pool = IShieldPool(poolAddr);
+
+        // Audit H-P1 / C1: never seed a pool whose shield path is unbound. With
+        // shieldVerifier == 0, anyone can shield() an over-valued commitment for
+        // ~1 wei and unshield it against this seeded inventory. Harden the pool
+        // (setShieldVerifier) before seeding.
+        require(
+            pool.shieldVerifier() != address(0),
+            "unsafe: shieldVerifier unset (C1) - harden pool before seeding"
+        );
+
         address[5] memory tokens = [TSLA, AMZN, PLTR, NFLX, AMD];
 
         console2.log("pool", poolAddr);
