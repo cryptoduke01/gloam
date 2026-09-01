@@ -4,20 +4,20 @@
  * Shielded balances, private transfers, and private trades that any RH Chain app
  * or agent can plug into. The Gloam vault app is the reference implementation.
  *
- * Status: scaffolding (Milestone 1). The canonical intent contract is live;
- * pure note/tree/prover modules are being ported from the app in behavior-
- * preserving batches. Extraction plan (see the buildathon handoff):
+ * Surface (all live and exported below):
  *
- *   core/    note commitment + nullifier (keccak + Poseidon), field math
- *   tree/    incremental Merkle tree + circom path builder
- *   prover/  witness builders (unshield, transfer, sealedSwap) + groth16 packing
- *   rates/   sealed-rate math + size-privacy policy (pure)
- *   intents/ shield | privateSend | unshield | privateTrade builders (this file's types)
- *   adapters/ NoteStore, KeyStore, prover artifact loader (browser + node impls)
+ *   note      note commitment + nullifier (Poseidon), field math
+ *   merkle    depth-20 incremental Merkle tree + circom path builder
+ *   witness   unshield / transfer / sealedSwap witness builders
+ *   prove     injected Groth16 prover (artifactProver) + proof packing
+ *   rates     sealed-rate math + size-privacy policy (pure)
+ *   builders  shieldBound | unshield | privateSend | privateTrade intents
+ *   constants pool + verifier addresses, chain ids, field prime
  *
- * Environment split: the crypto/math core is pure and runs anywhere. Storage
- * (notes, viewing keys), snarkjs proving, and RPC are injected via adapters so
- * the same core serves the browser app and the node MCP signer.
+ * Environment split: the crypto/math core is pure and runs anywhere. Proving
+ * (snarkjs + artifacts) and storage (notes, keys) are injected, so the same core
+ * serves the browser app and the node MCP signer. sealedSwap builds a valid
+ * intent, but its on-chain path is disabled pending the H1 solvency work.
  */
 
 export const SDK_VERSION = "0.0.1";

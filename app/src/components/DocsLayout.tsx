@@ -18,6 +18,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     section: "Start here",
     items: [
       { href: "/docs", label: "Overview" },
+      { href: "/docs/quickstart", label: "Quickstart" },
       { href: "/docs/testnet", label: "Testnet guide" },
       { href: "/docs/product", label: "What ships when" },
     ],
@@ -26,6 +27,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     section: "Build on Gloam",
     items: [
       { href: "/docs/sdk", label: "SDK" },
+      { href: "/docs/sdk/reference", label: "API reference" },
       { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
       { href: "/docs/agents", label: "Agents" },
     ],
@@ -50,9 +52,19 @@ const nav: { section: string; items: DocNavItem[] }[] = [
   },
 ];
 
+const allNavHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
+
 function isActive(pathname: string, href: string) {
-  if (href === "/docs") return pathname === "/docs";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (pathname === href) return true;
+  if (!pathname.startsWith(`${href}/`)) return false;
+  // Prefix match only counts if no more-specific nav item also matches, so a
+  // parent (e.g. /docs/sdk) does not light up on a child route (/docs/sdk/reference).
+  return !allNavHrefs.some(
+    (h) =>
+      h !== href &&
+      h.startsWith(`${href}/`) &&
+      (pathname === h || pathname.startsWith(`${h}/`))
+  );
 }
 
 function Mark({ size = 20 }: { size?: number }) {
