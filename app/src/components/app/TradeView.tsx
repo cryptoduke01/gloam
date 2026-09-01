@@ -646,14 +646,7 @@ export function TradeView() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground">{m.symbol}</p>
-                    <p className="truncate text-xs text-mute">
-                      {m.name}
-                      {m.privateReady
-                        ? " · private"
-                        : m.address
-                          ? " · onchain"
-                          : ""}
-                    </p>
+                    <p className="truncate text-xs text-mute">{m.name}</p>
                   </div>
                   <Sparkline
                     points={
