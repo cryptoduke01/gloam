@@ -5,7 +5,14 @@
   "hashScheme": "poseidon",
   "proofLayout": 2,
   "deployBlock": 110840714,
-  "shieldHardened": false,
+  "shieldHardened": true,
+  "liveState": {
+    "verifiedAt": "2026-09-01",
+    "owner": "0x8F47aE9eC148903C8535b9289ad8efA400e026B6",
+    "shieldVerifier": "0x28E6d0D02568EE634f9596645775275DE76b2847",
+    "sealedSwapVerifier": "0x0000000000000000000000000000000000000000",
+    "note": "Post-deploy owner actions (verified on-chain): setShieldVerifier -> C1 enforced (plain shield reverts); setSealedSwapVerifier(0) -> H1 swaps disabled; transferOwnership -> rotated to a fresh wallet off the exposed deploy key. The deployBlock/deployer fields are the original staged deploy. See contracts/audit/REMEDIATION.md."
+  },
   "contracts": {
     "Poseidon2": "0x46b33ced153199036F267CD19f45E246767a0540",
     "Poseidon3": "0x05A99a357D06084bf8e761ab6d339F9DFdf2a512",
