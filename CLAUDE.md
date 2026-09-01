@@ -19,26 +19,32 @@ You are taking over **Gloam**: private trading on **Robinhood Chain**.
 
 | Token | Value |
 | --- | --- |
-| Black | `#000000` |
-| Lime | `#C8FF00` (dark) / darker lime in light mode |
-| Display | Instrument Serif |
-| Body | Overused Grotesk |
+| Paper (bg) | `#F4F3EF` |
+| Ink (text) | `#121316` |
+| Indigo (accent) | `#3B3766` (this is the `--lime` CSS token slot in light mode) |
+| Twilight gradient | gold `#EEC996` → rose `#E4A69E` → violet `#9674B2` → indigo `#4A498C` |
+| Signal green / Rust | `#2E7D53` / `#C0432F` |
+| Typeface | Aeonik (self-hosted woff2), one family across the whole system |
 | Chain | Robinhood Chain · mainnet `4663` · testnet `46630` |
 
-No purple crypto slop. Voice: dense, theoretical, premium.
+Twilight brand ("Gloam" = dusk). Light-only. Positioning: **"The Private Layer for
+Robinhood."** Voice: spacious, confident, plain-language, not technical jargon.
+The `--lime` token is the indigo accent slot now — do not reintroduce acid lime or
+the old Instrument Serif. Use space generously; avoid jammed, boxed layouts.
 
 ## Live on testnet (dev keys)
 
 | Feature | Status |
 | --- | --- |
 | Shield / private send / cash out | Live |
-| **Private trade** (`sealedSwap`) | Live — size privacy default on (`amountOutMin = 1`) |
+| **Private trade** (`sealedSwap`) | Disable pending (audit H1: broken solvency accounting); re-enable after redesign |
 | Pay memos / receive tags | Live |
 | Production ceremony keys | Not yet |
 | Mainnet | Blocked |
 
-**Product vault:** `0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F`  
-**Never product-default** legacy pre-sealed `0xA488…` (app remaps in `config.ts`, clean Vercel env is better).
+**Product vault (hardened C1/C2/C3):** `0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834` (block 110840714).  
+**Drainable, never use or seed:** pre-C1 pool `0x4F38…12D8F` (audit H-P1; `emergencyWithdraw` pending — see `contracts/audit/REMEDIATION.md`).  
+**Never product-default** legacy pre-sealed `0xA488…` (app remaps in `config.ts`).
 
 ## Stack
 
