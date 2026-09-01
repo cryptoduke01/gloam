@@ -1,0 +1,17 @@
+{
+  "name": "gloam-agent-shield-example",
+  "private": true,
+  "type": "module",
+  "description": "Reference wrapper: an AI agent shields ETH privately on Gloam via @gloam/sdk.",
+  "scripts": {
+    "start": "tsx agent-shield.ts"
+  },
+  "dependencies": {
+    "@gloam/sdk": "workspace:*",
+    "snarkjs": "^0.7.5",
+    "viem": "^2.55.2"
+  },
+  "devDependencies": {
+    "tsx": "^4"
+  }
+}
