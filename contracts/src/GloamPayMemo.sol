@@ -11,11 +11,13 @@ pragma solidity ^0.8.24;
  *      Memo is opaque bytes (app uses gloam2t / ECDH packages).
  */
 contract GloamPayMemo {
-    event PaymentMemo(
-        bytes32 indexed paymentCommitment,
-        address indexed poster,
-        bytes memo
-    );
+    /// @dev Audit L-1: the poster (msg.sender = the payment sender's clear
+    ///      address) is intentionally NOT emitted. Indexing it next to the
+    ///      paymentCommitment linked a real address to a private payment. The
+    ///      recipient discovers by scanning commitments and decrypting the memo
+    ///      with their receive tag; the sender's address is never needed.
+    ///      (App ABI is updated alongside the next GloamPayMemo redeploy.)
+    event PaymentMemo(bytes32 indexed paymentCommitment, bytes memo);
 
     error ZeroCommitment();
     error BadMemo();
@@ -29,6 +31,6 @@ contract GloamPayMemo {
     function postMemo(bytes32 paymentCommitment, bytes calldata memo) external {
         if (paymentCommitment == bytes32(0)) revert ZeroCommitment();
         if (memo.length == 0 || memo.length > MAX_MEMO) revert BadMemo();
-        emit PaymentMemo(paymentCommitment, msg.sender, memo);
+        emit PaymentMemo(paymentCommitment, memo);
     }
 }
