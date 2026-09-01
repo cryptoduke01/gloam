@@ -5,6 +5,8 @@ import {IShieldPool} from "./interfaces/IShieldPool.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 import {IPoseidon2} from "./lib/IPoseidon.sol";
 import {IncrementalMerkleTreePoseidon as IMT} from "./lib/IncrementalMerkleTreePoseidon.sol";
+import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
+import {OracleRates} from "./lib/OracleRates.sol";
 
 interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -52,6 +54,14 @@ contract ShieldPoolPoseidon is IShieldPool {
     }
     mapping(address => mapping(address => SwapRate)) public swapRate;
 
+    /// @notice M3: Chainlink-bound rates. When oracleRatePair[in][out] is true,
+    ///         sealedSwap validates the caller's (rateIn, rateOut) ratio against
+    ///         the live feeds in priceFeed (within oracleConfig.toleranceBps)
+    ///         instead of the owner-pinned swapRate, removing the trusted price.
+    OracleRates.Config public oracleConfig;
+    mapping(address => IAggregatorV3) public priceFeed;
+    mapping(address => mapping(address => bool)) public oracleRatePair;
+
     address public owner;
     /// @notice M-4: two-step ownership. Set by transferOwnership, claimed by the
     ///         incoming owner via acceptOwnership. Guards against handing the pool
@@ -81,6 +91,9 @@ contract ShieldPoolPoseidon is IShieldPool {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ShieldVerifierSet(address indexed verifier);
     event EmergencyWithdrawal(address indexed asset, address indexed to, uint256 amount);
+    event PriceFeedSet(address indexed asset, address indexed feed);
+    event OraclePairSet(address indexed assetIn, address indexed assetOut, bool enabled);
+    event OracleConfigSet(address sequencer, uint64 grace, uint64 maxStaleness, uint64 toleranceBps);
 
     error NotOwner();
     error NotPendingOwner();
@@ -157,6 +170,49 @@ contract ShieldPoolPoseidon is IShieldPool {
         if (enabled_ && (rateIn_ == 0 || rateOut_ == 0)) revert InvalidAmount();
         swapRate[assetIn][assetOut] = SwapRate(rateIn_, rateOut_, enabled_);
         emit SwapRateSet(assetIn, assetOut, rateIn_, rateOut_, enabled_);
+    }
+
+    /// @notice M3: register the Chainlink feed (AggregatorV3, USD) for an asset.
+    function setPriceFeed(address asset, address feed) external onlyOwner {
+        priceFeed[asset] = IAggregatorV3(feed);
+        emit PriceFeedSet(asset, feed);
+    }
+
+    /// @notice M3: L2 sequencer uptime feed + max price staleness + ratio tolerance.
+    function setOracleConfig(
+        address sequencer,
+        uint64 sequencerGrace,
+        uint64 maxStaleness,
+        uint64 toleranceBps
+    ) external onlyOwner {
+        if (maxStaleness == 0 || toleranceBps > 10_000) revert InvalidAmount();
+        oracleConfig = OracleRates.Config(
+            IAggregatorV3(sequencer),
+            sequencerGrace,
+            maxStaleness,
+            toleranceBps
+        );
+        emit OracleConfigSet(sequencer, sequencerGrace, maxStaleness, toleranceBps);
+    }
+
+    /// @notice M3: switch a direction to oracle-bound pricing (both feeds required).
+    ///         While enabled, sealedSwap checks the caller's rate ratio against the
+    ///         live feeds instead of the owner-pinned swapRate.
+    function setOracleRatePair(
+        address assetIn,
+        address assetOut,
+        bool enabled_
+    ) external onlyOwner {
+        if (assetIn == assetOut) revert SameAsset();
+        if (
+            enabled_ &&
+            (address(priceFeed[assetIn]) == address(0) ||
+                address(priceFeed[assetOut]) == address(0))
+        ) {
+            revert ZeroAddress();
+        }
+        oracleRatePair[assetIn][assetOut] = enabled_;
+        emit OraclePairSet(assetIn, assetOut, enabled_);
     }
 
     /// @notice M-4: begin a two-step ownership handoff. The new owner must call
@@ -309,9 +365,27 @@ contract ShieldPoolPoseidon is IShieldPool {
         // C3: the rate must match the owner-approved rate for this direction.
         // rateIn/rateOut fit in uint128 (they are set that way); reject anything larger.
         if (rateIn > type(uint128).max || rateOut > type(uint128).max) revert RateNotAllowed();
-        SwapRate memory sr = swapRate[assetIn][assetOut];
-        if (!sr.enabled || uint256(sr.rateIn) != rateIn || uint256(sr.rateOut) != rateOut) {
-            revert RateNotAllowed();
+        // M3: oracle-bound pricing per direction removes the trusted price. When a
+        // pair is oracle-enabled, the caller's rate ratio must match the live
+        // Chainlink ratio within tolerance; otherwise fall back to the C3
+        // owner-pinned rate. (Neither fixes H1 solvency accounting.)
+        if (oracleRatePair[assetIn][assetOut]) {
+            OracleRates.requireRatio(
+                oracleConfig,
+                priceFeed[assetIn],
+                priceFeed[assetOut],
+                rateIn,
+                rateOut
+            );
+        } else {
+            SwapRate memory sr = swapRate[assetIn][assetOut];
+            if (
+                !sr.enabled ||
+                uint256(sr.rateIn) != rateIn ||
+                uint256(sr.rateOut) != rateOut
+            ) {
+                revert RateNotAllowed();
+            }
         }
         _requireSealedSwapProof(
             proof,
