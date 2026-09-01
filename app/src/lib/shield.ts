@@ -61,6 +61,13 @@ export const shieldPoolAbi = [
   },
   {
     type: "function",
+    name: "commitmentSeen",
+    stateMutability: "view",
+    inputs: [{ name: "commitment", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
     name: "currentRoot",
     stateMutability: "view",
     inputs: [],

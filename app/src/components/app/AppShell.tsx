@@ -12,6 +12,7 @@ const nav = [
   { href: "/app", label: "Portfolio", exact: true },
   { href: "/app/vault", label: "Vault" }, // shield · trade · send · cash out
   { href: "/app/markets", label: "Markets" },
+  { href: "/app/disclose", label: "Disclose" }, // selective disclosure
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {

@@ -12,5 +12,10 @@ declare module "snarkjs" {
       };
       publicSignals: string[];
     }>;
+    verify: (
+      vkey: unknown,
+      publicSignals: string[],
+      proof: unknown
+    ) => Promise<boolean>;
   };
 }
