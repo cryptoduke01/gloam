@@ -52,7 +52,7 @@ export function AppShell({
       />
       <WelcomeModal />
       <header className="sticky top-0 z-40 border-b border-line bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-8">
           <div className="flex items-center gap-4">
             <Logo />
             <span className="hidden rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime sm:inline">
@@ -133,8 +133,8 @@ export function AppShell({
         )}
       </header>
 
-      <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="rise mb-7">
+      <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-8 sm:py-14">
+        <div className="rise mb-10">
           <span className="block h-px w-8 bg-lime" aria-hidden />
           <h1 className="mt-4 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
             {title}

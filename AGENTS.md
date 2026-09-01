@@ -13,7 +13,7 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - X: `@gloamtrade`
 - Vercel: one project, Root Directory = `app`
 - Contracts: `contracts/` (Foundry) — ShieldPoolPoseidon sealed vault; RH testnet only
-- Sealed vault: `0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F` (never product-default `0xA488…`)
+- Sealed vault (hardened C1/C2/C3): `0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834`. Drainable, never use or seed: `0x4F38…12D8F` (audit H-P1). Never product-default `0xA488…`
 
 ## Live on testnet (dev keys)
 
@@ -29,7 +29,7 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - Real privacy (shielded balances / private txs) — never fake or mock success.
 - **Public path** needs no Gloam contracts. **Private path** needs `contracts/`.
 - Product is **testnet-only** until production ceremony + audit. No mainnet mix-in.
-- Brand: black `#000000`, lime `#C8FF00`, white. No purple crypto slop.
+- Brand: Twilight — paper `#F4F3EF`, ink `#121316`, indigo `#3B3766` accent, Aeonik. Light-only, spacious, plain-language. (`--lime` token = indigo slot.)
 - Secrets server-side only.
 - If it does not serve private trading on RH chain, it waits.
 - Docs live in-app (`app/src/app/docs`). Do **not** create a separate docs project or `docs.gloam.trade`.
