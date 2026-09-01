@@ -14,6 +14,7 @@ import type { GloamIntent, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
 import { fieldToBytes32 } from "./proof.js";
 import type { Prover } from "./prove.js";
+import { toField } from "./poseidon.js";
 import {
   buildPoseidonUnshieldWitness,
   buildTransferWitness,
@@ -70,6 +71,58 @@ export async function buildShieldIntent(
       fn: "shield",
       valueWei: isNative ? params.amountWei : 0n,
       args: [asset, params.amountWei, note.commitment],
+    },
+    note,
+  };
+}
+
+export interface ShieldBoundIntentParams extends ShieldIntentParams {
+  /**
+   * Injected shield prover bound to the shield circuit artifacts
+   * (artifactProver({ wasm, zkey })). Required because the hardened pool enforces
+   * a proof at deposit.
+   */
+  prover: Prover;
+}
+
+/**
+ * Build a hardened shield intent for a pool whose shieldVerifier is set (audit
+ * C1). Mints the note AND generates the shield proof binding the commitment to
+ * (amount, asset), then resolves shieldBound(asset, amount, commitment, proof).
+ * Use this on the live RH testnet pool — plain shield() reverts there
+ * (ShieldProofRequired).
+ */
+export async function buildShieldBoundIntent(
+  params: ShieldBoundIntentParams
+): Promise<ShieldIntent> {
+  if (params.amountWei <= 0n) throw new Error("amountWei must be positive");
+  const asset = params.asset ?? NATIVE_ASSET;
+  const isNative = isNativeAsset(asset);
+  const note = await makeBoundNotePoseidon(params.amountWei, asset);
+  const { proofBytes } = await params.prover({
+    commitment: note.commitmentField.toString(),
+    amount: params.amountWei.toString(),
+    asset: toField(BigInt(asset)).toString(),
+    secret: note.secretField.toString(),
+  });
+
+  return {
+    intent: "shield",
+    chainId: params.chainId ?? RH_TESTNET_CHAIN_ID,
+    agentAddress: params.agentAddress ?? null,
+    plan: {
+      asset: isNative ? "ETH" : asset,
+      amountWei: params.amountWei,
+    },
+    privacy:
+      "Shielding is a public deposit: the amount and asset are visible on-chain. The note commitment hides who can later spend it, so future private sends and trades are unlinkable to this deposit.",
+    execution:
+      "Unsigned. Sign and broadcast shieldBound(asset, amount, commitment, proof); attach msg.value for native ETH. Persist note.secret to spend later.",
+    exec: {
+      poolAddress: params.poolAddress ?? SEALED_VAULT,
+      fn: "shieldBound",
+      valueWei: isNative ? params.amountWei : 0n,
+      args: [asset, params.amountWei, note.commitment, proofBytes],
     },
     note,
   };

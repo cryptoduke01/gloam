@@ -53,7 +53,12 @@ export type PlanFor<K extends IntentKind> = K extends "shield"
       : PrivateTradePlan;
 
 /** ABI function the exec layer targets on ShieldPoolPoseidon. */
-export type PoolFn = "shield" | "unshield" | "transfer" | "sealedSwap";
+export type PoolFn =
+  | "shield"
+  | "shieldBound"
+  | "unshield"
+  | "transfer"
+  | "sealedSwap";
 
 /** Resolved on-chain call. Built by the SDK; consumed by an executor (wallet or MCP signer). */
 export interface IntentExec {
