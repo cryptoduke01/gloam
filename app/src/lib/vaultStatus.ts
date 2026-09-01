@@ -10,9 +10,10 @@ import {
 import { getRhPublicClient } from "./rhClient";
 import { SHIELD_POOL_ADDRESS, shieldPoolAbi } from "./shield";
 
-/** Known sealed-swap verifier on RH testnet Poseidon vault (poseidon-testnet.json) */
+/** Sealed-swap IVerifier on the hardened RH testnet pool (poseidon-testnet.json).
+ *  Used only as a transient-RPC-error fallback, never to mask a real disable. */
 export const KNOWN_SEALED_SWAP_VERIFIER =
-  "0x68C28ECD40320038bF8DE34Bb02064e12f602371" as const satisfies Address;
+  "0x9D866ca3b981585D5E6B138E4411C804c4d6C198" as const satisfies Address;
 
 export type VaultReadiness =
   | { status: "ready"; verifier: Address; pool: Address }
@@ -38,14 +39,10 @@ export async function readVaultSealedReadiness(): Promise<VaultReadiness> {
     })) as Address;
 
     if (!v || v === zeroAddress) {
-      if (isKnownSealed) {
-        // Deploy record says verifier is set; treat as ready if env is stale
-        return {
-          status: "ready",
-          verifier: KNOWN_SEALED_SWAP_VERIFIER,
-          pool,
-        };
-      }
+      // A successful read of 0 means sealed swaps are genuinely unset, or were
+      // deliberately disabled (audit H1). Report unavailable so the UI falls
+      // back to the public path instead of letting a private trade revert
+      // on-chain. (Do NOT mask a real disable with the known-verifier fallback.)
       return { status: "no_verifier", pool };
     }
     return { status: "ready", verifier: v, pool };
