@@ -87,7 +87,7 @@ export function DocsLayout({
     <div className="min-h-screen bg-[#F4F3EF] text-[#121316]">
       {/* light chrome */}
       <header className="sticky top-0 z-40 border-b border-[#E5E3DD] bg-[#F4F3EF]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           <Link href="/" className="flex items-center gap-[10px]">
             <Mark size={20} />
             <span className="font-semibold tracking-[-0.01em]">Gloam</span>
@@ -110,9 +110,9 @@ export function DocsLayout({
       </header>
 
       <div className="border-b border-[#E5E3DD]">
-        <div className="mx-auto grid max-w-6xl gap-0 lg:grid-cols-[220px_minmax(0,1fr)_220px]">
+        <div className="mx-auto grid max-w-7xl gap-x-16 lg:grid-cols-[240px_minmax(0,1fr)_240px]">
           {/* Left nav */}
-          <aside className="hidden border-r border-[#E5E3DD] lg:block">
+          <aside className="hidden lg:block">
             <nav
               className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto px-5 py-10"
               aria-label="Docs"
@@ -147,7 +147,7 @@ export function DocsLayout({
           </aside>
 
           {/* Main */}
-          <main className="min-w-0 px-5 py-10 sm:px-8 sm:py-14">
+          <main className="min-w-0 px-5 py-12 sm:px-10 sm:py-16">
             <div className="mb-8 flex flex-wrap gap-2 lg:hidden">
               {nav.flatMap((g) => g.items).map((item) => {
                 const active = isActive(pathname, item.href);
@@ -170,15 +170,15 @@ export function DocsLayout({
             <p className="text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
               Documentation
             </p>
-            <h1 className="mt-3 max-w-2xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
+            <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
               {title}
             </h1>
             {lede && (
-              <p className="mt-5 max-w-2xl text-base leading-relaxed text-[#565660] sm:text-lg">
+              <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#565660] sm:text-lg">
                 {lede}
               </p>
             )}
-            <div className="docs-prose mt-10 max-w-2xl space-y-4 text-[15px]">
+            <div className="docs-prose mt-10 max-w-3xl space-y-4 text-[15px]">
               {children}
             </div>
           </main>
@@ -251,7 +251,7 @@ export function DocsLayout({
       </div>
 
       {/* light footer */}
-      <footer className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <footer className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div className="flex items-center gap-[10px]">
           <Mark size={18} />
           <span>Gloam</span>
