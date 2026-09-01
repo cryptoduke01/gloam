@@ -288,7 +288,7 @@ export function AdminDashboard() {
               </label>
               {loginErr && (
                 <p
-                  className="rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                  className="rounded-md border border-[#C0432F]/25 bg-[#C0432F]/[0.07] px-3 py-2 text-sm text-[#C0432F]"
                   role="alert"
                 >
                   {loginErr}
@@ -314,7 +314,7 @@ export function AdminDashboard() {
   return (
     <div className="min-h-full bg-background">
       <header className="sticky top-0 z-20 border-b border-line bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-5 sm:px-8">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <Logo />
             <span className="rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime">
@@ -343,9 +343,9 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-8 px-5 py-8 sm:px-8 sm:py-10">
+      <main className="mx-auto max-w-7xl space-y-10 px-5 py-10 sm:px-8 sm:py-12">
         {loadErr && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <p className="rounded-lg border border-[#C0432F]/30 bg-[#C0432F]/[0.07] px-4 py-3 text-sm text-[#C0432F]">
             {loadErr}
           </p>
         )}
@@ -376,7 +376,7 @@ export function AdminDashboard() {
 
         {tab === "overview" && (
           <>
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi
                 label="Unique shielders"
                 value={String(oc?.uniqueShielders ?? 0)}
@@ -399,7 +399,7 @@ export function AdminDashboard() {
               />
             </section>
 
-            <section className="grid gap-3 sm:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-3">
               <Kpi
                 label="Public open"
                 value={data?.launch?.open ? "Yes" : "No"}
@@ -422,7 +422,7 @@ export function AdminDashboard() {
             </section>
 
             {ocError && (
-              <p className="text-sm text-red-400">On-chain: {ocError}</p>
+              <p className="text-sm text-[#C0432F]">On-chain: {ocError}</p>
             )}
 
             <div className="grid gap-6 lg:grid-cols-2">
@@ -532,7 +532,7 @@ export function AdminDashboard() {
 
         {tab === "events" && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(product?.counters ?? {})
                 .filter(([k]) => k !== "total")
                 .sort((a, b) => b[1] - a[1])
@@ -584,7 +584,7 @@ function Kpi({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-panel px-4 py-4">
+    <div className="rounded-2xl border border-line bg-panel px-5 py-5">
       <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
         {label}
       </p>
@@ -606,7 +606,7 @@ function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-line bg-panel p-4 sm:p-5">
+    <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="font-display text-lg text-foreground">{title}</h2>
         {action}
