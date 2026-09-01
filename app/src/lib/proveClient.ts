@@ -9,6 +9,7 @@ import type { Hex } from "viem";
 import { packGroth16Proof, type Groth16Proof } from "@gloam/sdk";
 import {
   assertSealedSwapArtifacts,
+  assertShieldArtifacts,
   assertTransferArtifacts,
   assertUnshieldArtifacts,
   CIRCUIT_ARTIFACTS,
@@ -23,6 +24,8 @@ const TRANSFER_WASM = CIRCUIT_ARTIFACTS.transferWasm.path;
 const TRANSFER_ZKEY = CIRCUIT_ARTIFACTS.transferZkey.path;
 const SEALED_SWAP_WASM = CIRCUIT_ARTIFACTS.sealedSwapWasm.path;
 const SEALED_SWAP_ZKEY = CIRCUIT_ARTIFACTS.sealedSwapZkey.path;
+const SHIELD_WASM = CIRCUIT_ARTIFACTS.shieldWasm.path;
+const SHIELD_ZKEY = CIRCUIT_ARTIFACTS.shieldZkey.path;
 
 async function fullProve(
   circomInput: Record<string, string | string[]>,
@@ -62,4 +65,16 @@ export async function proveSealedSwapInBrowser(
 ) {
   await assertSealedSwapArtifacts();
   return fullProve(circomInput, SEALED_SWAP_WASM, SEALED_SWAP_ZKEY);
+}
+
+/**
+ * Prove shield (C1): binds commitment == Poseidon(secret, amount, asset) at
+ * deposit. Public [commitment, amount, asset] — order matches shield.circom and
+ * ShieldPoolPoseidon.shieldBound. Only needed when the pool has a shieldVerifier.
+ */
+export async function proveShieldInBrowser(
+  circomInput: Record<string, string | string[]>
+) {
+  await assertShieldArtifacts();
+  return fullProve(circomInput, SHIELD_WASM, SHIELD_ZKEY);
 }

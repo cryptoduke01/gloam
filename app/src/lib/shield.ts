@@ -42,6 +42,25 @@ export const shieldPoolAbi = [
   },
   {
     type: "function",
+    name: "shieldBound",
+    stateMutability: "payable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "commitment", type: "bytes32" },
+      { name: "proof", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "shieldVerifier",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
     name: "currentRoot",
     stateMutability: "view",
     inputs: [],
@@ -213,6 +232,8 @@ export const shieldPoolAbi = [
 /** RH L2 gas headroom */
 /** Poseidon verify + tree insert, 500k was tight; unshield/transfer need headroom */
 export const SHIELD_GAS_LIMIT = 1_500_000n;
+// shieldBound also verifies a Groth16 proof on-chain (~250k extra).
+export const SHIELD_BOUND_GAS_LIMIT = 1_900_000n;
 /** Sealed swap proof verify is heavier */
 export const SEALED_SWAP_GAS_LIMIT = 2_500_000n;
 export const EMERGENCY_GAS_LIMIT = 200_000n;

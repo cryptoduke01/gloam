@@ -36,6 +36,7 @@ import {
   HASH_SCHEME,
   NATIVE_ASSET,
   SHIELD_GAS_LIMIT,
+  SHIELD_BOUND_GAS_LIMIT,
   SHIELD_POOL_ADDRESS,
   type LocalNote,
   assetLabel,
@@ -147,6 +148,12 @@ export function ShieldView() {
             args: [assetAddress],
             chainId: PRODUCT_CHAIN_ID,
           },
+          {
+            address: SHIELD_POOL_ADDRESS!,
+            abi: shieldPoolAbi,
+            functionName: "shieldVerifier",
+            chainId: PRODUCT_CHAIN_ID,
+          },
         ]
       : [],
     query: { enabled: deployed, refetchInterval: 12_000 },
@@ -176,6 +183,15 @@ export function ShieldView() {
     poolData?.[5]?.status === "success"
       ? (poolData[5].result as bigint)
       : null;
+  const shieldVerifierAddr =
+    poolData?.[6]?.status === "success"
+      ? (poolData[6].result as string)
+      : null;
+  // C1: when the pool enforces bound shields, plain shield() reverts and we must
+  // prove commitment == Poseidon(secret, amount, asset) via shieldBound().
+  const shieldVerifierLive =
+    Boolean(shieldVerifierAddr) &&
+    shieldVerifierAddr !== "0x0000000000000000000000000000000000000000";
 
   const verifierLive =
     Boolean(verifier) &&
@@ -261,17 +277,10 @@ export function ShieldView() {
       const pending = pendingShieldArgs.current;
       if (pending && SHIELD_POOL_ADDRESS && autoShieldAfterApprove.current) {
         autoShieldAfterApprove.current = false;
-        setPendingNote(pending.note);
-        setPendingKind("shield");
         handledHash.current = null;
-        writeContract({
-          address: SHIELD_POOL_ADDRESS,
-          abi: shieldPoolAbi,
-          functionName: "shield",
-          args: [assetAddress, pending.value, pending.commitment],
-          gas: SHIELD_GAS_LIMIT,
-          chainId: PRODUCT_CHAIN_ID,
-        });
+        // Route through executeShield so the shieldBound (C1) branch applies
+        // after an ERC20 approval too.
+        void executeShield(pending.value, pending.note, pending.commitment);
       }
       return;
     }
@@ -385,11 +394,43 @@ export function ShieldView() {
     return null;
   }
 
-  function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
+  async function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
     if (!SHIELD_POOL_ADDRESS) return;
+    const asset = selectedToken ? selectedToken.address : NATIVE_ASSET;
     setPendingNote(note);
     setPendingKind("shield");
     // Do not saveLocalNote until shield confirms, see receipt handler
+
+    // C1 (audit): a hardened pool requires a proof that commitment ==
+    // Poseidon(secret, amount, asset), submitted via shieldBound(). On legacy
+    // pools (shieldVerifier unset) plain shield() still works, unchanged.
+    if (shieldVerifierLive) {
+      try {
+        const { proveShieldInBrowser } = await import("@/lib/proveClient");
+        const { proofBytes } = await proveShieldInBrowser({
+          commitment: BigInt(commitment).toString(),
+          amount: value.toString(),
+          asset: BigInt(asset).toString(),
+          secret: BigInt(note.secret).toString(),
+        });
+        writeContract({
+          address: SHIELD_POOL_ADDRESS,
+          abi: shieldPoolAbi,
+          functionName: "shieldBound",
+          args: [asset, value, commitment, proofBytes],
+          value: selectedToken ? undefined : value,
+          gas: SHIELD_BOUND_GAS_LIMIT,
+          chainId: PRODUCT_CHAIN_ID,
+        });
+      } catch (err) {
+        setFormError(
+          err instanceof Error ? err.message : "Could not build shield proof."
+        );
+        setPendingKind(null);
+        setPendingNote(null);
+      }
+      return;
+    }
 
     if (selectedToken) {
       writeContract({
@@ -484,7 +525,7 @@ export function ShieldView() {
       }
     }
 
-    executeShield(value, note, commitment);
+    await executeShield(value, note, commitment);
   }
 
   // Clear in-memory pending on wallet reject / failed write
