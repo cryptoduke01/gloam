@@ -73,6 +73,30 @@ async function main() {
     : ethers.utils.formatEther(bal);
   console.log("balance", balEth, "ETH");
 
+  // RH testnet reports ~0.01 gwei. ethers v5 otherwise defaults to a ~1.5 gwei
+  // priority fee, which (a) overpays ~100x and (b) makes the node cap
+  // eth_estimateGas at balance/maxFeePerGas (~2.1M gas here) -> "code storage out
+  // of gas" on the Poseidon CREATE. Pin a low legacy gasPrice so estimateGas gets
+  // a sane cap and the deploy stays cheap.
+  async function computeGasPrice() {
+    if (v6) {
+      const fd = await provider.getFeeData();
+      const gp = (fd.gasPrice ?? fd.maxFeePerGas ?? 0n) * 3n;
+      const floor = 20000000n; // 0.02 gwei
+      return gp > floor ? gp : floor;
+    }
+    const gp = (await provider.getGasPrice()).mul(3);
+    const floor = ethers.BigNumber.from("20000000"); // 0.02 gwei
+    return gp.gt(floor) ? gp : floor;
+  }
+  const gasPrice = await computeGasPrice();
+  const ov = { gasPrice };
+  console.log(
+    "gasPrice",
+    Number(gasPrice.toString()) / 1e9,
+    "gwei (legacy, pinned)"
+  );
+
   async function waitDeployed(contract) {
     if (v6) {
       await contract.waitForDeployment();
@@ -88,7 +112,7 @@ async function main() {
     if (!bytecode.startsWith("0x")) bytecode = `0x${bytecode}`;
     const factory = new ethers.ContractFactory(abi, bytecode, wallet);
     console.log(`deploying Poseidon${n}...`);
-    const c = await factory.deploy();
+    const c = await factory.deploy(ov);
     const addr = await waitDeployed(c);
     console.log(`Poseidon${n}`, addr);
     return addr;
@@ -117,7 +141,7 @@ async function main() {
         : art.bytecode.object;
     const factory = new ethers.ContractFactory(art.abi, bytecode, wallet);
     console.log(`deploying ${name}...`, args);
-    const c = await factory.deploy(...args);
+    const c = await factory.deploy(...args, ov);
     const addr = await waitDeployed(c);
     console.log(name, addr);
     return addr;
@@ -132,14 +156,69 @@ async function main() {
   if (process.env.POSEIDON2) console.log("reuse Poseidon2", poseidon2);
   if (process.env.POSEIDON3) console.log("reuse Poseidon3", poseidon3);
 
+  // --- Groth16 verifiers (regenerated on the pot16 dev ceremony, C1/C2 hardening) ---
   const unshieldVerifier = await deployArtifact("UnshieldVerifier");
   const unshieldIVerifier = await deployArtifact("UnshieldIVerifier", [
     unshieldVerifier,
   ]);
+  const transferVerifier = await deployArtifact("TransferVerifier");
+  const transferIVerifier = await deployArtifact("TransferIVerifier", [
+    transferVerifier,
+  ]);
+  // DualProof routes by public-input length: 5 -> unshield, 4 -> transfer.
+  const dualProofVerifier = await deployArtifact("DualProofVerifier", [
+    unshieldIVerifier,
+    transferIVerifier,
+  ]);
+  const sealedSwapVerifier = await deployArtifact("SealedSwapVerifier");
+  const sealedSwapIVerifier = await deployArtifact("SealedSwapIVerifier", [
+    sealedSwapVerifier,
+  ]);
+  // Shield verifier (C1 fix): binds commitment <-> (amount, asset) at deposit.
+  const shieldVerifier = await deployArtifact("ShieldVerifier");
+  const shieldIVerifier = await deployArtifact("ShieldIVerifier", [
+    shieldVerifier,
+  ]);
+
+  // Pool's main `verifier` = dual-proof router (handles unshield + transfer).
   const pool = await deployArtifact("ShieldPoolPoseidon", [
     poseidon2,
-    unshieldIVerifier,
+    dualProofVerifier,
   ]);
+
+  // --- Wire the remaining verifiers (onlyOwner; deployer is owner) ---
+  const poolAbi = loadArtifact("ShieldPoolPoseidon").abi;
+  const poolContract = new ethers.Contract(pool, poolAbi, wallet);
+
+  async function sendTx(promise, label) {
+    const tx = await promise;
+    console.log(`  ${label} tx`, tx.hash);
+    await tx.wait();
+  }
+
+  console.log("wiring sealed-swap verifier...");
+  await sendTx(
+    poolContract.setSealedSwapVerifier(sealedSwapIVerifier, ov),
+    "setSealedSwapVerifier"
+  );
+
+  // HARDEN_SHIELD gates C1 enforcement. Once set, plain shield() reverts and the
+  // app MUST call shieldBound() with a proof. Only flip this on once the app's
+  // shieldBound flow is live and pointed at THIS pool. Default: staged (off).
+  const hardenShield = process.env.HARDEN_SHIELD === "1";
+  if (hardenShield) {
+    console.log("hardening shield (C1): setShieldVerifier...");
+    await sendTx(
+      poolContract.setShieldVerifier(shieldIVerifier, ov),
+      "setShieldVerifier"
+    );
+  } else {
+    console.log(
+      "shield verifier deployed but NOT wired (staged). To enforce C1 later:\n" +
+        `  cast send ${pool} "setShieldVerifier(address)" ${shieldIVerifier} --rpc-url $RPC_URL --private-key $DEPLOYER_PK\n` +
+        "  (or re-run with HARDEN_SHIELD=1 once the app's shieldBound flow is live)"
+    );
+  }
 
   const net = await provider.getNetwork();
   const chainId = Number(net.chainId ?? net.chainId);
@@ -159,17 +238,27 @@ async function main() {
     hashScheme: "poseidon",
     proofLayout: 2,
     deployBlock,
+    shieldHardened: hardenShield,
     contracts: {
       Poseidon2: poseidon2,
       Poseidon3: poseidon3,
       UnshieldVerifier: unshieldVerifier,
       UnshieldIVerifier: unshieldIVerifier,
+      TransferVerifier: transferVerifier,
+      TransferIVerifier: transferIVerifier,
+      DualProofVerifier: dualProofVerifier,
+      SealedSwapVerifier: sealedSwapVerifier,
+      SealedSwapIVerifier: sealedSwapIVerifier,
+      ShieldVerifier: shieldVerifier,
+      ShieldIVerifier: shieldIVerifier,
       ShieldPoolPoseidon: pool,
     },
     deployer: wallet.address,
     deployedAt: new Date().toISOString(),
     notes:
-      "Phase-2 Poseidon pool with real unshield verifier (dev ceremony keys). Keccak pool 0x2BD9… is separate.",
+      "Hardened Phase-2 Poseidon pool (C1/C2/C3). Verifiers regenerated on the pot16 " +
+      "dev ceremony — regenerate with a production multi-party ceremony before mainnet. " +
+      "Keccak pool 0x2BD9… is separate.",
   };
 
   const depDir = join(root, "deployments");
@@ -184,6 +273,11 @@ async function main() {
   if (deployBlock != null) {
     console.log(`NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=${deployBlock}`);
   }
+  console.log("\nNext: copy new circuit artifacts into app/public/circuits/,");
+  console.log("update app/src/lib/config.ts pool address, then verify shield→prove→unshield.");
+  console.log(
+    "Sealed-swap needs at least one rate: pool.setSwapRate(assetIn, assetOut, rateIn, rateOut, true)."
+  );
 }
 
 main().catch((e) => {
