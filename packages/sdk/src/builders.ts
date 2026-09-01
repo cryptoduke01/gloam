@@ -3,8 +3,11 @@
  * inspect, then sign and broadcast. The plan layer is portable; the exec layer
  * is the resolved on-chain call.
  *
- * Shield is live. private_send / unshield / private_trade builders land as the
- * prover core is ported (they require a witness + Groth16 proof).
+ * shieldBound (live deposit), unshield (cash out), and private_send (in-vault
+ * transfer) each build a witness, generate a Groth16 proof via the injected
+ * prover, and resolve to a signed-ready call. private_trade (sealedSwap) builds
+ * a valid intent too, but its on-chain path is disabled pending the H1 solvency
+ * work — the builder is here so integrators can wire it ahead of that flip.
  */
 
 import type { Address } from "viem";

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { DocsCopyEnhancer } from "./DocsCopyEnhancer";
 
 export type DocNavItem = {
   href: string;
@@ -88,7 +89,7 @@ export function DocsLayout({
     <div className="min-h-screen bg-[#F4F3EF] text-[#121316]">
       {/* light chrome */}
       <header className="sticky top-0 z-40 border-b border-[#E5E3DD] bg-[#F4F3EF]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+        <div className="mx-auto flex max-w-[96rem] items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           <Link href="/" className="flex items-center gap-[10px]">
             <Mark size={20} />
             <span className="font-semibold tracking-[-0.01em]">Gloam</span>
@@ -111,7 +112,7 @@ export function DocsLayout({
       </header>
 
       <div className="border-b border-[#E5E3DD]">
-        <div className="mx-auto grid max-w-7xl gap-x-16 lg:grid-cols-[240px_minmax(0,1fr)_240px]">
+        <div className="mx-auto grid max-w-[96rem] gap-x-14 lg:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_320px]">
           {/* Left nav */}
           <aside className="hidden lg:block">
             <nav
@@ -171,17 +172,18 @@ export function DocsLayout({
             <p className="text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
               Documentation
             </p>
-            <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
+            <h1 className="mt-3 max-w-4xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
               {title}
             </h1>
             {lede && (
-              <p className="mt-5 max-w-3xl text-base leading-relaxed text-[#565660] sm:text-lg">
+              <p className="mt-5 max-w-4xl text-base leading-relaxed text-[#565660] sm:text-lg">
                 {lede}
               </p>
             )}
-            <div className="docs-prose mt-10 max-w-3xl space-y-4 text-[15px]">
+            <div className="docs-prose mt-10 max-w-4xl space-y-4 text-[15px]">
               {children}
             </div>
+            <DocsCopyEnhancer />
           </main>
 
           {/* Right rail */}
@@ -196,10 +198,12 @@ export function DocsLayout({
                     {glance.map((row) => (
                       <div
                         key={row.label}
-                        className="flex items-baseline justify-between gap-3 border-b border-[#E5E3DD] pb-2 last:border-0 last:pb-0"
+                        className="border-b border-[#E5E3DD] pb-2.5 last:border-0 last:pb-0"
                       >
-                        <dt className="text-xs text-[#6E6E76]">{row.label}</dt>
-                        <dd className="text-right text-xs font-medium text-[#121316]">
+                        <dt className="text-[10px] uppercase tracking-[0.14em] text-[#8a8a90]">
+                          {row.label}
+                        </dt>
+                        <dd className="mt-1 break-words text-[13px] font-medium leading-snug text-[#121316]">
                           {row.value}
                         </dd>
                       </div>
@@ -252,7 +256,7 @@ export function DocsLayout({
       </div>
 
       {/* light footer */}
-      <footer className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <footer className="mx-auto flex max-w-[96rem] flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div className="flex items-center gap-[10px]">
           <Mark size={18} />
           <span>Gloam</span>

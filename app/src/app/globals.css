@@ -220,6 +220,7 @@ body {
 }
 
 .docs-prose pre {
+  position: relative;
   margin-top: 1.5rem;
   overflow-x: auto;
   border-radius: 14px;
@@ -235,6 +236,47 @@ body {
   font-size: 0.86em;
   font-weight: 400;
   white-space: pre;
+}
+
+/* Copy button injected into every docs code block by DocsCopyEnhancer. */
+.docs-prose .copy-btn {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.26rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-weight: 500;
+  color: #6e6e76;
+  background: #f4f3ef;
+  border: 1px solid #e5e3dd;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease, background 0.15s ease;
+}
+.docs-prose pre:hover .copy-btn,
+.docs-prose .copy-btn:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+.docs-prose .copy-btn:hover {
+  color: #121316;
+  border-color: #cfccc4;
+  background: #ffffff;
+}
+.docs-prose .copy-btn.copied {
+  opacity: 1;
+  color: #2e7d53;
+  border-color: rgba(46, 125, 83, 0.4);
+  background: rgba(46, 125, 83, 0.08);
+}
+.docs-prose .copy-btn svg {
+  display: block;
 }
 
 .docs-prose table {
