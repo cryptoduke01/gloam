@@ -415,6 +415,12 @@ export function SealedTradePanel({
       const { rateIn, rateOut } = rateQuote;
       // Do NOT publish exact amountOut as amountOutMin, that was the size leak.
       const amountOutMin = publicAmountOutMin(exact.amountOut, sizePrivacy);
+      // Audit M-3: a real client-side slippage floor. The public amountOutMin
+      // above stays a privacy floor (~1 wei); this minOut refuses to build if the
+      // output dropped below 1% of the quote before the proof was built (e.g. an
+      // oracle move). The on-chain oracle ratio-tolerance is the settle-time guard.
+      const SLIPPAGE_BPS = 100n; // 1%
+      const minOut = (exact.amountOut * (10_000n - SLIPPAGE_BPS)) / 10_000n;
       const w = await buildSealedSwapWitness({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
@@ -422,6 +428,7 @@ export function SealedTradePanel({
         assetIn,
         assetOut,
         amountOutMin,
+        minOut,
         rateIn,
         rateOut,
         path: path as PoseidonMerklePath,
