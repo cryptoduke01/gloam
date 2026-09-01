@@ -2,59 +2,25 @@
   "chainId": 46630,
   "network": "Robinhood Chain Testnet",
   "rpc": "https://rpc.testnet.chain.robinhood.com",
-  "explorer": "https://explorer.testnet.chain.robinhood.com",
   "hashScheme": "poseidon",
   "proofLayout": 2,
-  "deployBlock": 90436718,
+  "deployBlock": 110840714,
+  "shieldHardened": false,
   "contracts": {
-    "Poseidon2": "0xcc2d2D0f12324DcC32f781198664C92BB5200947",
-    "Poseidon3": "0x3242C523B5101c436e1AC74224598335E4f8F054",
-    "UnshieldVerifier": "0x1CdEf210C65616D7059397022BE3564fa742AED6",
-    "UnshieldIVerifier": "0xa40eCfBbB91D53dc66bf18E312228790751c3034",
-    "ShieldPoolPoseidon": "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F",
-    "TransferVerifier": "0x281Fe05bbD9f777fd26E1fF88d5b3BF094894719",
-    "TransferIVerifier": "0x73fe891fF323F7eBB730F8b6220fBc4D3d9648B1",
-    "DualProofVerifier": "0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C",
-    "SealedSwapVerifier": "0xE19a5a3CA4f7836811C5a87f2893b2A4C67AdF8D",
-    "SealedSwapIVerifier": "0x68C28ECD40320038bF8DE34Bb02064e12f602371",
-    "GloamPayMemo": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE"
-  },
-  "legacy": {
-    "ShieldPoolPoseidon_preSealed": "0xA488809a089F003A2B6E69daa65B0db79823c93B",
-    "deployBlock_preSealed": 90260331,
-    "keccakPool": "0x2BD98196D90AB45D58843B4c8B8809aa34343d35"
+    "Poseidon2": "0x46b33ced153199036F267CD19f45E246767a0540",
+    "Poseidon3": "0x05A99a357D06084bf8e761ab6d339F9DFdf2a512",
+    "UnshieldVerifier": "0xEc73Dd61a48F1A055AEC1F615b25b0C1917dF51a",
+    "UnshieldIVerifier": "0xd3A8eB4a325b7C0501a15431D5436655E65c2Eb8",
+    "TransferVerifier": "0x235E9413EcdC98Bc7e7d00361D65DDA49002fE12",
+    "TransferIVerifier": "0x0A399c33c95ff5e6aeC2E13355768863237D1C42",
+    "DualProofVerifier": "0xB077c620384813bB31Bb82Cd55b63608Ac20f7eF",
+    "SealedSwapVerifier": "0xa06461Ec24E80E9d83b12c2C39Dc681402642B89",
+    "SealedSwapIVerifier": "0x9D866ca3b981585D5E6B138E4411C804c4d6C198",
+    "ShieldVerifier": "0x3aB7f1Ab520Ad84523D271C8015567DAb84D362f",
+    "ShieldIVerifier": "0x28E6d0D02568EE634f9596645775275DE76b2847",
+    "ShieldPoolPoseidon": "0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834"
   },
   "deployer": "0xE1B0ddF821F1faA9402b0B8C4E66B213f877e828",
-  "deployedAt": "2026-07-15T09:30:00.000Z",
-  "poolDeployTxExplorer": "https://explorer.testnet.chain.robinhood.com/tx/0xb65eaf917144502e22b12885a4daecdb6dd1bddf2272405e2c4d17b463015366",
-  "appEnv": {
-    "NEXT_PUBLIC_POSEIDON_SHIELD_POOL": "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F",
-    "NEXT_PUBLIC_HASH_SCHEME": "poseidon",
-    "NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK": "90436718",
-    "NEXT_PUBLIC_PAY_MEMO": "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE",
-    "NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK": "90421567"
-  },
-  "features": {
-    "shield": true,
-    "unshield": true,
-    "privateSend": true,
-    "payMemo": true,
-    "sealedSwap": true,
-    "vaultInventorySeeded": true
-  },
-  "inventorySeed": {
-    "txSequence": "broadcast/SeedVaultInventory.s.sol/46630/run-latest.json",
-    "seededAtApprox": "2026-07-19",
-    "perAssetWei": "1000000000000000000",
-    "assets": [
-      "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E",
-      "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
-      "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
-      "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
-      "0x71178BAc73cBeb415514eB542a8995b82669778d"
-    ],
-    "note": "Throwaway commitments (inventory only). 1e18 each of TSLA AMZN PLTR NFLX AMD. ETH deposited still 0 unless ETH_AMT set."
-  },
-  "notes": "Vault with sealedSwap + DualProofVerifier + SealedSwapIVerifier. Dev ceremony keys. Inventory seeded for faucet stocks (see inventorySeed). Old pool 0xA488 for history only.",
-  "securityNote": "Dev ceremony zkeys — not production. No private keys in this file."
+  "deployedAt": "2026-09-01T00:37:08.419Z",
+  "notes": "Hardened Phase-2 Poseidon pool (C1/C2/C3). Verifiers regenerated on the pot16 dev ceremony — regenerate with a production multi-party ceremony before mainnet. Keccak pool 0x2BD9… is separate."
 }

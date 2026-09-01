@@ -14,11 +14,13 @@ export type HashScheme = "keccak" | "poseidon";
 export const KECCAK_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** Phase-2 Poseidon pool, live RH testnet with sealedSwap */
+/** Hardened Poseidon pool (C1/C2/C3 fixes), live RH testnet with sealedSwap.
+ *  Verifiers regenerated on the pot16 dev ceremony; replaces the vulnerable
+ *  0x4F38 pool (do not deposit into that one). */
 export const TESTNET_POSEIDON_POOL =
-  "0x4F38a4d80e5ca516A2e5549404C7be0E91c12D8F" as const satisfies Address;
+  "0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834" as const satisfies Address;
 
-export const TESTNET_POSEIDON_DEPLOY_BLOCK = 90_436_718n;
+export const TESTNET_POSEIDON_DEPLOY_BLOCK = 110_840_714n;
 
 /** Prior Poseidon pool (pre-sealedSwap), history only, never product default */
 export const LEGACY_POSEIDON_POOL =
