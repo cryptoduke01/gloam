@@ -69,7 +69,7 @@ export function MarketsView() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mkt-controls">
         <div className="flex flex-wrap gap-1">
           {filters.map((f) => (
             <button
@@ -90,7 +90,7 @@ export function MarketsView() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search"
-          className="min-h-11 w-full rounded-lg border border-line bg-panel px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime sm:max-w-xs"
+          className="min-h-11 rounded-lg border border-line bg-panel px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
         />
       </div>
 

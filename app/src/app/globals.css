@@ -245,6 +245,30 @@ body {
   }
 }
 
+/* Markets filter bar: real media query so the row/column swap is immune to the
+   Tailwind dev class-order bug (same reason as .app-nav). Filters left, search
+   right on desktop; stacked full-width on mobile. */
+.mkt-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.mkt-controls > input {
+  width: 100%;
+  max-width: 20rem;
+}
+@media (max-width: 639px) {
+  .mkt-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mkt-controls > input {
+    max-width: none;
+  }
+}
+
 /* Legal pages, light. Overrides inline dark tokens via higher specificity. */
 .prose-legal h2 {
   margin-top: 2rem;
