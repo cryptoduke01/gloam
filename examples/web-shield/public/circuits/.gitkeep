@@ -1,0 +1,3 @@
+# The shield circuit artifacts (shield.wasm, shield_final.zkey) land here.
+# `npm run artifacts` (run automatically before dev/build) copies them from
+# app/public/circuits. They are gitignored because they are large binaries.
