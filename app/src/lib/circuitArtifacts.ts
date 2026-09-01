@@ -12,32 +12,42 @@ export const CIRCUIT_ARTIFACTS = {
   unshieldWasm: {
     path: "/circuits/unshield.wasm",
     sha256:
-      "1accdab33d135c3b881eedd97666e0e03caf8381496d222c4e9f1c98bdcc015b",
+      "84ac0942b1618c6112a10bfe82ff0a62a80b7a14881565781eb513e9e581c480",
   },
   unshieldZkey: {
     path: "/circuits/unshield_final.zkey",
     sha256:
-      "cb3a58bd22c2011141420501a0181893840b805c428d170c267eeda0842faec5",
+      "f4b4c5bfa315cef38634eec1b64b8d9ad1d28725f61fde5e169fef1896360b63",
   },
   transferWasm: {
     path: "/circuits/transfer.wasm",
     sha256:
-      "b13262e3f8f525f3e0d627579e47a1a64236d714e7c07807ac3d8a2380a031c4",
+      "081929509c3477ee264cb2422183018c23122d59952ed4a61c4932c95d360872",
   },
   transferZkey: {
     path: "/circuits/transfer_final.zkey",
     sha256:
-      "d0455992378084fdb8a7f85eea5f5395c6dd281ca5b6525d63cfc9c95097da78",
+      "f75bc324f12e1f467f5779a7275737aa0fa514a6c317e3d775f1dba8f0234666",
   },
   sealedSwapWasm: {
     path: "/circuits/sealed_swap.wasm",
     sha256:
-      "8e1f8f2e331da4f8ad8c0fccf39ae68123189fd1202c42b5d8ce548fa89fd33d",
+      "7b8d18f3274d2e3e8d65ed3e41b66ab940082c9906d9281b28a25491f74405b0",
   },
   sealedSwapZkey: {
     path: "/circuits/sealed_swap_final.zkey",
     sha256:
-      "c9672678325e77cf4416c96fef9bba2f839e57b2f35aed09d869ae293875dd8e",
+      "c8521ebffe9a2181d5072e5351392c0f311a8a2f30be1b3ae954b77b1f728920",
+  },
+  shieldWasm: {
+    path: "/circuits/shield.wasm",
+    sha256:
+      "58157ec90f8af891acfa998bd599511b4d5cd06803cea32ab28a6eea8a9b2336",
+  },
+  shieldZkey: {
+    path: "/circuits/shield_final.zkey",
+    sha256:
+      "e4d42271b99faa218faebb38a06f69b5ccf01e328d3dea4381ab567e9fbd2481",
   },
 } as const;
 
@@ -105,6 +115,17 @@ export async function assertSealedSwapArtifacts(): Promise<void> {
   await assertArtifactIntegrity(
     CIRCUIT_ARTIFACTS.sealedSwapZkey.path,
     CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256
+  );
+}
+
+export async function assertShieldArtifacts(): Promise<void> {
+  await assertArtifactIntegrity(
+    CIRCUIT_ARTIFACTS.shieldWasm.path,
+    CIRCUIT_ARTIFACTS.shieldWasm.sha256
+  );
+  await assertArtifactIntegrity(
+    CIRCUIT_ARTIFACTS.shieldZkey.path,
+    CIRCUIT_ARTIFACTS.shieldZkey.sha256
   );
 }
 
