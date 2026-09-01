@@ -25,6 +25,7 @@ const nav: { section: string; items: DocNavItem[] }[] = [
     section: "Build on Gloam",
     items: [
       { href: "/docs/sdk", label: "SDK" },
+      { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
       { href: "/docs/agents", label: "Agents" },
     ],
   },
