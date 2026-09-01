@@ -193,6 +193,13 @@ export async function buildSealedSwapWitness(args: {
   assetIn?: Address;
   assetOut: Address;
   amountOutMin: bigint;
+  /**
+   * Audit M-3: the user's real slippage floor, enforced client-side and kept
+   * separate from the public (privacy) `amountOutMin`. If set and the computed
+   * output is below it, the witness refuses to build. Pass this once rates are
+   * market-driven (oracle-bound), where the on-chain floor stays private.
+   */
+  minOut?: bigint;
   rateIn: bigint;
   rateOut: bigint;
   path: PoseidonMerklePath;
@@ -218,9 +225,15 @@ export async function buildSealedSwapWitness(args: {
     blocker = "Invalid swap size.";
   }
 
+  // Public on-chain floor that goes into the proof: must be <= amountOut for a
+  // valid min-out constraint. With size privacy this is a tiny floor (~1 wei),
+  // so by design it does NOT protect the user's price — that is minOut's job.
   const amountOutMin = args.amountOutMin > amountOut ? amountOut : args.amountOutMin;
-  if (!blocker && amountOut < amountOutMin) {
-    blocker = "Output below minimum (slippage).";
+  // Audit M-3: the user's real slippage floor is a separate client-side gate and
+  // must never be silently clamped to amountOut. Refuse to build when the output
+  // is below it. (The public floor above stays private.)
+  if (!blocker && args.minOut !== undefined && amountOut < args.minOut) {
+    blocker = "Output below your minimum (slippage).";
   }
 
   const secretIn = hexToField(args.secretHex);
