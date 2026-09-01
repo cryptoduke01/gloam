@@ -53,6 +53,10 @@ contract ShieldPoolPoseidon is IShieldPool {
     mapping(address => mapping(address => SwapRate)) public swapRate;
 
     address public owner;
+    /// @notice M-4: two-step ownership. Set by transferOwnership, claimed by the
+    ///         incoming owner via acceptOwnership. Guards against handing the pool
+    ///         to a wrong/dead address in one irreversible step.
+    address public pendingOwner;
 
     uint256 public constant PROOF_LAYOUT_VERSION = 2;
     string public constant HASH_SCHEME = "poseidon";
@@ -73,7 +77,14 @@ contract ShieldPoolPoseidon is IShieldPool {
         bool enabled
     );
 
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event ShieldVerifierSet(address indexed verifier);
+    event EmergencyWithdrawal(address indexed asset, address indexed to, uint256 amount);
+
     error NotOwner();
+    error NotPendingOwner();
+    error ShieldVerifierAlreadySet();
     error ZeroCommitment();
     error AlreadySpent();
     error UnknownRoot();
@@ -121,8 +132,13 @@ contract ShieldPoolPoseidon is IShieldPool {
 
     /// @notice Enable value-bound deposits. Once set, plain shield() is blocked and
     ///         callers must use shieldBound() with a proof binding commitment↔amount↔asset.
+    /// @dev M-4: one-way. Once bound-shield enforcement is on it can never be
+    ///      cleared or repointed (e.g. reset to 0 to reopen the unbound C1 path).
     function setShieldVerifier(address verifier_) external onlyOwner {
+        if (address(shieldVerifier) != address(0)) revert ShieldVerifierAlreadySet();
+        if (verifier_ == address(0)) revert ZeroAddress();
         shieldVerifier = IVerifier(verifier_);
+        emit ShieldVerifierSet(verifier_);
     }
 
     /**
@@ -143,9 +159,21 @@ contract ShieldPoolPoseidon is IShieldPool {
         emit SwapRateSet(assetIn, assetOut, rateIn_, rateOut_, enabled_);
     }
 
+    /// @notice M-4: begin a two-step ownership handoff. The new owner must call
+    ///         acceptOwnership() to take control.
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice M-4: claim ownership after transferOwnership named you.
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        address previous = owner;
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previous, owner);
     }
 
     function emergencyWithdraw(
@@ -157,6 +185,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         if (amount == 0) revert InvalidAmount();
         if (deposited[asset] < amount) revert InsufficientPoolBalance();
         deposited[asset] -= amount;
+        emit EmergencyWithdrawal(asset, to, amount);
         _pushAsset(asset, to, amount);
     }
 
