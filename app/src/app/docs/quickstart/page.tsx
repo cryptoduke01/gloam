@@ -26,6 +26,18 @@ export default function DocsQuickstartPage() {
         { href: "/docs/agents", label: "Build a private agent" },
       ]}
     >
+      <h2>Fastest start</h2>
+      <p>Scaffold a working private app in one command:</p>
+      <pre>
+        <code>{`npm create gloam-app@latest my-private-app
+cd my-private-app && npm install && npm run dev`}</code>
+      </pre>
+      <p>
+        That gives you the browser shield flow, wired and running on{" "}
+        <code>localhost:3000</code>. The rest of this page builds the same thing
+        by hand so you understand each piece.
+      </p>
+
       <h2>What you need</h2>
       <ul>
         <li>

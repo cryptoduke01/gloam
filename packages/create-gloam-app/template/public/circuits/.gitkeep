@@ -1,0 +1,2 @@
+# shield.wasm and shield_final.zkey are fetched here by `npm run artifacts`
+# (runs automatically before dev/build). They are gitignored (large binaries).

@@ -166,6 +166,8 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/create-gloam-app: {}
+
   packages/sdk:
     dependencies:
       circomlibjs:
