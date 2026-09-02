@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Aeonik";
+        src: url("./fonts/Aeonik-Regular.woff2") format("woff2");
+        font-weight: 400; font-display: block;
+      }
+      @font-face {
+        font-family: "Aeonik";
+        src: url("./fonts/Aeonik-Medium.woff2") format("woff2");
+        font-weight: 500; font-display: block;
+      }
+      @font-face {
+        font-family: "Aeonik";
+        src: url("./fonts/Aeonik-Bold.woff2") format("woff2");
+        font-weight: 700; font-display: block;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px; height: 1080px; overflow: hidden;
+        background: #f4f3ef;
+      }
+      body { font-family: "Aeonik", system-ui, sans-serif; color: #121316; }
+
+      /* Faint blueprint grid, faded at the edges. */
+      .bg-grid {
+        position: absolute; inset: 0;
+        background-image:
+          linear-gradient(#e5e3dd 1px, transparent 1px),
+          linear-gradient(90deg, #e5e3dd 1px, transparent 1px);
+        background-size: 64px 64px; opacity: 0.7;
+        -webkit-mask-image: radial-gradient(56% 54% at 50% 40%, #000, transparent 76%);
+        mask-image: radial-gradient(56% 54% at 50% 40%, #000, transparent 76%);
+      }
+
+      /* The Gloam mark, extruded into a 3D slab and turning. */
+      .stage {
+        position: absolute; left: 50%; top: 40%;
+        width: 300px; height: 300px;
+        transform: translate(-50%, -50%);
+        perspective: 1600px;
+      }
+      .tile {
+        position: absolute; inset: 0;
+        transform-style: preserve-3d;
+        will-change: transform;
+        filter: drop-shadow(0 40px 55px rgba(18, 19, 22, 0.16));
+      }
+      .slab-slice {
+        position: absolute; inset: 0;
+        background: #121316;
+        border-radius: 84px;
+      }
+      .slab-inset {
+        position: absolute; top: 38px; right: 47px;
+        width: 112px; height: 112px;
+        border-radius: 33px;
+        background: #f4f3ef;
+      }
+
+      .wordmark {
+        position: absolute; left: 0; right: 0; top: 736px;
+        text-align: center;
+      }
+      .name {
+        font-weight: 700; font-size: 60px;
+        letter-spacing: -0.03em; color: #121316;
+      }
+      .sub {
+        margin-top: 18px; font-size: 23px; font-weight: 500;
+        letter-spacing: -0.01em; color: #6e6e76;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0" data-duration="6"
+      data-width="1080" data-height="1080"
+    >
+      <div class="bg-grid"></div>
+
+      <div class="stage">
+        <div id="tile" class="tile"><!-- slices injected below --></div>
+      </div>
+
+      <div id="wordmark" class="wordmark clip" data-start="0" data-duration="6" data-track-index="1">
+        <div class="name">Gloam SDK</div>
+        <div class="sub">The private layer for Robinhood Chain</div>
+      </div>
+    </div>
+
+    <script>
+      // Build the extruded mark: a stack of identical ink rounded-square slices
+      // (so the side profile is clean and rounded), the frontmost carrying the
+      // paper inset that makes it unmistakably the Gloam logo.
+      (function buildMark() {
+        const tile = document.getElementById("tile");
+        const N = 14, DEPTH = 26;
+        for (let i = 0; i < N; i++) {
+          const z = -DEPTH + (DEPTH * i) / (N - 1);
+          const s = document.createElement("div");
+          s.className = "slab-slice";
+          s.setAttribute("data-layout-allow-overflow", "");
+          s.style.transform = "translateZ(" + z.toFixed(2) + "px)";
+          tile.appendChild(s);
+          if (i === N - 1) {
+            const inset = document.createElement("div");
+            inset.className = "slab-inset";
+            s.appendChild(inset);
+          }
+        }
+      })();
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // A slow 3D sway that keeps the mark legible the whole time and loops
+      // seamlessly (both ends land on the same pose).
+      gsap.set("#tile", { rotationX: -12, rotationY: -50, y: 0 });
+      tl.to("#tile", { rotationY: 50, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationY: -50, duration: 3, ease: "sine.inOut" }, 3);
+      tl.to("#tile", { rotationX: -4, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationX: -12, duration: 3, ease: "sine.inOut" }, 3);
+      tl.to("#tile", { y: -12, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { y: 0, duration: 3, ease: "sine.inOut" }, 3);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -144,9 +144,6 @@ export default function SdkLandingPage() {
                 }}
               />
               <SdkObject size={132} />
-              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-[#E5E3DD] bg-white/80 px-3 py-1 font-mono text-[11px] text-[#6E6E76] backdrop-blur">
-                Groth16 · Poseidon
-              </span>
             </div>
           </div>
         </section>

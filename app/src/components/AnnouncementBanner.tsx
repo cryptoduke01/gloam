@@ -44,7 +44,7 @@ export function AnnouncementBanner() {
   return (
     <div
       className="relative z-[60] w-full bg-[#121316] text-[#F4F3EF]"
-      style={{ ["--sdk-accent" as keyof CSSProperties]: "#a29ce0" } as CSSProperties}
+      style={{ ["--sdk-bg" as keyof CSSProperties]: "#121316" } as CSSProperties}
     >
       <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-4 py-2.5 sm:px-6">
         <span className="shrink-0">
