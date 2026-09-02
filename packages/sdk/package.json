@@ -36,11 +36,20 @@
   },
   "sideEffects": false,
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   },
   "files": [
     "dist",
     "src",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {
