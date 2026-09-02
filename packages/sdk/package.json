@@ -48,7 +48,7 @@
     "prepublishOnly": "npm run build",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc && node test/rates.selftest.mjs && node test/note.selftest.mjs && node test/witness.selftest.mjs && node test/intents.selftest.mjs"
+    "test": "tsc && node test/rates.selftest.mjs && node test/note.selftest.mjs && node test/witness.selftest.mjs && node test/intents.selftest.mjs && node test/sync.selftest.mjs"
   },
   "dependencies": {
     "viem": "^2.55.2",
