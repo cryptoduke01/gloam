@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@/components/Analytics";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
@@ -101,6 +102,7 @@ export default function RootLayout({
         style={{ fontFamily: '"Aeonik", system-ui, sans-serif' }}
       >
         <ThemeProvider>
+          <AnnouncementBanner />
           {children}
           <CookieBanner />
           <Analytics />

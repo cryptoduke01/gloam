@@ -195,6 +195,9 @@ export function Landing() {
             <Link href="/app" className="hover:text-[#121316]">
               Vault
             </Link>
+            <Link href="/sdk" className="hover:text-[#121316]">
+              SDK
+            </Link>
             <Link href="/docs" className="hover:text-[#121316]">
               Docs
             </Link>

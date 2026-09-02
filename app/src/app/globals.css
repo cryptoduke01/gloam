@@ -529,3 +529,52 @@ body {
     animation: none !important;
   }
 }
+
+/* Animated SDK object — a rotating wireframe "package" cube. Hairlines use
+   currentColor so it adapts to a light page or a dark banner; two faces read as
+   "sealed" (indigo). Used in the announcement banner and the /sdk hero. */
+.sdk-cube-wrap {
+  display: inline-grid;
+  place-items: center;
+}
+.sdk-cube {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: sdk-spin 11s linear infinite;
+}
+.sdk-face {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, currentColor 32%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border-radius: 2px;
+}
+.sdk-face.sealed {
+  border-color: color-mix(in srgb, var(--sdk-accent, #3b3766) 70%, transparent);
+  background: color-mix(in srgb, var(--sdk-accent, #3b3766) 16%, transparent);
+}
+.sdk-core {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22%;
+  height: 22%;
+  border-radius: 2px;
+  background: var(--sdk-accent, #3b3766);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sdk-accent, #3b3766) 24%, transparent);
+  transform: translateZ(0);
+}
+@keyframes sdk-spin {
+  from {
+    transform: rotateX(-26deg) rotateY(0deg);
+  }
+  to {
+    transform: rotateX(-26deg) rotateY(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sdk-cube {
+    animation: none;
+    transform: rotateX(-26deg) rotateY(-34deg);
+  }
+}
