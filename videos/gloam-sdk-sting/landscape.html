@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Regular.woff2") format("woff2"); font-weight:400; font-display:block; }
+      @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Medium.woff2") format("woff2"); font-weight:500; font-display:block; }
+      @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Bold.woff2") format("woff2"); font-weight:700; font-display:block; }
+      * { margin:0; padding:0; box-sizing:border-box; }
+      html, body { width:1920px; height:1080px; overflow:hidden; background:#f4f3ef; }
+      body { font-family:"Aeonik", system-ui, sans-serif; color:#121316; }
+
+      .bg-grid {
+        position:absolute; inset:0;
+        background-image:
+          linear-gradient(#e5e3dd 1px, transparent 1px),
+          linear-gradient(90deg, #e5e3dd 1px, transparent 1px);
+        background-size:66px 66px; opacity:.6;
+        -webkit-mask-image:radial-gradient(70% 80% at 62% 50%, #000 10%, transparent 78%);
+                mask-image:radial-gradient(70% 80% at 62% 50%, #000 10%, transparent 78%);
+      }
+
+      .wrap { position:relative; height:100%; display:grid; grid-template-columns:1fr 640px; align-items:center; padding:0 128px; }
+      .eyebrow { display:flex; align-items:center; gap:14px; font-size:23px; font-weight:500; letter-spacing:.18em; text-transform:uppercase; color:#6E6E76; }
+      .dot { width:10px; height:10px; border-radius:50%; background:#3B3766; }
+      h1 { margin-top:30px; font-size:104px; line-height:.96; letter-spacing:-.04em; font-weight:700; }
+      .sub { margin-top:30px; font-size:32px; line-height:1.4; color:#565660; font-weight:400; max-width:22ch; }
+
+      .stage { justify-self:center; perspective:1700px; width:400px; height:400px; }
+      .tile { position:absolute; inset:0; transform-style:preserve-3d; will-change:transform; filter:drop-shadow(0 50px 62px rgba(18,19,22,.2)); }
+      .slab-slice { position:absolute; inset:0; background:#121316; border-radius:112px; }
+      .slab-inset { position:absolute; top:50px; right:62px; width:150px; height:150px; border-radius:44px; background:#f4f3ef; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0" data-duration="6"
+      data-width="1920" data-height="1080"
+    >
+      <div class="bg-grid"></div>
+      <div class="wrap">
+        <div id="copy" class="clip" data-start="0" data-duration="6" data-track-index="1">
+          <div class="eyebrow"><span class="dot"></span> Gloam SDK · live on testnet</div>
+          <h1>Gloam SDK</h1>
+          <p class="sub">The privacy layer for Robinhood Chain.</p>
+        </div>
+        <div class="stage"><div id="tile" class="tile"></div></div>
+      </div>
+    </div>
+
+    <script>
+      (function buildMark() {
+        const tile = document.getElementById("tile");
+        const N = 16, DEPTH = 30;
+        for (let i = 0; i < N; i++) {
+          const z = -DEPTH + (DEPTH * i) / (N - 1);
+          const s = document.createElement("div");
+          s.className = "slab-slice";
+          s.setAttribute("data-layout-allow-overflow", "");
+          s.style.transform = "translateZ(" + z.toFixed(2) + "px)";
+          tile.appendChild(s);
+          if (i === N - 1) {
+            const inset = document.createElement("div");
+            inset.className = "slab-inset";
+            s.appendChild(inset);
+          }
+        }
+      })();
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      gsap.set("#tile", { rotationX: -13, rotationY: -50, y: 0 });
+      tl.to("#tile", { rotationY: 50, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationY: -50, duration: 3, ease: "sine.inOut" }, 3);
+      tl.to("#tile", { rotationX: -5, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationX: -13, duration: 3, ease: "sine.inOut" }, 3);
+      tl.to("#tile", { y: -14, duration: 3, ease: "sine.inOut" }, 0)
+        .to("#tile", { y: 0, duration: 3, ease: "sine.inOut" }, 3);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
