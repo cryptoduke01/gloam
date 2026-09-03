@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1000, height=1000" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1000px; height: 1000px; overflow: hidden;
+        background: radial-gradient(120% 120% at 50% 18%, #ffffff, #f1f0ec);
+      }
+      .bg-grid {
+        position: absolute; inset: 0;
+        background-image:
+          linear-gradient(#e5e3dd 1px, transparent 1px),
+          linear-gradient(90deg, #e5e3dd 1px, transparent 1px);
+        background-size: 66px 66px; opacity: 0.6;
+        -webkit-mask-image: radial-gradient(60% 60% at 50% 46%, #000, transparent 78%);
+        mask-image: radial-gradient(60% 60% at 50% 46%, #000, transparent 78%);
+      }
+      .stage {
+        position: absolute; left: 50%; top: 50%;
+        width: 360px; height: 360px;
+        transform: translate(-50%, -50%);
+        perspective: 1700px;
+      }
+      .tile {
+        position: absolute; inset: 0;
+        transform-style: preserve-3d;
+        will-change: transform;
+        filter: drop-shadow(0 48px 60px rgba(18, 19, 22, 0.2));
+      }
+      .slab-slice {
+        position: absolute; inset: 0;
+        background: #121316;
+        border-radius: 100px;
+      }
+      .slab-inset {
+        position: absolute; top: 45px; right: 56px;
+        width: 135px; height: 135px;
+        border-radius: 40px;
+        background: #f4f3ef;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0" data-duration="7"
+      data-width="1000" data-height="1000"
+    >
+      <div class="bg-grid"></div>
+      <div class="stage"><div id="tile" class="tile"></div></div>
+    </div>
+
+    <script>
+      (function buildMark() {
+        const tile = document.getElementById("tile");
+        const N = 18, DEPTH = 46;
+        for (let i = 0; i < N; i++) {
+          const z = -DEPTH + (DEPTH * i) / (N - 1);
+          const s = document.createElement("div");
+          s.className = "slab-slice";
+          s.setAttribute("data-layout-allow-overflow", "");
+          s.style.transform = "translateZ(" + z.toFixed(2) + "px)";
+          tile.appendChild(s);
+          if (i === N - 1) {
+            const inset = document.createElement("div");
+            inset.className = "slab-inset";
+            s.appendChild(inset);
+          }
+        }
+      })();
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      // generous 3D sway — reveals the slab's depth, keeps the mark forward
+      gsap.set("#tile", { rotationX: -16, rotationY: -66 });
+      tl.to("#tile", { rotationY: 66, duration: 3.5, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationY: -66, duration: 3.5, ease: "sine.inOut" }, 3.5);
+      tl.to("#tile", { rotationX: -8, duration: 3.5, ease: "sine.inOut" }, 0)
+        .to("#tile", { rotationX: -16, duration: 3.5, ease: "sine.inOut" }, 3.5);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
