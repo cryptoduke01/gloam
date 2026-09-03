@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Regular.woff2") format("woff2"); font-weight:400; font-display:block; }
+  @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Medium.woff2") format("woff2"); font-weight:500; font-display:block; }
+  @font-face { font-family:"Aeonik"; src:url("./fonts/Aeonik-Bold.woff2") format("woff2"); font-weight:700; font-display:block; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1600px; height:900px; overflow:hidden; }
+  body {
+    font-family:"Aeonik", system-ui, sans-serif;
+    color:#121316;
+    background: radial-gradient(120% 130% at 22% 8%, #ffffff 0%, #f4f3ef 55%, #eeece6 100%);
+    position:relative;
+  }
+  .grid {
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(#e4e2db 1px, transparent 1px),
+      linear-gradient(90deg, #e4e2db 1px, transparent 1px);
+    background-size:60px 60px; opacity:.55;
+    -webkit-mask-image: radial-gradient(80% 90% at 70% 50%, #000 10%, transparent 80%);
+            mask-image: radial-gradient(80% 90% at 70% 50%, #000 10%, transparent 80%);
+  }
+  .wrap { position:relative; height:100%; display:grid; grid-template-columns:1fr 560px; align-items:center; padding:0 96px; }
+  .eyebrow { display:flex; align-items:center; gap:12px; font-size:19px; font-weight:500; letter-spacing:.18em; text-transform:uppercase; color:#6E6E76; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#3B3766; }
+  h1 { margin-top:26px; font-size:82px; line-height:.98; letter-spacing:-.04em; font-weight:700; max-width:14ch; }
+  h1 .muted { color:#8a8a90; }
+  .sub { margin-top:28px; font-size:26px; line-height:1.45; color:#4c4c53; max-width:30ch; font-weight:400; }
+  .cmd { margin-top:40px; display:inline-flex; align-items:center; gap:14px; padding:18px 26px; border:1px solid #E5E3DD; border-radius:14px; background:rgba(255,255,255,.75); font-size:24px; font-weight:500; }
+  .cmd .p { color:#3B3766; font-weight:700; }
+  .stage { justify-self:center; perspective:1700px; width:380px; height:380px; }
+  .tile { position:relative; width:380px; height:380px; transform-style:preserve-3d; transform:rotateX(-15deg) rotateY(-34deg); filter:drop-shadow(0 50px 60px rgba(18,19,22,.22)); }
+  .slice { position:absolute; inset:0; background:#121316; border-radius:106px; }
+  .inset { position:absolute; top:48px; right:59px; width:142px; height:142px; border-radius:42px; background:#f4f3ef; }
+  .foot { position:absolute; left:96px; bottom:54px; font-size:20px; color:#6E6E76; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> Gloam SDK · live on testnet</div>
+      <h1>The privacy layer for <span class="muted">Robinhood Chain.</span></h1>
+      <p class="sub">Shielded balances, private payments, and selective disclosure for any app or agent.</p>
+      <div class="cmd"><span class="p">$</span> npm install @gloamtrade/sdk</div>
+    </div>
+    <div class="stage"><div class="tile" id="tile"></div></div>
+  </div>
+  <div class="foot">gloam.trade</div>
+  <script>
+    var tile=document.getElementById('tile'), N=16, D=30;
+    for(var i=0;i<N;i++){var z=-D+(D*i)/(N-1);var s=document.createElement('div');s.className='slice';s.style.transform='translateZ('+z.toFixed(2)+'px)';tile.appendChild(s);if(i===N-1){var ins=document.createElement('div');ins.className='inset';s.appendChild(ins);}}
+  </script>
+</body>
+</html>
