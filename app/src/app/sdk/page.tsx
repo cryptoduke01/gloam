@@ -5,7 +5,7 @@ import { CopyCommand } from "@/components/CopyCommand";
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloam/sdk — the privacy layer for Robinhood Chain, as a package. Add shielded balances, private payments, and selective disclosure to any app or agent.",
+    "@gloamtrade/sdk — the privacy layer for Robinhood Chain, as a package. Add shielded balances, private payments, and selective disclosure to any app or agent.",
 };
 
 function Mark({ size = 22 }: { size?: number }) {
@@ -90,7 +90,7 @@ export default function SdkLandingPage() {
               stack to build from scratch.
             </p>
             <div className="mt-8 max-w-[420px] space-y-3">
-              <CopyCommand command="npm install @gloam/sdk" />
+              <CopyCommand command="npm install @gloamtrade/sdk" />
               <CopyCommand command="npm create gloam-app@latest" />
             </div>
             <div className="mt-8 flex flex-wrap gap-3">

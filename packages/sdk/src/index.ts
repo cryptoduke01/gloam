@@ -1,5 +1,5 @@
 /**
- * @gloam/sdk — the private path for Robinhood Chain, as a reusable package.
+ * @gloamtrade/sdk — the private path for Robinhood Chain, as a reusable package.
  *
  * Shielded balances, private transfers, and private trades that any RH Chain app
  * or agent can plug into. The Gloam vault app is the reference implementation.

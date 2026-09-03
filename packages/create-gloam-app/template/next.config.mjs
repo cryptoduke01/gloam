@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // @gloam/sdk ships TypeScript source; Next transpiles it.
-  transpilePackages: ["@gloam/sdk"],
+  // @gloamtrade/sdk ships TypeScript source; Next transpiles it.
+  transpilePackages: ["@gloamtrade/sdk"],
   webpack: (config) => {
     // WalletConnect / node-only optional deps pulled in transitively.
     config.externals.push("pino-pretty", "encoding");

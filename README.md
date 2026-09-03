@@ -20,8 +20,8 @@ The vault app is the reference implementation, not the whole product.
 
 | Surface | What it is | Package |
 | --- | --- | --- |
-| **SDK** | Drop shielded balances, private sends, and selective disclosure into any Robinhood Chain app or agent. Unsigned intents + client proving. | [`@gloam/sdk`](./packages/sdk) |
-| **Agents** | An MCP server + a reference wrapper so an AI agent can shield and move value privately, under policy. | [`@gloam/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
+| **SDK** | Drop shielded balances, private sends, and selective disclosure into any Robinhood Chain app or agent. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
+| **Agents** | An MCP server + a reference wrapper so an AI agent can shield and move value privately, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
 | **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
 
 All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle tree, circom witness builders, real Groth16 verification, and one canonical intent shape.
@@ -64,7 +64,7 @@ Privacy earns the mainnet gate only when it is auditable and correct.
 Deposit privately into the hardened pool in a few lines. The SDK mints the note and generates the shield proof; you sign the resolved call.
 
 ```ts
-import { buildShieldBoundIntent, artifactProver } from "@gloam/sdk";
+import { buildShieldBoundIntent, artifactProver } from "@gloamtrade/sdk";
 import { parseEther } from "viem";
 
 const intent = await buildShieldBoundIntent({
@@ -83,8 +83,8 @@ A complete runnable agent is in [`examples/agent-shield`](./examples/agent-shiel
 
 ```
 gloam/
-  packages/sdk/          @gloam/sdk  the private path as a reusable package
-  mcp/                   @gloam/mcp  agent server (plan + signed execution)
+  packages/sdk/          @gloamtrade/sdk  the private path as a reusable package
+  mcp/                   @gloamtrade/mcp  agent server (plan + signed execution)
   examples/agent-shield/ reference wrapper: an agent shields via the SDK
   app/                   Next.js reference app + docs → Vercel root: app
   contracts/             Foundry · ShieldPoolPoseidon vault, verifiers, circuits, audit
@@ -103,9 +103,9 @@ The pre-C1 pool `0x4F38…` is drained and retired, never use it. Circuits (Grot
 
 ```bash
 pnpm install
-pnpm --filter @gloam/sdk build        # build the SDK
+pnpm --filter @gloamtrade/sdk build        # build the SDK
 cd contracts && forge test            # contracts (67 tests)
-pnpm --filter @gloam/sdk test         # SDK core self-tests
+pnpm --filter @gloamtrade/sdk test         # SDK core self-tests
 ```
 
 Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https://gloam.trade/app). Testnet ETH + stock tokens: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/).

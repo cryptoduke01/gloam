@@ -1,7 +1,7 @@
 /**
- * Build an unsigned shield intent with @gloam/sdk.
+ * Build an unsigned shield intent with @gloamtrade/sdk.
  *
- *   pnpm --filter @gloam/sdk build
+ *   pnpm --filter @gloamtrade/sdk build
  *   node examples/shield-intent.mjs
  *
  * Prints a ready-to-sign shield of 0.01 ETH into the sealed vault: a real

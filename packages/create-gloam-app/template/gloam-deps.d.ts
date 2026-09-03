@@ -1,4 +1,4 @@
-// @gloam/sdk ships TypeScript source and depends on snarkjs (proving) and
+// @gloamtrade/sdk ships TypeScript source and depends on snarkjs (proving) and
 // circomlibjs (Poseidon), neither of which ships its own types. Declaring them
 // here lets `tsc` / `next build` type-check the transpiled SDK source. A real
 // integrator adds the same two shims (or installs community @types if any).

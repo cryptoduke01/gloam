@@ -5,7 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloam/sdk — add shielded balances, private payments, and selective disclosure to any Robinhood Chain app or agent. The privacy layer as a package.",
+    "@gloamtrade/sdk — add shielded balances, private payments, and selective disclosure to any Robinhood Chain app or agent. The privacy layer as a package.",
 };
 
 export default function DocsSdkPage() {
@@ -14,7 +14,7 @@ export default function DocsSdkPage() {
       title="SDK"
       lede="The privacy layer for Robinhood Chain, as a package. Give any app or agent shielded balances, private payments, and selective disclosure — without building a proving stack from scratch."
       glance={[
-        { label: "Package", value: "@gloam/sdk" },
+        { label: "Package", value: "@gloamtrade/sdk" },
         { label: "Runtime", value: "browser + node" },
         { label: "Chain", value: "RH testnet 46630" },
         { label: "Proofs", value: "Groth16 + Poseidon" },
@@ -29,7 +29,7 @@ export default function DocsSdkPage() {
       <h2>What Gloam gives your app</h2>
       <p>
         Robinhood Chain is public: every balance, size, and move is visible.
-        Gloam is the shielded chamber on top of it, and <code>@gloam/sdk</code>{" "}
+        Gloam is the shielded chamber on top of it, and <code>@gloamtrade/sdk</code>{" "}
         is that chamber as a dependency. The Gloam vault app is the reference
         implementation, not a special case — the same core runs in your app.
       </p>
@@ -61,7 +61,7 @@ export default function DocsSdkPage() {
         you generate proofs (shield, unshield, disclosure).
       </p>
       <pre>
-        <code>{`npm install @gloam/sdk viem
+        <code>{`npm install @gloamtrade/sdk viem
 npm install snarkjs   # optional peer, for proving`}</code>
       </pre>
 
@@ -92,7 +92,7 @@ nullifier  = Poseidon(secret, commitment)`}</code>
         call.
       </p>
       <pre>
-        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloam/sdk";
+        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloamtrade/sdk";
 import { parseEther } from "viem";
 
 const intent = await buildShieldBoundIntent({
@@ -173,7 +173,7 @@ await wallet.writeContract({
       <h2>API surface</h2>
       <h3>Notes</h3>
       <pre>
-        <code>{`import { makeBoundNotePoseidon, noteNullifierPoseidon } from "@gloam/sdk";
+        <code>{`import { makeBoundNotePoseidon, noteNullifierPoseidon } from "@gloamtrade/sdk";
 
 const note = await makeBoundNotePoseidon(amountWei, assetAddress);
 // { secret, commitment, secretField, commitmentField }
@@ -186,7 +186,7 @@ const nullifier = await noteNullifierPoseidon(note.secretField, note.commitmentF
         browser); <code>proveGroth16</code> is the one-shot form.
       </p>
       <pre>
-        <code>{`import { artifactProver, proveGroth16 } from "@gloam/sdk";
+        <code>{`import { artifactProver, proveGroth16 } from "@gloamtrade/sdk";
 
 const prover = artifactProver({ wasm, zkey });
 const { proofBytes, publicSignals } = await prover(circomInput);`}</code>

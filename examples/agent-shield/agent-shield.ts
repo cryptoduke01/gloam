@@ -1,6 +1,6 @@
 /**
  * Reference wrapper — an autonomous agent that shields ETH PRIVATELY on Gloam,
- * using only @gloam/sdk for the private path. It mints a note, generates the
+ * using only @gloamtrade/sdk for the private path. It mints a note, generates the
  * zero-knowledge shield proof, and deposits via shieldBound() on the hardened
  * Robinhood Chain testnet pool. This is the smallest end-to-end example of an
  * app or agent plugging into Gloam's private layer.
@@ -27,7 +27,7 @@ import {
   buildShieldBoundIntent,
   artifactProver,
   RH_TESTNET_CHAIN_ID,
-} from "@gloam/sdk";
+} from "@gloamtrade/sdk";
 
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const here = dirname(fileURLToPath(import.meta.url));

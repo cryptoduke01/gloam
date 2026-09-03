@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * create-gloam-app — scaffold a private app on Robinhood Chain, powered by
- * @gloam/sdk. Copies the starter template, fills in the project name, and
+ * @gloamtrade/sdk. Copies the starter template, fills in the project name, and
  * prints the next steps. Zero dependencies (Node built-ins only).
  */
 import {

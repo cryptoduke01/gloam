@@ -1,6 +1,6 @@
 /**
  * Reference wrapper — a payments bot that sends a PRIVATE payment on Gloam using
- * only @gloam/sdk. It shields a note to fund itself, rebuilds the pool tree from
+ * only @gloamtrade/sdk. It shields a note to fund itself, rebuilds the pool tree from
  * chain, then spends that note with a private transfer: no public transfer, no
  * visible amount. The recipient gets a payment note they can later open or cash
  * out; the sender keeps a change note.
@@ -10,7 +10,7 @@
  *
  * Needs: a funded testnet key, snarkjs installed, and the shield + transfer
  * circuit artifacts (reused here from the app's public dir). The whole private
- * path — shield, sync, send — is @gloam/sdk; viem only signs and reads.
+ * path — shield, sync, send — is @gloamtrade/sdk; viem only signs and reads.
  */
 import {
   createWalletClient,
@@ -31,7 +31,7 @@ import {
   assertTreeMatchesChain,
   SEALED_VAULT,
   RH_TESTNET_CHAIN_ID,
-} from "@gloam/sdk";
+} from "@gloamtrade/sdk";
 
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const DEPLOY_BLOCK = 110_840_714n; // pool deploy block — start the log scan here

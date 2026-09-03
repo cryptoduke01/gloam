@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Gloam web shield",
-  description: "Shield a private balance in the browser with @gloam/sdk.",
+  description: "Shield a private balance in the browser with @gloamtrade/sdk.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

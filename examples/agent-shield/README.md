@@ -2,7 +2,7 @@
 
 The smallest end-to-end example of plugging into Gloam's private layer: an
 autonomous agent that shields ETH **privately** on Robinhood Chain testnet, using
-only [`@gloam/sdk`](../../packages/sdk).
+only [`@gloamtrade/sdk`](../../packages/sdk).
 
 It mints a Poseidon note, generates the zero-knowledge shield proof, and deposits
 via `shieldBound()` on the hardened pool. The amount leaves the public feed; only
@@ -13,7 +13,7 @@ the holder (with `note.secret`) can later spend, send, or disclose it.
 ```bash
 # from the repo root
 pnpm install
-pnpm --filter @gloam/sdk build
+pnpm --filter @gloamtrade/sdk build
 
 # a funded RH testnet key (faucet: faucet.testnet.chain.robinhood.com)
 export GLOAM_AGENT_PRIVATE_KEY=0x...

@@ -1,5 +1,5 @@
 /**
- * Sealed-swap rate math. Now sourced from @gloam/sdk (the shared private-path
+ * Sealed-swap rate math. Now sourced from @gloamtrade/sdk (the shared private-path
  * core). This file re-exports the SDK surface so existing app imports keep
  * working unchanged. See packages/sdk/src/rates.ts.
  */
@@ -10,5 +10,5 @@ export {
   estimateSealedOut,
   exactSealedAmounts,
   formatSealedAmount,
-} from "@gloam/sdk";
-export type { SealedRateQuote } from "@gloam/sdk";
+} from "@gloamtrade/sdk";
+export type { SealedRateQuote } from "@gloamtrade/sdk";

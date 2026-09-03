@@ -1,7 +1,7 @@
 # create-gloam-app
 
 Scaffold a private app on **Robinhood Chain** in one command, powered by
-[`@gloam/sdk`](https://gloam.trade/docs/sdk) — the privacy layer for RH Chain.
+[`@gloamtrade/sdk`](https://gloam.trade/docs/sdk) — the privacy layer for RH Chain.
 
 ```bash
 npm create gloam-app@latest my-private-app

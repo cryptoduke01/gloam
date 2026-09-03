@@ -1,5 +1,5 @@
 /**
- * Poseidon helpers. Now sourced from @gloam/sdk (the shared private-path core).
+ * Poseidon helpers. Now sourced from @gloamtrade/sdk (the shared private-path core).
  * Re-exported here so existing app imports keep working unchanged.
  * See packages/sdk/src/poseidon.ts.
  */
@@ -10,4 +10,4 @@ export {
   poseidon3,
   fieldToHex,
   hexToField,
-} from "@gloam/sdk";
+} from "@gloamtrade/sdk";

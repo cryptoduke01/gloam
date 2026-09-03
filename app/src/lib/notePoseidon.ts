@@ -1,5 +1,5 @@
 /**
- * Poseidon note scheme. Now sourced from @gloam/sdk (the shared private-path
+ * Poseidon note scheme. Now sourced from @gloamtrade/sdk (the shared private-path
  * core). Re-exported here so existing app imports keep working unchanged.
  * See packages/sdk/src/note.ts.
  */
@@ -10,5 +10,5 @@ export {
   noteNullifierPoseidon,
   makeBoundNotePoseidon,
   openNotePoseidon,
-} from "@gloam/sdk";
-export type { BoundNote } from "@gloam/sdk";
+} from "@gloamtrade/sdk";
+export type { BoundNote } from "@gloamtrade/sdk";

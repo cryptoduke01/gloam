@@ -73,7 +73,7 @@ export default function DocsDisclosurePage() {
         the note you want to reveal and package it:
       </p>
       <pre>
-        <code>{`import { artifactProver } from "@gloam/sdk";
+        <code>{`import { artifactProver } from "@gloamtrade/sdk";
 
 // prove the note you choose to reveal (same input as a shield)
 const prover = artifactProver({ wasm: "shield.wasm", zkey: "shield_final.zkey" });

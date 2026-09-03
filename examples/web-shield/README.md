@@ -1,6 +1,6 @@
 # gloam-web-shield
 
-Shield a **private balance in the browser** with [`@gloam/sdk`](../../packages/sdk).
+Shield a **private balance in the browser** with [`@gloamtrade/sdk`](../../packages/sdk).
 The smallest complete web integration: connect an injected wallet, prove the
 shield client-side, deposit via `shieldBound()`, and read the private balance
 straight back from the pool.

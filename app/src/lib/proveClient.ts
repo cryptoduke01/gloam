@@ -1,12 +1,12 @@
 /**
  * Browser snarkjs fullProve for the Poseidon circuits (unshield, transfer,
  * sealedSwap). Artifacts under /public/circuits (dev ceremony, replace for
- * production). Proof packing and field helpers come from @gloam/sdk; this file
+ * production). Proof packing and field helpers come from @gloamtrade/sdk; this file
  * is the browser-specific proving glue.
  */
 
 import type { Hex } from "viem";
-import { packGroth16Proof, type Groth16Proof } from "@gloam/sdk";
+import { packGroth16Proof, type Groth16Proof } from "@gloamtrade/sdk";
 import {
   assertSealedSwapArtifacts,
   assertShieldArtifacts,
@@ -15,7 +15,7 @@ import {
   CIRCUIT_ARTIFACTS,
 } from "./circuitArtifacts";
 
-export { fieldToBytes32 } from "@gloam/sdk";
+export { fieldToBytes32 } from "@gloamtrade/sdk";
 export type { Groth16Proof };
 
 const UNSHIELD_WASM = CIRCUIT_ARTIFACTS.unshieldWasm.path;

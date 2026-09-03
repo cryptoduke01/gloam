@@ -5,7 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "Quickstart",
   description:
-    "Shield your first private balance on Robinhood Chain in under ten minutes with @gloam/sdk: install, prove, deposit, cash out.",
+    "Shield your first private balance on Robinhood Chain in under ten minutes with @gloamtrade/sdk: install, prove, deposit, cash out.",
 };
 
 export default function DocsQuickstartPage() {
@@ -61,7 +61,7 @@ cd my-private-app && npm install && npm run dev`}</code>
         proving peer, loaded only when you generate a proof.
       </p>
       <pre>
-        <code>{`npm install @gloam/sdk viem
+        <code>{`npm install @gloamtrade/sdk viem
 npm install snarkjs   # peer, for proving`}</code>
       </pre>
 
@@ -98,7 +98,7 @@ npm install snarkjs   # peer, for proving`}</code>
         it.
       </p>
       <pre>
-        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloam/sdk";
+        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloamtrade/sdk";
 import { createWalletClient, http, parseEther, defineChain } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -178,7 +178,7 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
         public on exit — the source note stays unlinkable via the nullifier.
       </p>
       <pre>
-        <code>{`import { buildUnshieldIntent, artifactProver, syncTree, SEALED_VAULT } from "@gloam/sdk";
+        <code>{`import { buildUnshieldIntent, artifactProver, syncTree, SEALED_VAULT } from "@gloamtrade/sdk";
 
 // rebuild the pool tree, then get this note's membership path by commitment
 const synced = await syncTree(publicClient, { pool: SEALED_VAULT, fromBlock });

@@ -2,7 +2,7 @@
 
 A private app on **Robinhood Chain**, scaffolded with
 [`create-gloam-app`](https://www.npmjs.com/package/create-gloam-app) and powered
-by [`@gloam/sdk`](https://gloam.trade/docs/sdk).
+by [`@gloamtrade/sdk`](https://gloam.trade/docs/sdk).
 
 It shields a private balance in the browser: connect a wallet, prove the shield
 client-side, deposit via `shieldBound()`, and read the balance back from the pool

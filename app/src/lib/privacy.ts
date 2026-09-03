@@ -1,5 +1,5 @@
 /**
- * Size-privacy policy. Now sourced from @gloam/sdk (the shared private-path
+ * Size-privacy policy. Now sourced from @gloamtrade/sdk (the shared private-path
  * core). This file re-exports the SDK surface so existing app imports keep
  * working unchanged. See packages/sdk/src/privacy.ts.
  */
@@ -8,5 +8,5 @@ export {
   publicAmountOutMin,
   coarsenMarkUsd,
   SEALED_PRIVACY_FACTS,
-} from "@gloam/sdk";
-export type { SizePrivacyMode } from "@gloam/sdk";
+} from "@gloamtrade/sdk";
+export type { SizePrivacyMode } from "@gloamtrade/sdk";

@@ -1,7 +1,7 @@
 # gloam-pay-bot
 
 A payments bot that sends a **private payment** on Robinhood Chain using only
-[`@gloam/sdk`](../../packages/sdk). It is the smallest end-to-end example of the
+[`@gloamtrade/sdk`](../../packages/sdk). It is the smallest end-to-end example of the
 spend path: shield, sync the tree from chain, and transfer privately.
 
 ## What it does

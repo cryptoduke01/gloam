@@ -5,7 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "Agents",
   description:
-    "Give an AI agent private execution on Robinhood Chain: shield, pay, and disclose end to end via @gloam/sdk and the @gloam/mcp server, under policy.",
+    "Give an AI agent private execution on Robinhood Chain: shield, pay, and disclose end to end via @gloamtrade/sdk and the @gloamtrade/mcp server, under policy.",
 };
 
 export default function DocsAgentsPage() {
@@ -14,8 +14,8 @@ export default function DocsAgentsPage() {
       title="Build a private agent"
       lede="Give an AI agent a private execution surface on Robinhood Chain. It shields, pays, and proves holdings end to end, with size and strategy hidden and signing under policy."
       glance={[
-        { label: "SDK", value: "@gloam/sdk" },
-        { label: "Server", value: "@gloam/mcp (MCP)" },
+        { label: "SDK", value: "@gloamtrade/sdk" },
+        { label: "Server", value: "@gloamtrade/mcp (MCP)" },
         { label: "Example", value: "examples/agent-shield" },
         { label: "Secrets", value: "server-side only" },
       ]}
@@ -41,12 +41,12 @@ export default function DocsAgentsPage() {
       </p>
       <ul>
         <li>
-          <strong>Directly via <code>@gloam/sdk</code>.</strong> Your agent
+          <strong>Directly via <code>@gloamtrade/sdk</code>.</strong> Your agent
           framework builds an intent and signs it with its own wallet. Best when
           the agent already has an execution loop.
         </li>
         <li>
-          <strong>Via the <code>@gloam/mcp</code> server.</strong> An
+          <strong>Via the <code>@gloamtrade/mcp</code> server.</strong> An
           MCP-speaking model (Claude, etc.) gets Gloam as tools alongside its
           other capabilities — the same way Robinhood&apos;s own MCP exposes
           public trading. Best for a general assistant that should also act
@@ -61,7 +61,7 @@ export default function DocsAgentsPage() {
         <code>shieldBound</code>. The whole private path is a few lines.
       </p>
       <pre>
-        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloam/sdk";
+        <code>{`import { buildShieldBoundIntent, artifactProver } from "@gloamtrade/sdk";
 import { parseEther } from "viem";
 
 // 1) SDK mints the note + generates the shield proof
@@ -88,7 +88,7 @@ const hash = await wallet.writeContract({
 
       <h2>The MCP server</h2>
       <p>
-        <code>@gloam/mcp</code> exposes Gloam as tools to any MCP client. It keeps
+        <code>@gloamtrade/mcp</code> exposes Gloam as tools to any MCP client. It keeps
         two phases separate on purpose: planning tools build an unsigned intent
         and describe, in plain language, what is private and what is not;
         execution tools take a plan, sign it server-side, and broadcast.

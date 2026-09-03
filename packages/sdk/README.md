@@ -1,4 +1,4 @@
-# @gloam/sdk
+# @gloamtrade/sdk
 
 The private path for Robinhood Chain, as a reusable package. Shielded balances,
 private payments, and selective disclosure that any RH Chain app or agent plugs
@@ -14,7 +14,7 @@ app](https://gloam.trade/app) and a Node agent alike.
 ## Install
 
 ```bash
-npm install @gloam/sdk viem
+npm install @gloamtrade/sdk viem
 # snarkjs is an optional peer, needed only for proving (shieldBound, unshield, …)
 npm install snarkjs
 ```
@@ -29,7 +29,7 @@ reverts. `buildShieldBoundIntent` mints the note **and** generates the shield
 proof; you just sign the resolved call.
 
 ```ts
-import { buildShieldBoundIntent, artifactProver } from "@gloam/sdk";
+import { buildShieldBoundIntent, artifactProver } from "@gloamtrade/sdk";
 import { parseEther } from "viem";
 
 const intent = await buildShieldBoundIntent({
@@ -83,8 +83,8 @@ Proving and storage are environment-bound, so they are passed in:
 ## Publishing
 
 ```bash
-pnpm --filter @gloam/sdk build   # emits dist/ (JS + .d.ts)
-pnpm --filter @gloam/sdk test    # core self-tests
+pnpm --filter @gloamtrade/sdk build   # emits dist/ (JS + .d.ts)
+pnpm --filter @gloamtrade/sdk test    # core self-tests
 npm publish --access public      # requires the @gloam npm org
 ```
 

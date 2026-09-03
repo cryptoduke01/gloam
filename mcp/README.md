@@ -24,14 +24,14 @@ policy guardrails) and lands next. We never return a fake private fill.
 ## Run
 
 ```bash
-pnpm --filter @gloam/mcp build
-pnpm --filter @gloam/mcp start
+pnpm --filter @gloamtrade/mcp build
+pnpm --filter @gloamtrade/mcp start
 ```
 
 Or during development:
 
 ```bash
-pnpm --filter @gloam/mcp dev
+pnpm --filter @gloamtrade/mcp dev
 ```
 
 ## Connect an agent

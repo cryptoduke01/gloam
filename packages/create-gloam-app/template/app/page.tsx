@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Reference wrapper — shield a private balance IN THE BROWSER with @gloam/sdk.
+ * Reference wrapper — shield a private balance IN THE BROWSER with @gloamtrade/sdk.
  * Connect an injected wallet, prove the shield client-side (snarkjs fetches the
  * circuit over HTTP), and deposit via shieldBound(). Notes are kept in
  * localStorage keyed by commitment; the note secret is the only spend authority
@@ -25,7 +25,7 @@ import {
   artifactProver,
   SEALED_VAULT,
   RH_TESTNET_CHAIN_ID,
-} from "@gloam/sdk";
+} from "@gloamtrade/sdk";
 
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const CHAIN_ID_HEX = `0x${RH_TESTNET_CHAIN_ID.toString(16)}`;
@@ -226,7 +226,7 @@ export default function Page() {
 
   return (
     <main className="wrap">
-      <p className="eyebrow">@gloam/sdk · browser example</p>
+      <p className="eyebrow">@gloamtrade/sdk · browser example</p>
       <h1>Shield a private balance</h1>
       <p className="lede">
         Deposit ETH into a shielded note on Robinhood Chain testnet. The proof is

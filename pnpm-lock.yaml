@@ -10,7 +10,7 @@ importers:
 
   app:
     dependencies:
-      '@gloam/sdk':
+      '@gloamtrade/sdk':
         specifier: workspace:*
         version: link:../packages/sdk
       '@tanstack/react-query':
@@ -80,7 +80,7 @@ importers:
 
   examples/agent-shield:
     dependencies:
-      '@gloam/sdk':
+      '@gloamtrade/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       snarkjs:
@@ -96,7 +96,7 @@ importers:
 
   examples/pay-bot:
     dependencies:
-      '@gloam/sdk':
+      '@gloamtrade/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       snarkjs:
@@ -112,7 +112,7 @@ importers:
 
   examples/web-shield:
     dependencies:
-      '@gloam/sdk':
+      '@gloamtrade/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       next:

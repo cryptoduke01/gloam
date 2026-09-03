@@ -5,16 +5,16 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "API reference",
   description:
-    "The complete @gloam/sdk surface: intent builders, note and prover primitives, incremental Merkle tree, sealed-rate math, and constants. One barrel import.",
+    "The complete @gloamtrade/sdk surface: intent builders, note and prover primitives, incremental Merkle tree, sealed-rate math, and constants. One barrel import.",
 };
 
 export default function DocsSdkReferencePage() {
   return (
     <DocsLayout
       title="API reference"
-      lede="The complete @gloam/sdk surface. Everything exports from one barrel; the crypto core is pure and runs anywhere, and proving and storage are injected so the same code serves a browser app and a node agent."
+      lede="The complete @gloamtrade/sdk surface. Everything exports from one barrel; the crypto core is pure and runs anywhere, and proving and storage are injected so the same code serves a browser app and a node agent."
       glance={[
-        { label: "Package", value: "@gloam/sdk" },
+        { label: "Package", value: "@gloamtrade/sdk" },
         { label: "Import", value: "one barrel" },
         { label: "Core", value: "pure, isomorphic" },
         { label: "Injected", value: "prover, storage" },
@@ -39,7 +39,7 @@ export default function DocsSdkReferencePage() {
   makeBoundNotePoseidon, artifactProver,
   syncTree, IncrementalMerkleTreePoseidon,
   SEALED_VAULT, NATIVE_ASSET,
-} from "@gloam/sdk";`}</code>
+} from "@gloamtrade/sdk";`}</code>
       </pre>
 
       {/* ─────────────────────────  builders  ───────────────────────── */}

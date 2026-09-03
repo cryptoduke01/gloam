@@ -1,6 +1,6 @@
 /**
  * Canonical Gloam intent shapes — the contract of record shared by the app,
- * the SDK, and the @gloam/mcp agent server.
+ * the SDK, and the @gloamtrade/mcp agent server.
  *
  * An intent has two layers:
  *   plan  — portable, USD/symbol-denominated, no secrets (matches MCP plan_*).
