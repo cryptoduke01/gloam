@@ -121,9 +121,18 @@ const hash = await wallet.writeContract({
           </tr>
           <tr>
             <td>
+              <code>gloam_execute_shield</code>
+            </td>
+            <td>
+              Real private deposit: mint a note, prove, and broadcast{" "}
+              <code>shieldBound</code> server-side (execute)
+            </td>
+          </tr>
+          <tr>
+            <td>
               <code>gloam_execute_transfer</code>
             </td>
-            <td>Sign + broadcast on the real testnet execution rail (execute)</td>
+            <td>Sign + broadcast a public testnet transfer for funding (execute)</td>
           </tr>
         </tbody>
       </table>

@@ -48,9 +48,13 @@ export function findMarket(query: string): Market | undefined {
 export const PRIVACY_STATUS = {
   network: "testnet",
   provingKeys: "development (not a production ceremony)",
-  live: ["shield", "private send", "cash out", "private trade (test rates)"],
+  live: ["shield", "private send", "cash out"],
+  disabled: ["sealed swaps (paused pending solvency work)"],
   notLive: ["mainnet", "production keys", "audited contracts"],
+  whatIsPublic:
+    "The shield deposit and any cash-out are public transactions (amount and address visible). What stays hidden is the link between them, your holdings inside the pool, and the amounts of in-pool sends.",
   anonymitySet:
-    "thin on a new pool. Size privacy is only as strong as the pool of same-size notes. Do not treat large exits as fully private yet.",
-  note: "Execution of private actions requires a connected agent wallet with signing (e.g. Turnkey). This build exposes read + planning tools; signed execution lands next.",
+    "thin on a new pool. Unlinkability is only as strong as the crowd of notes to hide among. Do not treat a cash-out as fully private until the pool has real volume.",
+  execution:
+    "gloam_execute_shield performs a real private deposit (mints a note, generates the Groth16 proof server-side, and broadcasts shieldBound) when GLOAM_AGENT_PRIVATE_KEY is set. Sealed-swap execution stays a plan until swaps are re-enabled.",
 } as const;

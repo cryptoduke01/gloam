@@ -14,11 +14,28 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { isAddress, parseEther, type Address } from "viem";
+import { isAddress, parseEther, type Address, type Hex } from "viem";
+import { buildShieldBoundIntent, artifactProver, SEALED_VAULT } from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
+import { shieldArtifacts } from "./artifacts.js";
 
 const server = new McpServer({ name: "gloam", version: "0.1.0" });
+
+const shieldPoolAbi = [
+  {
+    type: "function",
+    name: "shieldBound",
+    stateMutability: "payable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "commitment", type: "bytes32" },
+      { name: "proof", type: "bytes" },
+    ],
+    outputs: [],
+  },
+] as const;
 
 function text(value: unknown) {
   return {
@@ -46,12 +63,13 @@ server.registerTool(
         "Agents run predictable, high-frequency strategies. On a public chain every move is copyable and front-runnable. Gloam keeps an agent's positions and size private.",
       chain: CHAIN,
       tools: [
-        "gloam_privacy_status: honest privacy posture (read)",
+        "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
         "gloam_list_markets: tradable markets and marks (read)",
         "gloam_quote: indicative quote and what stays private (read)",
-        "gloam_plan_private_trade: build a private-trade intent (planning)",
-        "gloam_plan_shield: build a shield (deposit-to-private) intent (planning)",
-        "gloam_execute_transfer: sign and broadcast a testnet transfer (execution rail; needs a signer)",
+        "gloam_plan_private_trade: build a private-trade intent, no execution (planning)",
+        "gloam_plan_shield: describe a shield before executing (planning)",
+        "gloam_execute_shield: REAL private deposit — mints a note, proves, and broadcasts shieldBound (execution; needs a signer)",
+        "gloam_execute_transfer: sign and broadcast a public testnet transfer (execution; needs a signer)",
       ],
     })
 );
@@ -185,11 +203,70 @@ server.registerTool(
 );
 
 server.registerTool(
+  "gloam_execute_shield",
+  {
+    title: "Execute a private shield",
+    description:
+      "Deposit ETH into a PRIVATE balance on Robinhood Chain. Mints a note, generates the Groth16 shield proof server-side, and broadcasts shieldBound(). This is the real private-execution rail: the agent ends up holding a shielded balance only it can spend. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan. The returned note secret is the ONLY authority to spend the balance later, so the agent must persist it.",
+    inputSchema: {
+      eth: z
+        .number()
+        .positive()
+        .describe("Amount of testnet ETH to shield into a private balance."),
+    },
+  },
+  async ({ eth }) => {
+    const signer = getSigner();
+    if (!signer) {
+      return text({
+        status: "no_signer",
+        plan: { action: "shield", eth, chainId: CHAIN.chainId, pool: SEALED_VAULT },
+        message:
+          "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
+      });
+    }
+    try {
+      const { wasm, zkey } = await shieldArtifacts();
+      const intent = await buildShieldBoundIntent({
+        amountWei: parseEther(String(eth)),
+        prover: artifactProver({ wasm, zkey }),
+      });
+      const hash = await signer.walletClient.writeContract({
+        address: intent.exec.poolAddress,
+        abi: shieldPoolAbi,
+        functionName: "shieldBound",
+        args: intent.exec.args as readonly [Address, bigint, Hex, Hex],
+        value: intent.exec.valueWei,
+      });
+      return text({
+        status: "submitted",
+        hash,
+        from: signer.account.address,
+        explorer: `${CHAIN.explorer}/tx/${hash}`,
+        note: {
+          commitment: intent.note.commitment,
+          secret: intent.note.secret,
+        },
+        persist:
+          "Store note.secret. It is the only authority to spend this private balance; losing it loses the funds.",
+        privacy:
+          "The deposit amount is public. The note hides who can spend it, so future private sends are unlinkable to this deposit.",
+      });
+    } catch (err) {
+      return text({
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+);
+
+server.registerTool(
   "gloam_execute_transfer",
   {
     title: "Execute a transfer (public)",
     description:
-      "Send testnet ETH on Robinhood Chain from the agent wallet. This is the public execution rail that proves the agent can sign and broadcast through Gloam. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan only. Private shield and trade execution build on this rail next.",
+      "Send testnet ETH publicly on Robinhood Chain from the agent wallet. This is the PUBLIC rail (amount and recipient are visible), useful for funding. For private movement, use gloam_execute_shield. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan only.",
     inputSchema: {
       to: z.string().describe("Recipient 0x address."),
       eth: z.number().positive().describe("Amount of testnet ETH to send."),
