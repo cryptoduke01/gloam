@@ -6,22 +6,34 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Sealed-size private trade",
   description:
-    "What sealed private trade means on Gloam, what is live on testnet today, and what still ships next.",
+    "What sealed private trade means on Gloam, why it is paused on-chain pending the H1 solvency fix, and the design that turns it back on.",
 };
 
 export default function DocsSealedTradePage() {
   return (
     <DocsLayout
       title="Sealed-size private trade"
-      lede="Goal: trade without printing full size to the public book. Live on Robinhood Chain testnet with fixed rates and dev proving keys. Real rates and production keys still ship next."
+      lede="Convert one vault asset to another with your size sealed. This is currently paused on-chain: the sealed-swap verifier is disabled pending the H1 solvency fix. The path is built, and the design to re-enable it with full privacy and solvency is set. Here is how it works, why it is paused, and the way back on."
       glance={[
-        { label: "Today", value: "Sealed path + adapter" },
+        { label: "Status", value: "Paused (H1)" },
         { label: "Goal", value: "Size sealed" },
-        { label: "Status", value: "Testnet live" },
+        { label: "Live instead", value: "shield / send / cash out" },
         { label: "Fake fills", value: "Never" },
       ]}
     >
-      <h2>What lives today</h2>
+      <h2>Why it is paused</h2>
+      <p>
+        A sealed swap spends an <code>assetIn</code> note and mints an{" "}
+        <code>assetOut</code> note with both amounts private, but no tokens move,
+        so the pool ends up owing <code>assetOut</code> it does not physically
+        hold (audit H1). Rather than ship an insolvent swap or reveal your size to
+        fix the accounting, the on-chain verifier is set to zero and the swap is
+        off. Shield, private send, and cash out are live and solvent in the
+        meantime. The re-enable design is below and in{" "}
+        <code>contracts/audit/H1-CONFIDENTIAL-SWAP-DESIGN.md</code>.
+      </p>
+
+      <h2>How the sealed path works (when enabled)</h2>
       <FlowDiagram
         title="Private trade (sealed path)"
         steps={[
@@ -48,11 +60,11 @@ export default function DocsSealedTradePage() {
         fallback. Dev ceremony keys only.
       </p>
       <p>
-        <strong>Size privacy (default on):</strong> public{" "}
-        <code>amountOutMin</code> is a 1-wei floor, not your real output. Your
-        first private trade leaked size because min-out equaled the exact
-        amount, that is fixed. Rates and asset pair remain public. Cash out
-        still publishes amount. See{" "}
+        <strong>Size privacy (default on when enabled):</strong> the public{" "}
+        <code>amountOutMin</code> is a 1-wei floor, not your real output (an
+        earlier build leaked size by setting min-out to the exact amount; the
+        sealed path fixes that). Rates and asset pair are public. Cash out
+        publishes amount. See{" "}
         <Link href="/docs/privacy-model">privacy model</Link> ·{" "}
         <Link href="/docs/production">production gate</Link>.
       </p>
@@ -98,6 +110,13 @@ export default function DocsSealedTradePage() {
 
       <h2>What ships next</h2>
       <ol>
+        <li>
+          <strong>H1 confidential-reserve solvency (the re-enable gate)</strong>,
+          the swap draws the out asset from a protocol reserve tracked as Pedersen
+          commitments, with an in-circuit reserve range proof, so size stays
+          sealed and the pool stays solvent. Design in{" "}
+          <code>contracts/audit/H1-CONFIDENTIAL-SWAP-DESIGN.md</code>.
+        </li>
         <li>
           <strong>On-chain rates</strong>, replace display-mark rates with
           oracle-bound or pool-bound pricing (Pyth / AMM). Full write-up:{" "}
@@ -152,11 +171,11 @@ export default function DocsSealedTradePage() {
       </ul>
 
       <p>
-        Try it:{" "}
-        <Link href="/app/trade?path=private">Trade → Private trade</Link>.
-        Adapter fallback:{" "}
-        <Link href="/app/trade?path=vault">From vault</Link>. Hold/move:{" "}
-        <Link href="/app/move">Move</Link>.
+        The sealed path is paused on-chain, so the trade panel shows it as
+        disabled until the H1 work lands. Available today: the{" "}
+        <Link href="/app/trade?path=vault">from-vault adapter</Link> (honest,
+        not sealed), and <Link href="/app/move">Move</Link> to hold and send
+        privately.
       </p>
     </DocsLayout>
   );
