@@ -25,6 +25,7 @@ Add shielded balances, private payments, and selective disclosure to any Robinho
 - [Private payments (transfer)](#private-payments-transfer)
 - [Selective disclosure](#selective-disclosure)
 - [Private agents](#private-agents)
+- [Private agent payments (x402)](#private-agent-payments-x402)
 - [API reference](#api-reference)
 - [Framework integration](#framework-integration)
 - [Examples](#examples)
@@ -49,6 +50,7 @@ The Gloam vault app is the reference implementation, not a special case. The sam
 - **Cash out.** Unshield back to a public balance with a browser- or node-generated Groth16 proof.
 - **Selective disclosure.** Let a holder prove one balance to a chosen party, an auditor or a counterparty, revealing nothing else. Provable, not a dark pool.
 - **Private agents.** The same core runs server-side, so an autonomous agent can hold and move value under policy with its size and strategy hidden.
+- **Private agent payments (x402).** Agents pay for tools and data over HTTP 402 and settle privately, so the amount, sender, and recipient never go public.
 
 ## Install
 
@@ -228,6 +230,46 @@ The crypto core is pure and isomorphic, so the exact code above runs server-side
 
 See [Build a private agent](https://gloam.trade/docs/agents).
 
+## Private agent payments (x402)
+
+Agents pay for tools and data over HTTP 402. The pattern that won Colosseum (MCPay) paired x402 with stablecoins, but that settlement is fully public: the amount, the payer, and the payee all leak. Gloam's `gloam-private` scheme keeps the settlement private and self-custodial. The agent settles a shielded transfer to the payee itself (no operator or facilitator ever holds its key or funds), then presents the payment note plus the settlement tx as proof on the 402 retry.
+
+```ts
+import {
+  buildGloamPaymentRequirements,
+  buildGloamPayment,
+  verifyGloamPayment,
+  artifactProver,
+} from "@gloamtrade/sdk";
+
+// Server: price a resource. This is the 402 challenge.
+const requirements = buildGloamPaymentRequirements({
+  amountWei: parseUnits("0.25", 18),
+  asset: USD_TOKEN,          // a stable asset; omit for the chain's native unit
+  assetSymbol: "USD",
+  payTo: "gloam:rcpt:...",   // payee receive tag
+  resource: "mcp://tool/summarize",
+});
+
+// Agent: build the private payment, broadcast it, then present the header.
+const pay = await buildGloamPayment({
+  requirements,
+  senderSecretHex: note.secret,
+  senderNoteAmountWei: note.amountWei,
+  path,                                  // from syncTree.pathForCommitment
+  prove: artifactProver({ wasm, zkey }), // transfer artifacts
+  issuerTag: "issuer:usd",               // optional issuer-scoped compliance disclosure
+});
+const hash = await wallet.writeContract({ ...pay.intent.exec }); // agent self-settles
+pay.payload.payload.txHash = hash;
+
+// Server: verify before granting access, then run the listed on-chain checks.
+const v = verifyGloamPayment({ requirements, payload: pay.payload });
+// v.ok, plus v.onchainChecksRequired: note membership, tx landed, nullifier single-use.
+```
+
+**This is not a Tempo Zone.** A Zone is operator-visible: the zone operator sees every transaction inside it. Gloam is private from the public and from any operator; only the payer and the payee learn the amount. Compliance visibility is opt-in per payment via `buildComplianceDisclosure`, an issuer-scoped disclosure that reuses the shield-circuit proof rather than handing an operator a blanket view. See [`TEMPO_EXPANSION.md`](https://github.com/cryptoduke01/gloam/blob/main/TEMPO_EXPANSION.md).
+
 ## API reference
 
 Everything exports from one barrel. The crypto and math core is pure and runs anywhere. Proving (snarkjs plus artifacts) and storage (notes, keys) are injected, so the same core serves a browser app and a node signer.
@@ -269,6 +311,20 @@ syncTree(client, { pool, fromBlock?, chunkSize? }): Promise<SyncedTree>
 assertTreeMatchesChain(client, pool, synced): Promise<boolean>
 // SyncedTree.pathForCommitment(commitment) feeds straight into the spend builders.
 ```
+
+### x402 payments
+
+```ts
+buildGloamPaymentRequirements(p): GloamPaymentRequirements   // server: the 402 challenge
+buildGloamPayment(p): Promise<BuiltPayment>                  // agent: private send + X-PAYMENT header
+verifyGloamPayment({ requirements, payload }): VerifyResult  // server: structural verify + on-chain checklist
+buildComplianceDisclosure(p): GloamComplianceDisclosure      // optional issuer-scoped disclosure
+encodeRequirements / decodeRequirements                      // 402 body transport
+encodePaymentHeader / decodePaymentHeader                    // X-PAYMENT transport
+GLOAM_VS_ZONE, GLOAM_X402_SCHEME                             // posture + scheme id
+```
+
+`buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset and settles through the right pool; it never assumes settlement, returning `onchainChecksRequired` for the server to confirm against the chain.
 
 ### Merkle, rates, privacy, constants
 
