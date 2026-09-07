@@ -14,8 +14,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { isAddress, parseEther, type Address, type Hex } from "viem";
-import { buildShieldBoundIntent, artifactProver, SEALED_VAULT } from "@gloamtrade/sdk";
+import { isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
+import {
+  buildShieldBoundIntent,
+  artifactProver,
+  SEALED_VAULT,
+  NATIVE_ASSET,
+  buildGloamPaymentRequirements,
+  verifyGloamPayment,
+  encodeRequirements,
+  decodeRequirements,
+  decodePaymentHeader,
+  GLOAM_VS_ZONE,
+} from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
 import { shieldArtifacts } from "./artifacts.js";
@@ -70,7 +81,12 @@ server.registerTool(
         "gloam_plan_shield: describe a shield before executing (planning)",
         "gloam_execute_shield: REAL private deposit — mints a note, proves, and broadcasts shieldBound (execution; needs a signer)",
         "gloam_execute_transfer: sign and broadcast a public testnet transfer (execution; needs a signer)",
+        "gloam_payment_requirements: price an agent resource in a private x402 payment (server side)",
+        "gloam_pay_x402: plan the self-custodial private payment for a 402 challenge (agent side)",
+        "gloam_verify_payment: verify a presented x402 private payment, list the on-chain settlement checks (server side)",
       ],
+      privatePayments:
+        "x402 agent payments settle privately through the Gloam pool. Unlike a Tempo Zone, there is no operator that sees the transaction: it is private from the public and self-custodial, with optional per-payment compliance disclosure.",
     })
 );
 
@@ -302,6 +318,126 @@ server.registerTool(
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+);
+
+// ── x402 private agent payments ───────────────────────────────────────────────
+
+server.registerTool(
+  "gloam_payment_requirements",
+  {
+    title: "Price a resource in private payments (x402)",
+    description:
+      "SERVER side. Build the HTTP 402 payment requirements an agent-paid resource returns, priced in a private Gloam settlement. This is the MCPay pattern (x402 + stablecoins) but the settlement is private: the amount and parties never go public. Returns the requirements object and its encoded form to put in a 402 response.",
+    inputSchema: {
+      amount: z.number().positive().describe("Price in the asset's display units, e.g. 0.25."),
+      decimals: z.number().int().min(0).max(36).default(18).describe("Decimals of the settlement asset."),
+      assetSymbol: z.string().default("ETH").describe("Asset label, e.g. USD on Tempo or ETH on Robinhood testnet."),
+      asset: z.string().optional().describe("Settlement token address; omit for the chain's native unit."),
+      payTo: z.string().describe("Payee identity the payment note is directed to (a Gloam receive tag)."),
+      resource: z.string().describe("What is being paid for: a URL or an MCP tool id."),
+    },
+  },
+  async ({ amount, decimals, assetSymbol, asset, payTo, resource }) => {
+    if (asset !== undefined && !isAddress(asset)) {
+      return text({ status: "error", error: `"${asset}" is not a valid token address.` });
+    }
+    const req = buildGloamPaymentRequirements({
+      amountWei: parseUnits(String(amount), decimals),
+      asset: (asset as Address | undefined) ?? NATIVE_ASSET,
+      assetSymbol,
+      payTo,
+      resource,
+      network: CHAIN.chainId,
+    });
+    return text({
+      requirements: req,
+      encoded: encodeRequirements(req),
+      httpHint: "Return HTTP 402 with this requirements object; the agent retries with an X-PAYMENT header.",
+      notVsZone: GLOAM_VS_ZONE.oneLine,
+    });
+  }
+);
+
+server.registerTool(
+  "gloam_pay_x402",
+  {
+    title: "Plan a private payment for a 402 challenge",
+    description:
+      "AGENT side. Given a Gloam 402 challenge, describe the private payment the agent would make: a self-custodial private send of the required amount to the payee, which the agent broadcasts ITSELF (no operator or facilitator holds its key). Returns the plan and the exact SDK call. It does not fake a proof or a settlement: live payment needs a deployed pool on the target network and a shielded note the agent already holds (see remainingPrereqs).",
+    inputSchema: {
+      requirements: z
+        .string()
+        .describe("Encoded requirements from gloam_payment_requirements (or the raw JSON)."),
+      noteCommitment: z
+        .string()
+        .optional()
+        .describe("Commitment of a shielded note the agent already holds, if known."),
+    },
+  },
+  async ({ requirements, noteCommitment }) => {
+    let req;
+    try {
+      req = decodeRequirements(requirements);
+    } catch {
+      try {
+        req = JSON.parse(requirements);
+      } catch {
+        return text({ status: "error", error: "Could not parse requirements." });
+      }
+    }
+    return text({
+      status: "plan",
+      intent: "private_pay_x402",
+      network: req.network,
+      pay: {
+        amountWei: req.maxAmountRequired,
+        asset: req.asset,
+        assetSymbol: req.assetSymbol,
+        payTo: req.payTo,
+        pool: req.poolAddress,
+      },
+      sdkCall:
+        "buildGloamPayment({ requirements, senderSecretHex, senderNoteAmountWei, path, prove }) then sign + broadcast the returned exec (transfer), then set payload.txHash.",
+      settlement:
+        "Self-custodial: the agent signs and broadcasts the shielded transfer itself. The payee opens the payment note to see the amount; the public sees only that a shielded transfer occurred.",
+      notVsZone: GLOAM_VS_ZONE,
+      sourceNote: noteCommitment ?? null,
+      remainingPrereqs: [
+        "A deployed Gloam pool on network " + req.network + " (Tempo pool is not deployed yet).",
+        "A shielded note the agent holds in that pool, plus its Merkle path (via syncTree.pathForCommitment).",
+        "Transfer circuit artifacts wired into this server's prover (only shield artifacts are wired today).",
+      ],
+    });
+  }
+);
+
+server.registerTool(
+  "gloam_verify_payment",
+  {
+    title: "Verify a private payment (x402)",
+    description:
+      "SERVER side. Structurally verify an X-PAYMENT payload against its requirements: the payment note binds the required amount and asset, and the transfer settles through the right pool and network. Returns the on-chain checks the server must still run (note membership, that the transfer landed, and single-use of its nullifier). Does not assume settlement.",
+    inputSchema: {
+      requirements: z.string().describe("Encoded requirements (or raw JSON)."),
+      payment: z.string().describe("Encoded X-PAYMENT header value (or raw JSON payload)."),
+    },
+  },
+  async ({ requirements, payment }) => {
+    let req;
+    let pay;
+    try {
+      req = decodeRequirements(requirements);
+    } catch {
+      try { req = JSON.parse(requirements); } catch { return text({ status: "error", error: "Could not parse requirements." }); }
+    }
+    try {
+      pay = decodePaymentHeader(payment);
+    } catch {
+      try { pay = JSON.parse(payment); } catch { return text({ status: "error", error: "Could not parse payment." }); }
+    }
+    const result = verifyGloamPayment({ requirements: req, payload: pay });
+    return text({ status: result.ok ? "verified" : "rejected", ...result });
   }
 );
 

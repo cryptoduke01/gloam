@@ -16,8 +16,13 @@ Robinhood gives agents an MCP server for **public** trading. Gloam gives them on
 | `gloam_plan_shield` | plan | Describe a shield before executing (no signing) |
 | `gloam_execute_shield` | execute | **Real private deposit.** Mints a note, generates the Groth16 proof server-side, and broadcasts `shieldBound()` |
 | `gloam_execute_transfer` | execute | Public testnet transfer (funding). Amount and recipient are visible |
+| `gloam_payment_requirements` | server | Price an agent resource in a private x402 payment; returns the 402 requirements |
+| `gloam_pay_x402` | agent | Plan the self-custodial private payment that satisfies a 402 challenge |
+| `gloam_verify_payment` | server | Verify a presented x402 payment and list the on-chain settlement checks |
 
 `gloam_execute_shield` is the private-execution rail: the agent ends up holding a shielded balance only it can spend. It returns the note secret, which is the only authority to spend that balance, so the agent must persist it. When no signer is configured, every execute tool returns a plan instead of acting, and we never return a fake private fill.
+
+The x402 tools are private agent payments (the MCPay pattern, but the settlement is private). `gloam_payment_requirements` prices a resource, the agent settles a private send to the payee itself and presents an `X-PAYMENT` header, and `gloam_verify_payment` checks the payment note binds the required amount and asset before the server runs the listed on-chain checks. Unlike a Tempo Zone, no operator sees the transaction: it is private from the public and self-custodial, with an optional per-payment issuer-scoped compliance disclosure. See `TEMPO_EXPANSION.md`.
 
 ## Setup
 

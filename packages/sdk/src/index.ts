@@ -13,6 +13,7 @@
  *   prove     injected Groth16 prover (artifactProver) + proof packing
  *   rates     sealed-rate math + size-privacy policy (pure)
  *   builders  shieldBound | unshield | privateSend | privateTrade intents
+ *   x402      private agent payments over HTTP 402 (settle-then-prove)
  *   constants pool + verifier addresses, chain ids, field prime
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
@@ -35,3 +36,4 @@ export * from "./witness.js";
 export * from "./prove.js";
 export * from "./builders.js";
 export * from "./sync.js";
+export * from "./x402.js";
