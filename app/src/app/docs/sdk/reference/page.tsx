@@ -297,6 +297,47 @@ interface SyncedTree {
         <code>buildUnshieldIntent</code> or <code>buildPrivateSendIntent</code>.
       </p>
 
+      {/* ─────────────────────────  x402  ───────────────────────── */}
+      <h2>x402 payments</h2>
+      <p>
+        Private agent payments over HTTP 402, settle-then-prove and
+        self-custodial. The seller prices a resource, the agent settles a private
+        send to the payee itself, then presents the payment note and settlement
+        tx. The public sees only a shielded transfer, never the amount or the
+        parties. This is not a Tempo Zone: no operator sees the payment, and
+        compliance visibility is opt-in per payment through an issuer-scoped
+        disclosure.
+      </p>
+      <pre>
+        <code>{`// server: the 402 challenge
+buildGloamPaymentRequirements(p): GloamPaymentRequirements
+
+// agent: build the private send + X-PAYMENT header (does not broadcast)
+buildGloamPayment(p): Promise<BuiltPayment>
+//   p: { requirements, senderSecretHex, senderNoteAmountWei, path, prove,
+//        issuerTag?, disclosureProver? }
+//   returns { payload, intent, paymentNote, changeNote, header }
+
+// server: structural verify + the on-chain checks it must still run
+verifyGloamPayment({ requirements, payload }): VerifyResult
+//   VerifyResult: { ok, reason, amountWei, asset, commitment, onchainChecksRequired[] }
+
+// optional issuer-scoped compliance disclosure over the payment note
+buildComplianceDisclosure(p): Promise<GloamComplianceDisclosure>
+
+encodeRequirements / decodeRequirements     // 402 body transport
+encodePaymentHeader / decodePaymentHeader   // X-PAYMENT transport
+GLOAM_VS_ZONE, GLOAM_X402_SCHEME`}</code>
+      </pre>
+      <p>
+        The agent signs and broadcasts <code>payment.intent.exec</code> itself,
+        then sets <code>payload.txHash</code>. <code>verifyGloamPayment</code>{" "}
+        confirms the payment note binds the required amount and asset; it never
+        assumes settlement, returning the on-chain checks (note membership, tx
+        landed, nullifier single-use) for the server to confirm. Worked example:{" "}
+        <code>examples/pay-x402</code>.
+      </p>
+
       {/* ─────────────────────────  witness  ───────────────────────── */}
       <h2>Witness builders</h2>
       <p>
