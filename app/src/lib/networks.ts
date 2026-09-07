@@ -113,6 +113,33 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
 
 export const DEFAULT_NETWORK_KEY: NetworkKey = "robinhood";
 
+/** localStorage key the network selector persists to (mirror of NetworkProvider). */
+const ACTIVE_NETWORK_STORAGE_KEY = "gloam.network";
+
+/**
+ * The active network for non-React code (lib functions that cannot use the
+ * useNetwork hook). Reads the same localStorage key the selector writes, and
+ * defaults to Robinhood. SSR and blocked-storage safe. React components should
+ * prefer useNetwork().
+ *
+ * Only `live` networks are selectable in the UI, so today this always resolves
+ * to Robinhood; it becomes meaningful the moment Tempo is marked live.
+ */
+export function getActiveNetwork(): GloamNetwork {
+  if (typeof window === "undefined") return NETWORKS[DEFAULT_NETWORK_KEY];
+  try {
+    const v = window.localStorage.getItem(ACTIVE_NETWORK_STORAGE_KEY);
+    if (isNetworkKey(v)) {
+      const n = NETWORKS[v];
+      // Never resolve to a non-writable network for lib/write code.
+      if (isNetworkWritable(n)) return n;
+    }
+  } catch {
+    /* private mode / blocked storage */
+  }
+  return NETWORKS[DEFAULT_NETWORK_KEY];
+}
+
 export const NETWORK_KEYS = Object.keys(NETWORKS) as NetworkKey[];
 
 export function getNetwork(key: NetworkKey): GloamNetwork {

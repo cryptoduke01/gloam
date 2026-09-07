@@ -94,10 +94,26 @@ Asset strategy given the constraint:
   do not state, 18 assumed in `networks.ts` and flagged there).
 - **Deploy block.** Record it for `syncTree` / `getLogs` tree rebuild; wire into
   the `tempo` entry in `networks.ts` and flip status from `planned` to `live`.
-- **Consumer migration.** Migrate the 72 build-time `PRODUCT_CHAIN_ID` consumers
-  to read `useNetwork()`. Notes are already keyed by chainId, so per-chain vaults
-  fall out for free. This is the bulk of the app work and is intentionally
-  deferred to Phase 1, when there is a second live chain to switch to.
+- **Consumer migration.** The runtime accessor is already in place:
+  `getActiveNetwork()` in `app/src/lib/networks.ts` (non-React, reads the
+  selector's localStorage key, resolves to Robinhood until Tempo is live) plus
+  the `useNetwork()` hook for components. The remaining app surface is ~15 files
+  (the components in `app/src/components/app` using `PRODUCT_CHAIN_ID` /
+  `EXPLORER_TX`, and the pool/deploy-block resolvers in `config.ts` / `shield.ts`
+  / `payMemo.ts`), not the 72 the raw grep suggested (the rest are static docs).
+  Notes are already keyed by chainId, so per-chain vaults fall out for free.
+
+  Do this as one coordinated cutover on deploy day, not before: it is
+  behavior-preserving today (the active network is always Robinhood), so it adds
+  no interim value and only risks the live write path. Recipe: components read
+  `useNetwork().network` for `chainId` / `explorerTx` / `chain`; lib resolvers
+  read `getActiveNetwork()`. Gotcha found in a trial: wagmi hook options
+  (`useBalance`, `useSendTransaction`, `useWaitForTransactionReceipt`,
+  `switchChain`) type `chainId` as the configured-chain literal, so add Tempo to
+  the wagmi config (`wagmi.ts`) first and type `GloamNetwork.chainId` as the
+  configured-id union (`46630 | 42431`), or the wagmi call sites will not
+  typecheck. The module-level `SHIELD_POOL_ADDRESS` const also becomes a function
+  call at use time so a runtime switch takes effect.
 
 ## 5. Agent payments: the winning combo, plus privacy
 
