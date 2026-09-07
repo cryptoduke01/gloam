@@ -32,7 +32,7 @@ const CAPABILITIES = [
   },
   {
     title: "Private agents",
-    body: "The same core runs server-side, so an AI agent holds and moves value under policy.",
+    body: "The same core runs server-side, so an AI agent holds, moves, and pays for tools privately over x402, under policy.",
   },
 ];
 
