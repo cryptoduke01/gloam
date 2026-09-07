@@ -23,10 +23,10 @@ export default function DocsProductionPage() {
     >
       <h2>Why this page exists</h2>
       <p>
-        The app proves unshield, private send, and private trade in the browser.
-        That is real cryptography, and still <strong>not</strong>{" "}
-        production-safe while the proving keys come from a development trusted
-        setup.
+        The app proves shield, unshield, and private send in the browser. That is
+        real cryptography, and still <strong>not</strong> production-safe while
+        the proving keys come from a development trusted setup and note secrets
+        sit in the browser in the clear.
       </p>
 
       <FlowDiagram
@@ -73,17 +73,21 @@ export default function DocsProductionPage() {
         <li>Real on-chain verifiers (no always-true mock on the funded pool)</li>
         <li>Browser prove path with artifact hash checks</li>
         <li>Private send does not keep the payment note on the sender</li>
-        <li>
-          Private trade (sealedSwap) live with size privacy defaults, see{" "}
-          <Link href="/docs/sealed-trade">sealed trade</Link>
-        </li>
-        <li>Honest copy: via-market adapter ≠ private trade</li>
+        <li>Hardened pool: a bound shield proof and 128-bit amount range checks (audit C1/C2)</li>
+        <li>Two-step ownership and a one-way shield-verifier set (audit M-4)</li>
       </ul>
 
       <h2>What is still open product-wise</h2>
       <ul>
+        <li>
+          <strong>Encrypt notes at rest.</strong> Note secrets sit in browser
+          localStorage in the clear today (audit M-1)
+        </li>
+        <li>
+          <strong>Re-enable sealed swaps</strong> after the H1 solvency fix (they
+          are disabled on-chain today)
+        </li>
         <li>Stronger public-input privacy (rates / pair strategies)</li>
-        <li>Oracle-bound rates (not display marks)</li>
         <li>Anonymity set growth (more users → better privacy)</li>
         <li>Mainnet only after this gate</li>
       </ul>
