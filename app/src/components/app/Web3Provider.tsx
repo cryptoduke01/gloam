@@ -6,6 +6,7 @@ import { WagmiProvider } from "wagmi";
 import { wagmiConfig } from "@/lib/wagmi";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { TurnkeyAutoConnect } from "./TurnkeyAutoConnect";
+import { NetworkProvider } from "./NetworkProvider";
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -24,7 +25,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         {TURNKEY_ENABLED && <TurnkeyAutoConnect />}
-        {children}
+        <NetworkProvider>{children}</NetworkProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

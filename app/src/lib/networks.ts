@@ -1,0 +1,136 @@
+/**
+ * Gloam network registry: the runtime source of truth for every chain the
+ * product can point at. Today Robinhood Chain testnet is the live flagship;
+ * Tempo testnet (Moderato) is scaffolded for the World's Fair expansion and is
+ * marked `planned` until its shielded pool + verifiers are deployed (Phase 1).
+ *
+ * Everything chain-specific (chain object, shielded pool, deploy block, hash
+ * scheme, native + stable assets, explorer links) hangs off one `GloamNetwork`
+ * record so the app can switch networks at runtime instead of at build time.
+ * Robinhood values are re-exported from the existing single sources
+ * (chain.ts / config.ts) so there is no second copy to drift.
+ */
+import { defineChain, type Address, type Chain } from "viem";
+import { robinhoodTestnet } from "./chain";
+import {
+  TESTNET_POSEIDON_POOL,
+  TESTNET_POSEIDON_DEPLOY_BLOCK,
+  type HashScheme,
+} from "./config";
+
+export type NetworkKey = "robinhood" | "tempo";
+
+/** Whether a network is deployed and safe for real shield/spend writes. */
+export type NetworkStatus = "live" | "planned";
+
+export interface NetworkAsset {
+  symbol: string;
+  /** ERC-20 address, or null for the chain's native gas asset. */
+  address: Address | null;
+  decimals: number;
+}
+
+export interface GloamNetwork {
+  key: NetworkKey;
+  label: string;
+  /** viem chain used for clients, wallet_addEthereumChain, etc. */
+  chain: Chain;
+  chainId: number;
+  /** Shielded pool address; null while a network is still `planned`. */
+  pool: Address | null;
+  /** Block the pool was deployed at, for getLogs / tree rebuild. */
+  deployBlock: bigint | null;
+  hashScheme: HashScheme;
+  /** The asset the chain leads with in the product narrative. */
+  primaryAsset: NetworkAsset;
+  /** Stable assets shieldable on this network (empty until registered). */
+  stableAssets: NetworkAsset[];
+  status: NetworkStatus;
+  /** One-line, honest description of where the network stands. */
+  note: string;
+  explorerTx: (hash: string) => string;
+  explorerAddress: (addr: string) => string;
+}
+
+/**
+ * Tempo testnet (Moderato). Payments-first EVM L1 (Reth) incubated by Stripe +
+ * Paradigm; native currency is USD and gas is paid in stablecoins. Params from
+ * the official connection docs (docs.tempo.xyz). USD decimals are unspecified
+ * upstream; 18 is the EVM/Reth default and must be confirmed before writes.
+ */
+export const tempoTestnet = defineChain({
+  id: 42431,
+  name: "Tempo Testnet (Moderato)",
+  nativeCurrency: { name: "US Dollar", symbol: "USD", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://rpc.moderato.tempo.xyz"] },
+  },
+  blockExplorers: {
+    default: {
+      name: "Tempo Testnet Explorer",
+      url: "https://explore.testnet.tempo.xyz",
+    },
+  },
+  testnet: true,
+});
+
+const NETWORKS: Record<NetworkKey, GloamNetwork> = {
+  robinhood: {
+    key: "robinhood",
+    label: "Robinhood Chain",
+    chain: robinhoodTestnet,
+    chainId: robinhoodTestnet.id,
+    pool: TESTNET_POSEIDON_POOL,
+    deployBlock: TESTNET_POSEIDON_DEPLOY_BLOCK,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "live",
+    note: "Live on testnet: shield, private send, cash out, selective disclosure.",
+    explorerTx: (hash) =>
+      `${robinhoodTestnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) =>
+      `${robinhoodTestnet.blockExplorers.default.url}/address/${addr}`,
+  },
+  tempo: {
+    key: "tempo",
+    label: "Tempo",
+    chain: tempoTestnet,
+    chainId: tempoTestnet.id,
+    pool: null,
+    deployBlock: null,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "USD", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "planned",
+    note: "Planned: private stablecoin payments for people and agents. Pool not yet deployed.",
+    explorerTx: (hash) =>
+      `${tempoTestnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) =>
+      `${tempoTestnet.blockExplorers.default.url}/address/${addr}`,
+  },
+};
+
+export const DEFAULT_NETWORK_KEY: NetworkKey = "robinhood";
+
+export const NETWORK_KEYS = Object.keys(NETWORKS) as NetworkKey[];
+
+export function getNetwork(key: NetworkKey): GloamNetwork {
+  return NETWORKS[key];
+}
+
+/** All networks, live first, for rendering a selector. */
+export function allNetworks(): GloamNetwork[] {
+  return NETWORK_KEYS.map(getNetwork).sort((a, b) =>
+    a.status === b.status ? 0 : a.status === "live" ? -1 : 1
+  );
+}
+
+export function isNetworkKey(v: string | null | undefined): v is NetworkKey {
+  return v === "robinhood" || v === "tempo";
+}
+
+/** A network can take real shield/spend writes only when live with a pool. */
+export function isNetworkWritable(n: GloamNetwork): boolean {
+  return n.status === "live" && n.pool !== null;
+}

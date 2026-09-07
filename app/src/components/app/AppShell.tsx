@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { WalletMenu } from "./WalletMenu";
 import { WelcomeModal } from "./WelcomeModal";
+import { NetworkSelector } from "./NetworkSelector";
 
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
@@ -54,11 +55,12 @@ export function AppShell({
       <WelcomeModal />
       <header className="sticky top-0 z-40 border-b border-line bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-8">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Logo />
             <span className="hidden rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime sm:inline">
               Testnet
             </span>
+            <NetworkSelector />
           </div>
           <nav
             className="app-nav items-center gap-1"
