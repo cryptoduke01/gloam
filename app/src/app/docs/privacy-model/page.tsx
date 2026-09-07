@@ -115,6 +115,20 @@ export default function DocsPrivacyPage() {
         <li>Recovery if you lose a note secret</li>
       </ul>
 
+      <h2>Private from the public, not from an operator</h2>
+      <p>
+        Some chains offer privacy through operator-run environments, for example
+        Tempo Zones, where a designated operator sees every transaction inside
+        the zone and only the wider public is kept out. Gloam is a different
+        model. It is a self-custodial shielded pool with no operator in the
+        middle: only you hold the note secret, and only a party you choose sees a
+        balance, through selective disclosure. When Gloam settles a private agent
+        payment over x402, the payer and the payee learn the amount and no one
+        else does. Where a regulated asset needs oversight, compliance visibility
+        is opt-in per payment through an issuer-scoped disclosure, never a
+        standing view handed to an operator.
+      </p>
+
       <h2>Before mainnet</h2>
       <p>
         Gloam is testnet only today, and there are honest gaps we will not ship to
