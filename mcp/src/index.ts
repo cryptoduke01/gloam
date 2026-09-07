@@ -21,15 +21,22 @@ import {
   SEALED_VAULT,
   NATIVE_ASSET,
   buildGloamPaymentRequirements,
+  buildGloamPayment,
   verifyGloamPayment,
   encodeRequirements,
   decodeRequirements,
   decodePaymentHeader,
+  syncTree,
+  noteCommitmentPoseidon,
+  fieldToHex,
   GLOAM_VS_ZONE,
 } from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
-import { shieldArtifacts } from "./artifacts.js";
+import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+
+/** Deploy block of the sealed Poseidon pool on RH testnet (tree scan start). */
+const POOL_DEPLOY_BLOCK = 110_840_714n;
 
 const server = new McpServer({ name: "gloam", version: "0.1.0" });
 
@@ -43,6 +50,21 @@ const shieldPoolAbi = [
       { name: "amount", type: "uint256" },
       { name: "commitment", type: "bytes32" },
       { name: "proof", type: "bytes" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const transferAbi = [
+  {
+    type: "function",
+    name: "transfer",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "root", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
+      { name: "newCommitments", type: "bytes32[2]" },
     ],
     outputs: [],
   },
@@ -83,6 +105,7 @@ server.registerTool(
         "gloam_execute_transfer: sign and broadcast a public testnet transfer (execution; needs a signer)",
         "gloam_payment_requirements: price an agent resource in a private x402 payment (server side)",
         "gloam_pay_x402: plan the self-custodial private payment for a 402 challenge (agent side)",
+        "gloam_execute_private_pay: REAL private x402 settlement from a held note — sync, prove, broadcast transfer (execution; needs a signer)",
         "gloam_verify_payment: verify a presented x402 private payment, list the on-chain settlement checks (server side)",
       ],
       privatePayments:
@@ -438,6 +461,94 @@ server.registerTool(
     }
     const result = verifyGloamPayment({ requirements: req, payload: pay });
     return text({ status: result.ok ? "verified" : "rejected", ...result });
+  }
+);
+
+server.registerTool(
+  "gloam_execute_private_pay",
+  {
+    title: "Execute a private payment (x402)",
+    description:
+      "AGENT side, REAL execution. Settle an x402 payment privately from a note the agent already holds: syncs the pool tree, builds the private send to the payee, generates the Groth16 transfer proof, and broadcasts transfer() server-side. Self-custodial (the agent's own key signs; no operator holds funds). Returns the X-PAYMENT payload plus the payee's payment note. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan. The change note secret is the agent's remaining balance, so it must persist it.",
+    inputSchema: {
+      requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or raw JSON)."),
+      noteSecret: z.string().describe("The 0x secret of a note the agent already holds in the pool."),
+      noteEth: z.number().positive().describe("The full ETH amount of that note (its value, not the payment amount)."),
+      issuerTag: z.string().optional().describe("Optional issuer tag to attach a compliance disclosure."),
+    },
+  },
+  async ({ requirements, noteSecret, noteEth, issuerTag }) => {
+    let req;
+    try {
+      req = decodeRequirements(requirements);
+    } catch {
+      try { req = JSON.parse(requirements); } catch { return text({ status: "error", error: "Could not parse requirements." }); }
+    }
+    const signer = getSigner();
+    if (!signer) {
+      return text({
+        status: "no_signer",
+        plan: { action: "private_pay_x402", pay: req.maxAmountRequired, asset: req.asset, payTo: req.payTo, pool: req.poolAddress },
+        message: "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
+        notVsZone: GLOAM_VS_ZONE.oneLine,
+      });
+    }
+    try {
+      const noteAmountWei = parseEther(String(noteEth));
+      const asset = (req.asset as Address) ?? NATIVE_ASSET;
+      const commitment = fieldToHex(
+        await noteCommitmentPoseidon(BigInt(noteSecret), noteAmountWei, asset)
+      );
+      const synced = await syncTree(signer.publicClient, {
+        pool: req.poolAddress as Address,
+        fromBlock: POOL_DEPLOY_BLOCK,
+      });
+      const path = await synced.pathForCommitment(commitment);
+      if (!path) {
+        return text({ status: "error", error: "That note is not in the pool tree yet. Shield it first, or wait for the deposit to confirm." });
+      }
+      const { wasm, zkey } = await transferArtifacts();
+      const payment = await buildGloamPayment({
+        requirements: req,
+        senderSecretHex: noteSecret as `0x${string}`,
+        senderNoteAmountWei: noteAmountWei,
+        path,
+        prove: artifactProver({ wasm, zkey }),
+        issuerTag,
+      });
+      const hash = await signer.walletClient.writeContract({
+        address: payment.intent.exec.poolAddress,
+        abi: transferAbi,
+        functionName: "transfer",
+        args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
+      });
+      const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        return text({ status: "error", error: `Transfer reverted (${hash}).` });
+      }
+      payment.payload.payload.txHash = hash;
+      const verify = verifyGloamPayment({ requirements: req, payload: payment.payload });
+      return text({
+        status: "submitted",
+        hash,
+        explorer: `${CHAIN.explorer}/tx/${hash}`,
+        verify,
+        paymentNote: {
+          secret: payment.paymentNote.secret,
+          commitment: payment.paymentNote.commitment,
+          amountWei: payment.paymentNote.amountWei,
+        },
+        persistChangeNote: {
+          secret: payment.changeNote.secret,
+          amountWei: payment.changeNote.amountWei,
+          note: "Store this change note secret. It is the agent's remaining private balance.",
+        },
+        privacy: "The public feed shows a shielded transfer, never the amount or the parties.",
+        notVsZone: GLOAM_VS_ZONE.oneLine,
+      });
+    } catch (err) {
+      return text({ status: "error", error: err instanceof Error ? err.message : String(err) });
+    }
   }
 );
 
