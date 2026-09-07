@@ -124,9 +124,11 @@ selective disclosure it lacks:
 
 ## 7. Open questions and risks
 
-- **Freeze / blocklist enforcement against shielded notes.** Needs a concrete
-  in-circuit or unshield-time design. Until solved, only non-freezing assets are
-  safe to shield. This is the top technical risk for real-stablecoin support.
+- **Freeze / blocklist enforcement against shielded notes.** Designed: enforce
+  issuer controls at the public shield / unshield edges (where tokens actually
+  move), keep privacy in the middle. See
+  `contracts/audit/TEMPO-COMPLIANCE-DESIGN.md`. Until it ships, only non-freezing
+  assets are safe to shield.
 - **Native USD decimals on Tempo.** Unconfirmed upstream; verify before writes.
 - **World's Fair eligibility window (Sep 14 to Oct 12).** The scored Tempo build
   must land inside the window. Pre-hack work here is design + testnet foundation
