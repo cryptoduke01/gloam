@@ -364,12 +364,13 @@ export default nextConfig;
 
 ## Examples
 
-Three runnable references, one for each shape a builder starts from:
+Four runnable references, one for each shape a builder starts from:
 
 | Example | Runtime | What it shows |
 | --- | --- | --- |
 | [agent-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-shield) | Node | The smallest agent: mint a note, prove, deposit privately. |
 | [pay-bot](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-bot) | Node | A private payment end to end: shield, sync, send. |
+| [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay, verify. |
 | [web-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
 
 ![Shield a private balance in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
