@@ -322,6 +322,9 @@ buildGloamPayment(p): Promise<BuiltPayment>
 verifyGloamPayment({ requirements, payload }): VerifyResult
 //   VerifyResult: { ok, reason, amountWei, asset, commitment, onchainChecksRequired[] }
 
+// crypto check: the note's claimed amount binds to its commitment (run before granting)
+verifyPaymentNoteBinding(note): Promise<boolean>
+
 // optional issuer-scoped compliance disclosure over the payment note
 buildComplianceDisclosure(p): Promise<GloamComplianceDisclosure>
 
@@ -334,7 +337,9 @@ GLOAM_VS_ZONE, GLOAM_X402_SCHEME`}</code>
         then sets <code>payload.txHash</code>. <code>verifyGloamPayment</code>{" "}
         confirms the payment note binds the required amount and asset; it never
         assumes settlement, returning the on-chain checks (note membership, tx
-        landed, nullifier single-use) for the server to confirm. Worked example:{" "}
+        landed, nullifier single-use) for the server to confirm. Run{" "}
+        <code>verifyPaymentNoteBinding</code> too, so a payer cannot claim the
+        full price for a note minted at a smaller amount. Worked example:{" "}
         <code>examples/pay-x402</code>.
       </p>
 

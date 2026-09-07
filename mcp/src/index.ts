@@ -23,9 +23,11 @@ import {
   buildGloamPaymentRequirements,
   buildGloamPayment,
   verifyGloamPayment,
+  verifyPaymentNoteBinding,
   encodeRequirements,
   decodeRequirements,
   decodePaymentHeader,
+  decodePaymentNote,
   syncTree,
   noteCommitmentPoseidon,
   fieldToHex,
@@ -460,7 +462,18 @@ server.registerTool(
       try { pay = JSON.parse(payment); } catch { return text({ status: "error", error: "Could not parse payment." }); }
     }
     const result = verifyGloamPayment({ requirements: req, payload: pay });
-    return text({ status: result.ok ? "verified" : "rejected", ...result });
+    // Also run the crypto binding check: does the note's claimed amount bind to
+    // its commitment? A structural pass alone would trust a lying payer.
+    let noteBinds: boolean | null = null;
+    if (result.ok) {
+      try {
+        noteBinds = await verifyPaymentNoteBinding(decodePaymentNote(pay.payload.paymentNote));
+      } catch {
+        noteBinds = false;
+      }
+    }
+    const ok = result.ok && noteBinds !== false;
+    return text({ status: ok ? "verified" : "rejected", noteBinds, ...result });
   }
 );
 

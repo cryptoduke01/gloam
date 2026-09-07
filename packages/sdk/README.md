@@ -318,13 +318,14 @@ assertTreeMatchesChain(client, pool, synced): Promise<boolean>
 buildGloamPaymentRequirements(p): GloamPaymentRequirements   // server: the 402 challenge
 buildGloamPayment(p): Promise<BuiltPayment>                  // agent: private send + X-PAYMENT header
 verifyGloamPayment({ requirements, payload }): VerifyResult  // server: structural verify + on-chain checklist
-buildComplianceDisclosure(p): GloamComplianceDisclosure      // optional issuer-scoped disclosure
+verifyPaymentNoteBinding(note): Promise<boolean>             // crypto: amount binds to commitment (run before granting)
+buildComplianceDisclosure(p): Promise<GloamComplianceDisclosure>  // optional issuer-scoped disclosure
 encodeRequirements / decodeRequirements                      // 402 body transport
 encodePaymentHeader / decodePaymentHeader                    // X-PAYMENT transport
 GLOAM_VS_ZONE, GLOAM_X402_SCHEME                             // posture + scheme id
 ```
 
-`buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset and settles through the right pool; it never assumes settlement, returning `onchainChecksRequired` for the server to confirm against the chain.
+`buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset and settles through the right pool; it never assumes settlement, returning `onchainChecksRequired` for the server to confirm against the chain. Run `verifyPaymentNoteBinding` alongside it so a payer cannot claim the full price for a note minted at a smaller amount.
 
 ### Merkle, rates, privacy, constants
 

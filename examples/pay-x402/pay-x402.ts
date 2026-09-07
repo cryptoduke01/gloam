@@ -33,6 +33,7 @@ import {
   buildGloamPaymentRequirements,
   buildGloamPayment,
   verifyGloamPayment,
+  verifyPaymentNoteBinding,
   decodePaymentHeader,
   artifactProver,
   syncTree,
@@ -166,6 +167,12 @@ async function main() {
   const v = verifyGloamPayment({ requirements, payload: presented });
   console.log(`\nSeller verify: ${v.ok ? "OK" : "REJECTED: " + v.reason}`);
   if (!v.ok || !v.commitment) throw new Error("Payment did not verify.");
+
+  // Crypto binding check: the note's claimed amount must bind to its commitment,
+  // so a lying payer cannot claim the full price for a smaller note.
+  const binds = await verifyPaymentNoteBinding(payment.paymentNote);
+  console.log(`  payment note binds amount to commitment: ${binds ? "yes ✓" : "NO ✗"}`);
+  if (!binds) throw new Error("Payment note amount does not bind to its commitment.");
 
   // One of the on-chain checks the seller runs: the payment note is a real leaf.
   const seen = await pub.readContract({
