@@ -7,6 +7,7 @@ import { zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { PRODUCT_CHAIN_ID } from "./chain";
 import { TESTNET_STOCK_TOKENS } from "./tokens";
 import { makeBoundNote } from "./note";
+import { getAllNotes, setAllNotes } from "./noteVault";
 import {
   activeHashScheme,
   activePoolAddress,
@@ -309,8 +310,6 @@ export type LocalNote = {
   source?: "local" | "chain";
 };
 
-const NOTES_KEY = "gloam.shield.notes.v1";
-
 export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => Boolean(n.txHash) && n.status !== "recovered");
 }
@@ -338,24 +337,17 @@ export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
  */
 export function purgeSenderPaymentNotes(): boolean {
   if (typeof window === "undefined") return false;
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    if (!raw) return false;
-    const all = JSON.parse(raw) as LocalNote[];
-    if (!Array.isArray(all)) return false;
-    let changed = false;
-    const next = all.map((n) => {
-      if (n?.id?.startsWith("pay-") && n.status !== "recovered") {
-        changed = true;
-        return { ...n, status: "recovered" as const };
-      }
-      return n;
-    });
-    if (changed) localStorage.setItem(NOTES_KEY, JSON.stringify(next));
-    return changed;
-  } catch {
-    return false;
-  }
+  const all = getAllNotes();
+  let changed = false;
+  const next = all.map((n) => {
+    if (n?.id?.startsWith("pay-") && n.status !== "recovered") {
+      changed = true;
+      return { ...n, status: "recovered" as const };
+    }
+    return n;
+  });
+  if (changed) setAllNotes(next);
+  return changed;
 }
 
 export type NotesBackup = {
@@ -443,53 +435,31 @@ export function markAllNotesRecovered(
   asset?: Address | null
 ) {
   if (typeof window === "undefined") return;
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    if (!raw) return;
-    const all = JSON.parse(raw) as LocalNote[];
-    const lower = address?.toLowerCase();
-    const assetLower = asset?.toLowerCase();
-    const next = all.map((n) => {
-      if (n.chainId !== PRODUCT_CHAIN_ID) return n;
-      if (lower && n.from && n.from.toLowerCase() !== lower) return n;
-      if (!n.txHash) return n;
-      if (assetLower && n.asset.toLowerCase() !== assetLower) return n;
-      return { ...n, status: "recovered" as const };
-    });
-    localStorage.setItem(NOTES_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
+  const lower = address?.toLowerCase();
+  const assetLower = asset?.toLowerCase();
+  const next = getAllNotes().map((n) => {
+    if (n.chainId !== PRODUCT_CHAIN_ID) return n;
+    if (lower && n.from && n.from.toLowerCase() !== lower) return n;
+    if (!n.txHash) return n;
+    if (assetLower && n.asset.toLowerCase() !== assetLower) return n;
+    return { ...n, status: "recovered" as const };
+  });
+  setAllNotes(next);
 }
 
 export function loadLocalNotes(address?: string | null): LocalNote[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    if (!raw) return [];
-    const all = JSON.parse(raw) as LocalNote[];
-    if (!Array.isArray(all)) return [];
-    const filtered = all.filter((n) => n.chainId === PRODUCT_CHAIN_ID);
-    if (!address) return filtered;
-    const lower = address.toLowerCase();
-    return filtered.filter(
-      (n) => !n.from || n.from.toLowerCase() === lower
-    );
-  } catch {
-    return [];
-  }
+  const filtered = getAllNotes().filter((n) => n.chainId === PRODUCT_CHAIN_ID);
+  if (!address) return filtered;
+  const lower = address.toLowerCase();
+  return filtered.filter((n) => !n.from || n.from.toLowerCase() === lower);
 }
 
 export function saveLocalNote(note: LocalNote) {
   if (typeof window === "undefined") return;
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    const all: LocalNote[] = raw ? (JSON.parse(raw) as LocalNote[]) : [];
-    const next = [note, ...all.filter((n) => n.id !== note.id)].slice(0, 100);
-    localStorage.setItem(NOTES_KEY, JSON.stringify(next));
-  } catch {
-    /* quota / private mode */
-  }
+  const all = getAllNotes();
+  const next = [note, ...all.filter((n) => n.id !== note.id)].slice(0, 100);
+  setAllNotes(next);
 }
 
 export function updateLocalNote(
@@ -497,15 +467,8 @@ export function updateLocalNote(
   patch: Partial<Pick<LocalNote, "leafIndex" | "txHash" | "status">>
 ) {
   if (typeof window === "undefined") return;
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    if (!raw) return;
-    const all = JSON.parse(raw) as LocalNote[];
-    const next = all.map((n) => (n.id === id ? { ...n, ...patch } : n));
-    localStorage.setItem(NOTES_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
+  const next = getAllNotes().map((n) => (n.id === id ? { ...n, ...patch } : n));
+  setAllNotes(next);
 }
 
 /** Clear ghost balances after cash-out / private send when nullifier was spent. */

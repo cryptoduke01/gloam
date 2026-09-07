@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
 import {
   SHIELD_POOL_ADDRESS,
   activeSpendableNotes,
@@ -123,7 +124,15 @@ export function useLocalShieldNotes(address?: string | null) {
   }, [refreshLocal, syncChain]);
 
   useEffect(() => {
+    let cancelled = false;
+    // Show any legacy plaintext immediately, then decrypt the vault and re-read.
     refreshLocal();
+    void unlockNoteVault().then(() => {
+      if (!cancelled) refreshLocal();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refreshLocal]);
 
   useEffect(() => {
@@ -132,7 +141,7 @@ export function useLocalShieldNotes(address?: string | null) {
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "gloam.shield.notes.v1") refreshLocal();
+      if (e.key === NOTES_KEY) void syncFromDisk().then(refreshLocal);
     };
     const onFocus = () => {
       const now = Date.now();
