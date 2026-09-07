@@ -122,10 +122,6 @@ export default function DocsPrivacyPage() {
       </p>
       <ul>
         <li>
-          <strong>Notes are stored in the browser in the clear.</strong> Encrypt
-          at rest is a mainnet gate, not done yet.
-        </li>
-        <li>
           <strong>Dev-ceremony proving keys.</strong> Mainnet needs a real
           multi-party trusted setup and an external audit.
         </li>

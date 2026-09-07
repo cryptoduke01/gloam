@@ -75,17 +75,19 @@ export default function DocsProductionPage() {
         <li>Private send does not keep the payment note on the sender</li>
         <li>Hardened pool: a bound shield proof and 128-bit amount range checks (audit C1/C2)</li>
         <li>Two-step ownership and a one-way shield-verifier set (audit M-4)</li>
+        <li>Note secrets encrypted at rest (AES-GCM under an IndexedDB device key, audit M-1)</li>
       </ul>
 
       <h2>What is still open product-wise</h2>
       <ul>
         <li>
-          <strong>Encrypt notes at rest.</strong> Note secrets sit in browser
-          localStorage in the clear today (audit M-1)
-        </li>
-        <li>
           <strong>Re-enable sealed swaps</strong> after the H1 solvency fix (they
           are disabled on-chain today)
+        </li>
+        <li>
+          <strong>Stronger key custody.</strong> Notes are encrypted at rest, but
+          the key is device-bound; a wallet-bound or passphrase key is a mainnet
+          consideration
         </li>
         <li>Stronger public-input privacy (rates / pair strategies)</li>
         <li>Anonymity set growth (more users → better privacy)</li>
