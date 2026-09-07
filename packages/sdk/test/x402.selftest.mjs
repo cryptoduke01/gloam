@@ -115,8 +115,17 @@ assert(built.payload.payload.disclosure, "disclosure attached when issuerTag giv
 assert(built.payload.payload.disclosure.stub === true, "disclosure is a stub without a proof");
 assert(isComplianceDisclosureShape(built.payload.payload.disclosure), "disclosure shape valid");
 assert(built.payload.payload.disclosure.commitment === payNote.commitment, "disclosure binds the payment note");
-const real = buildComplianceDisclosure({ issuerTag: "issuer:testusd", note: payNote, proof: { pi_a: [] } });
-assert(real.stub === false, "injecting a proof leaves stub mode");
+const injected = await buildComplianceDisclosure({ issuerTag: "issuer:testusd", note: payNote, proof: { pi_a: [] } });
+assert(injected.stub === false, "injecting a proof leaves stub mode");
+// generating via a shield prover produces a real (non-stub) disclosure carrying the proof
+const proven = await buildComplianceDisclosure({ issuerTag: "issuer:testusd", note: payNote, prove: async () => ({ proofBytes: "0xfeed" }) });
+assert(proven.stub === false && proven.proof === "0xfeed", "prover-generated disclosure is real");
+// a payment built with a disclosureProver carries a real disclosure
+const builtProven = await buildGloamPayment({
+  requirements: req, senderSecretHex, senderNoteAmountWei: NOTE_AMOUNT, path, prove,
+  issuerTag: "issuer:testusd", disclosureProver: async () => ({ proofBytes: "0xfeed" }),
+});
+assert(builtProven.payload.payload.disclosure.stub === false, "payment with disclosureProver carries a real disclosure");
 
 // ── negative cases ────────────────────────────────────────────────────────────
 // asset mismatch: a requirement for native ETH must reject a stable-asset note

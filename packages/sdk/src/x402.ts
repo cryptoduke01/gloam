@@ -165,19 +165,47 @@ export interface GloamComplianceDisclosure {
 export interface BuildComplianceDisclosureParams {
   issuerTag: string;
   note: NoteExport;
-  /** Inject a real disclosure proof (from buildDisclosure) to leave stub mode. */
+  /** Inject a pre-made disclosure proof to leave stub mode. */
   proof?: unknown;
+  /**
+   * A shield prover (artifactProver over the shield artifacts). When given, this
+   * generates the real disclosure proof over the note, proving it is worth
+   * (amount, asset) without revealing the secret, exactly the shield-circuit
+   * disclosure. This is the same statement selective disclosure uses, reused
+   * for an issuer scope.
+   */
+  prove?: Prover;
 }
 
 /**
- * Build an issuer-scoped compliance disclosure for a payment note. Without an
- * injected proof this returns a structurally valid stub (stub: true) that
- * documents the issuer-viewing-key path; with a proof it is a complete,
- * shape-valid disclosure ready to encrypt to the issuer key at deploy time.
+ * Build an issuer-scoped compliance disclosure for a payment note.
+ *
+ * With `prove` it generates the real shield-circuit disclosure proof binding the
+ * note's commitment to (amount, asset); with an injected `proof` it wraps that;
+ * with neither it returns a structurally valid stub (stub: true) documenting the
+ * path. In every case the disclosure is directed at a named issuer viewing key.
+ * Encrypting the proof to that key and the on-chain freeze reconciliation remain
+ * deployment prerequisites (TEMPO_EXPANSION.md sections 3 and 7).
  */
-export function buildComplianceDisclosure(
+export async function buildComplianceDisclosure(
   params: BuildComplianceDisclosureParams
-): GloamComplianceDisclosure {
+): Promise<GloamComplianceDisclosure> {
+  let proof = params.proof ?? null;
+  let stub = params.proof === undefined && params.prove === undefined;
+
+  if (proof === null && params.prove) {
+    // Shield-circuit disclosure: prove knowledge of the secret binding the
+    // commitment to (amount, asset). Public signals order: [commitment, amount, asset].
+    const r = await params.prove({
+      commitment: BigInt(params.note.commitment).toString(),
+      amount: params.note.amountWei,
+      asset: BigInt(params.note.asset).toString(),
+      secret: BigInt(params.note.secret).toString(),
+    });
+    proof = r.proofBytes;
+    stub = false;
+  }
+
   return {
     v: 1,
     scope: "issuer",
@@ -185,8 +213,8 @@ export function buildComplianceDisclosure(
     commitment: params.note.commitment,
     amountWei: params.note.amountWei,
     asset: params.note.asset,
-    proof: params.proof ?? null,
-    stub: params.proof === undefined,
+    proof,
+    stub,
   };
 }
 
@@ -233,8 +261,14 @@ export interface BuildPaymentParams {
   prove: Prover;
   /** Optional issuer tag to attach a compliance disclosure for the payment note. */
   issuerTag?: string;
-  /** Optional real disclosure proof; without it the disclosure is a stub. */
+  /** Optional pre-made disclosure proof; without it the disclosure is a stub. */
   disclosureProof?: unknown;
+  /**
+   * Optional shield prover to generate the real compliance-disclosure proof over
+   * the payment note. The payer knows the payment note secret at build time, so
+   * it can produce the issuer-scoped proof here.
+   */
+  disclosureProver?: Prover;
 }
 
 export interface BuiltPayment {
@@ -279,10 +313,11 @@ export async function buildGloamPayment(
   });
 
   const disclosure = params.issuerTag
-    ? buildComplianceDisclosure({
+    ? await buildComplianceDisclosure({
         issuerTag: params.issuerTag,
         note: intent.paymentNote,
         proof: params.disclosureProof,
+        prove: params.disclosureProver,
       })
     : undefined;
 
