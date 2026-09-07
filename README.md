@@ -21,7 +21,7 @@ The vault app is the reference implementation, not the whole product.
 | Surface | What it is | Package |
 | --- | --- | --- |
 | **SDK** | Drop shielded balances, private sends, and selective disclosure into any Robinhood Chain app or agent. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
-| **Agents** | An MCP server + a reference wrapper so an AI agent can shield and move value privately, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
+| **Agents** | An MCP server + a reference wrapper so an AI agent can shield, move value, and pay for tools privately over x402, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
 | **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
 
 All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle tree, circom witness builders, real Groth16 verification, and one canonical intent shape.
@@ -34,6 +34,7 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 | **Private send** | Live | Send inside the vault to a receive tag; an on-chain encrypted memo inbox (`GloamPayMemo`) for discovery, with the sender no longer revealed |
 | **Cash out** | Live, proof-gated | Unshield to a public balance with a real browser-generated Groth16 proof |
 | **Selective disclosure** | Live | Prove you hold a specific shielded balance to a party you choose, revealing nothing else. Anyone verifies it at [`/verify`](https://gloam.trade/verify), no wallet |
+| **Private agent payments (x402)** | SDK live | Agents pay for tools over HTTP 402 and settle a private send to the payee; the server verifies the payment before granting access. Settlement rides the live transfer path; the offline real-proof is validated (`mcp verify:prover`) |
 | **Private trade** | Disabled, by design | `sealedSwap` is off until the H1 solvency accounting lands. Oracle-bound rates are built and tested; see below |
 
 Every private action is proof-gated on-chain. No mock fills, no theatrical privacy. If a path cannot be both private and solvent yet, it waits. See [`contracts/audit/H1-SWAP-SOLVENCY.md`](./contracts/audit/H1-SWAP-SOLVENCY.md).
@@ -51,13 +52,17 @@ Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026
 - **Groth16 runs native.** bn254 pairing precompiles are present and the 96 KB code-size cap fits large verifier contracts, so shield / unshield / transfer proofs verify with no special infra.
 - **First-class ERC-4337** opens the door to gasless private transactions.
 
+## Expanding to Tempo
+
+Gloam is bringing the same private core to [Tempo](https://tempo.xyz), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with issuer-compatible selective disclosure. It is not deployed there yet: the app carries a runtime network toggle that lists Tempo as planned, and the design is in [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
+
 ## Trust, verified
 
 Privacy earns the mainnet gate only when it is auditable and correct.
 
 - **Self-audited, then re-verified.** A Kensho pass found a critical funded drain, two highs, and a set of mediums in the sealed pool and client. Every critical and high is fixed and **verified on-chain and in code** (independent re-audit): the drainable pool drained and de-published, value-binding enforced at deposit (C1), the swap path disabled (H1), the re-open path closed (one-way verifier + two-step ownership). Full status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
 - **Selective disclosure, not a mixer.** Prove balance or a payment to a counterparty or auditor without revealing everything. The right posture for a regulated-sponsor chain.
-- **Honest gates.** The trusted setup is a dev ceremony and mainnet needs a multi-party one; note secrets are not yet encrypted at rest. These are disclosed, not hidden. Mainnet `4663` is blocked in-product.
+- **Honest gates.** The trusted setup is a dev ceremony and mainnet needs a multi-party one; note secrets are encrypted at rest (AES-GCM under a device key, audit M-1), though the key is device-bound. These are disclosed, not hidden. Mainnet `4663` is blocked in-product.
 
 ## Using the SDK
 
