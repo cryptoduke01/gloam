@@ -29,6 +29,8 @@ import { buildPrivateSendIntent, type PrivateSendIntent } from "./builders.js";
 import type { PoseidonMerklePath } from "./merkle.js";
 import type { Prover } from "./prove.js";
 import type { NoteExport } from "./witness.js";
+import { noteCommitmentPoseidon } from "./note.js";
+import { fieldToHex } from "./poseidon.js";
 import { NATIVE_ASSET, RH_TESTNET_CHAIN_ID, SEALED_VAULT } from "./constants.js";
 
 export const GLOAM_X402_SCHEME = "gloam-private" as const;
@@ -413,6 +415,7 @@ export function verifyGloamPayment(args: {
     asset: note.asset,
     commitment: note.commitment,
     onchainChecksRequired: [
+      "verifyPaymentNoteBinding(note) === true (the claimed amount binds to the commitment; a structural check alone would trust a lying payer)",
       `pool.commitmentSeen(${note.commitment}) === true (payment note is a real leaf)`,
       pay.payload.txHash
         ? `transfer tx ${pay.payload.txHash} succeeded on ${req.poolAddress}`
@@ -420,6 +423,28 @@ export function verifyGloamPayment(args: {
       "the transfer nullifier is recorded spent exactly once (no double spend)",
     ],
   };
+}
+
+/**
+ * Confirm a payment note's claimed amount actually binds to its commitment:
+ * commitment == Poseidon(secret, amount, asset). verifyGloamPayment is a fast
+ * structural check and trusts the encoded amountWei; without this, a payer could
+ * present a note claiming the full price whose commitment was minted for a
+ * smaller amount (and is a real on-chain leaf), passing structural verify while
+ * underpaying. The payee only learns the true value at cash-out. Run this before
+ * granting access on any payment where the payee will rely on the amount.
+ */
+export async function verifyPaymentNoteBinding(note: NoteExport): Promise<boolean> {
+  try {
+    const c = await noteCommitmentPoseidon(
+      BigInt(note.secret),
+      BigInt(note.amountWei),
+      note.asset
+    );
+    return fieldToHex(c).toLowerCase() === note.commitment.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 export function encodePaymentHeader(p: GloamPaymentPayload): string {

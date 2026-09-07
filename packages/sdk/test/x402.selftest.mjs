@@ -19,6 +19,7 @@ import {
   verifyGloamPayment,
   buildComplianceDisclosure,
   isComplianceDisclosureShape,
+  verifyPaymentNoteBinding,
   decodePaymentHeader,
   decodePaymentNote,
   encodeRequirements,
@@ -101,8 +102,15 @@ const v = verifyGloamPayment({ requirements: req, payload: built.payload });
 assert(v.ok === true, `verify ok (got: ${v.reason})`);
 assert(v.amountWei === PRICE.toString(), "verify surfaces amount");
 assert(v.commitment === payNote.commitment, "verify surfaces the commitment to check on-chain");
-assert(v.onchainChecksRequired.length === 3, "verify lists 3 on-chain checks");
+assert(v.onchainChecksRequired.length === 4, "verify lists 4 on-chain checks");
+assert(v.onchainChecksRequired.some((c) => /binding/i.test(c)), "verify flags the note-binding check");
 assert(v.onchainChecksRequired.some((c) => c.includes("not yet attached")), "verify flags missing settlement tx");
+
+// the payment note binds its claimed amount to its commitment
+assert((await verifyPaymentNoteBinding(payNote)) === true, "honest payment note binds amount to commitment");
+// a payer who lies about the amount (claims more than the commitment was minted for) fails the binding check
+const lyingNote = { ...payNote, amountWei: (PRICE * 4n).toString() };
+assert((await verifyPaymentNoteBinding(lyingNote)) === false, "lied-up payment note fails the binding check");
 
 // after the agent broadcasts, it attaches the tx hash
 built.payload.payload.txHash = "0xabc123";
