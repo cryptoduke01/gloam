@@ -1,0 +1,19 @@
+{
+  "name": "gloam-pay-x402-example",
+  "private": true,
+  "type": "module",
+  "description": "Reference agent payment over x402, private end to end, via @gloamtrade/sdk.",
+  "scripts": {
+    "start": "tsx pay-x402.ts"
+  },
+  "dependencies": {
+    "@gloamtrade/sdk": "workspace:*",
+    "snarkjs": "^0.7.5",
+    "viem": "^2.55.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
