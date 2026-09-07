@@ -134,8 +134,49 @@ const hash = await wallet.writeContract({
             </td>
             <td>Sign + broadcast a public testnet transfer for funding (execute)</td>
           </tr>
+          <tr>
+            <td>
+              <code>gloam_payment_requirements</code> /{" "}
+              <code>gloam_verify_payment</code>
+            </td>
+            <td>
+              Price a resource in a private x402 payment, and verify a presented
+              one (server)
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <code>gloam_pay_x402</code>
+            </td>
+            <td>
+              Plan the self-custodial private payment that satisfies a 402
+              challenge (agent)
+            </td>
+          </tr>
         </tbody>
       </table>
+
+      <h2>Private agent payments (x402)</h2>
+      <p>
+        Agents pay for tools and data over HTTP 402. The pattern that won
+        Colosseum paired x402 with stablecoins, but that settlement is fully
+        public: the amount, the payer, and the payee all leak. Gloam&apos;s{" "}
+        <code>gloam-private</code> scheme keeps it private and self-custodial. The
+        agent settles a shielded transfer to the payee itself, so no operator or
+        facilitator ever holds its key or funds, then presents the payment note
+        plus the settlement transaction as proof on the 402 retry. The payee
+        opens the note to see the amount; the public sees only that a shielded
+        transfer happened.
+      </p>
+      <p>
+        <strong>This is not a Tempo Zone.</strong> A Zone is operator-visible:
+        the zone operator sees every transaction inside it. Gloam is private from
+        the public and from any operator; only the payer and the payee learn the
+        amount. Compliance visibility is opt-in per payment through an
+        issuer-scoped disclosure, not a blanket view handed to an operator. See
+        the <Link href="/docs/privacy-model">privacy model</Link> for what stays
+        hidden and what does not.
+      </p>
 
       <h2>Policy and key custody</h2>
       <p>
