@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { AsciiImage } from "@/components/AsciiImage";
+import { LandingMobileNav } from "@/components/LandingMobileNav";
 
 /**
  * Gloam landing, "Twilight" brand.
@@ -205,12 +206,15 @@ export function Landing() {
               Whitepaper
             </Link>
           </div>
-          <Link
-            href="/app"
-            className="rounded-[10px] border border-[#E5E3DD] bg-white/60 px-4 py-[10px] text-[13.5px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
-          >
-            Connect
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/app"
+              className="rounded-[10px] border border-[#E5E3DD] bg-white/60 px-4 py-[10px] text-[13.5px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
+            >
+              Connect
+            </Link>
+            <LandingMobileNav />
+          </div>
         </nav>
 
         {/* hero */}
