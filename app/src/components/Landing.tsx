@@ -218,7 +218,7 @@ export function Landing() {
           <div>
             <p className="mb-5 flex items-center gap-2.5 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#3B3766]" />
-              The private layer for Robinhood
+              The private layer for Robinhood Chain and Tempo
             </p>
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
@@ -373,8 +373,9 @@ export function Landing() {
               </h2>
               <p className="mt-5 max-w-[42ch] text-[15px] leading-relaxed text-[#c9c7d0]">
                 Dark pools let large players trade without showing their hand.
-                Gloam brings that to tokenized stocks and crypto, sealed by a
-                proof and settled on Robinhood Chain.
+                Gloam brings that to tokenized stocks, crypto, and stablecoin
+                payments, sealed by a proof and settled on Robinhood Chain and
+                Tempo.
               </p>
             </div>
           </div>
