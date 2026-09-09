@@ -223,7 +223,24 @@ export function Landing() {
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
               <br />
-              <span className="text-[#6E6E76]">Reveal nothing.</span>
+              <span className="relative inline-block text-[#6E6E76]">
+                Reveal nothing.
+                {/* hand-drawn marker underline, collage accent */}
+                <svg
+                  aria-hidden
+                  viewBox="0 0 240 14"
+                  preserveAspectRatio="none"
+                  className="pointer-events-none absolute -bottom-2 left-0 h-3 w-full text-[#3B3766]"
+                  fill="none"
+                >
+                  <path
+                    d="M3 9C34 3 58 11 92 6c34-5 62 4 96-1 18-3 34 1 46 3"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
             </h1>
             <p className="mt-6 max-w-[44ch] text-[17px] text-[#4c4c53]">
               Shield a balance, then trade tokenized stocks and crypto with your

@@ -5,9 +5,9 @@ import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
-const siteTitle = "Gloam · The Private Layer for Robinhood";
+const siteTitle = "Gloam · The Privacy Layer for Onchain Finance";
 const siteDescription =
-  "The private layer for Robinhood. Shield a balance, then trade tokenized stocks and crypto with your size sealed. Settlement is public, your strategy is not.";
+  "The privacy layer for onchain finance, live on Robinhood Chain and Tempo. Shield a balance, then trade and pay with your size sealed. Settlement is public, your strategy is not.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gloam.trade"),
