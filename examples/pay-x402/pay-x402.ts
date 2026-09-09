@@ -34,6 +34,7 @@ import {
   buildGloamPayment,
   verifyGloamPayment,
   verifyPaymentNoteBinding,
+  encodePaymentHeader,
   decodePaymentHeader,
   artifactProver,
   syncTree,
@@ -173,7 +174,8 @@ async function main() {
   payment.payload.payload.txHash = sendHash;
 
   // ── Seller: verify the presented X-PAYMENT before granting access ──────────
-  const presented = decodePaymentHeader(payment.header); // what the buyer sends back
+  // The agent attaches the settlement tx, then presents the header on the retry.
+  const presented = decodePaymentHeader(encodePaymentHeader(payment.payload));
   const v = verifyGloamPayment({ requirements, payload: presented });
   console.log(`\nSeller verify: ${v.ok ? "OK" : "REJECTED: " + v.reason}`);
   if (!v.ok || !v.commitment) throw new Error("Payment did not verify.");
