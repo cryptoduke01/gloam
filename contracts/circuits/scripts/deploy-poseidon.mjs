@@ -21,7 +21,9 @@ async function main() {
   const { poseidonContract } = await import("circomlibjs");
   const { ethers } = await import("ethers");
 
-  const provider = new ethers.JsonRpcProvider(RPC);
+  // Work on either ethers v6 (ethers.JsonRpcProvider) or v5 (ethers.providers.*).
+  const ProviderCtor = ethers.JsonRpcProvider ?? ethers.providers?.JsonRpcProvider;
+  const provider = new ProviderCtor(RPC);
   const wallet = new ethers.Wallet(pk, provider);
 
   async function deploy(nInputs, name) {
@@ -29,8 +31,9 @@ async function main() {
     const bytecode = poseidonContract.createCode(nInputs);
     const factory = new ethers.ContractFactory(abi, bytecode, wallet);
     const c = await factory.deploy();
-    await c.waitForDeployment();
-    const addr = await c.getAddress();
+    if (typeof c.waitForDeployment === "function") await c.waitForDeployment();
+    else if (typeof c.deployed === "function") await c.deployed();
+    const addr = typeof c.getAddress === "function" ? await c.getAddress() : c.address;
     console.log(name, addr);
     return { name, nInputs, address: addr, abi };
   }
@@ -40,7 +43,7 @@ async function main() {
 
   mkdirSync("build/poseidon", { recursive: true });
   const out = {
-    chain: "robinhood-testnet",
+    rpc: RPC,
     Poseidon2: p2.address,
     Poseidon3: p3.address,
   };
