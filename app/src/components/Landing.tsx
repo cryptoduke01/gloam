@@ -216,10 +216,6 @@ export function Landing() {
         {/* hero */}
         <section className="grid grid-cols-1 items-center gap-14 py-16 md:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
           <div>
-            <p className="mb-5 flex items-center gap-2.5 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#3B3766]" />
-              The private layer for Robinhood Chain and Tempo
-            </p>
             <h1 className="text-[clamp(44px,6.4vw,80px)] font-bold leading-[0.95] tracking-[-0.04em] text-balance">
               Trade everything.
               <br />

@@ -377,11 +377,6 @@ export function PortfolioView() {
               disabled={!shieldLive}
             />
             <QuickAction href="/app/send" label="Send" />
-            <QuickAction
-              href="/app/trade?path=sealed"
-              label="Private trade"
-              disabled={!shieldLive}
-            />
             <QuickAction href="/app/move" label="Move" disabled={!shieldLive} />
           </div>
         </div>
@@ -400,7 +395,7 @@ export function PortfolioView() {
         {isConnected && !onProduct && (
           <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-[#c0432f]">
-              Switch to Robinhood testnet to see balances.
+              Switch your wallet to {network.label} to see balances.
             </p>
             <WalletMenu />
           </div>
