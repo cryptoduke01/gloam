@@ -1,8 +1,8 @@
 # Tempo expansion: design and positioning
 
 Status: design. No Tempo contracts deployed yet. This is the plan that guides
-Phase 1, written before the World's Fair build window so the scored work lands
-inside it.
+Phase 1. Colosseum permits building up to two months before the Sep 14 start, so
+this can be built now; judging weighs progress shown during the window.
 
 Gloam runs one product on two chains: the flagship on Robinhood Chain
 (tokenized-equity privacy) and an expansion on Tempo (private stablecoin
@@ -146,9 +146,12 @@ selective disclosure it lacks:
   `contracts/audit/TEMPO-COMPLIANCE-DESIGN.md`. Until it ships, only non-freezing
   assets are safe to shield.
 - **Native USD decimals on Tempo.** Unconfirmed upstream; verify before writes.
-- **World's Fair eligibility window (Sep 14 to Oct 12).** The scored Tempo build
-  must land inside the window. Pre-hack work here is design + testnet foundation
-  only. Open House (Sep 14 to Oct 4) has no such constraint.
+- **World's Fair timing (Sep 14 to Oct 12).** Colosseum explicitly permits
+  building up to two months before the start, so building and deploying Tempo
+  before Sep 14 is allowed and is not a disqualification risk. Judging weighs
+  work shown during the window, so the goal is demoable in-window progress, not
+  gating the build to those dates. (Confirmed against Colosseum's official
+  guidance, 2026-09-09.)
 - **Do Zones make a public-Mainnet shielded pool redundant in judges' eyes?**
   Mitigate by leading with the self-custodial + permissionless + agent lane and
   the compliance-compatible disclosure, which Zones does not offer.
@@ -159,7 +162,7 @@ selective disclosure it lacks:
    listed as planned.
 2. Design sign-off on section 3 (compliance reconciliation) and section 7
    (freeze path). This is the gate before writing contracts.
-3. Phase 1 (in the World's Fair window): deploy pool + verifiers on Tempo
+3. Phase 1 (build now, keep demoable progress for the window): deploy pool + verifiers on Tempo
    Moderato, register asset, flip `tempo` to live, migrate consumers to
    `useNetwork()`.
 4. Phase 2: x402 + MCP private-pay surface.
