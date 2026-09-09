@@ -10,12 +10,8 @@ import {
   useChainId,
 } from "wagmi";
 import { isAddress } from "viem";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID,
-  formatEth,
-  shortAddress,
-} from "@/lib/chain";
+import { formatEth, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { safeParseEther } from "@/lib/amount";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
@@ -25,13 +21,14 @@ import { SuccessModal } from "./SuccessModal";
 
 export function SendView() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { settings } = useTradingSettings();
   const { data: bal, refetch } = useBalance({
     address,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -53,7 +50,7 @@ export function SendView() {
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
   });
 
   const handledHash = useRef<string | null>(null);
@@ -99,7 +96,7 @@ export function SendView() {
     sendTransaction({
       to: to as `0x${string}`,
       value,
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: network.chainId,
     });
   }
 
@@ -232,7 +229,7 @@ export function SendView() {
             <p className="text-sm text-mute">
               Submitted…{" "}
               <a
-                href={EXPLORER_TX(hash)}
+                href={network.explorerTx(hash)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-lime hover:underline"
@@ -320,7 +317,7 @@ export function SendView() {
             <p className="mt-2">Settled on testnet.</p>
           </>
         }
-        primaryHref={hash ? EXPLORER_TX(hash) : undefined}
+        primaryHref={hash ? network.explorerTx(hash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Send more"
         onClose={() => {

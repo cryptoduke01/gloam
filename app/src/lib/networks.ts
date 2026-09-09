@@ -20,6 +20,14 @@ import {
 
 export type NetworkKey = "robinhood" | "tempo";
 
+/**
+ * Chain ids of the networks registered in the wagmi config. Typed as the literal
+ * union so `network.chainId` is accepted directly by wagmi hook options
+ * (`useBalance`, `useSendTransaction`, `useWaitForTransactionReceipt`,
+ * `switchChain`), which narrow `chainId` to the configured ids.
+ */
+export type GloamChainId = 46630 | 42431;
+
 /** Whether a network is deployed and safe for real shield/spend writes. */
 export type NetworkStatus = "live" | "planned";
 
@@ -35,7 +43,7 @@ export interface GloamNetwork {
   label: string;
   /** viem chain used for clients, wallet_addEthereumChain, etc. */
   chain: Chain;
-  chainId: number;
+  chainId: GloamChainId;
   /** Shielded pool address; null while a network is still `planned`. */
   pool: Address | null;
   /** Block the pool was deployed at, for getLogs / tree rebuild. */
