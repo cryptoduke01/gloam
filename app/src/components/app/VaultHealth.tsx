@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { shortAddress } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { vaultEnvDiagnostics } from "@/lib/config";
-import {
-  SHIELD_POOL_ADDRESS,
-  HASH_SCHEME,
-  isShieldDeployed,
-} from "@/lib/shield";
+import { HASH_SCHEME, isShieldDeployed } from "@/lib/shield";
 import { readVaultSealedReadiness } from "@/lib/vaultStatus";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { StatusPill } from "./StatusPill";
@@ -45,8 +41,8 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
         <span>
           Privacy vault
-          {SHIELD_POOL_ADDRESS
-            ? ` · ${shortAddress(SHIELD_POOL_ADDRESS, 4)}`
+          {network.pool
+            ? ` · ${shortAddress(network.pool, 4)}`
             : ""}
           {treeLoading
             ? " · syncing…"
@@ -84,8 +80,8 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
             Privacy vault
           </p>
           <p className="mt-1 text-mute">
-            {SHIELD_POOL_ADDRESS
-              ? shortAddress(SHIELD_POOL_ADDRESS, 6)
+            {network.pool
+              ? shortAddress(network.pool, 6)
               : "not configured"}
             {HASH_SCHEME !== "poseidon" ? ` · ${HASH_SCHEME}` : ""}
             {treeLoading
@@ -118,9 +114,9 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         Stay in the vault for privacy. Shield, private send, and private trade
         keep size off the public book. Cash out publishes amount by design.
       </p>
-      {SHIELD_POOL_ADDRESS && (
+      {network.pool && (
         <p className="mt-2 break-all text-[10px] text-mute">
-          {SHIELD_POOL_ADDRESS}
+          {network.pool}
           {" · block "}
           {env.deployBlock.toString()}
           {env.remappedFromLegacy || env.deployBlockRemapped
@@ -128,7 +124,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
             : ""}
           {" · "}
           <a
-            href={network.explorerAddress(SHIELD_POOL_ADDRESS)}
+            href={network.explorerAddress(network.pool)}
             target="_blank"
             rel="noreferrer"
             className="text-lime hover:underline"

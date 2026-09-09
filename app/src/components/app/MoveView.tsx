@@ -15,18 +15,7 @@ import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { formatSealedAmount } from "@/lib/sealedRates";
 import { getRhPublicClient } from "@/lib/rhClient";
-import {
-  HASH_SCHEME,
-  SHIELD_GAS_LIMIT,
-  SHIELD_POOL_ADDRESS,
-  type LocalNote,
-  assetLabel,
-  isNativeAsset,
-  isShieldDeployed,
-  saveLocalNote,
-  shieldPoolAbi,
-  updateLocalNote,
-} from "@/lib/shield";
+import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
 import { syncShieldTree } from "@/lib/treeSync";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { buildTransferWitness } from "@/lib/proverTransfer";
@@ -304,7 +293,7 @@ export function MoveView() {
     poolForCashOut < cashOutAmount;
 
   async function onCashOut() {
-    if (!selected || !address || !SHIELD_POOL_ADDRESS || !poseidonMode) return;
+    if (!selected || !address || !network.pool || !poseidonMode) return;
     setError(null);
 
     if (poolForCashOut != null && poolForCashOut < BigInt(selected.amountWei)) {
@@ -338,7 +327,7 @@ export function MoveView() {
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
       setStatus("Confirm cash out in your wallet…");
       writeContract({
-        address: SHIELD_POOL_ADDRESS,
+        address: network.pool,
         abi: shieldPoolAbi,
         functionName: "unshield",
         args: [
@@ -365,7 +354,7 @@ export function MoveView() {
   }
 
   async function onPrivateSend() {
-    if (!selected || !address || !SHIELD_POOL_ADDRESS || !poseidonMode) return;
+    if (!selected || !address || !network.pool || !poseidonMode) return;
     setError(null);
     setShareBlob(null);
     setBusy(true);
@@ -403,7 +392,7 @@ export function MoveView() {
         pendingChange.current = {
           id: `chg-${Date.now()}`,
           chainId: network.chainId,
-          pool: SHIELD_POOL_ADDRESS,
+          pool: network.pool,
           asset: selected.asset,
           amountWei: w.changeNote.amountWei,
           commitment: w.changeNote.commitment,
@@ -422,7 +411,7 @@ export function MoveView() {
 
       // Share package for recipient (shown only after on-chain success)
       const pack = buildNotePackage({
-        pool: SHIELD_POOL_ADDRESS,
+        pool: network.pool,
         asset: w.paymentNote.asset,
         amountWei: w.paymentNote.amountWei,
         secret: w.paymentNote.secret,
@@ -466,7 +455,7 @@ export function MoveView() {
 
       setStatus("Confirm private pay in your wallet…");
       writeContract({
-        address: SHIELD_POOL_ADDRESS,
+        address: network.pool,
         abi: shieldPoolAbi,
         functionName: "transfer",
         args: [
@@ -543,7 +532,7 @@ export function MoveView() {
     setError(null);
     setImportOk(null);
     try {
-      if (!SHIELD_POOL_ADDRESS || !address) {
+      if (!network.pool || !address) {
         throw new Error("Connect wallet first.");
       }
       const pack = await decodeNotePackage(
@@ -553,7 +542,7 @@ export function MoveView() {
       );
       if (
         pack.pool &&
-        pack.pool.toLowerCase() !== SHIELD_POOL_ADDRESS.toLowerCase()
+        pack.pool.toLowerCase() !== network.pool.toLowerCase()
       ) {
         throw new Error("This payment is for a different vault.");
       }
@@ -578,7 +567,7 @@ export function MoveView() {
       const note: LocalNote = {
         id: `imp-${Date.now()}`,
         chainId: network.chainId,
-        pool: SHIELD_POOL_ADDRESS,
+        pool: network.pool,
         asset,
         amountWei: pack.amountWei,
         commitment,

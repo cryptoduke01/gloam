@@ -27,23 +27,7 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
-import {
-  APPROVE_GAS_LIMIT,
-  EMERGENCY_GAS_LIMIT,
-  HASH_SCHEME,
-  NATIVE_ASSET,
-  SHIELD_GAS_LIMIT,
-  SHIELD_BOUND_GAS_LIMIT,
-  SHIELD_POOL_ADDRESS,
-  type LocalNote,
-  assetLabel,
-  isNativeAsset,
-  isShieldDeployed,
-  makeNoteMaterial,
-  markAllNotesRecovered,
-  saveLocalNote,
-  shieldPoolAbi,
-} from "@/lib/shield";
+import { APPROVE_GAS_LIMIT, EMERGENCY_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
@@ -60,7 +44,7 @@ export function ShieldView() {
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { data: marketData } = useLiveMarkets();
-  const deployed = isShieldDeployed() && Boolean(SHIELD_POOL_ADDRESS);
+  const deployed = isShieldDeployed() && Boolean(network.pool);
   const {
     open: openNotes,
     shieldedWei,
@@ -98,8 +82,8 @@ export function ShieldView() {
     abi: erc20Abi,
     functionName: "allowance",
     args:
-      address && SHIELD_POOL_ADDRESS
-        ? [address, SHIELD_POOL_ADDRESS]
+      address && network.pool
+        ? [address, network.pool]
         : undefined,
     chainId: network.chainId,
     query: { enabled: Boolean(address && selectedToken && onProduct) },
@@ -109,45 +93,45 @@ export function ShieldView() {
     contracts: deployed
       ? [
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "nextIndex",
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "deposited",
             args: [NATIVE_ASSET],
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "currentRoot",
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "verifier",
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "owner",
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "deposited",
             args: [assetAddress],
             chainId: network.chainId,
           },
           {
-            address: SHIELD_POOL_ADDRESS!,
+            address: network.pool!,
             abi: shieldPoolAbi,
             functionName: "shieldVerifier",
             chainId: network.chainId,
@@ -273,7 +257,7 @@ export function ShieldView() {
       setPendingKind(null);
       // auto continue shield
       const pending = pendingShieldArgs.current;
-      if (pending && SHIELD_POOL_ADDRESS && autoShieldAfterApprove.current) {
+      if (pending && network.pool && autoShieldAfterApprove.current) {
         autoShieldAfterApprove.current = false;
         handledHash.current = null;
         // Route through executeShield so the shieldBound (C1) branch applies
@@ -393,7 +377,7 @@ export function ShieldView() {
   }
 
   async function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
-    if (!SHIELD_POOL_ADDRESS) return;
+    if (!network.pool) return;
     const asset = selectedToken ? selectedToken.address : NATIVE_ASSET;
     setPendingNote(note);
     setPendingKind("shield");
@@ -412,7 +396,7 @@ export function ShieldView() {
           secret: BigInt(note.secret).toString(),
         });
         writeContract({
-          address: SHIELD_POOL_ADDRESS,
+          address: network.pool,
           abi: shieldPoolAbi,
           functionName: "shieldBound",
           args: [asset, value, commitment, proofBytes],
@@ -432,7 +416,7 @@ export function ShieldView() {
 
     if (selectedToken) {
       writeContract({
-        address: SHIELD_POOL_ADDRESS,
+        address: network.pool,
         abi: shieldPoolAbi,
         functionName: "shield",
         args: [selectedToken.address, value, commitment],
@@ -441,7 +425,7 @@ export function ShieldView() {
       });
     } else {
       writeContract({
-        address: SHIELD_POOL_ADDRESS,
+        address: network.pool,
         abi: shieldPoolAbi,
         functionName: "shield",
         args: [NATIVE_ASSET, value, commitment],
@@ -459,7 +443,7 @@ export function ShieldView() {
       setFormError(err);
       return;
     }
-    if (!SHIELD_POOL_ADDRESS || !address) return;
+    if (!network.pool || !address) return;
 
     const value = parseAmount();
     if (value === null) {
@@ -484,7 +468,7 @@ export function ShieldView() {
     const note: LocalNote = {
       id: `${Date.now()}-${commitment.slice(0, 10)}`,
       chainId: network.chainId,
-      pool: SHIELD_POOL_ADDRESS,
+      pool: network.pool,
       asset: assetAddress,
       amountWei: value.toString(),
       commitment,
@@ -515,7 +499,7 @@ export function ShieldView() {
           address: selectedToken.address,
           abi: erc20Abi,
           functionName: "approve",
-          args: [SHIELD_POOL_ADDRESS, maxUint256],
+          args: [network.pool, maxUint256],
           gas: APPROVE_GAS_LIMIT,
           chainId: network.chainId,
         });
@@ -538,7 +522,7 @@ export function ShieldView() {
   }, [writeError, pendingKind]);
 
   function onOwnerPull() {
-    if (!SHIELD_POOL_ADDRESS || !address || !isOwner) return;
+    if (!network.pool || !address || !isOwner) return;
     const amt = poolSelected ?? BigInt(0);
     if (amt <= BigInt(0)) {
       setFormError(`Pool has no ${symbol} to pull.`);
@@ -552,7 +536,7 @@ export function ShieldView() {
     setPendingNote(null);
 
     writeContract({
-      address: SHIELD_POOL_ADDRESS,
+      address: network.pool,
       abi: shieldPoolAbi,
       functionName: "emergencyWithdraw",
       args: [assetAddress, address, amt],

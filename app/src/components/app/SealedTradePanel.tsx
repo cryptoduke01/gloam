@@ -22,19 +22,7 @@ import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
-import {
-  HASH_SCHEME,
-  NATIVE_ASSET,
-  SEALED_SWAP_GAS_LIMIT,
-  SHIELD_POOL_ADDRESS,
-  assetLabel,
-  isNativeAsset,
-  isShieldDeployed,
-  saveLocalNote,
-  shieldPoolAbi,
-  updateLocalNote,
-  type LocalNote,
-} from "@/lib/shield";
+import { HASH_SCHEME, NATIVE_ASSET, SEALED_SWAP_GAS_LIMIT, assetLabel, isNativeAsset, isShieldDeployed, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "@/lib/shield";
 import { buildSealedSwapWitness } from "@/lib/proverSealedSwap";
 import { fieldToBytes32, proveSealedSwapInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
@@ -349,7 +337,7 @@ export function SealedTradePanel({
     if (
       !selected ||
       !address ||
-      !SHIELD_POOL_ADDRESS ||
+      !network.pool ||
       !stockToken ||
       !poseidonMode
     ) {
@@ -446,7 +434,7 @@ export function SealedTradePanel({
       pendingOut.current = {
         id: `ss-out-${Date.now()}`,
         chainId: network.chainId,
-        pool: SHIELD_POOL_ADDRESS,
+        pool: network.pool,
         asset: w.outNote.asset,
         amountWei: w.outNote.amountWei,
         commitment: w.outNote.commitment,
@@ -464,7 +452,7 @@ export function SealedTradePanel({
           ? {
               id: `ss-chg-${Date.now()}`,
               chainId: network.chainId,
-              pool: SHIELD_POOL_ADDRESS,
+              pool: network.pool,
               asset: w.changeNote.asset,
               amountWei: w.changeNote.amountWei,
               commitment: w.changeNote.commitment,
@@ -481,7 +469,7 @@ export function SealedTradePanel({
 
       setStatus("Confirm in your wallet…");
       writeContract({
-        address: SHIELD_POOL_ADDRESS,
+        address: network.pool,
         abi: shieldPoolAbi,
         functionName: "sealedSwap",
         args: [
@@ -547,9 +535,9 @@ export function SealedTradePanel({
               does not matter for this check). Retry, or wait a few seconds if
               the RPC is flaky.
             </p>
-            {SHIELD_POOL_ADDRESS && (
+            {network.pool && (
               <p className="mt-2 text-[10px] text-mute">
-                vault {shortAddress(SHIELD_POOL_ADDRESS, 6)}
+                vault {shortAddress(network.pool, 6)}
               </p>
             )}
             <button
@@ -664,8 +652,8 @@ export function SealedTradePanel({
                     : treeError
                       ? "Vault sync error"
                       : `Vault ok · ${leafCount} notes on chain`}
-                  {SHIELD_POOL_ADDRESS
-                    ? ` · ${shortAddress(SHIELD_POOL_ADDRESS, 4)}`
+                  {network.pool
+                    ? ` · ${shortAddress(network.pool, 4)}`
                     : ""}
                 </span>
                 <button
