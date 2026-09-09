@@ -111,10 +111,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     hashScheme: "poseidon",
     primaryAsset: { symbol: "USD", address: null, decimals: 18 },
     stableAssets: [],
-    // Pool is live on-chain; the app write-path cutover to useNetwork() is the
-    // last step before flipping this to "live" so the selector is honest.
-    status: "planned",
-    note: "Deployed on Tempo Moderato. Private stablecoin payments; app toggle integration in progress.",
+    status: "live",
+    note: "Live on Tempo Moderato: private stablecoin payments (shield PathUSD, send, cash out).",
     explorerTx: (hash) =>
       `${tempoTestnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) =>

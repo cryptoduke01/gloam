@@ -26,7 +26,7 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { TESTNET_STOCK_TOKENS } from "@/lib/tokens";
+import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, EMERGENCY_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
@@ -54,10 +54,20 @@ export function ShieldView() {
   } = useLocalShieldNotes(address);
 
   const [assetChoice, setAssetChoice] = useState<AssetChoice>("eth");
+  const tokens = shieldTokensFor(network.chainId);
+  const nativeOk = supportsNativeShield(network.chainId);
   const selectedToken =
     assetChoice === "eth"
       ? null
-      : TESTNET_STOCK_TOKENS.find((t) => t.id === assetChoice) ?? null;
+      : tokens.find((t) => t.id === assetChoice) ?? null;
+  // Reset the asset choice when the network changes to one where it is invalid
+  // (e.g. Tempo has no native ETH shield, and different tokens).
+  useEffect(() => {
+    const valid =
+      assetChoice === "eth" ? nativeOk : tokens.some((t) => t.id === assetChoice);
+    if (!valid) setAssetChoice(nativeOk ? "eth" : tokens[0]?.id ?? "eth");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network.chainId]);
   const assetAddress: Address = selectedToken
     ? selectedToken.address
     : NATIVE_ASSET;
@@ -222,10 +232,11 @@ export function ShieldView() {
   const symbol = selectedToken?.symbol ?? "ETH";
   const decimals = selectedToken?.decimals ?? 18;
 
-  const mark =
-    selectedToken && marketData?.markets
-      ? (marketData.markets.find((m) => m.id === selectedToken.id)?.mark ?? 0)
-      : ethUsd ?? 0;
+  const mark = selectedToken
+    ? selectedToken.kind === "stablecoin"
+      ? 1
+      : (marketData?.markets?.find((m) => m.id === selectedToken.id)?.mark ?? 0)
+    : ethUsd ?? 0;
 
   useEffect(() => {
     if (!isSuccess || !hash || !receipt) return;
@@ -635,8 +646,8 @@ export function ShieldView() {
                   className="min-h-11 cursor-pointer appearance-none rounded-xl border border-line bg-background px-4 pr-9 text-sm font-semibold text-foreground outline-none focus:border-lime"
                   aria-label="Asset to shield"
                 >
-                  <option value="eth">ETH</option>
-                  {TESTNET_STOCK_TOKENS.map((t) => (
+                  {nativeOk && <option value="eth">ETH</option>}
+                  {tokens.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.symbol}
                     </option>

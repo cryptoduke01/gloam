@@ -9,7 +9,7 @@ export type OnchainToken = {
   address: `0x${string}`;
   decimals: number;
   yahoo: string;
-  kind: "stock";
+  kind: "stock" | "stablecoin";
 };
 
 export const TESTNET_STOCK_TOKENS: OnchainToken[] = [
@@ -59,6 +59,27 @@ export const TESTNET_STOCK_TOKENS: OnchainToken[] = [
     kind: "stock",
   },
 ];
+
+/**
+ * Tempo Moderato faucet stablecoins (6 decimals), from tempo_fundAddress. These
+ * are what Gloam shields on Tempo, since Tempo blocks native msg.value.
+ */
+export const TEMPO_STABLE_TOKENS: OnchainToken[] = [
+  { id: "pathusd", symbol: "PathUSD", name: "Path USD", address: "0x20c0000000000000000000000000000000000000", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "alphausd", symbol: "AlphaUSD", name: "Alpha USD", address: "0x20c0000000000000000000000000000000000001", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "betausd", symbol: "BetaUSD", name: "Beta USD", address: "0x20c0000000000000000000000000000000000002", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "thetausd", symbol: "ThetaUSD", name: "Theta USD", address: "0x20c0000000000000000000000000000000000003", decimals: 6, yahoo: "", kind: "stablecoin" },
+];
+
+/** ERC-20 tokens shieldable on a given chain. */
+export function shieldTokensFor(chainId: number): OnchainToken[] {
+  return chainId === 42431 ? TEMPO_STABLE_TOKENS : TESTNET_STOCK_TOKENS;
+}
+
+/** Tempo (42431) blocks native msg.value; shields there go through ERC-20 only. */
+export function supportsNativeShield(chainId: number): boolean {
+  return chainId !== 42431;
+}
 
 export const erc20BalanceOfAbi = [
   {
