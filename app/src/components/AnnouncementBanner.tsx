@@ -53,8 +53,7 @@ export function AnnouncementBanner() {
         <p className="min-w-0 flex-1 truncate text-[13px] leading-tight sm:text-[13.5px]">
           <span className="font-semibold">The Gloam SDK is live.</span>{" "}
           <span className="text-white/55">
-            Add private balances, payments, and disclosure to any Robinhood Chain
-            app.
+            Add private balances, payments, and disclosure to any onchain app.
           </span>
         </p>
         <Link

@@ -59,17 +59,17 @@ export function WelcomeModal() {
             Welcome, you&apos;re live
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Private money on Robinhood Chain. Testnet, play money only. Don&apos;t
-            use real funds.
+            Private money onchain, on Robinhood Chain and Tempo. Testnet, play
+            money only. Don&apos;t use real funds.
           </p>
         </div>
 
         <div className="space-y-3 px-6 py-5 text-sm text-mute">
           <p className="font-medium text-foreground">Quick path</p>
           <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
-            <li>Connect a wallet and switch to Robinhood testnet.</li>
+            <li>Connect a wallet and pick a network: Robinhood Chain or Tempo.</li>
             <li>
-              Claim faucet ETH / stocks if needed, see the{" "}
+              Claim testnet funds if needed, see the{" "}
               <Link
                 href="/docs/testnet"
                 className="text-lime underline-offset-2 hover:underline"
@@ -80,10 +80,9 @@ export function WelcomeModal() {
               .
             </li>
             <li>
-              <strong className="text-foreground">Shield ETH</strong> →{" "}
-              <strong className="text-foreground">Trade → Private trade</strong>{" "}
-              (size hidden) or <strong className="text-foreground">Move</strong>{" "}
-              to pay / cash out.
+              <strong className="text-foreground">Shield a balance</strong> →{" "}
+              <strong className="text-foreground">Move</strong> to pay or send
+              privately → cash out when you want it public.
             </li>
           </ol>
           <p className="text-xs leading-relaxed text-mute">

@@ -522,7 +522,7 @@ export function VaultTradePanel({
       return;
     }
     if (!onProduct) {
-      setError("Switch to Robinhood testnet.");
+      setError(`Switch to ${network.label}.`);
       return;
     }
     if (matchesChain === false) {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAccount, useChainId } from "wagmi";
-import { ensureRhTestnetWallet } from "@/lib/chain";
+import { ensureWalletOnChain } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { StatusPill } from "./StatusPill";
 
@@ -35,10 +35,10 @@ export function NetworkPulse() {
       disabled={busy}
       onClick={() => {
         setBusy(true);
-        void ensureRhTestnetWallet().finally(() => setBusy(false));
+        void ensureWalletOnChain(network.chain).finally(() => setBusy(false));
       }}
       className="inline-flex items-center"
-      title="Switch to Robinhood testnet"
+      title={`Switch to ${network.label}`}
     >
       <StatusPill tone="warn" dot>
         {busy ? "Switching…" : "Wrong network · tap to fix"}

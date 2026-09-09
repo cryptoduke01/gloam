@@ -345,7 +345,7 @@ export function TradeView() {
     handledHash.current = null;
 
     if (!isConnected || !onProduct || !address) {
-      setError("Connect on Robinhood testnet.");
+      setError(`Connect on ${network.label}.`);
       return;
     }
     if (!market) return;

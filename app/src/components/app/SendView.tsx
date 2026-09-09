@@ -137,7 +137,7 @@ export function SendView() {
               <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
                 You&apos;re sending
               </span>
-              <span className="text-[11px] text-mute">On Robinhood testnet</span>
+              <span className="text-[11px] text-mute">On {network.label}</span>
             </div>
             <div className="mt-3 flex items-end gap-3">
               <input
@@ -275,7 +275,7 @@ export function SendView() {
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-mute">Network</dt>
-                    <dd className="text-foreground">Robinhood testnet</dd>
+                    <dd className="text-foreground">{network.label}</dd>
                   </div>
                 </dl>
                 <div className="mt-6 flex flex-col gap-2">

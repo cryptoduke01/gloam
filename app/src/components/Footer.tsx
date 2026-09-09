@@ -58,17 +58,17 @@ export function Footer() {
               </div>
             </div>
             <p className="mt-6 max-w-sm text-sm leading-relaxed text-mute">
-              Trade Everything on Robinhood Privately. Stocks, memes, hold, send,
-              and trade without turning every move into a public confession.
+              The privacy layer for onchain finance. Shield a balance, then hold,
+              send, and trade without turning every move into a public confession.
             </p>
             <div className="mt-8 flex items-center gap-3 border border-line bg-panel px-4 py-3">
               <span className="h-2 w-2 shrink-0 rounded-full bg-lime shadow-[0_0_12px_#c8ff00]" />
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Network
+                  Networks
                 </p>
                 <p className="truncate text-sm text-foreground">
-                  RH testnet · 46630 · sealed vault live
+                  Robinhood Chain + Tempo · testnet · live
                 </p>
               </div>
             </div>

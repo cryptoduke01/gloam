@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useAccount, useDisconnect, useChainId } from "wagmi";
-import { RH_TESTNET_WALLET_PARAMS } from "@/lib/chain";
+import { walletParamsForChain } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
-import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
+import { faucetFor } from "@/lib/faucet";
 import {
   exportNotesBackup,
   importNotesBackup,
@@ -141,7 +141,7 @@ export function SettingsView() {
     try {
       await eth.request({
         method: "wallet_addEthereumChain",
-        params: [RH_TESTNET_WALLET_PARAMS],
+        params: [walletParamsForChain(network.chain)],
       });
       setNetMsg("Network ready.");
     } catch (e) {
@@ -152,6 +152,7 @@ export function SettingsView() {
   }
 
   const onProduct = chainId === network.chainId;
+  const faucet = faucetFor(network.key);
 
   return (
     <div className="space-y-6">
@@ -294,10 +295,10 @@ export function SettingsView() {
             Network
           </p>
           <p className="mt-2 font-display text-xl text-foreground">
-            Robinhood testnet
+            {network.label}
           </p>
           <p className="mt-2 text-sm text-mute">
-            Faucet stocks: TSLA · AMZN · PLTR · NFLX · AMD
+            Faucet assets: {faucet.assets}
           </p>
           <button
             type="button"
@@ -314,16 +315,16 @@ export function SettingsView() {
             Faucet
           </p>
           <p className="mt-2 font-display text-xl text-foreground">
-            Free testnet ETH
+            {faucet.title}
           </p>
-          <p className="mt-2 text-sm text-mute">{FAUCET_BLURB}</p>
+          <p className="mt-2 text-sm text-mute">{faucet.blurb}</p>
           <a
-            href={FAUCET_URL}
-            target="_blank"
-            rel="noreferrer"
+            href={faucet.url}
+            target={faucet.url.startsWith("http") ? "_blank" : undefined}
+            rel={faucet.url.startsWith("http") ? "noreferrer" : undefined}
             className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50"
           >
-            Open faucet →
+            {faucet.cta}
           </a>
         </section>
       </div>

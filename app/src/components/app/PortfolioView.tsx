@@ -11,7 +11,7 @@ import {
 import { formatUnits } from "viem";
 import { formatEth } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
-import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
+import { faucetFor } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
@@ -159,6 +159,13 @@ export function PortfolioView() {
   const { network } = useNetwork();
   const chainId = useChainId();
   const onProduct = chainId === network.chainId;
+  const faucet = faucetFor(network.key);
+  const faucetExternal = faucet.url.startsWith("http");
+  const isTempo = network.key === "tempo";
+  // The public, unshielded asset differs by chain: equities on Robinhood,
+  // stablecoins on Tempo.
+  const publicAssetLabel = isTempo ? "Tokens" : "Stocks";
+  const publicAssetSub = isTempo ? "Faucet · stablecoins" : "Faucet · live marks";
   const { settings } = useTradingSettings();
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
@@ -276,16 +283,16 @@ export function PortfolioView() {
       ? formatUsd(totalUsd)
       : isConnected
         ? `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`
-        : ", ";
+        : "—";
 
   const walletValue = !isConnected
-    ? ", "
+    ? "—"
     : `${formatEth(bal?.value ?? BigInt(0))} ETH`;
   const walletSub =
     ethUsdVal != null && settings.showUsd ? formatUsd(ethUsdVal) : "Open wallet";
 
   const vaultValue = !isConnected
-    ? ", "
+    ? "—"
     : !hasShield
       ? "0"
       : shieldRows.length === 1
@@ -304,7 +311,7 @@ export function PortfolioView() {
       : "Size hidden onchain";
 
   const stocksValue = !isConnected
-    ? ", "
+    ? "—"
     : settings.showUsd && stocksUsd > 0
       ? formatUsd(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
@@ -318,13 +325,13 @@ export function PortfolioView() {
             <div className="flex flex-wrap items-center gap-3">
               <NetworkPulse />
               <a
-                href={FAUCET_URL}
-                target="_blank"
-                rel="noreferrer"
+                href={faucet.url}
+                target={faucetExternal ? "_blank" : undefined}
+                rel={faucetExternal ? "noreferrer" : undefined}
                 className="text-xs text-mute transition-colors hover:text-lime"
-                title={FAUCET_BLURB}
+                title={faucet.blurb}
               >
-                Get testnet ETH →
+                Get testnet funds →
               </a>
             </div>
             <p className="mt-5 text-[10px] uppercase tracking-[0.18em] text-mute">
@@ -423,10 +430,10 @@ export function PortfolioView() {
           sub={syncing ? "Syncing…" : vaultSub}
         />
         <AccountCard
-          label="Stocks"
+          label={publicAssetLabel}
           sealed={false}
           value={stocksValue}
-          sub="Faucet · live marks"
+          sub={publicAssetSub}
         />
       </div>
 
@@ -513,15 +520,15 @@ export function PortfolioView() {
             </header>
             {!isConnected ? (
               <p className="px-5 py-10 text-center text-sm text-mute">
-                Connect to see stock tokens from the faucet.
+                Connect to see your tokens from the faucet.
               </p>
             ) : positions.length === 0 ? (
               <p className="px-5 py-10 text-center text-sm text-mute">
-                No stock tokens yet.{" "}
+                No tokens yet.{" "}
                 <a
-                  href={FAUCET_URL}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={faucet.url}
+                  target={faucetExternal ? "_blank" : undefined}
+                  rel={faucetExternal ? "noreferrer" : undefined}
                   className="text-lime hover:underline"
                 >
                   Claim from the faucet →
