@@ -97,13 +97,16 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     label: "Tempo",
     chain: tempoTestnet,
     chainId: tempoTestnet.id,
-    pool: null,
-    deployBlock: null,
+    // Deployed on Tempo Moderato 2026-09-09 (DeployTempo + DeployTempoPool).
+    pool: "0x3eeE869aFF476D90aF6CF0bC8F0b450C98A8D30b",
+    deployBlock: 34_556_677n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "USD", address: null, decimals: 18 },
     stableAssets: [],
+    // Pool is live on-chain; the app write-path cutover to useNetwork() is the
+    // last step before flipping this to "live" so the selector is honest.
     status: "planned",
-    note: "Planned: private stablecoin payments for people and agents. Pool not yet deployed.",
+    note: "Deployed on Tempo Moderato. Private stablecoin payments; app toggle integration in progress.",
     explorerTx: (hash) =>
       `${tempoTestnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) =>

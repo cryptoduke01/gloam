@@ -42,15 +42,22 @@ import {
   RH_TESTNET_CHAIN_ID,
 } from "@gloamtrade/sdk";
 
-const RPC = "https://rpc.testnet.chain.robinhood.com";
-const DEPLOY_BLOCK = 110_840_714n;
+// Defaults target Robinhood testnet. Override via env to run on another chain,
+// e.g. Tempo Moderato:
+//   GLOAM_RPC=https://rpc.moderato.tempo.xyz GLOAM_CHAIN_ID=42431 \
+//   GLOAM_POOL=0x... GLOAM_DEPLOY_BLOCK=34556677 GLOAM_ASSET_SYMBOL=USD
+const RPC = process.env.GLOAM_RPC ?? "https://rpc.testnet.chain.robinhood.com";
+const CHAIN_ID = Number(process.env.GLOAM_CHAIN_ID ?? RH_TESTNET_CHAIN_ID);
+const POOL = (process.env.GLOAM_POOL ?? SEALED_VAULT) as `0x${string}`;
+const DEPLOY_BLOCK = BigInt(process.env.GLOAM_DEPLOY_BLOCK ?? "110840714");
+const ASSET_SYMBOL = process.env.GLOAM_ASSET_SYMBOL ?? "ETH";
 const here = dirname(fileURLToPath(import.meta.url));
 const art = (name: string) => resolve(here, "../../app/public/circuits/", name);
 
-const rhTestnet = defineChain({
-  id: RH_TESTNET_CHAIN_ID,
-  name: "Robinhood Chain Testnet",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+const chain = defineChain({
+  id: CHAIN_ID,
+  name: `Gloam chain ${CHAIN_ID}`,
+  nativeCurrency: { name: ASSET_SYMBOL, symbol: ASSET_SYMBOL, decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 });
 
@@ -100,17 +107,19 @@ async function main() {
   const account = privateKeyToAccount(
     (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`
   );
-  const wallet = createWalletClient({ account, chain: rhTestnet, transport: http(RPC) });
-  const pub = createPublicClient({ chain: rhTestnet, transport: http(RPC) });
+  const wallet = createWalletClient({ account, chain, transport: http(RPC) });
+  const pub = createPublicClient({ chain, transport: http(RPC) });
 
   // ── Seller: price the resource (the 402 challenge) ─────────────────────────
   const price = parseEther("0.0002");
   const requirements = buildGloamPaymentRequirements({
     amountWei: price,
-    assetSymbol: "ETH", // native on RH testnet; a stablecoin on Tempo
+    assetSymbol: ASSET_SYMBOL, // native ETH on RH, native USD on Tempo
     payTo: "gloam:rcpt:demo-seller",
     resource: "mcp://gloam/tool/summarize",
     description: "One private summarize call",
+    poolAddress: POOL,
+    network: CHAIN_ID,
   });
   console.log("402 Payment Required:");
   console.log(`  price ${formatEther(price)} ${requirements.assetSymbol} to ${requirements.payTo}`);
@@ -131,6 +140,7 @@ async function main() {
   console.log(`Buyer ${account.address} shielding ${formatEther(fundWei)} ETH to fund the payment…`);
   const shield = await buildShieldBoundIntent({
     amountWei: fundWei,
+    poolAddress: POOL,
     prover: artifactProver({ wasm: art("shield.wasm"), zkey: art("shield_final.zkey") }),
   });
   const shieldHash = await wallet.writeContract({
@@ -143,7 +153,7 @@ async function main() {
   await pub.waitForTransactionReceipt({ hash: shieldHash });
 
   // ── Buyer: sync the tree and build the private x402 payment ────────────────
-  const synced = await syncTree(pub, { pool: SEALED_VAULT, fromBlock: DEPLOY_BLOCK });
+  const synced = await syncTree(pub, { pool: POOL, fromBlock: DEPLOY_BLOCK });
   const path = await synced.pathForCommitment(shield.note.commitment);
   if (!path) throw new Error("Source note not in the tree yet — retry in a moment.");
 
@@ -188,7 +198,7 @@ async function main() {
 
   // One of the on-chain checks the seller runs: the payment note is a real leaf.
   const seen = await pub.readContract({
-    address: SEALED_VAULT,
+    address: POOL,
     abi: commitmentSeenAbi,
     functionName: "commitmentSeen",
     args: [v.commitment],
