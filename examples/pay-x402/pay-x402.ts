@@ -103,7 +103,7 @@ async function main() {
   const pub = createPublicClient({ chain: rhTestnet, transport: http(RPC) });
 
   // ── Seller: price the resource (the 402 challenge) ─────────────────────────
-  const price = parseEther("0.001");
+  const price = parseEther("0.0002");
   const requirements = buildGloamPaymentRequirements({
     amountWei: price,
     assetSymbol: "ETH", // native on RH testnet; a stablecoin on Tempo
@@ -116,7 +116,17 @@ async function main() {
   console.log(`  ${requirements.privacy.oneLine}\n`);
 
   // ── Buyer: shield a note to fund itself ────────────────────────────────────
-  const fundWei = parseEther("0.002");
+  const fundWei = parseEther("0.0005");
+  // Precheck funding so an underfunded wallet fails clearly, not with a raw
+  // "shieldBound reverted" (the shield attaches its amount as msg.value, so the
+  // wallet needs the shield amount plus gas for both the shield and the send).
+  const balance = await pub.getBalance({ address: account.address });
+  const needed = fundWei + parseEther("0.0004");
+  if (balance < needed) {
+    throw new Error(
+      `Wallet ${account.address} has ${formatEther(balance)} ETH but needs about ${formatEther(needed)} (shield amount plus gas for two txs). Top up at https://faucet.testnet.chain.robinhood.com/`
+    );
+  }
   console.log(`Buyer ${account.address} shielding ${formatEther(fundWei)} ETH to fund the payment…`);
   const shield = await buildShieldBoundIntent({
     amountWei: fundWei,
