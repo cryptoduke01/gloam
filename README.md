@@ -2,17 +2,17 @@
 
 # Gloam
 
-### The private layer for Robinhood Chain. Shielded balances, private payments, and verifiable disclosure that any app or agent can plug into.
+### The privacy layer for onchain finance. Shielded balances, private payments, and verifiable disclosure that any app or agent can plug into.
 
 [gloam.trade](https://gloam.trade) · [Testnet app](https://gloam.trade/app) · [Verify a disclosure](https://gloam.trade/verify) · [Docs](https://gloam.trade/docs) · [Whitepaper](https://gloam.trade/whitepaper) · [@gloamtrade](https://x.com/gloamtrade)
 
-**Robinhood Chain** · testnet `46630` · testnet only, real ZK proofs, no mock fills
+**Robinhood Chain** `46630` · **Tempo** `42431` · testnet only, real ZK proofs, no mock fills
 
 </div>
 
 ---
 
-Robinhood Chain puts tokenized stocks and crypto on public rails: every holding, every size, every move is visible. Gloam is the sealed chamber on top of it. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other Robinhood Chain apps and AI agents build on.
+Public chains put finance on public rails: every holding, every size, every move is visible. Robinhood Chain does it for tokenized stocks and crypto; Tempo does it for stablecoin payments. Gloam is the sealed chamber on top. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other onchain apps and AI agents build on — live today on Robinhood Chain (flagship) and Tempo.
 
 ## Three surfaces, one private core
 
@@ -20,7 +20,7 @@ The vault app is the reference implementation, not the whole product.
 
 | Surface | What it is | Package |
 | --- | --- | --- |
-| **SDK** | Drop shielded balances, private sends, and selective disclosure into any Robinhood Chain app or agent. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
+| **SDK** | Drop shielded balances, private sends, and selective disclosure into any onchain app or agent, on Robinhood Chain or Tempo. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
 | **Agents** | An MCP server + a reference wrapper so an AI agent can shield, move value, and pay for tools privately over x402, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
 | **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
 
@@ -52,9 +52,9 @@ Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026
 - **Groth16 runs native.** bn254 pairing precompiles are present and the 96 KB code-size cap fits large verifier contracts, so shield / unshield / transfer proofs verify with no special infra.
 - **First-class ERC-4337** opens the door to gasless private transactions.
 
-## Expanding to Tempo
+## Live on Tempo
 
-Gloam is bringing the same private core to [Tempo](https://tempo.xyz), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with issuer-compatible selective disclosure. It is not deployed there yet: the app carries a runtime network toggle that lists Tempo as planned, and the design is in [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
+The same private core now runs on [Tempo](https://tempo.xyz), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with issuer-compatible selective disclosure. The sealed pool and verifiers are deployed on Tempo Moderato (`42431`), and the app's runtime network toggle switches the whole product between chains — shield PathUSD, send, and cash out, proof-gated end to end. Because Tempo blocks native `msg.value` and pays gas in stablecoins, Gloam shields ERC-20 stablecoins there instead of a native asset. Design and constraints: [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
 
 ## Trust, verified
 
@@ -95,14 +95,21 @@ gloam/
   contracts/             Foundry · ShieldPoolPoseidon vault, verifiers, circuits, audit
 ```
 
-**Contracts (RH testnet 46630)**
+**Contracts — Robinhood Chain testnet `46630`**
 
 | Role | Address |
 | --- | --- |
 | Sealed vault `ShieldPoolPoseidon` (hardened, C1/C2/C3) | [`0xaEbB…1834`](https://explorer.testnet.chain.robinhood.com/address/0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834) |
 | Pay memo `GloamPayMemo` | [`0x689e…5DCE`](https://explorer.testnet.chain.robinhood.com/address/0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE) |
 
-The pre-C1 pool `0x4F38…` is drained and retired, never use it. Circuits (Groth16 + Poseidon + depth-20 Merkle membership): `shield`, `transfer`, `unshield`, `sealedSwap`. Details in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md).
+**Contracts — Tempo Moderato testnet `42431`**
+
+| Role | Address |
+| --- | --- |
+| Sealed vault `ShieldPoolPoseidon` | [`0x3eeE…D30b`](https://explore.testnet.tempo.xyz/address/0x3eee869aff476d90af6cf0bc8f0b450c98a8d30b) |
+| Dual-proof verifier `DualProofVerifier` | [`0x82F4…03A2`](https://explore.testnet.tempo.xyz/address/0x82f4ece6533e48574914bedeb55a8242bc1a03a2) |
+
+The pre-C1 RH pool `0x4F38…` is drained and retired, never use it. Circuits (Groth16 + Poseidon + depth-20 Merkle membership): `shield`, `transfer`, `unshield`, `sealedSwap`. Details in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md).
 
 ## Local
 
@@ -113,7 +120,7 @@ cd contracts && forge test            # contracts (67 tests)
 pnpm --filter @gloamtrade/sdk test         # SDK core self-tests
 ```
 
-Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https://gloam.trade/app). Testnet ETH + stock tokens: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/).
+Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https://gloam.trade/app). The in-app network toggle switches between chains. Robinhood testnet ETH + stock tokens: [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/). Tempo test stablecoins (PathUSD and friends): the Tempo faucet (`tempo_fundAddress`).
 
 ## Guardrails
 
