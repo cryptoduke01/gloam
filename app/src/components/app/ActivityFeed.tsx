@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { formatEther } from "viem";
-import { EXPLORER_TX, formatEth, shortAddress } from "@/lib/chain";
+import { formatEth, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { useActivity } from "@/hooks/useActivity";
 import { StatusPill } from "./StatusPill";
 
@@ -11,6 +12,7 @@ const PAGE_SIZE = 5;
 
 export function ActivityFeed() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const { data, isLoading, isError } = useActivity(address);
   const [page, setPage] = useState(0);
 
@@ -100,7 +102,7 @@ export function ActivityFeed() {
                     </p>
                   </div>
                   <a
-                    href={EXPLORER_TX(tx.hash)}
+                    href={network.explorerTx(tx.hash)}
                     target="_blank"
                     rel="noreferrer"
                     className="shrink-0 text-xs text-lime hover:underline"

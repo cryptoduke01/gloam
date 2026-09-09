@@ -10,7 +10,8 @@ import {
   type FormEvent,
 } from "react";
 import { Logo } from "@/components/Logo";
-import { EXPLORER_TX, EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
+import { shortAddress } from "@/lib/chain";
+import { useNetwork } from "../app/NetworkProvider";
 
 type MetricsPayload = {
   ok: boolean;
@@ -74,6 +75,7 @@ type MetricsPayload = {
 };
 
 export function AdminDashboard() {
+  const { network } = useNetwork();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [code, setCode] = useState("");
   const [loginErr, setLoginErr] = useState<string | null>(null);
@@ -455,7 +457,7 @@ export function AdminDashboard() {
               action={
                 oc?.pool ? (
                   <a
-                    href={EXPLORER_ADDRESS(oc.pool)}
+                    href={network.explorerAddress(oc.pool)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-[11px] text-lime hover:underline"
@@ -473,7 +475,7 @@ export function AdminDashboard() {
                   tx.from ? (
                     <a
                       key="a"
-                      href={EXPLORER_ADDRESS(tx.from)}
+                      href={network.explorerAddress(tx.from)}
                       className="text-mute hover:text-lime"
                       target="_blank"
                       rel="noreferrer"
@@ -485,7 +487,7 @@ export function AdminDashboard() {
                   ),
                   <a
                     key="t"
-                    href={EXPLORER_TX(tx.txHash)}
+                    href={network.explorerTx(tx.txHash)}
                     className="text-mute hover:text-lime"
                     target="_blank"
                     rel="noreferrer"
@@ -517,7 +519,7 @@ export function AdminDashboard() {
                 u.volumeEth,
                 <a
                   key="ex"
-                  href={EXPLORER_ADDRESS(u.address)}
+                  href={network.explorerAddress(u.address)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-lime hover:underline"

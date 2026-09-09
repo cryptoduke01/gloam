@@ -15,13 +15,8 @@ import {
   useWriteContract,
 } from "wagmi";
 import { formatEther, type Address } from "viem";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID as CHAIN,
-  ensureRhTestnetWallet,
-  formatEth,
-  shortAddress,
-} from "@/lib/chain";
+import { ensureRhTestnetWallet, formatEth, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { safeParseEther } from "@/lib/amount";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -84,8 +79,9 @@ export function SealedTradePanel({
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === CHAIN;
+  const onProduct = chainId === network.chainId;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     pathForLeaf,
@@ -128,7 +124,7 @@ export function SealedTradePanel({
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId: CHAIN,
+    chainId: network.chainId,
   });
 
   // Dedicated RH RPC, works with wallet off or on another chain
@@ -449,7 +445,7 @@ export function SealedTradePanel({
 
       pendingOut.current = {
         id: `ss-out-${Date.now()}`,
-        chainId: CHAIN,
+        chainId: network.chainId,
         pool: SHIELD_POOL_ADDRESS,
         asset: w.outNote.asset,
         amountWei: w.outNote.amountWei,
@@ -467,7 +463,7 @@ export function SealedTradePanel({
         BigInt(w.changeNote.amountWei) > 0n
           ? {
               id: `ss-chg-${Date.now()}`,
-              chainId: CHAIN,
+              chainId: network.chainId,
               pool: SHIELD_POOL_ADDRESS,
               asset: w.changeNote.asset,
               amountWei: w.changeNote.amountWei,
@@ -501,7 +497,7 @@ export function SealedTradePanel({
           w.publicInputs.rateOut,
         ],
         gas: SEALED_SWAP_GAS_LIMIT,
-        chainId: CHAIN,
+        chainId: network.chainId,
       });
       void import("@/lib/track").then(({ track }) => {
         // No amounts, privacy stack
@@ -920,7 +916,7 @@ export function SealedTradePanel({
                 <p className="text-sm text-mute">
                   Submitted…{" "}
                   <a
-                    href={EXPLORER_TX(hash)}
+                    href={network.explorerTx(hash)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-lime hover:underline"
@@ -946,7 +942,7 @@ export function SealedTradePanel({
               <>
                 {" "}
                 <a
-                  href={EXPLORER_TX(hash)}
+                  href={network.explorerTx(hash)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-lime hover:underline"

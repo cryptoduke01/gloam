@@ -9,11 +9,8 @@ import {
   useReadContracts,
 } from "wagmi";
 import { formatUnits } from "viem";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID,
-  formatEth,
-} from "@/lib/chain";
+import { formatEth } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
@@ -159,8 +156,9 @@ function QuickAction({
 
 export function PortfolioView() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
   const { settings } = useTradingSettings();
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
@@ -171,7 +169,7 @@ export function PortfolioView() {
 
   const { data: bal, isLoading } = useBalance({
     address,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -182,7 +180,7 @@ export function PortfolioView() {
         abi: erc20BalanceOfAbi,
         functionName: "balanceOf" as const,
         args: [address!] as const,
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       })),
     [address]
   );
@@ -473,7 +471,7 @@ export function PortfolioView() {
                     <div className="flex items-center gap-2">
                       {n.txHash && (
                         <a
-                          href={EXPLORER_TX(n.txHash)}
+                          href={network.explorerTx(n.txHash)}
                           target="_blank"
                           rel="noreferrer"
                           className="text-xs text-lime hover:underline"

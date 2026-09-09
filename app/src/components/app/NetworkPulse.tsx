@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { useAccount, useChainId } from "wagmi";
-import { PRODUCT_CHAIN_ID, ensureRhTestnetWallet } from "@/lib/chain";
+import { ensureRhTestnetWallet } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { StatusPill } from "./StatusPill";
 
 /** Minimal network status, one-tap fix when on the wrong chain. */
 export function NetworkPulse() {
+  const { network } = useNetwork();
   const chainId = useChainId();
   const { isConnected } = useAccount();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
   const [busy, setBusy] = useState(false);
 
   if (onProduct) {

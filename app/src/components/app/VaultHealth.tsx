@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
+import { shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { vaultEnvDiagnostics } from "@/lib/config";
 import {
   SHIELD_POOL_ADDRESS,
@@ -16,6 +17,7 @@ import { StatusPill } from "./StatusPill";
  * Always-on vault status, dedicated RH RPC, no wallet required.
  */
 export function VaultHealth({ compact = false }: { compact?: boolean }) {
+  const { network } = useNetwork();
   const { leafCount, loading: treeLoading, refresh, error: treeError } =
     useShieldTree();
   const [sealed, setSealed] = useState<"checking" | "ready" | "off">("checking");
@@ -126,7 +128,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
             : ""}
           {" · "}
           <a
-            href={EXPLORER_ADDRESS(SHIELD_POOL_ADDRESS)}
+            href={network.explorerAddress(SHIELD_POOL_ADDRESS)}
             target="_blank"
             rel="noreferrer"
             className="text-lime hover:underline"

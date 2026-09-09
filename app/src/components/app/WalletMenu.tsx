@@ -9,11 +9,8 @@ import {
   useSwitchChain,
   useChainId,
 } from "wagmi";
-import {
-  PRODUCT_CHAIN_ID,
-  ensureRhTestnetWallet,
-  shortAddress,
-} from "@/lib/chain";
+import { ensureRhTestnetWallet, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { TurnkeyHeaderSignIn } from "./TurnkeyHeaderSignIn";
 import { ClientOnly } from "./ClientOnly";
@@ -22,6 +19,7 @@ export function WalletMenu() {
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
+  const { network } = useNetwork();
   const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const [mounted, setMounted] = useState(false);
@@ -53,10 +51,10 @@ export function WalletMenu() {
     setBusy(true);
     try {
       try {
-        await switchChain({ chainId: PRODUCT_CHAIN_ID });
+        await switchChain({ chainId: network.chainId });
       } catch {
         await ensureRhTestnetWallet();
-        await switchChain({ chainId: PRODUCT_CHAIN_ID });
+        await switchChain({ chainId: network.chainId });
       }
     } catch {
       /* ignore */
@@ -119,7 +117,7 @@ export function WalletMenu() {
     );
   }
 
-  const wrong = chainId !== PRODUCT_CHAIN_ID;
+  const wrong = chainId !== network.chainId;
 
   return (
     <div className="relative" ref={root}>

@@ -19,11 +19,8 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID,
-  formatEth,
-} from "@/lib/chain";
+import { formatEth } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -58,8 +55,9 @@ type AssetChoice = "eth" | string; // eth | token id
 
 export function ShieldView() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { data: marketData } = useLiveMarkets();
   const deployed = isShieldDeployed() && Boolean(SHIELD_POOL_ADDRESS);
@@ -82,7 +80,7 @@ export function ShieldView() {
 
   const { data: ethBal, refetch: refetchEth } = useBalance({
     address,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -91,7 +89,7 @@ export function ShieldView() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address && selectedToken && onProduct) },
   });
 
@@ -103,7 +101,7 @@ export function ShieldView() {
       address && SHIELD_POOL_ADDRESS
         ? [address, SHIELD_POOL_ADDRESS]
         : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address && selectedToken && onProduct) },
   });
 
@@ -114,45 +112,45 @@ export function ShieldView() {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "nextIndex",
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "deposited",
             args: [NATIVE_ASSET],
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "currentRoot",
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "verifier",
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "owner",
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "deposited",
             args: [assetAddress],
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
           {
             address: SHIELD_POOL_ADDRESS!,
             abi: shieldPoolAbi,
             functionName: "shieldVerifier",
-            chainId: PRODUCT_CHAIN_ID,
+            chainId: network.chainId,
           },
         ]
       : [],
@@ -229,7 +227,7 @@ export function ShieldView() {
     data: receipt,
   } = useWaitForTransactionReceipt({
     hash,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
   });
 
   const handledHash = useRef<string | null>(null);
@@ -420,7 +418,7 @@ export function ShieldView() {
           args: [asset, value, commitment, proofBytes],
           value: selectedToken ? undefined : value,
           gas: SHIELD_BOUND_GAS_LIMIT,
-          chainId: PRODUCT_CHAIN_ID,
+          chainId: network.chainId,
         });
       } catch (err) {
         setFormError(
@@ -439,7 +437,7 @@ export function ShieldView() {
         functionName: "shield",
         args: [selectedToken.address, value, commitment],
         gas: SHIELD_GAS_LIMIT,
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       });
     } else {
       writeContract({
@@ -449,7 +447,7 @@ export function ShieldView() {
         args: [NATIVE_ASSET, value, commitment],
         value,
         gas: SHIELD_GAS_LIMIT,
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       });
     }
   }
@@ -485,7 +483,7 @@ export function ShieldView() {
     }
     const note: LocalNote = {
       id: `${Date.now()}-${commitment.slice(0, 10)}`,
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: network.chainId,
       pool: SHIELD_POOL_ADDRESS,
       asset: assetAddress,
       amountWei: value.toString(),
@@ -519,7 +517,7 @@ export function ShieldView() {
           functionName: "approve",
           args: [SHIELD_POOL_ADDRESS, maxUint256],
           gas: APPROVE_GAS_LIMIT,
-          chainId: PRODUCT_CHAIN_ID,
+          chainId: network.chainId,
         });
         return;
       }
@@ -559,7 +557,7 @@ export function ShieldView() {
       functionName: "emergencyWithdraw",
       args: [assetAddress, address, amt],
       gas: EMERGENCY_GAS_LIMIT,
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: network.chainId,
     });
   }
 
@@ -728,7 +726,7 @@ export function ShieldView() {
             <p className="text-sm text-mute">
               Submitted…{" "}
               <a
-                href={EXPLORER_TX(hash)}
+                href={network.explorerTx(hash)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-lime hover:underline"
@@ -811,7 +809,7 @@ export function ShieldView() {
         open={showSuccess && Boolean(hash)}
         title={successTitle}
         body={successBody}
-        primaryHref={hash ? EXPLORER_TX(hash) : undefined}
+        primaryHref={hash ? network.explorerTx(hash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
         onClose={() => {

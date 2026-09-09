@@ -69,7 +69,8 @@ import {
   ticketToMemoBytes,
   type ScannedMemo,
 } from "@/lib/payMemo";
-import { EXPLORER_TX, PRODUCT_CHAIN_ID as CHAIN, formatEth } from "@/lib/chain";
+import { formatEth } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { safeParseEther } from "@/lib/amount";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
@@ -89,8 +90,9 @@ export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === CHAIN;
+  const onProduct = chainId === network.chainId;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     loading: treeLoading,
@@ -139,7 +141,7 @@ export function MoveView() {
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId: CHAIN,
+    chainId: network.chainId,
   });
 
   const handledHash = useRef<string | null>(null);
@@ -235,7 +237,7 @@ export function MoveView() {
           functionName: "postMemo",
           args: [m.paymentCommitment, ticketToMemoBytes(m.ticket)],
           gas: MEMO_GAS_LIMIT,
-          chainId: CHAIN,
+          chainId: network.chainId,
         });
         return;
       }
@@ -348,7 +350,7 @@ export function MoveView() {
           BigInt(selected.amountWei),
         ],
         gas: SHIELD_GAS_LIMIT,
-        chainId: CHAIN,
+        chainId: network.chainId,
       });
       setSuccessTitle("Cashed out");
       void import("@/lib/track").then(({ track }) => {
@@ -400,7 +402,7 @@ export function MoveView() {
       if (BigInt(w.changeNote.amountWei) > 0n) {
         pendingChange.current = {
           id: `chg-${Date.now()}`,
-          chainId: CHAIN,
+          chainId: network.chainId,
           pool: SHIELD_POOL_ADDRESS,
           asset: selected.asset,
           amountWei: w.changeNote.amountWei,
@@ -477,7 +479,7 @@ export function MoveView() {
           ],
         ],
         gas: SHIELD_GAS_LIMIT,
-        chainId: CHAIN,
+        chainId: network.chainId,
       });
       setSuccessTitle(
         payStyle === "direct" && isPayMemoLive()
@@ -575,7 +577,7 @@ export function MoveView() {
 
       const note: LocalNote = {
         id: `imp-${Date.now()}`,
-        chainId: CHAIN,
+        chainId: network.chainId,
         pool: SHIELD_POOL_ADDRESS,
         asset,
         amountWei: pack.amountWei,
@@ -1234,7 +1236,7 @@ export function MoveView() {
                 <p className="text-sm text-mute">
                   Submitted…{" "}
                   <a
-                    href={EXPLORER_TX(hash)}
+                    href={network.explorerTx(hash)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-lime hover:underline"
@@ -1267,7 +1269,7 @@ export function MoveView() {
             </p>
           )
         }
-        primaryHref={hash ? EXPLORER_TX(hash) : undefined}
+        primaryHref={hash ? network.explorerTx(hash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
         onClose={() => {

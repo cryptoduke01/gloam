@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useAccount, useDisconnect, useChainId } from "wagmi";
-import {
-  EXPLORER_ADDRESS,
-  PRODUCT_CHAIN_ID,
-  RH_TESTNET_WALLET_PARAMS,
-} from "@/lib/chain";
+import { RH_TESTNET_WALLET_PARAMS } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import {
   exportNotesBackup,
@@ -102,6 +99,7 @@ function Chip({
 export function SettingsView() {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+  const { network } = useNetwork();
   const chainId = useChainId();
   const { settings, setSettings } = useTradingSettings();
   const [copied, setCopied] = useState(false);
@@ -153,7 +151,7 @@ export function SettingsView() {
     }
   }
 
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
 
   return (
     <div className="space-y-6">
@@ -184,7 +182,7 @@ export function SettingsView() {
                   {copied ? "Copied" : "Copy"}
                 </button>
                 <a
-                  href={EXPLORER_ADDRESS(address)}
+                  href={network.explorerAddress(address)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-mute"

@@ -17,11 +17,8 @@ import {
   useWriteContract,
 } from "wagmi";
 import { formatEther, formatUnits, type Address, type Hex } from "viem";
-import {
-  EXPLORER_TX,
-  PRODUCT_CHAIN_ID as CHAIN,
-  formatEth,
-} from "@/lib/chain";
+import { formatEth } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import {
   DEX_ROUTER,
   WETH,
@@ -90,8 +87,9 @@ export function VaultTradePanel({
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === CHAIN;
+  const onProduct = chainId === network.chainId;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
     matchesChain,
@@ -139,12 +137,12 @@ export function VaultTradePanel({
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
-    chainId: CHAIN,
+    chainId: network.chainId,
   });
 
   const { data: ethBal, refetch: refetchEth } = useBalance({
     address,
-    chainId: CHAIN,
+    chainId: network.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -153,7 +151,7 @@ export function VaultTradePanel({
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    chainId: CHAIN,
+    chainId: network.chainId,
     query: { enabled: Boolean(address && tokenAddress) },
   });
 
@@ -209,7 +207,7 @@ export function VaultTradePanel({
           ? [amountIn, [WETH, tokenAddress]]
           : [amountIn, [tokenAddress, WETH]]
         : undefined,
-    chainId: CHAIN,
+    chainId: network.chainId,
     query: {
       enabled:
         hasPool &&
@@ -246,7 +244,7 @@ export function VaultTradePanel({
           deadlineSeconds(),
         ],
         value: BigInt(plan.note.amountWei),
-        chainId: CHAIN,
+        chainId: network.chainId,
       });
       return;
     }
@@ -266,7 +264,7 @@ export function VaultTradePanel({
         address,
         deadlineSeconds(),
       ],
-      chainId: CHAIN,
+      chainId: network.chainId,
     });
   }
 
@@ -281,7 +279,7 @@ export function VaultTradePanel({
       functionName: "approve",
       args: [DEX_ROUTER, BigInt(plan.note.amountWei)],
       gas: APPROVE_GAS_LIMIT,
-      chainId: CHAIN,
+      chainId: network.chainId,
     });
   }
 
@@ -328,7 +326,7 @@ export function VaultTradePanel({
       args: [asset, amount, commitment],
       value: isNativeAsset(asset) ? amount : 0n,
       gas: SHIELD_GAS_LIMIT,
-      chainId: CHAIN,
+      chainId: network.chainId,
     });
   }
 
@@ -346,7 +344,7 @@ export function VaultTradePanel({
     const n = await makeBoundNotePoseidon(amount, asset);
     const note: LocalNote = {
       id: `vt-${Date.now()}`,
-      chainId: CHAIN,
+      chainId: network.chainId,
       pool: SHIELD_POOL_ADDRESS,
       asset,
       amountWei: amount.toString(),
@@ -382,7 +380,7 @@ export function VaultTradePanel({
           functionName: "approve",
           args: [SHIELD_POOL_ADDRESS, amount],
           gas: APPROVE_GAS_LIMIT,
-          chainId: CHAIN,
+          chainId: network.chainId,
         });
         return;
       }
@@ -589,7 +587,7 @@ export function VaultTradePanel({
           BigInt(selected.amountWei),
         ],
         gas: SHIELD_GAS_LIMIT,
-        chainId: CHAIN,
+        chainId: network.chainId,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start vault trade");
@@ -830,7 +828,7 @@ export function VaultTradePanel({
               <p className="text-sm text-mute">
                 Tx{" "}
                 <a
-                  href={EXPLORER_TX(hash)}
+                  href={network.explorerTx(hash)}
                   target="_blank"
                   rel="noreferrer"
                   className="text-lime hover:underline"
@@ -852,7 +850,7 @@ export function VaultTradePanel({
             measurable.{" "}
             {lastHash && (
               <a
-                href={EXPLORER_TX(lastHash)}
+                href={network.explorerTx(lastHash)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-lime hover:underline"

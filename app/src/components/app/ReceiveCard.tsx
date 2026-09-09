@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
-import { EXPLORER_ADDRESS, shortAddress } from "@/lib/chain";
+import { shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { StatusPill } from "./StatusPill";
 
 export function ReceiveCard() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -44,7 +46,7 @@ export function ReceiveCard() {
               {copied ? "Copied" : "Copy address"}
             </button>
             <a
-              href={EXPLORER_ADDRESS(address)}
+              href={network.explorerAddress(address)}
               target="_blank"
               rel="noreferrer"
               className="inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"

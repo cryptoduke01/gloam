@@ -8,16 +8,14 @@ import {
   useSwitchChain,
   useChainId,
 } from "wagmi";
-import {
-  PRODUCT_CHAIN_ID,
-  ensureRhTestnetWallet,
-  shortAddress,
-} from "@/lib/chain";
+import { ensureRhTestnetWallet, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 
 export function ConnectButton({ className = "" }: { className?: string }) {
   const { address, isConnected, isConnecting } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
+  const { network } = useNetwork();
   const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const [mounted, setMounted] = useState(false);
@@ -38,10 +36,10 @@ export function ConnectButton({ className = "" }: { className?: string }) {
     setBusy(true);
     try {
       try {
-        await switchChain({ chainId: PRODUCT_CHAIN_ID });
+        await switchChain({ chainId: network.chainId });
       } catch {
         await ensureRhTestnetWallet();
-        await switchChain({ chainId: PRODUCT_CHAIN_ID });
+        await switchChain({ chainId: network.chainId });
       }
     } catch (e) {
       setNetErr(
@@ -65,7 +63,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
   }
 
   if (isConnected && address) {
-    const wrong = chainId !== PRODUCT_CHAIN_ID;
+    const wrong = chainId !== network.chainId;
     if (wrong) {
       return (
         <div className={className}>

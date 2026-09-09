@@ -11,12 +11,8 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { formatUnits, isAddress } from "viem";
-import {
-  PRODUCT_CHAIN_ID,
-  EXPLORER_TX,
-  formatEth,
-  shortAddress,
-} from "@/lib/chain";
+import { formatEth, shortAddress } from "@/lib/chain";
+import { useNetwork } from "./NetworkProvider";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import {
   DEX_FACTORY,
@@ -70,8 +66,9 @@ function EyeGlyph() {
 
 export function TradeView() {
   const { address, isConnected } = useAccount();
+  const { network } = useNetwork();
   const chainId = useChainId();
-  const onProduct = chainId === PRODUCT_CHAIN_ID;
+  const onProduct = chainId === network.chainId;
   const search = useSearchParams();
   const { settings } = useTradingSettings();
   const { data, isFetching, isError, refetch, isFetched } = useLiveMarkets();
@@ -160,7 +157,7 @@ export function TradeView() {
     abi: factoryAbi,
     functionName: "getPair",
     args: token ? [token, WETH] : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(token) },
   });
 
@@ -169,7 +166,7 @@ export function TradeView() {
 
   const { data: ethBal, refetch: refetchEth } = useBalance({
     address,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address) },
   });
 
@@ -178,7 +175,7 @@ export function TradeView() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address && token) },
   });
 
@@ -187,7 +184,7 @@ export function TradeView() {
     abi: erc20Abi,
     functionName: "allowance",
     args: address ? [address, DEX_ROUTER] : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: { enabled: Boolean(address && token && hasPool) },
   });
 
@@ -227,7 +224,7 @@ export function TradeView() {
       hasPool && token && buyEthIn > 0n && side === "buy" && mode === "swap"
         ? [buyEthIn, [WETH, token]]
         : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: {
       enabled: hasPool && Boolean(token) && buyEthIn > 0n && side === "buy",
     },
@@ -251,7 +248,7 @@ export function TradeView() {
       mode === "swap"
         ? [sellAmountIn, [token, WETH]]
         : undefined,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
     query: {
       enabled:
         hasPool &&
@@ -273,7 +270,7 @@ export function TradeView() {
 
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
-    chainId: PRODUCT_CHAIN_ID,
+    chainId: network.chainId,
   });
 
   // After approve, auto-submit sell once allowance is enough
@@ -337,7 +334,7 @@ export function TradeView() {
         address,
         deadlineSeconds(),
       ],
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: network.chainId,
     });
   }, [allowance, sellAmountIn, quoteOut, token, address, writeContract]);
 
@@ -383,7 +380,7 @@ export function TradeView() {
         abi: erc20Abi,
         functionName: "transfer",
         args: [to as `0x${string}`, value],
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       });
       return;
     }
@@ -418,7 +415,7 @@ export function TradeView() {
           deadlineSeconds(),
         ],
         value: buyEthIn,
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       });
       return;
     }
@@ -440,7 +437,7 @@ export function TradeView() {
         abi: erc20Abi,
         functionName: "approve",
         args: [DEX_ROUTER, sellAmountIn * 2n],
-        chainId: PRODUCT_CHAIN_ID,
+        chainId: network.chainId,
       });
       return;
     }
@@ -460,7 +457,7 @@ export function TradeView() {
         address,
         deadlineSeconds(),
       ],
-      chainId: PRODUCT_CHAIN_ID,
+      chainId: network.chainId,
     });
   }
 
@@ -1022,7 +1019,7 @@ export function TradeView() {
             )}
           </p>
         }
-        primaryHref={lastHash ? EXPLORER_TX(lastHash) : undefined}
+        primaryHref={lastHash ? network.explorerTx(lastHash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
         onClose={() => {
