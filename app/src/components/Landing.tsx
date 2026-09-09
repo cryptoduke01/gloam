@@ -2,6 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { AsciiImage } from "@/components/AsciiImage";
 import { LandingMobileNav } from "@/components/LandingMobileNav";
+import {
+  DoodleUnderline,
+  DoodleCrossedEye,
+  DoodlePadlock,
+  DoodleSeal,
+} from "@/components/PrivacyDoodles";
 
 /**
  * Gloam landing, "Twilight" brand.
@@ -226,20 +232,7 @@ export function Landing() {
               <span className="relative inline-block text-[#6E6E76]">
                 Reveal nothing.
                 {/* hand-drawn marker underline, collage accent */}
-                <svg
-                  aria-hidden
-                  viewBox="0 0 240 14"
-                  preserveAspectRatio="none"
-                  className="pointer-events-none absolute -bottom-2 left-0 h-3 w-full text-[#3B3766]"
-                  fill="none"
-                >
-                  <path
-                    d="M3 9C34 3 58 11 92 6c34-5 62 4 96-1 18-3 34 1 46 3"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <DoodleUnderline className="pointer-events-none absolute -bottom-2 left-0 h-3 w-full text-[#3B3766]" />
               </span>
             </h1>
             <p className="mt-6 max-w-[44ch] text-[17px] text-[#4c4c53]">
@@ -265,7 +258,11 @@ export function Landing() {
             </div>
           </div>
 
-          <SealedVaultCard />
+          <div className="relative">
+            {/* collage sticker: the vault reveals nothing */}
+            <DoodleCrossedEye className="pointer-events-none absolute -top-6 left-3 z-10 w-14 -rotate-[9deg] text-[#3B3766] sm:w-16" />
+            <SealedVaultCard />
+          </div>
         </section>
 
         {/* the three moves, each with a house dither */}
@@ -283,25 +280,32 @@ export function Landing() {
                 k: "01 · Shield",
                 t: "Into the vault",
                 b: "Park a balance in the vault. Your open wallet stops showing that bag.",
+                doodle: (
+                  <DoodlePadlock className="w-5 text-[#3B3766]" />
+                ),
               },
               {
                 img: "/ascii/trade.png",
                 k: "02 · Trade",
                 t: "Size sealed",
                 b: "Trade tokenized stocks and crypto. The market never sees how much you moved.",
+                doodle: (
+                  <DoodleCrossedEye className="w-7 text-[#3B3766]" />
+                ),
               },
               {
                 img: "/ascii/move.png",
                 k: "03 · Move",
                 t: "Send or cash out",
                 b: "Pay to a tag or cash out. A vault proof settles, never how much.",
+                doodle: <DoodleSeal className="w-6 text-[#3B3766]" />,
               },
             ].map((m) => (
               <div
                 key={m.k}
                 className="overflow-hidden rounded-[18px] border border-[#E5E3DD] bg-white/70"
               >
-                <div className="aspect-[5/4] border-b border-[#E5E3DD]">
+                <div className="relative aspect-[5/4] border-b border-[#E5E3DD]">
                   <AsciiImage
                     src={m.img}
                     alt=""
@@ -310,6 +314,10 @@ export function Landing() {
                     className="h-full w-full"
                     sizes="(max-width: 768px) 100vw, 33vw"
                   />
+                  {/* paper-sticker privacy mark, cut into the plate corner */}
+                  <span className="absolute right-3 top-3 grid h-9 w-9 -rotate-6 place-items-center rounded-[10px] border border-[#E5E3DD] bg-[#F4F3EF] shadow-[0_2px_6px_-2px_rgba(18,19,22,0.25)]">
+                    {m.doodle}
+                  </span>
                 </div>
                 <div className="p-6">
                   <div className="text-[11px] uppercase tracking-[0.03em] text-[#6E6E76]">
@@ -342,6 +350,7 @@ export function Landing() {
               sizes="100vw"
             />
           </div>
+          <DoodleSeal className="pointer-events-none absolute right-4 top-10 hidden w-16 rotate-[8deg] text-[#3B3766]/75 md:right-8 md:block" />
           <h2 className="relative max-w-[18ch] text-[clamp(28px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-0.025em]">
             What settles in public. What stays sealed.
           </h2>
@@ -418,7 +427,8 @@ export function Landing() {
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#EFECE4] via-[#EFECE4]/85 to-transparent"
             />
             <div className="relative max-w-[620px]">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
+              <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
+                <DoodleCrossedEye className="w-6 text-[#3B3766]" />
                 Reveal nothing
               </p>
               <h2 className="mt-4 text-[clamp(32px,4.8vw,58px)] font-bold leading-[0.99] tracking-[-0.03em] text-balance">
