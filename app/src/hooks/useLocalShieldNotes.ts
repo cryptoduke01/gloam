@@ -5,7 +5,6 @@ import type { Address, Hex } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
 import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
 import {
-  SHIELD_POOL_ADDRESS,
   activeSpendableNotes,
   confirmedNotes,
   fetchChainShieldNotes,
@@ -18,6 +17,7 @@ import {
   sumEthWei,
   type LocalNote,
 } from "@/lib/shield";
+import { useNetwork } from "@/components/app/NetworkProvider";
 
 /**
  * Local notes + chain history. Balance only counts notes with a local secret
@@ -26,6 +26,7 @@ import {
  * Uses dedicated RH RPC, not the wallet network.
  */
 export function useLocalShieldNotes(address?: string | null) {
+  const { network } = useNetwork();
   const [local, setLocal] = useState<LocalNote[]>([]);
   const [chain, setChain] = useState<LocalNote[]>([]);
   const [ready, setReady] = useState(false);
@@ -40,7 +41,7 @@ export function useLocalShieldNotes(address?: string | null) {
 
   const reconcileSpent = useCallback(
     async (notes: LocalNote[]) => {
-      if (!SHIELD_POOL_ADDRESS) return;
+      if (!network.pool) return;
       const publicClient = getRhPublicClient();
       const candidates = notes.filter(
         (n) =>
@@ -54,7 +55,7 @@ export function useLocalShieldNotes(address?: string | null) {
       for (const n of candidates) {
         try {
           const spent = (await publicClient.readContract({
-            address: SHIELD_POOL_ADDRESS,
+            address: network.pool,
             abi: shieldPoolAbi,
             functionName: "isSpent",
             args: [n.nullifier as Hex],
@@ -71,11 +72,11 @@ export function useLocalShieldNotes(address?: string | null) {
         setLocal(loadLocalNotes(address));
       }
     },
-    [address]
+    [address, network.pool]
   );
 
   const syncChain = useCallback(async () => {
-    if (!address || !SHIELD_POOL_ADDRESS) {
+    if (!address || !network.pool) {
       setChain([]);
       return;
     }
@@ -92,7 +93,7 @@ export function useLocalShieldNotes(address?: string | null) {
       // Ghost-note cleanup: only wipe local ETH if pool ETH inventory is zero
       try {
         const ethInPool = (await publicClient.readContract({
-          address: SHIELD_POOL_ADDRESS,
+          address: network.pool,
           abi: shieldPoolAbi,
           functionName: "deposited",
           args: ["0x0000000000000000000000000000000000000000"],
@@ -116,7 +117,7 @@ export function useLocalShieldNotes(address?: string | null) {
     } finally {
       setSyncing(false);
     }
-  }, [address, reconcileSpent]);
+  }, [address, reconcileSpent, network.pool]);
 
   const refresh = useCallback(() => {
     refreshLocal();

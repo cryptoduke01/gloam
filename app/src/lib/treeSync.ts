@@ -8,12 +8,8 @@
  */
 
 import type { Address, Hex, Log, PublicClient } from "viem";
-import {
-  HASH_SCHEME,
-  SHIELD_DEPLOY_BLOCK,
-  SHIELD_POOL_ADDRESS,
-  shieldPoolAbi,
-} from "./shield";
+import { HASH_SCHEME, shieldPoolAbi } from "./shield";
+import { getActiveNetwork } from "./networks";
 import { IncrementalMerkleTree } from "./merkle";
 import { IncrementalMerkleTreePoseidon } from "./merklePoseidon";
 import type { MerklePath } from "./merkle";
@@ -111,11 +107,14 @@ async function getLogsChunked(
 export async function syncShieldTree(
   client: PublicClient
 ): Promise<SyncedTree | null> {
-  if (!SHIELD_POOL_ADDRESS) return null;
+  const net = getActiveNetwork();
+  const pool = net.pool;
+  if (!pool) return null;
+  const fromBlock = net.deployBlock ?? 0n;
 
   const [shieldLogs, transferLogs, sealedLogs] = await Promise.all([
     getLogsChunked(client, {
-      address: SHIELD_POOL_ADDRESS,
+      address: pool,
       event: {
         type: "event",
         name: "Shielded",
@@ -127,10 +126,10 @@ export async function syncShieldTree(
           { name: "from", type: "address", indexed: true },
         ],
       },
-      fromBlock: SHIELD_DEPLOY_BLOCK,
+      fromBlock: fromBlock,
     }),
     getLogsChunked(client, {
-      address: SHIELD_POOL_ADDRESS,
+      address: pool,
       event: {
         type: "event",
         name: "Transferred",
@@ -139,11 +138,11 @@ export async function syncShieldTree(
           { name: "newCommitments", type: "bytes32[2]", indexed: false },
         ],
       },
-      fromBlock: SHIELD_DEPLOY_BLOCK,
+      fromBlock: fromBlock,
     }),
     // Older pools have no SealedSwapped, empty on failure
     getLogsChunked(client, {
-      address: SHIELD_POOL_ADDRESS,
+      address: pool,
       event: {
         type: "event",
         name: "SealedSwapped",
@@ -155,7 +154,7 @@ export async function syncShieldTree(
           { name: "newCommitmentChange", type: "bytes32", indexed: false },
         ],
       },
-      fromBlock: SHIELD_DEPLOY_BLOCK,
+      fromBlock: fromBlock,
     }).catch(() => [] as DecodedLog[]),
   ]);
 
@@ -319,9 +318,10 @@ export async function assertTreeMatchesChain(
   client: PublicClient,
   synced: SyncedTree
 ): Promise<boolean> {
-  if (!SHIELD_POOL_ADDRESS) return false;
+  const pool = getActiveNetwork().pool;
+  if (!pool) return false;
   const onchain = (await client.readContract({
-    address: SHIELD_POOL_ADDRESS,
+    address: pool,
     abi: shieldPoolAbi,
     functionName: "currentRoot",
   })) as Hex;
