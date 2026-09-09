@@ -22,8 +22,8 @@ import {
   createPublicClient,
   defineChain,
   http,
-  parseEther,
-  formatEther,
+  parseUnits,
+  formatUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { fileURLToPath } from "node:url";
@@ -39,18 +39,25 @@ import {
   artifactProver,
   syncTree,
   SEALED_VAULT,
+  NATIVE_ASSET,
   RH_TESTNET_CHAIN_ID,
 } from "@gloamtrade/sdk";
 
-// Defaults target Robinhood testnet. Override via env to run on another chain,
-// e.g. Tempo Moderato:
+// Defaults target Robinhood testnet (native ETH). Override via env to run on
+// another chain. Tempo Moderato blocks native msg.value, so shield an ERC-20
+// stablecoin there (e.g. PathUSD, 6 decimals):
 //   GLOAM_RPC=https://rpc.moderato.tempo.xyz GLOAM_CHAIN_ID=42431 \
-//   GLOAM_POOL=0x... GLOAM_DEPLOY_BLOCK=34556677 GLOAM_ASSET_SYMBOL=USD
+//   GLOAM_POOL=0x3eeE86... GLOAM_DEPLOY_BLOCK=34556677 \
+//   GLOAM_ASSET=0x20c0000000000000000000000000000000000000 \
+//   GLOAM_DECIMALS=6 GLOAM_ASSET_SYMBOL=PathUSD
 const RPC = process.env.GLOAM_RPC ?? "https://rpc.testnet.chain.robinhood.com";
 const CHAIN_ID = Number(process.env.GLOAM_CHAIN_ID ?? RH_TESTNET_CHAIN_ID);
 const POOL = (process.env.GLOAM_POOL ?? SEALED_VAULT) as `0x${string}`;
 const DEPLOY_BLOCK = BigInt(process.env.GLOAM_DEPLOY_BLOCK ?? "110840714");
+const ASSET = (process.env.GLOAM_ASSET ?? NATIVE_ASSET) as `0x${string}`;
+const DECIMALS = Number(process.env.GLOAM_DECIMALS ?? "18");
 const ASSET_SYMBOL = process.env.GLOAM_ASSET_SYMBOL ?? "ETH";
+const IS_NATIVE = ASSET.toLowerCase() === NATIVE_ASSET.toLowerCase();
 const here = dirname(fileURLToPath(import.meta.url));
 const art = (name: string) => resolve(here, "../../app/public/circuits/", name);
 
@@ -101,6 +108,26 @@ const commitmentSeenAbi = [
   },
 ] as const;
 
+const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 async function main() {
   const pk = process.env.GLOAM_PAY_KEY;
   if (!pk) throw new Error("Set GLOAM_PAY_KEY (a funded RH testnet key).");
@@ -111,10 +138,11 @@ async function main() {
   const pub = createPublicClient({ chain, transport: http(RPC) });
 
   // ── Seller: price the resource (the 402 challenge) ─────────────────────────
-  const price = parseEther("0.0002");
+  const price = parseUnits("0.0002", DECIMALS);
   const requirements = buildGloamPaymentRequirements({
     amountWei: price,
-    assetSymbol: ASSET_SYMBOL, // native ETH on RH, native USD on Tempo
+    asset: ASSET,
+    assetSymbol: ASSET_SYMBOL,
     payTo: "gloam:rcpt:demo-seller",
     resource: "mcp://gloam/tool/summarize",
     description: "One private summarize call",
@@ -122,27 +150,55 @@ async function main() {
     network: CHAIN_ID,
   });
   console.log("402 Payment Required:");
-  console.log(`  price ${formatEther(price)} ${requirements.assetSymbol} to ${requirements.payTo}`);
+  console.log(`  price ${formatUnits(price, DECIMALS)} ${requirements.assetSymbol} to ${requirements.payTo}`);
   console.log(`  ${requirements.privacy.oneLine}\n`);
 
   // ── Buyer: shield a note to fund itself ────────────────────────────────────
-  const fundWei = parseEther("0.0005");
-  // Precheck funding so an underfunded wallet fails clearly, not with a raw
-  // "shieldBound reverted" (the shield attaches its amount as msg.value, so the
-  // wallet needs the shield amount plus gas for both the shield and the send).
-  const balance = await pub.getBalance({ address: account.address });
-  const needed = fundWei + parseEther("0.0004");
-  if (balance < needed) {
-    throw new Error(
-      `Wallet ${account.address} has ${formatEther(balance)} ETH but needs about ${formatEther(needed)} (shield amount plus gas for two txs). Top up at https://faucet.testnet.chain.robinhood.com/`
-    );
+  const fund = parseUnits("0.0005", DECIMALS);
+  // Precheck funding so an underfunded wallet fails clearly. A native shield
+  // attaches its amount as msg.value; an ERC-20 shield pulls via transferFrom
+  // after approve. Either way the wallet also needs native balance for gas.
+  const gas = await pub.getBalance({ address: account.address });
+  if (gas === 0n) {
+    throw new Error(`Wallet ${account.address} has no native balance for gas. Fund it first.`);
   }
-  console.log(`Buyer ${account.address} shielding ${formatEther(fundWei)} ETH to fund the payment…`);
+  if (IS_NATIVE) {
+    const needed = fund + parseUnits("0.0004", DECIMALS);
+    if (gas < needed) {
+      throw new Error(
+        `Wallet ${account.address} has ${formatUnits(gas, DECIMALS)} but needs about ${formatUnits(needed, DECIMALS)} (shield amount plus gas). Top up at the faucet.`
+      );
+    }
+  } else {
+    const tokenBal = await pub.readContract({
+      address: ASSET,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [account.address],
+    });
+    if (tokenBal < fund) {
+      throw new Error(
+        `Wallet ${account.address} holds ${formatUnits(tokenBal, DECIMALS)} ${ASSET_SYMBOL} but needs ${formatUnits(fund, DECIMALS)}. Fund it from the faucet.`
+      );
+    }
+  }
+  console.log(`Buyer ${account.address} shielding ${formatUnits(fund, DECIMALS)} ${ASSET_SYMBOL} to fund the payment…`);
   const shield = await buildShieldBoundIntent({
-    amountWei: fundWei,
+    amountWei: fund,
+    asset: ASSET,
     poolAddress: POOL,
     prover: artifactProver({ wasm: art("shield.wasm"), zkey: art("shield_final.zkey") }),
   });
+  // ERC-20 shields need an allowance so the pool can pull the tokens.
+  if (!IS_NATIVE) {
+    const approveHash = await wallet.writeContract({
+      address: ASSET,
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [POOL, fund],
+    });
+    await pub.waitForTransactionReceipt({ hash: approveHash });
+  }
   const shieldHash = await wallet.writeContract({
     address: shield.exec.poolAddress,
     abi: shieldBoundAbi,
@@ -160,7 +216,7 @@ async function main() {
   const payment = await buildGloamPayment({
     requirements,
     senderSecretHex: shield.note.secret,
-    senderNoteAmountWei: fundWei,
+    senderNoteAmountWei: fund,
     path,
     prove: artifactProver({ wasm: art("transfer.wasm"), zkey: art("transfer_final.zkey") }),
     issuerTag: "issuer:demo", // optional issuer-scoped compliance disclosure
