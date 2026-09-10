@@ -6,6 +6,7 @@ import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatMark, formatUsd } from "@/lib/markets";
 import { NetworkPulse } from "./NetworkPulse";
+import { useNetwork } from "./NetworkProvider";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
 
@@ -13,6 +14,10 @@ type Filter = "all" | "onchain" | "private" | "stocks";
 
 /** Testnet-only markets. No mainnet memes mixed in. */
 export function MarketsView() {
+  const { network } = useNetwork();
+  // Tokenized stock marks are a Robinhood Chain product; Tempo is stablecoin
+  // payments, with no equities to list or trade.
+  const isTempo = network.key === "tempo";
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<Filter>("private");
@@ -69,6 +74,18 @@ export function MarketsView() {
         </p>
       </div>
 
+      {isTempo ? (
+        <div className="rounded-xl border border-line bg-panel px-5 py-10 text-center">
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-mute">
+            Tokenized stock markets run on{" "}
+            <span className="text-foreground">Robinhood Chain</span>. On Tempo,
+            Gloam is private stablecoin payments — shield, send, and cash out
+            from the <Link href="/app/vault" className="text-lime hover:underline">Vault</Link>.
+            Switch networks to browse and trade equities.
+          </p>
+        </div>
+      ) : (
+        <>
       <div className="mkt-controls">
         <div className="flex flex-wrap gap-1">
           {filters.map((f) => (
@@ -176,6 +193,8 @@ export function MarketsView() {
           )}
         </ul>
       </div>
+        </>
+      )}
     </div>
   );
 }
