@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { WalletMenu } from "./WalletMenu";
 import { WelcomeModal } from "./WelcomeModal";
 import { NetworkSelector } from "./NetworkSelector";
+import { DoodleUnderline } from "@/components/PrivacyDoodles";
 
 const nav = [
   { href: "/app", label: "Portfolio", exact: true },
@@ -139,8 +140,10 @@ export function AppShell({
       <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-8 sm:py-14">
         <div className="rise mb-10">
           <span className="block h-px w-8 bg-lime" aria-hidden />
-          <h1 className="mt-4 font-display text-3xl tracking-tight text-foreground sm:text-4xl">
+          <h1 className="mt-4 inline-block font-display text-3xl tracking-tight text-foreground sm:text-4xl">
             {title}
+            {/* signature marker underline, ties the app to the landing */}
+            <DoodleUnderline className="pointer-events-none mt-1 block h-2.5 w-full text-lime/70" />
           </h1>
           {subtitle && (
             <p className="mt-2 max-w-xl text-sm text-mute sm:text-base">
