@@ -157,13 +157,13 @@ export function SendView() {
               <span className="text-mute">{usdHint ? `≈ ${usdHint}` : ""}</span>
               <button
                 type="button"
-                disabled={!isConnected}
+                disabled={!isConnected || !onProduct}
                 onClick={() =>
                   setAmount(maxEth === "<0.0001" ? "0" : maxEth.replace(/,/g, ""))
                 }
                 className="text-mute transition-colors hover:text-foreground disabled:opacity-40"
               >
-                Balance: {isConnected ? maxEth : "0"} ETH ·{" "}
+                Balance: {isConnected && onProduct ? maxEth : "0"} ETH ·{" "}
                 <span className="font-medium text-lime">Max</span>
               </button>
             </div>
