@@ -54,8 +54,8 @@ export function markOnboardingStep(id: string) {
 export const ONBOARDING_STEPS = [
   {
     id: "faucet",
-    title: "Get testnet ETH",
-    body: "Claim free gas from the Robinhood faucet.",
+    title: "Get testnet funds",
+    body: "Claim free testnet funds from the faucet for your network.",
     href: "external:faucet",
   },
   {
@@ -71,10 +71,10 @@ export const ONBOARDING_STEPS = [
     href: "/app/move",
   },
   {
-    id: "private-trade",
-    title: "Private trade",
-    body: "Sell vault ETH for vault stock with size privacy on.",
-    href: "/app/trade?path=sealed",
+    id: "disclose",
+    title: "Prove a balance",
+    body: "Make a selective disclosure: prove you hold a balance without revealing the rest.",
+    href: "/app/disclose",
   },
   {
     id: "backup",

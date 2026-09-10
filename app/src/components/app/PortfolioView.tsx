@@ -30,7 +30,6 @@ import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard } from "./OnboardingCard";
 import { WalletMenu } from "./WalletMenu";
-import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { StatusPill } from "./StatusPill";
@@ -276,22 +275,31 @@ export function PortfolioView() {
   const sealedUsd = shieldEthUsd + shieldStocksUsd;
   const totalKnown = publicUsd + sealedUsd;
   const sealedPct =
-    totalKnown > 0 ? Math.round((sealedUsd / totalKnown) * 100) : null;
+    isConnected && onProduct && totalKnown > 0
+      ? Math.round((sealedUsd / totalKnown) * 100)
+      : null;
 
-  const totalDisplay =
-    totalUsd != null && settings.showUsd
+  // Balances only mean anything when the wallet is on this network. When it is
+  // connected to a different chain, its on-chain reads belong to that foreign
+  // chain (and can be absurdly large), so hold everything at "—" until the
+  // wallet is switched — which is exactly what the wrong-network banner says.
+  const balancesVisible = isConnected && onProduct;
+
+  const totalDisplay = !balancesVisible
+    ? "—"
+    : totalUsd != null && settings.showUsd
       ? formatUsd(totalUsd)
-      : isConnected
-        ? `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`
-        : "—";
+      : `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`;
 
-  const walletValue = !isConnected
+  const walletValue = !balancesVisible
     ? "—"
     : `${formatEth(bal?.value ?? BigInt(0))} ETH`;
   const walletSub =
-    ethUsdVal != null && settings.showUsd ? formatUsd(ethUsdVal) : "Open wallet";
+    balancesVisible && ethUsdVal != null && settings.showUsd
+      ? formatUsd(ethUsdVal)
+      : "Open wallet";
 
-  const vaultValue = !isConnected
+  const vaultValue = !balancesVisible
     ? "—"
     : !hasShield
       ? "0"
@@ -310,7 +318,7 @@ export function PortfolioView() {
       ? formatUsd(sealedUsd)
       : "Size hidden onchain";
 
-  const stocksValue = !isConnected
+  const stocksValue = !balancesVisible
     ? "—"
     : settings.showUsd && stocksUsd > 0
       ? formatUsd(stocksUsd)
@@ -337,7 +345,7 @@ export function PortfolioView() {
             <p className="mt-5 text-[10px] uppercase tracking-[0.18em] text-mute">
               Total value
             </p>
-            <p className="tnum mt-1 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
+            <p className="tnum mt-1 break-all font-display text-4xl tracking-tight text-foreground sm:text-5xl">
               {totalDisplay}
             </p>
 
@@ -388,17 +396,8 @@ export function PortfolioView() {
           </div>
         </div>
 
-        {/* connect / network banners live inside the strip footer */}
-        {!isConnected && (
-          <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-mute">
-              {TURNKEY_ENABLED
-                ? "Sign in to load your balances."
-                : "Connect a wallet to load your balances."}
-            </p>
-            <WalletMenu />
-          </div>
-        )}
+        {/* network banner lives inside the strip footer; the header already
+            carries the connect / switch control, so no connect prompt here */}
         {isConnected && !onProduct && (
           <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-[#c0432f]">
@@ -518,9 +517,11 @@ export function PortfolioView() {
               </p>
               <StatusPill tone="lime">Onchain</StatusPill>
             </header>
-            {!isConnected ? (
+            {!balancesVisible ? (
               <p className="px-5 py-10 text-center text-sm text-mute">
-                Connect to see your tokens from the faucet.
+                {!isConnected
+                  ? "Connect to see your tokens from the faucet."
+                  : `Switch your wallet to ${network.label} to see your tokens.`}
               </p>
             ) : positions.length === 0 ? (
               <p className="px-5 py-10 text-center text-sm text-mute">

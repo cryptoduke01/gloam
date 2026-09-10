@@ -6,29 +6,30 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Gloam docs, private money on Robinhood Chain, explained simply. Shield, unshield, what works on testnet.",
+    "Gloam docs, private money onchain — on Robinhood Chain and Tempo — explained simply. Shield, unshield, what works on testnet.",
 };
 
 export default function DocsOverviewPage() {
   return (
     <DocsLayout
       title="Docs"
-      lede="Private money on Robinhood Chain, without the jargon wall. Start here."
+      lede="Private money onchain, without the jargon wall. Start here."
       glance={[
         { label: "Product", value: "gloam.trade/app" },
-        { label: "Network", value: "RH testnet" },
-        { label: "Chain ID", value: "46630" },
-        { label: "Live", value: "Vault + private trade" },
+        { label: "Networks", value: "Robinhood + Tempo" },
+        { label: "Chain IDs", value: "46630 · 42431" },
+        { label: "Live", value: "Vault + private send" },
         { label: "Keys", value: "Dev ceremony" },
       ]}
     >
       <h2 id="what">What is Gloam?</h2>
       <p>
-        Gloam is an app on <strong>Robinhood Chain</strong> where you can put
+        Gloam is the privacy layer for onchain finance, live on{" "}
+        <strong>Robinhood Chain</strong> and <strong>Tempo</strong>. You put
         assets into a shared vault (“shield”), pay privately inside the vault,
-        trade privately (size privacy on by default), and cash out with a real
-        proof. Goal: stocks and memes can sit, move, and trade more privately
-        than a normal public wallet.
+        and cash out with a real proof. Goal: what you hold and how much you
+        move stays private, instead of sitting in the open like a normal public
+        wallet.
       </p>
       <p>
         Right now everything is <strong>testnet</strong>, play money,{" "}
@@ -47,16 +48,15 @@ export default function DocsOverviewPage() {
       </p>
       <ol>
         <li>
-          Open <Link href="/app">/app</Link> and connect a wallet on Robinhood
-          testnet.
+          Open <Link href="/app">/app</Link>, connect a wallet, and pick a
+          network (Robinhood Chain or Tempo).
         </li>
         <li>
-          <Link href="/app/shield">Shield</Link> a tiny amount of testnet ETH.
+          <Link href="/app/shield">Shield</Link> a tiny amount of testnet funds.
         </li>
         <li>
-          <Link href="/app/trade?path=sealed">Trade → Private</Link> sell vault
-          ETH for vault stock, or <Link href="/app/move">Move</Link> to pay /
-          cash out with a browser proof.
+          <Link href="/app/move">Move</Link> to pay a tag or cash out — a browser
+          proof settles, never the amount.
         </li>
       </ol>
 
@@ -70,13 +70,13 @@ export default function DocsOverviewPage() {
           },
           {
             n: "2",
-            title: "Private trade",
-            body: "Vault ETH → vault stock with size privacy on. No public DEX hop.",
+            title: "Private send",
+            body: "Send inside the vault to a receive tag. The sender and amount stay sealed.",
           },
           {
             n: "3",
-            title: "Move",
-            body: "Private send (payment tag) or cash out. Proofs run in your browser.",
+            title: "Cash out",
+            body: "Unshield to a public balance with a real browser proof. Proofs run in your browser.",
           },
         ]}
       />
@@ -84,20 +84,25 @@ export default function DocsOverviewPage() {
       <h2 id="works">What works today</h2>
       <ul>
         <li>Connect wallet, portfolio, markets</li>
-        <li>Send ETH and faucet stock tokens (public)</li>
-        <li>Shield ETH + faucet stocks</li>
+        <li>
+          Send public balances (ETH + stock tokens on Robinhood, stablecoins on
+          Tempo)
+        </li>
+        <li>
+          Shield into the vault (ETH/stocks on Robinhood, PathUSD on Tempo)
+        </li>
         <li>Private send + receive tags (optional passphrase tickets)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
-        <li>
-          <Link href="/docs/sealed-trade">Private trade</Link>, size privacy
-          on by default (min-out floor)
-        </li>
-        <li>Vault trade adapter (public swap edge; needs DEX pool)</li>
+        <li>Selective disclosure, verified in the browser</li>
         <li>Note backup (optional lock) in Settings</li>
       </ul>
 
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
+        <li>
+          <Link href="/docs/sealed-trade">Private trade</Link> (sealed swap) —
+          paused until the H1 solvency accounting lands
+        </li>
         <li>
           <Link href="/docs/data">On-chain price oracles</Link> (no Chainlink /
           Pyth / RedStone wired)
