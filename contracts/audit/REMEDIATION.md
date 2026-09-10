@@ -75,3 +75,67 @@ The live pool `0xaEbB` predates these; they land when it is redeployed.
   is a mainnet ops decision.
 - **M-3 residual**: a user-facing slippage-tolerance control wiring `minOut`
   through `SealedTradePanel`, landed with the oracle-swap re-enablement.
+
+---
+
+## Second pass — Kensho multi-fleet audit (2026-09-10, RH 46630 + Tempo 42431)
+
+Seven parallel finder agents (ZK public-input alignment, Merkle tree, nullifier /
+double-spend / cross-chain replay, reentrancy / ERC-20 / accounting, Tempo + cross-
+chain, access-control / swap-oracle / memo, circom soundness), each handed the prior
+dupe digest, then owner-verified against the code, the compiled circuit, and live
+on-chain reads.
+
+**On-chain confirmed (both pools):** real Groth16 stack wired, bound-shield enforced,
+swaps disabled.
+- RH `0xaEbB…1834`: verifier `0xB077…7EF`, shieldVerifier `0x28E6…2847`, sealedSwapVerifier `0x0`.
+- Tempo `0x3eee…d30b`: verifier `0x82F4…03A2`, shieldVerifier `0x7836…6Eb3`, sealedSwapVerifier `0x0`.
+
+**Swept clean (independently re-verified, no new finding):** circuit↔contract public-
+input order/count/encoding (3/4/5/9 exact); all four Groth16 verifiers field-range-check
+every public input; Merkle zeros + EMPTY_ROOT re-derived from circomlibjs (20/20 match);
+root history is permanent (no eviction); nullifier binding + shared-`spent` cross-path +
+CEI ordering; cross-chain replay bound by per-chain roots + per-chain `deposited[]`;
+6-dec PathUSD accounted correctly (contract is decimals-agnostic on the live paths);
+Tempo native path inert/untrickable; `insert` is constant-gas (no 30M brick).
+
+**New findings + fixes (this pass):**
+
+| ID | Severity | Status |
+|----|----------|--------|
+| F-1 | High (latent — live only if oracle-swaps re-enabled) | **FIXED in code + tested** |
+| F-2 | Medium (issuer-triggered, unrecoverable) | **DOCUMENTED + mitigations specified** |
+| INFO-1/2/3 | Hardening | **FIXED in code + tested** |
+| SS-circom | Low (latent) | **FIXED in circuit source** (needs recompile+ceremony+redeploy) |
+
+- **F-1 — `OracleRates.requireRatio` dropped decimal normalization.** With an oracle-
+  bound swap across mismatched-decimal assets (exactly the Tempo 6-dec ↔ RH 18-dec
+  case), the enforced `amountOut` was off by `10^|decIn-decOut|` → permissionless over-
+  mint + drain once enabled. **Fix:** `requireRatio` now normalizes by asset decimals
+  and requires equal feed decimals, re-checked at call time (immune to `setPriceFeed`
+  reordering). Wired via `_assetDecimals()` in `sealedSwap`. Proof: `OracleRates.t.sol`
+  — `test_naive_rate_rejected_for_mixed_decimals` (the old bug rate now reverts),
+  `test_mixed_decimals_fair_rate_ok`, `test_reverts_on_feed_decimals_mismatch`.
+- **F-2 — issuer freeze of the pool's own token balance** permanently freezes every
+  note of that asset, and `emergencyWithdraw` (same `token.transfer`) can't rescue it.
+  Issuer-triggered, so not a permissionless crit — but real and unrecoverable. Can't be
+  code-fixed (trusted-party action); documented with required mitigations in
+  `TEMPO-COMPLIANCE-DESIGN.md` (per-asset pause, no single-freezable-account
+  concentration, explicit "emergencyWithdraw is not a backstop", non-freezing first
+  asset for mainnet).
+- **INFO-1/2/3 (defense-in-depth), all fixed + tested** (`GloamHardeningFixes.t.sol`):
+  a `nonReentrant` latch on every value-moving external fn (removes reliance on CEI +
+  STATICCALL holding under future edits); an explicit `NotAContract` check on a codeless
+  `asset` in shield (no phantom `deposited` credit); and `sweepStrayNative()` to recover
+  ETH sent via `receive()` above `deposited[address(0)]` (otherwise stuck).
+- **sealedSwap.circom** (not deployed; `sealedSwapVerifier==0`): added `secret != 0` on
+  all three notes (closes the known L1) and 128-bit range checks on `rateIn/rateOut/
+  amountOutMin` (product-wrap + `amountOutMin ≥ 2^252` slippage-floor bypass). Compiles
+  clean; **inert until the H1 re-enable recompiles + reruns the ceremony + redeploys.**
+
+**Headline:** no new permissionless critical/high on current code — the disabled swap
+path neutralizes the highest-severity surface, and the shielded core (ZK, Merkle,
+nullifier, accounting) is sound. F-1 (the one substantive latent High) is fixed and
+tested; the Tempo issuer-freeze Medium is documented with mitigations; hardening landed.
+All new + existing tests green (66/66). **These land on-chain at the next hardened
+redeploy** — the live pools predate them.

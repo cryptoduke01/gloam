@@ -80,6 +80,31 @@ template SealedSwap(levels) {
     component rcOut = Num2Bits(MAX_AMOUNT_BITS());
     rcOut.in <== amountOut;
 
+    // 3c) Audit hardening: range-check the public rate/floor signals too. Without
+    //     these, a caller-influenced rate could wrap the rate product below, and an
+    //     amountOutMin >= 2^252 defeats the GreaterEqThan(252) slippage floor. Bound
+    //     them to 128 bits (the same uint128 the settlement contract enforces on
+    //     rateIn/rateOut), so amount(128) * rate(128) stays a fixed <=256-bit product
+    //     whose equality the contract-pinned rate makes non-malleable.
+    component rcRateIn = Num2Bits(MAX_AMOUNT_BITS());
+    rcRateIn.in <== rateIn;
+    component rcRateOut = Num2Bits(MAX_AMOUNT_BITS());
+    rcRateOut.in <== rateOut;
+    component rcMin = Num2Bits(MAX_AMOUNT_BITS());
+    rcMin.in <== amountOutMin;
+
+    // 3d) Audit L1: forbid the zero secret on every note (a 0 secret makes the
+    //     commitment/nullifier a public function of (amount, asset) → forgeable/linkable).
+    component nzIn = IsZero();
+    nzIn.in <== secretIn;
+    nzIn.out === 0;
+    component nzOut = IsZero();
+    nzOut.in <== secretOut;
+    nzOut.out === 0;
+    component nzChg = IsZero();
+    nzChg.in <== secretChange;
+    nzChg.out === 0;
+
     // 4) Conservation of assetIn
     amountIn === amountSwap + amountChange;
 

@@ -82,3 +82,39 @@ per-payment visibility without the blanket, always-on view a Zone operator has.
 This keeps the same rule as the rest of Gloam: private by default, provable and
 controllable exactly where a regulated asset requires it, never an operator who
 sees everything.
+
+## Audit gap — pool-account freeze (Kensho multi-fleet, 2026-09-10)
+
+The freeze analysis above bounds impact to the *frozen holder's* value. The 2026-09-10
+audit pass surfaced a distinct, larger case this design did not cover: an issuer
+freezing the **pool contract's own token balance** for `asset`.
+
+- **Blast radius is every holder of that asset, not one bad actor.** `unshield` →
+  `_pushAsset` → `token.transfer(to, amount)` reverts for a frozen sender (the pool),
+  so *no* note of that asset can be withdrawn. `emergencyWithdraw` routes through the
+  same `token.transfer`, so the owner's escape hatch is also defeated. There is no
+  on-chain recovery path: the value is permanently frozen for all holders of that
+  asset until the issuer unfreezes the pool.
+- **Severity: Medium (loss of availability / potential permanent freeze), issuer-
+  triggered.** It is not a permissionless critical — the trigger is a trusted issuer,
+  not an arbitrary attacker — but it is a real, unrecoverable risk that the boundary
+  checks above do **not** address (they gate *who* deposits/withdraws, not the case
+  where the pool's own balance is frozen), and those boundary checks are **not
+  implemented in the deployed contract** yet.
+- **Reality check:** the pool is already live on Tempo Moderato shielding **PathUSD**,
+  a freeze-enforcing asset — so the build-order rule "launch first on a non-freezing
+  asset" has effectively been crossed on testnet. On testnet this is acceptable (play
+  money); it must be resolved before any mainnet, compliance-enforcing deployment.
+
+### Required mitigations before a mainnet freeze-enforcing asset
+
+1. **Do not concentrate all notes of a freezing asset in a single freezable pool
+   account without an out-of-band recovery** agreed with the issuer (e.g. a
+   contractual unfreeze-for-migration, or a per-asset migration path to a fresh pool).
+2. **Implement the shield/unshield boundary checks** this document specifies, and add
+   a **per-asset pause** so a compromised/frozen asset can be quarantined without
+   bricking other assets in the same pool.
+3. **Document explicitly, in product and to users, that `emergencyWithdraw` cannot
+   rescue a balance the issuer has frozen** — the owner is not a backstop here.
+4. Prefer, for the first mainnet asset, a stablecoin whose issuer will contractually
+   commit not to freeze the pool account, or a non-freezing asset.

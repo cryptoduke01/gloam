@@ -12,6 +12,7 @@ interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
     function transfer(address to, uint256 amount) external returns (bool);
     function balanceOf(address account) external view returns (uint256);
+    function decimals() external view returns (uint8);
 }
 
 /**
@@ -68,6 +69,11 @@ contract ShieldPoolPoseidon is IShieldPool {
     ///         to a wrong/dead address in one irreversible step.
     address public pendingOwner;
 
+    /// @notice Reentrancy latch. The value-moving paths follow checks-effects-
+    ///         interactions, so this is defense-in-depth (audit INFO-3): it removes
+    ///         reliance on CEI + STATICCALL-only view calls holding under future edits.
+    uint256 private _entered;
+
     uint256 public constant PROOF_LAYOUT_VERSION = 2;
     string public constant HASH_SCHEME = "poseidon";
 
@@ -113,10 +119,20 @@ contract ShieldPoolPoseidon is IShieldPool {
     error RateNotAllowed();
     error DuplicateCommitment();
     error ShieldProofRequired();
+    error Reentrancy();
+    error NotAContract();
+    error NothingToSweep();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
+    }
+
+    modifier nonReentrant() {
+        if (_entered == 1) revert Reentrancy();
+        _entered = 1;
+        _;
+        _entered = 0;
     }
 
     /**
@@ -236,13 +252,36 @@ contract ShieldPoolPoseidon is IShieldPool {
         address asset,
         address to,
         uint256 amount
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (deposited[asset] < amount) revert InsufficientPoolBalance();
         deposited[asset] -= amount;
         emit EmergencyWithdrawal(asset, to, amount);
         _pushAsset(asset, to, amount);
+    }
+
+    /// @notice Recover native currency that was sent directly (via receive()) and is
+    ///         not backing any shielded note. Audit INFO-1: such ETH is otherwise
+    ///         permanently stuck, since unshield only pays proof-bound notes and
+    ///         emergencyWithdraw is bounded by deposited[]. Only the surplus over
+    ///         deposited[address(0)] is sweepable, so shielded native balances are
+    ///         never touched.
+    function sweepStrayNative(address to) external onlyOwner nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+        uint256 backed = deposited[address(0)];
+        uint256 bal = address(this).balance;
+        if (bal <= backed) revert NothingToSweep();
+        uint256 surplus = bal - backed;
+        (bool ok, ) = to.call{value: surplus}("");
+        if (!ok) revert TransferFailed();
+        emit EmergencyWithdrawal(address(0), to, surplus);
+    }
+
+    /// @notice Token decimals for value math; native currency is treated as 18-dec.
+    function _assetDecimals(address asset) internal view returns (uint8) {
+        if (asset == address(0)) return 18;
+        return IERC20(asset).decimals();
     }
 
     function nextIndex() external view returns (uint256) {
@@ -270,7 +309,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         address asset,
         uint256 amount,
         bytes32 commitment
-    ) external payable override {
+    ) external payable override nonReentrant {
         if (address(shieldVerifier) != address(0)) revert ShieldProofRequired();
         _shield(asset, amount, commitment);
     }
@@ -285,7 +324,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         uint256 amount,
         bytes32 commitment,
         bytes calldata proof
-    ) external payable {
+    ) external payable nonReentrant {
         if (address(shieldVerifier) == address(0)) revert VerifierNotSet();
         uint256[] memory inputs = new uint256[](3);
         inputs[0] = uint256(commitment);
@@ -309,6 +348,11 @@ contract ShieldPoolPoseidon is IShieldPool {
             if (msg.value != amount) revert InvalidMsgValue();
         } else {
             if (msg.value != 0) revert InvalidMsgValue();
+            // Audit INFO-2: reject a codeless `asset` explicitly. Otherwise the
+            // low-level transferFrom in _pullERC20 would return success (empty data)
+            // against an EOA/undeployed address and mint phantom `deposited` credit.
+            // (The balanceOf delta below also catches it today, but only incidentally.)
+            if (asset.code.length == 0) revert NotAContract();
             uint256 before = IERC20(asset).balanceOf(address(this));
             _pullERC20(msg.sender, amount, asset);
             uint256 received = IERC20(asset).balanceOf(address(this)) - before;
@@ -326,7 +370,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         bytes32 root,
         bytes32 nullifier,
         bytes32[2] calldata newCommitments
-    ) external override {
+    ) external override nonReentrant {
         _requireTransferProof(proof, root, nullifier, newCommitments);
         if (spent[nullifier]) revert AlreadySpent();
         spent[nullifier] = true;
@@ -359,7 +403,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         uint256 amountOutMin,
         uint256 rateIn,
         uint256 rateOut
-    ) external {
+    ) external nonReentrant {
         if (assetIn == assetOut) revert SameAsset();
         if (rateIn == 0 || rateOut == 0) revert InvalidAmount();
         // C3: the rate must match the owner-approved rate for this direction.
@@ -375,7 +419,9 @@ contract ShieldPoolPoseidon is IShieldPool {
                 priceFeed[assetIn],
                 priceFeed[assetOut],
                 rateIn,
-                rateOut
+                rateOut,
+                _assetDecimals(assetIn),
+                _assetDecimals(assetOut)
             );
         } else {
             SwapRate memory sr = swapRate[assetIn][assetOut];
@@ -429,7 +475,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         address asset,
         address to,
         uint256 amount
-    ) external override {
+    ) external override nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         _requireUnshieldProof(proof, root, nullifier, asset, to, amount);

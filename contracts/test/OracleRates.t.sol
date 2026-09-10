@@ -38,13 +38,26 @@ contract OracleHarness {
         cfg = c;
     }
 
+    /// Equal-decimals convenience (18/18) — matches the pre-F-1 behavior.
     function requireRatio(
         IAggregatorV3 fin,
         IAggregatorV3 fout,
         uint256 ri,
         uint256 ro
     ) external view {
-        OracleRates.requireRatio(cfg, fin, fout, ri, ro);
+        OracleRates.requireRatio(cfg, fin, fout, ri, ro, 18, 18);
+    }
+
+    /// Decimal-aware form (audit F-1).
+    function requireRatioDec(
+        IAggregatorV3 fin,
+        IAggregatorV3 fout,
+        uint256 ri,
+        uint256 ro,
+        uint8 decIn,
+        uint8 decOut
+    ) external view {
+        OracleRates.requireRatio(cfg, fin, fout, ri, ro, decIn, decOut);
     }
 
     function readPrice(IAggregatorV3 f) external view returns (uint256) {
@@ -120,5 +133,33 @@ contract OracleRatesTest is Test {
     function test_reverts_on_unset_feed() public {
         vm.expectRevert(OracleRates.FeedNotSet.selector);
         h.readPrice(IAggregatorV3(address(0)));
+    }
+
+    // --- Audit F-1: decimal normalization ---
+
+    /// Feeds must share decimals so priceIn/priceOut is a pure ratio.
+    function test_reverts_on_feed_decimals_mismatch() public {
+        MockFeed amzn6 = new MockFeed(6, 190e6, NOW); // 6-dec feed vs tsla's 8-dec
+        vm.expectRevert(OracleRates.FeedDecimalsMismatch.selector);
+        h.requireRatioDec(tsla, amzn6, 250e8, 190e8, 18, 18);
+    }
+
+    /// A genuine mixed-decimal pair (18-dec assetIn, 6-dec assetOut) conserves value
+    /// only when the rate carries the 10^(decIn-decOut) factor. Fair rate passes.
+    function test_mixed_decimals_fair_rate_ok() public view {
+        // assetIn 18-dec @ $250, assetOut 6-dec @ $190. Value conservation in raw
+        // units needs rateIn/rateOut == (priceIn/priceOut) * 10^(decOut-decIn)
+        // i.e. rateIn*priceOut*10^decIn == rateOut*priceIn*10^decOut.
+        // Pick rateIn = priceIn * 10^decOut = 250e8 * 1e6, rateOut = priceOut * 10^decIn = 190e8 * 1e18.
+        // Both <= uint128 max. This is the value-preserving rate.
+        h.requireRatioDec(tsla, amzn, 250e8 * 1e6, 190e8 * 1e18, 18, 6);
+    }
+
+    /// THE BUG: the pre-fix math (no decimal factor) accepted rateIn=250e8, rateOut=190e8
+    /// for an 18-dec -> 6-dec swap, which mints 10^12x the fair assetOut. The fix must
+    /// now REJECT that naive rate as wildly out of band.
+    function test_naive_rate_rejected_for_mixed_decimals() public {
+        vm.expectRevert(OracleRates.RateOutOfBand.selector);
+        h.requireRatioDec(tsla, amzn, 250e8, 190e8, 18, 6);
     }
 }
