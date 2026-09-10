@@ -376,7 +376,7 @@ export function Landing() {
           <div className="relative overflow-hidden rounded-[22px] bg-[#121316] px-8 py-16 sm:px-12 md:px-16 md:py-24">
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[56%] opacity-80 mix-blend-screen md:block"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[56%] opacity-80 mix-blend-screen sm:block"
             >
               <Image
                 src="/ascii/hero.png"
@@ -412,7 +412,7 @@ export function Landing() {
           <div className="relative overflow-hidden rounded-[22px] border border-[#E5E3DD] bg-[#EFECE4] px-8 py-16 sm:px-12 md:px-16 md:py-24">
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[42%] opacity-95 mix-blend-multiply md:block"
+              className="pointer-events-none absolute inset-y-0 right-0 hidden w-[42%] opacity-95 mix-blend-multiply sm:block"
             >
               <Image
                 src="/ascii/IMG_1476.PNG"
