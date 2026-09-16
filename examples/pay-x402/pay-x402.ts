@@ -47,13 +47,14 @@ import {
 // another chain. Tempo Moderato blocks native msg.value, so shield an ERC-20
 // stablecoin there (e.g. PathUSD, 6 decimals):
 //   GLOAM_RPC=https://rpc.moderato.tempo.xyz GLOAM_CHAIN_ID=42431 \
-//   GLOAM_POOL=0x3eeE86... GLOAM_DEPLOY_BLOCK=34556677 \
+//   GLOAM_POOL=0xeD0b0F8eE6206eCd87cF47Fc1C5220d15C6e2276 GLOAM_DEPLOY_BLOCK=35578268 \
 //   GLOAM_ASSET=0x20c0000000000000000000000000000000000000 \
 //   GLOAM_DECIMALS=6 GLOAM_ASSET_SYMBOL=PathUSD
 const RPC = process.env.GLOAM_RPC ?? "https://rpc.testnet.chain.robinhood.com";
 const CHAIN_ID = Number(process.env.GLOAM_CHAIN_ID ?? RH_TESTNET_CHAIN_ID);
 const POOL = (process.env.GLOAM_POOL ?? SEALED_VAULT) as `0x${string}`;
-const DEPLOY_BLOCK = BigInt(process.env.GLOAM_DEPLOY_BLOCK ?? "110840714");
+// RH hardened pool 0xAc25… deploy block (matches SEALED_VAULT default).
+const DEPLOY_BLOCK = BigInt(process.env.GLOAM_DEPLOY_BLOCK ?? "120461692");
 const ASSET = (process.env.GLOAM_ASSET ?? NATIVE_ASSET) as `0x${string}`;
 const DECIMALS = Number(process.env.GLOAM_DECIMALS ?? "18");
 const ASSET_SYMBOL = process.env.GLOAM_ASSET_SYMBOL ?? "ETH";
