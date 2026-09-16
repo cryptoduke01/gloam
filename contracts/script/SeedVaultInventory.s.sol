@@ -32,7 +32,7 @@ contract SeedVaultInventory is Script {
     // Hardened Poseidon pool (C1/C2/C3). NEVER point this at the drainable
     // pre-C1 pool 0x4F38…12D8F (audit H-P1) — it has no shieldVerifier and is
     // unhardenable in place.
-    address constant DEFAULT_POOL = 0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834;
+    address constant DEFAULT_POOL = 0xAc25c3C4A880194324d1fC78722694e0F315aF1c;
 
     address constant TSLA = 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E;
     address constant AMZN = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02;

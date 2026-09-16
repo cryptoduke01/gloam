@@ -12,10 +12,11 @@ export const RH_TESTNET_CHAIN_ID = 46630;
 export const RH_MAINNET_CHAIN_ID = 4663;
 
 /** Contracts of record (RH testnet 46630). */
-// Hardened Poseidon pool (C1/C2/C3, shieldVerifier enforced). NEVER the drainable
-// pre-C1 pool 0x4F38…12D8F (audit H-P1).
+// Hardened Poseidon pool (shieldVerifier enforced). Redeployed 2026-09-16 with the
+// Kensho audit-pass fixes; supersedes 0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834.
+// NEVER the drainable pre-C1 pool 0x4F38…12D8F (audit H-P1).
 export const SEALED_VAULT: Address =
-  "0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834";
+  "0xAc25c3C4A880194324d1fC78722694e0F315aF1c";
 export const GLOAM_PAY_MEMO: Address =
   "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE";
 /** ShieldIVerifier adapter — set as the pool's shieldVerifier; shield() reverts,

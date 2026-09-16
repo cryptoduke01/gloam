@@ -13,7 +13,7 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 - X: `@gloamtrade`
 - Vercel: one project, Root Directory = `app`
 - Contracts: `contracts/` (Foundry) — ShieldPoolPoseidon sealed vault; RH testnet only
-- Sealed vault (hardened C1/C2/C3): `0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834`. Drainable, never use or seed: `0x4F38…12D8F` (audit H-P1). Never product-default `0xA488…`
+- Sealed vault (hardened C1/C2/C3): `0xAc25c3C4A880194324d1fC78722694e0F315aF1c`. Drainable, never use or seed: `0x4F38…12D8F` (audit H-P1). Never product-default `0xA488…`
 
 ## Live on testnet (dev keys)
 

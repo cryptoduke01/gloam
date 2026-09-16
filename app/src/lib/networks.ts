@@ -105,9 +105,12 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     label: "Tempo",
     chain: tempoTestnet,
     chainId: tempoTestnet.id,
-    // Deployed on Tempo Moderato 2026-09-09 (DeployTempo + DeployTempoPool).
-    pool: "0x3eeE869aFF476D90aF6CF0bC8F0b450C98A8D30b",
-    deployBlock: 34_556_677n,
+    // Hardened pool redeployed on Tempo Moderato 2026-09-16 (Kensho audit fixes:
+    // F-1 oracle decimals + reentrancy guard + codeless-asset check + stray-ETH
+    // sweep). Reuses the existing verifiers + Poseidon2. Prior pool
+    // 0x3eeE869aFF476D90aF6CF0bC8F0b450C98A8D30b (block 34_556_677) is superseded.
+    pool: "0xeD0b0F8eE6206eCd87cF47Fc1C5220d15C6e2276",
+    deployBlock: 35_578_268n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "USD", address: null, decimals: 18 },
     stableAssets: [],

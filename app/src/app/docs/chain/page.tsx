@@ -48,7 +48,7 @@ export default function DocsChainPage() {
         </li>
         <li>
           <strong>Testnet vault (sealed)</strong>, {" "}
-          <code>0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834</code>
+          <code>0xAc25c3C4A880194324d1fC78722694e0F315aF1c</code>
         </li>
       </ul>
 
