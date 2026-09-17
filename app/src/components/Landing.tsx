@@ -4,7 +4,7 @@ import { AsciiImage } from "@/components/AsciiImage";
 import { LandingMobileNav } from "@/components/LandingMobileNav";
 import {
   DoodleUnderline,
-  DoodleCrossedEye,
+  DoodleSparks,
   DoodlePadlock,
   DoodleSeal,
 } from "@/components/PrivacyDoodles";
@@ -258,11 +258,7 @@ export function Landing() {
             </div>
           </div>
 
-          <div className="relative">
-            {/* collage sticker: the vault reveals nothing */}
-            <DoodleCrossedEye className="pointer-events-none absolute -top-6 left-3 z-10 w-14 -rotate-[9deg] text-[#3B3766] sm:w-16" />
-            <SealedVaultCard />
-          </div>
+          <SealedVaultCard />
         </section>
 
         {/* the three moves, each with a house dither */}
@@ -290,7 +286,7 @@ export function Landing() {
                 t: "Size sealed",
                 b: "Trade tokenized stocks and crypto. The market never sees how much you moved.",
                 doodle: (
-                  <DoodleCrossedEye className="w-7 text-[#3B3766]" />
+                  <DoodleSparks className="w-6 text-[#3B3766]" />
                 ),
               },
               {
@@ -427,8 +423,7 @@ export function Landing() {
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#EFECE4] via-[#EFECE4]/85 to-transparent"
             />
             <div className="relative max-w-[620px]">
-              <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
-                <DoodleCrossedEye className="w-6 text-[#3B3766]" />
+              <p className="text-[11px] uppercase tracking-[0.18em] text-[#6E6E76]">
                 Reveal nothing
               </p>
               <h2 className="mt-4 text-[clamp(32px,4.8vw,58px)] font-bold leading-[0.99] tracking-[-0.03em] text-balance">
