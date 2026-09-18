@@ -34,7 +34,7 @@ export function MarketsView() {
 
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<Filter>("private");
+  const [kind, setKind] = useState<Filter>("stocks");
   const [menuOpen, setMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);

@@ -33,6 +33,12 @@ const KNOWN_LOGOS: Record<string, string> = {
   nflx: "/brand/logos/nflx.png",
   amd: "/brand/logos/amd.png",
   hood: "/brand/logos/hood.png",
+  aapl: "/brand/logos/aapl.png",
+  nvda: "/brand/logos/nvda.png",
+  msft: "/brand/logos/msft.png",
+  googl: "/brand/logos/googl.png",
+  meta: "/brand/logos/meta.png",
+  coin: "/brand/logos/coin.png",
   robinhood: "/brand/logos/robinhood.png",
   tempo: "/brand/logos/tempo.svg",
 };
@@ -69,12 +75,8 @@ export function TokenLogo({
         width={size}
         height={size}
         onError={() => setBroken(true)}
-        className={`shrink-0 rounded-full border border-line bg-white object-contain p-[3px] ${className}`}
-        style={{
-          width: size,
-          height: size,
-          filter: "drop-shadow(0 0 0.5px rgba(0,0,0,0.18))",
-        }}
+        className={`shrink-0 rounded-[22%] border border-line bg-white object-cover ${className}`}
+        style={{ width: size, height: size }}
       />
     );
   }
@@ -82,7 +84,7 @@ export function TokenLogo({
   return (
     <span
       aria-hidden
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-[22%] font-semibold text-white ${className}`}
       style={{
         width: size,
         height: size,
