@@ -4,6 +4,8 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL } from "@/lib/faucet";
+import { useNetwork } from "./NetworkProvider";
+import { useTempoFaucet } from "@/hooks/useTempoFaucet";
 import {
   ONBOARDING_STEPS,
   dismissOnboarding,
@@ -30,6 +32,9 @@ export function openOnboarding() {
 export function OnboardingCard() {
   const [state, setState] = useState<OnboardingState | null>(null);
   const [open, setOpen] = useState(false);
+  const { network } = useNetwork();
+  const isTempo = network.key === "tempo";
+  const tempoFaucet = useTempoFaucet();
 
   const refresh = useCallback(() => setState(loadOnboarding()), []);
 
@@ -160,18 +165,40 @@ export function OnboardingCard() {
                       {!done &&
                         (isNext ? (
                           step.href === "external:faucet" ? (
-                            <a
-                              href={FAUCET_URL}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={() => {
-                                markOnboardingStep(step.id);
-                                refresh();
-                              }}
-                              className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"
-                            >
-                              Open
-                            </a>
+                            isTempo ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void tempoFaucet.claim();
+                                  markOnboardingStep(step.id);
+                                  refresh();
+                                }}
+                                disabled={
+                                  !tempoFaucet.ready ||
+                                  tempoFaucet.status === "pending"
+                                }
+                                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
+                              >
+                                {tempoFaucet.status === "pending"
+                                  ? "Funding…"
+                                  : tempoFaucet.status === "done"
+                                    ? "Funded ✓"
+                                    : "Claim"}
+                              </button>
+                            ) : (
+                              <a
+                                href={FAUCET_URL}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => {
+                                  markOnboardingStep(step.id);
+                                  refresh();
+                                }}
+                                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"
+                              >
+                                Open
+                              </a>
+                            )
                           ) : (
                             <Link
                               href={step.href}
