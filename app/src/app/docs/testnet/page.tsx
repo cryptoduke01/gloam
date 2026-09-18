@@ -178,7 +178,17 @@ export default function DocsTestnetPage() {
           docs.robinhood.com/chain
         </a>
         . More network context:{" "}
-        <Link href="/docs/chain">Robinhood Chain in Gloam docs</Link>.
+        <Link href="/docs/chain">all networks in the Gloam docs</Link>.
+      </p>
+
+      <p>
+        Gloam also runs on <strong>Tempo Moderato testnet</strong> (chain ID{" "}
+        <code>42431</code>), where the shieldable asset is a stablecoin (PathUSD,
+        6 decimals) instead of equities and gas is paid in a stablecoin rather
+        than ETH. Switch chains with the network selector in the app header; the
+        shield, private pay, cash out, and disclosure steps below are the same.
+        Tempo params and integration notes live in the{" "}
+        <Link href="/docs/chain">Networks doc</Link>.
       </p>
 
       <h2 id="faucet">2. Get testnet funds (faucet)</h2>
