@@ -21,7 +21,7 @@ import {
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
-import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
+import { shieldTokensFor, erc20BalanceOfAbi } from "@/lib/tokens";
 import {
   assetLabel,
   isNativeAsset,
@@ -234,16 +234,24 @@ export function PortfolioView() {
     query: { enabled: Boolean(address) },
   });
 
+  // Public tokens differ by chain: equities on Robinhood, faucet stablecoins on
+  // Tempo. Reading Robinhood's stock tokens on Tempo (or vice-versa) is exactly
+  // why the holdings looked empty on the wrong chain.
+  const tokenSet = useMemo(
+    () => shieldTokensFor(network.chainId),
+    [network.chainId]
+  );
+
   const tokenContracts = useMemo(
     () =>
-      TESTNET_STOCK_TOKENS.map((t) => ({
+      tokenSet.map((t) => ({
         address: t.address,
         abi: erc20BalanceOfAbi,
         functionName: "balanceOf" as const,
         args: [address!] as const,
         chainId: network.chainId,
       })),
-    [address]
+    [address, tokenSet, network.chainId]
   );
 
   const { data: tokenBals } = useReadContracts({
@@ -252,29 +260,30 @@ export function PortfolioView() {
   });
 
   const positions = useMemo(() => {
-    return TESTNET_STOCK_TOKENS.map((t, i) => {
-      const raw =
-        tokenBals?.[i]?.status === "success"
-          ? (tokenBals[i].result as bigint)
-          : BigInt(0);
-      const m = markets.find((x) => x.id === t.id);
-      const mark = m?.mark ?? 0;
-      const amount = Number(raw) / 10 ** t.decimals;
-      const usd = amount * mark;
-      return {
-        ...t,
-        raw,
-        amount,
-        mark,
-        usd,
-        change24h: m?.change24h ?? 0,
-        spark: m?.spark ?? [],
-        live: m?.source === "live",
-      };
-    }).filter((p) =>
-      settings.hideZeroBalances ? p.raw > BigInt(0) : true
-    );
-  }, [tokenBals, markets, settings.hideZeroBalances]);
+    return tokenSet
+      .map((t, i) => {
+        const raw =
+          tokenBals?.[i]?.status === "success"
+            ? (tokenBals[i].result as bigint)
+            : BigInt(0);
+        const m = markets.find((x) => x.id === t.id);
+        // Stablecoins are worth $1; equities use their live mark.
+        const mark = t.kind === "stablecoin" ? 1 : (m?.mark ?? 0);
+        const amount = Number(raw) / 10 ** t.decimals;
+        const usd = amount * mark;
+        return {
+          ...t,
+          raw,
+          amount,
+          mark,
+          usd,
+          change24h: m?.change24h ?? 0,
+          spark: m?.spark ?? [],
+          live: m?.source === "live",
+        };
+      })
+      .filter((p) => (settings.hideZeroBalances ? p.raw > BigInt(0) : true));
+  }, [tokenSet, tokenBals, markets, settings.hideZeroBalances]);
 
   const shieldRows = useMemo(() => {
     const rows: {
@@ -290,11 +299,18 @@ export function PortfolioView() {
       if (isNativeAsset(asset) && nativeUsdRate != null) {
         usd = (Number(amount) / 1e18) * nativeUsdRate;
       } else {
-        const tok = TESTNET_STOCK_TOKENS.find(
+        const tok = tokenSet.find(
           (t) => t.address.toLowerCase() === asset.toLowerCase()
         );
-        const m = tok ? markets.find((x) => x.id === tok.id) : null;
-        if (m?.mark) usd = (Number(amount) / 1e18) * m.mark;
+        if (tok) {
+          const dec = tok.decimals;
+          if (tok.kind === "stablecoin") {
+            usd = Number(amount) / 10 ** dec; // $1 each
+          } else {
+            const m = markets.find((x) => x.id === tok.id);
+            if (m?.mark) usd = (Number(amount) / 10 ** dec) * m.mark;
+          }
+        }
       }
       rows.push({ asset, label, amount, usd });
     });
@@ -303,7 +319,7 @@ export function PortfolioView() {
       if (isNativeAsset(b.asset)) return 1;
       return a.label.localeCompare(b.label);
     });
-  }, [byAsset, nativeUsdRate, markets]);
+  }, [byAsset, nativeUsdRate, markets, tokenSet]);
 
   const ethAmt = bal ? Number(bal.value) / 1e18 : 0;
   const shieldEthUsd =
@@ -315,18 +331,18 @@ export function PortfolioView() {
     .reduce((s, r) => s + (r.usd ?? 0), 0);
   const ethUsdVal = nativeUsdRate != null ? ethAmt * nativeUsdRate : null;
   const stocksUsd = positions.reduce((s, p) => s + p.usd, 0);
-  const totalUsd =
-    ethUsdVal != null
-      ? ethUsdVal + stocksUsd + shieldEthUsd + shieldStocksUsd
-      : stocksUsd + shieldStocksUsd > 0
-        ? stocksUsd + shieldEthUsd + shieldStocksUsd
-        : null;
+  // On Robinhood the native ETH is a real holding and counts toward value. On
+  // Tempo the native USD is a faucet balance (the faucet hands out an absurd
+  // amount), so it is NOT portfolio value — Total value there reflects only what
+  // you actually hold and have shielded (stablecoins + vault).
+  const nativeHeldUsd = isTempo ? 0 : (ethUsdVal ?? 0);
+  const totalUsd = nativeHeldUsd + stocksUsd + shieldEthUsd + shieldStocksUsd;
 
   const hasShield = shieldRows.length > 0;
   const stockCount = positions.filter((p) => p.raw > BigInt(0)).length;
 
-  // Public (wallet + onchain stocks) vs sealed (vault) split, the whole point.
-  const publicUsd = (ethUsdVal ?? 0) + stocksUsd;
+  // Public (wallet + tokens) vs sealed (vault) split, the whole point.
+  const publicUsd = nativeHeldUsd + stocksUsd;
   const sealedUsd = shieldEthUsd + shieldStocksUsd;
   const totalKnown = publicUsd + sealedUsd;
   const sealedPct =
@@ -351,10 +367,13 @@ export function PortfolioView() {
   const walletValue = !balancesVisible
     ? `0 ${nativeSymbol}`
     : `${formatEth(bal?.value ?? BigInt(0))} ${nativeSymbol}`;
-  const walletSub =
-    balancesVisible && ethUsdVal != null && settings.showUsd
-      ? formatUsdCompact(ethUsdVal)
-      : "Open wallet";
+  const walletSub = !balancesVisible
+    ? "Open wallet"
+    : isTempo
+      ? "Testnet balance"
+      : ethUsdVal != null && settings.showUsd
+        ? formatUsdCompact(ethUsdVal)
+        : "Open wallet";
 
   const vaultValue = !balancesVisible
     ? "0"
@@ -563,7 +582,7 @@ export function PortfolioView() {
                           isNativeAsset(n.asset)
                             ? "/app/trade?path=sealed"
                             : `/app/trade?path=sealed&side=sell&market=${
-                                TESTNET_STOCK_TOKENS.find(
+                                tokenSet.find(
                                   (t) =>
                                     t.address.toLowerCase() ===
                                     n.asset.toLowerCase()
@@ -640,7 +659,7 @@ export function PortfolioView() {
                     />
                     <div className="w-24 text-right">
                       <p className="tnum text-sm text-foreground">
-                        {formatTokenAmount(p.raw)}
+                        {formatTokenAmount(p.raw, p.decimals)}
                       </p>
                       {settings.showUsd && p.mark > 0 && (
                         <p className="text-xs text-mute">

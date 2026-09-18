@@ -58,8 +58,8 @@ export function ActivityFeed() {
       )}
       {!isLoading && !isError && txs.length === 0 && (
         <p className="px-4 py-6 text-sm text-mute">
-          No public wallet activity yet. Vault private trade and private send
-          intentionally stay off this list.
+          No public activity yet. Your shields, private sends, and disclosures
+          stay off the public feed by design.
         </p>
       )}
 
@@ -76,38 +76,40 @@ export function ActivityFeed() {
               }
               const zero =
                 tx.valueWei === "0" || tx.valueWei === "0x0" || eth === "0";
+              const sym = network.primaryAsset.symbol;
+              const counterparty = out ? tx.to : tx.from;
+              const isVault =
+                network.pool != null &&
+                counterparty?.toLowerCase() === network.pool.toLowerCase();
+              // Human-readable label, not raw call metadata.
+              const title = !zero
+                ? `${out ? "Sent" : "Received"} ${eth} ${sym}`
+                : isVault
+                  ? "Vault transaction"
+                  : out
+                    ? "Payment"
+                    : "Received";
+              const who = isVault
+                ? "Gloam vault"
+                : shortAddress(counterparty, 4);
               return (
                 <li
                   key={tx.hash}
                   className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm last:border-0"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                      {zero
-                        ? out
-                          ? "Contract (vault / other)"
-                          : "Incoming call"
-                        : out
-                          ? "Sent"
-                          : "Received"}{" "}
-                      {!zero && (
-                        <span>
-                          {eth} {network.primaryAsset.symbol}
-                        </span>
-                      )}
-                    </p>
+                    <p className="font-medium text-foreground">{title}</p>
                     <p className="truncate text-[11px] text-mute">
-                      {out ? "to" : "from"}{" "}
-                      {shortAddress(out ? tx.to : tx.from, 4)}
+                      {out ? "To" : "From"} {who}
                     </p>
                   </div>
                   <a
                     href={network.explorerTx(tx.hash)}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 text-xs text-lime hover:underline"
+                    className="shrink-0 text-xs text-mute transition-colors hover:text-foreground"
                   >
-                    Tx →
+                    View →
                   </a>
                 </li>
               );
