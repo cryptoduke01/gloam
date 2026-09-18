@@ -1,8 +1,8 @@
 {
   "name": "@gloamtrade/sdk",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
-  "description": "Gloam SDK — shielded balances, private payments, and selective disclosure on Robinhood Chain. The private path other apps and agents plug into.",
+  "description": "Gloam SDK: shielded balances, private payments, and selective disclosure on Robinhood Chain and Tempo. The private path other apps and agents plug into.",
   "license": "MIT",
   "homepage": "https://gloam.trade/docs/sdk",
   "repository": {
@@ -16,6 +16,9 @@
   "keywords": [
     "gloam",
     "robinhood-chain",
+    "tempo",
+    "stablecoin",
+    "payments",
     "privacy",
     "zero-knowledge",
     "zk",
