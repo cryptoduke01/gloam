@@ -31,6 +31,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
 import { TokenLogo } from "./TokenLogo";
+import { TempoFaucetButton } from "./TempoFaucetButton";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
@@ -411,15 +412,19 @@ export function PortfolioView() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <NetworkPulse />
-              <a
-                href={faucet.url}
-                target={faucetExternal ? "_blank" : undefined}
-                rel={faucetExternal ? "noreferrer" : undefined}
-                className="text-xs text-mute transition-colors hover:text-lime"
-                title={faucet.blurb}
-              >
-                Get testnet funds →
-              </a>
+              {isTempo ? (
+                <TempoFaucetButton className="text-xs text-mute transition-colors hover:text-foreground disabled:opacity-60" />
+              ) : (
+                <a
+                  href={faucet.url}
+                  target={faucetExternal ? "_blank" : undefined}
+                  rel={faucetExternal ? "noreferrer" : undefined}
+                  className="text-xs text-mute transition-colors hover:text-foreground"
+                  title={faucet.blurb}
+                >
+                  Get testnet funds →
+                </a>
+              )}
               <span className="text-line">·</span>
               <button
                 type="button"

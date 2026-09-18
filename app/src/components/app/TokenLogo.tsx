@@ -44,6 +44,10 @@ const PNG_LOGO_IDS = new Set([
 
 const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
+  pathusd: "/brand/logos/pathusd.svg",
+  alphausd: "/brand/logos/alphausd.svg",
+  betausd: "/brand/logos/betausd.svg",
+  thetausd: "/brand/logos/thetausd.svg",
 };
 
 function resolveLogo(id: string): string | undefined {
