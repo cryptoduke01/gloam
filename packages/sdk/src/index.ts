@@ -1,8 +1,12 @@
 /**
- * @gloamtrade/sdk — the private path for Robinhood Chain, as a reusable package.
+ * @gloamtrade/sdk — Gloam's private path as a reusable package.
  *
- * Shielded balances, private transfers, and private trades that any RH Chain app
- * or agent can plug into. The Gloam vault app is the reference implementation.
+ * Shielded balances, private transfers, and private payments that any app or
+ * agent can plug into. It runs on both networks Gloam deploys to — Robinhood
+ * Chain and Tempo — which are separate deployments of the same shielded-pool
+ * design; pass the target network's `chainId` and `poolAddress` (see
+ * `GLOAM_NETWORKS`) and the same circuits and proving path serve either. The
+ * Gloam vault app is the reference implementation.
  *
  * Surface (all live and exported below):
  *
@@ -14,7 +18,7 @@
  *   rates     sealed-rate math + size-privacy policy (pure)
  *   builders  shieldBound | unshield | privateSend | privateTrade intents
  *   x402      private agent payments over HTTP 402 (settle-then-prove)
- *   constants pool + verifier addresses, chain ids, field prime
+ *   constants pool + verifier addresses, chain ids, networks, field prime
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
  * (snarkjs + artifacts) and storage (notes, keys) are injected, so the same core
