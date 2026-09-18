@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { allNetworks, isNetworkWritable } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
+import { TokenLogo } from "./TokenLogo";
 
 export function NetworkSelector() {
   const { network, setNetworkKey } = useNetwork();
@@ -35,9 +36,6 @@ export function NetworkSelector() {
     };
   }, [open]);
 
-  const dot =
-    network.status === "live" ? "bg-lime" : "bg-mute";
-
   return (
     <div ref={ref} className="relative">
       <button
@@ -45,9 +43,9 @@ export function NetworkSelector() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-8 items-center gap-1.5 rounded-full border border-line px-2.5 text-xs text-foreground transition-colors hover:border-lime/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime/60"
+        className="flex h-8 items-center gap-1.5 rounded-full border border-line pl-1 pr-2.5 text-xs text-foreground transition-colors hover:border-mute focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+        <TokenLogo id={network.key} symbol={network.label} size={20} />
         <span className="font-medium">{network.label}</span>
         <span className="text-mute" aria-hidden>
           {open ? "▴" : "▾"}
@@ -81,11 +79,11 @@ export function NetworkSelector() {
                     : "cursor-not-allowed opacity-70"
                 } ${active ? "bg-panel" : ""}`}
               >
-                <span
-                  className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
-                    n.status === "live" ? "bg-lime" : "bg-mute"
-                  }`}
-                  aria-hidden
+                <TokenLogo
+                  id={n.key}
+                  symbol={n.label}
+                  size={26}
+                  className="mt-0.5"
                 />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">

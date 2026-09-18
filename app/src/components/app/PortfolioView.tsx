@@ -30,6 +30,7 @@ import {
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
+import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
@@ -340,13 +341,15 @@ export function PortfolioView() {
   const balancesVisible = isConnected && onProduct;
 
   const totalDisplay = !balancesVisible
-    ? "—"
+    ? settings.showUsd
+      ? formatUsd(0)
+      : `0 ${nativeSymbol}`
     : totalUsd != null && settings.showUsd
       ? formatUsdCompact(totalUsd)
       : `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ${nativeSymbol}`;
 
   const walletValue = !balancesVisible
-    ? "—"
+    ? `0 ${nativeSymbol}`
     : `${formatEth(bal?.value ?? BigInt(0))} ${nativeSymbol}`;
   const walletSub =
     balancesVisible && ethUsdVal != null && settings.showUsd
@@ -354,7 +357,7 @@ export function PortfolioView() {
       : "Open wallet";
 
   const vaultValue = !balancesVisible
-    ? "—"
+    ? "0"
     : !hasShield
       ? "0"
       : shieldRows.length === 1
@@ -373,7 +376,9 @@ export function PortfolioView() {
       : "Size hidden onchain";
 
   const stocksValue = !balancesVisible
-    ? "—"
+    ? settings.showUsd
+      ? formatUsd(0)
+      : "0 tokens"
     : settings.showUsd && stocksUsd > 0
       ? formatUsdCompact(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
@@ -614,6 +619,7 @@ export function PortfolioView() {
                     key={p.id}
                     className="flex items-center gap-3 border-b border-line px-5 py-3.5 last:border-0"
                   >
+                    <TokenLogo id={p.id} symbol={p.symbol} size={30} />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground">
                         {p.symbol}

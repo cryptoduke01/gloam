@@ -10,7 +10,7 @@ export default function MarketsPage() {
   return (
     <AppShell
       title="Markets"
-      subtitle="Live marks for tokenized stocks on Robinhood Chain. Settlement stays public."
+      subtitle="Live prices for tokenized stocks on Robinhood Chain. Trade in the open, or shield them to your vault to keep your size private."
     >
       <MarketsView />
     </AppShell>

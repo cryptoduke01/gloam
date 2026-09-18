@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL } from "@/lib/faucet";
 import {
@@ -64,15 +65,17 @@ export function OnboardingCard() {
     };
   }, [open]);
 
-  if (!state || !open) return null;
+  if (!state || !open || typeof document === "undefined") return null;
 
   const remaining = ONBOARDING_STEPS.filter((s) => !state.done.includes(s.id));
   const next = remaining[0] ?? null;
   const doneCount = ONBOARDING_STEPS.length - remaining.length;
 
-  return (
+  // Portal to <body> so the fixed overlay centres in the viewport rather than
+  // inside the app's transformed (.rise) content wrapper.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Getting started"
@@ -222,6 +225,7 @@ export function OnboardingCard() {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
