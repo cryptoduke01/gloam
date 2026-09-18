@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Gloam MCP server — private execution tools for AI agents on Robinhood Chain.",
+  "description": "Gloam MCP server: private execution tools for AI agents — private stablecoin payments on Tempo and private trading on Robinhood Chain.",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",

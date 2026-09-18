@@ -2,13 +2,14 @@
 /**
  * Gloam MCP server.
  *
- * Gives an AI agent private-trading tools on Robinhood Chain, the same way
- * Robinhood's own MCP server gives it public trading. An agent adds both:
- * Robinhood for open execution, Gloam for private execution.
+ * Gives an AI agent private execution tools across Gloam's networks: private
+ * stablecoin payments on Tempo and private trading on Robinhood Chain. The x402
+ * payment tools target either network (pass `network`), so an agent can settle a
+ * 402 challenge privately in PathUSD on Tempo or in the RH asset on Robinhood.
  *
- * This v0 exposes read + planning tools that work today, and returns honest
- * "intent" objects for write actions (shield / trade / send) that need a
- * connected agent wallet with signing. It never fakes a private fill.
+ * This exposes read + planning tools that work today, and returns honest
+ * "intent" objects for write actions (shield / pay / send) that need a connected
+ * agent wallet with signing. It never fakes a private fill or settlement.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -32,6 +33,7 @@ import {
   noteCommitmentPoseidon,
   fieldToHex,
   GLOAM_VS_ZONE,
+  GLOAM_NETWORKS,
 } from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
@@ -361,19 +363,25 @@ server.registerTool(
       asset: z.string().optional().describe("Settlement token address; omit for the chain's native unit."),
       payTo: z.string().describe("Payee identity the payment note is directed to (a Gloam receive tag)."),
       resource: z.string().describe("What is being paid for: a URL or an MCP tool id."),
+      network: z
+        .enum(["robinhood", "tempo"])
+        .default("robinhood")
+        .describe("Which Gloam network to settle on. Tempo is the stablecoin-payments chain (pay in PathUSD); Robinhood is the equities chain."),
     },
   },
-  async ({ amount, decimals, assetSymbol, asset, payTo, resource }) => {
+  async ({ amount, decimals, assetSymbol, asset, payTo, resource, network }) => {
     if (asset !== undefined && !isAddress(asset)) {
       return text({ status: "error", error: `"${asset}" is not a valid token address.` });
     }
+    const net = GLOAM_NETWORKS[network];
     const req = buildGloamPaymentRequirements({
       amountWei: parseUnits(String(amount), decimals),
       asset: (asset as Address | undefined) ?? NATIVE_ASSET,
       assetSymbol,
       payTo,
       resource,
-      network: CHAIN.chainId,
+      network: net.chainId,
+      poolAddress: net.pool,
     });
     return text({
       requirements: req,
@@ -411,6 +419,9 @@ server.registerTool(
         return text({ status: "error", error: "Could not parse requirements." });
       }
     }
+    const netForReq = Object.values(GLOAM_NETWORKS).find(
+      (n) => n.chainId === Number(req.network)
+    );
     return text({
       status: "plan",
       intent: "private_pay_x402",
@@ -422,6 +433,9 @@ server.registerTool(
         payTo: req.payTo,
         pool: req.poolAddress,
       },
+      poolStatus: netForReq
+        ? `Live: pool ${netForReq.pool} on ${netForReq.label} (chain ${netForReq.chainId}).`
+        : `Unknown network ${req.network}.`,
       sdkCall:
         "buildGloamPayment({ requirements, senderSecretHex, senderNoteAmountWei, path, prove }) then sign + broadcast the returned exec (transfer), then set payload.txHash.",
       settlement:
@@ -429,7 +443,6 @@ server.registerTool(
       notVsZone: GLOAM_VS_ZONE,
       sourceNote: noteCommitment ?? null,
       remainingPrereqs: [
-        "A deployed Gloam pool on network " + req.network + " (Tempo pool is not deployed yet).",
         "A shielded note the agent holds in that pool, plus its Merkle path (via syncTree.pathForCommitment).",
         "Transfer circuit artifacts wired into this server's prover (only shield artifacts are wired today).",
       ],
