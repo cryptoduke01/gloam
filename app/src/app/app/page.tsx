@@ -11,6 +11,7 @@ export default function AppHomePage() {
     <AppShell
       title="Portfolio"
       subtitle="Your wallet, your private vault, and everything you hold."
+      subtitleTempo="Private stablecoin payments for people and agents. Your wallet, your sealed vault, one place."
     >
       <PortfolioView />
     </AppShell>

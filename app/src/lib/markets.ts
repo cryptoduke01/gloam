@@ -203,5 +203,52 @@ export function formatTokenAmount(raw: bigint, decimals = 18, maxDigits = 4) {
   const n = Number(raw) / 10 ** decimals;
   if (!Number.isFinite(n) || n === 0) return "0";
   if (n < 0.0001) return "<0.0001";
+  if (n >= 1_000_000) return compactAmount(n);
   return n.toLocaleString(undefined, { maximumFractionDigits: maxDigits });
+}
+
+/**
+ * Compact a large magnitude so it never overflows a card. Precise commas below a
+ * million, K/M/B/T suffixes through a trillion, then scientific for the truly
+ * absurd (testnet faucets hand out play-money balances in the 1e30+ range — we
+ * show them honestly, but they must never wrap the layout). Always short.
+ */
+function compactMagnitude(n: number): string {
+  const abs = Math.abs(n);
+  if (abs < 1_000_000) {
+    return n.toLocaleString(undefined, {
+      maximumFractionDigits: abs < 1 ? 4 : abs < 100 ? 2 : 0,
+    });
+  }
+  if (abs < 1e15) {
+    const units: [number, string][] = [
+      [1e12, "T"],
+      [1e9, "B"],
+      [1e6, "M"],
+    ];
+    for (const [d, suffix] of units) {
+      if (abs >= d) {
+        const v = n / d;
+        const frac = Math.abs(v) < 10 ? 2 : Math.abs(v) < 100 ? 1 : 0;
+        return `${v.toLocaleString(undefined, { maximumFractionDigits: frac })}${suffix}`;
+      }
+    }
+  }
+  const exp = Math.floor(Math.log10(abs));
+  return `${(n / 10 ** exp).toFixed(2)}e${exp}`;
+}
+
+/** Compact bare amount (no currency), e.g. 4.24e30 or 1.2M. */
+export function compactAmount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  if (n > 0 && n < 0.0001) return "<0.0001";
+  return compactMagnitude(n);
+}
+
+/** Compact USD that never overflows: precise under $1M, then $1.2M / $1.06e34. */
+export function formatUsdCompact(n: number): string {
+  if (!Number.isFinite(n)) return "$0";
+  if (n > 0 && n < 0.01) return "<$0.01";
+  if (Math.abs(n) < 1_000_000) return formatUsd(n);
+  return `$${compactMagnitude(n)}`;
 }

@@ -51,6 +51,7 @@ html[data-theme="dark"] {
   --ink: #000000;
   --lime: #c8ff00;
   --lime-dim: #a8d600;
+  --sealed: #34d17f;
   --text: #ffffff;
   --mute: #a3a3a3;
   --line: #1a1a1a;
@@ -71,8 +72,9 @@ html[data-theme="dark"] {
 html.light,
 html[data-theme="light"] {
   --ink: #121316;
-  --lime: #3b3766; /* twilight accent (indigo), the app's primary/accent */
+  --lime: #3b3766; /* twilight accent (indigo), the marketing site's accent */
   --lime-dim: #2f2c52;
+  --sealed: #2e7d53; /* the one functional accent: sealed / private / verified */
   --text: #121316;
   --mute: #6e6e76;
   --line: #e5e3dd;
@@ -84,10 +86,23 @@ html[data-theme="light"] {
   --chart-down: #c0432f;
 }
 
+/*
+ * The app workspace runs a monochrome palette: ink type + ink primary actions on
+ * paper, with green reserved strictly for the sealed / private signal. Remapping
+ * the accent slot to ink here (instead of the marketing indigo) keeps the whole
+ * workspace black + cream, so no stray blue fights the page. Scoped to `.gloam-app`
+ * so the marketing site keeps its twilight indigo.
+ */
+.gloam-app {
+  --lime: #121316;
+  --lime-dim: #2b2b30;
+}
+
 @theme inline {
   --color-ink: var(--ink);
   --color-lime: var(--lime);
   --color-lime-dim: var(--lime-dim);
+  --color-sealed: var(--sealed);
   --color-mute: var(--mute);
   --color-line: var(--line);
   --color-panel: var(--panel);

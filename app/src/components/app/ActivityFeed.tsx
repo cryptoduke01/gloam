@@ -6,7 +6,6 @@ import { formatEther } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { useActivity } from "@/hooks/useActivity";
-import { StatusPill } from "./StatusPill";
 
 const PAGE_SIZE = 5;
 
@@ -47,7 +46,6 @@ export function ActivityFeed() {
         <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
           Public activity
         </p>
-        <StatusPill>Open book</StatusPill>
       </div>
 
       {isLoading && (
@@ -93,7 +91,9 @@ export function ActivityFeed() {
                           ? "Sent"
                           : "Received"}{" "}
                       {!zero && (
-                        <span className="">{eth} ETH</span>
+                        <span>
+                          {eth} {network.primaryAsset.symbol}
+                        </span>
                       )}
                     </p>
                     <p className="truncate text-[11px] text-mute">

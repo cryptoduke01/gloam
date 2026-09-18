@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatMark, formatUsd } from "@/lib/markets";
@@ -15,9 +16,14 @@ type Filter = "all" | "onchain" | "private" | "stocks";
 /** Testnet-only markets. No mainnet memes mixed in. */
 export function MarketsView() {
   const { network } = useNetwork();
+  const router = useRouter();
   // Tokenized stock marks are a Robinhood Chain product; Tempo is stablecoin
-  // payments, with no equities to list or trade.
+  // payments, with no equities to list or trade. On Tempo there is no Markets
+  // page at all — send anyone who lands here back to the portfolio.
   const isTempo = network.key === "tempo";
+  useEffect(() => {
+    if (isTempo) router.replace("/app");
+  }, [isTempo, router]);
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<Filter>("private");
@@ -75,14 +81,8 @@ export function MarketsView() {
       </div>
 
       {isTempo ? (
-        <div className="rounded-xl border border-line bg-panel px-5 py-10 text-center">
-          <p className="mx-auto max-w-md text-sm leading-relaxed text-mute">
-            Tokenized stock markets run on{" "}
-            <span className="text-foreground">Robinhood Chain</span>. On Tempo,
-            Gloam is private stablecoin payments — shield, send, and cash out
-            from the <Link href="/app/vault" className="text-lime hover:underline">Vault</Link>.
-            Switch networks to browse and trade equities.
-          </p>
+        <div className="rounded-xl border border-line bg-panel px-5 py-10 text-center text-sm text-mute">
+          Redirecting…
         </div>
       ) : (
         <>

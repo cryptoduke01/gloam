@@ -60,6 +60,27 @@ export function formatEth(wei: bigint, digits = 4) {
   if (!Number.isFinite(whole)) return "0";
   if (whole === 0) return "0";
   if (whole < 0.0001) return "<0.0001";
+  // Testnet faucets hand out play-money balances that can run to 1e30+; compact
+  // them so a wallet card never wraps to three lines. Precise below a million.
+  if (whole >= 1_000_000) {
+    if (whole < 1e15) {
+      const units: [number, string][] = [
+        [1e12, "T"],
+        [1e9, "B"],
+        [1e6, "M"],
+      ];
+      for (const [d, suffix] of units) {
+        if (whole >= d) {
+          const v = whole / d;
+          return `${v.toLocaleString(undefined, {
+            maximumFractionDigits: v < 10 ? 2 : v < 100 ? 1 : 0,
+          })}${suffix}`;
+        }
+      }
+    }
+    const exp = Math.floor(Math.log10(whole));
+    return `${(whole / 10 ** exp).toFixed(2)}e${exp}`;
+  }
   return whole.toLocaleString(undefined, {
     maximumFractionDigits: digits,
     minimumFractionDigits: 0,

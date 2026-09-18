@@ -22,11 +22,8 @@ export function NetworkPulse() {
     );
   }
   if (!isConnected) {
-    return (
-      <StatusPill tone="mute" dot>
-        Disconnected
-      </StatusPill>
-    );
+    // No negative "disconnected" chip — the header already carries Connect.
+    return null;
   }
 
   return (

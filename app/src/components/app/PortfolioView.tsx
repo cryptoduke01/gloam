@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   useAccount,
   useBalance,
@@ -19,6 +19,7 @@ import {
   formatMark,
   formatTokenAmount,
   formatUsd,
+  formatUsdCompact,
 } from "@/lib/markets";
 import { TESTNET_STOCK_TOKENS, erc20BalanceOfAbi } from "@/lib/tokens";
 import {
@@ -28,11 +29,10 @@ import {
 } from "@/lib/shield";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
-import { OnboardingCard } from "./OnboardingCard";
+import { OnboardingCard, openOnboarding } from "./OnboardingCard";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
-import { StatusPill } from "./StatusPill";
 
 /*, small marks that carry the public / sealed duality, */
 function EyeIcon({ className = "" }: { className?: string }) {
@@ -76,7 +76,7 @@ function KindBadge({ sealed }: { sealed: boolean }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] ${
         sealed
-          ? "border-lime/40 text-lime"
+          ? "border-sealed/45 text-sealed"
           : "border-line text-mute"
       }`}
     >
@@ -103,7 +103,7 @@ function AccountCard({
     <div
       className={`rounded-2xl border border-line p-5 ${
         sealed
-          ? "bg-[color-mix(in_srgb,var(--lime)_5%,var(--panel))]"
+          ? "bg-[color-mix(in_srgb,var(--sealed)_6%,var(--panel))]"
           : "bg-panel"
       }`}
     >
@@ -121,20 +121,67 @@ function AccountCard({
   );
 }
 
+function ShieldIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 3l7 2.6v5c0 4.4-3 7.4-7 8.9-4-1.5-7-4.5-7-8.9v-5L12 3z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function SendIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 17L17 7M9 7h8v8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+function MoveIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 8h11m0 0l-3-3m3 3l-3 3M17 16H6m0 0l3-3m-3 3l3 3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function QuickAction({
   href,
   label,
+  icon,
   primary = false,
   disabled = false,
 }: {
   href: string;
   label: string;
+  icon: ReactNode;
   primary?: boolean;
   disabled?: boolean;
 }) {
+  const base =
+    "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-all active:scale-[0.98]";
   if (disabled) {
     return (
-      <span className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-4 text-sm text-mute opacity-50">
+      <span
+        className={`${base} cursor-not-allowed border border-line text-mute opacity-50`}
+        title="Not live yet"
+      >
+        {icon}
         {label}
       </span>
     );
@@ -142,12 +189,13 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold transition-all active:scale-[0.98] ${
+      className={`${base} ${
         primary
           ? "bg-lime text-background hover:opacity-90"
           : "border border-line text-foreground hover:border-mute"
       }`}
     >
+      {icon}
       {label}
     </Link>
   );
@@ -169,6 +217,12 @@ export function PortfolioView() {
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
   const markets = marketData?.markets ?? [];
+  // The native gas asset is priced differently per chain: Robinhood is ETH
+  // (marked against ETH/USD), Tempo's native currency IS the US dollar, so a
+  // unit is worth $1 — never the ETH price. The wallet card labels it with the
+  // chain's own symbol rather than a hardcoded "ETH".
+  const nativeSymbol = network.primaryAsset.symbol;
+  const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
   const { open: shieldNotes, shieldedWei, byAsset, syncing } =
     useLocalShieldNotes(address);
   const shieldLive = isShieldDeployed();
@@ -232,8 +286,8 @@ export function PortfolioView() {
       if (amount <= BigInt(0)) return;
       const label = assetLabel(asset);
       let usd: number | null = null;
-      if (isNativeAsset(asset) && ethUsd != null) {
-        usd = (Number(amount) / 1e18) * ethUsd;
+      if (isNativeAsset(asset) && nativeUsdRate != null) {
+        usd = (Number(amount) / 1e18) * nativeUsdRate;
       } else {
         const tok = TESTNET_STOCK_TOKENS.find(
           (t) => t.address.toLowerCase() === asset.toLowerCase()
@@ -248,17 +302,17 @@ export function PortfolioView() {
       if (isNativeAsset(b.asset)) return 1;
       return a.label.localeCompare(b.label);
     });
-  }, [byAsset, ethUsd, markets]);
+  }, [byAsset, nativeUsdRate, markets]);
 
   const ethAmt = bal ? Number(bal.value) / 1e18 : 0;
   const shieldEthUsd =
-    ethUsd != null && shieldedWei > BigInt(0)
-      ? (Number(shieldedWei) / 1e18) * ethUsd
+    nativeUsdRate != null && shieldedWei > BigInt(0)
+      ? (Number(shieldedWei) / 1e18) * nativeUsdRate
       : 0;
   const shieldStocksUsd = shieldRows
     .filter((r) => !isNativeAsset(r.asset))
     .reduce((s, r) => s + (r.usd ?? 0), 0);
-  const ethUsdVal = ethUsd != null ? ethAmt * ethUsd : null;
+  const ethUsdVal = nativeUsdRate != null ? ethAmt * nativeUsdRate : null;
   const stocksUsd = positions.reduce((s, p) => s + p.usd, 0);
   const totalUsd =
     ethUsdVal != null
@@ -288,15 +342,15 @@ export function PortfolioView() {
   const totalDisplay = !balancesVisible
     ? "—"
     : totalUsd != null && settings.showUsd
-      ? formatUsd(totalUsd)
-      : `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ETH`;
+      ? formatUsdCompact(totalUsd)
+      : `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ${nativeSymbol}`;
 
   const walletValue = !balancesVisible
     ? "—"
-    : `${formatEth(bal?.value ?? BigInt(0))} ETH`;
+    : `${formatEth(bal?.value ?? BigInt(0))} ${nativeSymbol}`;
   const walletSub =
     balancesVisible && ethUsdVal != null && settings.showUsd
-      ? formatUsd(ethUsdVal)
+      ? formatUsdCompact(ethUsdVal)
       : "Open wallet";
 
   const vaultValue = !balancesVisible
@@ -315,17 +369,18 @@ export function PortfolioView() {
       ? "Shield to deposit"
       : "Not live"
     : settings.showUsd && sealedUsd > 0
-      ? formatUsd(sealedUsd)
+      ? formatUsdCompact(sealedUsd)
       : "Size hidden onchain";
 
   const stocksValue = !balancesVisible
     ? "—"
     : settings.showUsd && stocksUsd > 0
-      ? formatUsd(stocksUsd)
+      ? formatUsdCompact(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
   return (
     <div className="space-y-5">
+      <OnboardingCard />
       {/*, Balance strip: total + public/sealed allocation + quick actions, */}
       <div className="overflow-hidden rounded-2xl border border-line bg-panel">
         <div className="flex gap-6 p-6 max-lg:flex-col lg:items-center lg:justify-between lg:gap-10">
@@ -341,11 +396,19 @@ export function PortfolioView() {
               >
                 Get testnet funds →
               </a>
+              <span className="text-line">·</span>
+              <button
+                type="button"
+                onClick={openOnboarding}
+                className="text-xs text-mute transition-colors hover:text-lime"
+              >
+                Getting started
+              </button>
             </div>
             <p className="mt-5 text-[10px] uppercase tracking-[0.18em] text-mute">
               Total value
             </p>
-            <p className="tnum mt-1 break-all font-display text-4xl tracking-tight text-foreground sm:text-5xl">
+            <p className="tnum mt-1 font-display text-4xl leading-none tracking-tight text-foreground sm:text-5xl">
               {totalDisplay}
             </p>
 
@@ -362,7 +425,7 @@ export function PortfolioView() {
                       style={{ width: `${100 - sealedPct}%` }}
                     />
                     <span
-                      className="h-full bg-lime"
+                      className="h-full bg-sealed"
                       style={{ width: `${sealedPct}%` }}
                     />
                   </>
@@ -376,7 +439,7 @@ export function PortfolioView() {
                   Public{sealedPct != null ? ` ${100 - sealedPct}%` : ""}
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-lime" />
+                  <span className="h-2 w-2 rounded-full bg-sealed" />
                   Sealed{sealedPct != null ? ` ${sealedPct}%` : ""}
                 </span>
               </div>
@@ -384,15 +447,25 @@ export function PortfolioView() {
           </div>
 
           {/* quick actions */}
-          <div className="grid shrink-0 grid-cols-2 gap-2.5 max-lg:w-full lg:w-[300px]">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <QuickAction
               href="/app/shield"
               label="Shield"
+              icon={<ShieldIcon />}
               primary
               disabled={!shieldLive}
             />
-            <QuickAction href="/app/send" label="Send" />
-            <QuickAction href="/app/move" label="Move" disabled={!shieldLive} />
+            <QuickAction
+              href="/app/send"
+              label="Send"
+              icon={<SendIcon />}
+            />
+            <QuickAction
+              href="/app/move"
+              label="Move"
+              icon={<MoveIcon />}
+              disabled={!shieldLive}
+            />
           </div>
         </div>
 
@@ -440,7 +513,7 @@ export function PortfolioView() {
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="space-y-4 lg:col-span-8">
           {shieldNotes.length > 0 && (
-            <section className="overflow-hidden rounded-2xl border border-line bg-[color-mix(in_srgb,var(--lime)_4%,var(--panel))]">
+            <section className="overflow-hidden rounded-2xl border border-line bg-[color-mix(in_srgb,var(--sealed)_5%,var(--panel))]">
               <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-mute">
                   In the vault
@@ -475,7 +548,7 @@ export function PortfolioView() {
                           href={network.explorerTx(n.txHash)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-lime hover:underline"
+                          className="text-xs text-sealed hover:underline"
                         >
                           Tx
                         </a>
@@ -492,7 +565,7 @@ export function PortfolioView() {
                                 )?.id ?? "tsla"
                               }`
                         }
-                        className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
+                        className="inline-flex min-h-9 items-center rounded-md border border-sealed/35 px-2.5 text-xs text-sealed hover:border-sealed/60"
                       >
                         Trade
                       </Link>
@@ -515,7 +588,6 @@ export function PortfolioView() {
               <p className="text-[10px] uppercase tracking-[0.16em] text-mute">
                 Holdings
               </p>
-              <StatusPill tone="lime">Onchain</StatusPill>
             </header>
             {!balancesVisible ? (
               <p className="px-5 py-10 text-center text-sm text-mute">
@@ -543,16 +615,9 @@ export function PortfolioView() {
                     className="flex items-center gap-3 border-b border-line px-5 py-3.5 last:border-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-foreground">
-                          {p.symbol}
-                        </p>
-                        {p.live && (
-                          <StatusPill tone="lime" dot>
-                            Live
-                          </StatusPill>
-                        )}
-                      </div>
+                      <p className="font-medium text-foreground">
+                        {p.symbol}
+                      </p>
                       <p className="text-xs text-mute">{p.name}</p>
                     </div>
                     <Sparkline
@@ -603,7 +668,6 @@ export function PortfolioView() {
         </div>
 
         <div className="space-y-4 lg:col-span-4">
-          <OnboardingCard />
           <ActivityFeed />
         </div>
       </div>
