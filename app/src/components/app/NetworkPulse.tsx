@@ -14,15 +14,10 @@ export function NetworkPulse() {
   const onProduct = chainId === network.chainId;
   const [busy, setBusy] = useState(false);
 
-  if (onProduct) {
-    return (
-      <StatusPill tone="lime" dot>
-        Testnet
-      </StatusPill>
-    );
-  }
-  if (!isConnected) {
-    // No negative "disconnected" chip — the header already carries Connect.
+  // On the right network (or not yet connected) there is no status chip — the
+  // header's network selector already names the chain. Only surface a control
+  // when the wallet is on the wrong chain and needs switching.
+  if (onProduct || !isConnected) {
     return null;
   }
 

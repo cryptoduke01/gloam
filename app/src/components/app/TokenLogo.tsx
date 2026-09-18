@@ -25,23 +25,33 @@ function tileColor(seed: string): string {
   return TILE_COLORS[h % TILE_COLORS.length];
 }
 
-/** Real brand marks that ship in /public/brand/logos. Anything else = monogram. */
-const KNOWN_LOGOS: Record<string, string> = {
-  tsla: "/brand/logos/tsla.png",
-  amzn: "/brand/logos/amzn.png",
-  pltr: "/brand/logos/pltr.png",
-  nflx: "/brand/logos/nflx.png",
-  amd: "/brand/logos/amd.png",
-  hood: "/brand/logos/hood.png",
-  aapl: "/brand/logos/aapl.png",
-  nvda: "/brand/logos/nvda.png",
-  msft: "/brand/logos/msft.png",
-  googl: "/brand/logos/googl.png",
-  meta: "/brand/logos/meta.png",
-  coin: "/brand/logos/coin.png",
-  robinhood: "/brand/logos/robinhood.png",
+/**
+ * Ids with a real brand mark shipped in /public/brand/logos as `<id>.png`.
+ * Anything not in the set (or SPECIAL) falls back to a monogram — no 404.
+ */
+const PNG_LOGO_IDS = new Set([
+  // onchain-tradeable
+  "tsla", "amzn", "pltr", "nflx", "amd",
+  // watchlist (Aumo app-icon set + FMP)
+  "hood", "aapl", "nvda", "msft", "googl", "meta", "coin",
+  "goog", "avgo", "orcl", "crm", "adbe", "intc", "qcom", "mu", "ibm", "csco",
+  "dis", "uber", "abnb", "shop", "pypl", "sbux", "nke", "mcd", "ko", "wmt",
+  "cost", "jpm", "v", "ma", "mstr", "gme", "rblx", "rddt", "snap", "f",
+  "rivn", "baba", "spot",
+  // networks
+  "robinhood",
+]);
+
+const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
 };
+
+function resolveLogo(id: string): string | undefined {
+  const key = id.toLowerCase();
+  if (SPECIAL_LOGOS[key]) return SPECIAL_LOGOS[key];
+  if (PNG_LOGO_IDS.has(key)) return `/brand/logos/${key}.png`;
+  return undefined;
+}
 
 export function TokenLogo({
   id,
@@ -64,7 +74,7 @@ export function TokenLogo({
   // Scale the ticker to fit the tile: shorter tickers read larger.
   const fontRatio =
     label.length <= 2 ? 0.4 : label.length === 3 ? 0.32 : 0.26;
-  const src = logoSrc ?? KNOWN_LOGOS[id.toLowerCase()];
+  const src = logoSrc ?? resolveLogo(id);
 
   if (src && !broken) {
     return (

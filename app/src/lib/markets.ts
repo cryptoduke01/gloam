@@ -149,6 +149,40 @@ export const MARKET_DEFS: MarketDef[] = [
     fallbackMark: 580,
     privateReady: false,
   },
+  // Extended equity watchlist (live marks via Yahoo, view-only for now)
+  { id: "goog", symbol: "GOOG", name: "Alphabet", kind: "stock", yahoo: "GOOG", fallbackMark: 175, privateReady: false },
+  { id: "avgo", symbol: "AVGO", name: "Broadcom", kind: "stock", yahoo: "AVGO", fallbackMark: 170, privateReady: false },
+  { id: "orcl", symbol: "ORCL", name: "Oracle", kind: "stock", yahoo: "ORCL", fallbackMark: 175, privateReady: false },
+  { id: "crm", symbol: "CRM", name: "Salesforce", kind: "stock", yahoo: "CRM", fallbackMark: 260, privateReady: false },
+  { id: "adbe", symbol: "ADBE", name: "Adobe", kind: "stock", yahoo: "ADBE", fallbackMark: 520, privateReady: false },
+  { id: "intc", symbol: "INTC", name: "Intel", kind: "stock", yahoo: "INTC", fallbackMark: 24, privateReady: false },
+  { id: "qcom", symbol: "QCOM", name: "Qualcomm", kind: "stock", yahoo: "QCOM", fallbackMark: 170, privateReady: false },
+  { id: "mu", symbol: "MU", name: "Micron", kind: "stock", yahoo: "MU", fallbackMark: 110, privateReady: false },
+  { id: "ibm", symbol: "IBM", name: "IBM", kind: "stock", yahoo: "IBM", fallbackMark: 230, privateReady: false },
+  { id: "csco", symbol: "CSCO", name: "Cisco", kind: "stock", yahoo: "CSCO", fallbackMark: 50, privateReady: false },
+  { id: "dis", symbol: "DIS", name: "Disney", kind: "stock", yahoo: "DIS", fallbackMark: 95, privateReady: false },
+  { id: "uber", symbol: "UBER", name: "Uber", kind: "stock", yahoo: "UBER", fallbackMark: 75, privateReady: false },
+  { id: "abnb", symbol: "ABNB", name: "Airbnb", kind: "stock", yahoo: "ABNB", fallbackMark: 130, privateReady: false },
+  { id: "shop", symbol: "SHOP", name: "Shopify", kind: "stock", yahoo: "SHOP", fallbackMark: 90, privateReady: false },
+  { id: "pypl", symbol: "PYPL", name: "PayPal", kind: "stock", yahoo: "PYPL", fallbackMark: 75, privateReady: false },
+  { id: "sbux", symbol: "SBUX", name: "Starbucks", kind: "stock", yahoo: "SBUX", fallbackMark: 95, privateReady: false },
+  { id: "nke", symbol: "NKE", name: "Nike", kind: "stock", yahoo: "NKE", fallbackMark: 75, privateReady: false },
+  { id: "mcd", symbol: "MCD", name: "McDonald's", kind: "stock", yahoo: "MCD", fallbackMark: 300, privateReady: false },
+  { id: "ko", symbol: "KO", name: "Coca-Cola", kind: "stock", yahoo: "KO", fallbackMark: 70, privateReady: false },
+  { id: "wmt", symbol: "WMT", name: "Walmart", kind: "stock", yahoo: "WMT", fallbackMark: 95, privateReady: false },
+  { id: "cost", symbol: "COST", name: "Costco", kind: "stock", yahoo: "COST", fallbackMark: 900, privateReady: false },
+  { id: "jpm", symbol: "JPM", name: "JPMorgan", kind: "stock", yahoo: "JPM", fallbackMark: 290, privateReady: false },
+  { id: "v", symbol: "V", name: "Visa", kind: "stock", yahoo: "V", fallbackMark: 350, privateReady: false },
+  { id: "ma", symbol: "MA", name: "Mastercard", kind: "stock", yahoo: "MA", fallbackMark: 560, privateReady: false },
+  { id: "mstr", symbol: "MSTR", name: "Strategy", kind: "stock", yahoo: "MSTR", fallbackMark: 350, privateReady: false },
+  { id: "gme", symbol: "GME", name: "GameStop", kind: "stock", yahoo: "GME", fallbackMark: 25, privateReady: false },
+  { id: "rblx", symbol: "RBLX", name: "Roblox", kind: "stock", yahoo: "RBLX", fallbackMark: 55, privateReady: false },
+  { id: "rddt", symbol: "RDDT", name: "Reddit", kind: "stock", yahoo: "RDDT", fallbackMark: 130, privateReady: false },
+  { id: "snap", symbol: "SNAP", name: "Snap", kind: "stock", yahoo: "SNAP", fallbackMark: 9, privateReady: false },
+  { id: "f", symbol: "F", name: "Ford", kind: "stock", yahoo: "F", fallbackMark: 11, privateReady: false },
+  { id: "rivn", symbol: "RIVN", name: "Rivian", kind: "stock", yahoo: "RIVN", fallbackMark: 14, privateReady: false },
+  { id: "baba", symbol: "BABA", name: "Alibaba", kind: "stock", yahoo: "BABA", fallbackMark: 120, privateReady: false },
+  { id: "spot", symbol: "SPOT", name: "Spotify", kind: "stock", yahoo: "SPOT", fallbackMark: 600, privateReady: false },
   // Native gas
   {
     id: "eth",
@@ -209,9 +243,10 @@ export function formatTokenAmount(raw: bigint, decimals = 18, maxDigits = 4) {
 
 /**
  * Compact a large magnitude so it never overflows a card. Precise commas below a
- * million, K/M/B/T suffixes through a trillion, then scientific for the truly
- * absurd (testnet faucets hand out play-money balances in the 1e30+ range — we
- * show them honestly, but they must never wrap the layout). Always short.
+ * million, then K/M/B suffixes, and a clean "1T+" cap above a trillion. Nothing
+ * real reaches a trillion, so the cap only ever catches testnet faucet balances
+ * (which come back absurdly large) — we show those as "1T+" rather than an ugly
+ * scientific string. Always short.
  */
 function compactMagnitude(n: number): string {
   const abs = Math.abs(n);
@@ -220,22 +255,19 @@ function compactMagnitude(n: number): string {
       maximumFractionDigits: abs < 1 ? 4 : abs < 100 ? 2 : 0,
     });
   }
-  if (abs < 1e15) {
-    const units: [number, string][] = [
-      [1e12, "T"],
-      [1e9, "B"],
-      [1e6, "M"],
-    ];
-    for (const [d, suffix] of units) {
-      if (abs >= d) {
-        const v = n / d;
-        const frac = Math.abs(v) < 10 ? 2 : Math.abs(v) < 100 ? 1 : 0;
-        return `${v.toLocaleString(undefined, { maximumFractionDigits: frac })}${suffix}`;
-      }
+  if (abs >= 1e12) return `${n < 0 ? "-" : ""}1T+`;
+  const units: [number, string][] = [
+    [1e9, "B"],
+    [1e6, "M"],
+  ];
+  for (const [d, suffix] of units) {
+    if (abs >= d) {
+      const v = n / d;
+      const frac = Math.abs(v) < 10 ? 2 : Math.abs(v) < 100 ? 1 : 0;
+      return `${v.toLocaleString(undefined, { maximumFractionDigits: frac })}${suffix}`;
     }
   }
-  const exp = Math.floor(Math.log10(abs));
-  return `${(n / 10 ** exp).toFixed(2)}e${exp}`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 /** Compact bare amount (no currency), e.g. 4.24e30 or 1.2M. */
