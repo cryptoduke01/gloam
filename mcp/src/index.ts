@@ -38,9 +38,30 @@ import {
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
 import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+import { networkByKey, networkByChainId, MCP_NETWORKS } from "./networks.js";
 
-/** Deploy block of the sealed Poseidon pool on RH testnet (tree scan start). */
-const POOL_DEPLOY_BLOCK = 110_840_714n;
+const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
 
 const server = new McpServer({ name: "gloam", version: "0.1.0" });
 
@@ -250,20 +271,41 @@ server.registerTool(
   {
     title: "Execute a private shield",
     description:
-      "Deposit ETH into a PRIVATE balance on Robinhood Chain. Mints a note, generates the Groth16 shield proof server-side, and broadcasts shieldBound(). This is the real private-execution rail: the agent ends up holding a shielded balance only it can spend. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan. The returned note secret is the ONLY authority to spend the balance later, so the agent must persist it.",
+      "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token, e.g. PathUSD on Tempo). The agent ends up holding a shielded balance only it can spend. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan. The returned note secret is the ONLY authority to spend the balance later, so the agent must persist it.",
     inputSchema: {
-      eth: z
+      amount: z
         .number()
         .positive()
-        .describe("Amount of testnet ETH to shield into a private balance."),
+        .describe("Amount to shield into a private balance, in the asset's units (e.g. PathUSD on Tempo, ETH on Robinhood)."),
+      network: z
+        .enum(["robinhood", "tempo"])
+        .default("robinhood")
+        .describe("Which network to shield on. Tempo shields the PathUSD stablecoin; Robinhood shields native ETH by default."),
+      asset: z
+        .string()
+        .optional()
+        .describe("ERC-20 token address to shield; omit to use the network default (PathUSD on Tempo, native ETH on Robinhood)."),
+      decimals: z
+        .number()
+        .int()
+        .optional()
+        .describe("Decimals of the asset; omit to use the network default (6 for PathUSD, 18 for ETH)."),
     },
   },
-  async ({ eth }) => {
-    const signer = getSigner();
+  async ({ amount, network, asset, decimals }) => {
+    if (asset !== undefined && !isAddress(asset)) {
+      return text({ status: "error", error: `"${asset}" is not a valid token address.` });
+    }
+    const net = networkByKey(network);
+    const assetAddr = (asset as Address | undefined) ?? net.defaultAsset;
+    const dec = decimals ?? (asset ? 18 : net.defaultAssetDecimals);
+    const amountWei = parseUnits(String(amount), dec);
+    const isNative = assetAddr.toLowerCase() === NATIVE_ASSET.toLowerCase();
+    const signer = getSigner(net);
     if (!signer) {
       return text({
         status: "no_signer",
-        plan: { action: "shield", eth, chainId: CHAIN.chainId, pool: SEALED_VAULT },
+        plan: { action: "shield", amount, asset: assetAddr, network: net.key, chainId: net.chainId, pool: net.pool },
         message:
           "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
       });
@@ -271,9 +313,23 @@ server.registerTool(
     try {
       const { wasm, zkey } = await shieldArtifacts();
       const intent = await buildShieldBoundIntent({
-        amountWei: parseEther(String(eth)),
+        amountWei,
+        asset: assetAddr,
+        poolAddress: net.pool,
         prover: artifactProver({ wasm, zkey }),
       });
+      // ERC-20 shields (e.g. PathUSD on Tempo) approve the pool to pull the
+      // tokens before shieldBound; native shields carry value instead.
+      let approveHash: `0x${string}` | undefined;
+      if (!isNative) {
+        approveHash = await signer.walletClient.writeContract({
+          address: assetAddr,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [net.pool, amountWei],
+        });
+        await signer.publicClient.waitForTransactionReceipt({ hash: approveHash });
+      }
       const hash = await signer.walletClient.writeContract({
         address: intent.exec.poolAddress,
         abi: shieldPoolAbi,
@@ -283,15 +339,20 @@ server.registerTool(
       });
       return text({
         status: "submitted",
+        network: net.key,
+        approveHash,
         hash,
         from: signer.account.address,
-        explorer: `${CHAIN.explorer}/tx/${hash}`,
+        explorer: `${net.explorer}/tx/${hash}`,
         note: {
           commitment: intent.note.commitment,
           secret: intent.note.secret,
+          amountWei: amountWei.toString(),
+          asset: assetAddr,
+          decimals: dec,
         },
         persist:
-          "Store note.secret. It is the only authority to spend this private balance; losing it loses the funds.",
+          "Store note.secret and note.amountWei. They are the only authority to spend this private balance; losing them loses the funds.",
         privacy:
           "The deposit amount is public. The note hides who can spend it, so future private sends are unlinkable to this deposit.",
       });
@@ -499,35 +560,40 @@ server.registerTool(
     inputSchema: {
       requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or raw JSON)."),
       noteSecret: z.string().describe("The 0x secret of a note the agent already holds in the pool."),
-      noteEth: z.number().positive().describe("The full ETH amount of that note (its value, not the payment amount)."),
+      noteAmount: z.number().positive().describe("The full amount of that note in the asset's units (its value, not the payment amount)."),
+      decimals: z.number().int().optional().describe("Decimals of the note's asset; omit to use the network default (6 for PathUSD, 18 for ETH)."),
       issuerTag: z.string().optional().describe("Optional issuer tag to attach a compliance disclosure."),
     },
   },
-  async ({ requirements, noteSecret, noteEth, issuerTag }) => {
+  async ({ requirements, noteSecret, noteAmount, decimals, issuerTag }) => {
     let req;
     try {
       req = decodeRequirements(requirements);
     } catch {
       try { req = JSON.parse(requirements); } catch { return text({ status: "error", error: "Could not parse requirements." }); }
     }
-    const signer = getSigner();
+    // The requirements name the network to settle on; use it for the signer,
+    // tree scan, and explorer so an agent can pay privately on Tempo or Robinhood.
+    const net = networkByChainId(Number(req.network)) ?? MCP_NETWORKS.robinhood;
+    const signer = getSigner(net);
     if (!signer) {
       return text({
         status: "no_signer",
-        plan: { action: "private_pay_x402", pay: req.maxAmountRequired, asset: req.asset, payTo: req.payTo, pool: req.poolAddress },
+        plan: { action: "private_pay_x402", network: net.key, pay: req.maxAmountRequired, asset: req.asset, payTo: req.payTo, pool: req.poolAddress },
         message: "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
         notVsZone: GLOAM_VS_ZONE.oneLine,
       });
     }
     try {
-      const noteAmountWei = parseEther(String(noteEth));
+      const dec = decimals ?? net.defaultAssetDecimals;
+      const noteAmountWei = parseUnits(String(noteAmount), dec);
       const asset = (req.asset as Address) ?? NATIVE_ASSET;
       const commitment = fieldToHex(
         await noteCommitmentPoseidon(BigInt(noteSecret), noteAmountWei, asset)
       );
       const synced = await syncTree(signer.publicClient, {
         pool: req.poolAddress as Address,
-        fromBlock: POOL_DEPLOY_BLOCK,
+        fromBlock: net.deployBlock,
       });
       const path = await synced.pathForCommitment(commitment);
       if (!path) {
@@ -556,8 +622,9 @@ server.registerTool(
       const verify = verifyGloamPayment({ requirements: req, payload: payment.payload });
       return text({
         status: "submitted",
+        network: net.key,
         hash,
-        explorer: `${CHAIN.explorer}/tx/${hash}`,
+        explorer: `${net.explorer}/tx/${hash}`,
         verify,
         paymentNote: {
           secret: payment.paymentNote.secret,
