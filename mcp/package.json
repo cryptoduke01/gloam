@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
+    "demo:tempo": "tsx scripts/demo-tempo-agent.mts",
     "verify:prover": "tsx scripts/verify-transfer-prover.mjs"
   },
   "dependencies": {
