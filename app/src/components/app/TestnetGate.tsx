@@ -23,17 +23,17 @@ const plates = [
   {
     src: "/ascii/shield.png",
     title: "Shield",
-    body: "Park assets in the vault. Your open wallet no longer shows that bag.",
+    body: "Add money to your vault. Your public wallet stops showing it.",
   },
   {
     src: "/ascii/move.png",
     title: "Private pay",
-    body: "Send inside the vault with a receive tag, not a public transfer.",
+    body: "Pay someone with a Gloam address, not a public transfer.",
   },
   {
     src: "/ascii/trade.png",
     title: "Trade",
-    body: "Vault adapter today; sealed-size private trade on the roadmap.",
+    body: "Private balances and payments today. Private trading is coming.",
   },
 ] as const;
 

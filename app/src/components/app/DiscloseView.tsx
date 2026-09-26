@@ -67,14 +67,14 @@ export function DiscloseView() {
 
         {!address && (
           <div className="rounded-2xl border border-line bg-panel p-6 text-sm text-mute">
-            Connect your wallet to see the notes you can disclose.
+            Connect your wallet to see the balances you can prove.
           </div>
         )}
 
         {address && notes.length === 0 && (
           <div className="rounded-2xl border border-line bg-panel p-6 text-sm text-mute">
-            No shielded notes yet. Shield a balance first, then you can prove it
-            here without revealing anything else.
+            No private balances yet. Add money to your vault first, then you can
+            prove it here without revealing anything else.
           </div>
         )}
 
@@ -93,7 +93,7 @@ export function DiscloseView() {
                     </span>{" "}
                     {assetLabel(n.asset)}
                   </p>
-                  <p className="mt-1 text-[11px] text-mute">Shielded note</p>
+                  <p className="mt-1 text-[11px] text-mute">Private balance</p>
                 </div>
                 <button
                   type="button"
@@ -101,14 +101,14 @@ export function DiscloseView() {
                   disabled={busyId === n.id}
                   className="inline-flex min-h-10 items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {busyId === n.id ? "Proving…" : "Create disclosure"}
+                  {busyId === n.id ? "Proving…" : "Create proof"}
                 </button>
               </div>
 
               {token && (
                 <div className="mt-4 border-t border-line pt-4">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                    Share this with the party you choose
+                    Share this with whoever you choose
                   </p>
                   <textarea
                     readOnly
@@ -144,9 +144,9 @@ export function DiscloseView() {
             What this proves
           </span>
           <p className="mt-2 text-sm leading-relaxed text-foreground/80">
-            A disclosure proves you own a specific shielded balance in the vault,
-            to a party you choose. It reveals only that one note. Your identity,
-            your note secret, and every other holding stay private.
+            This proves you hold a specific balance in your vault, to whoever you
+            choose. It reveals only that one balance. Your identity and everything
+            else stay private.
           </p>
         </div>
         <div className="rounded-2xl border border-line p-5 sm:p-6">

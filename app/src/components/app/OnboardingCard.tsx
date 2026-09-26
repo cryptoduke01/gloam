@@ -113,13 +113,13 @@ export function OnboardingCard() {
         <div className="px-6 py-5">
           {remaining.length === 0 ? (
             <p className="text-sm leading-relaxed text-mute">
-              Your private vault path is ready. Shield, pay, and prove a balance
-              whenever you like.
+              You&apos;re ready. Add money privately, send it, and prove what you
+              hold whenever you like.
             </p>
           ) : (
             <>
               <div className="flex items-center justify-between text-xs text-mute">
-                <span>The private vault path, end to end.</span>
+                <span>A few steps to get going.</span>
                 <span className="tnum">
                   {doneCount}/{ONBOARDING_STEPS.length}
                 </span>

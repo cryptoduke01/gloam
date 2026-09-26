@@ -389,11 +389,11 @@ export function PortfolioView() {
         : `${shieldRows.length} assets`;
   const vaultSub = !hasShield
     ? shieldLive
-      ? "Shield to deposit"
-      : "Not live"
+      ? "Add money to start"
+      : "Not live yet"
     : settings.showUsd && sealedUsd > 0
       ? formatUsdCompact(sealedUsd)
-      : "Size hidden onchain";
+      : "Amount stays hidden";
 
   const stocksValue = !balancesVisible
     ? settings.showUsd
@@ -564,8 +564,8 @@ export function PortfolioView() {
                       </p>
                       <p className="mt-0.5 text-xs text-mute">
                         {n.leafIndex != null
-                          ? "Ready to private trade, send, or cash out"
-                          : "Linking to vault…"}
+                          ? "Ready to send privately or cash out"
+                          : "Confirming…"}
                         {n.source === "local" && n.id.startsWith("imp-")
                           ? " · received"
                           : ""}

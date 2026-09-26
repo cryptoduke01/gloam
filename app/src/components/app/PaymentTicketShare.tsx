@@ -37,7 +37,7 @@ export function PaymentTicketShare({
         if (!cancelled) setQrDataUrl(url);
       } catch {
         if (!cancelled) {
-          setQrError("QR unavailable, copy the code instead.");
+          setQrError("QR code not available. Copy the code instead.");
         }
       }
     })();
@@ -70,10 +70,10 @@ export function PaymentTicketShare({
     if (!navigator.share) return;
     try {
       await navigator.share({
-        title: "Gloam payment ticket",
+        title: "Gloam payment",
         text: locked
-          ? `Gloam vault payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. Code is locked, ask me for the passphrase separately.\n\n${code}`
-          : `Gloam vault payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. Claim under Move → Claim ticket.\n\n${code}`,
+          ? `Gloam private payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. This is locked. Ask me for the passphrase separately.\n\n${code}`
+          : `Gloam private payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. To claim, open Move, then Claim.\n\n${code}`,
       });
       setShared(true);
       setTimeout(() => setShared(false), 2000);
@@ -89,25 +89,25 @@ export function PaymentTicketShare({
     <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
       <p className="text-sm font-medium text-foreground">
         {code.startsWith("gloamr1.")
-          ? "Your receive tag"
-          : "Payment package ready"}
+          ? "Your Gloam address"
+          : "Claim link ready"}
         {amountLabel ? ` · ${amountLabel} ETH` : ""}
-        {locked ? " · encrypted" : ""}
+        {locked ? " · locked" : ""}
       </p>
       <p className="mt-1 text-xs text-mute">
         {code.startsWith("gloamr1.") ? (
           <>
-            Share this tag so others can{" "}
+            Share this address so others can{" "}
             <strong className="text-foreground">Private pay → Direct</strong>{" "}
-            to you. Not a public chain address.
+            to you. It is not a public wallet address.
           </>
         ) : (
           <>
-            Hand off off-app (message, AirDrop, QR). They open{" "}
+            Send it any way you like (message, AirDrop, QR). They open{" "}
             <strong className="text-foreground">Move → Receive</strong>.
             {locked
-              ? " Encrypted, only the intended key/passphrase opens it."
-              : " Bearer ticket, treat like cash."}
+              ? " It is locked. Only the right passphrase opens it."
+              : " Anyone with this link can claim it, so treat it like cash."}
           </>
         )}
       </p>
@@ -117,7 +117,7 @@ export function PaymentTicketShare({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={qrDataUrl}
-            alt="Payment ticket QR"
+            alt="Payment QR code"
             className="h-[140px] w-[140px] shrink-0 rounded-lg border border-line bg-white p-1"
           />
         ) : (
@@ -135,7 +135,7 @@ export function PaymentTicketShare({
               onClick={() => void copy()}
               className="inline-flex min-h-10 items-center justify-center rounded-xl border border-lime/40 text-sm font-medium text-lime hover:bg-lime/10"
             >
-              {copied ? "Copied" : "Copy ticket"}
+              {copied ? "Copied" : "Copy code"}
             </button>
             <button
               type="button"

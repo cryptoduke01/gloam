@@ -22,7 +22,7 @@ const nav: NavItem[] = [
   { href: "/app", label: "Portfolio", exact: true },
   { href: "/app/vault", label: "Vault" }, // shield · trade · send · cash out
   { href: "/app/markets", label: "Markets", robinhoodOnly: true },
-  { href: "/app/disclose", label: "Disclose" }, // selective disclosure
+  { href: "/app/disclose", label: "Prove" }, // prove you hold a balance
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {

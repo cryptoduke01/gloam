@@ -298,7 +298,7 @@ export function MoveView() {
 
     if (poolForCashOut != null && poolForCashOut < BigInt(selected.amountWei)) {
       setError(
-        `Vault inventory too low for this cash out (${formatSealedAmount(poolForCashOut)} available, need ${formatSealedAmount(BigInt(selected.amountWei))}). Someone must shield more of this asset first.`
+        `Not enough in the shared vault to cash out right now (${formatSealedAmount(poolForCashOut)} available, need ${formatSealedAmount(BigInt(selected.amountWei))}). Someone needs to add more of this asset first.`
       );
       return;
     }
@@ -423,7 +423,7 @@ export function MoveView() {
         const tag = recipientTag.trim();
         if (!isReceiveTag(tag)) {
           throw new Error(
-            "Paste their Gloam receive tag (gloamr1…) for direct private pay."
+            "Paste their Gloam address (gloamr1…) to pay them privately."
           );
         }
         const plain = encodeNotePackage(pack);
@@ -491,7 +491,7 @@ export function MoveView() {
   async function scanInbox() {
     if (!isPayMemoLive()) {
       setInboxStatus(
-        "On-chain memo board not deployed yet, paste ticket manually or deploy GloamPayMemo."
+        "Message board not available yet. Share the claim link manually."
       );
       return;
     }
@@ -638,7 +638,7 @@ export function MoveView() {
           }
           if (isEncryptedPackage(t) && !importPassphrase.trim()) {
             if (!cancelled) {
-              setClaimPreview("Passphrase-locked ticket, enter the phrase to preview.");
+              setClaimPreview("This claim link is locked. Enter the phrase to preview.");
             }
             return;
           }
@@ -776,7 +776,7 @@ export function MoveView() {
                             if (v.startsWith("gloamr1.")) setPayStyle("direct");
                             else if (v === "") setPayStyle("direct");
                           }}
-                          placeholder="Their gloamr1… receive tag"
+                          placeholder="Their Gloam address (gloamr1…)"
                           className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                         />
                         <p className="mt-1 text-xs text-mute">
@@ -860,7 +860,7 @@ export function MoveView() {
                           >
                             {payStyle === "bearer"
                               ? "← Back to pay by tag"
-                              : "Advanced: bearer ticket (no tag) →"}
+                              : "Advanced: claim link (no address) →"}
                           </button>
                           {payStyle === "bearer" && (
                             <div className="mt-2">
@@ -1055,13 +1055,13 @@ export function MoveView() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
                     <p className="text-sm font-medium text-foreground">
-                      Your receive tag (direct private pay)
+                      Your Gloam address
                     </p>
                     <p className="mt-1 text-xs text-mute">
-                      Share this once, others paste it under Private pay →
-                      Direct. Encrypted tickets only open in{" "}
-                      <strong className="text-foreground">this browser</strong>{" "}
-                      (back up notes if you clear data).
+                      Share this once. Others paste it to pay you privately.
+                      Payments only open in{" "}
+                      <strong className="text-foreground">this browser</strong>,
+                      so back up your account if you clear your data.
                     </p>
                     {myIdentity ? (
                       <>
@@ -1129,7 +1129,7 @@ export function MoveView() {
                       automatically, no QR needed.{" "}
                       {isPayMemoLive()
                         ? "Inbox is live."
-                        : "Inbox not deployed yet, paste the ticket below."}
+                        : "Inbox not available yet. Paste the claim link below."}
                     </p>
                     {inboxStatus && (
                       <p className="mt-2 text-xs text-mute">{inboxStatus}</p>
@@ -1196,7 +1196,7 @@ export function MoveView() {
                           autoComplete="off"
                           value={importPassphrase}
                           onChange={(e) => setImportPassphrase(e.target.value)}
-                          placeholder="Bearer lock phrase"
+                          placeholder="Claim link phrase"
                           className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
                         />
                       </div>

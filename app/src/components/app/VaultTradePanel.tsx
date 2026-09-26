@@ -271,7 +271,7 @@ export function VaultTradePanel({
   async function runApproveThenSwap(plan: Plan) {
     if (!address) return;
     setPipeline("approve");
-    setStatus(`Approve ${plan.symbol} for the router…`);
+    setStatus(`Approve ${plan.symbol} for the swap…`);
     handledHash.current = null;
     writeContract({
       address: plan.token,
@@ -510,7 +510,7 @@ export function VaultTradePanel({
     handledHash.current = null;
 
     if (!selected || !address || !tokenAddress || !SHIELD_POOL_ADDRESS) {
-      setError("Connect wallet and pick a vault note.");
+      setError("Connect a wallet and pick a vault balance.");
       return;
     }
     if (!hasPool) {
@@ -526,11 +526,11 @@ export function VaultTradePanel({
       return;
     }
     if (matchesChain === false) {
-      setError("Vault tree out of sync, open Move and refresh, then retry.");
+      setError("Vault out of sync. Open Move, refresh, then retry.");
       return;
     }
     if (selected.leafIndex == null) {
-      setError("Note not linked to the vault tree yet.");
+      setError("This balance is not ready in the vault yet.");
       return;
     }
     // need gas in wallet for proofs + txs
@@ -558,7 +558,7 @@ export function VaultTradePanel({
 
     try {
       const path = await pathForLeaf(selected.leafIndex);
-      if (!path) throw new Error("Could not build the vault path. Refresh and try again.");
+      if (!path) throw new Error("Could not sync the vault. Refresh and try again.");
 
       const w = await buildPoseidonUnshieldWitness({
         secretHex: selected.secret,
@@ -568,7 +568,7 @@ export function VaultTradePanel({
         path: path as PoseidonMerklePath,
       });
       if (!w.checks.commitmentMatches) {
-        throw new Error(w.blocker ?? "Note does not match the vault leaf.");
+        throw new Error(w.blocker ?? "This balance does not match the vault.");
       }
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
 
@@ -612,7 +612,7 @@ export function VaultTradePanel({
           : phase === "swap"
             ? "Swapping…"
             : phase === "reshield"
-              ? "Re-shielding…"
+              ? "Shielding back…"
               : null;
 
   if (!shieldLive || !poseidonMode) {
@@ -636,7 +636,7 @@ export function VaultTradePanel({
             <p className="mt-2 leading-relaxed">
               This tab needs an open market. Testnet doesn&apos;t have one for{" "}
               {marketSymbol} yet. Use{" "}
-              <strong className="text-foreground">Private</strong> instead, that path does not need a pool.
+              <strong className="text-foreground">Private</strong> instead. It works without one.
             </p>
             <button
               type="button"
@@ -666,7 +666,7 @@ export function VaultTradePanel({
                 {marketSymbol}
               </p>
               <p className="text-sm text-mute">
-                Via public market (size visible)
+                Via public market (amount is public)
               </p>
             </div>
             <StatusPill tone={hasPool ? "lime" : "mute"}>
@@ -704,11 +704,11 @@ export function VaultTradePanel({
 
             <div>
               <p className="text-sm font-medium text-foreground">
-                {side === "buy" ? "ETH vault note" : `${marketSymbol} vault note`}
+                {side === "buy" ? "ETH vault balance" : `${marketSymbol} vault balance`}
               </p>
               {eligible.length === 0 ? (
                 <p className="mt-2 text-sm text-mute">
-                  No matching notes.{" "}
+                  No matching balances.{" "}
                   <Link href="/app/shield" className="text-lime hover:underline">
                     Shield
                   </Link>{" "}
@@ -752,19 +752,19 @@ export function VaultTradePanel({
                     ? `${formatUnits(quoteOut, 18)} ${marketSymbol}`
                     : `${formatEther(quoteOut)} ETH`}
                 </strong>{" "}
-                (before slippage). Entire note is used.
+                (before price changes). Uses your whole balance.
               </p>
             )}
 
             <ol className="space-y-1 text-xs text-mute">
               <li className={phase === "unshield" || phase === "prove" ? "text-lime" : ""}>
-                1. Cash out note (public edge)
+                1. Cash out from the vault (public step)
               </li>
               <li className={phase === "approve" || phase === "swap" ? "text-lime" : ""}>
-                2. Swap on public DEX
+                2. Swap on the public market
               </li>
               <li className={phase === "reshield" ? "text-lime" : ""}>
-                3. Re-shield proceeds into vault
+                3. Shield the result back into the vault
               </li>
             </ol>
 
@@ -811,11 +811,11 @@ export function VaultTradePanel({
                       href="/app/shield"
                       className="text-lime hover:underline"
                     >
-                      re-shield leftover
+                      shield leftover
                     </Link>
                     {" · "}
                     <Link href="/app/move" className="text-lime hover:underline">
-                      cash out other notes
+                      cash out other balances
                     </Link>
                   </p>
                 )}
@@ -846,8 +846,8 @@ export function VaultTradePanel({
         title="Vault trade complete"
         body={
           <p>
-            {marketSymbol} vault trade finished. Proceeds were re-shielded when
-            measurable.{" "}
+            Your {marketSymbol} vault trade finished. The result was shielded
+            back into the vault when possible.{" "}
             {lastHash && (
               <a
                 href={network.explorerTx(lastHash)}

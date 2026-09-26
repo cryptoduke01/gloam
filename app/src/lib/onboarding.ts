@@ -54,32 +54,32 @@ export function markOnboardingStep(id: string) {
 export const ONBOARDING_STEPS = [
   {
     id: "faucet",
-    title: "Get testnet funds",
-    body: "Claim free testnet funds from the faucet for your network.",
+    title: "Get test funds",
+    body: "Claim free test funds to try everything. It's play money, not real.",
     href: "external:faucet",
   },
   {
     id: "shield",
-    title: "Shield a small amount",
-    body: "Deposit into the vault so the bag leaves your open wallet.",
+    title: "Add money privately",
+    body: "Move some into your private vault. The amount stops showing on your public wallet.",
     href: "/app/shield",
   },
   {
     id: "move",
-    title: "Private pay (direct or ticket)",
-    body: "Copy your receive tag, or pay to someone else's tag / bearer ticket.",
+    title: "Send a private payment",
+    body: "Pay someone privately, or share a link they can claim. Amounts stay hidden.",
     href: "/app/move",
   },
   {
     id: "disclose",
-    title: "Prove a balance",
-    body: "Make a selective disclosure: prove you hold a balance without revealing the rest.",
+    title: "Prove what you hold",
+    body: "Show someone you hold a balance, without revealing anything else.",
     href: "/app/disclose",
   },
   {
     id: "backup",
-    title: "Back up vault notes",
-    body: "Export (preferably locked) so clearing the browser does not lose secrets.",
+    title: "Back up your account",
+    body: "Save a backup so clearing your browser never loses your private balance.",
     href: "/app/settings",
   },
 ] as const;

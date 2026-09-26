@@ -47,8 +47,8 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           {treeLoading
             ? " · syncing…"
             : treeError
-              ? " · tree error"
-              : ` · ${leafCount} notes`}
+              ? " · sync error"
+              : ` · ${leafCount} private balances`}
         </span>
         <span className="flex items-center gap-2">
           <StatusPill tone={sealed === "ready" ? "lime" : "mute"} dot>
@@ -85,15 +85,15 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
               : "not configured"}
             {HASH_SCHEME !== "poseidon" ? ` · ${HASH_SCHEME}` : ""}
             {treeLoading
-              ? " · syncing tree…"
+              ? " · syncing…"
               : treeError
-                ? " · tree error"
-                : ` · ${leafCount} notes on chain`}
+                ? " · sync error"
+                : ` · ${leafCount} private balances`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <StatusPill tone={sealed === "ready" ? "lime" : "warn"} dot>
-            {sealed === "ready" ? "Sealed ready" : sealed === "checking" ? "…" : "Limited"}
+            {sealed === "ready" ? "Ready" : sealed === "checking" ? "…" : "Limited"}
           </StatusPill>
           <button
             type="button"
@@ -111,8 +111,8 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
       <p className="mt-2 text-xs text-mute">
-        Stay in the vault for privacy. Shield, private send, and private trade
-        keep size off the public book. Cash out publishes amount by design.
+        Stay in the vault to stay private. Shield, private send, and private
+        trade keep your amounts hidden. Cash out shows the amount publicly.
       </p>
       {network.pool && (
         <p className="mt-2 break-all text-[10px] text-mute">

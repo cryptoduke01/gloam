@@ -90,10 +90,15 @@ html[data-theme="light"] {
  * The app workspace runs a monochrome palette: ink type + ink primary actions on
  * paper, with green reserved strictly for the sealed / private signal. Remapping
  * the accent slot to ink here (instead of the marketing indigo) keeps the whole
- * workspace black + cream, so no stray blue fights the page. Scoped to `.gloam-app`
- * so the marketing site keeps its twilight indigo.
+ * workspace black + cream, so no stray blue fights the page.
+ *
+ * `.gloam-app` covers in-tree content; `html.gloam-app-ctx` (set by AppThemeScope
+ * while any app route is mounted) also covers modals that portal to <body>, which
+ * sit outside .gloam-app and would otherwise fall back to the marketing indigo.
+ * The marketing site never sets either, so it keeps its twilight indigo.
  */
-.gloam-app {
+.gloam-app,
+html.gloam-app-ctx {
   --lime: #121316;
   --lime-dim: #2b2b30;
 }

@@ -3,14 +3,14 @@ import { AppShell } from "@/components/app/AppShell";
 import { DiscloseView } from "@/components/app/DiscloseView";
 
 export const metadata: Metadata = {
-  title: "Disclose",
+  title: "Prove",
 };
 
 export default function DisclosePage() {
   return (
     <AppShell
-      title="Selective disclosure"
-      subtitle="Prove a shielded balance to a party you choose, without revealing your identity or anything else."
+      title="Prove what you hold"
+      subtitle="Show someone you hold a balance, without revealing your identity or anything else."
     >
       <DiscloseView />
     </AppShell>

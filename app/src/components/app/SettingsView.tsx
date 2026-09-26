@@ -238,7 +238,7 @@ export function SettingsView() {
               {(
                 [
                   ["all", "All"],
-                  ["onchain", "Onchain"],
+                  ["onchain", "Crypto"],
                   ["stocks", "Stocks"],
                 ] as const
               ).map(([k, label]) => (
@@ -270,8 +270,8 @@ export function SettingsView() {
           <Toggle
             on={settings.confirmSends}
             onChange={(v) => setSettings({ confirmSends: v })}
-            label="Success modal"
-            hint="Celebrate after a send settles"
+            label="Success message"
+            hint="Show a message after a send goes through"
           />
           <Toggle
             on={settings.compactCharts}
@@ -298,7 +298,7 @@ export function SettingsView() {
             {network.label}
           </p>
           <p className="mt-2 text-sm text-mute">
-            Faucet assets: {faucet.assets}
+            Test funds: {faucet.assets}
           </p>
           <button
             type="button"
@@ -312,7 +312,7 @@ export function SettingsView() {
 
         <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
           <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-            Faucet
+            Free test funds
           </p>
           <p className="mt-2 font-display text-xl text-foreground">
             {faucet.title}
@@ -332,17 +332,17 @@ export function SettingsView() {
       {/* Vault note backup, secrets leave this browser only when you export */}
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
         <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Vault notes backup
+          Vault backup
         </p>
         <p className="mt-2 text-sm text-mute">
-          Secrets live in this browser. Export before clearing site data.
-          Prefer a passphrase lock so a stolen file is not free money. Losing
-          this backup loses vault access, privacy does not include recovery
-          magic.
+          Your backup lives in this browser. Export it before you clear site
+          data. Add a passphrase so a stolen file can&apos;t be spent. If you
+          lose this backup, you lose access to your vault. There is no way to
+          recover it.
         </p>
         <p className="mt-2 text-xs text-mute">
-          Privacy path: shield → private trade / private send. Cash out
-          publishes amount on the explorer by design.
+          To stay private, use Shield, then private trade or private send. Cash
+          out shows the amount publicly.
         </p>
         <label
           htmlFor="backup-pass"
@@ -369,7 +369,7 @@ export function SettingsView() {
               try {
                 const backup = exportNotesBackup(address);
                 if (!backup.notes.length) {
-                  setBackupMsg("No spendable notes to export.");
+                  setBackupMsg("No private balances to export.");
                   return;
                 }
                 const json = JSON.stringify(backup, null, 2);
@@ -379,8 +379,8 @@ export function SettingsView() {
                 await navigator.clipboard.writeText(text);
                 setBackupMsg(
                   backupPass.trim()
-                    ? `Copied locked backup (${backup.notes.length} note(s)).`
-                    : `Copied plain backup (${backup.notes.length} note(s)). Anyone with it can spend.`
+                    ? `Copied locked backup (${backup.notes.length} balance(s)).`
+                    : `Copied plain backup (${backup.notes.length} balance(s)). Anyone with this file can spend it.`
                 );
               } catch (e) {
                 setBackupMsg(
@@ -418,7 +418,7 @@ export function SettingsView() {
                 URL.revokeObjectURL(url);
                 setBackupMsg(
                   backup.notes.length
-                    ? `Downloaded ${backup.notes.length} note(s)${
+                    ? `Downloaded ${backup.notes.length} balance(s)${
                         backupPass.trim() ? " (locked)" : ""
                       }.`
                     : "Empty backup file downloaded."
@@ -445,7 +445,7 @@ export function SettingsView() {
           value={backupImport}
           onChange={(e) => setBackupImport(e.target.value)}
           rows={3}
-          placeholder='Paste JSON or gloambak1.… locked backup'
+          placeholder='Paste your backup here (plain or locked)'
           className="mt-2 w-full rounded-md border border-line bg-transparent p-3 text-[11px] outline-none focus:border-lime"
         />
         <button
@@ -466,7 +466,7 @@ export function SettingsView() {
                 const res = importNotesBackup(raw, address);
                 if (res.ok) {
                   setBackupMsg(
-                    `Restored ${res.count} note(s). Open Portfolio / Move.`
+                    `Restored ${res.count} balance(s). Open Portfolio or Move.`
                   );
                   setBackupImport("");
                 } else {
@@ -481,7 +481,7 @@ export function SettingsView() {
           }}
           className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-lime hover:bg-lime/10 disabled:opacity-50"
         >
-          Import notes
+          Import backup
         </button>
         {backupMsg && (
           <p className="mt-2 text-sm text-mute" role="status">
@@ -501,24 +501,24 @@ export function SettingsView() {
 
       <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
         <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Proving artifacts
+          Proof files
         </p>
         <p className="mt-2 text-sm text-mute">
-          Ceremony:{" "}
+          Setup:{" "}
           <strong className="text-foreground">{PROVING_CEREMONY}</strong>
           {PROVING_CEREMONY === "dev"
-            ? ", not for real money."
-            : ", production fingerprints."}
+            ? ", test keys, not for real money."
+            : ", verified for real money."}
         </p>
         <ul className="mt-3 space-y-1 text-[11px] text-mute">
           {(
             [
-              ["unshield zkey", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
-              ["transfer zkey", CIRCUIT_ARTIFACTS.transferZkey.sha256],
-              ["sealed swap zkey", CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256],
-              ["unshield wasm", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
-              ["transfer wasm", CIRCUIT_ARTIFACTS.transferWasm.sha256],
-              ["sealed swap wasm", CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256],
+              ["cash out proof key", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
+              ["send proof key", CIRCUIT_ARTIFACTS.transferZkey.sha256],
+              ["private trade proof key", CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256],
+              ["cash out proof program", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
+              ["send proof program", CIRCUIT_ARTIFACTS.transferWasm.sha256],
+              ["private trade proof program", CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256],
             ] as const
           ).map(([label, hash]) => (
             <li key={label}>
@@ -540,10 +540,10 @@ export function SettingsView() {
                 await assertUnshieldArtifacts();
                 await assertTransferArtifacts();
                 await assertSealedSwapArtifacts();
-                setIntegrityMsg("All six artifacts match expected SHA-256.");
+                setIntegrityMsg("All six proof files check out.");
               } catch (e) {
                 setIntegrityMsg(
-                  e instanceof Error ? e.message : "Integrity check failed"
+                  e instanceof Error ? e.message : "Check failed. Files do not match."
                 );
               } finally {
                 setIntegrityBusy(false);
@@ -552,7 +552,7 @@ export function SettingsView() {
           }}
           className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
         >
-          {integrityBusy ? "Checking…" : "Verify circuit files"}
+          {integrityBusy ? "Checking…" : "Verify proof files"}
         </button>
         {integrityMsg && (
           <p className="mt-2 text-sm text-mute" role="status">
@@ -561,7 +561,7 @@ export function SettingsView() {
         )}
         <p className="mt-4 text-xs text-mute">
           <a href="/docs/production" className="text-lime hover:underline">
-            Production gate
+            Going live
           </a>
           {" · "}
           <button

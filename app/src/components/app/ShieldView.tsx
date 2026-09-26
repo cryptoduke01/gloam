@@ -622,7 +622,7 @@ export function ShieldView() {
                   <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
                   <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
                 </svg>
-                Size sealed
+                Amount hidden
               </span>
             </div>
             <div className="mt-3 flex items-end gap-3">
@@ -732,7 +732,7 @@ export function ShieldView() {
           )}
 
           <p className="text-center text-xs leading-relaxed text-mute">
-            Your open wallet balance drops. Only you can see what is inside the
+            Your public wallet balance drops. Only you can see what is inside the
             vault.
           </p>
         </form>

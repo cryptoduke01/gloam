@@ -14,8 +14,8 @@ import { MoveView } from "./MoveView";
  * over a boxed form. The URL (?tab=) drives which action shows.
  */
 const TABS = [
-  { id: "shield", label: "Shield", hint: "Into the vault" },
-  { id: "trade", label: "Trade", hint: "Size stays sealed" },
+  { id: "shield", label: "Shield", hint: "Make a balance private" },
+  { id: "trade", label: "Trade", hint: "Amounts stay private" },
   { id: "send", label: "Send", hint: "To any address" },
   { id: "move", label: "Cash out", hint: "Back to your wallet" },
 ] as const;

@@ -359,7 +359,7 @@ export function SealedTradePanel({
       return;
     }
     if (amountWanted > BigInt(selected.amountWei)) {
-      setError(`That is more ${inSymbol} than this vault note holds.`);
+      setError(`That is more ${inSymbol} than this vault balance holds.`);
       return;
     }
 
@@ -388,7 +388,7 @@ export function SealedTradePanel({
       }
       if (leafIdx == null) {
         throw new Error(
-          "This vault note is not linked yet. Open Shield, wait for confirm, then come back."
+          "This vault balance is not ready yet. Open Shield, wait for it to confirm, then come back."
         );
       }
 
@@ -531,9 +531,9 @@ export function SealedTradePanel({
               Can&apos;t reach the vault
             </p>
             <p className="mt-2 leading-relaxed">
-              The app talks to Robinhood testnet RPC directly (wallet network
-              does not matter for this check). Retry, or wait a few seconds if
-              the RPC is flaky.
+              The app connects to the Robinhood testnet directly. Your wallet
+              network does not matter here. Retry, or wait a few seconds if the
+              network is slow.
             </p>
             {network.pool && (
               <p className="mt-2 text-[10px] text-mute">
@@ -556,8 +556,8 @@ export function SealedTradePanel({
               Private trade offline
             </p>
             <p className="mt-2 leading-relaxed">
-              The vault is up, but the private-trade checker is not set. We need
-              to flip that on-chain. Use Shield / Move until then.
+              The vault is up, but private trade is not switched on yet. Use
+              Shield or Move until then.
             </p>
           </div>
         )}
@@ -570,8 +570,8 @@ export function SealedTradePanel({
                   Private trade
                 </p>
                 <p className="text-sm text-mute">
-                  Vault {inSymbol} → vault {outSymbol}. Size stays private. No
-                  public market needed.
+                  Vault {inSymbol} → vault {outSymbol}. Your amount stays hidden.
+                  No public market needed.
                 </p>
               </div>
               <StatusPill tone="lime" dot>
@@ -612,12 +612,12 @@ export function SealedTradePanel({
 
               <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-xs leading-relaxed text-mute">
                 <p className="font-medium text-foreground">
-                  Size privacy {sizePrivacy === "max" ? "on" : "relaxed"}
+                  Amount privacy {sizePrivacy === "max" ? "on" : "relaxed"}
                 </p>
                 <p className="mt-1">
                   {sizePrivacy === "max"
-                    ? "On-chain min-out is a floor (1 wei), not your real size. Explorer sees the vault proof and pair, not how much you traded."
-                    : "Min-out uses loose slippage. Tighter floors can leak size magnitude on-chain."}
+                    ? "The network can't see how much you traded. It only sees that a private trade happened."
+                    : "This can reveal roughly how much you traded. Turn it back on to stay fully private."}
                 </p>
                 <label className="mt-2 flex cursor-pointer items-center gap-2 text-foreground">
                   <input
@@ -628,7 +628,7 @@ export function SealedTradePanel({
                     }
                     className="accent-[var(--lime,#c8ff00)]"
                   />
-                  Max size privacy (recommended)
+                  Maximum amount privacy (recommended)
                 </label>
               </div>
 
@@ -651,7 +651,7 @@ export function SealedTradePanel({
                     ? "Syncing vault…"
                     : treeError
                       ? "Vault sync error"
-                      : `Vault ok · ${leafCount} notes on chain`}
+                      : `Vault ok · ${leafCount} private balances`}
                   {network.pool
                     ? ` · ${shortAddress(network.pool, 4)}`
                     : ""}
@@ -696,7 +696,7 @@ export function SealedTradePanel({
                     )}
                     {notesMissingIndex > 0 && (
                       <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                        Found notes that are not linked yet. Tap Refresh above.
+                        Found balances that are not ready yet. Tap Refresh above.
                       </p>
                     )}
                   </div>
@@ -746,7 +746,7 @@ export function SealedTradePanel({
                   <button
                     type="button"
                     className="border-l border-line px-3 text-xs text-lime"
-                    aria-label="Use full note amount"
+                    aria-label="Use full balance"
                     onClick={() =>
                       selected &&
                       setAmount(formatEther(BigInt(selected.amountWei)))
@@ -780,7 +780,7 @@ export function SealedTradePanel({
                   <StatusPill
                     tone={rateQuote.source === "live" ? "lime" : "mute"}
                   >
-                    {rateQuote.source === "live" ? "Live marks" : "Marks"}
+                    {rateQuote.source === "live" ? "Live prices" : "Prices"}
                   </StatusPill>
                 </div>
                 {quoteReady &&
@@ -788,7 +788,7 @@ export function SealedTradePanel({
                   amountSwapPreview != null &&
                   amountSwapExact !== amountSwapPreview && (
                     <p className="mt-1 text-[11px] text-mute">
-                      Exact size {formatSealedAmount(amountSwapExact)}{" "}
+                      Exact amount {formatSealedAmount(amountSwapExact)}{" "}
                       {inSymbol} for the proof.
                     </p>
                   )}
@@ -813,9 +813,9 @@ export function SealedTradePanel({
 
               {inventoryShort && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Vault holds less {outSymbol} than this trade. Private trade can
-                  still settle, but cashing out {outSymbol} later may fail until
-                  inventory is topped up.{" "}
+                  The vault holds less {outSymbol} than this trade. The private
+                  trade can still go through, but cashing out {outSymbol} later
+                  may fail until the vault is refilled.{" "}
                   <Link href="/app/shield" className="underline">
                     Shield more
                   </Link>
@@ -825,8 +825,8 @@ export function SealedTradePanel({
               {!isConnected ? (
                 <div className="space-y-2">
                   <p className="text-xs text-mute">
-                    Connect a wallet to sign the trade. Vault reads work without
-                    it.
+                    Connect a wallet to sign the trade. You can view the vault
+                    without one.
                   </p>
                   <WalletMenu />
                 </div>
@@ -875,13 +875,13 @@ export function SealedTradePanel({
                   </button>
                   {!working && selected && amountEntered && !quoteReady && (
                     <p className="text-center text-xs text-amber-600 dark:text-amber-400">
-                      Could not lock a proof size for that amount. Tap Max and
-                      try again.
+                      Could not prepare a proof for that amount. Tap Max and try
+                      again.
                     </p>
                   )}
                   {!working && !selected && (
                     <p className="text-center text-xs text-mute">
-                      Select a vault ETH note above.
+                      Select a vault ETH balance above.
                     </p>
                   )}
                   {!working && selected && !amountEntered && (
@@ -923,9 +923,10 @@ export function SealedTradePanel({
         title="Private trade done"
         body={
           <p>
-            You received vault {outSymbol}. Size stays out of the public min-out.
-            Explorer shows a vault proof, not a market fill. Cash out later will
-            publish amount by design, stay in vault to stay private.
+            You received vault {outSymbol}. Your amount stayed hidden. The
+            network shows a private trade, not how much you traded. Cash out
+            later will show the amount publicly. Stay in the vault to stay
+            private.
             {hash ? (
               <>
                 {" "}

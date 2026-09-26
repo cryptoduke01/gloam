@@ -59,17 +59,17 @@ export function WelcomeModal() {
             Welcome, you&apos;re live
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-mute">
-            Private money onchain, on Robinhood Chain and Tempo. Testnet, play
-            money only. Don&apos;t use real funds.
+            Private money on Robinhood Chain and Tempo. This is a test version
+            with play money, so don&apos;t use real funds.
           </p>
         </div>
 
         <div className="space-y-3 px-6 py-5 text-sm text-mute">
-          <p className="font-medium text-foreground">Quick path</p>
+          <p className="font-medium text-foreground">Quick start</p>
           <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
             <li>Connect a wallet and pick a network: Robinhood Chain or Tempo.</li>
             <li>
-              Claim testnet funds if needed, see the{" "}
+              Claim test funds if you need them, see the{" "}
               <Link
                 href="/docs/testnet"
                 className="text-lime underline-offset-2 hover:underline"
@@ -80,14 +80,14 @@ export function WelcomeModal() {
               .
             </li>
             <li>
-              <strong className="text-foreground">Shield a balance</strong> →{" "}
-              <strong className="text-foreground">Move</strong> to pay or send
-              privately → cash out when you want it public.
+              <strong className="text-foreground">Add money</strong> to your
+              vault, pay or send it privately, then cash out when you want it
+              public.
             </li>
           </ol>
           <p className="text-xs leading-relaxed text-mute">
-            Notes live in this browser. Export a backup in Settings before
-            clearing site data.
+            Your private balance lives in this browser. Save a backup in Settings
+            before clearing your data.
           </p>
         </div>
 

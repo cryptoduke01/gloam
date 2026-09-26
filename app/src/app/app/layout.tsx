@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Web3Provider } from "@/components/app/Web3Provider";
 import { TurnkeyEmbeddedProvider } from "@/components/app/TurnkeyEmbeddedProvider";
+import { AppThemeScope } from "@/components/app/AppThemeScope";
 
 export const metadata: Metadata = {
   title: {
@@ -18,6 +19,7 @@ export default function ProductLayout({
 }) {
   return (
     <TurnkeyEmbeddedProvider>
+      <AppThemeScope />
       <Web3Provider>{children}</Web3Provider>
     </TurnkeyEmbeddedProvider>
   );
