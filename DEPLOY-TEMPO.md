@@ -51,7 +51,7 @@ export POSEIDON2=0x...          # PoseidonT3 address from the output
 ## Step 2: deploy the verifier stack and the pool
 
 ```bash
-forge script script/DeployTempo.s.sol:DeployTempo --rpc-url $RPC_URL --broadcast
+forge script script/DeployTempo.s.sol:DeployTempo --rpc-url $RPC_URL --broadcast --gas-estimate-multiplier 105
 ```
 
 The script logs `ShieldPoolPoseidon`, `DualProofVerifier`, `ShieldIVerifier`, and

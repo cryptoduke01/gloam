@@ -2,10 +2,20 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {ShieldPool} from "../src/ShieldPool.sol";
+
+/// @dev ABI of the PRE-HARDENING legacy keccak pool only. The current ShieldPool /
+///      ShieldPoolPoseidon sources have no emergencyWithdraw (owner cannot move
+///      user funds), so this script only works against old deployments such as
+///      0x2BD9… that were deployed before that removal.
+interface ILegacyShieldPool {
+    function emergencyWithdraw(address asset, address to, uint256 amount) external;
+    function deposited(address asset) external view returns (uint256);
+    function owner() external view returns (address);
+}
 
 /**
- * @notice Owner pull-back of ETH (or set ASSET) from the pool after a shield test.
+ * @notice LEGACY ONLY: owner pull-back of ETH (or set ASSET) from the pre-hardening
+ *         keccak pool 0x2BD9… after a shield test. Hardened pools have no such path.
  *
  *   export DEPLOYER_PK=0x...
  *   export SHIELD_POOL=0x2BD98196D90AB45D58843B4c8B8809aa34343d35
@@ -27,7 +37,7 @@ contract PullShield is Script {
         address poolAddr = vm.envAddress("SHIELD_POOL");
         address asset = vm.envOr("ASSET", address(0));
 
-        ShieldPool pool = ShieldPool(payable(poolAddr));
+        ILegacyShieldPool pool = ILegacyShieldPool(poolAddr);
         address me = vm.addr(pk);
         uint256 amount = vm.envOr("AMOUNT_WEI", pool.deposited(asset));
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {ShieldPool} from "../src/ShieldPool.sol";
+import {ChangeTimelock} from "../src/lib/ChangeTimelock.sol";
 import {IVerifier} from "../src/interfaces/IVerifier.sol";
 import {MockERC20} from "./MockERC20.sol";
 
@@ -174,18 +175,69 @@ contract ShieldPoolTest is Test {
         pool.transfer(hex"00", root, keccak256("n"), next);
     }
 
-    function test_emergency_withdraw_owner_only() public {
+    // emergencyWithdraw was removed: the owner has no function that moves user funds.
+    function test_owner_has_no_emergency_withdraw() public {
         vm.prank(alice);
         pool.shield{value: 3 ether}(address(0), 3 ether, keccak256("e"));
 
         address sink = address(0x51A1);
-        pool.emergencyWithdraw(address(0), sink, 1 ether);
-        assertEq(sink.balance, 1 ether);
-        assertEq(pool.deposited(address(0)), 2 ether);
+        (bool ok, ) = address(pool).call(
+            abi.encodeWithSignature(
+                "emergencyWithdraw(address,address,uint256)",
+                address(0),
+                sink,
+                1 ether
+            )
+        );
+        assertFalse(ok, "emergencyWithdraw must not exist");
+        assertEq(sink.balance, 0);
+        assertEq(pool.deposited(address(0)), 3 ether);
+        assertEq(address(pool).balance, 3 ether);
+    }
 
-        vm.prank(alice);
-        vm.expectRevert(ShieldPool.NotOwner.selector);
-        pool.emergencyWithdraw(address(0), sink, 1 ether);
+    function test_setVerifier_instant_in_setup_timelocked_after() public {
+        MockVerifier v2 = new MockVerifier();
+        // setup mode: instant
+        assertTrue(pool.setupMode());
+        pool.setVerifier(address(v2));
+        assertEq(address(pool.verifier()), address(v2));
+
+        pool.endSetup();
+        assertFalse(pool.setupMode());
+
+        // direct call now reverts
+        MockVerifier v3 = new MockVerifier();
+        vm.expectRevert(ChangeTimelock.TimelockRequired.selector);
+        pool.setVerifier(address(v3));
+
+        // queue -> wait -> execute
+        bytes memory call_ = abi.encodeCall(ShieldPool.setVerifier, (address(v3)));
+        (, uint256 eta) = pool.queueChange(call_);
+        assertEq(eta, block.timestamp + pool.CHANGE_DELAY());
+        vm.expectRevert(ChangeTimelock.ChangeNotReady.selector);
+        pool.executeChange(call_);
+        vm.warp(eta);
+        pool.executeChange(call_);
+        assertEq(address(pool.verifier()), address(v3));
+
+        // no replay
+        vm.expectRevert(ChangeTimelock.ChangeNotQueued.selector);
+        pool.executeChange(call_);
+    }
+
+    function test_timelock_rejects_non_setter_selectors() public {
+        pool.endSetup();
+        // transferOwnership is owner-only but is not a timelockable change
+        vm.expectRevert(ChangeTimelock.UnknownChange.selector);
+        pool.queueChange(abi.encodeCall(ShieldPool.transferOwnership, (alice)));
+        // unshield cannot be smuggled through the owner's timelock
+        vm.expectRevert(ChangeTimelock.UnknownChange.selector);
+        pool.queueChange(
+            abi.encodeWithSignature(
+                "unshield(bytes,bytes32,bytes32,address,address,uint256)",
+                hex"00", bytes32(0), bytes32(0), address(0), alice, 1
+            )
+        );
     }
 
     function test_deploy_without_verifier_blocks_unshield() public {

@@ -94,13 +94,34 @@ async function main() {
   const transferI = await deploy("TransferIVerifier", [transferVerifier]);
   const dual = await deploy("DualProofVerifier", [unshieldI, transferI]);
 
-  // setVerifier on pool
+  // setVerifier on pool. Pools past endSetup() only accept it through the
+  // timelock: queue now, executeChange(<same bytes>) after the 3-day delay.
+  // Pre-timelock pool bytecode has no setupMode(); treat that as direct-set.
   const poolArt = loadArtifact("ShieldPoolPoseidon");
   const poolC = new ethers.Contract(pool, poolArt.abi, wallet);
-  console.log("setVerifier", dual, "on", pool);
-  const tx = await poolC.setVerifier(dual);
-  await tx.wait();
-  console.log("setVerifier tx", tx.hash);
+  let inSetup = true;
+  try {
+    inSetup = await poolC.setupMode();
+  } catch {
+    inSetup = true;
+  }
+  if (inSetup) {
+    console.log("setVerifier", dual, "on", pool);
+    const tx = await poolC.setVerifier(dual);
+    await tx.wait();
+    console.log("setVerifier tx", tx.hash);
+  } else {
+    const iface = v6
+      ? new ethers.Interface(poolArt.abi)
+      : new ethers.utils.Interface(poolArt.abi);
+    const call = iface.encodeFunctionData("setVerifier", [dual]);
+    console.log("pool setup has ended: queueing setVerifier", dual, "on", pool);
+    const tx = await poolC.queueChange(call);
+    await tx.wait();
+    console.log("queueChange tx", tx.hash);
+    console.log("After 3 days (and within 14 more), run:");
+    console.log(`  cast send ${pool} "executeChange(bytes)" ${call} --rpc-url $RPC_URL --private-key $DEPLOYER_PK`);
+  }
 
   // update deployment json
   const dep = existsSync(depPath)

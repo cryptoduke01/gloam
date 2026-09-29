@@ -9,7 +9,7 @@ Date: 2026-07-14 · Scope: `ShieldPool` + `IncrementalMerkleTree` · Not a forma
 | Proof public inputs = root + nullifier only | Verifier that always returns true allows **arbitrary unshield** | **Do not set mock verifier on a funded pool** |
 | Amount/asset not bound in proof | Wrong-amount unshield if verifier is weak | Phase 2 circuits |
 | Keccak Merkle vs Poseidon | Circuit mismatch later | Documented; swap hash in library later |
-| `emergencyWithdraw` | Owner can drain | Testnet recovery; renounce before trust assumptions |
+| `emergencyWithdraw` | Owner can drain | **Removed** (2026-09-29). Owner has no fund-moving function; verifier/rate setters are timelocked (3 days) after `endSetup()` |
 
 ## Fixed in this pass
 

@@ -110,8 +110,8 @@ contract KenshoContractFindingsTest is Test {
         pool.unshield(hex"00", root, bytes32(uint256(0xE0003)), address(tokenOut), lp, 100);
 
         // And the 100 tokenIn the attacker swapped in is stranded: deposited[tokenIn]
-        // is still 100 but no live tokenIn note represents it (only owner emergencyWithdraw
-        // could ever move it). Net: LP lost 100 tokenOut with no recourse.
+        // is still 100 but no live tokenIn note represents it (emergencyWithdraw is gone,
+        // so nobody can move it). Net: LP lost 100 tokenOut with no recourse.
         assertEq(tokenIn.balanceOf(address(pool)), 100);
     }
 

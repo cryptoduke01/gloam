@@ -7,6 +7,7 @@ import {IPoseidon2} from "./lib/IPoseidon.sol";
 import {IncrementalMerkleTreePoseidon as IMT} from "./lib/IncrementalMerkleTreePoseidon.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 import {OracleRates} from "./lib/OracleRates.sol";
+import {ChangeTimelock} from "./lib/ChangeTimelock.sol";
 
 interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -21,8 +22,19 @@ interface IERC20 {
  * @dev Pairs with UnshieldVerifier (Poseidon circuit). Not the live keccak pool.
  *
  * Leaves/roots stored as uint256 field elements, exposed as bytes32 for IShieldPool.
+ *
+ * Owner powers (no-middlemen hardening):
+ *  - The owner has NO function that moves user funds. There is no emergencyWithdraw;
+ *    notes leave the pool only through proof-gated unshield(). sweepStrayNative()
+ *    can only take native currency above deposited[address(0)], i.e. ETH sent
+ *    straight to receive() that backs no note.
+ *  - Every setter that affects proof validity, pricing, or asset flows
+ *    (setVerifier, setSealedSwapVerifier, setShieldVerifier, setSwapRate,
+ *    setPriceFeed, setOracleConfig, setOracleRatePair) is instant only during
+ *    setup mode. After endSetup() they must go through ChangeTimelock:
+ *    queueChange -> CHANGE_DELAY (3 days) public notice -> executeChange.
  */
-contract ShieldPoolPoseidon is IShieldPool {
+contract ShieldPoolPoseidon is IShieldPool, ChangeTimelock {
     using IMT for IMT.Tree;
 
     IVerifier public verifier;
@@ -96,7 +108,9 @@ contract ShieldPoolPoseidon is IShieldPool {
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ShieldVerifierSet(address indexed verifier);
-    event EmergencyWithdrawal(address indexed asset, address indexed to, uint256 amount);
+    event VerifierSet(address indexed verifier);
+    event SealedSwapVerifierSet(address indexed verifier);
+    event StrayNativeSwept(address indexed to, uint256 amount);
     event PriceFeedSet(address indexed asset, address indexed feed);
     event OraclePairSet(address indexed assetIn, address indexed assetOut, bool enabled);
     event OracleConfigSet(address sequencer, uint64 grace, uint64 maxStaleness, uint64 toleranceBps);
@@ -151,23 +165,27 @@ contract ShieldPoolPoseidon is IShieldPool {
 
     receive() external payable {}
 
-    function setVerifier(address verifier_) external onlyOwner {
-        verifier = IVerifier(verifier_);
+    // ─────────────────────────────────────────────────────────────────────────
+    // Rule-changing setters. Direct calls work only in setup mode (onlySetup);
+    // after endSetup() the same calls must be queued via queueChange() and run
+    // via executeChange() after CHANGE_DELAY. Both paths share the internal
+    // _setX() bodies, so validation and events are identical.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function setVerifier(address verifier_) external onlyOwner onlySetup {
+        _setVerifier(verifier_);
     }
 
-    function setSealedSwapVerifier(address verifier_) external onlyOwner {
-        sealedSwapVerifier = IVerifier(verifier_);
+    function setSealedSwapVerifier(address verifier_) external onlyOwner onlySetup {
+        _setSealedSwapVerifier(verifier_);
     }
 
     /// @notice Enable value-bound deposits. Once set, plain shield() is blocked and
     ///         callers must use shieldBound() with a proof binding commitment↔amount↔asset.
     /// @dev M-4: one-way. Once bound-shield enforcement is on it can never be
     ///      cleared or repointed (e.g. reset to 0 to reopen the unbound C1 path).
-    function setShieldVerifier(address verifier_) external onlyOwner {
-        if (address(shieldVerifier) != address(0)) revert ShieldVerifierAlreadySet();
-        if (verifier_ == address(0)) revert ZeroAddress();
-        shieldVerifier = IVerifier(verifier_);
-        emit ShieldVerifierSet(verifier_);
+    function setShieldVerifier(address verifier_) external onlyOwner onlySetup {
+        _setShieldVerifier(verifier_);
     }
 
     /**
@@ -181,17 +199,13 @@ contract ShieldPoolPoseidon is IShieldPool {
         uint128 rateIn_,
         uint128 rateOut_,
         bool enabled_
-    ) external onlyOwner {
-        if (assetIn == assetOut) revert SameAsset();
-        if (enabled_ && (rateIn_ == 0 || rateOut_ == 0)) revert InvalidAmount();
-        swapRate[assetIn][assetOut] = SwapRate(rateIn_, rateOut_, enabled_);
-        emit SwapRateSet(assetIn, assetOut, rateIn_, rateOut_, enabled_);
+    ) external onlyOwner onlySetup {
+        _setSwapRate(assetIn, assetOut, rateIn_, rateOut_, enabled_);
     }
 
     /// @notice M3: register the Chainlink feed (AggregatorV3, USD) for an asset.
-    function setPriceFeed(address asset, address feed) external onlyOwner {
-        priceFeed[asset] = IAggregatorV3(feed);
-        emit PriceFeedSet(asset, feed);
+    function setPriceFeed(address asset, address feed) external onlyOwner onlySetup {
+        _setPriceFeed(asset, feed);
     }
 
     /// @notice M3: L2 sequencer uptime feed + max price staleness + ratio tolerance.
@@ -200,7 +214,62 @@ contract ShieldPoolPoseidon is IShieldPool {
         uint64 sequencerGrace,
         uint64 maxStaleness,
         uint64 toleranceBps
-    ) external onlyOwner {
+    ) external onlyOwner onlySetup {
+        _setOracleConfig(sequencer, sequencerGrace, maxStaleness, toleranceBps);
+    }
+
+    /// @notice M3: switch a direction to oracle-bound pricing (both feeds required).
+    ///         While enabled, sealedSwap checks the caller's rate ratio against the
+    ///         live feeds instead of the owner-pinned swapRate.
+    function setOracleRatePair(
+        address assetIn,
+        address assetOut,
+        bool enabled_
+    ) external onlyOwner onlySetup {
+        _setOracleRatePair(assetIn, assetOut, enabled_);
+    }
+
+    function _setVerifier(address verifier_) internal {
+        verifier = IVerifier(verifier_);
+        emit VerifierSet(verifier_);
+    }
+
+    function _setSealedSwapVerifier(address verifier_) internal {
+        sealedSwapVerifier = IVerifier(verifier_);
+        emit SealedSwapVerifierSet(verifier_);
+    }
+
+    function _setShieldVerifier(address verifier_) internal {
+        if (address(shieldVerifier) != address(0)) revert ShieldVerifierAlreadySet();
+        if (verifier_ == address(0)) revert ZeroAddress();
+        shieldVerifier = IVerifier(verifier_);
+        emit ShieldVerifierSet(verifier_);
+    }
+
+    function _setSwapRate(
+        address assetIn,
+        address assetOut,
+        uint128 rateIn_,
+        uint128 rateOut_,
+        bool enabled_
+    ) internal {
+        if (assetIn == assetOut) revert SameAsset();
+        if (enabled_ && (rateIn_ == 0 || rateOut_ == 0)) revert InvalidAmount();
+        swapRate[assetIn][assetOut] = SwapRate(rateIn_, rateOut_, enabled_);
+        emit SwapRateSet(assetIn, assetOut, rateIn_, rateOut_, enabled_);
+    }
+
+    function _setPriceFeed(address asset, address feed) internal {
+        priceFeed[asset] = IAggregatorV3(feed);
+        emit PriceFeedSet(asset, feed);
+    }
+
+    function _setOracleConfig(
+        address sequencer,
+        uint64 sequencerGrace,
+        uint64 maxStaleness,
+        uint64 toleranceBps
+    ) internal {
         if (maxStaleness == 0 || toleranceBps > 10_000) revert InvalidAmount();
         oracleConfig = OracleRates.Config(
             IAggregatorV3(sequencer),
@@ -211,14 +280,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         emit OracleConfigSet(sequencer, sequencerGrace, maxStaleness, toleranceBps);
     }
 
-    /// @notice M3: switch a direction to oracle-bound pricing (both feeds required).
-    ///         While enabled, sealedSwap checks the caller's rate ratio against the
-    ///         live feeds instead of the owner-pinned swapRate.
-    function setOracleRatePair(
-        address assetIn,
-        address assetOut,
-        bool enabled_
-    ) external onlyOwner {
+    function _setOracleRatePair(address assetIn, address assetOut, bool enabled_) internal {
         if (assetIn == assetOut) revert SameAsset();
         if (
             enabled_ &&
@@ -229,6 +291,55 @@ contract ShieldPoolPoseidon is IShieldPool {
         }
         oracleRatePair[assetIn][assetOut] = enabled_;
         emit OraclePairSet(assetIn, assetOut, enabled_);
+    }
+
+    // ── ChangeTimelock hooks ────────────────────────────────────────────────
+
+    function _checkOwner() internal view override {
+        if (msg.sender != owner) revert NotOwner();
+    }
+
+    /// @dev Whitelist of timelockable setters and their static-arg word counts.
+    function _changeArgWords(bytes4 selector) internal pure override returns (uint256) {
+        if (selector == ShieldPoolPoseidon.setVerifier.selector) return 1;
+        if (selector == ShieldPoolPoseidon.setSealedSwapVerifier.selector) return 1;
+        if (selector == ShieldPoolPoseidon.setShieldVerifier.selector) return 1;
+        if (selector == ShieldPoolPoseidon.setSwapRate.selector) return 5;
+        if (selector == ShieldPoolPoseidon.setPriceFeed.selector) return 2;
+        if (selector == ShieldPoolPoseidon.setOracleConfig.selector) return 4;
+        if (selector == ShieldPoolPoseidon.setOracleRatePair.selector) return 3;
+        return 0;
+    }
+
+    /// @dev Internal dispatch for a matured queued change. No external calls.
+    function _applyChange(bytes4 selector, bytes calldata args) internal override {
+        if (selector == ShieldPoolPoseidon.setVerifier.selector) {
+            _setVerifier(abi.decode(args, (address)));
+        } else if (selector == ShieldPoolPoseidon.setSealedSwapVerifier.selector) {
+            _setSealedSwapVerifier(abi.decode(args, (address)));
+        } else if (selector == ShieldPoolPoseidon.setShieldVerifier.selector) {
+            _setShieldVerifier(abi.decode(args, (address)));
+        } else if (selector == ShieldPoolPoseidon.setSwapRate.selector) {
+            (address a, address b, uint128 ri, uint128 ro, bool en) = abi.decode(
+                args,
+                (address, address, uint128, uint128, bool)
+            );
+            _setSwapRate(a, b, ri, ro, en);
+        } else if (selector == ShieldPoolPoseidon.setPriceFeed.selector) {
+            (address asset, address feed) = abi.decode(args, (address, address));
+            _setPriceFeed(asset, feed);
+        } else if (selector == ShieldPoolPoseidon.setOracleConfig.selector) {
+            (address seq, uint64 grace, uint64 stale, uint64 tol) = abi.decode(
+                args,
+                (address, uint64, uint64, uint64)
+            );
+            _setOracleConfig(seq, grace, stale, tol);
+        } else if (selector == ShieldPoolPoseidon.setOracleRatePair.selector) {
+            (address a, address b, bool en) = abi.decode(args, (address, address, bool));
+            _setOracleRatePair(a, b, en);
+        } else {
+            revert UnknownChange();
+        }
     }
 
     /// @notice M-4: begin a two-step ownership handoff. The new owner must call
@@ -248,25 +359,12 @@ contract ShieldPoolPoseidon is IShieldPool {
         emit OwnershipTransferred(previous, owner);
     }
 
-    function emergencyWithdraw(
-        address asset,
-        address to,
-        uint256 amount
-    ) external onlyOwner nonReentrant {
-        if (to == address(0)) revert ZeroAddress();
-        if (amount == 0) revert InvalidAmount();
-        if (deposited[asset] < amount) revert InsufficientPoolBalance();
-        deposited[asset] -= amount;
-        emit EmergencyWithdrawal(asset, to, amount);
-        _pushAsset(asset, to, amount);
-    }
-
     /// @notice Recover native currency that was sent directly (via receive()) and is
     ///         not backing any shielded note. Audit INFO-1: such ETH is otherwise
-    ///         permanently stuck, since unshield only pays proof-bound notes and
-    ///         emergencyWithdraw is bounded by deposited[]. Only the surplus over
-    ///         deposited[address(0)] is sweepable, so shielded native balances are
-    ///         never touched.
+    ///         permanently stuck, since unshield only pays proof-bound notes. Only
+    ///         the surplus over deposited[address(0)] is sweepable, so shielded
+    ///         native balances are never touched. This is the owner's only
+    ///         value-moving function and it cannot reach note-backing funds.
     function sweepStrayNative(address to) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         uint256 backed = deposited[address(0)];
@@ -275,7 +373,7 @@ contract ShieldPoolPoseidon is IShieldPool {
         uint256 surplus = bal - backed;
         (bool ok, ) = to.call{value: surplus}("");
         if (!ok) revert TransferFailed();
-        emit EmergencyWithdrawal(address(0), to, surplus);
+        emit StrayNativeSwept(to, surplus);
     }
 
     /// @notice Token decimals for value math; native currency is treated as 18-dec.

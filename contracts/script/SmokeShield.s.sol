@@ -18,7 +18,9 @@ import {ShieldPool} from "../src/ShieldPool.sol";
  *     --rpc-url https://rpc.testnet.chain.robinhood.com \
  *     --broadcast --gas-estimate-multiplier 200 -vvvv
  *
- *   # 2) pull back (after step 1 confirms)
+ *   # 2) pull back (after step 1 confirms). LEGACY 0x2BD9… ONLY: pools built from
+ *   #    the current source have no emergencyWithdraw, so smoke deposits there
+ *   #    come back out only through a proof-gated unshield.
  *   cast send $SHIELD_POOL \
  *     "emergencyWithdraw(address,address,uint256)" \
  *     0x0000000000000000000000000000000000000000 \
@@ -56,6 +58,6 @@ contract SmokeShield is Script {
         console2.logBytes32(commitment);
         console2.log("after nextIndex", pool.nextIndex());
         console2.log("after deposited ETH", pool.deposited(address(0)));
-        console2.log("OK: shielded. Pull back with cast emergencyWithdraw (see header).");
+        console2.log("OK: shielded. Legacy 0x2BD9 only: pull back via emergencyWithdraw (see header).");
     }
 }

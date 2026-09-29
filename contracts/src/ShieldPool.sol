@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {IShieldPool} from "./interfaces/IShieldPool.sol";
 import {IVerifier} from "./interfaces/IVerifier.sol";
 import {IncrementalMerkleTree as IMT} from "./lib/IncrementalMerkleTree.sol";
+import {ChangeTimelock} from "./lib/ChangeTimelock.sol";
 
 interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -22,8 +23,14 @@ interface IERC20 {
  *         on a funded pool.
  *
  * Note scheme: see NoteLib (commitment binds secret, amount, asset).
+ *
+ * Owner powers: no function moves user funds (emergencyWithdraw removed). The only
+ * rule-changing setter, setVerifier, is instant during setup mode and must go
+ * through ChangeTimelock (queueChange -> 3-day notice -> executeChange) after
+ * endSetup(). NOTE: the already-deployed legacy instance 0x2BD9… predates this
+ * source and still has the old owner functions on chain.
  */
-contract ShieldPool is IShieldPool {
+contract ShieldPool is IShieldPool, ChangeTimelock {
     using IMT for IMT.Tree;
 
     IVerifier public verifier;
@@ -54,6 +61,8 @@ contract ShieldPool is IShieldPool {
     error FeeOnTransferNotSupported();
     error DuplicateCommitment();
 
+    event VerifierSet(address indexed verifier);
+
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
@@ -73,28 +82,38 @@ contract ShieldPool is IShieldPool {
 
     receive() external payable {}
 
-    function setVerifier(address verifier_) external onlyOwner {
+    /// @notice Instant only during setup mode; afterwards queue it via queueChange().
+    function setVerifier(address verifier_) external onlyOwner onlySetup {
+        _setVerifier(verifier_);
+    }
+
+    function _setVerifier(address verifier_) internal {
         verifier = IVerifier(verifier_);
+        emit VerifierSet(verifier_);
+    }
+
+    // ── ChangeTimelock hooks ────────────────────────────────────────────────
+
+    function _checkOwner() internal view override {
+        if (msg.sender != owner) revert NotOwner();
+    }
+
+    function _changeArgWords(bytes4 selector) internal pure override returns (uint256) {
+        if (selector == ShieldPool.setVerifier.selector) return 1;
+        return 0;
+    }
+
+    function _applyChange(bytes4 selector, bytes calldata args) internal override {
+        if (selector == ShieldPool.setVerifier.selector) {
+            _setVerifier(abi.decode(args, (address)));
+        } else {
+            revert UnknownChange();
+        }
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
         owner = newOwner;
-    }
-
-    /**
-     * @notice Testnet recovery only. Pull assets out if verifier path is not ready.
-     */
-    function emergencyWithdraw(
-        address asset,
-        address to,
-        uint256 amount
-    ) external onlyOwner {
-        if (to == address(0)) revert ZeroAddress();
-        if (amount == 0) revert InvalidAmount();
-        if (deposited[asset] < amount) revert InsufficientPoolBalance();
-        deposited[asset] -= amount;
-        _pushAsset(asset, to, amount);
     }
 
     /// @inheritdoc IShieldPool

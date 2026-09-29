@@ -17,7 +17,8 @@ import {DualProofVerifier} from "../src/verifiers/DualProofVerifier.sol";
  * Tempo has none of Gloam's on-chain deps, so this deploys the raw Groth16
  * verifiers, their IVerifier adapters, the combined DualProofVerifier, and the
  * hardened pool; wires the shield verifier so deposits go through shieldBound();
- * and leaves sealedSwap DISABLED (audit H1). The Poseidon2 (PoseidonT3) hasher is
+ * leaves sealedSwap DISABLED (audit H1); then calls endSetup() so every later
+ * rule change is timelocked (queueChange -> 3 days -> executeChange). The Poseidon2 (PoseidonT3) hasher is
  * deployed separately from precomputed bytecode; pass its address in POSEIDON2.
  *
  * The USER runs this. It is NOT executed by CI or by any agent, and the proving
@@ -60,12 +61,20 @@ contract DeployTempo is Script {
         ShieldPoolPoseidon pool = new ShieldPoolPoseidon(poseidon2, address(dual));
         pool.setShieldVerifier(address(shieldI));
 
+        // FINAL STEP: end setup mode. Irreversible. From here on the owner has no
+        // instant power over proofs, pricing, or asset flows: every verifier / rate
+        // / oracle setter reverts unless first announced with queueChange() and
+        // executed after the 3-day CHANGE_DELAY. There is no emergencyWithdraw, so
+        // the owner cannot move user funds at all. Do all wiring ABOVE this line.
+        pool.endSetup();
+
         console2.log("chainId", block.chainid);
         console2.log("poseidon2", poseidon2);
         console2.log("ShieldPoolPoseidon", address(pool));
         console2.log("DualProofVerifier", address(dual));
         console2.log("ShieldIVerifier", address(shieldI));
         console2.log("sealedSwapVerifier (must be 0)", address(pool.sealedSwapVerifier()));
+        console2.log("setupMode (must be false)", pool.setupMode());
         console2.log("Next: set pool + deploy block in app/src/lib/networks.ts tempo, flip status to live");
 
         vm.stopBroadcast();

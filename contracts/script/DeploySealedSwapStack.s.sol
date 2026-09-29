@@ -33,8 +33,30 @@ contract DeploySealedSwapStack is Script {
         address pool = vm.envOr("POOL", address(0));
         if (pool != address(0)) {
             // Pool has payable receive() - cast for interface call
-            ShieldPoolPoseidon(payable(pool)).setSealedSwapVerifier(address(adapter));
-            console2.log("setSealedSwapVerifier on", pool);
+            ShieldPoolPoseidon p = ShieldPoolPoseidon(payable(pool));
+            // Pools past endSetup() only accept the change through the timelock.
+            // Pre-timelock bytecode has no setupMode(); treat it as direct-set.
+            bool timelocked;
+            try p.setupMode() returns (bool inSetup) {
+                timelocked = !inSetup;
+            } catch {
+                timelocked = false;
+            }
+            if (timelocked) {
+                bytes memory call_ = abi.encodeCall(
+                    ShieldPoolPoseidon.setSealedSwapVerifier,
+                    (address(adapter))
+                );
+                (bytes32 id, uint256 eta) = p.queueChange(call_);
+                console2.log("queued setSealedSwapVerifier on", pool);
+                console2.logBytes32(id);
+                console2.log("executable from (unix)", eta);
+                console2.log("then: cast send $POOL 'executeChange(bytes)' <call>, call =");
+                console2.logBytes(call_);
+            } else {
+                p.setSealedSwapVerifier(address(adapter));
+                console2.log("setSealedSwapVerifier on", pool);
+            }
         } else {
             console2.log("POOL not set - only verifiers deployed");
             console2.log("Redeploy pool with sealedSwap then setSealedSwapVerifier");

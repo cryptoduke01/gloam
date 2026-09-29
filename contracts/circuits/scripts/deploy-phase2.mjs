@@ -220,6 +220,26 @@ async function main() {
     );
   }
 
+  // FINAL STEP: end setup mode (irreversible). After this the owner has no instant
+  // power over proofs, pricing or asset flows: every verifier / rate / oracle
+  // setter must be announced with queueChange() and can only run via
+  // executeChange() after the 3-day CHANGE_DELAY. There is no emergencyWithdraw.
+  // Only done once the shield verifier is wired: ending setup with C1 still open
+  // would leave the unbound shield() path live for at least 3 days.
+  // Set any swap rates (setSwapRate) BEFORE this if the pool should launch with them.
+  let setupEnded = false;
+  if (hardenShield) {
+    console.log("ending setup mode (timelock all future rule changes)...");
+    await sendTx(poolContract.endSetup(ov), "endSetup");
+    setupEnded = true;
+  } else {
+    console.log(
+      "WARNING: setup mode still OPEN (owner can change verifiers/rates instantly).\n" +
+        "  After wiring the shield verifier, end it (irreversible):\n" +
+        `  cast send ${pool} "endSetup()" --rpc-url $RPC_URL --private-key $DEPLOYER_PK`
+    );
+  }
+
   const net = await provider.getNetwork();
   const chainId = Number(net.chainId ?? net.chainId);
 
@@ -239,6 +259,7 @@ async function main() {
     proofLayout: 2,
     deployBlock,
     shieldHardened: hardenShield,
+    setupEnded,
     contracts: {
       Poseidon2: poseidon2,
       Poseidon3: poseidon3,
@@ -276,7 +297,11 @@ async function main() {
   console.log("\nNext: copy new circuit artifacts into app/public/circuits/,");
   console.log("update app/src/lib/config.ts pool address, then verify shield→prove→unshield.");
   console.log(
-    "Sealed-swap needs at least one rate: pool.setSwapRate(assetIn, assetOut, rateIn, rateOut, true)."
+    setupEnded
+      ? "Sealed-swap needs at least one rate. Setup is over, so queue it:\n" +
+          "  pool.queueChange(abi.encodeCall(setSwapRate,(assetIn, assetOut, rateIn, rateOut, true)))\n" +
+          "  then pool.executeChange(<same bytes>) after 3 days."
+      : "Sealed-swap needs at least one rate: pool.setSwapRate(assetIn, assetOut, rateIn, rateOut, true) (setup mode only)."
   );
 }
 
