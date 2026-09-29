@@ -4,19 +4,20 @@
  */
 
 import type { Address, Hex, PublicClient } from "viem";
-import { PRODUCT_CHAIN_ID } from "./chain";
+import { getActiveNetwork, type PayMemoBoard } from "./networks";
 
 /** Live RH testnet deploy (see contracts/deployments/poseidon-testnet.json) */
 export const TESTNET_PAY_MEMO =
   "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE" as const satisfies Address;
 
-/** Env override, else hard-coded testnet memo board */
-export const PAY_MEMO_ADDRESS: Address | null = (() => {
-  const e = process.env.NEXT_PUBLIC_PAY_MEMO;
-  if (e && e.startsWith("0x") && e.length === 42) return e as Address;
-  if (PRODUCT_CHAIN_ID === 46630) return TESTNET_PAY_MEMO;
-  return null;
-})();
+/** Memo board for the network the app is pointed at, or null if none is deployed there. */
+export function activePayMemo(): PayMemoBoard | null {
+  return getActiveNetwork().payMemo;
+}
+
+export function payMemoAddress(): Address | null {
+  return activePayMemo()?.address ?? null;
+}
 
 export const payMemoAbi = [
   {
@@ -41,7 +42,7 @@ export const payMemoAbi = [
 ] as const;
 
 export function isPayMemoLive(): boolean {
-  return Boolean(PAY_MEMO_ADDRESS);
+  return Boolean(activePayMemo());
 }
 
 /** Encode ticket string as hex bytes for postMemo */
@@ -74,28 +75,33 @@ export type ScannedMemo = {
  */
 export async function fetchPaymentMemos(
   client: PublicClient,
-  fromBlock: bigint,
+  fromBlockOverride?: bigint,
   toBlock?: bigint
 ): Promise<ScannedMemo[]> {
-  if (!PAY_MEMO_ADDRESS) return [];
+  const board = activePayMemo();
+  if (!board) return [];
+  const fromBlock = fromBlockOverride ?? board.deployBlock;
+  // First deploy indexed the poster too; the fixed board emits only commitment + memo.
+  const inputs = board.emitsPoster
+    ? ([
+        { name: "paymentCommitment", type: "bytes32", indexed: true },
+        { name: "poster", type: "address", indexed: true },
+        { name: "memo", type: "bytes", indexed: false },
+      ] as const)
+    : ([
+        { name: "paymentCommitment", type: "bytes32", indexed: true },
+        { name: "memo", type: "bytes", indexed: false },
+      ] as const);
   const latest = toBlock ?? (await client.getBlockNumber());
   if (latest < fromBlock) return [];
-  const CHUNK = 40_000n;
+  const CHUNK = getActiveNetwork().logRange;
   const out: ScannedMemo[] = [];
   for (let start = fromBlock; start <= latest; start += CHUNK) {
     let end = start + CHUNK - 1n;
     if (end > latest) end = latest;
     const logs = await client.getLogs({
-      address: PAY_MEMO_ADDRESS,
-      event: {
-        type: "event",
-        name: "PaymentMemo",
-        inputs: [
-          { name: "paymentCommitment", type: "bytes32", indexed: true },
-          { name: "poster", type: "address", indexed: true },
-          { name: "memo", type: "bytes", indexed: false },
-        ],
-      },
+      address: board.address,
+      event: { type: "event", name: "PaymentMemo", inputs },
       fromBlock: start,
       toBlock: end,
     });
@@ -122,9 +128,5 @@ export async function fetchPaymentMemos(
   }
   return out.reverse(); // newest first
 }
-
-export const PAY_MEMO_DEPLOY_BLOCK = BigInt(
-  process.env.NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK ?? "90421567"
-);
 
 export const MEMO_GAS_LIMIT = 200_000n;

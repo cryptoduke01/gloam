@@ -21,6 +21,7 @@ type NavItem = {
 const nav: NavItem[] = [
   { href: "/app", label: "Portfolio", exact: true },
   { href: "/app/vault", label: "Vault" }, // shield · trade · send · cash out
+  { href: "/app/payroll", label: "Payroll" }, // pay a whole team privately
   { href: "/app/markets", label: "Markets", robinhoodOnly: true },
   { href: "/app/disclose", label: "Prove" }, // prove you hold a balance
 ];

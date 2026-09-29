@@ -38,6 +38,30 @@ export interface NetworkAsset {
   decimals: number;
 }
 
+/**
+ * Encrypted payment-memo board (GloamPayMemo): lets a recipient find a private
+ * payment by scanning the chain with their Gloam address, no link needed.
+ * `emitsPoster` is true for the first deploy, whose event also indexed the
+ * poster's address (fixed in source by audit L-1; relayed memos hide it anyway).
+ */
+export interface PayMemoBoard {
+  address: Address;
+  deployBlock: bigint;
+  emitsPoster: boolean;
+}
+
+function envAddress(v: string | undefined): Address | null {
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : null;
+}
+
+function envBlock(v: string | undefined, fallback: bigint): bigint {
+  try {
+    return v ? BigInt(v) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export interface GloamNetwork {
   key: NetworkKey;
   label: string;
@@ -48,12 +72,16 @@ export interface GloamNetwork {
   pool: Address | null;
   /** Block the pool was deployed at, for getLogs / tree rebuild. */
   deployBlock: bigint | null;
+  /** Largest eth_getLogs block range the public RPC accepts. */
+  logRange: bigint;
   hashScheme: HashScheme;
   /** The asset the chain leads with in the product narrative. */
   primaryAsset: NetworkAsset;
   /** Stable assets shieldable on this network (empty until registered). */
   stableAssets: NetworkAsset[];
   status: NetworkStatus;
+  /** Payment-memo board, null until deployed on this network. */
+  payMemo: PayMemoBoard | null;
   /** One-line, honest description of where the network stands. */
   note: string;
   explorerTx: (hash: string) => string;
@@ -90,10 +118,18 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     chainId: robinhoodTestnet.id,
     pool: TESTNET_POSEIDON_POOL,
     deployBlock: TESTNET_POSEIDON_DEPLOY_BLOCK,
+    logRange: 200_000n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
     stableAssets: [],
     status: "live",
+    payMemo: {
+      address:
+        envAddress(process.env.NEXT_PUBLIC_PAY_MEMO) ??
+        "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE",
+      deployBlock: envBlock(process.env.NEXT_PUBLIC_PAY_MEMO_DEPLOY_BLOCK, 90_421_567n),
+      emitsPoster: !envAddress(process.env.NEXT_PUBLIC_PAY_MEMO),
+    },
     note: "Live on testnet: shield, private send, cash out, selective disclosure.",
     explorerTx: (hash) =>
       `${robinhoodTestnet.blockExplorers.default.url}/tx/${hash}`,
@@ -105,16 +141,26 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     label: "Tempo",
     chain: tempoTestnet,
     chainId: tempoTestnet.id,
-    // Hardened pool redeployed on Tempo Moderato 2026-09-16 (Kensho audit fixes:
-    // F-1 oracle decimals + reentrancy guard + codeless-asset check + stray-ETH
-    // sweep). Reuses the existing verifiers + Poseidon2. Prior pool
-    // 0x3eeE869aFF476D90aF6CF0bC8F0b450C98A8D30b (block 34_556_677) is superseded.
-    pool: "0xeD0b0F8eE6206eCd87cF47Fc1C5220d15C6e2276",
-    deployBlock: 35_578_268n,
+    // No-middlemen pool redeployed on Tempo Moderato 2026-09-29: no
+    // emergencyWithdraw, setup ended, admin changes behind a public 3-day
+    // timelock. Reuses the existing verifiers + Poseidon2. Superseded:
+    // 0xeD0b…2276 (block 35_578_268), 0x3eeE…D30b (block 34_556_677).
+    pool: "0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb",
+    deployBlock: 37_411_195n,
+    // Tempo RPC: "query exceeds max block range 100000"
+    logRange: 100_000n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "USD", address: null, decimals: 18 },
     stableAssets: [],
     status: "live",
+    // Deployed 2026-09-29 from the fixed source (no poster in the event).
+    payMemo: {
+      address:
+        envAddress(process.env.NEXT_PUBLIC_PAY_MEMO_TEMPO) ??
+        "0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3",
+      deployBlock: envBlock(process.env.NEXT_PUBLIC_PAY_MEMO_TEMPO_DEPLOY_BLOCK, 37_410_900n),
+      emitsPoster: false,
+    },
     note: "Live on Tempo Moderato: private stablecoin payments (shield PathUSD, send, cash out).",
     explorerTx: (hash) =>
       `${tempoTestnet.blockExplorers.default.url}/tx/${hash}`,

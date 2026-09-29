@@ -26,7 +26,7 @@ See [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json).
 
 | | |
 | --- | --- |
-| Pool (product) | `0xAc25c3C4A880194324d1fC78722694e0F315aF1c` |
+| Pool (product) | `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` |
 | Deploy block | `90436718` |
 | SealedSwapVerifier | `0xE19a…dF8D` / IVerifier `0x68C2…2371` |
 | DualProofVerifier | `0x4B0D…949C` |

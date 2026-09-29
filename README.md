@@ -99,15 +99,16 @@ gloam/
 
 | Role | Address |
 | --- | --- |
-| Sealed vault `ShieldPoolPoseidon` (hardened) | [`0xAc25…aF1c`](https://explorer.testnet.chain.robinhood.com/address/0xAc25c3C4A880194324d1fC78722694e0F315aF1c) |
+| Sealed vault `ShieldPoolPoseidon` (no admin access to funds, 3-day timelock on rule changes) | [`0x7240…d740`](https://explorer.testnet.chain.robinhood.com/address/0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740) |
 | Pay memo `GloamPayMemo` | [`0x689e…5DCE`](https://explorer.testnet.chain.robinhood.com/address/0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE) |
 
 **Contracts — Tempo Moderato testnet `42431`**
 
 | Role | Address |
 | --- | --- |
-| Sealed vault `ShieldPoolPoseidon` | [`0xeD0b…2276`](https://explore.testnet.tempo.xyz/address/0xed0b0f8ee6206ecd87cf47fc1c5220d15c6e2276) |
+| Sealed vault `ShieldPoolPoseidon` (no admin access to funds, 3-day timelock on rule changes) | [`0x841D…d5eb`](https://explore.testnet.tempo.xyz/address/0x841dc046ea3cc842ba3a855731472c6eb0f2d5eb) |
 | Dual-proof verifier `DualProofVerifier` | [`0x82F4…03A2`](https://explore.testnet.tempo.xyz/address/0x82f4ece6533e48574914bedeb55a8242bc1a03a2) |
+| Pay memo `GloamPayMemo` | [`0x3ca8…b4E3`](https://explore.testnet.tempo.xyz/address/0x3ca88712e9219b5ee4c82d31cafeab64c9e9b4e3) |
 
 The pre-C1 RH pool `0x4F38…` is drained and retired, never use it. Circuits (Groth16 + Poseidon + depth-20 Merkle membership): `shield`, `transfer`, `unshield`, `sealedSwap`. Details in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md).
 

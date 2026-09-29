@@ -34,6 +34,8 @@ import {
   fieldToHex,
   GLOAM_VS_ZONE,
   GLOAM_NETWORKS,
+  GLOAM_RELAY_URL,
+  relayIntent,
 } from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
@@ -608,12 +610,18 @@ server.registerTool(
         prove: artifactProver({ wasm, zkey }),
         issuerTag,
       });
-      const hash = await signer.walletClient.writeContract({
-        address: payment.intent.exec.poolAddress,
-        abi: transferAbi,
-        functionName: "transfer",
-        args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
-      });
+      // With the Gloam relay the agent's wallet never appears next to the
+      // payment (GLOAM_USE_RELAY=1, or GLOAM_RELAY_URL for a self-hosted relay).
+      const relayUrl =
+        process.env.GLOAM_RELAY_URL?.trim() || (process.env.GLOAM_USE_RELAY === "1" ? GLOAM_RELAY_URL : "");
+      const hash = relayUrl
+        ? await relayIntent(payment.intent, { url: relayUrl })
+        : await signer.walletClient.writeContract({
+            address: payment.intent.exec.poolAddress,
+            abi: transferAbi,
+            functionName: "transfer",
+            args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
+          });
       const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
         return text({ status: "error", error: `Transfer reverted (${hash}).` });
@@ -623,6 +631,7 @@ server.registerTool(
       return text({
         status: "submitted",
         network: net.key,
+        submittedBy: relayUrl ? "gloam-relay (agent wallet hidden)" : "agent wallet",
         hash,
         explorer: `${net.explorer}/tx/${hash}`,
         verify,

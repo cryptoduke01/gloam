@@ -12,7 +12,7 @@
 
 ## Live (RH testnet)
 
-Product vault (sealed): **`0xAc25c3C4A880194324d1fC78722694e0F315aF1c`**
+Product vault (sealed): **`0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740`**
 
 Full addresses: [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json)
 

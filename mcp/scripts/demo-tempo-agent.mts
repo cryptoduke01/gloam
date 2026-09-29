@@ -11,6 +11,7 @@
  *
  * Run:
  *   GLOAM_AGENT_PRIVATE_KEY=0x... npx tsx scripts/demo-tempo-agent.mts
+ *   (add GLOAM_RELAY_URL=http://localhost:3000/api/relay to settle through the relay)
  *
  * Optional env: AMOUNT (PathUSD to shield, default 10), PAY (to send, default 1),
  * PAYTO (payee receive tag, default a demo tag), SKIP_FUND=1 to skip the faucet.
@@ -24,6 +25,8 @@ import {
   artifactProver,
   syncTree,
   TEMPO_PATHUSD,
+  GLOAM_RELAY_URL,
+  relayIntent,
 } from "@gloamtrade/sdk";
 import { MCP_NETWORKS } from "../src/networks.js";
 import { getSigner } from "../src/signer.js";
@@ -166,14 +169,24 @@ async function main() {
     path,
     prove: artifactProver(tArt),
   });
-  const payHash = await signer.walletClient.writeContract({
-    address: payment.intent.exec.poolAddress,
-    abi: transferAbi,
-    functionName: "transfer",
-    args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
-  });
+  // GLOAM_RELAY_URL (or GLOAM_USE_RELAY=1 for the hosted relay): the Gloam relay
+  // submits the payment, so the agent's wallet never appears next to it.
+  const relayUrl =
+    process.env.GLOAM_RELAY_URL?.trim() || (process.env.GLOAM_USE_RELAY === "1" ? GLOAM_RELAY_URL : "");
+  const payHash = relayUrl
+    ? await relayIntent(payment.intent, { url: relayUrl })
+    : await signer.walletClient.writeContract({
+        address: payment.intent.exec.poolAddress,
+        abi: transferAbi,
+        functionName: "transfer",
+        args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
+      });
   const receipt = await signer.publicClient.waitForTransactionReceipt({ hash: payHash });
   if (receipt.status !== "success") throw new Error(`transfer reverted (${payHash})`);
+  if (relayUrl) {
+    const hidden = receipt.from.toLowerCase() !== signer.account.address.toLowerCase();
+    console.log(`     submitted by the Gloam relay ${receipt.from} (agent wallet hidden: ${hidden})`);
+  }
   payment.payload.payload.txHash = payHash;
   console.log(`     settled. tx ${net.explorer}/tx/${payHash}\n`);
 

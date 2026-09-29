@@ -3,16 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useAccount } from "wagmi";
-import { formatUnits } from "viem";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
-import { NATIVE_ASSET, type LocalNote } from "@/lib/shield";
+import { assetLabel, formatAssetAmount, type LocalNote } from "@/lib/shield";
 import { buildDisclosure, encodeDisclosure } from "@/lib/disclosure";
-
-function assetLabel(asset: string): string {
-  return asset.toLowerCase() === NATIVE_ASSET.toLowerCase()
-    ? "ETH"
-    : `${asset.slice(0, 6)}…${asset.slice(-4)}`;
-}
 
 export function DiscloseView() {
   const { address } = useAccount();
@@ -89,7 +82,7 @@ export function DiscloseView() {
                 <div>
                   <p className="font-display text-xl tracking-tight text-foreground">
                     <span className="tnum">
-                      {formatUnits(BigInt(n.amountWei), 18)}
+                      {formatAssetAmount(n.amountWei, n.asset)}
                     </span>{" "}
                     {assetLabel(n.asset)}
                   </p>

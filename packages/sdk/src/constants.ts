@@ -16,11 +16,13 @@ export const RH_MAINNET_CHAIN_ID = 4663;
 export const TEMPO_TESTNET_CHAIN_ID = 42431;
 
 /** Contracts of record (RH testnet 46630). */
-// Hardened Poseidon pool (shieldVerifier enforced). Redeployed 2026-09-16 with the
-// Kensho audit-pass fixes; supersedes 0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834.
+// No-middlemen Poseidon pool (shieldVerifier enforced, no emergencyWithdraw,
+// admin changes behind a public 3-day timelock). Redeployed 2026-09-29;
+// supersedes 0xAc25c3C4A880194324d1fC78722694e0F315aF1c and 0xaEbB…1834.
 // NEVER the drainable pre-C1 pool 0x4F38…12D8F (audit H-P1).
 export const SEALED_VAULT: Address =
-  "0xAc25c3C4A880194324d1fC78722694e0F315aF1c";
+  "0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740";
+export const SEALED_VAULT_DEPLOY_BLOCK = 126_185_021n;
 export const GLOAM_PAY_MEMO: Address =
   "0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE";
 /** ShieldIVerifier adapter — set as the pool's shieldVerifier; shield() reverts,
@@ -28,11 +30,15 @@ export const GLOAM_PAY_MEMO: Address =
 export const SHIELD_VERIFIER: Address =
   "0x28E6d0D02568EE634f9596645775275DE76b2847";
 
-/** Hardened Poseidon pool on Tempo Moderato (42431). Redeployed 2026-09-16,
+/** No-middlemen Poseidon pool on Tempo Moderato (42431). Redeployed 2026-09-29,
  *  reuses the same verifiers + Poseidon2 as Robinhood, so the same circuits and
  *  proving path work unchanged — only the pool address and chain id differ. */
 export const TEMPO_SEALED_VAULT: Address =
-  "0xeD0b0F8eE6206eCd87cF47Fc1C5220d15C6e2276";
+  "0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb";
+export const TEMPO_SEALED_VAULT_DEPLOY_BLOCK = 37_411_195n;
+/** Encrypted payment-message board on Tempo (event has no poster address). */
+export const TEMPO_PAY_MEMO: Address =
+  "0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3";
 /** PathUSD, the primary 6-decimal shieldable stablecoin on Tempo. */
 export const TEMPO_PATHUSD: Address =
   "0x20c0000000000000000000000000000000000000";
@@ -49,6 +55,10 @@ export interface GloamNetwork {
   chainId: number;
   /** Shielded pool address. */
   pool: Address;
+  /** Block the pool was deployed at (start of tree scans). */
+  deployBlock: bigint;
+  /** Encrypted payment-message board for this network. */
+  payMemo: Address;
   /** Whether native-value shields are allowed (Tempo blocks native msg.value). */
   nativeShield: boolean;
 }
@@ -59,6 +69,8 @@ export const GLOAM_NETWORKS: Record<GloamNetwork["key"], GloamNetwork> = {
     label: "Robinhood Chain",
     chainId: RH_TESTNET_CHAIN_ID,
     pool: SEALED_VAULT,
+    deployBlock: SEALED_VAULT_DEPLOY_BLOCK,
+    payMemo: GLOAM_PAY_MEMO,
     nativeShield: true,
   },
   tempo: {
@@ -66,6 +78,8 @@ export const GLOAM_NETWORKS: Record<GloamNetwork["key"], GloamNetwork> = {
     label: "Tempo",
     chainId: TEMPO_TESTNET_CHAIN_ID,
     pool: TEMPO_SEALED_VAULT,
+    deployBlock: TEMPO_SEALED_VAULT_DEPLOY_BLOCK,
+    payMemo: TEMPO_PAY_MEMO,
     nativeShield: false,
   },
 };

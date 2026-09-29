@@ -27,7 +27,7 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
-import { APPROVE_GAS_LIMIT, EMERGENCY_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
+import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
@@ -188,9 +188,6 @@ export function ShieldView() {
   const verifierLive =
     Boolean(verifier) &&
     verifier !== "0x0000000000000000000000000000000000000000";
-  const isOwner =
-    Boolean(address && owner) &&
-    address!.toLowerCase() === owner!.toLowerCase();
 
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -532,30 +529,6 @@ export function ShieldView() {
     }
   }, [writeError, pendingKind]);
 
-  function onOwnerPull() {
-    if (!network.pool || !address || !isOwner) return;
-    const amt = poolSelected ?? BigInt(0);
-    if (amt <= BigInt(0)) {
-      setFormError(`Pool has no ${symbol} to pull.`);
-      return;
-    }
-    setFormError(null);
-    reset();
-    setShowSuccess(false);
-    handledHash.current = null;
-    setPendingKind("pull");
-    setPendingNote(null);
-
-    writeContract({
-      address: network.pool,
-      abi: shieldPoolAbi,
-      functionName: "emergencyWithdraw",
-      args: [assetAddress, address, amt],
-      gas: EMERGENCY_GAS_LIMIT,
-      chainId: network.chainId,
-    });
-  }
-
   const maxLabel =
     walletBalance !== undefined
       ? selectedToken
@@ -769,35 +742,6 @@ export function ShieldView() {
           </div>
         )}
 
-        {isOwner && (
-          <div className="rounded-2xl border border-line bg-panel p-5">
-            <StatusPill tone="warn">Owner &middot; testnet</StatusPill>
-            <p className="mt-3 text-sm text-foreground">
-              Emergency pull of pool{" "}
-              <strong>
-                {poolSelected != null
-                  ? isNativeAsset(assetAddress)
-                    ? formatEth(poolSelected)
-                    : formatUnits(poolSelected, 18)
-                  : "…"}{" "}
-                {symbol}
-              </strong>
-              .
-            </p>
-            <button
-              type="button"
-              disabled={busy || !poolSelected || poolSelected <= BigInt(0)}
-              onClick={onOwnerPull}
-              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-mute disabled:opacity-50"
-            >
-              {isPending && pendingKind === "pull"
-                ? "Confirm in wallet…"
-                : confirming && pendingKind === "pull"
-                  ? "Pulling…"
-                  : `Pull pool ${symbol}`}
-            </button>
-          </div>
-        )}
       </div>
 
       <SuccessModal

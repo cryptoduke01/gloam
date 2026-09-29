@@ -42,7 +42,7 @@ the old Instrument Serif. Use space generously; avoid jammed, boxed layouts.
 | Production ceremony keys | Not yet |
 | Mainnet | Blocked |
 
-**Product vault (hardened C1/C2/C3):** `0xAc25c3C4A880194324d1fC78722694e0F315aF1c` (block 120461692).  
+**Product vault (hardened C1/C2/C3):** `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` (block 126185021).  
 **Drainable, never use or seed:** pre-C1 pool `0x4F38…12D8F` (audit H-P1; `emergencyWithdraw` pending — see `contracts/audit/REMEDIATION.md`).  
 **Never product-default** legacy pre-sealed `0xA488…` (app remaps in `config.ts`).
 

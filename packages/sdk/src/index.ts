@@ -26,7 +26,7 @@
  * intent, but its on-chain path is disabled pending the H1 solvency work.
  */
 
-export const SDK_VERSION = "0.0.1";
+export const SDK_VERSION = "0.0.5";
 
 export * from "./intents.js";
 export * from "./rates.js";
@@ -41,3 +41,4 @@ export * from "./prove.js";
 export * from "./builders.js";
 export * from "./sync.js";
 export * from "./x402.js";
+export * from "./relay.js";

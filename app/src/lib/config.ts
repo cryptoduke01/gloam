@@ -14,15 +14,23 @@ export type HashScheme = "keccak" | "poseidon";
 export const KECCAK_POOL =
   "0x2BD98196D90AB45D58843B4c8B8809aa34343d35" as const satisfies Address;
 
-/** Hardened Poseidon pool, live RH testnet. Redeployed 2026-09-16 with the
- *  Kensho audit-pass fixes (F-1 oracle decimals + reentrancy guard + codeless-
- *  asset check + stray-ETH sweep); reuses the existing verifiers + Poseidon2.
- *  Prior pool 0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834 (block 110_840_714)
- *  is superseded. Verifiers are pot16 dev-ceremony keys (regenerate for mainnet). */
+/** No-middlemen Poseidon pool, live RH testnet. Redeployed 2026-09-29: no
+ *  emergencyWithdraw, and after endSetup() every verifier / rate / oracle change
+ *  needs a public 3-day timelock. Reuses the existing verifiers + Poseidon2.
+ *  Superseded: 0xAc25…aF1c (block 120_461_692), 0xaEbB…1834 (block 110_840_714).
+ *  Verifiers are pot16 dev-ceremony keys (regenerate for mainnet). */
 export const TESTNET_POSEIDON_POOL =
-  "0xAc25c3C4A880194324d1fC78722694e0F315aF1c" as const satisfies Address;
+  "0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740" as const satisfies Address;
 
-export const TESTNET_POSEIDON_DEPLOY_BLOCK = 120_461_692n;
+export const TESTNET_POSEIDON_DEPLOY_BLOCK = 126_185_021n;
+
+/** Earlier product pools: a stale env pointing at one is remapped to the current pool. */
+const SUPERSEDED_POOLS = [
+  "0xAc25c3C4A880194324d1fC78722694e0F315aF1c",
+  "0xaEbB8E3b5C4648Aa7Cc4E41d3Cec008Db4bb1834",
+  "0xA488809a089F003A2B6E69daa65B0db79823c93B",
+];
+const SUPERSEDED_BLOCKS = [120_461_692n, 110_840_714n, 90_260_331n];
 
 /** Prior Poseidon pool (pre-sealedSwap), history only, never product default */
 export const LEGACY_POSEIDON_POOL =
@@ -45,8 +53,8 @@ function sameAddr(a: string, b: string) {
 export const POSEIDON_POOL: Address | null = (() => {
   const e = process.env.NEXT_PUBLIC_POSEIDON_SHIELD_POOL;
   if (isAddressLike(e)) {
-    if (sameAddr(e, LEGACY_POSEIDON_POOL)) {
-      // Stale Vercel env from before sealed redeploy
+    if (SUPERSEDED_POOLS.some((p) => sameAddr(e, p))) {
+      // Stale Vercel env from before a redeploy
       return TESTNET_POSEIDON_POOL;
     }
     return e;
@@ -75,7 +83,7 @@ export function activePoolAddress(): Address | null {
     const e = process.env.NEXT_PUBLIC_SHIELD_POOL_ADDRESS;
     if (isAddressLike(e)) {
       // Don't silently land on pre-sealed poseidon via wrong env either
-      if (sameAddr(e, LEGACY_POSEIDON_POOL)) return TESTNET_POSEIDON_POOL;
+      if (SUPERSEDED_POOLS.some((p) => sameAddr(e, p))) return TESTNET_POSEIDON_POOL;
       return e;
     }
     return KECCAK_POOL;
@@ -92,7 +100,7 @@ export function activeShieldDeployBlock(): bigint {
     if (
       POSEIDON_POOL &&
       sameAddr(POSEIDON_POOL, TESTNET_POSEIDON_POOL) &&
-      n === LEGACY_POSEIDON_DEPLOY_BLOCK
+      SUPERSEDED_BLOCKS.includes(n)
     ) {
       return TESTNET_POSEIDON_DEPLOY_BLOCK;
     }

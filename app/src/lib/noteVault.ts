@@ -164,3 +164,21 @@ export function setAllNotes(next: LocalNote[]): void {
     await writeBlob();
   })();
 }
+
+/**
+ * Encrypt any JSON value under the same non-extractable device key as the notes
+ * (for other secret-bearing local state, e.g. payroll claim links).
+ */
+export async function sealJson(value: unknown): Promise<string> {
+  return encrypt(JSON.stringify(value));
+}
+
+/** Decrypt a value sealed with sealJson. Returns null if it cannot be opened. */
+export async function openJson<T>(blob: string | null): Promise<T | null> {
+  if (!blob || !blob.startsWith(ENC_PREFIX)) return null;
+  try {
+    return JSON.parse(await decrypt(blob)) as T;
+  } catch {
+    return null;
+  }
+}

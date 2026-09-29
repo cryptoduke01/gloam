@@ -72,8 +72,8 @@ export function PaymentTicketShare({
       await navigator.share({
         title: "Gloam payment",
         text: locked
-          ? `Gloam private payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. This is locked. Ask me for the passphrase separately.\n\n${code}`
-          : `Gloam private payment${amountLabel ? ` (${amountLabel} ETH)` : ""}. To claim, open Move, then Claim.\n\n${code}`,
+          ? `Gloam private payment${amountLabel ? ` (${amountLabel})` : ""}. This is locked. Ask me for the passphrase separately.\n\n${code}`
+          : `Gloam private payment${amountLabel ? ` (${amountLabel})` : ""}. To claim, open Move, then Claim.\n\n${code}`,
       });
       setShared(true);
       setTimeout(() => setShared(false), 2000);
@@ -91,7 +91,7 @@ export function PaymentTicketShare({
         {code.startsWith("gloamr1.")
           ? "Your Gloam address"
           : "Claim link ready"}
-        {amountLabel ? ` · ${amountLabel} ETH` : ""}
+        {amountLabel ? ` · ${amountLabel}` : ""}
         {locked ? " · locked" : ""}
       </p>
       <p className="mt-1 text-xs text-mute">

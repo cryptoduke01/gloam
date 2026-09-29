@@ -52,7 +52,7 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Testnet vault (sealed pool)</strong>,{" "}
-          <code>0xAc25c3C4A880194324d1fC78722694e0F315aF1c</code>
+          <code>0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740</code>
         </li>
         <li>
           Official docs,{" "}
@@ -94,7 +94,7 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Sealed pool (hardened)</strong>,{" "}
-          <code>0xeD0b0F8eE6206eCd87cF47Fc1C5220d15C6e2276</code>
+          <code>0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb</code>
         </li>
         <li>
           <strong>Shieldable asset</strong>, PathUSD (6-decimal stablecoin),{" "}

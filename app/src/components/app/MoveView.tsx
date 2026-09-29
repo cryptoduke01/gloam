@@ -8,14 +8,13 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { formatEther, formatUnits, type Hex } from "viem";
+import { formatUnits, type Hex } from "viem";
 import { AsciiImage } from "@/components/AsciiImage";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
-import { formatSealedAmount } from "@/lib/sealedRates";
 import { getRhPublicClient } from "@/lib/rhClient";
-import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
+import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, isShieldDeployed, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
 import { syncShieldTree } from "@/lib/treeSync";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { buildTransferWitness } from "@/lib/proverTransfer";
@@ -32,7 +31,6 @@ import {
   decodeNotePackage,
   encodeNotePackage,
   encodeNotePackageEncrypted,
-  formatAmountEth,
   isEncryptedPackage,
   isPayToTagSealed,
 } from "@/lib/notePackage";
@@ -52,16 +50,23 @@ import {
   fetchPaymentMemos,
   isPayMemoLive,
   MEMO_GAS_LIMIT,
-  PAY_MEMO_ADDRESS,
-  PAY_MEMO_DEPLOY_BLOCK,
+  payMemoAddress,
   payMemoAbi,
   ticketToMemoBytes,
   type ScannedMemo,
 } from "@/lib/payMemo";
-import { formatEth } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
-import { safeParseEther } from "@/lib/amount";
+import { isNetworkKey } from "@/lib/networks";
+import {
+  relayFor,
+  relayMemo,
+  relayPreferred,
+  relayTransfer,
+  relayUnshield,
+  setRelayPreferred,
+} from "@/lib/relay/client";
 import { StatusPill } from "./StatusPill";
+import { RelayToggle } from "./RelayToggle";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
@@ -119,6 +124,10 @@ export function MoveView() {
   const [inboxStatus, setInboxStatus] = useState<string | null>(null);
   const [memoPosted, setMemoPosted] = useState(false);
   const [contacts, setContacts] = useState<GloamContact[]>([]);
+  /** Relay: submit proven actions from the Gloam relay so the wallet never shows. */
+  const [relayAvailable, setRelayAvailable] = useState(false);
+  const [relayOn, setRelayOn] = useState(false);
+  const [relayHash, setRelayHash] = useState<Hex | undefined>(undefined);
 
   const {
     writeContract,
@@ -128,10 +137,44 @@ export function MoveView() {
     reset,
   } = useWriteContract();
 
+  const txHash = relayHash ?? hash;
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
+    hash: txHash,
     chainId: network.chainId,
   });
+
+  // Claim links: /app/vault?tab=move&net=tempo#claim=<code>. The code lives in
+  // the URL fragment (never sent to a server) and is cleared once read.
+  const { setNetworkKey, networkKey } = useNetwork();
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const h = window.location.hash;
+    if (!h.startsWith("#claim=")) return;
+    const code = decodeURIComponent(h.slice("#claim=".length));
+    const net = new URLSearchParams(window.location.search).get("net");
+    const t = window.setTimeout(() => {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      if (isNetworkKey(net) && net !== networkKey) setNetworkKey(net);
+      if (code) {
+        setMode("receive");
+        setImportText(code);
+      }
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [networkKey, setNetworkKey]);
+
+  useEffect(() => {
+    let live = true;
+    void relayFor(network.chainId).then((r) => {
+      if (!live) return;
+      const ok = Boolean(r?.enabled);
+      setRelayAvailable(ok);
+      setRelayOn(ok && relayPreferred());
+    });
+    return () => {
+      live = false;
+    };
+  }, [network.chainId]);
 
   const handledHash = useRef<string | null>(null);
   const pendingAction = useRef<"send" | "cashout" | "memo" | null>(null);
@@ -149,9 +192,9 @@ export function MoveView() {
 
   // Confirm path: transfer → optional on-chain memo → share UI
   useEffect(() => {
-    if (!isSuccess || !hash) return;
-    if (handledHash.current === hash) return;
-    handledHash.current = hash;
+    if (!isSuccess || !txHash) return;
+    if (handledHash.current === txHash) return;
+    handledHash.current = txHash;
 
     void (async () => {
       // Memo post finished
@@ -200,7 +243,7 @@ export function MoveView() {
       if (pendingChange.current) {
         saveLocalNote({
           ...pendingChange.current,
-          txHash: hash,
+          txHash,
           leafIndex: changeLeaf,
         });
         pendingChange.current = null;
@@ -213,15 +256,41 @@ export function MoveView() {
       if (
         pendingMemo.current &&
         isPayMemoLive() &&
-        PAY_MEMO_ADDRESS &&
+        payMemoAddress() &&
         pendingAction.current === "send"
       ) {
         const m = pendingMemo.current;
-        setStatus("Posting encrypted memo on-chain (no QR required for them)…");
+        setStatus("Letting them know privately…");
         pendingAction.current = "memo";
         handledHash.current = null;
+        if (relayOn) {
+          try {
+            const h = await relayMemo({
+              chainId: network.chainId,
+              paymentCommitment: m.paymentCommitment,
+              memo: ticketToMemoBytes(m.ticket),
+            });
+            setRelayHash(h);
+          } catch (e) {
+            // Payment already landed; only the heads-up failed. Fall back to the link.
+            pendingAction.current = null;
+            pendingMemo.current = null;
+            if (pendingShare.current) {
+              setShareBlob(pendingShare.current.blob);
+              setShareAmountLabel(pendingShare.current.amountLabel);
+              pendingShare.current = null;
+            }
+            setError(
+              `Payment sent. We could not post their notification (${e instanceof Error ? e.message : "relay error"}), so share the payment code below instead.`
+            );
+            setShowSuccess(true);
+            setBusy(false);
+            setStatus(null);
+          }
+          return;
+        }
         writeContract({
-          address: PAY_MEMO_ADDRESS,
+          address: payMemoAddress()!,
           abi: payMemoAbi,
           functionName: "postMemo",
           args: [m.paymentCommitment, ticketToMemoBytes(m.ticket)],
@@ -242,7 +311,7 @@ export function MoveView() {
       setBusy(false);
       setStatus(null);
     })();
-  }, [isSuccess, hash, refreshNotes, refreshTree, writeContract]);
+  }, [isSuccess, txHash, relayOn, network.chainId, refreshNotes, refreshTree, writeContract]);
 
   // Wallet reject / tx fail: drop ephemeral payment secrets
   useEffect(() => {
@@ -278,7 +347,7 @@ export function MoveView() {
     notes.find((n) => n.id === selectedId) ?? notes[0] ?? null;
 
   const maxEth = selected
-    ? formatEther(BigInt(selected.amountWei))
+    ? formatUnits(BigInt(selected.amountWei), assetDecimals(selected.asset))
     : "0";
 
   const cashOutAsset = selected?.asset as `0x${string}` | undefined;
@@ -298,13 +367,14 @@ export function MoveView() {
 
     if (poolForCashOut != null && poolForCashOut < BigInt(selected.amountWei)) {
       setError(
-        `Not enough in the shared vault to cash out right now (${formatSealedAmount(poolForCashOut)} available, need ${formatSealedAmount(BigInt(selected.amountWei))}). Someone needs to add more of this asset first.`
+        `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, need ${formatAssetLabel(selected.amountWei, selected.asset)}). Someone needs to add more of this asset first.`
       );
       return;
     }
 
     setBusy(true);
     reset();
+    setRelayHash(undefined);
     handledHash.current = null;
     pendingAction.current = "cashout";
     spentNoteId.current = selected.id;
@@ -325,6 +395,21 @@ export function MoveView() {
         throw new Error(w.blocker ?? "Note does not match");
       }
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
+      if (relayOn) {
+        setStatus("Sending through the Gloam relay…");
+        const h = await relayUnshield({
+          chainId: network.chainId,
+          proof: proofBytes,
+          root: fieldToBytes32(w.publicInputs.root),
+          nullifier: fieldToBytes32(w.publicInputs.nullifier),
+          asset: selected.asset,
+          to: address,
+          amount: BigInt(selected.amountWei),
+        });
+        setRelayHash(h);
+        setSuccessTitle("Cashed out");
+        return;
+      }
       setStatus("Confirm cash out in your wallet…");
       writeContract({
         address: network.pool,
@@ -359,12 +444,13 @@ export function MoveView() {
     setShareBlob(null);
     setBusy(true);
     reset();
+    setRelayHash(undefined);
     handledHash.current = null;
     pendingAction.current = "send";
     spentNoteId.current = selected.id;
 
     try {
-      const amountPay = safeParseEther(sendAmount);
+      const amountPay = parseAssetAmount(sendAmount, selected.asset);
       if (amountPay === null || amountPay <= 0n) {
         throw new Error("Enter a valid amount to send.");
       }
@@ -437,7 +523,7 @@ export function MoveView() {
       }
       pendingShare.current = {
         blob: share,
-        amountLabel: formatAmountEth(w.paymentNote.amountWei),
+        amountLabel: formatAssetLabel(w.paymentNote.amountWei, w.paymentNote.asset),
       };
       setShareLocked(locked);
       setShareBlob(null);
@@ -453,6 +539,25 @@ export function MoveView() {
         pendingMemo.current = null;
       }
 
+      if (relayOn) {
+        setStatus("Sending through the Gloam relay…");
+        const h = await relayTransfer({
+          chainId: network.chainId,
+          proof: proofBytes,
+          root: fieldToBytes32(w.publicInputs.root),
+          nullifier: fieldToBytes32(w.publicInputs.nullifier),
+          commitments: [
+            fieldToBytes32(w.publicInputs.newCommitment0),
+            fieldToBytes32(w.publicInputs.newCommitment1),
+          ],
+        });
+        setRelayHash(h);
+        setSuccessTitle("Sent privately");
+        void import("@/lib/track").then(({ track }) => {
+          track("private_send_submit", { relay: true });
+        });
+        return;
+      }
       setStatus("Confirm private pay in your wallet…");
       writeContract({
         address: network.pool,
@@ -498,10 +603,7 @@ export function MoveView() {
     setInboxStatus("Scanning chain for payments to your tag…");
     setInbox([]);
     try {
-      const memos = await fetchPaymentMemos(
-        getRhPublicClient(),
-        PAY_MEMO_DEPLOY_BLOCK
-      );
+      const memos = await fetchPaymentMemos(getRhPublicClient());
       const hits: { memo: ScannedMemo; label: string; ticket: string }[] = [];
       for (const m of memos) {
         try {
@@ -511,7 +613,7 @@ export function MoveView() {
           hits.push({
             memo: m,
             ticket: m.ticket,
-            label: `${formatAmountEth(pack.amountWei)} ETH`,
+            label: formatAssetLabel(pack.amountWei, pack.asset),
           });
         } catch {
           /* not for us */
@@ -586,11 +688,11 @@ export function MoveView() {
       setSelectedId(note.id);
       setImportText("");
       setImportPassphrase("");
-      const ethLabel = formatAmountEth(pack.amountWei);
+      const ethLabel = formatAssetLabel(pack.amountWei, pack.asset);
       setImportOk(
         idx != null
-          ? `Got ${ethLabel} ETH in the vault, open Cash out when ready.`
-          : `Got ${ethLabel} ETH. Tap Refresh on the vault tree, then Cash out.`
+          ? `Got ${ethLabel} in the vault, open Cash out when ready.`
+          : `Got ${ethLabel}. Tap Refresh, then Cash out.`
       );
       setMode("cashout");
     } catch (e) {
@@ -631,7 +733,7 @@ export function MoveView() {
             });
             if (!cancelled) {
               setClaimPreview(
-                `Encrypted to your tag · ${formatAmountEth(pack.amountWei)} ETH, ready to claim.`
+                `Encrypted to your tag · ${formatAssetLabel(pack.amountWei, pack.asset)}, ready to claim.`
               );
             }
             return;
@@ -648,7 +750,7 @@ export function MoveView() {
           );
           if (cancelled) return;
           setClaimPreview(
-            `Looks like ${formatAmountEth(pack.amountWei)} ETH vault payment.`
+            `Looks like a ${formatAssetLabel(pack.amountWei, pack.asset)} vault payment.`
           );
         } catch (e) {
           if (!cancelled) {
@@ -738,9 +840,7 @@ export function MoveView() {
                             }`}
                           >
                             <span>
-                              {isNativeAsset(n.asset)
-                                ? formatEth(BigInt(n.amountWei))
-                                : formatUnits(BigInt(n.amountWei), 18)}{" "}
+                              {formatAssetAmount(n.amountWei, n.asset)}{" "}
                               {assetLabel(n.asset)}
                               {!n.txHash && (
                                 <span className="ml-2 text-[10px] text-lime">
@@ -923,6 +1023,14 @@ export function MoveView() {
                           Vault tree mismatch, tap Refresh above, then retry.
                         </p>
                       )}
+                      <RelayToggle
+                        available={relayAvailable}
+                        on={relayOn}
+                        onChange={(v) => {
+                          setRelayOn(v);
+                          setRelayPreferred(v);
+                        }}
+                      />
                       {isPayMemoLive() && (
                         <p className="text-center text-[11px] text-mute">
                           After confirm: vault transfer + on-chain memo so they
@@ -955,8 +1063,7 @@ export function MoveView() {
                         <p className="text-sm text-mute">
                           Withdraw{" "}
                           <strong className="text-foreground">
-                            {formatSealedAmount(BigInt(selected.amountWei))}{" "}
-                            {assetLabel(selected.asset)}
+                            {formatAssetLabel(selected.amountWei, selected.asset)}
                           </strong>{" "}
                           to your connected wallet.
                         </p>
@@ -977,7 +1084,7 @@ export function MoveView() {
                             </span>
                             <span className="font-medium text-foreground">
                               {poolForCashOut != null
-                                ? formatSealedAmount(poolForCashOut)
+                                ? formatAssetLabel(poolForCashOut, selected.asset)
                                 : "Checking…"}
                             </span>
                           </div>
@@ -1000,6 +1107,14 @@ export function MoveView() {
                           ) : null}
                         </div>
                       )}
+                      <RelayToggle
+                        available={relayAvailable}
+                        on={relayOn}
+                        onChange={(v) => {
+                          setRelayOn(v);
+                          setRelayPreferred(v);
+                        }}
+                      />
                       <button
                         type="button"
                         disabled={
