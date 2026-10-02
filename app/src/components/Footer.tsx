@@ -31,6 +31,7 @@ const groups: {
     title: "Company",
     links: [
       { href: "/brand", label: "Brand" },
+      { href: "/brand#downloads", label: "Brand kit" },
       { href: "/blog/live-on-tempo", label: "Live on Tempo" },
       { href: "/pitch", label: "Pitch" },
     ],

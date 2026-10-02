@@ -8,14 +8,14 @@ import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
 import { SealDots } from "@/components/ui/SealDots";
 import { CopyValue } from "@/components/brand/CopyValue";
+import { AssetFigure, KIT, KitPill, ThemedImage, type KitFile } from "@/components/brand/KitAsset";
+import { LockupDiagram } from "@/components/brand/LockupDiagram";
 
 export const metadata: Metadata = {
   title: "Brand",
   description:
-    "The Gloam brand: the mark, colour, type, the field, illustration, voice and interface rules. Download the brand kit.",
+    "The Gloam brand: the mark, colour, type, the field, illustration, voice and interface rules, plus social headers, post templates, slides, wallpapers and press screenshots. Download the brand kit.",
 };
-
-const KIT = "/brand/kit";
 
 const SECTIONS = [
   ["logo", "Logo"],
@@ -25,7 +25,36 @@ const SECTIONS = [
   ["illustration", "Illustration"],
   ["voice", "Voice"],
   ["interface", "Interface"],
+  ["social", "Social and press"],
+  ["presentation", "Presentation"],
+  ["wallpapers", "Wallpapers"],
+  ["partners", "Partners"],
   ["downloads", "Downloads"],
+] as const;
+
+const S = `${KIT}/social`;
+const P = `${KIT}/presentation`;
+const W = `${KIT}/wallpapers`;
+const PR = `${KIT}/press`;
+
+/** Light + dark pair of files, as two pills. */
+const pair = (base: string, ext = "png", labels: [string, string] = ["Light", "Dark"]): KitFile[] => [
+  { label: labels[0], href: `${base}-light.${ext}` },
+  { label: labels[1], href: `${base}-dark.${ext}` },
+];
+/** The four post files: wide and tall, light and dark. */
+const posts = (name: string, ext = "png"): KitFile[] => [
+  { label: "16:9", href: `${S}/${name}-1200x675-light.${ext}` },
+  { label: "16:9 dark", href: `${S}/${name}-1200x675-dark.${ext}` },
+  { label: "4:5", href: `${S}/${name}-1080x1350-light.${ext}` },
+  { label: "4:5 dark", href: `${S}/${name}-1080x1350-dark.${ext}` },
+];
+
+const PRESS = [
+  { id: "landing", title: "Landing page", alt: "The Gloam landing page hero" },
+  { id: "payroll", title: "Payroll", alt: "The Gloam payroll screen with a four person pay list" },
+  { id: "vault", title: "Vault", alt: "The Gloam vault screen with a private balance" },
+  { id: "docs", title: "Docs", alt: "The Gloam docs overview page" },
 ] as const;
 
 const COLOURS: {
@@ -67,19 +96,120 @@ const WORDS: [string, string][] = [
   ["Private transfer", "Nullifier, commitment, Merkle root"],
 ];
 
-const DOWNLOADS = [
-  { file: "gloam-mark.svg", label: "Mark, ink", kind: "SVG" },
-  { file: "gloam-mark-white.svg", label: "Mark, white", kind: "SVG" },
-  { file: "gloam-mark-1024.png", label: "Mark, ink, 1024px", kind: "PNG" },
-  { file: "gloam-mark-white-1024.png", label: "Mark, white, 1024px", kind: "PNG" },
-  { file: "gloam-wordmark.svg", label: "Wordmark, ink", kind: "SVG" },
-  { file: "gloam-wordmark-white.svg", label: "Wordmark, white", kind: "SVG" },
-  { file: "gloam-wordmark-ink@4x.png", label: "Wordmark, ink, 4x", kind: "PNG" },
-  { file: "gloam-wordmark-white@4x.png", label: "Wordmark, white, 4x", kind: "PNG" },
-  { file: "gloam-avatar-ink.png", label: "Avatar, ink", kind: "PNG" },
-  { file: "gloam-avatar-paper.png", label: "Avatar, paper", kind: "PNG" },
-  { file: "gloam-x-banner.png", label: "X banner, 1500 × 500", kind: "PNG" },
-  { file: "gloam-courier-etching.png", label: "The courier etching", kind: "PNG" },
+const DOWNLOAD_GROUPS: { title: string; items: { label: string; meta?: string; files: KitFile[] }[] }[] = [
+  {
+    title: "Logo",
+    items: [
+      {
+        label: "Mark",
+        files: [
+          { label: "SVG", href: `${KIT}/gloam-mark.svg` },
+          { label: "White SVG", href: `${KIT}/gloam-mark-white.svg` },
+          { label: "PNG", href: `${KIT}/gloam-mark-1024.png` },
+          { label: "White PNG", href: `${KIT}/gloam-mark-white-1024.png` },
+        ],
+      },
+      {
+        label: "Wordmark",
+        files: [
+          { label: "SVG", href: `${KIT}/gloam-wordmark.svg` },
+          { label: "White SVG", href: `${KIT}/gloam-wordmark-white.svg` },
+          { label: "PNG", href: `${KIT}/gloam-wordmark-ink@4x.png` },
+          { label: "White PNG", href: `${KIT}/gloam-wordmark-white@4x.png` },
+        ],
+      },
+      {
+        label: "Avatar",
+        meta: "800 × 800",
+        files: [
+          { label: "Ink", href: `${KIT}/gloam-avatar-ink.png` },
+          { label: "Paper", href: `${KIT}/gloam-avatar-paper.png` },
+        ],
+      },
+      {
+        label: "Partner lockup",
+        meta: "SVG",
+        files: [
+          { label: "Ink", href: `${KIT}/gloam-partner-lockup.svg` },
+          { label: "White", href: `${KIT}/gloam-partner-lockup-white.svg` },
+          { label: "Guides", href: `${KIT}/gloam-partner-lockup-guides.svg` },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Social",
+    items: [
+      {
+        label: "X header",
+        meta: "1500 × 500",
+        files: [...pair(`${S}/gloam-x-header`), { label: "Etching", href: `${KIT}/gloam-x-banner.png` }],
+      },
+      { label: "LinkedIn banner", meta: "1584 × 396", files: pair(`${S}/gloam-linkedin-banner`) },
+      { label: "Post template", meta: "Editable SVG", files: posts("gloam-post-template", "svg") },
+      { label: "Post template preview", meta: "PNG", files: posts("gloam-post-template") },
+      { label: "Private payroll is live", meta: "Example post", files: posts("gloam-post-payroll-live") },
+      { label: "Private money on public chains", meta: "Example post", files: posts("gloam-post-private-money") },
+    ],
+  },
+  {
+    title: "Presentation",
+    items: [
+      { label: "Cover", meta: "1920 × 1080", files: pair(`${P}/gloam-deck-cover`) },
+      { label: "Section divider", meta: "1920 × 1080", files: pair(`${P}/gloam-deck-divider`) },
+      { label: "Closing, with the etching", meta: "1920 × 1080", files: pair(`${P}/gloam-deck-closing`) },
+    ],
+  },
+  {
+    title: "Wallpapers",
+    items: [
+      {
+        label: "Desktop",
+        meta: "2880 × 1800",
+        files: [
+          { label: "Field", href: `${W}/gloam-wallpaper-desktop-field.jpg` },
+          { label: "Etching", href: `${W}/gloam-wallpaper-desktop-etching.jpg` },
+        ],
+      },
+      {
+        label: "Phone",
+        meta: "1179 × 2556",
+        files: [
+          { label: "Field", href: `${W}/gloam-wallpaper-phone-field.jpg` },
+          { label: "Etching", href: `${W}/gloam-wallpaper-phone-etching.jpg` },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Press",
+    items: PRESS.map((p) => ({ label: p.title, meta: "3200 × 2160", files: pair(`${PR}/gloam-press-${p.id}`) })),
+  },
+  {
+    title: "Illustration",
+    items: [
+      {
+        label: "The courier etching",
+        meta: "2048 × 768",
+        files: [
+          { label: "Ink", href: `${KIT}/gloam-courier-etching.png` },
+          { label: "Paper", href: `${KIT}/illustration/gloam-courier-etching-paper.png` },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Email",
+    items: [
+      {
+        label: "Email signature",
+        files: [
+          { label: "HTML", href: `${KIT}/email/gloam-email-signature.html` },
+          { label: "Preview", href: `${KIT}/email/gloam-email-signature-preview.png` },
+        ],
+      },
+    ],
+  },
 ];
 
 function SectionHead({ id, title, lede }: { id: string; title: string; lede: string }) {
@@ -417,6 +547,23 @@ export default function BrandPage() {
                 sizes="(max-width: 1240px) 100vw, 1240px"
               />
             </figure>
+            <figure className="theme-light gl-panel mt-3 border border-line bg-background">
+              <Image
+                src={`${KIT}/illustration/gloam-courier-etching-paper.png`}
+                alt="The courier etching reversed: ink lines on a paper sky"
+                width={2048}
+                height={768}
+                className="h-auto w-full"
+                sizes="(max-width: 1240px) 100vw, 1240px"
+              />
+            </figure>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[13px] text-mute">Ink for dark grounds, paper for light ones. Same plate, never recoloured.</p>
+              <span className="flex flex-wrap gap-1.5">
+                <KitPill href={`${KIT}/gloam-courier-etching.png`}>Ink PNG</KitPill>
+                <KitPill href={`${KIT}/illustration/gloam-courier-etching-paper.png`}>Paper PNG</KitPill>
+              </span>
+            </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               {[
                 ["Two tones", "Pure ink on pure paper, or reversed. No grey washes, no colour, no gradients."],
@@ -520,38 +667,344 @@ export default function BrandPage() {
             </div>
           </section>
 
+          {/* social and press */}
+          <section>
+            <SectionHead
+              id="social"
+              title="Social and press"
+              lede="Headers, posts and product shots, sized for each platform and made in both themes. Keep the headline short, set it in Aeonik Light, and let the field carry the mood."
+            />
+            <div className="mt-12 grid gap-3 md:grid-cols-2">
+              <AssetFigure
+                title="X header"
+                meta="1500 × 500"
+                light={`${S}/gloam-x-header-light.png`}
+                dark={`${S}/gloam-x-header-dark.png`}
+                alt="Gloam X header: the field with the line Private money on public chains"
+                width={1500}
+                height={500}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={pair(`${S}/gloam-x-header`)}
+              />
+              <AssetFigure
+                title="X header, etching"
+                meta="1500 × 500"
+                light={`${KIT}/gloam-x-banner.png`}
+                alt="Gloam X header: the courier etching on ink"
+                width={1500}
+                height={500}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={[{ label: "PNG", href: `${KIT}/gloam-x-banner.png` }]}
+              />
+            </div>
+            <AssetFigure
+              className="mt-3"
+              title="LinkedIn banner"
+              meta="1584 × 396"
+              light={`${S}/gloam-linkedin-banner-light.png`}
+              dark={`${S}/gloam-linkedin-banner-dark.png`}
+              alt="Gloam LinkedIn banner: the field with the line Private money on public chains"
+              width={1584}
+              height={396}
+              sizes="(max-width: 1240px) 100vw, 1240px"
+              files={pair(`${S}/gloam-linkedin-banner`)}
+            />
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <AssetFigure
+                title="Announcement post"
+                meta="1200 × 675"
+                light={`${S}/gloam-post-payroll-live-1200x675-light.png`}
+                dark={`${S}/gloam-post-payroll-live-1200x675-dark.png`}
+                alt="Post reading Private payroll is live, with a payroll card on the field"
+                width={1200}
+                height={675}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={pair(`${S}/gloam-post-payroll-live-1200x675`)}
+              />
+              <AssetFigure
+                title="Positioning post"
+                meta="1200 × 675"
+                light={`${S}/gloam-post-private-money-1200x675-light.png`}
+                dark={`${S}/gloam-post-private-money-1200x675-dark.png`}
+                alt="Post reading Private money on public chains, with a private balance card on the field"
+                width={1200}
+                height={675}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={pair(`${S}/gloam-post-private-money-1200x675`)}
+              />
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <AssetFigure
+                title="Announcement, tall"
+                meta="1080 × 1350"
+                light={`${S}/gloam-post-payroll-live-1080x1350-light.png`}
+                dark={`${S}/gloam-post-payroll-live-1080x1350-dark.png`}
+                alt="Tall post reading Private payroll is live"
+                width={1080}
+                height={1350}
+                sizes="(max-width: 640px) 100vw, 400px"
+                files={pair(`${S}/gloam-post-payroll-live-1080x1350`)}
+              />
+              <AssetFigure
+                title="Positioning, tall"
+                meta="1080 × 1350"
+                light={`${S}/gloam-post-private-money-1080x1350-light.png`}
+                dark={`${S}/gloam-post-private-money-1080x1350-dark.png`}
+                alt="Tall post reading Private money on public chains"
+                width={1080}
+                height={1350}
+                sizes="(max-width: 640px) 100vw, 400px"
+                files={pair(`${S}/gloam-post-private-money-1080x1350`)}
+              />
+              <AssetFigure
+                title="Post template"
+                meta="Editable SVG, both sizes"
+                light={`${S}/gloam-post-template-1080x1350-light.png`}
+                dark={`${S}/gloam-post-template-1080x1350-dark.png`}
+                alt="Blank post template: the mark, a label, a two line headline and a footer line"
+                width={1080}
+                height={1350}
+                sizes="(max-width: 640px) 100vw, 400px"
+                files={posts("gloam-post-template", "svg")}
+              />
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {[
+                ["Mark, label, headline", "Every post has the same three parts: the wordmark top left, one short label, a headline of two lines at most."],
+                ["One idea per post", "Say one thing. A product card can support it, never a collage of features."],
+                ["Footer stays put", "gloam.trade on the left, where we are live on the right. Leave it in."],
+              ].map(([t, b]) => (
+                <div key={t} className="gl-tile p-6">
+                  <p className="text-[17px]">{t}</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">{b}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-16 grid gap-4 lg:grid-cols-[1fr_1.4fr] lg:gap-12">
+              <h3 className="text-[26px] font-light leading-tight tracking-[-0.015em]">Press screenshots</h3>
+              <p className="max-w-[58ch] text-[15px] leading-relaxed text-mute">
+                The real product at 2x, framed on the field. Use them as they are: no
+                redrawn screens, no device mockups, no added badges.
+              </p>
+            </div>
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
+              {PRESS.map((p) => (
+                <AssetFigure
+                  key={p.id}
+                  title={p.title}
+                  meta="3200 × 2160"
+                  light={`${PR}/gloam-press-${p.id}-light.png`}
+                  dark={`${PR}/gloam-press-${p.id}-dark.png`}
+                  alt={p.alt}
+                  width={3200}
+                  height={2160}
+                  sizes="(max-width: 768px) 100vw, 610px"
+                  files={pair(`${PR}/gloam-press-${p.id}`)}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* presentation */}
+          <section>
+            <SectionHead
+              id="presentation"
+              title="Presentation"
+              lede="A cover, a section divider and a closing slide at 1920 × 1080. One idea per slide, set large and light, with room around it."
+            />
+            <AssetFigure
+              className="mt-12"
+              title="Cover"
+              meta="1920 × 1080"
+              light={`${P}/gloam-deck-cover-light.png`}
+              dark={`${P}/gloam-deck-cover-dark.png`}
+              alt="Deck cover: the field with the title Private money on public chains"
+              width={1920}
+              height={1080}
+              sizes="(max-width: 1240px) 100vw, 1240px"
+              files={pair(`${P}/gloam-deck-cover`)}
+            />
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <AssetFigure
+                title="Section divider"
+                meta="1920 × 1080"
+                light={`${P}/gloam-deck-divider-light.png`}
+                dark={`${P}/gloam-deck-divider-dark.png`}
+                alt="Section divider slide titled How private payroll works"
+                width={1920}
+                height={1080}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={pair(`${P}/gloam-deck-divider`)}
+              />
+              <AssetFigure
+                title="Closing"
+                meta="1920 × 1080"
+                light={`${P}/gloam-deck-closing-light.png`}
+                dark={`${P}/gloam-deck-closing-dark.png`}
+                alt="Closing slide with the courier etching and Gloam contact details"
+                width={1920}
+                height={1080}
+                sizes="(max-width: 768px) 100vw, 610px"
+                files={pair(`${P}/gloam-deck-closing`)}
+              />
+            </div>
+          </section>
+
+          {/* wallpapers */}
+          <section>
+            <SectionHead
+              id="wallpapers"
+              title="Wallpapers"
+              lede="The silver field for the desk, the courier for the dark. Desktop at 2880 × 1800, phone at 1179 × 2556."
+            />
+            <div className="mt-12 grid gap-3 md:grid-cols-2">
+              {[
+                {
+                  title: "Silver field",
+                  desktop: `${W}/gloam-wallpaper-desktop-field.jpg`,
+                  phone: `${W}/gloam-wallpaper-phone-field.jpg`,
+                  alt: "the silver field",
+                },
+                {
+                  title: "Ink and etching",
+                  desktop: `${W}/gloam-wallpaper-desktop-etching.jpg`,
+                  phone: `${W}/gloam-wallpaper-phone-etching.jpg`,
+                  alt: "the courier etching under a black sky",
+                },
+              ].map((w) => (
+                <figure key={w.title} className="gl-tile flex flex-col overflow-hidden">
+                  <div className="grid grid-cols-[3.47fr_1fr] items-end gap-3 border-b border-line p-3 sm:p-4">
+                    <ThemedImage
+                      light={w.desktop}
+                      alt={`Desktop wallpaper, ${w.alt}`}
+                      width={2880}
+                      height={1800}
+                      sizes="(max-width: 768px) 75vw, 460px"
+                      className="rounded-[10px]"
+                    />
+                    <ThemedImage
+                      light={w.phone}
+                      alt={`Phone wallpaper, ${w.alt}`}
+                      width={1179}
+                      height={2556}
+                      sizes="(max-width: 768px) 25vw, 140px"
+                      className="rounded-[10px]"
+                    />
+                  </div>
+                  <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
+                    <span className="text-[14px]">{w.title}</span>
+                    <span className="flex flex-wrap gap-1.5">
+                      <KitPill href={w.desktop}>Desktop</KitPill>
+                      <KitPill href={w.phone}>Phone</KitPill>
+                    </span>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+
+          {/* partners */}
+          <section>
+            <SectionHead
+              id="partners"
+              title="Partners"
+              lede="When Gloam sits next to another name, both logos get equal room and nothing crowds them. Email signatures stay just as quiet."
+            />
+            <div className="mt-12 grid gap-3 lg:grid-cols-[1.35fr_1fr]">
+              <figure className="gl-tile flex flex-col overflow-hidden">
+                <div className="grid flex-1 place-items-center border-b border-line px-5 py-12 sm:px-12 sm:py-16">
+                  <LockupDiagram className="max-w-[560px]" />
+                </div>
+                <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
+                  <span className="min-w-0">
+                    <span className="block text-[14px]">Gloam × Partner</span>
+                    <span className="mt-0.5 block max-w-[46ch] text-[12.5px] leading-relaxed text-mute">
+                      Clear space of one window (w) all round, two between each logo and the
+                      cross. Match the partner logo to the height of our wordmark.
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <KitPill href={`${KIT}/gloam-partner-lockup.svg`}>Ink SVG</KitPill>
+                    <KitPill href={`${KIT}/gloam-partner-lockup-white.svg`}>White SVG</KitPill>
+                    <KitPill href={`${KIT}/gloam-partner-lockup-guides.svg`}>Guides</KitPill>
+                  </span>
+                </figcaption>
+              </figure>
+              <figure className="gl-tile flex flex-col overflow-hidden">
+                <div className="grid flex-1 place-items-center border-b border-line p-3 sm:p-4">
+                  <Image
+                    src={`${KIT}/email/gloam-email-signature-preview.png`}
+                    alt="Gloam email signature: the mark, a hairline, name, role, the line Private money on public chains, and links"
+                    width={1440}
+                    height={536}
+                    sizes="(max-width: 1024px) 100vw, 500px"
+                    className="h-auto w-full rounded-[10px]"
+                  />
+                </div>
+                <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
+                  <span className="min-w-0">
+                    <span className="block text-[14px]">Email signature</span>
+                    <span className="mt-0.5 block max-w-[40ch] text-[12.5px] leading-relaxed text-mute">
+                      Open the HTML file, change the name and role, copy, paste into your mail app.
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <KitPill href={`${KIT}/email/gloam-email-signature.html`}>HTML</KitPill>
+                    <KitPill href={`${KIT}/email/gloam-email-signature-preview.png`}>PNG</KitPill>
+                  </span>
+                </figcaption>
+              </figure>
+            </div>
+          </section>
+
           {/* downloads */}
           <section>
             <SectionHead
               id="downloads"
               title="Downloads"
-              lede="Everything in one archive, or file by file. Need something that is not here? Ask on X."
+              lede="Everything in one archive, sorted into folders, or file by file. Need something that is not here? Ask on X."
             />
             <div className="mt-12 grid gap-3 lg:grid-cols-[1fr_2fr]">
-              <div className="theme-dark gl-panel flex flex-col justify-between bg-black p-8 text-foreground">
+              <div className="theme-dark gl-panel flex flex-col justify-between bg-black p-8 text-foreground lg:self-start">
                 <Mark size={44} />
                 <div className="mt-16">
                   <p className="text-[22px] font-light tracking-[-0.015em]">The Gloam brand kit</p>
-                  <p className="mt-2 text-[14px] text-mute">Marks, wordmarks, avatars, the X banner and the courier etching.</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">
+                    Logos and the partner lockup, social headers and post templates, slides,
+                    wallpapers, press screenshots, the etching and an email signature.
+                  </p>
+                  <p className="tnum mt-4 text-[12.5px] text-faint">64 files in seven folders, about 11 MB</p>
                   <a href={`${KIT}/gloam-brand-kit.zip`} download className="btn btn-ink mt-6">
                     Download .zip
                   </a>
                 </div>
               </div>
-              <ul className="gl-card divide-y divide-line">
-                {DOWNLOADS.map((d) => (
-                  <li key={d.file} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                    <span className="min-w-0 truncate text-[14.5px]">{d.label}</span>
-                    <a
-                      href={`${KIT}/${d.file}`}
-                      download
-                      className="inline-flex h-8 shrink-0 items-center rounded-full bg-surface px-3 text-[12.5px] text-soft transition-colors hover:bg-surface-2 hover:text-foreground"
-                    >
-                      {d.kind}
-                    </a>
-                  </li>
+              <div className="gap-3 md:columns-2">
+                {DOWNLOAD_GROUPS.map((g) => (
+                  <div key={g.title} className="gl-card mb-3 break-inside-avoid overflow-hidden">
+                    <p className="t-label border-b border-line bg-surface px-5 py-3 text-foreground">{g.title}</p>
+                    <ul className="divide-y divide-line">
+                      {g.items.map((it) => (
+                        <li key={it.label} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5">
+                          <span className="min-w-0">
+                            <span className="block text-[14.5px]">{it.label}</span>
+                            {it.meta && <span className="tnum block text-[12.5px] text-mute">{it.meta}</span>}
+                          </span>
+                          <span className="flex flex-wrap gap-1.5">
+                            {it.files.map((f) => (
+                              <KitPill key={f.href} href={f.href}>
+                                {f.label}
+                              </KitPill>
+                            ))}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           </section>
         </div>
