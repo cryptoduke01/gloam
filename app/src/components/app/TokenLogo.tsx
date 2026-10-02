@@ -38,6 +38,8 @@ const PNG_LOGO_IDS = new Set([
   "dis", "uber", "abnb", "shop", "pypl", "sbux", "nke", "mcd", "ko", "wmt",
   "cost", "jpm", "v", "ma", "mstr", "gme", "rblx", "rddt", "snap", "f",
   "rivn", "baba", "spot",
+  // stablecoins
+  "usdg",
   // networks
   "robinhood",
 ]);

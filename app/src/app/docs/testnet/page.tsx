@@ -3,6 +3,7 @@ import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
+import { PAXOS_FAUCET_URL } from "@/lib/tokens";
 
 export const metadata: Metadata = {
   title: "Testnet guide",
@@ -206,6 +207,14 @@ export default function DocsTestnetPage() {
           test assets) when offered.
         </li>
         <li>Typical limit: once per 24 hours, plan your demo flow.</li>
+        <li>
+          For stablecoin payments and payroll, claim test USDG (Paxos Global
+          Dollar) on Robinhood Chain testnet from{" "}
+          <a href={PAXOS_FAUCET_URL} target="_blank" rel="noreferrer">
+            the Paxos faucet
+          </a>
+          .
+        </li>
       </ul>
       <p>
         After claiming, open <Link href="/app">Portfolio</Link> and confirm ETH

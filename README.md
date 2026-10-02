@@ -30,8 +30,10 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 
 | Path | Status | What you can do |
 | --- | --- | --- |
-| **Shield** | Live, proof-gated | Deposit ETH + faucet stock tokens; the hardened pool enforces `shieldBound()` so a deposit proves `commitment == Poseidon(secret, amount, asset)` (audit C1) |
+| **Shield** | Live, proof-gated | Deposit ETH, USDG (Paxos Global Dollar) + faucet stock tokens on Robinhood Chain, PathUSD and other stablecoins on Tempo; the hardened pool enforces `shieldBound()` so a deposit proves `commitment == Poseidon(secret, amount, asset)` (audit C1) |
 | **Private send** | Live | Send inside the vault to a receive tag; an on-chain encrypted memo inbox (`GloamPayMemo`) for discovery, with the sender no longer revealed |
+| **Private payroll** | Live | Upload a CSV and pay a whole team at once in USDG (Robinhood Chain) or PathUSD (Tempo). Gloam-address payees are paid directly and notified on-chain; everyone else gets a claim link. Crash-safe resume, results export. [Docs](https://gloam.trade/docs/payroll) |
+| **Gloam relay** | Live | Submits proven sends, cash outs and payment memos from a Gloam account so the user's wallet never appears. Dry-runs every payment against the pool first; cash-out recipients are bound in the proof, so the relay can only submit or refuse. SDK `relayIntent`, MCP `GLOAM_USE_RELAY=1` |
 | **Cash out** | Live, proof-gated | Unshield to a public balance with a real browser-generated Groth16 proof |
 | **Selective disclosure** | Live | Prove you hold a specific shielded balance to a party you choose, revealing nothing else. Anyone verifies it at [`/verify`](https://gloam.trade/verify), no wallet |
 | **Private agent payments (x402)** | SDK live | Agents pay for tools over HTTP 402 and settle a private send to the payee; the server verifies the payment before granting access. Settlement rides the live transfer path; the offline real-proof is validated (`mcp verify:prover`) |
@@ -61,6 +63,7 @@ The same private core now runs on [Tempo](https://tempo.xyz), the payments-first
 Privacy earns the mainnet gate only when it is auditable and correct.
 
 - **Self-audited, then re-verified.** A Kensho pass found a critical funded drain, two highs, and a set of mediums in the sealed pool and client. Every critical and high is fixed and **verified on-chain and in code** (independent re-audit): the drainable pool drained and de-published, value-binding enforced at deposit (C1), the swap path disabled (H1), the re-open path closed (one-way verifier + two-step ownership). Full status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
+- **No middlemen.** Redeployed 2026-09-29 on both networks with no admin withdraw: nobody, including the team, can move pooled funds, and after setup every verifier, rate or oracle change must be queued on-chain 3 days ahead (`endSetup()`, `queueChange`, 93/93 tests). Verify `setupMode() == false` on the pools listed below.
 - **Selective disclosure, not a mixer.** Prove balance or a payment to a counterparty or auditor without revealing everything. The right posture for a regulated-sponsor chain.
 - **Honest gates.** The trusted setup is a dev ceremony and mainnet needs a multi-party one; note secrets are encrypted at rest (AES-GCM under a device key, audit M-1), though the key is device-bound. These are disclosed, not hidden. Mainnet `4663` is blocked in-product.
 

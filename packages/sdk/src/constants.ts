@@ -39,6 +39,9 @@ export const TEMPO_SEALED_VAULT_DEPLOY_BLOCK = 37_411_195n;
 /** Encrypted payment-message board on Tempo (event has no poster address). */
 export const TEMPO_PAY_MEMO: Address =
   "0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3";
+/** Paxos Global Dollar (USDG) on Robinhood Chain testnet, 6 decimals. */
+export const RH_USDG: Address =
+  "0x7E955252E15c84f5768B83c41a71F9eba181802F";
 /** PathUSD, the primary 6-decimal shieldable stablecoin on Tempo. */
 export const TEMPO_PATHUSD: Address =
   "0x20c0000000000000000000000000000000000000";

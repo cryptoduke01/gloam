@@ -71,9 +71,20 @@ export const TEMPO_STABLE_TOKENS: OnchainToken[] = [
   { id: "thetausd", symbol: "ThetaUSD", name: "Theta USD", address: "0x20c0000000000000000000000000000000000003", decimals: 6, yahoo: "", kind: "stablecoin" },
 ];
 
-/** ERC-20 tokens shieldable on a given chain. */
+/**
+ * Paxos Global Dollar (USDG) on Robinhood Chain testnet, from Paxos's testnet docs
+ * (docs.paxos.com/guides/stablecoin/usdg/testnet); test USDG from faucet.paxos.com.
+ * The stablecoin Gloam leads with on Robinhood Chain (payroll, private pay).
+ */
+export const RH_STABLE_TOKENS: OnchainToken[] = [
+  { id: "usdg", symbol: "USDG", name: "Global Dollar", address: "0x7E955252E15c84f5768B83c41a71F9eba181802F", decimals: 6, yahoo: "", kind: "stablecoin" },
+];
+
+export const PAXOS_FAUCET_URL = "https://faucet.paxos.com/";
+
+/** ERC-20 tokens shieldable on a given chain (stablecoins first). */
 export function shieldTokensFor(chainId: number): OnchainToken[] {
-  return chainId === 42431 ? TEMPO_STABLE_TOKENS : TESTNET_STOCK_TOKENS;
+  return chainId === 42431 ? TEMPO_STABLE_TOKENS : [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS];
 }
 
 /** Tempo (42431) blocks native msg.value; shields there go through ERC-20 only. */

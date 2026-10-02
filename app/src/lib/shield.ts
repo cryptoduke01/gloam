@@ -4,7 +4,7 @@
  */
 
 import { formatUnits, parseUnits, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
-import { TEMPO_STABLE_TOKENS, TESTNET_STOCK_TOKENS } from "./tokens";
+import { RH_STABLE_TOKENS, TEMPO_STABLE_TOKENS, TESTNET_STOCK_TOKENS } from "./tokens";
 import { getActiveNetwork } from "./networks";
 import { makeBoundNote } from "./note";
 import { getAllNotes, setAllNotes } from "./noteVault";
@@ -258,7 +258,7 @@ function inActiveScope(
   return true;
 }
 
-const KNOWN_TOKENS = [...TESTNET_STOCK_TOKENS, ...TEMPO_STABLE_TOKENS];
+const KNOWN_TOKENS = [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS, ...TEMPO_STABLE_TOKENS];
 
 export function isNativeAsset(asset: string) {
   return !asset || asset.toLowerCase() === NATIVE_ASSET.toLowerCase();

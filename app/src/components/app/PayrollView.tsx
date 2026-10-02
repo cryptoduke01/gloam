@@ -197,7 +197,11 @@ export function PayrollView() {
 
   // ---------------------------------------------------------------- assets
   const assetOptions = useMemo<AssetOption[]>(() => {
-    const opts: AssetOption[] = [];
+    // Payroll leads with stablecoins (USDG on Robinhood Chain, PathUSD on Tempo).
+    const tokens = shieldTokensFor(network.chainId);
+    const stable = tokens.filter((t) => t.kind === "stablecoin");
+    const rest = tokens.filter((t) => t.kind !== "stablecoin");
+    const opts: AssetOption[] = stable.map((t) => ({ address: t.address as Address, symbol: t.symbol, logoId: t.id }));
     if (supportsNativeShield(network.chainId)) {
       opts.push({
         address: NATIVE_ASSET,
@@ -205,9 +209,7 @@ export function PayrollView() {
         logoId: network.primaryAsset.symbol.toLowerCase(),
       });
     }
-    for (const t of shieldTokensFor(network.chainId)) {
-      opts.push({ address: t.address as Address, symbol: t.symbol, logoId: t.id });
-    }
+    for (const t of rest) opts.push({ address: t.address as Address, symbol: t.symbol, logoId: t.id });
     return opts;
   }, [network.chainId, network.primaryAsset.symbol]);
   const [assetChoice, setAsset] = useState<Address | null>(null);
