@@ -4,13 +4,27 @@ export const KIT = "/brand/kit";
 
 export type KitFile = { label: string; href: string };
 
-/** A small download pill. 40px tall on touch, compact from sm up. */
-export function KitPill({ href, children }: { href: string; children: React.ReactNode }) {
+/**
+ * A small download pill. 40px tall on touch, compact from sm up. `onTile`
+ * lifts it off a surface-coloured tile so it does not disappear into it.
+ */
+export function KitPill({
+  href,
+  onTile = false,
+  children,
+}: {
+  href: string;
+  onTile?: boolean;
+  children: React.ReactNode;
+}) {
+  const tone = onTile
+    ? "border border-line bg-panel hover:border-line-strong"
+    : "bg-surface hover:bg-surface-2";
   return (
     <a
       href={href}
       download
-      className="inline-flex h-10 shrink-0 items-center rounded-full bg-surface px-3.5 text-[12.5px] text-soft transition-colors hover:bg-surface-2 hover:text-foreground sm:h-8 sm:px-3"
+      className={`inline-flex h-10 shrink-0 items-center rounded-full px-3.5 text-[12.5px] text-soft transition-colors hover:text-foreground sm:h-8 sm:px-3 ${tone}`}
     >
       {children}
     </a>
@@ -88,7 +102,7 @@ export function AssetFigure({
         </span>
         <span className="flex flex-wrap gap-1.5">
           {files.map((f) => (
-            <KitPill key={f.href} href={f.href}>
+            <KitPill key={f.href} href={f.href} onTile>
               {f.label}
             </KitPill>
           ))}

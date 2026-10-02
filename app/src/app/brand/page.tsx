@@ -896,8 +896,8 @@ export default function BrandPage() {
                   <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
                     <span className="text-[14px]">{w.title}</span>
                     <span className="flex flex-wrap gap-1.5">
-                      <KitPill href={w.desktop}>Desktop</KitPill>
-                      <KitPill href={w.phone}>Phone</KitPill>
+                      <KitPill href={w.desktop} onTile>Desktop</KitPill>
+                      <KitPill href={w.phone} onTile>Phone</KitPill>
                     </span>
                   </figcaption>
                 </figure>
@@ -926,9 +926,9 @@ export default function BrandPage() {
                     </span>
                   </span>
                   <span className="flex flex-wrap gap-1.5">
-                    <KitPill href={`${KIT}/gloam-partner-lockup.svg`}>Ink SVG</KitPill>
-                    <KitPill href={`${KIT}/gloam-partner-lockup-white.svg`}>White SVG</KitPill>
-                    <KitPill href={`${KIT}/gloam-partner-lockup-guides.svg`}>Guides</KitPill>
+                    <KitPill href={`${KIT}/gloam-partner-lockup.svg`} onTile>Ink SVG</KitPill>
+                    <KitPill href={`${KIT}/gloam-partner-lockup-white.svg`} onTile>White SVG</KitPill>
+                    <KitPill href={`${KIT}/gloam-partner-lockup-guides.svg`} onTile>Guides</KitPill>
                   </span>
                 </figcaption>
               </figure>
@@ -951,8 +951,8 @@ export default function BrandPage() {
                     </span>
                   </span>
                   <span className="flex flex-wrap gap-1.5">
-                    <KitPill href={`${KIT}/email/gloam-email-signature.html`}>HTML</KitPill>
-                    <KitPill href={`${KIT}/email/gloam-email-signature-preview.png`}>PNG</KitPill>
+                    <KitPill href={`${KIT}/email/gloam-email-signature.html`} onTile>HTML</KitPill>
+                    <KitPill href={`${KIT}/email/gloam-email-signature-preview.png`} onTile>PNG</KitPill>
                   </span>
                 </figcaption>
               </figure>
