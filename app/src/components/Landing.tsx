@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
+import { CursorReveal } from "@/components/ui/CursorReveal";
 import { SealDots } from "@/components/ui/SealDots";
 import { SealStream } from "@/components/landing/SealStream";
 import { PayrollLive } from "@/components/landing/PayrollLive";
@@ -209,7 +210,8 @@ export function Landing() {
         <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
           <div className="gl-panel flex min-h-[max(520px,calc(100svh-8rem))] flex-col justify-end px-5 pb-8 pt-24 sm:px-10 sm:pb-10 lg:h-[calc(100svh-10rem)] lg:max-h-[980px] lg:min-h-[620px] lg:px-14 lg:pb-14">
             <FlowField />
-            <div className="max-w-[720px]">
+            <CursorReveal />
+            <div className="relative z-10 max-w-[720px]">
               <h1 className="t-display-xl">Private money on public chains</h1>
               <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft sm:text-[18px]">
                 Hold, pay and get paid in stablecoins without putting amounts or
@@ -226,7 +228,7 @@ export function Landing() {
             </div>
             <a
               href="#how"
-              className="gl-glass absolute bottom-8 right-8 hidden h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] text-foreground transition-colors hover:bg-panel/70 sm:inline-flex lg:bottom-14 lg:right-14"
+              className="gl-glass absolute bottom-8 right-8 z-10 hidden h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] text-foreground transition-colors hover:bg-panel/70 sm:inline-flex lg:bottom-14 lg:right-14"
             >
               Scroll to explore <span aria-hidden>↓</span>
             </a>
