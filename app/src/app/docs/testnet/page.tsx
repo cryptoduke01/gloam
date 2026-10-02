@@ -26,45 +26,44 @@ export default function DocsTestnetPage() {
       ]}
       quickLinks={[
         { href: "/app", label: "Open testnet app" },
-        { href: "/app/trade?path=sealed", label: "Private trade" },
+        { href: "/docs/payroll", label: "Private payroll" },
         { href: "/docs/sealed-trade", label: "Sealed trade docs" },
         { href: "/docs/privacy-model", label: "Privacy model" },
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
-      <p className="!text-sm !text-mute">
+      <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
         Testnet is experimental. Assets have no real-world value. Development
         proving keys are used. Do not use real funds or treat this as a security
         audit. For product status, see{" "}
         <Link href="/docs/product">what ships when</Link>.
-      </p>
+      </div>
 
       <h2 id="demo">Demo video</h2>
       <p>
         X does not offer a site embed for posts, so the walkthrough opens in a
         new tab on X. Watch the demo, then follow the steps below on testnet.
       </p>
-      <div className="not-prose my-6 overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="flex flex-col items-start gap-3 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
-              Demo on X
-            </p>
-            <p className="mt-2 max-w-md text-sm text-mute">
-              Shield → private pay → cash out walkthrough (posted by the team).
-            </p>
-          </div>
-          <a
-            href="https://x.com/dukedotsol/status/2077117792520634789"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-lime px-5 text-sm font-semibold text-background hover:opacity-90"
-          >
-            Watch demo on X →
-          </a>
-        </div>
-      </div>
-      <p className="!text-sm !text-mute">
+      <figure className="my-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 rounded-[22px] border border-line p-5 sm:p-6">
+        <span className="block min-w-0 max-w-[40ch]">
+          <span className="t-label block">Demo on X</span>
+          <span className="mt-2 block text-[16px] leading-snug tracking-[-0.01em] text-foreground">
+            Shield, private pay and cash out, start to finish.
+          </span>
+          <span className="mt-1 block text-[13.5px] text-mute">
+            Posted by the team. Opens in a new tab.
+          </span>
+        </span>
+        <a
+          href="https://x.com/dukedotsol/status/2077117792520634789"
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-ghost btn-sm shrink-0 !border-line-strong hover:!border-foreground"
+        >
+          Watch the demo <span aria-hidden>↗</span>
+        </a>
+      </figure>
+      <p>
         Also follow{" "}
         <a
           href="https://x.com/gloamtrade"
@@ -327,6 +326,11 @@ export default function DocsTestnetPage() {
       </ul>
 
       <h2 id="private-trade">7b. Private trade walkthrough</h2>
+      <p>
+        Private trade is paused on-chain until the H1 solvency fix lands (see{" "}
+        <Link href="/docs/sealed-trade">sealed trade</Link>). These steps
+        describe the flow once it is switched back on.
+      </p>
       <ol>
         <li>
           <Link href="/app/shield">Shield ETH</Link> (not only stock tokens).
@@ -432,10 +436,6 @@ export default function DocsTestnetPage() {
         <li>
           Shield / unshield edges are visible on explorers. Internal transfers
           depend on anonymity set size.
-        </li>
-        <li>
-          $GLOAM is not required to use the testnet. It is not launched (see
-          the whitepaper for detail).
         </li>
       </ul>
 

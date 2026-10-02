@@ -55,7 +55,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
       <button
         type="button"
         disabled
-        className={`inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm text-mute ${className}`}
+        className={`btn btn-ghost ${className}`}
       >
         Connect
       </button>
@@ -71,26 +71,28 @@ export function ConnectButton({ className = "" }: { className?: string }) {
             type="button"
             onClick={onSwitch}
             disabled={switching || busy}
-            className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
+            className="btn btn-ink"
           >
-            {switching || busy ? "Switching…" : "Add / switch RH testnet"}
+            {switching || busy ? "Switching…" : `Switch to ${network.label}`}
           </button>
           {netErr && (
-            <p className="mt-1 max-w-[16rem] text-[11px] text-red-400">{netErr}</p>
+            <p className="mt-2 max-w-[16rem] text-[12px] leading-snug text-danger">
+              {netErr}
+            </p>
           )}
         </div>
       );
     }
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className="hidden items-center gap-1.5 text-xs text-mute sm:inline-flex">
-          <span className="h-1.5 w-1.5 rounded-full bg-lime" aria-hidden />
+        <span className="tnum inline-flex items-center gap-2 text-[13px] text-mute max-sm:hidden">
+          <span className="h-1.5 w-1.5 rounded-full bg-foreground" aria-hidden />
           {shortAddress(address)}
         </span>
         <button
           type="button"
           onClick={() => disconnect()}
-          className="inline-flex min-h-10 items-center rounded-md border border-line px-3 text-sm text-foreground hover:border-mute"
+          className="btn btn-ghost btn-sm"
         >
           Disconnect
         </button>
@@ -111,12 +113,12 @@ export function ConnectButton({ className = "" }: { className?: string }) {
           if (connector) connect({ connector });
         }}
         disabled={!connector || isPending || isConnecting}
-        className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+        className="btn btn-ink"
       >
         {isPending || isConnecting ? "Connecting…" : "Connect wallet"}
       </button>
       {error && (
-        <p className="mt-1 max-w-[14rem] text-[11px] text-red-400">
+        <p className="mt-2 max-w-[14rem] text-[12px] leading-snug text-danger">
           {error.message.slice(0, 120)}
         </p>
       )}

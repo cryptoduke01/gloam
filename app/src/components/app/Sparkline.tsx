@@ -1,6 +1,6 @@
 "use client";
 
-/** Tiny price path, theme-aware stroke. */
+/** Tiny price path. Stroke comes from the theme's chart tokens. */
 export function Sparkline({
   points,
   up,
@@ -15,11 +15,23 @@ export function Sparkline({
   height?: number;
 }) {
   if (!points || points.length < 2) {
+    // No history yet: a flat hairline holds the space without inventing data.
     return (
-      <div
-        className={`flex items-center justify-center text-[10px] text-mute ${className}`}
-        style={{ width, height }}
-      >, </div>
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className={`text-line-strong ${className}`}
+        aria-hidden
+      >
+        <path
+          d={`M 2 ${height / 2} L ${width - 2} ${height / 2}`}
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeDasharray="2 3"
+          strokeLinecap="round"
+        />
+      </svg>
     );
   }
 
@@ -33,11 +45,11 @@ export function Sparkline({
   const coords = points.map((p, i) => {
     const x = pad + (i / (points.length - 1)) * w;
     const y = pad + h - ((p - min) / range) * h;
-    return `${x},${y}`;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
   });
 
   const d = `M ${coords.join(" L ")}`;
-  // CSS vars: --chart-up / --chart-down set in globals
+  // --chart-up / --chart-down are theme tokens in globals.css.
   const stroke = up === false ? "var(--chart-down)" : "var(--chart-up)";
 
   return (
@@ -52,9 +64,10 @@ export function Sparkline({
         d={d}
         fill="none"
         stroke={stroke}
-        strokeWidth="1.75"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
       />
     </svg>
   );

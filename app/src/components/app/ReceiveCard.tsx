@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { shortAddress } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
-import { StatusPill } from "./StatusPill";
 
 export function ReceiveCard() {
   const { address, isConnected } = useAccount();
@@ -23,35 +22,36 @@ export function ReceiveCard() {
   }
 
   return (
-    <div className="rounded-xl border border-line bg-panel p-5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Receive
-        </p>
-        <StatusPill tone="lime">Public address</StatusPill>
+    <div className="gl-card p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="t-label">Receive</p>
+        <span className="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-[12px] text-mute">
+          Public address
+        </span>
       </div>
       {!isConnected || !address ? (
-        <p className="mt-3 text-sm text-mute">Connect to show your deposit address.</p>
+        <p className="mt-4 text-[14px] leading-relaxed text-mute">
+          Connect a wallet to show your deposit address.
+        </p>
       ) : (
         <>
-          <p className="mt-3 break-all text-sm text-foreground">
+          <p className="tnum mt-4 break-all text-[15px] leading-relaxed text-foreground">
             {address}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={copy}
-              className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90"
-            >
+          <p className="mt-1.5 text-[12.5px] text-mute">
+            Anything sent here is public on {network.label}.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button type="button" onClick={copy} className="btn btn-ink">
               {copied ? "Copied" : "Copy address"}
             </button>
             <a
               href={network.explorerAddress(address)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-10 items-center rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"
+              className="btn btn-ghost"
             >
-              Explorer · {shortAddress(address, 3)}
+              Explorer, {shortAddress(address, 3)}
             </a>
           </div>
         </>

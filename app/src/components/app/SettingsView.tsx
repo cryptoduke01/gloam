@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAccount, useDisconnect, useChainId } from "wagmi";
 import { walletParamsForChain } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
@@ -23,9 +23,65 @@ import {
 } from "@/lib/circuitArtifacts";
 import { resetOnboarding } from "@/lib/onboarding";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
+import { ThemeSegmented } from "@/components/ThemeToggle";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { VaultHealth } from "./VaultHealth";
+
+/* ------------------------------------------------------------ primitives */
+
+function Card({
+  title,
+  description,
+  children,
+  flush = false,
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+  /** Rows run edge to edge with hairlines (true) or sit in padded body (false). */
+  flush?: boolean;
+}) {
+  return (
+    <section className="gl-card">
+      <header className="max-sm:px-5 max-sm:pt-5 sm:px-6 sm:pt-6">
+        <h2 className="text-[17px] text-foreground">{title}</h2>
+        {description && (
+          <p className="mt-1 max-w-[62ch] text-[13.5px] leading-relaxed text-mute">{description}</p>
+        )}
+      </header>
+      <div
+        className={
+          flush
+            ? "mt-2 divide-y divide-line pb-1 max-sm:px-5 sm:px-6"
+            : "pt-4 max-sm:px-5 max-sm:pb-5 sm:px-6 sm:pb-6"
+        }
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4">
+      <div className="min-w-0 max-w-[52ch]">
+        <p className="text-[14px] text-foreground">{label}</p>
+        {hint && <p className="mt-0.5 text-[13px] leading-relaxed text-mute">{hint}</p>}
+      </div>
+      {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  );
+}
 
 function Toggle({
   on,
@@ -45,29 +101,37 @@ function Toggle({
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      className="flex h-full w-full flex-col justify-between gap-3 rounded-xl border border-line bg-background/40 p-4 text-left transition-colors hover:border-mute"
+      className="group flex min-h-[64px] w-full items-center justify-between gap-6 py-4 text-left"
     >
-      <div>
-        <p className="text-sm font-medium text-foreground" aria-hidden>
+      <span className="min-w-0">
+        <span className="block text-[14px] text-foreground" aria-hidden>
           {label}
-        </p>
+        </span>
         {hint && (
-          <p className="mt-1 text-xs leading-relaxed text-mute">{hint}</p>
+          <span className="mt-0.5 block text-[13px] leading-relaxed text-mute">{hint}</span>
         )}
-      </div>
+      </span>
       <span
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-          on ? "bg-lime" : "bg-line"
+        className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors duration-200 ${
+          on ? "bg-ink" : "bg-line-strong group-hover:bg-faint"
         }`}
         aria-hidden
       >
         <span
-          className={`absolute top-0.5 h-6 w-6 rounded-full bg-background shadow transition-transform ${
-            on ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute h-5 w-5 rounded-full shadow-card transition-transform duration-200 ${
+            on ? "translate-x-[18px] bg-on-ink" : "translate-x-0.5 bg-panel"
           }`}
         />
       </span>
     </button>
+  );
+}
+
+function Segmented({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex rounded-full bg-surface p-1 text-[13px]">
+      {children}
+    </div>
   );
 }
 
@@ -85,16 +149,26 @@ function Chip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`min-h-10 rounded-lg px-3 text-sm font-medium capitalize ${
+      className={`h-8 rounded-full px-3.5 capitalize transition-colors duration-200 ${
         active
-          ? "bg-lime text-background"
-          : "border border-line text-mute hover:text-foreground"
+          ? "bg-panel text-foreground shadow-card"
+          : "text-mute hover:text-foreground"
       }`}
     >
       {children}
     </button>
   );
 }
+
+function Status({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-3 rounded-[12px] bg-surface px-3.5 py-2.5 text-[13px] leading-relaxed text-soft" role="status">
+      {children}
+    </p>
+  );
+}
+
+/* ------------------------------------------------------------ view */
 
 export function SettingsView() {
   const { address, isConnected } = useAccount();
@@ -153,203 +227,176 @@ export function SettingsView() {
 
   const onProduct = chainId === network.chainId;
   const faucet = faucetFor(network.key);
+  // Trading preferences only mean something where there are markets to trade.
+  const isTempo = network.key === "tempo";
 
   return (
-    <div className="space-y-6">
-      {/* Top row: wallet + appearance */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-            Wallet
-          </p>
-          {!isConnected || !address ? (
-            <div className="mt-4">
-              <p className="text-sm text-mute">Connect to manage your session.</p>
-              <div className="mt-3">
-                <WalletMenu />
-              </div>
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3">
-              <p className="break-all text-xs text-foreground sm:text-sm">
-                {address}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={copyAddr}
-                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-mute"
-                >
-                  {copied ? "Copied" : "Copy"}
-                </button>
-                <a
-                  href={network.explorerAddress(address)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-foreground hover:border-mute"
-                >
-                  Explorer
-                </a>
-                <button
-                  type="button"
-                  onClick={() => disconnect()}
-                  className="inline-flex min-h-10 items-center rounded-lg border border-line px-3 text-sm text-mute hover:text-foreground"
-                >
-                  Disconnect
-                </button>
+    <div className="max-w-[880px] space-y-5">
+      {/* Account: wallet + appearance */}
+      <Card title="Account" flush>
+        {!isConnected || !address ? (
+          <Row label="Wallet" hint="Connect to manage your session.">
+            <WalletMenu />
+          </Row>
+        ) : (
+          <div className="py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[14px] text-foreground">Wallet</p>
+                <p className="tnum mt-0.5 break-all text-[13px] text-mute">{address}</p>
               </div>
               {onProduct ? (
-                <StatusPill tone="lime">Testnet</StatusPill>
+                <StatusPill tone="lime" dot>
+                  On {network.label}
+                </StatusPill>
               ) : (
-                <StatusPill tone="warn">Wrong network</StatusPill>
+                <StatusPill tone="warn" dot>
+                  Wrong network
+                </StatusPill>
               )}
             </div>
-          )}
-        </section>
-
-      </div>
-
-      {/* Trading grid */}
-      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Trading
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <p className="mb-2 text-xs font-medium text-mute">Default side</p>
-            <div className="grid grid-cols-2 gap-2">
-              <Chip
-                active={settings.defaultSide === "buy"}
-                onClick={() => setSettings({ defaultSide: "buy" })}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={copyAddr} className="btn btn-ghost btn-sm h-10">
+                {copied ? "Copied" : "Copy address"}
+              </button>
+              <a
+                href={network.explorerAddress(address)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost btn-sm h-10"
               >
-                Buy
-              </Chip>
-              <Chip
-                active={settings.defaultSide === "sell"}
-                onClick={() => setSettings({ defaultSide: "sell" })}
-              >
-                Sell
-              </Chip>
+                Explorer
+              </a>
+              <button type="button" onClick={() => disconnect()} className="btn btn-quiet btn-sm h-10 text-mute">
+                Disconnect
+              </button>
             </div>
           </div>
-          <div>
-            <p className="mb-2 text-xs font-medium text-mute">Markets filter</p>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ["all", "All"],
-                  ["onchain", "Crypto"],
-                  ["stocks", "Stocks"],
-                ] as const
-              ).map(([k, label]) => (
+        )}
+        <Row label="Appearance" hint="Light, dark, or match your device.">
+          <ThemeSegmented />
+        </Row>
+      </Card>
+
+      {/* Preferences */}
+      <Card title="Preferences" flush>
+        {!isTempo && (
+          <>
+            <Row label="Default side" hint="Where the trade ticket starts.">
+              <Segmented label="Default side">
                 <Chip
-                  key={k}
-                  active={settings.marketFilter === k}
-                  onClick={() => setSettings({ marketFilter: k })}
+                  active={settings.defaultSide === "buy"}
+                  onClick={() => setSettings({ defaultSide: "buy" })}
                 >
-                  {label}
+                  Buy
                 </Chip>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Toggle
-            on={settings.showUsd}
-            onChange={(v) => setSettings({ showUsd: v })}
-            label="Show USD"
-            hint="Dollar values on portfolio and trade"
-          />
-          <Toggle
-            on={settings.hideZeroBalances}
-            onChange={(v) => setSettings({ hideZeroBalances: v })}
-            label="Hide empty"
-            hint="Only tokens you hold"
-          />
-          <Toggle
-            on={settings.confirmSends}
-            onChange={(v) => setSettings({ confirmSends: v })}
-            label="Success message"
-            hint="Show a message after a send goes through"
-          />
+                <Chip
+                  active={settings.defaultSide === "sell"}
+                  onClick={() => setSettings({ defaultSide: "sell" })}
+                >
+                  Sell
+                </Chip>
+              </Segmented>
+            </Row>
+            <Row label="Markets filter" hint="What Markets shows first.">
+              <Segmented label="Markets filter">
+                {(
+                  [
+                    ["all", "All"],
+                    ["onchain", "Crypto"],
+                    ["stocks", "Stocks"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <Chip
+                    key={k}
+                    active={settings.marketFilter === k}
+                    onClick={() => setSettings({ marketFilter: k })}
+                  >
+                    {label}
+                  </Chip>
+                ))}
+              </Segmented>
+            </Row>
+          </>
+        )}
+        <Toggle
+          on={settings.showUsd}
+          onChange={(v) => setSettings({ showUsd: v })}
+          label="Show USD"
+          hint="Dollar values on Portfolio and in trades."
+        />
+        <Toggle
+          on={settings.hideZeroBalances}
+          onChange={(v) => setSettings({ hideZeroBalances: v })}
+          label="Hide empty"
+          hint="Only list tokens you hold."
+        />
+        <Toggle
+          on={settings.confirmSends}
+          onChange={(v) => setSettings({ confirmSends: v })}
+          label="Success message"
+          hint="Show a message after a send goes through."
+        />
+        {!isTempo && (
           <Toggle
             on={settings.compactCharts}
             onChange={(v) => setSettings({ compactCharts: v })}
             label="Compact charts"
-            hint="Smaller charts on trade"
+            hint="Smaller charts on Trade."
           />
-          <Toggle
-            on={settings.fastSend}
-            onChange={(v) => setSettings({ fastSend: v })}
-            label="Fast send"
-            hint="Skip review, still one wallet confirm. We never hold keys."
-          />
-        </div>
-      </section>
+        )}
+        <Toggle
+          on={settings.fastSend}
+          onChange={(v) => setSettings({ fastSend: v })}
+          label="Fast send"
+          hint="Skip the review step. You still confirm in your wallet, and we never hold keys."
+        />
+      </Card>
 
       {/* Network + faucet */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-            Network
-          </p>
-          <p className="mt-2 font-display text-xl text-foreground">
-            {network.label}
-          </p>
-          <p className="mt-2 text-sm text-mute">
-            Test funds: {faucet.assets}
-          </p>
-          <button
-            type="button"
-            onClick={addNetwork}
-            className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-background hover:opacity-90"
-          >
-            Add to wallet
-          </button>
-          {netMsg && <p className="mt-2 text-sm text-mute">{netMsg}</p>}
-        </section>
-
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-            Free test funds
-          </p>
-          <p className="mt-2 font-display text-xl text-foreground">
-            {faucet.title}
-          </p>
-          <p className="mt-2 text-sm text-mute">{faucet.blurb}</p>
+      <Card title="Network" flush>
+        <div className="py-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+            <div className="min-w-0">
+              <p className="text-[14px] text-foreground">{network.label} testnet</p>
+              <p className="mt-0.5 text-[13px] text-mute">Test funds: {faucet.assets}</p>
+            </div>
+            <button type="button" onClick={addNetwork} className="btn btn-ghost btn-sm h-10">
+              Add to wallet
+            </button>
+          </div>
+          {netMsg && <Status>{netMsg}</Status>}
+        </div>
+        <Row label={faucet.title} hint={faucet.blurb}>
           <a
             href={faucet.url}
             target={faucet.url.startsWith("http") ? "_blank" : undefined}
             rel={faucet.url.startsWith("http") ? "noreferrer" : undefined}
-            className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50"
+            className="btn btn-ghost btn-sm h-10"
           >
-            {faucet.cta}
+            {faucet.cta.replace(/\s*→\s*$/, "")}
           </a>
-        </section>
-      </div>
+        </Row>
+      </Card>
 
       {/* Vault note backup, secrets leave this browser only when you export */}
-      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Vault backup
-        </p>
-        <p className="mt-2 text-sm text-mute">
-          Your backup lives in this browser. Export it before you clear site
-          data. Add a passphrase so a stolen file can&apos;t be spent. If you
-          lose this backup, you lose access to your vault. There is no way to
-          recover it.
-        </p>
-        <p className="mt-2 text-xs text-mute">
-          To stay private, use Shield, then private trade or private send. Cash
-          out shows the amount publicly.
-        </p>
-        <label
-          htmlFor="backup-pass"
-          className="mt-4 block text-sm font-medium text-foreground"
-        >
-          Backup passphrase{" "}
-          <span className="font-normal text-mute">(recommended)</span>
+      <Card
+        title="Backup"
+        description="Your private balances live in this browser. Export a backup before you clear site data, and add a passphrase so a stolen file can't be spent."
+      >
+        <div className="flex items-start gap-3 rounded-[14px] bg-warn-soft px-4 py-3 text-[13px] leading-relaxed text-warn">
+          <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M12 7.75v5M12 16.25v.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <span>
+            If you lose this backup, you lose access to your vault. Nobody can
+            recover it, including us.
+          </span>
+        </div>
+
+        <label htmlFor="backup-pass" className="mt-5 block text-[13px] text-mute">
+          Backup passphrase <span className="text-faint">(recommended)</span>
         </label>
         <input
           id="backup-pass"
@@ -357,8 +404,8 @@ export function SettingsView() {
           autoComplete="new-password"
           value={backupPass}
           onChange={(e) => setBackupPass(e.target.value)}
-          placeholder="Lock / unlock backup"
-          className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
+          placeholder="Locks and unlocks the backup"
+          className="gl-input mt-2 max-w-[440px]"
         />
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -379,8 +426,8 @@ export function SettingsView() {
                 await navigator.clipboard.writeText(text);
                 setBackupMsg(
                   backupPass.trim()
-                    ? `Copied locked backup (${backup.notes.length} balance(s)).`
-                    : `Copied plain backup (${backup.notes.length} balance(s)). Anyone with this file can spend it.`
+                    ? `Copied a locked backup (${backup.notes.length} balance(s)).`
+                    : `Copied a plain backup (${backup.notes.length} balance(s)). Anyone with this file can spend it.`
                 );
               } catch (e) {
                 setBackupMsg(
@@ -388,7 +435,7 @@ export function SettingsView() {
                 );
               }
             }}
-            className="inline-flex min-h-11 items-center rounded-xl bg-lime px-4 text-sm font-semibold text-background disabled:opacity-50"
+            className="btn btn-ink"
           >
             Copy backup
           </button>
@@ -419,7 +466,7 @@ export function SettingsView() {
                 setBackupMsg(
                   backup.notes.length
                     ? `Downloaded ${backup.notes.length} balance(s)${
-                        backupPass.trim() ? " (locked)" : ""
+                        backupPass.trim() ? ", locked" : ""
                       }.`
                     : "Empty backup file downloaded."
                 );
@@ -429,144 +476,136 @@ export function SettingsView() {
                 );
               }
             }}
-            className="inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
+            className="btn btn-ghost"
           >
             Download
           </button>
         </div>
-        <label
-          htmlFor="backup-import"
-          className="mt-5 block text-sm font-medium text-foreground"
-        >
-          Restore backup
-        </label>
-        <textarea
-          id="backup-import"
-          value={backupImport}
-          onChange={(e) => setBackupImport(e.target.value)}
-          rows={3}
-          placeholder='Paste your backup here (plain or locked)'
-          className="mt-2 w-full rounded-md border border-line bg-transparent p-3 text-[11px] outline-none focus:border-lime"
-        />
-        <button
-          type="button"
-          disabled={!backupImport.trim() || !isConnected}
-          onClick={() => {
-            void (async () => {
-              setBackupMsg(null);
-              try {
-                let raw = backupImport.trim();
-                if (isSealedBackup(raw)) {
-                  if (!backupPass.trim()) {
-                    setBackupMsg("Enter the passphrase for this locked backup.");
-                    return;
-                  }
-                  raw = await openWithPassphrase(raw, backupPass);
-                }
-                const res = importNotesBackup(raw, address);
-                if (res.ok) {
-                  setBackupMsg(
-                    `Restored ${res.count} balance(s). Open Portfolio or Move.`
-                  );
-                  setBackupImport("");
-                } else {
-                  setBackupMsg(res.error);
-                }
-              } catch (e) {
-                setBackupMsg(
-                  e instanceof Error ? e.message : "Import failed."
-                );
-              }
-            })();
-          }}
-          className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-lime/40 px-4 text-sm font-medium text-lime hover:bg-lime/10 disabled:opacity-50"
-        >
-          Import backup
-        </button>
-        {backupMsg && (
-          <p className="mt-2 text-sm text-mute" role="status">
-            {backupMsg}
+
+        <div className="mt-6 border-t border-line pt-5">
+          <label htmlFor="backup-import" className="block text-[14px] text-foreground">
+            Restore a backup
+          </label>
+          <p className="mt-0.5 text-[13px] text-mute">
+            Paste a plain or locked backup. For a locked one, enter its passphrase above.
           </p>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Vault health
-        </p>
-        <div className="mt-3">
-          <VaultHealth />
+          <textarea
+            id="backup-import"
+            value={backupImport}
+            onChange={(e) => setBackupImport(e.target.value)}
+            rows={3}
+            placeholder="Paste your backup here"
+            className="gl-input tnum mt-3 h-auto resize-y break-all py-3 text-[12.5px] leading-relaxed"
+          />
+          <button
+            type="button"
+            disabled={!backupImport.trim() || !isConnected}
+            onClick={() => {
+              void (async () => {
+                setBackupMsg(null);
+                try {
+                  let raw = backupImport.trim();
+                  if (isSealedBackup(raw)) {
+                    if (!backupPass.trim()) {
+                      setBackupMsg("Enter the passphrase for this locked backup.");
+                      return;
+                    }
+                    raw = await openWithPassphrase(raw, backupPass);
+                  }
+                  const res = importNotesBackup(raw, address);
+                  if (res.ok) {
+                    setBackupMsg(
+                      `Restored ${res.count} balance(s). Open Portfolio or Vault to see them.`
+                    );
+                    setBackupImport("");
+                  } else {
+                    setBackupMsg(res.error);
+                  }
+                } catch (e) {
+                  setBackupMsg(
+                    e instanceof Error ? e.message : "Import failed."
+                  );
+                }
+              })();
+            }}
+            className="btn btn-ghost mt-3"
+          >
+            Restore
+          </button>
         </div>
-      </section>
+        {backupMsg && <Status>{backupMsg}</Status>}
+        <p className="mt-5 text-[12.5px] leading-relaxed text-mute">
+          To stay private, keep money in your vault and send or trade from there.
+          Cashing out shows the amount.
+        </p>
+      </Card>
 
-      <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-          Proof files
-        </p>
-        <p className="mt-2 text-sm text-mute">
-          Setup:{" "}
-          <strong className="text-foreground">{PROVING_CEREMONY}</strong>
-          {PROVING_CEREMONY === "dev"
-            ? ", test keys, not for real money."
-            : ", verified for real money."}
-        </p>
-        <ul className="mt-3 space-y-1 text-[11px] text-mute">
+      <Card title="Vault health">
+        <VaultHealth />
+      </Card>
+
+      <Card
+        title="Proof files"
+        description={
+          <>
+            Your browser builds private payments with these files.{" "}
+            {PROVING_CEREMONY === "dev"
+              ? "This build uses test keys, not for real money."
+              : `Setup: ${PROVING_CEREMONY}, verified for real money.`}
+          </>
+        }
+      >
+        <ul className="divide-y divide-line rounded-[14px] bg-surface px-4">
           {(
             [
-              ["cash out proof key", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
-              ["send proof key", CIRCUIT_ARTIFACTS.transferZkey.sha256],
-              ["private trade proof key", CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256],
-              ["cash out proof program", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
-              ["send proof program", CIRCUIT_ARTIFACTS.transferWasm.sha256],
-              ["private trade proof program", CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256],
+              ["Cash out proof key", CIRCUIT_ARTIFACTS.unshieldZkey.sha256],
+              ["Send proof key", CIRCUIT_ARTIFACTS.transferZkey.sha256],
+              ["Private trade proof key", CIRCUIT_ARTIFACTS.sealedSwapZkey.sha256],
+              ["Cash out proof program", CIRCUIT_ARTIFACTS.unshieldWasm.sha256],
+              ["Send proof program", CIRCUIT_ARTIFACTS.transferWasm.sha256],
+              ["Private trade proof program", CIRCUIT_ARTIFACTS.sealedSwapWasm.sha256],
             ] as const
           ).map(([label, hash]) => (
-            <li key={label}>
-              {label}:{" "}
-              <span className="text-foreground">
+            <li key={label} className="flex min-h-[44px] justify-between gap-x-4 gap-y-0.5 py-2.5 max-sm:flex-col sm:items-center">
+              <span className="text-[13px] text-mute">{label}</span>
+              <span className="tnum text-[12.5px] text-soft">
                 {hash.slice(0, 12)}…{hash.slice(-8)}
               </span>
             </li>
           ))}
         </ul>
-        <button
-          type="button"
-          disabled={integrityBusy}
-          onClick={() => {
-            void (async () => {
-              setIntegrityBusy(true);
-              setIntegrityMsg(null);
-              try {
-                await assertUnshieldArtifacts();
-                await assertTransferArtifacts();
-                await assertSealedSwapArtifacts();
-                setIntegrityMsg("All six proof files check out.");
-              } catch (e) {
-                setIntegrityMsg(
-                  e instanceof Error ? e.message : "Check failed. Files do not match."
-                );
-              } finally {
-                setIntegrityBusy(false);
-              }
-            })();
-          }}
-          className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-line px-4 text-sm font-medium text-foreground hover:border-lime/50 disabled:opacity-50"
-        >
-          {integrityBusy ? "Checking…" : "Verify proof files"}
-        </button>
-        {integrityMsg && (
-          <p className="mt-2 text-sm text-mute" role="status">
-            {integrityMsg}
-          </p>
-        )}
-        <p className="mt-4 text-xs text-mute">
-          <a href="/docs/production" className="text-lime hover:underline">
-            Going live
-          </a>
-          {" · "}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="text-lime hover:underline"
+            disabled={integrityBusy}
+            onClick={() => {
+              void (async () => {
+                setIntegrityBusy(true);
+                setIntegrityMsg(null);
+                try {
+                  await assertUnshieldArtifacts();
+                  await assertTransferArtifacts();
+                  await assertSealedSwapArtifacts();
+                  setIntegrityMsg("All six proof files check out.");
+                } catch (e) {
+                  setIntegrityMsg(
+                    e instanceof Error ? e.message : "Check failed. Files do not match."
+                  );
+                } finally {
+                  setIntegrityBusy(false);
+                }
+              })();
+            }}
+            className="btn btn-ghost btn-sm h-10"
+          >
+            {integrityBusy ? "Checking…" : "Verify proof files"}
+          </button>
+          <a href="/docs/production" className="btn btn-quiet btn-sm h-10 text-mute">
+            Going live
+          </a>
+          <button
+            type="button"
+            className="btn btn-quiet btn-sm h-10 text-mute"
             onClick={() => {
               resetOnboarding();
               setIntegrityMsg("Start checklist restored on Portfolio.");
@@ -574,8 +613,9 @@ export function SettingsView() {
           >
             Show start checklist
           </button>
-        </p>
-      </section>
+        </div>
+        {integrityMsg && <Status>{integrityMsg}</Status>}
+      </Card>
     </div>
   );
 }

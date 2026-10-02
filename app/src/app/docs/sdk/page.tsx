@@ -5,14 +5,14 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloamtrade/sdk — add shielded balances, private payments, and selective disclosure to any Robinhood Chain app or agent. The privacy layer as a package.",
+    "@gloamtrade/sdk: add private balances, private payments, and selective disclosure to any Robinhood Chain app or agent. The privacy layer as a package.",
 };
 
 export default function DocsSdkPage() {
   return (
     <DocsLayout
       title="SDK"
-      lede="The privacy layer for Robinhood Chain, as a package. Give any app or agent shielded balances, private payments, and selective disclosure — without building a proving stack from scratch."
+      lede="The privacy layer for Robinhood Chain, as a package. Give any app or agent shielded balances, private payments, and selective disclosure, without building a proving stack from scratch."
       glance={[
         { label: "Package", value: "@gloamtrade/sdk" },
         { label: "Runtime", value: "browser + node" },
@@ -31,7 +31,7 @@ export default function DocsSdkPage() {
         Robinhood Chain is public: every balance, size, and move is visible.
         Gloam is the shielded chamber on top of it, and <code>@gloamtrade/sdk</code>{" "}
         is that chamber as a dependency. The Gloam vault app is the reference
-        implementation, not a special case — the same core runs in your app.
+        implementation, not a special case: the same core runs in your app.
       </p>
       <ul>
         <li>
@@ -44,8 +44,8 @@ export default function DocsSdkPage() {
         </li>
         <li>
           <strong>Selective disclosure.</strong> Let a holder prove one balance
-          to a chosen party — an auditor, a counterparty — revealing nothing
-          else. See <Link href="/docs/sdk/disclosure">the guide</Link>.
+          to a chosen party, such as an auditor or a counterparty, revealing
+          nothing else. See <Link href="/docs/sdk/disclosure">the guide</Link>.
         </li>
         <li>
           <strong>Cash out.</strong> Unshield to a public balance with a real
@@ -56,7 +56,7 @@ export default function DocsSdkPage() {
       <h2>Install</h2>
       <p>
         The SDK ships TypeScript source, consumed through your bundler (Next
-        <code>transpilePackages</code>, Vite, tsx) — the same way the reference
+        <code>transpilePackages</code>, Vite, tsx), the same way the reference
         app uses it. <code>snarkjs</code> is an optional peer, needed only when
         you generate proofs (shield, unshield, disclosure).
       </p>
@@ -79,7 +79,7 @@ nullifier  = Poseidon(secret, commitment)`}</code>
         authority and never leaves the client. Spending (send, cash out, trade)
         proves in zero knowledge that you know the secret for a commitment in the
         tree, and publishes the <code>nullifier</code> so it cannot be spent
-        twice — without revealing which note. The chain verifies a Groth16 proof,
+        twice, without revealing which note. The chain verifies a Groth16 proof,
         never your identity or size. Nothing is a mock; if a path cannot be
         private, it waits.
       </p>
@@ -102,7 +102,7 @@ const intent = await buildShieldBoundIntent({
 });
 
 // intent.exec is a ready shieldBound(asset, amount, commitment, proof) call.
-// intent.note.secret is the spend key — PERSIST IT.
+// intent.note.secret is the spend key. PERSIST IT.
 await wallet.writeContract({
   address: intent.exec.poolAddress,
   abi: shieldPoolAbi,
@@ -125,50 +125,52 @@ await wallet.writeContract({
         on-chain call (wei amounts, resolved addresses, proof args). The SDK and
         the <Link href="/docs/agents">agent server</Link> share one intent shape.
       </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Builder</th>
-            <th>Resolves</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>buildShieldBoundIntent</code>
-            </td>
-            <td>
-              Mints a note + shield proof → <code>shieldBound(...)</code> (the
-              live deposit path)
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildShieldIntent</code>
-            </td>
-            <td>
-              Plain <code>shield(...)</code> — only for pools without a shield
-              verifier
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildUnshieldIntent</code>
-            </td>
-            <td>
-              Witness + proof → <code>unshield(...)</code> (cash out)
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildPrivateSendIntent</code>
-            </td>
-            <td>
-              Transfer witness → <code>transfer(...)</code> to a receive tag
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Builder</th>
+              <th>Resolves</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>buildShieldBoundIntent</code>
+              </td>
+              <td>
+                Mints a note + shield proof → <code>shieldBound(...)</code> (the
+                live deposit path)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildShieldIntent</code>
+              </td>
+              <td>
+                Plain <code>shield(...)</code>, only for pools without a shield
+                verifier
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildUnshieldIntent</code>
+              </td>
+              <td>
+                Witness + proof → <code>unshield(...)</code> (cash out)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildPrivateSendIntent</code>
+              </td>
+              <td>
+                Transfer witness → <code>transfer(...)</code> to a receive tag
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <h2>API surface</h2>
       <h3>Notes</h3>
@@ -208,7 +210,7 @@ const { proofBytes, publicSignals } = await prover(circomInput);`}</code>
       <p>
         <code>SEALED_VAULT</code> (the hardened pool),{" "}
         <code>SHIELD_VERIFIER</code>, <code>NATIVE_ASSET</code>, and the chain
-        ids. The default <code>SEALED_VAULT</code> is the hardened C1/C2/C3 pool —
+        ids. The default <code>SEALED_VAULT</code> is the hardened C1/C2/C3 pool,
         never the retired <code>0x4F38</code> pool.
       </p>
 
@@ -264,7 +266,7 @@ const { proofBytes, publicSignals } = await prover(circomInput);`}</code>
       <p>
         Robinhood Chain testnet <code>46630</code> only, with dev-ceremony keys.
         Real privacy only, never a mock success. Note secrets are the sole spend
-        authority — persist and protect them. Mainnet waits for a production
+        authority: persist and protect them. Mainnet waits for a production
         ceremony and an external audit; see{" "}
         <Link href="/docs/production">the production gate</Link>.
       </p>

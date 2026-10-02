@@ -9,6 +9,20 @@ import { readVaultSealedReadiness } from "@/lib/vaultStatus";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { StatusPill } from "./StatusPill";
 
+function RefreshIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /**
  * Always-on vault status, dedicated RH RPC, no wallet required.
  */
@@ -36,35 +50,39 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
 
   if (!isShieldDeployed()) return null;
 
+  const recheck = () => {
+    void (async () => {
+      const r = await readVaultSealedReadiness();
+      setSealed(r.status === "ready" ? "ready" : "off");
+      await refresh();
+    })();
+  };
+
+  const syncText = treeLoading
+    ? "Syncing…"
+    : treeError
+      ? "Could not sync"
+      : `${leafCount.toLocaleString()} private ${leafCount === 1 ? "balance" : "balances"}`;
+
   if (compact) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
-        <span>
-          Privacy vault
-          {network.pool
-            ? ` · ${shortAddress(network.pool, 4)}`
-            : ""}
-          {treeLoading
-            ? " · syncing…"
-            : treeError
-              ? " · sync error"
-              : ` · ${leafCount} private balances`}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-mute">
+        <span className="tnum">
+          Private vault
+          {network.pool ? ` ${shortAddress(network.pool, 4)}` : ""}
+          <span className="text-faint"> · </span>
+          {syncText}
         </span>
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-1">
           <StatusPill tone={sealed === "ready" ? "lime" : "mute"} dot>
-            {sealed === "ready" ? "Private trade" : "Vault"}
+            {sealed === "ready" ? "Private trade on" : "Vault"}
           </StatusPill>
           <button
             type="button"
-            onClick={() => {
-              void (async () => {
-                const r = await readVaultSealedReadiness();
-                setSealed(r.status === "ready" ? "ready" : "off");
-                await refresh();
-              })();
-            }}
-            className="text-lime hover:underline"
+            onClick={recheck}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface hover:text-foreground"
           >
+            <RefreshIcon />
             Refresh
           </button>
         </span>
@@ -73,49 +91,37 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="rounded-xl border border-line bg-panel px-4 py-3 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-            Privacy vault
-          </p>
-          <p className="mt-1 text-mute">
-            {network.pool
-              ? shortAddress(network.pool, 6)
-              : "not configured"}
+    <div className="rounded-[14px] bg-surface p-4 text-[14px]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[14px] text-foreground">Private vault</p>
+          <p className="tnum mt-1 text-[13px] text-mute">
+            {network.pool ? shortAddress(network.pool, 6) : "Not set up"}
             {HASH_SCHEME !== "poseidon" ? ` · ${HASH_SCHEME}` : ""}
-            {treeLoading
-              ? " · syncing…"
-              : treeError
-                ? " · sync error"
-                : ` · ${leafCount} private balances`}
+            <span className="text-faint"> · </span>
+            {syncText}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <StatusPill tone={sealed === "ready" ? "lime" : "warn"} dot>
-            {sealed === "ready" ? "Ready" : sealed === "checking" ? "…" : "Limited"}
+        <div className="flex items-center gap-1">
+          <StatusPill tone={sealed === "ready" ? "lime" : sealed === "checking" ? "mute" : "warn"} dot>
+            {sealed === "ready" ? "Ready" : sealed === "checking" ? "Checking" : "Limited"}
           </StatusPill>
           <button
             type="button"
-            onClick={() => {
-              void (async () => {
-                const r = await readVaultSealedReadiness();
-                setSealed(r.status === "ready" ? "ready" : "off");
-                await refresh();
-              })();
-            }}
-            className="text-xs text-lime hover:underline"
+            onClick={recheck}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
           >
+            <RefreshIcon />
             Refresh
           </button>
         </div>
       </div>
-      <p className="mt-2 text-xs text-mute">
-        Stay in the vault to stay private. Shield, private send, and private
-        trade keep your amounts hidden. Cash out shows the amount publicly.
+      <p className="mt-3 max-w-[64ch] text-[13px] leading-relaxed text-mute">
+        Money stays private while it stays in the vault. Adding, sending and
+        trading from it keep amounts hidden. Cashing out shows the amount.
       </p>
       {network.pool && (
-        <p className="mt-2 break-all text-[10px] text-mute">
+        <p className="tnum mt-3 break-all border-t border-line pt-3 text-[12px] leading-relaxed text-faint">
           {network.pool}
           {" · block "}
           {env.deployBlock.toString()}
@@ -127,18 +133,18 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
             href={network.explorerAddress(network.pool)}
             target="_blank"
             rel="noreferrer"
-            className="text-lime hover:underline"
+            className="text-mute underline decoration-line-strong underline-offset-2 transition-colors hover:text-foreground"
           >
-            explorer
+            Explorer
           </a>
         </p>
       )}
       {(env.remappedFromLegacy || env.deployBlockRemapped) && (
-        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
-          Vercel still has pre-sealed env values. App remaps to sealed vault{" "}
-          {shortAddress(env.productPool, 4)}, clean{" "}
-          <code className="text-foreground">NEXT_PUBLIC_POSEIDON_SHIELD_POOL</code>{" "}
-          and deploy block in Vercel when you can.
+        <p className="mt-2 rounded-[10px] bg-warn-soft px-3 py-2 text-[12px] leading-relaxed text-warn">
+          Vercel still has older env values. The app remaps to the current vault{" "}
+          {shortAddress(env.productPool, 4)}. Clean{" "}
+          <span className="font-medium">NEXT_PUBLIC_POSEIDON_SHIELD_POOL</span>{" "}
+          and the deploy block in Vercel when you can.
         </p>
       )}
     </div>

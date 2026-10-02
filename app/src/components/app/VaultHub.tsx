@@ -1,77 +1,122 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { ShieldView } from "./ShieldView";
 import { TradeView } from "./TradeView";
 import { SendView } from "./SendView";
 import { MoveView } from "./MoveView";
+import { useNetwork } from "./NetworkProvider";
 
 /**
- * The Vault hub, one surface for every money move. Actions live in a quiet
- * vertical rail on the left (sticky on desktop, a horizontal scroller on mobile),
- * and the active action gets the whole main column to breathe. No stacked panes
- * over a boxed form. The URL (?tab=) drives which action shows.
+ * The Vault hub, one surface for every money move. A calm segmented track picks
+ * the action and the active view gets the full width below it. The URL (?tab=)
+ * drives which action shows, so links and the old /app/shield, /app/move and
+ * /app/send redirects keep working.
  */
 const TABS = [
-  { id: "shield", label: "Shield", hint: "Make a balance private" },
-  { id: "trade", label: "Trade", hint: "Amounts stay private" },
-  { id: "send", label: "Send", hint: "To any address" },
-  { id: "move", label: "Cash out", hint: "Back to your wallet" },
+  { id: "shield", label: "Add", hint: "Move money into your private balance" },
+  { id: "move", label: "Pay", hint: "Send privately, receive, cash out" },
+  {
+    id: "trade",
+    label: "Trade",
+    hint: "Trade with the size kept private",
+    robinhoodOnly: true,
+  },
+  {
+    id: "send",
+    label: "Public send",
+    hint: "A regular transfer from your wallet",
+    // Sends the chain's native coin. Tempo has none to send (no native value
+    // transfers), so on Tempo payments go through Pay.
+    robinhoodOnly: true,
+  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
+const noopSubscribe = () => () => {};
+
+function PanelSkeleton() {
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" aria-busy="true">
+      <div className="gl-card h-[420px] motion-safe:animate-pulse" />
+      <div className="gl-card h-[220px] motion-safe:animate-pulse" />
+    </div>
+  );
+}
+
 export function VaultHub() {
   const router = useRouter();
   const sp = useSearchParams();
+  const { network } = useNetwork();
+  // The views read the saved network and wallet, which only exist in the
+  // browser. Render them once hydrated so server and client HTML always match.
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
+
+  // Tokenized-stock trading and native-coin sends only exist on Robinhood
+  // Chain, so those tabs drop out on Tempo (same rule as Markets in the shell).
+  const isTempo = hydrated && network.key === "tempo";
+  const tabs = TABS.filter((t) => !(isTempo && "robinhoodOnly" in t && t.robinhoodOnly));
+
   const raw = sp.get("tab");
-  const tab: TabId = (TABS.some((t) => t.id === raw) ? raw : "shield") as TabId;
+  const tab: TabId = (tabs.some((t) => t.id === raw) ? raw : "shield") as TabId;
 
   function select(id: TabId) {
     const params = new URLSearchParams(Array.from(sp.entries()));
     params.set("tab", id);
+    params.delete("mode");
     router.replace(`/app/vault?${params.toString()}`, { scroll: false });
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[228px_minmax(0,1fr)] lg:gap-16">
-      <nav aria-label="Vault actions" className="vault-rail">
-        {TABS.map((t) => {
+    <div className="space-y-6">
+      <div
+        role="tablist"
+        aria-label="Vault actions"
+        className="inline-flex max-w-full rounded-full bg-surface-2 p-1 max-sm:flex max-sm:w-full dark:bg-panel dark:ring-1 dark:ring-line"
+      >
+        {tabs.map((t) => {
           const active = t.id === tab;
           return (
             <button
               key={t.id}
+              id={`vault-tab-${t.id}`}
               type="button"
-              aria-current={active ? "page" : undefined}
+              role="tab"
+              aria-selected={active}
+              aria-controls="vault-panel"
+              title={t.hint}
               onClick={() => select(t.id)}
-              className={`vault-rail-item flex flex-col gap-0.5 rounded-2xl px-4 py-3.5 text-left transition-colors ${
+              className={`h-10 whitespace-nowrap rounded-full px-[18px] text-[14px] transition-colors duration-200 max-sm:flex-auto max-sm:px-3 ${
                 active
-                  ? "bg-lime text-background"
-                  : "text-mute hover:bg-panel hover:text-foreground"
+                  ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
+                  : "text-mute hover:text-foreground"
               }`}
             >
-              <span className="text-[15px] font-semibold tracking-tight">
-                {t.label}
-              </span>
-              <span className="text-[12px] opacity-75">{t.hint}</span>
+              {t.label}
             </button>
           );
         })}
-      </nav>
+      </div>
 
-      <Suspense
-        fallback={
-          <div className="rounded-2xl border border-line bg-panel p-8 text-sm text-mute">
-            Loading…
-          </div>
-        }
-      >
-        <div className="min-w-0">
-          {tab === "shield" && <ShieldView />}
-          {tab === "trade" && <TradeView />}
-          {tab === "send" && <SendView />}
-          {tab === "move" && <MoveView />}
+      <Suspense fallback={<PanelSkeleton />}>
+        <div
+          id="vault-panel"
+          role="tabpanel"
+          aria-labelledby={`vault-tab-${tab}`}
+          className="min-w-0"
+        >
+          {!hydrated ? (
+            <PanelSkeleton />
+          ) : (
+            <>
+              {tab === "shield" && <ShieldView />}
+              {tab === "trade" && <TradeView />}
+              {tab === "send" && <SendView />}
+              {tab === "move" && <MoveView />}
+            </>
+          )}
         </div>
       </Suspense>
     </div>

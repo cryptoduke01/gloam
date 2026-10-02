@@ -46,80 +46,82 @@ export default function DocsSdkReferencePage() {
       <h2>Intent builders</h2>
       <p>
         The primary surface. Each builder returns an unsigned{" "}
-        <code>GloamIntent</code> — a portable <code>plan</code> plus a resolved{" "}
+        <code>GloamIntent</code>: a portable <code>plan</code> plus a resolved{" "}
         <code>exec</code> (the on-chain call). You sign and broadcast; the SDK
         never holds a key.
       </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Function</th>
-            <th>Signature</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>buildShieldBoundIntent</code>
-            </td>
-            <td>
-              <code>(p: ShieldBoundIntentParams) =&gt; Promise&lt;ShieldIntent&gt;</code>
-              <br />
-              Mints a note + shield proof → <code>shieldBound(...)</code>
-            </td>
-            <td>Live</td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildShieldIntent</code>
-            </td>
-            <td>
-              <code>(p: ShieldIntentParams) =&gt; Promise&lt;ShieldIntent&gt;</code>
-              <br />
-              Plain <code>shield(...)</code>, no proof
-            </td>
-            <td>Legacy pools only</td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildUnshieldIntent</code>
-            </td>
-            <td>
-              <code>(p: UnshieldIntentParams) =&gt; Promise&lt;GloamIntent&lt;&quot;unshield&quot;&gt;&gt;</code>
-              <br />
-              Witness + proof → <code>unshield(...)</code> (cash out)
-            </td>
-            <td>Live</td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildPrivateSendIntent</code>
-            </td>
-            <td>
-              <code>(p: PrivateSendIntentParams) =&gt; Promise&lt;PrivateSendIntent&gt;</code>
-              <br />
-              Transfer witness → <code>transfer(...)</code>; returns payment +
-              change notes
-            </td>
-            <td>Live</td>
-          </tr>
-          <tr>
-            <td>
-              <code>buildPrivateTradeIntent</code>
-            </td>
-            <td>
-              <code>(p: PrivateTradeIntentParams) =&gt; Promise&lt;PrivateTradeIntent&gt;</code>
-              <br />
-              Sealed-swap witness → <code>sealedSwap(...)</code>
-            </td>
-            <td>Disabled (H1)</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Function</th>
+              <th>Signature</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>buildShieldBoundIntent</code>
+              </td>
+              <td>
+                <code>(p: ShieldBoundIntentParams) =&gt; Promise&lt;ShieldIntent&gt;</code>
+                <br />
+                Mints a note + shield proof → <code>shieldBound(...)</code>
+              </td>
+              <td>Live</td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildShieldIntent</code>
+              </td>
+              <td>
+                <code>(p: ShieldIntentParams) =&gt; Promise&lt;ShieldIntent&gt;</code>
+                <br />
+                Plain <code>shield(...)</code>, no proof
+              </td>
+              <td>Legacy pools only</td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildUnshieldIntent</code>
+              </td>
+              <td>
+                <code>(p: UnshieldIntentParams) =&gt; Promise&lt;GloamIntent&lt;&quot;unshield&quot;&gt;&gt;</code>
+                <br />
+                Witness + proof → <code>unshield(...)</code> (cash out)
+              </td>
+              <td>Live</td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildPrivateSendIntent</code>
+              </td>
+              <td>
+                <code>(p: PrivateSendIntentParams) =&gt; Promise&lt;PrivateSendIntent&gt;</code>
+                <br />
+                Transfer witness → <code>transfer(...)</code>; returns payment +
+                change notes
+              </td>
+              <td>Live</td>
+            </tr>
+            <tr>
+              <td>
+                <code>buildPrivateTradeIntent</code>
+              </td>
+              <td>
+                <code>(p: PrivateTradeIntentParams) =&gt; Promise&lt;PrivateTradeIntent&gt;</code>
+                <br />
+                Sealed-swap witness → <code>sealedSwap(...)</code>
+              </td>
+              <td>Disabled (H1)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p>
         <code>buildPrivateTradeIntent</code> produces a valid intent, but the
-        on-chain sealed-swap path is disabled pending the H1 solvency work — the
+        on-chain sealed-swap path is disabled pending the H1 solvency work. The
         builder is here so you can wire it ahead of the flip.
       </p>
 
@@ -166,7 +168,7 @@ interface PrivateSendIntentParams {
   intent: K;                  // one of the four IntentKind values
   chainId: number;
   agentAddress: Address | null;
-  plan: PlanFor<K>;           // portable: symbol, amount — no secrets
+  plan: PlanFor<K>;           // portable: symbol, amount, no secrets
   privacy: string;            // plain-language: what is and isn't hidden
   execution: string;          // plain-language: how to sign + broadcast
   exec: IntentExec;
@@ -269,7 +271,7 @@ pathToCircomInput(path: PoseidonMerklePath)  // -> circom-ready string fields`}<
       <h2>Tree sync</h2>
       <p>
         A spend needs a membership path, which needs the current tree.{" "}
-        <code>syncTree</code> rebuilds it from chain — replaying{" "}
+        <code>syncTree</code> rebuilds it from chain, replaying{" "}
         <code>Shielded</code>, <code>Transferred</code>, and{" "}
         <code>SealedSwapped</code> leaves in on-chain order, so the root stays
         correct after any transfer or swap. viem&apos;s <code>PublicClient</code>{" "}
@@ -417,64 +419,66 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
 
       {/* ─────────────────────────  constants  ───────────────────────── */}
       <h2>Constants</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Constant</th>
-            <th>Value / meaning</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>SEALED_VAULT</code>
-            </td>
-            <td>The hardened C1/C2/C3 pool — the default deposit target</td>
-          </tr>
-          <tr>
-            <td>
-              <code>SHIELD_VERIFIER</code>
-            </td>
-            <td>The deployed shield verifier the hardened pool checks against</td>
-          </tr>
-          <tr>
-            <td>
-              <code>GLOAM_PAY_MEMO</code>
-            </td>
-            <td>The encrypted-memo contract for private-pay discovery</td>
-          </tr>
-          <tr>
-            <td>
-              <code>NATIVE_ASSET</code>
-            </td>
-            <td>Zero address — native ETH</td>
-          </tr>
-          <tr>
-            <td>
-              <code>RH_TESTNET_CHAIN_ID</code> / <code>RH_MAINNET_CHAIN_ID</code>
-            </td>
-            <td>
-              <code>46630</code> / <code>4663</code>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>FIELD_PRIME</code>
-            </td>
-            <td>The BN254 scalar field modulus</td>
-          </tr>
-          <tr>
-            <td>
-              <code>MERKLE_DEPTH</code> / <code>SEALED_RATE_SCALE</code>
-            </td>
-            <td>
-              <code>20</code> / <code>100</code>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Constant</th>
+              <th>Value / meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>SEALED_VAULT</code>
+              </td>
+              <td>The hardened C1/C2/C3 pool, the default deposit target</td>
+            </tr>
+            <tr>
+              <td>
+                <code>SHIELD_VERIFIER</code>
+              </td>
+              <td>The deployed shield verifier the hardened pool checks against</td>
+            </tr>
+            <tr>
+              <td>
+                <code>GLOAM_PAY_MEMO</code>
+              </td>
+              <td>The encrypted-memo contract for private-pay discovery</td>
+            </tr>
+            <tr>
+              <td>
+                <code>NATIVE_ASSET</code>
+              </td>
+              <td>Zero address, meaning native ETH</td>
+            </tr>
+            <tr>
+              <td>
+                <code>RH_TESTNET_CHAIN_ID</code> / <code>RH_MAINNET_CHAIN_ID</code>
+              </td>
+              <td>
+                <code>46630</code> / <code>4663</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>FIELD_PRIME</code>
+              </td>
+              <td>The BN254 scalar field modulus</td>
+            </tr>
+            <tr>
+              <td>
+                <code>MERKLE_DEPTH</code> / <code>SEALED_RATE_SCALE</code>
+              </td>
+              <td>
+                <code>20</code> / <code>100</code>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p>
-        The default <code>SEALED_VAULT</code> is the hardened pool — never the
+        The default <code>SEALED_VAULT</code> is the hardened pool, never the
         retired <code>0x4F38</code> deployment. Pass <code>poolAddress</code> to
         any builder to override it.
       </p>
@@ -482,7 +486,7 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
       <h2>Guardrails</h2>
       <p>
         Robinhood Chain testnet <code>46630</code> with dev-ceremony keys. Real
-        proofs only, never a mock. Note secrets are the sole spend authority —
+        proofs only, never a mock. Note secrets are the sole spend authority:
         persist and protect them. See the <Link href="/docs/quickstart">quickstart</Link>{" "}
         to put this together, or <Link href="/docs/production">the production
         gate</Link> for what mainnet still needs.

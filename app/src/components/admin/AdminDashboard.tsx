@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import { Logo } from "@/components/Logo";
+import { SealedField } from "@/components/ui/SealedField";
 import { shortAddress } from "@/lib/chain";
 import { useNetwork } from "../app/NetworkProvider";
 
@@ -232,10 +233,8 @@ export function AdminDashboard() {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
-          <span className="livedot h-2 w-2 rounded-full bg-lime" />
-          <p className="text-[11px] uppercase tracking-[0.18em] text-mute">
-            Verifying session
-          </p>
+          <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+          <p className="t-label">Verifying session</p>
         </div>
       </div>
     );
@@ -243,101 +242,97 @@ export function AdminDashboard() {
 
   if (!authed) {
     return (
-      <div className="relative flex min-h-dvh flex-col bg-background">
-        <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <div className="absolute left-1/2 top-[42%] h-[480px] w-[480px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-lime/[0.07] blur-[120px]" />
-        </div>
-
-        <header className="relative z-10 border-b border-line">
-          <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-5 sm:px-6">
+      <div className="flex min-h-dvh flex-col bg-background p-3 sm:p-4">
+        <div className="gl-panel flex flex-1 flex-col">
+          <SealedField />
+          <header className="flex h-16 items-center justify-between px-5 sm:px-8">
             <Logo />
-            <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
+            <span className="rounded-full bg-panel/70 px-3 py-1 text-[12px] text-mute">
               Restricted
             </span>
-          </div>
-        </header>
+          </header>
 
-        <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 py-12">
-          <div className="w-full max-w-md">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
-              Ops console
-            </p>
-            <h1 className="mt-3 font-display text-4xl tracking-tight text-foreground sm:text-5xl">
-              Traction
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-mute">
-              On-chain volume, unique wallets, and product funnel. Access code
-              required. Not public.
-            </p>
+          <main className="flex flex-1 flex-col items-center justify-center px-2 py-12 sm:px-5">
+            <div className="w-full max-w-[420px]">
+              <div className="gl-glass p-2 shadow-pop">
+                <div className="rounded-[12px] bg-panel p-6 sm:p-7">
+                  <p className="t-label">Ops console</p>
+                  <h1 className="t-display-m mt-3 text-foreground">Traction</h1>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">
+                    On-chain volume, unique wallets, and product funnel. Access
+                    code required. Not public.
+                  </p>
 
-            <form
-              onSubmit={onLogin}
-              className="mt-8 space-y-5 rounded-2xl border border-line bg-panel p-6 sm:p-7"
-            >
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                  Access code
-                </span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="mt-2 w-full rounded-lg border border-line bg-background px-4 py-3.5 text-sm text-foreground outline-none placeholder:text-mute/50 focus:border-lime/50 focus:ring-1 focus:ring-lime/30"
-                  required
-                />
-              </label>
-              {loginErr && (
-                <p
-                  className="rounded-md border border-[#C0432F]/25 bg-[#C0432F]/[0.07] px-3 py-2 text-sm text-[#C0432F]"
-                  role="alert"
-                >
-                  {loginErr}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={busy}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-lime text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {busy ? "Checking…" : "Enter console"}
-              </button>
-            </form>
-            <p className="mt-6 text-center text-[11px] text-mute">
-              Set <code className="text-lime">ADMIN_ACCESS_CODE</code> on Vercel
-            </p>
-          </div>
-        </main>
+                  <form onSubmit={onLogin} className="mt-7 space-y-4">
+                    <label className="block">
+                      <span className="text-[13px] text-mute">Access code</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="gl-input mt-2"
+                        required
+                      />
+                    </label>
+                    {loginErr && (
+                      <p
+                        className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-[13px] text-danger"
+                        role="alert"
+                      >
+                        {loginErr}
+                      </p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="btn btn-ink btn-lg btn-block"
+                    >
+                      {busy ? "Checking…" : "Enter console"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <p className="mt-5 text-center text-[12px] text-mute">
+                Set{" "}
+                <code className="rounded-md bg-panel/70 px-1.5 py-0.5 text-foreground">
+                  ADMIN_ACCESS_CODE
+                </code>{" "}
+                on Vercel
+              </p>
+            </div>
+          </main>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-background">
-      <header className="sticky top-0 z-20 border-b border-line bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8">
+    <div className="gloam-app min-h-dvh bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-line bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-3 px-5 sm:px-8">
           <div className="flex items-center gap-3">
             <Logo />
-            <span className="rounded-full border border-lime/40 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.14em] text-lime">
+            <span className="rounded-full border border-line bg-panel px-2.5 py-1 text-[12px] text-mute">
               Admin
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden text-[10px] text-mute sm:inline">
-              {product?.backend === "redis" ? "redis" : "memory"} · auto 45s
+          <div className="flex items-center gap-1.5">
+            <span className="mr-2 hidden text-[12px] text-mute sm:inline">
+              {product?.backend === "redis" ? "Redis" : "Memory"}, refreshes every 45s
             </span>
             <button
               type="button"
               onClick={() => void loadMetrics()}
-              className="rounded-md border border-line px-3 py-2 text-xs text-mute hover:text-foreground"
+              className="btn btn-ghost btn-sm"
             >
               Refresh
             </button>
             <button
               type="button"
               onClick={() => void onLogout()}
-              className="rounded-md border border-line px-3 py-2 text-xs text-mute hover:text-foreground"
+              className="btn btn-quiet btn-sm"
             >
               Log out
             </button>
@@ -345,40 +340,54 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-10 px-5 py-10 sm:px-8 sm:py-12">
+      <main className="mx-auto max-w-[1200px] space-y-8 px-5 py-10 sm:px-8 sm:py-12">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="t-display-m">Traction</h1>
+            <p className="mt-2 text-[14px] text-mute">
+              On-chain activity and the product funnel, in one place.
+            </p>
+          </div>
+          {/* Tabs */}
+          <div
+            role="tablist"
+            aria-label="Dashboard sections"
+            className="flex self-start rounded-full bg-surface-2 p-1 text-[13px] sm:self-auto"
+          >
+            {(
+              [
+                ["overview", "Overview"],
+                ["users", "Wallets"],
+                ["events", "Product events"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className={`h-9 rounded-full px-3.5 transition-colors sm:px-4 ${
+                  tab === id
+                    ? "bg-panel font-medium text-foreground shadow-card"
+                    : "text-mute hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loadErr && (
-          <p className="rounded-lg border border-[#C0432F]/30 bg-[#C0432F]/[0.07] px-4 py-3 text-sm text-[#C0432F]">
+          <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
             {loadErr}
           </p>
         )}
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-line pb-3">
-          {(
-            [
-              ["overview", "Overview"],
-              ["users", "Wallets"],
-              ["events", "Product events"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                tab === id
-                  ? "bg-lime/15 font-medium text-foreground"
-                  : "text-mute hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {tab === "overview" && (
           <>
-            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Kpi
                 label="Unique shielders"
                 value={String(oc?.uniqueShielders ?? 0)}
@@ -397,24 +406,24 @@ export function AdminDashboard() {
               <Kpi
                 label="Product events"
                 value={String(product?.totalEvents ?? 0)}
-                sub={product?.backend ?? ", "}
+                sub={product?.backend ?? "unknown"}
               />
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-3">
+            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Kpi
                 label="Public open"
                 value={data?.launch?.open ? "Yes" : "No"}
                 sub={
                   data?.launch?.opensAt
                     ? new Date(data.launch.opensAt).toLocaleString()
-                    : ", "
+                    : "Not scheduled"
                 }
               />
               <Kpi
                 label="Note slots"
                 value={String(oc?.notes ?? 0)}
-                sub={`block ${oc?.latestBlock ?? ", "}`}
+                sub={`block ${oc?.latestBlock ?? "unknown"}`}
               />
               <Kpi
                 label="Unshield vol"
@@ -424,16 +433,18 @@ export function AdminDashboard() {
             </section>
 
             {ocError && (
-              <p className="text-sm text-[#C0432F]">On-chain: {ocError}</p>
+              <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
+                On-chain: {ocError}
+              </p>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <Panel title="On-chain activity">
                 <BarChart rows={activityBars} />
               </Panel>
               <Panel title="Product funnel">
                 {funnelBars.length === 0 ? (
-                  <p className="text-sm text-mute">No product events yet</p>
+                  <p className="text-[14px] text-mute">No product events yet</p>
                 ) : (
                   <BarChart rows={funnelBars.map((r) => ({ k: r.k, v: r.v, pct: r.pct }))} />
                 )}
@@ -460,9 +471,9 @@ export function AdminDashboard() {
                     href={network.explorerAddress(oc.pool)}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[11px] text-lime hover:underline"
+                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
                   >
-                    Pool →
+                    Pool <span aria-hidden>↗</span>
                   </a>
                 ) : null
               }
@@ -476,19 +487,21 @@ export function AdminDashboard() {
                     <a
                       key="a"
                       href={network.explorerAddress(tx.from)}
-                      className="text-mute hover:text-lime"
+                      className="text-mute transition-colors hover:text-foreground"
                       target="_blank"
                       rel="noreferrer"
                     >
                       {shortAddress(tx.from, 4)}
                     </a>
                   ) : (
-                    ", "
+                    <span key="a" className="text-faint">
+                      Not shown
+                    </span>
                   ),
                   <a
                     key="t"
                     href={network.explorerTx(tx.txHash)}
-                    className="text-mute hover:text-lime"
+                    className="text-mute transition-colors hover:text-foreground"
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -504,7 +517,7 @@ export function AdminDashboard() {
 
         {tab === "users" && (
           <Panel title="Shielders (by activity)">
-            <p className="mb-4 text-sm text-mute">
+            <p className="mb-4 text-[14px] text-mute">
               Unique addresses that called shield. Volume ETH is native
               deposits only (not stock tokens).
             </p>
@@ -512,7 +525,7 @@ export function AdminDashboard() {
               headers={["#", "Address", "Shields", "ETH vol", "Explorer"]}
               rows={(oc?.topShielders ?? []).map((u, i) => [
                 String(i + 1),
-                <span key="addr" className="text-xs text-foreground">
+                <span key="addr" className="text-[13px] text-foreground">
                   {u.address}
                 </span>,
                 String(u.shields),
@@ -522,7 +535,7 @@ export function AdminDashboard() {
                   href={network.explorerAddress(u.address)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-lime hover:underline"
+                  className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground"
                 >
                   View
                 </a>,
@@ -534,7 +547,7 @@ export function AdminDashboard() {
 
         {tab === "events" && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {Object.entries(product?.counters ?? {})
                 .filter(([k]) => k !== "total")
                 .sort((a, b) => b[1] - a[1])
@@ -546,28 +559,33 @@ export function AdminDashboard() {
               <DataTable
                 headers={["Event", "Path", "Time"]}
                 rows={(product?.recent ?? []).map((ev) => [
-                  <span key="t" className="text-lime">
+                  <span key="t" className="text-foreground">
                     {ev.t}
                   </span>,
-                  ev.path ?? ", ",
+                  ev.path ?? "None",
                   new Date(ev.ts).toLocaleString(),
                 ])}
                 empty="No product events, open /app to generate traffic"
               />
             </Panel>
             {product?.backend === "memory" && (
-              <p className="text-sm text-mute">
+              <p className="text-[14px] text-mute">
                 Backend is memory. Set Upstash{" "}
-                <code className="text-lime">UPSTASH_REDIS_REST_*</code> and
-                redeploy for durable counts.
+                <code className="rounded-md bg-surface px-1.5 py-0.5 text-foreground">
+                  UPSTASH_REDIS_REST_*
+                </code>{" "}
+                and redeploy for durable counts.
               </p>
             )}
           </>
         )}
 
-        <p className="text-[11px] text-mute">
-          Generated {data?.generatedAt ?? ", "} ·{" "}
-          <Link href="/app" className="text-lime hover:underline">
+        <p className="tnum text-[12px] text-mute">
+          Generated {data?.generatedAt ?? "not yet"} ·{" "}
+          <Link
+            href="/app"
+            className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground"
+          >
             Open app
           </Link>
         </p>
@@ -586,14 +604,12 @@ function Kpi({
   sub?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-line bg-panel px-5 py-5">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-        {label}
-      </p>
-      <p className="tnum mt-1.5 text-xl font-medium tracking-tight text-foreground sm:text-2xl">
+    <div className="gl-card min-w-0 px-4 py-4 sm:px-5 sm:py-5">
+      <p className="t-label truncate">{label}</p>
+      <p className="tnum mt-3 truncate text-[22px] font-light leading-none tracking-[-0.02em] text-foreground sm:text-[30px]">
         {value}
       </p>
-      {sub && <p className="mt-1 text-[11px] text-mute">{sub}</p>}
+      {sub && <p className="mt-2 truncate text-[12px] text-mute">{sub}</p>}
     </div>
   );
 }
@@ -608,9 +624,9 @@ function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="font-display text-lg text-foreground">{title}</h2>
+    <section className="gl-card min-w-0 p-5 sm:p-6">
+      <div className="mb-5 flex items-center justify-between gap-2">
+        <h2 className="text-[17px] tracking-[-0.01em] text-foreground">{title}</h2>
         {action}
       </div>
       {children}
@@ -624,19 +640,19 @@ function BarChart({
   rows: { k: string; v: number; pct: number }[];
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-mute">No data</p>;
+    return <p className="text-[14px] text-mute">No data</p>;
   }
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-4">
       {rows.map((r) => (
         <li key={r.k}>
-          <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
             <span className="truncate text-mute">{r.k}</span>
             <span className="tnum shrink-0 text-foreground">{r.v}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-background">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface">
             <div
-              className="h-full rounded-full bg-lime transition-[width] duration-500"
+              className="h-full rounded-full bg-foreground transition-[width] duration-500"
               style={{ width: `${Math.max(r.pct, r.v > 0 ? 4 : 0)}%` }}
             />
           </div>
@@ -656,18 +672,15 @@ function DataTable({
   empty?: string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-mute">{empty ?? "No rows"}</p>;
+    return <p className="text-[14px] text-mute">{empty ?? "No rows"}</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-lg border border-line">
-      <table className="w-full min-w-[480px] text-left text-sm">
-        <thead className="border-b border-line bg-background/80">
+    <div className="overflow-x-auto rounded-xl border border-line">
+      <table className="tnum w-full min-w-[480px] text-left text-[14px]">
+        <thead className="border-b border-line bg-surface">
           <tr>
             {headers.map((h) => (
-              <th
-                key={h}
-                className="px-3 py-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-mute"
-              >
+              <th key={h} className="t-label px-4 py-3 font-medium">
                 {h}
               </th>
             ))}
@@ -677,10 +690,10 @@ function DataTable({
           {rows.map((row, i) => (
             <tr
               key={i}
-              className="border-b border-line last:border-0 hover:bg-background/40"
+              className="border-b border-line transition-colors last:border-0 hover:bg-surface"
             >
               {row.map((cell, j) => (
-                <td key={j} className="px-3 py-2.5 text-mute">
+                <td key={j} className="h-[52px] whitespace-nowrap px-4 py-2 text-soft">
                   {cell}
                 </td>
               ))}

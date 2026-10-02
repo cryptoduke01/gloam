@@ -3,6 +3,10 @@
 /**
  * Share a Gloam payment ticket, not a wallet address.
  * QR is generated locally so the ticket never hits a third-party API.
+ *
+ * Two shapes: a claim link (code, copy, download, share) and a Gloam address
+ * (`gloamr1.`), where the parent already shows the address and its copy button,
+ * so this adds the scannable QR plus download and share.
  */
 
 import { useEffect, useState } from "react";
@@ -30,7 +34,7 @@ export function PaymentTicketShare({
         const QR = await import("qrcode");
         const url = await QR.toDataURL(code, {
           margin: 2,
-          width: 220,
+          width: 240,
           errorCorrectionLevel: "M",
           color: { dark: "#0a0a0a", light: "#ffffff" },
         });
@@ -71,9 +75,11 @@ export function PaymentTicketShare({
     try {
       await navigator.share({
         title: "Gloam payment",
-        text: locked
+        text: code.startsWith("gloamr1.")
+          ? `My Gloam address. Paste it in Gloam under Pay to send me money privately.\n\n${code}`
+          : locked
           ? `Gloam private payment${amountLabel ? ` (${amountLabel})` : ""}. This is locked. Ask me for the passphrase separately.\n\n${code}`
-          : `Gloam private payment${amountLabel ? ` (${amountLabel})` : ""}. To claim, open Move, then Claim.\n\n${code}`,
+          : `Gloam private payment${amountLabel ? ` (${amountLabel})` : ""}. To claim it, open Gloam and go to Vault, Pay, Receive.\n\n${code}`,
       });
       setShared(true);
       setTimeout(() => setShared(false), 2000);
@@ -84,71 +90,86 @@ export function PaymentTicketShare({
 
   const canShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const isAddress = code.startsWith("gloamr1.");
 
   return (
-    <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
-      <p className="text-sm font-medium text-foreground">
-        {code.startsWith("gloamr1.")
-          ? "Your Gloam address"
-          : "Claim link ready"}
-        {amountLabel ? ` · ${amountLabel}` : ""}
-        {locked ? " · locked" : ""}
-      </p>
-      <p className="mt-1 text-xs text-mute">
-        {code.startsWith("gloamr1.") ? (
-          <>
-            Share this address so others can{" "}
-            <strong className="text-foreground">Private pay → Direct</strong>{" "}
-            to you. It is not a public wallet address.
-          </>
-        ) : (
-          <>
-            Send it any way you like (message, AirDrop, QR). They open{" "}
-            <strong className="text-foreground">Move → Receive</strong>.
-            {locked
-              ? " It is locked. Only the right passphrase opens it."
-              : " Anyone with this link can claim it, so treat it like cash."}
-          </>
-        )}
-      </p>
-
-      <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+    <div className="gl-tile p-[16px] sm:p-5">
+      <div className="flex gap-5 max-sm:flex-col max-sm:items-center">
         {qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={qrDataUrl}
-            alt="Payment QR code"
-            className="h-[140px] w-[140px] shrink-0 rounded-lg border border-line bg-white p-1"
+            alt={isAddress ? "QR code for your Gloam address" : "Payment QR code"}
+            width={136}
+            height={136}
+            className="h-[136px] w-[136px] shrink-0 rounded-[14px] shadow-card"
           />
         ) : (
-          <div className="flex h-[140px] w-[140px] shrink-0 items-center justify-center rounded-lg border border-line bg-panel text-[10px] text-mute">
-            {qrError ?? "QR…"}
+          <div className="grid h-[136px] w-[136px] shrink-0 place-items-center rounded-[14px] bg-panel px-3 text-center text-[11px] leading-snug text-mute">
+            {qrError ?? "Making QR…"}
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="max-h-28 overflow-y-auto break-all rounded-lg border border-line bg-panel p-3 text-[10px] text-mute">
-            {code}
+
+        <div className="min-w-0 flex-1 max-sm:w-full">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[15px] font-medium text-foreground">
+              {isAddress ? "Scan to pay privately" : "Claim link ready"}
+              {amountLabel ? (
+                <span className="tnum font-normal text-mute">, {amountLabel}</span>
+              ) : null}
+            </p>
+            {locked && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sealed-soft px-2 py-0.5 text-[11.5px] font-medium text-sealed">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
+                  <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
+                </svg>
+                Locked
+              </span>
+            )}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => void copy()}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-lime/40 text-sm font-medium text-lime hover:bg-lime/10"
-            >
-              {copied ? "Copied" : "Copy code"}
-            </button>
-            <button
-              type="button"
-              onClick={downloadTxt}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-line text-sm font-medium text-foreground hover:border-mute"
-            >
+          <p className="mt-1 text-[13px] leading-relaxed text-mute">
+            {isAddress ? (
+              <>
+                Anyone on Gloam can scan this to pay you privately. It is not a
+                public wallet address.
+              </>
+            ) : (
+              <>
+                Send it any way you like: a message, AirDrop or this QR code. They
+                open Pay, then Receive.
+                {locked
+                  ? " It is locked, so only the right phrase opens it."
+                  : " Anyone with this link can claim it, so treat it like cash."}
+              </>
+            )}
+          </p>
+
+          {!isAddress && (
+            <div className="tnum mt-3 max-h-24 overflow-y-auto break-all rounded-xl bg-panel px-3 py-2.5 text-[12px] leading-relaxed text-mute">
+              {code}
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {!isAddress && (
+              <button
+                type="button"
+                onClick={() => void copy()}
+                className="btn btn-ink btn-sm"
+                aria-live="polite"
+              >
+                {copied ? "Copied" : "Copy code"}
+              </button>
+            )}
+            <button type="button" onClick={downloadTxt} className="btn btn-ghost btn-sm">
               Download
             </button>
             {canShare && (
               <button
                 type="button"
                 onClick={() => void nativeShare()}
-                className="col-span-2 inline-flex min-h-10 items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
+                className="btn btn-ghost btn-sm"
               >
                 {shared ? "Shared" : "Share…"}
               </button>

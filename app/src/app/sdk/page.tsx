@@ -1,240 +1,562 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import { SealedField } from "@/components/ui/SealedField";
+import { FlowField } from "@/components/ui/FlowField";
+import { SealDots } from "@/components/ui/SealDots";
 import { CopyCommand } from "@/components/CopyCommand";
+import { CodeTabs, type CodeTab } from "./SdkClient";
+import { CodeBlock } from "@/components/ui/CodeBlock";
 
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloamtrade/sdk — the privacy layer for Robinhood Chain, as a package. Add shielded balances, private payments, and selective disclosure to any app or agent.",
+    "@gloamtrade/sdk: private balances, private payments and proofs for any app or agent on Robinhood Chain and Tempo. Plus an MCP server so AI agents can pay over x402 without showing their treasury.",
 };
 
-function Mark({ size = 22 }: { size?: number }) {
+const GITHUB = "https://github.com/cryptoduke01/gloam";
+
+
+/* ---------- line icons (same hand as the landing) ---------- */
+
+const icon = "h-6 w-6 text-foreground";
+function IconBalance() {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="shrink-0">
-      <rect width="32" height="32" rx="9" fill="#121316" />
-      <rect x="15" y="4" width="12" height="12" rx="3.5" fill="#F4F3EF" />
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3.5" y="6" width="17" height="12.5" rx="3" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.5 10h17" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="16.5" cy="14.5" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+function IconSend() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4.5 12h13M13 7l5 5-5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconCashOut() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 15V4.5M8 8.5l4-4 4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 13.5v4A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconProve() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 3.5l7 2.8v5.2c0 4.3-2.9 7.6-7 9-4.1-1.4-7-4.7-7-9V6.3l7-2.8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M9 12.2l2.2 2.2L15.2 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconRelay() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="5.5" cy="12" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="18.5" cy="12" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M7.5 12h3M13.5 12h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <rect x="10.5" y="9.5" width="3" height="5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+function IconChains() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3.5" y="5" width="9" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="11.5" y="10" width="9" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
     </svg>
   );
 }
 
-const CAPABILITIES = [
+const SURFACE = [
   {
-    title: "Shielded balances",
-    body: "Deposit ETH or tokenized stocks into a private balance only the holder can see or spend.",
+    icon: <IconBalance />,
+    title: "Private balances",
+    body: "Move ETH or stablecoins into a balance only the holder can see or spend.",
+    fn: "buildShieldBoundIntent",
   },
   {
+    icon: <IconSend />,
     title: "Private payments",
-    body: "Send inside the vault to a receive tag. No public transfer, no visible amount.",
+    body: "Pay inside the vault to a Gloam address. No public transfer, no visible amount.",
+    fn: "buildPrivateSendIntent",
   },
   {
-    title: "Selective disclosure",
-    body: "Prove one balance to a chosen party, revealing nothing else. Provable, not a dark pool.",
+    icon: <IconCashOut />,
+    title: "Cash out",
+    body: "Move money back to any public wallet, whenever the holder wants it public.",
+    fn: "buildUnshieldIntent",
   },
   {
-    title: "Private agents",
-    body: "The same core runs server-side, so an AI agent holds, moves, and pays for tools privately over x402, under policy.",
+    icon: <IconRelay />,
+    title: "Relay",
+    body: "Sends and cash outs go out through the relay, so the sender's wallet never shows up. It can submit or refuse, never redirect.",
+    fn: "relayIntent",
+  },
+  {
+    icon: <IconProve />,
+    title: "Prove",
+    body: "Share one fact with one party, a payment with its issuer or a balance with an auditor, and nothing else.",
+    fn: "buildComplianceDisclosure",
+  },
+  {
+    icon: <IconChains />,
+    title: "Two chains, one core",
+    body: "The same circuits and the same calls on Robinhood Chain and Tempo. Pick a pool, keep the code.",
+    fn: "TEMPO_SEALED_VAULT",
   },
 ];
+
+const PAY_SNIPPET = `import {
+  buildShieldBoundIntent,
+  buildPrivateSendIntent,
+  relayIntent,
+  artifactProver,
+  syncTree,
+  SEALED_VAULT,
+} from "@gloamtrade/sdk";
+
+// 1. Add money privately. Sign deposit.exec from your own wallet.
+// Keep deposit.note.secret: it is the only key to this balance.
+const deposit = await buildShieldBoundIntent({
+  amountWei: parseEther("0.01"),
+  prover: artifactProver({ wasm: "shield.wasm", zkey: "shield_final.zkey" }),
+});
+
+// 2. Pay privately from that balance. The rest comes back as change.
+const tree = await syncTree(publicClient, { pool: SEALED_VAULT });
+const send = await buildPrivateSendIntent({
+  secretHex: deposit.note.secret,
+  amountInWei: parseEther("0.01"),
+  amountPayWei: parseEther("0.004"),
+  path: await tree.pathForCommitment(deposit.note.commitment),
+  prove: artifactProver({ wasm: "transfer.wasm", zkey: "transfer_final.zkey" }),
+});
+
+// 3. Send it through the relay. Your wallet never shows up.
+const hash = await relayIntent(send);`;
+
+const X402_SNIPPET = `import {
+  buildGloamPaymentRequirements,
+  buildGloamPayment,
+  verifyGloamPayment,
+  artifactProver,
+} from "@gloamtrade/sdk";
+
+// Server: price a tool. This is the 402 challenge.
+const requirements = buildGloamPaymentRequirements({
+  amountWei: parseUnits("0.25", 18),
+  assetSymbol: "USD",
+  payTo: "gloam:rcpt:...",
+  resource: "mcp://tool/summarize",
+});
+
+// Agent: pay privately from its own balance, then retry with the header.
+const pay = await buildGloamPayment({
+  requirements,
+  senderSecretHex: note.secret,
+  senderNoteAmountWei: note.amountWei,
+  path,
+  prove: artifactProver({ wasm, zkey }),
+});
+
+// Server: check the payment before it serves the tool.
+const result = verifyGloamPayment({ requirements, payload: pay.payload });`;
+
+const CASHOUT_SNIPPET = `import {
+  buildUnshieldIntent,
+  relayIntent,
+  artifactProver,
+  syncTree,
+  SEALED_VAULT,
+} from "@gloamtrade/sdk";
+
+const tree = await syncTree(publicClient, { pool: SEALED_VAULT });
+
+// Cash out to any public wallet. The recipient is fixed inside the proof.
+const exit = await buildUnshieldIntent({
+  secretHex: note.secret,
+  amountWei: parseEther("0.004"),
+  to: "0xYourPublicWallet",
+  path: await tree.pathForCommitment(note.commitment),
+  prove: artifactProver({ wasm: "unshield.wasm", zkey: "unshield_final.zkey" }),
+});
+
+// The relay can submit it or refuse it. It cannot send it anywhere else.
+const hash = await relayIntent(exit);`;
+
+const TABS: CodeTab[] = [
+  { id: "pay", label: "Payment", file: "pay.ts", code: PAY_SNIPPET },
+  { id: "x402", label: "Agent x402", file: "x402.ts", code: X402_SNIPPET },
+  { id: "cashout", label: "Cash out", file: "cash-out.ts", code: CASHOUT_SNIPPET },
+];
+
+const MCP_TOOLS = [
+  { name: "gloam_execute_shield", body: "Add money to the agent's private balance" },
+  { name: "gloam_payment_requirements", body: "Price a tool or a dataset with a 402" },
+  { name: "gloam_execute_private_pay", body: "Pay a 402 from the private balance" },
+  { name: "gloam_verify_payment", body: "Check a payment before serving" },
+];
+
+const MCP_CONFIG = `{
+  "mcpServers": {
+    "gloam": {
+      "command": "npx",
+      "args": ["-y", "tsx", "/path/to/gloam/mcp/src/index.ts"]
+    }
+  }
+}`;
 
 const EXAMPLES = [
-  { name: "agent-shield", env: "Node", body: "The smallest agent: mint a note, prove, deposit privately." },
-  { name: "pay-bot", env: "Node", body: "A private payment end to end: shield, sync, send." },
-  { name: "web-shield", env: "Browser", body: "Shield in the browser, read the balance from chain." },
+  { name: "agent-shield", env: "Node", body: "The smallest agent: add money to a private balance." },
+  { name: "pay-bot", env: "Node", body: "A private payment end to end: add, sync, send." },
+  { name: "pay-x402", env: "Node", body: "An agent paying over x402: price, pay, verify." },
+  { name: "web-shield", env: "Browser", body: "Add privately in the browser, read the balance back." },
 ];
 
-const STEPS = [
-  { n: "01", title: "Mint a note", body: "The SDK creates a Poseidon note that binds your secret to the amount and asset." },
-  { n: "02", title: "Prove privately", body: "It generates the shield proof in the browser or in node. The secret never leaves the client." },
-  { n: "03", title: "Sign and deposit", body: "You sign the resolved shieldBound call. The balance is now private, and yours alone." },
-];
+/* ---------- live mini product: one x402 exchange ---------- */
 
-export default function SdkLandingPage() {
+function X402Exchange() {
+  const rows = [
+    { k: "Agent asks", v: "mcp://tool/summarize", note: "GET" },
+    { k: "Tool answers", v: "Payment required", note: "402" },
+  ];
   return (
-    <div className="relative min-h-screen bg-[#F4F3EF] text-[#121316]">
-      <div className="mx-auto w-full max-w-[1120px] px-5 sm:px-8">
-        {/* Nav */}
-        <nav className="sticky top-4 z-50 mt-4 flex items-center justify-between gap-4 rounded-[14px] border border-[#E5E3DD] bg-[#F4F3EF]/90 px-4 py-[10px] shadow-[0_1px_2px_rgba(18,19,22,0.05),0_8px_24px_-16px_rgba(18,19,22,0.18)] backdrop-blur-xl sm:px-[18px]">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Mark />
-            <span className="text-[16px] font-semibold tracking-[-0.01em]">Gloam</span>
-          </Link>
-          <div className="hidden items-center gap-7 text-sm text-[#6E6E76] md:flex">
-            <Link href="/docs/sdk" className="hover:text-[#121316]">Docs</Link>
-            <Link href="/docs/quickstart" className="hover:text-[#121316]">Quickstart</Link>
-            <Link href="/docs/agents" className="hover:text-[#121316]">Agents</Link>
-            <a href="https://github.com/cryptoduke01/gloam" target="_blank" rel="noreferrer" className="hover:text-[#121316]">GitHub</a>
-          </div>
-          <Link
-            href="/app"
-            className="rounded-[10px] border border-[#E5E3DD] bg-white/60 px-4 py-[9px] text-[13.5px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4]"
-          >
-            Open app
-          </Link>
-        </nav>
+    <div className="rounded-[14px] bg-panel p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[13px] text-mute">Research agent</p>
+          <p className="mt-0.5 text-[15px] text-foreground">Pays per call, privately</p>
+        </div>
+        <span className="rounded-full bg-surface px-2.5 py-1 text-[12px] text-mute">x402</span>
+      </div>
 
-        {/* Hero */}
-        <section className="grid grid-cols-1 items-center gap-10 py-14 md:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
-          <div className="order-2 lg:order-1">
-            <p className="mb-5 flex items-center gap-2.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#6E6E76]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#3B3766]" />
-              The Gloam SDK
-            </p>
-            <h1 className="text-[clamp(38px,6vw,68px)] font-bold leading-[0.98] tracking-[-0.04em] text-balance">
-              The privacy layer,
-              <br />
-              <span className="text-[#6E6E76]">as a package.</span>
-            </h1>
-            <p className="mt-6 max-w-[46ch] text-[16.5px] leading-relaxed text-[#4c4c53]">
-              Add shielded balances, private payments, and selective disclosure to
-              any Robinhood Chain app or agent. Real zero-knowledge, no proving
-              stack to build from scratch.
-            </p>
-            <div className="mt-8 max-w-[420px] space-y-3">
-              <CopyCommand command="npm install @gloamtrade/sdk" />
-              <CopyCommand command="npm create gloam-app@latest" />
+      <ul className="mt-4 divide-y divide-line">
+        {rows.map((r) => (
+          <li key={r.k} className="flex min-h-[52px] items-center gap-3">
+            <span className="tnum grid h-8 w-11 shrink-0 place-items-center rounded-full bg-surface text-[12px] text-foreground">
+              {r.note}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[14px] text-foreground">{r.v}</p>
+              <p className="text-[12px] text-mute">{r.k}</p>
             </div>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/docs/quickstart"
-                className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#121316] px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black"
-              >
-                Quickstart
-                <span aria-hidden>→</span>
-              </Link>
-              <Link
-                href="/docs/sdk/reference"
-                className="inline-flex min-h-11 items-center rounded-[12px] border border-[#E5E3DD] bg-white/60 px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:border-[#cfccc4]"
-              >
-                API reference
-              </Link>
-            </div>
+          </li>
+        ))}
+        <li className="flex min-h-[52px] items-center gap-3">
+          <span className="grid h-8 w-11 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" strokeWidth="2" />
+              <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] text-foreground">Paid privately</p>
+            <p className="text-[12px] text-mute">From the agent&apos;s own balance</p>
           </div>
-
-          {/* 3D logo */}
-          <div className="order-1 flex justify-center lg:order-2 lg:justify-end">
-            <div className="relative aspect-square w-full max-w-[380px] overflow-hidden rounded-[24px] border border-[#E5E3DD] bg-white">
-              <video
-                className="h-full w-full object-cover"
-                autoPlay
-                loop
-                muted
-                playsInline
-                poster="/media/sdk-hero-poster.jpg"
-              >
-                <source src="/media/sdk-hero.mp4" type="video/mp4" />
-              </video>
-            </div>
+          <span className="tnum text-[14px] text-foreground">0.25 USD</span>
+        </li>
+        <li className="flex min-h-[52px] items-center gap-3">
+          <span className="tnum grid h-8 w-11 shrink-0 place-items-center rounded-full bg-surface text-[12px] text-foreground">
+            200
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] text-foreground">Summary delivered</p>
+            <p className="text-[12px] text-mute">Payment checked first</p>
           </div>
-        </section>
+        </li>
+      </ul>
 
-        {/* What you get */}
-        <section className="border-t border-[#E5E3DD] py-14 md:py-20">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#6E6E76]">The surface</p>
-          <h2 className="mt-3 max-w-[20ch] text-[clamp(26px,3.6vw,40px)] font-semibold leading-[1.04] tracking-[-0.025em]">
-            Everything a private app needs, in one import.
-          </h2>
-          <div className="mt-9 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {CAPABILITIES.map((cap) => (
-              <div key={cap.title} className="rounded-[18px] border border-[#E5E3DD] bg-white/70 p-6">
-                <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-[#121316]">
-                  {cap.title}
-                </h3>
-                <p className="mt-2 text-[14.5px] leading-relaxed text-[#565660]">{cap.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-[10px] bg-surface px-3.5 py-2.5 text-[13px]">
+        <span className="text-mute">
+          <span className="max-sm:hidden">The explorer shows</span>
+          <span className="sm:hidden">Explorer</span>
+        </span>
+        <span className="inline-flex items-center gap-2 whitespace-nowrap text-foreground">
+          Private transfer <SealDots n={4} className="text-foreground/60" />
+        </span>
+      </div>
+    </div>
+  );
+}
 
-        {/* How it works */}
-        <section className="border-t border-[#E5E3DD] py-14 md:py-20">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#6E6E76]">How shielding works</p>
-          <h2 className="mt-3 max-w-[22ch] text-[clamp(26px,3.6vw,40px)] font-semibold leading-[1.04] tracking-[-0.025em]">
-            A private balance in three steps.
-          </h2>
-          <div className="mt-9 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {STEPS.map((s) => (
-              <div key={s.n} className="rounded-[18px] border border-[#E5E3DD] bg-white/70 p-6">
-                <span className="text-[13px] font-semibold tracking-[0.02em] text-[#3B3766]">{s.n}</span>
-                <h3 className="mt-3 text-[18px] font-semibold tracking-[-0.01em] text-[#121316]">{s.title}</h3>
-                <p className="mt-2 text-[14.5px] leading-relaxed text-[#565660]">{s.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+export default function SdkPage() {
+  return (
+    <div className="relative min-h-screen bg-panel text-foreground">
+      <Header />
 
-        {/* One command */}
-        <section className="border-t border-[#E5E3DD] py-14 md:py-20">
-          <div className="rounded-[22px] border border-[#E5E3DD] bg-white/70 p-7 sm:p-9">
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_auto] md:items-center md:gap-10">
-              <div>
-                <h2 className="text-[clamp(22px,2.6vw,30px)] font-semibold leading-[1.06] tracking-[-0.025em]">
-                  From zero to shielding in one command.
-                </h2>
-                <p className="mt-3 max-w-[54ch] text-[15px] leading-relaxed text-[#565660]">
-                  <span className="font-semibold text-[#121316]">create-gloam-app</span>{" "}
-                  scaffolds a working Next.js app on the SDK, wired and ready. Point
-                  your builders at it.
+      <main>
+        {/* hero */}
+        <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
+          <div className="gl-panel flex min-h-[max(520px,calc(100svh-8rem))] flex-col justify-end px-5 pb-8 pt-24 sm:px-10 sm:pb-10 lg:h-[calc(100svh-10rem)] lg:max-h-[980px] lg:min-h-[620px] lg:px-14 lg:pb-14">
+            <FlowField />
+            <div className="grid grid-cols-1 items-end gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
+              <div className="max-w-[720px]">
+                <p className="t-label">Gloam SDK</p>
+                <h1 className="t-display-xl mt-5">Private payments, as a package</h1>
+                <p className="mt-6 max-w-[50ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
+                  One import gives your app or agent private balances, private
+                  payments and proofs on Robinhood Chain and Tempo. Real proofs,
+                  checked on-chain, with no proving stack to build.
                 </p>
+                <div className="mt-8 flex flex-wrap gap-2">
+                  <Link href="/docs/quickstart" className="btn btn-ink btn-lg">
+                    Read the quickstart
+                  </Link>
+                  <Link href="/docs/sdk/reference" className="btn btn-ghost btn-lg">
+                    API reference
+                  </Link>
+                </div>
               </div>
-              <div className="w-full md:w-[320px]">
-                <CopyCommand command="npm create gloam-app@latest" />
+
+              <div className="gl-glass w-full p-2 lg:max-w-[460px] lg:justify-self-end">
+                <div className="rounded-[12px] bg-panel p-4 sm:p-5">
+                  <p className="text-[13px] text-mute">Install the SDK</p>
+                  <div className="mt-2.5">
+                    <CopyCommand command="npm install @gloamtrade/sdk viem" />
+                  </div>
+                  <p className="mt-5 text-[13px] text-mute">Or start from a working app</p>
+                  <div className="mt-2.5">
+                    <CopyCommand command="npm create gloam-app@latest" />
+                  </div>
+                  <div className="mt-5 flex flex-wrap gap-1.5 text-[12px] text-mute">
+                    {["TypeScript", "Node and browser", "Open source, MIT"].map((t) => (
+                      <span key={t} className="rounded-full bg-surface px-2.5 py-1">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Examples */}
-        <section className="border-t border-[#E5E3DD] py-14 md:py-20">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#6E6E76]">Start from a reference</p>
-          <h2 className="mt-3 text-[clamp(26px,3.6vw,40px)] font-semibold leading-[1.04] tracking-[-0.025em]">
-            Three shapes a builder starts from.
-          </h2>
-          <div className="mt-9 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {EXAMPLES.map((ex) => (
-              <div key={ex.name} className="rounded-[18px] border border-[#E5E3DD] bg-white/70 p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[16px] font-semibold tracking-[-0.01em] text-[#121316]">{ex.name}</span>
-                  <span className="shrink-0 rounded-full border border-[#E5E3DD] bg-[#F4F3EF] px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.04em] text-[#6E6E76]">
-                    {ex.env}
+        {/* quickstart: the ink panel */}
+        <section id="quickstart" className="mx-auto max-w-[1400px] scroll-mt-20 px-4 py-14 sm:px-7 sm:py-20">
+          <div className="theme-dark gl-panel grid grid-cols-1 gap-12 border border-line bg-background px-5 py-14 text-foreground sm:px-12 sm:py-20 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+            <SealedField tone="soft" />
+            <div className="relative">
+              <p className="t-label">Quickstart</p>
+              <h2 className="t-display-l mt-4 max-w-[14ch]">Three calls to a private payment</h2>
+              <p className="mt-5 max-w-[46ch] text-[16px] leading-relaxed text-mute">
+                Add money privately, pay from that balance, then hand the payment
+                to the relay. You sign everything yourself. The SDK never holds a
+                key.
+              </p>
+              <ul className="mt-10 divide-y divide-line border-y border-line text-[15px]">
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-4">
+                  <span>Add money privately</span>
+                  <span className="text-[13.5px] text-mute">buildShieldBoundIntent</span>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-4">
+                  <span>Pay privately</span>
+                  <span className="text-[13.5px] text-mute">buildPrivateSendIntent</span>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-4">
+                  <span>Send through the relay</span>
+                  <span className="text-[13.5px] text-mute">relayIntent</span>
+                </li>
+              </ul>
+              <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3">
+                <Link
+                  href="/docs/quickstart"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                >
+                  Full walkthrough <span aria-hidden>→</span>
+                </Link>
+                <Link
+                  href="/docs/sdk"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                >
+                  SDK docs <span aria-hidden>→</span>
+                </Link>
+              </div>
+            </div>
+            <div className="relative min-w-0">
+              <CodeTabs tabs={TABS} />
+            </div>
+          </div>
+        </section>
+
+        {/* the surface */}
+        <section className="mx-auto max-w-[1240px] px-6 pb-20 sm:pb-28">
+          <div className="max-w-[720px]">
+            <h2 className="t-display-l">Everything a private app needs, in one import</h2>
+            <p className="mt-5 max-w-[56ch] text-[16px] leading-relaxed text-mute">
+              The same core that runs the Gloam app. Pure TypeScript that works in
+              the browser and on a server, with the prover passed in so you
+              choose where proofs are made.
+            </p>
+          </div>
+          <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {SURFACE.map((s) => (
+              <div key={s.title} className="gl-tile flex min-h-[208px] flex-col p-6 sm:min-h-[248px]">
+                <div className="flex items-start justify-between gap-4">
+                  {s.icon}
+                  <span className="max-w-full truncate rounded-full bg-panel px-2.5 py-1 text-[12px] text-mute">
+                    {s.fn}
                   </span>
                 </div>
-                <p className="mt-3 text-[14px] leading-relaxed text-[#565660]">{ex.body}</p>
+                <div className="mt-auto pt-8 sm:pt-10">
+                  <p className="text-[19px] leading-snug tracking-[-0.01em] text-foreground">
+                    {s.title}
+                  </p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-mute">{s.body}</p>
+                </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* CTA */}
-        <section className="border-t border-[#E5E3DD] py-16 md:py-20">
-          <div className="rounded-[22px] bg-[#121316] px-6 py-14 text-center text-[#F4F3EF] sm:px-8">
-            <h2 className="mx-auto max-w-[18ch] text-[clamp(26px,4vw,44px)] font-bold leading-[1.04] tracking-[-0.03em]">
-              Build the private layer into your app.
-            </h2>
-            <p className="mx-auto mt-4 max-w-[46ch] text-[15px] leading-relaxed text-white/60">
-              Testnet is live with an open SDK, docs, and examples. Ship private on
-              Robinhood Chain today.
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link href="/docs/quickstart" className="inline-flex min-h-11 items-center gap-2 rounded-[12px] bg-[#F4F3EF] px-[22px] text-[15px] font-semibold text-[#121316] transition-colors hover:bg-white">
-                Start building <span aria-hidden>→</span>
-              </Link>
-              <a href="https://github.com/cryptoduke01/gloam" target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-[12px] border border-white/20 px-[22px] text-[15px] font-semibold text-[#F4F3EF] transition-colors hover:border-white/50">
-                GitHub
-              </a>
+        {/* agents */}
+        <section id="agents" className="mx-auto max-w-[1400px] scroll-mt-20 px-4 sm:px-7">
+          <div className="gl-panel grid grid-cols-1 gap-12 bg-surface px-5 py-14 sm:px-12 sm:py-20 lg:grid-cols-2 lg:items-center lg:gap-16">
+            <SealedField tone="soft" />
+            <div className="relative">
+              <p className="t-label">For agents</p>
+              <h2 className="t-display-l mt-4 max-w-[14ch]">Agents pay without showing their treasury</h2>
+              <p className="mt-5 max-w-[48ch] text-[16px] leading-relaxed text-mute">
+                Agents pay for tools and data over HTTP 402. With Gloam the agent
+                settles each payment privately from its own balance, then shows
+                the payment as proof. Only the payer and the payee learn the
+                amount, and no operator ever holds the agent&apos;s key or money.
+              </p>
+              <ul className="mt-10 divide-y divide-line border-y border-line">
+                {MCP_TOOLS.map((t) => (
+                  <li
+                    key={t.name}
+                    className="flex flex-col gap-1 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                  >
+                    <span className="text-[14.5px] text-foreground">{t.body}</span>
+                    <span className="truncate text-[13px] text-mute">{t.name}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 flex flex-wrap gap-2">
+                <Link href="/docs/agents" className="btn btn-ink">
+                  Build a private agent
+                </Link>
+                <a
+                  href={`${GITHUB}/tree/main/mcp`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-quiet"
+                >
+                  MCP server on GitHub <span aria-hidden>↗</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="relative min-w-0">
+              <div className="gl-glass p-2 shadow-pop">
+                <X402Exchange />
+              </div>
+              <div className="theme-dark mt-3 text-foreground">
+                <CodeBlock code={MCP_CONFIG} lang="json" title="Connect any MCP client" meta="mcp.json" className="bg-background" />
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="flex flex-col gap-3 border-t border-[#E5E3DD] py-8 text-[13px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between">
-          <span>Gloam · the private layer for Robinhood Chain. Testnet, dev-ceremony keys.</span>
-          <div className="flex gap-5">
-            <Link href="/docs/sdk" className="hover:text-[#121316]">Docs</Link>
-            <Link href="/whitepaper" className="hover:text-[#121316]">Whitepaper</Link>
-            <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer" className="hover:text-[#121316]">@gloamtrade</a>
+        {/* start from a reference */}
+        <section className="mx-auto max-w-[1240px] px-6 py-20 sm:py-28">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.35fr]">
+            <div className="gl-card flex flex-col justify-between p-7 sm:p-9">
+              <div>
+                <p className="t-label">create-gloam-app</p>
+                <h2 className="t-display-m mt-4 max-w-[14ch]">One command to a working app</h2>
+                <p className="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-mute">
+                  Scaffolds a Next.js app already wired to the SDK, with private
+                  balances and payments working on testnet from the first run.
+                </p>
+              </div>
+              <div className="mt-10">
+                <CopyCommand command="npm create gloam-app@latest my-private-app" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {EXAMPLES.map((ex) => (
+                <a
+                  key={ex.name}
+                  href={`${GITHUB}/tree/main/examples/${ex.name}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="gl-tile group flex min-h-[176px] flex-col p-6 transition-colors hover:bg-surface-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="rounded-full bg-panel px-2.5 py-1 text-[12px] text-mute">{ex.env}</span>
+                    <span
+                      aria-hidden
+                      className="text-mute transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground"
+                    >
+                      ↗
+                    </span>
+                  </div>
+                  <div className="mt-auto pt-8">
+                    <p className="text-[18px] leading-snug tracking-[-0.01em] text-foreground">{ex.name}</p>
+                    <p className="mt-1.5 text-[14px] leading-relaxed text-mute">{ex.body}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
-        </footer>
-      </div>
+        </section>
+
+        {/* honest status */}
+        <section className="mx-auto max-w-[1240px] px-6 pb-8">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <h2 className="t-display-l max-w-[11ch]">Honest about where it is</h2>
+              <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3">
+                <a
+                  href={GITHUB}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
+                >
+                  Source on GitHub <span aria-hidden>↗</span>
+                </a>
+                <a
+                  href="https://www.npmjs.com/package/@gloamtrade/sdk"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
+                >
+                  npm <span aria-hidden>↗</span>
+                </a>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-10 sm:grid-cols-3">
+              {[
+                {
+                  title: "Testnet today",
+                  body: "Live on Robinhood Chain testnet and Tempo Moderato, with play money.",
+                },
+                {
+                  title: "Development keys",
+                  body: "Proofs use keys from a development ceremony. A production ceremony and an external audit come before mainnet.",
+                },
+                {
+                  title: "Nothing faked",
+                  body: "If a path cannot be private yet, the SDK returns a plan instead of a pretend result.",
+                },
+              ].map((t) => (
+                <div key={t.title} className="border-t border-foreground pt-5">
+                  <p className="text-[18px] leading-snug tracking-[-0.01em]">{t.title}</p>
+                  <p className="mt-3 text-[14px] leading-relaxed text-mute">{t.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
     </div>
   );
 }

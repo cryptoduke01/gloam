@@ -6,21 +6,14 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Gloam docs, private money onchain — on Robinhood Chain and Tempo — explained simply. Shield, unshield, what works on testnet.",
+    "Gloam docs: private money on public chains, on Robinhood Chain and Tempo, explained simply. Private balances, payments, payroll, and what works on testnet.",
 };
 
 export default function DocsOverviewPage() {
   return (
     <DocsLayout
       title="Docs"
-      lede="Private money onchain, without the jargon wall. Start here."
-      glance={[
-        { label: "Product", value: "gloam.trade/app" },
-        { label: "Networks", value: "Robinhood + Tempo" },
-        { label: "Chain IDs", value: "46630 · 42431" },
-        { label: "Live", value: "Vault + private send" },
-        { label: "Keys", value: "Dev ceremony" },
-      ]}
+      lede="Private money on public chains, explained without the jargon wall. Start here."
     >
       <h2 id="what">What is Gloam?</h2>
       <p>
@@ -55,7 +48,7 @@ export default function DocsOverviewPage() {
           <Link href="/app/shield">Shield</Link> a tiny amount of testnet funds.
         </li>
         <li>
-          <Link href="/app/move">Move</Link> to pay a tag or cash out — a browser
+          <Link href="/app/move">Move</Link> to pay a tag or cash out. A browser
           proof settles, never the amount.
         </li>
       </ol>
@@ -94,13 +87,18 @@ export default function DocsOverviewPage() {
         <li>Private send + receive tags (optional passphrase tickets)</li>
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
         <li>Selective disclosure, verified in the browser</li>
+        <li>
+          <Link href="/docs/payroll">Private payroll</Link>: upload a list and
+          pay everyone from your private balance
+        </li>
+        <li>The Gloam relay, which keeps your wallet off the record</li>
         <li>Note backup (optional lock) in Settings</li>
       </ul>
 
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
         <li>
-          <Link href="/docs/sealed-trade">Private trade</Link> (sealed swap) —
+          <Link href="/docs/sealed-trade">Private trade</Link> (sealed swap),
           paused until the H1 solvency accounting lands
         </li>
         <li>
@@ -111,18 +109,7 @@ export default function DocsOverviewPage() {
           <Link href="/docs/production">Production ceremony keys / mainnet</Link>
         </li>
         <li>Ethereum expansion (roadmap)</li>
-        <li>
-          $GLOAM token, prepared page only; not
-          launched, no live contract
-        </li>
       </ul>
-
-      <h2 id="token">$GLOAM</h2>
-      <p>
-        The protocol asset ticker is <strong>$GLOAM</strong>. There is no
-        tradable contract yet. Status and planned utility will be published through official
-        channels. Product and privacy work without a token.
-      </p>
 
       <h2 id="read-next">Read next</h2>
       <ul>
@@ -149,9 +136,6 @@ export default function DocsOverviewPage() {
         </li>
         <li>
           <Link href="/whitepaper">Whitepaper</Link>
-        </li>
-        <li>
-          $GLOAM token
         </li>
       </ul>
     </DocsLayout>

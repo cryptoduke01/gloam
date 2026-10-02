@@ -13,13 +13,12 @@ export default function WhitepaperPage() {
   return (
     <DocsLayout
       title="Whitepaper"
-      lede="Trade Everything on Robinhood Privately. Technical and product thesis for Gloam, application-layer privacy on Robinhood Chain."
+      lede="Private money on public chains. The technical and product thesis for Gloam: application-layer privacy on Robinhood Chain, with the same core now live on Tempo."
       glance={[
         { label: "Version", value: "0.3" },
         { label: "Status", value: "Public draft" },
         { label: "Network", value: "RH testnet 46630" },
         { label: "Live", value: "Shield · send · unshield" },
-        { label: "Token", value: "$GLOAM · not live" },
         { label: "Mainnet", value: "Not yet" },
       ]}
       quickLinks={[
@@ -28,13 +27,12 @@ export default function WhitepaperPage() {
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
       ]}
     >
-      <p className="!text-sm !text-mute">
+      <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
         This document is a living public draft. It describes design targets,
         shipped testnet capability, and intentional non-claims. It is not an
         offer of securities, a guarantee of mainnet timelines, a promise of
-        absolute anonymity, or a solicitation to purchase tokens. Official{" "}
-        $GLOAM status is announced through official channels only.
-      </p>
+        absolute anonymity, or a solicitation to purchase anything.
+      </div>
 
       <h2 id="abstract">1. Abstract</h2>
       <p>
@@ -48,7 +46,7 @@ export default function WhitepaperPage() {
         application-layer vault in which assets can be held and transferred with
         reduced public visibility, and a path toward private trading of stocks
         and memes on the same rails. The product thesis is a single sentence:{" "}
-        <strong>Trade Everything on Robinhood Privately.</strong>
+        <strong>private money on public chains.</strong>
       </p>
       <p>
         Privacy on a transparent L2 is not the absence of transactions from
@@ -325,31 +323,10 @@ export default function WhitepaperPage() {
         origin (
         <Link href="/docs">/docs</Link>,{" "}
         <Link href="/whitepaper">/whitepaper</Link>
-        ). Marketing site and product share branding: black, lime, white.
+        ). Marketing site and product share one brand: ink, paper, and a single green tint that marks what is private.
       </p>
 
-      <h2 id="token">9. $GLOAM (protocol asset)</h2>
-      <p>
-        Gloam reserves the ticker <strong>$GLOAM</strong> as a future
-        coordination asset for the private rails on Robinhood Chain. Status is stated
-        honestly: <strong>not launched</strong>. There is no tradable contract
-        address until product, trust (audits / production keys), and utility
-        design gates are closed.
-      </p>
-      <p>
-        Planned roles are design targets only: protocol alignment, fee or access
-        economics once mainnet volume is real, parameter voice after audits, and
-        ecosystem gravity for partners and builders. This whitepaper does not
-        define supply, unlocks, or distribution. Those details will be published
-        before any mint. The vault, private pay, and sealed trade
-        paths are useful without a token.
-      </p>
-      <p>
-        This section is not an offer of securities or a solicitation to purchase
-        tokens. Do not trust contract addresses from unsolicited messages.
-      </p>
-
-      <h2 id="roadmap">10. Roadmap</h2>
+      <h2 id="roadmap">9. Roadmap</h2>
       <ol>
         <li>
           <strong>Complete (testnet):</strong> public path, shield, unshield,
@@ -369,14 +346,9 @@ export default function WhitepaperPage() {
           trusted setup or equivalent, incident process, mainnet only after
           explicit readiness criteria.
         </li>
-        <li>
-          <strong>$GLOAM:</strong> publish utility and supply,
-          then deploy only after the above
-          gates, not as a substitute for shipping privacy.
-        </li>
       </ol>
 
-      <h2 id="competition">11. Positioning</h2>
+      <h2 id="competition">10. Positioning</h2>
       <p>
         Broad privacy protocols target multi-chain or multi-asset general
         privacy. Gloam is intentionally narrow: Robinhood Chain, stocks and
@@ -385,7 +357,7 @@ export default function WhitepaperPage() {
         privacy literature.
       </p>
 
-      <h2 id="risks">12. Risks and limitations</h2>
+      <h2 id="risks">11. Risks and limitations</h2>
       <ul>
         <li>Smart contract and circuit bugs prior to audit</li>
         <li>Development proving keys on testnet</li>
@@ -393,31 +365,23 @@ export default function WhitepaperPage() {
         <li>Regulatory and compliance uncertainty around privacy tools</li>
         <li>Thin anonymity sets in early usage</li>
         <li>L2 and bridge operational risk of the underlying chain</li>
-        <li>
-          Premature or unofficial “$GLOAM” contracts, only trust
-          official channels
-        </li>
       </ul>
 
-      <h2 id="non-claims">13. Explicit non-claims</h2>
+      <h2 id="non-claims">12. Explicit non-claims</h2>
       <p>
         Gloam does not claim mainnet readiness, insurance of funds, legal
         immunity, or invisibility from investigation. Testnet assets have no
-        real-world value. Nothing in this paper is investment advice.{" "}
-        $GLOAM is not live; this paper is not a token
-        sale.
+        real-world value. Nothing in this paper is investment advice.
       </p>
 
-      <h2 id="closing">14. Closing</h2>
+      <h2 id="closing">13. Closing</h2>
       <p>
         Settlement will remain public. Strategy need not. Gloam builds the
         sealed chamber beside the open book on Robinhood Chain, so holders can
         shield, move, and eventually trade without printing every private
         calculation to the street.
       </p>
-      <p className="!!text-[11px] !uppercase !tracking-[0.14em] !text-lime">
-        gloam.trade · testnet · @gloamtrade
-      </p>
+      <div className="t-label pt-4">gloam.trade · testnet · @gloamtrade</div>
     </DocsLayout>
   );
 }

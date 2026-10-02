@@ -10,7 +10,7 @@ export default function SettingsPage() {
   return (
     <AppShell
       title="Settings"
-      subtitle="Wallet, network, faucet, and vault note backup."
+      subtitle="Wallet, appearance, network, and your vault backup."
     >
       <SettingsView />
     </AppShell>

@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAccount, useChainId, useWriteContract } from "wagmi";
 import type { Address, Hex } from "viem";
 import { useNetwork } from "./NetworkProvider";
 import { RelayToggle } from "./RelayToggle";
 import { TokenLogo } from "./TokenLogo";
+import { SealDots } from "@/components/ui/SealDots";
+import { SealedField } from "@/components/ui/SealedField";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient } from "@/lib/rhClient";
@@ -62,6 +64,14 @@ const STATUS_LABEL: Record<PayrollRowStatus, string> = {
   failed: "Failed",
 };
 
+/** Where a busy row sits in its own four-step run (for the per-person ticks). */
+const STEP_INDEX: Partial<Record<PayrollRowStatus, number>> = {
+  preparing: 1,
+  sending: 2,
+  confirming: 3,
+  notifying: 4,
+};
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "·";
@@ -69,6 +79,14 @@ function initials(name: string) {
 
 function short(tag: string) {
   return tag.length > 22 ? `${tag.slice(0, 12)}…${tag.slice(-6)}` : tag;
+}
+
+function people(n: number) {
+  return `${n} ${n === 1 ? "person" : "people"}`;
+}
+
+function minutes(n: number) {
+  return Math.max(1, Math.round((n * SECONDS_PER_PERSON) / 60));
 }
 
 function download(filename: string, text: string) {
@@ -85,12 +103,24 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <span
       aria-hidden
-      className={`inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70 ${className}`}
+      className={`inline-block shrink-0 animate-spin rounded-full border-[1.5px] border-current border-t-transparent opacity-70 motion-reduce:animate-none ${className}`}
     />
   );
 }
 
-type IconName = "file" | "link" | "shield" | "lock" | "check" | "alert" | "upload" | "x";
+type IconName =
+  | "file"
+  | "link"
+  | "shield"
+  | "lock"
+  | "check"
+  | "alert"
+  | "upload"
+  | "x"
+  | "download"
+  | "paste"
+  | "pause"
+  | "arrow";
 
 function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: string }) {
   const common = {
@@ -98,7 +128,7 @@ function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: str
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: 1.8,
+    strokeWidth: 1.6,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     "aria-hidden": true,
@@ -114,8 +144,22 @@ function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: str
     case "upload":
       return (
         <svg {...common}>
-          <path d="M12 16V4M7 9l5-5 5 5" />
-          <path d="M5 16v2a2 2 0 002 2h10a2 2 0 002-2v-2" />
+          <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" />
+          <path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3" />
+        </svg>
+      );
+    case "download":
+      return (
+        <svg {...common}>
+          <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" />
+          <path d="M5 17v1a2 2 0 002 2h10a2 2 0 002-2v-1" />
+        </svg>
+      );
+    case "paste":
+      return (
+        <svg {...common}>
+          <rect x="6" y="5" width="12" height="15" rx="2.5" />
+          <path d="M9.5 5V4a1 1 0 011-1h3a1 1 0 011 1v1M9.5 11h5M9.5 14.5h3.5" />
         </svg>
       );
     case "link":
@@ -140,21 +184,33 @@ function Icon({ name, className = "h-4 w-4" }: { name: IconName; className?: str
       );
     case "check":
       return (
-        <svg {...common} strokeWidth={2.2}>
+        <svg {...common} strokeWidth={2}>
           <path d="M5 12.5l4.2 4.2L19 7" />
         </svg>
       );
     case "alert":
       return (
         <svg {...common}>
-          <path d="M12 8v5M12 16.5v.5" />
-          <path d="M10.3 3.9L2.6 17.2A2 2 0 004.3 20h15.4a2 2 0 001.7-2.8L13.7 3.9a2 2 0 00-3.4 0z" />
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.75v5M12 16.25v.01" />
         </svg>
       );
     case "x":
       return (
         <svg {...common}>
-          <path d="M6 6l12 12M18 6L6 18" />
+          <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+        </svg>
+      );
+    case "pause":
+      return (
+        <svg {...common}>
+          <path d="M9.5 6.5v11M14.5 6.5v11" />
+        </svg>
+      );
+    case "arrow":
+      return (
+        <svg {...common}>
+          <path d="M7 17L17 7M9 7h8v8" />
         </svg>
       );
   }
@@ -166,6 +222,7 @@ function Amount({
   logoId,
   symbol,
   size = 18,
+  logo = true,
   className = "",
 }: {
   raw: bigint | string;
@@ -173,13 +230,65 @@ function Amount({
   logoId: string;
   symbol: string;
   size?: number;
+  /** false: the symbol as quiet text (calmer in long lists). */
+  logo?: boolean;
   className?: string;
 }) {
   return (
-    <span className={`inline-flex items-center gap-2 whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center whitespace-nowrap ${logo ? "gap-2" : "gap-1.5"} ${className}`}>
       <span className="tnum">{formatAssetAmount(raw, asset, 6)}</span>
-      <TokenLogo id={logoId} symbol={symbol} size={size} />
+      {logo ? (
+        <TokenLogo id={logoId} symbol={symbol} size={size} />
+      ) : (
+        <span className="text-mute">{symbol}</span>
+      )}
     </span>
+  );
+}
+
+/** A person's avatar: initials on a soft tile, or the sealed tint when hidden. */
+function Avatar({
+  tone = "plain",
+  children,
+}: {
+  tone?: "plain" | "sealed" | "warn" | "danger";
+  children: ReactNode;
+}) {
+  const tones = {
+    plain: "bg-surface text-foreground",
+    sealed: "bg-sealed-soft text-sealed",
+    warn: "bg-warn-soft text-warn",
+    danger: "bg-danger-soft text-danger",
+  } as const;
+  return (
+    <span
+      aria-hidden
+      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[12px] font-medium tracking-[0.02em] transition-colors duration-300 ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** The progress rail: surface track, sealed fill (paid is the one green thing). */
+function Rail({
+  value,
+  reduce,
+  tone = "sealed",
+}: {
+  value: number;
+  reduce: boolean | null;
+  tone?: "sealed" | "ink";
+}) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden>
+      <motion.div
+        className={`h-full rounded-full ${tone === "sealed" ? "bg-sealed" : "bg-foreground/70"}`}
+        initial={false}
+        animate={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}
+        transition={{ duration: reduce ? 0 : 0.5, ease }}
+      />
+    </div>
   );
 }
 
@@ -216,6 +325,11 @@ export function PayrollView() {
   const token: AssetOption = assetOptions.find((o) => o.address === assetChoice) ??
     assetOptions[0] ?? { address: NATIVE_ASSET, symbol: "ETH", logoId: "eth" };
   const asset = token.address;
+  // Stablecoins (and the native coin) lead; anything else waits behind "More".
+  const [moreAssets, setMoreAssets] = useState(false);
+  const leadCount =
+    shieldTokensFor(network.chainId).filter((t) => t.kind === "stablecoin").length +
+    (supportsNativeShield(network.chainId) ? 1 : 0);
 
   /** Spendable private balance per asset (only entries the vault tree knows). */
   const balances = useMemo(() => {
@@ -447,61 +561,79 @@ export function PayrollView() {
     const remaining = b.rows.filter((r) => r.status !== "paid" && r.status !== "failed").length;
     const links = paid.filter((r) => r.kind === "link" && r.ticket);
     const done = b.status === "done";
+    const linkTotal = b.rows.filter((r) => r.kind === "link").length;
 
     return (
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-line bg-panel">
-          <div className="border-b border-line px-5 py-5 sm:px-7">
-            {done ? (
-              <div className="flex items-start gap-4">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sealed text-white">
-                  <Icon name="check" className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="font-display text-2xl tracking-tight text-foreground">
-                    {paid.length} {paid.length === 1 ? "person" : "people"} paid privately
-                  </p>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-mute">
-                    <Amount raw={paidTotal} asset={b.asset} logoId={opt.logoId} symbol={opt.symbol} size={16} className="text-foreground" />
-                    <span>· {b.title}</span>
+      <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
+        <section className="gl-card min-w-0 overflow-hidden">
+          <header className="relative overflow-hidden border-b border-line max-sm:px-5 pb-6 max-sm:pt-6 sm:px-7 sm:pt-7">
+            {done && <SealedField tone="soft" />}
+            <div className="relative z-[1]">
+              {done ? (
+                <div className="flex items-start gap-4">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
+                    <Icon name="check" className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="max-sm:text-[26px] font-light leading-[1.15] tracking-[-0.018em] text-foreground sm:text-[30px]">
+                      {people(paid.length)} paid privately
+                    </p>
+                    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-mute">
+                      <Amount
+                        raw={paidTotal}
+                        asset={b.asset}
+                        logoId={opt.logoId}
+                        symbol={opt.symbol}
+                        size={16}
+                        className="text-foreground"
+                      />
+                      <span aria-hidden className="text-faint">
+                        ·
+                      </span>
+                      <span className="truncate">{b.title}</span>
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="t-label truncate">{b.title}</p>
+                    <p className="mt-2 flex items-center gap-2.5 max-sm:text-[22px] font-light leading-tight tracking-[-0.012em] text-foreground sm:text-[26px]">
+                      {running ? <Spinner className="h-4 w-4 text-mute" /> : null}
+                      <span className="truncate">
+                        {running
+                          ? current
+                            ? `Paying ${current.name}`
+                            : "Starting…"
+                          : b.status === "needs_funds"
+                            ? "Paused, add money to continue"
+                            : "Paused"}
+                      </span>
+                    </p>
+                    <p className="mt-1.5 text-[13px] text-mute">
+                      About {minutes(remaining)} min left. Keep this tab open.
+                    </p>
+                  </div>
+                  <p className="tnum shrink-0 pt-6 text-right text-[13px] text-mute">
+                    <span className="text-[22px] font-light text-foreground">{paid.length}</span>
+                    <span className="text-faint"> / {b.rows.length}</span>
                   </p>
                 </div>
+              )}
+              <div className="mt-5">
+                <Rail value={paid.length / Math.max(1, b.rows.length)} reduce={reduce} />
               </div>
-            ) : (
-              <div>
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  {running ? <Spinner className="h-3.5 w-3.5" /> : null}
-                  {running
-                    ? current
-                      ? `Paying ${current.name}`
-                      : "Starting…"
-                    : b.status === "needs_funds"
-                      ? "Paused: add money privately to continue"
-                      : "Paused"}
-                </p>
-                <p className="mt-1 text-sm text-mute">
-                  {paid.length} of {b.rows.length} paid · about{" "}
-                  {Math.max(1, Math.round((remaining * SECONDS_PER_PERSON) / 60))} min left. Keep this tab open.
-                </p>
-              </div>
-            )}
-            <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]" aria-hidden>
-              <motion.div
-                className="h-full rounded-full bg-sealed"
-                initial={false}
-                animate={{ width: `${(paid.length / Math.max(1, b.rows.length)) * 100}%` }}
-                transition={{ duration: reduce ? 0 : 0.5, ease }}
-              />
             </div>
-          </div>
+          </header>
 
           {runError && (
-            <p className="flex items-center gap-2 border-b border-line bg-amber-500/5 px-5 py-3 text-sm text-amber-700 sm:px-7">
-              <Icon name="alert" /> {runError}
+            <p className="flex items-start gap-2.5 border-b border-line bg-warn-soft max-sm:px-5 py-3.5 text-[13px] leading-relaxed text-warn sm:px-7">
+              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">{runError}</span>
             </p>
           )}
 
-          <ul>
+          <ul className="divide-y divide-line">
             {b.rows.map((r) => (
               <RunRow
                 key={r.id}
@@ -516,37 +648,74 @@ export function PayrollView() {
           </ul>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-2xl border border-line bg-panel p-5">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-mute">{done ? "Receipt" : "Run"}</p>
-            <div className="mt-3 space-y-2 text-sm">
+        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          <section className="gl-card max-sm:p-5 sm:p-6">
+            <div className="flex items-center justify-between">
+              <p className="t-label">{done ? "Receipt" : "This run"}</p>
+              {done ? (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
+                  <Icon name="lock" className="h-3 w-3" />
+                  Private
+                </span>
+              ) : running ? (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-surface px-2.5 text-[12px] font-medium text-foreground">
+                  <span className="livedot h-1.5 w-1.5 rounded-full bg-foreground" aria-hidden />
+                  Live
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-4 flex items-center gap-2.5 text-foreground">
+              <span className="tnum text-[34px] font-light leading-none tracking-[-0.02em]">
+                {formatAssetAmount(paidTotal, b.asset, 2)}
+              </span>
+              <TokenLogo id={opt.logoId} symbol={opt.symbol} size={22} />
+            </p>
+            <p className="mt-1.5 text-[13px] text-mute">
+              {done ? `Paid in ${opt.symbol}` : `Paid so far, in ${opt.symbol}`}
+            </p>
+
+            <dl className="mt-5 divide-y divide-line border-y border-line text-[13.5px]">
               <Line k="Paid" v={`${paid.length} of ${b.rows.length}`} />
               <Line k="Sent by" v={b.relay ? "Gloam, wallet hidden" : "Your wallet"} />
-              <Line k="Claim links" v={String(b.rows.filter((r) => r.kind === "link").length)} />
-            </div>
+              <Line k="Claim links" v={String(linkTotal)} />
+              <Line
+                k="The public sees"
+                v={
+                  <span className="inline-flex items-center gap-2 text-mute">
+                    {b.rows.length} private transfers
+                  </span>
+                }
+              />
+            </dl>
+
+            {b.status === "needs_funds" && !running && (
+              <div className="mt-4 rounded-[14px] bg-warn-soft px-4 py-3 text-[13px] leading-relaxed text-warn">
+                Your private balance ran short.{" "}
+                <Link href="/app/vault?tab=shield" className="font-medium underline underline-offset-2">
+                  Add {opt.symbol} privately
+                </Link>
+                , then resume.
+              </div>
+            )}
+
             <div className="mt-5 space-y-2">
               {running ? (
                 <button
                   type="button"
                   onClick={() => (stopRef.current = true)}
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-line text-sm font-medium text-foreground hover:border-foreground/40"
+                  className="btn btn-ghost btn-block"
                 >
+                  <Icon name="pause" />
                   Pause after this person
                 </button>
               ) : !done ? (
-                <button
-                  type="button"
-                  onClick={() => void execute(b)}
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
-                >
+                <button type="button" onClick={() => void execute(b)} className="btn btn-ink btn-lg btn-block">
                   Resume
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => exportBatch(b)}
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
-                >
+                <button type="button" onClick={() => exportBatch(b)} className="btn btn-ink btn-lg btn-block">
+                  <Icon name="download" />
                   Download results
                 </button>
               )}
@@ -559,31 +728,22 @@ export function PayrollView() {
                       links.map((r) => `${r.name}: ${claimLink(window.location.origin, networkKey, r.ticket!)}`).join("\n")
                     )
                   }
-                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 text-sm font-medium text-foreground hover:underline"
+                  className="btn btn-ghost btn-block"
                 >
-                  <Icon name="link" />
+                  {copied === "all" ? <Icon name="check" /> : <Icon name="link" />}
                   {copied === "all" ? "Copied" : `Copy ${links.length} claim ${links.length === 1 ? "link" : "links"}`}
                 </button>
               )}
               {!running && (
-                <button
-                  type="button"
-                  onClick={() => setActive(null)}
-                  className="inline-flex min-h-10 w-full items-center justify-center text-sm text-mute hover:text-foreground"
-                >
+                <button type="button" onClick={() => setActive(null)} className="btn btn-quiet btn-block text-mute">
                   {done ? "Start a new run" : "Back to your list"}
                 </button>
               )}
             </div>
             {done && links.length > 0 && (
-              <p className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-mute">
+              <p className="mt-4 border-t border-line pt-4 text-[12.5px] leading-relaxed text-mute">
                 Claim links work like cash. Send each one only to its person.
               </p>
-            )}
-            {b.status === "needs_funds" && (
-              <Link href="/app/vault?tab=shield" className="mt-4 inline-flex text-sm font-medium text-foreground underline">
-                Add {opt.symbol} privately
-              </Link>
             )}
           </section>
         </aside>
@@ -593,18 +753,29 @@ export function PayrollView() {
 
   // ================================================================ draft view
   const hasRows = parsed.rows.length > 0;
+  const pasted = !file && csv.trim().length > 0;
   const linkCount = validRows.length - directCount;
+  const isPublic = view === "public";
+  const covered = plan.shortfall === 0n && total > 0n;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
+    <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
       <div className="min-w-0 space-y-5">
         {/* currency */}
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-mute">Pay in</p>
-          <div className="mt-3 flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="radiogroup" aria-label="Currency">
-            {assetOptions.map((o) => {
+        <section className="gl-card max-sm:p-5 sm:p-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[17px] text-foreground">Pay in</h2>
+            <p className="max-sm:hidden text-[13px] text-mute sm:block">Comes out of your private balance</p>
+          </div>
+          <div
+            className="max-sm:-mx-5 mt-4 flex gap-2 overflow-x-auto max-sm:px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
+            role="radiogroup"
+            aria-label="Currency"
+          >
+            {assetOptions.map((o, i) => {
               const selected = o.address === asset;
               const b = balances.get(o.address.toLowerCase())?.total ?? 0n;
+              if (!moreAssets && i >= leadCount && !selected) return null;
               return (
                 <button
                   key={o.address}
@@ -612,45 +783,83 @@ export function PayrollView() {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setAsset(o.address)}
-                  className={`flex min-w-[156px] shrink-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${
-                    selected ? "border-foreground bg-foreground/[0.03]" : "border-line hover:border-foreground/30"
+                  className={`flex h-14 shrink-0 items-center gap-3 rounded-full border pl-2 pr-5 text-left transition-[border-color,box-shadow,background-color] duration-200 ${
+                    selected
+                      ? "border-foreground bg-panel shadow-card"
+                      : "border-line bg-panel hover:border-line-strong hover:bg-surface"
                   }`}
                 >
-                  <TokenLogo id={o.logoId} symbol={o.symbol} size={30} />
+                  <TokenLogo id={o.logoId} symbol={o.symbol} size={38} />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">{o.symbol}</span>
-                    <span className="tnum block text-xs text-mute">
+                    <span className="block text-[14px] font-medium leading-tight text-foreground">{o.symbol}</span>
+                    <span className="tnum mt-0.5 block text-[12px] leading-tight text-mute">
                       {b > 0n ? `${formatAssetAmount(b, o.address, 2)} private` : "No private balance"}
                     </span>
                   </span>
                 </button>
               );
             })}
+            {assetOptions.length > leadCount && (
+              <button
+                type="button"
+                onClick={() => setMoreAssets((v) => !v)}
+                aria-expanded={moreAssets}
+                className="flex h-14 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground"
+              >
+                {moreAssets ? "Fewer" : `${assetOptions.length - leadCount} more`}
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                  className={`transition-transform duration-200 ${moreAssets ? "rotate-180" : ""}`}
+                >
+                  <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </div>
         </section>
 
         {/* team list */}
-        <section className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          {file && !reading ? (
-            <div className="flex items-center gap-4 rounded-xl border border-line px-4 py-3.5">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-foreground/[0.05] text-foreground">
-                <Icon name="file" className="h-5 w-5" />
+        <section className="gl-card max-sm:p-5 sm:p-6">
+          <div className="mb-4 flex items-baseline justify-between gap-3">
+            <h2 className="text-[17px] text-foreground">Your team</h2>
+            <button
+              type="button"
+              onClick={() => download("gloam-payroll-template.csv", PAYROLL_TEMPLATE)}
+              className="btn btn-quiet btn-sm -mr-3 text-mute hover:text-foreground"
+            >
+              <Icon name="download" className="h-3.5 w-3.5" />
+              Template
+            </button>
+          </div>
+
+          {(file || (pasted && !pasteOpen)) && !reading ? (
+            <div className="flex items-center rounded-[14px] bg-surface py-2.5 pl-2.5 pr-2 max-sm:gap-3 sm:gap-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] bg-panel text-foreground shadow-card">
+                <Icon name={file ? "file" : "paste"} className="h-5 w-5" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
-                <p className="text-xs text-mute">
-                  {validRows.length} {validRows.length === 1 ? "person" : "people"}
-                  {badCount > 0 && <span className="text-amber-700"> · {badCount} to fix</span>}
+                <p className="truncate text-[14px] text-foreground">{file ? file.name : "Pasted list"}</p>
+                <p className="mt-0.5 text-[12.5px] text-mute">
+                  {people(validRows.length)} ready
+                  {badCount > 0 && <span className="text-warn">, {badCount} to fix</span>}
                 </p>
               </div>
-              <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-medium text-foreground hover:underline">
-                Replace
+              <button
+                type="button"
+                onClick={() => (file ? fileRef.current?.click() : setPasteOpen(true))}
+                className="btn btn-quiet btn-sm h-10 shrink-0 hover:bg-surface-2"
+              >
+                {file ? "Replace" : "Edit"}
               </button>
               <button
                 type="button"
                 onClick={clearDraft}
-                aria-label="Remove file"
-                className="grid h-9 w-9 place-items-center rounded-lg text-mute hover:bg-foreground/5 hover:text-foreground"
+                aria-label={file ? "Remove file" : "Clear list"}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
               >
                 <Icon name="x" />
               </button>
@@ -663,32 +872,76 @@ export function PayrollView() {
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={onDrop}
-              className={`flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-10 text-center transition-colors ${
-                dragging ? "border-foreground bg-foreground/[0.03]" : "border-foreground/20"
+              className={`rounded-[16px] border border-dashed transition-colors duration-200 ${
+                dragging ? "border-foreground bg-surface" : "border-line-strong bg-surface/50"
+              } ${
+                pasteOpen && !reading && !dragging
+                  ? "flex items-center gap-3 p-2.5 text-left"
+                  : "flex flex-col items-center justify-center px-5 text-center max-sm:py-10 sm:py-12"
               }`}
             >
               {reading ? (
                 <>
                   <Spinner className="h-6 w-6 text-foreground" />
-                  <p className="mt-4 text-sm font-medium text-foreground">Reading {reading}</p>
-                  <p className="mt-1 text-xs text-mute">Checking names, addresses and amounts</p>
+                  <p className="mt-4 text-[15px] text-foreground">Reading {reading}</p>
+                  <p className="mt-1 text-[13px] text-mute">Checking names, addresses and amounts</p>
+                </>
+              ) : pasteOpen && !dragging ? (
+                <>
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-panel text-foreground shadow-card">
+                    <Icon name="upload" className="h-4 w-4" />
+                  </span>
+                  <p className="min-w-0 flex-1 truncate text-[13.5px] text-mute">
+                    <span className="max-sm:hidden">Drop a CSV here, or</span>
+                  </p>
+                  <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ghost btn-sm h-10 shrink-0">
+                    Choose a file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasteOpen(false)}
+                    aria-expanded={pasteOpen}
+                    aria-label="Hide pasted list"
+                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+                  >
+                    <Icon name="x" />
+                  </button>
                 </>
               ) : (
                 <>
-                  <span className="grid h-12 w-12 place-items-center rounded-full bg-foreground/[0.05] text-foreground">
+                  <span className="grid h-12 w-12 place-items-center rounded-full bg-panel text-foreground shadow-card">
                     <Icon name="upload" className="h-5 w-5" />
                   </span>
-                  <p className="mt-4 text-base font-medium text-foreground">Drop your team&apos;s CSV here</p>
-                  <p className="mt-1 max-w-sm text-sm text-mute">
-                    Name, Gloam address, amount. Leave the address blank and they get a claim link.
+                  <p className="mt-4 text-[17px] text-foreground">
+                    {dragging ? "Drop it here" : "Drop your team’s CSV"}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    className="mt-5 inline-flex min-h-10 items-center rounded-lg bg-lime px-4 text-sm font-semibold text-background"
-                  >
-                    Choose a file
-                  </button>
+                  <p className="mt-1.5 max-w-[42ch] text-[13.5px] leading-relaxed text-mute">
+                    One line per person. Leave the address blank and they get a claim link instead.
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5" aria-label="Columns">
+                    {["name", "gloam_address", "amount"].map((c) => (
+                      <span
+                        key={c}
+                        className="inline-flex h-7 items-center rounded-full bg-panel px-3 text-[12px] text-soft shadow-card"
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                    <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ink btn-sm h-10">
+                      Choose a file
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPasteOpen(true)}
+                      className="btn btn-ghost btn-sm h-10"
+                      aria-expanded={pasteOpen}
+                    >
+                      <Icon name="paste" className="h-3.5 w-3.5" />
+                      Paste a list
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -701,23 +954,19 @@ export function PayrollView() {
             onChange={(e) => void loadFile(e.target.files?.[0])}
           />
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <button
-              type="button"
-              onClick={() => setPasteOpen((v) => !v)}
-              className="font-medium text-foreground hover:underline"
-              aria-expanded={pasteOpen}
-            >
-              {pasteOpen ? "Hide pasted list" : "Paste a list instead"}
-            </button>
-            <button
-              type="button"
-              onClick={() => download("gloam-payroll-template.csv", PAYROLL_TEMPLATE)}
-              className="text-mute hover:text-foreground"
-            >
-              Download template
-            </button>
-          </div>
+          {file && !reading && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setPasteOpen((v) => !v)}
+                className="btn btn-quiet btn-sm -ml-3 h-10 text-mute hover:text-foreground"
+                aria-expanded={pasteOpen}
+              >
+                <Icon name="paste" className="h-3.5 w-3.5" />
+                {pasteOpen ? "Hide pasted list" : "Edit as text"}
+              </button>
+            </div>
+          )}
           <AnimatePresence initial={false}>
             {pasteOpen && (
               <motion.div
@@ -727,8 +976,8 @@ export function PayrollView() {
                 transition={{ duration: 0.2, ease }}
                 className="overflow-hidden"
               >
-                <label className="mt-4 block">
-                  <span className="sr-only">Payroll list</span>
+                <label className="block pt-4">
+                  <span className="mb-2 block text-[13px] text-mute">Paste your list, one person per line</span>
                   <textarea
                     value={csv}
                     onChange={(e) => {
@@ -738,31 +987,39 @@ export function PayrollView() {
                     rows={6}
                     spellCheck={false}
                     placeholder={PAYROLL_TEMPLATE}
-                    className="w-full resize-y rounded-xl border border-line bg-background px-4 py-3 text-sm leading-relaxed text-foreground outline-none placeholder:text-mute/60 focus:border-foreground"
+                    wrap="off"
+                    className="gl-input tnum h-auto resize-y overflow-x-auto whitespace-pre py-3 text-[13.5px] leading-[1.7]"
                   />
                 </label>
               </motion.div>
             )}
           </AnimatePresence>
           {parsed.error && (
-            <p className="mt-4 flex items-center gap-2 text-sm text-amber-700">
-              <Icon name="alert" /> {parsed.error}
+            <p className="mt-4 flex items-start gap-2 rounded-[12px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
+              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /> {parsed.error}
             </p>
           )}
         </section>
 
         {/* pay list, with the "who sees what" switch */}
         {hasRows && (
-          <section className="overflow-hidden rounded-2xl border border-line bg-panel">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Pay list</h2>
-                <p className="text-xs text-mute">
-                  {validRows.length} {validRows.length === 1 ? "person" : "people"} · {directCount} direct · {linkCount} claim{" "}
-                  {linkCount === 1 ? "link" : "links"}
+          <section className="gl-card overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 max-sm:px-5 pb-4 pt-5 sm:px-6">
+              <div className="min-w-0">
+                <h2 className="text-[17px] text-foreground">Pay list</h2>
+                <p className="mt-0.5 text-[13px] text-mute">
+                  {isPublic
+                    ? "What anyone can see on the explorer"
+                    : `${people(validRows.length)}, ${directCount} to Gloam ${
+                        directCount === 1 ? "address" : "addresses"
+                      }, ${linkCount} claim ${linkCount === 1 ? "link" : "links"}`}
                 </p>
               </div>
-              <div className="inline-flex rounded-lg bg-foreground/[0.06] p-1 text-xs font-medium" role="tablist" aria-label="Who sees what">
+              <div
+                className="flex rounded-full bg-surface p-1 text-[12.5px]"
+                role="tablist"
+                aria-label="Who sees what"
+              >
                 {(["you", "public"] as const).map((m) => (
                   <button
                     key={m}
@@ -770,14 +1027,14 @@ export function PayrollView() {
                     role="tab"
                     aria-selected={view === m}
                     onClick={() => setViewMode(m)}
-                    className={`relative min-h-8 rounded-md px-3 transition-colors ${
+                    className={`relative h-8 rounded-full px-3.5 transition-colors duration-200 ${
                       view === m ? "text-foreground" : "text-mute hover:text-foreground"
                     }`}
                   >
                     {view === m && (
                       <motion.span
                         layoutId="payroll-view-pill"
-                        className="absolute inset-0 rounded-md bg-panel shadow-sm"
+                        className="absolute inset-0 rounded-full bg-panel shadow-card"
                         transition={{ duration: reduce ? 0 : 0.25, ease }}
                       />
                     )}
@@ -787,32 +1044,32 @@ export function PayrollView() {
               </div>
             </div>
 
-            <ul>
+            <ul className="border-t border-line" aria-live="polite">
               <AnimatePresence initial={false} mode="popLayout">
                 {parsed.rows.map((r) => {
-                  const pub = view === "public" && !r.error;
+                  const pub = isPublic && !r.error;
                   return (
                     <motion.li
                       key={`${r.line}-${pub ? "p" : "y"}`}
                       {...rowMotion}
-                      className="flex items-center gap-4 border-b border-line px-5 py-3.5 last:border-0 sm:px-6"
+                      className="flex min-h-[64px] items-center gap-3.5 border-b border-line max-sm:px-5 py-3 transition-colors last:border-0 hover:bg-surface/60 sm:px-6"
                     >
                       {pub ? (
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sealed/10 text-sealed">
-                          <Icon name="lock" />
-                        </span>
+                        <Avatar tone="sealed">
+                          <Icon name="lock" className="h-3.5 w-3.5" />
+                        </Avatar>
+                      ) : r.error ? (
+                        <Avatar tone="warn">
+                          <Icon name="alert" className="h-4 w-4" />
+                        </Avatar>
                       ) : (
-                        <span
-                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${
-                            r.error ? "bg-amber-500/10 text-amber-700" : "bg-foreground/[0.06] text-foreground"
-                          }`}
-                        >
-                          {r.error ? <Icon name="alert" /> : initials(r.name)}
-                        </span>
+                        <Avatar>{initials(r.name)}</Avatar>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">{pub ? "Private transfer" : r.name}</p>
-                        <p className={`truncate text-xs ${r.error ? "text-amber-700" : "text-mute"}`}>
+                        <p className="truncate text-[14px] text-foreground">
+                          {pub ? "Private transfer" : r.name || `Line ${r.line}`}
+                        </p>
+                        <p className={`mt-0.5 truncate text-[12.5px] ${r.error ? "text-warn" : "text-mute"}`}>
                           {r.error
                             ? r.error
                             : pub
@@ -820,67 +1077,85 @@ export function PayrollView() {
                                 ? "Sent by Gloam. No name, no amount."
                                 : "No name, no amount."
                               : r.kind === "gloam"
-                                ? `Gloam address · ${short(r.recipient)}`
+                                ? `Gloam address ${short(r.recipient)}`
                                 : "Claim link, you share it after the run"}
                         </p>
                       </div>
                       {pub ? (
-                        <span className="text-sm tracking-[0.2em] text-mute" aria-label="Amount hidden">
-                          ●●●●●
-                        </span>
+                        <SealDots n={6} className="text-foreground/55" />
                       ) : r.amount != null ? (
                         <Amount
                           raw={r.amount}
                           asset={asset}
                           logoId={token.logoId}
                           symbol={token.symbol}
-                          className={`text-sm ${r.error ? "text-mute line-through" : "text-foreground"}`}
+                          logo={false}
+                          className={`text-[15px] ${r.error ? "text-faint line-through" : "text-foreground"}`}
                         />
                       ) : (
-                        <span className="text-sm text-mute">{r.amountInput || "No amount"}</span>
+                        <span className="text-[13px] text-mute">{r.amountInput || "No amount"}</span>
                       )}
                     </motion.li>
                   );
                 })}
               </AnimatePresence>
             </ul>
+
+            <div className="max-sm:mx-3 mb-3 flex items-center justify-between rounded-[12px] bg-surface px-3.5 py-3 text-[13.5px] sm:mx-3">
+              <span className="text-mute">{isPublic ? "Total" : `Total for ${people(validRows.length)}`}</span>
+              {isPublic ? (
+                <SealDots n={7} className="text-foreground/55" />
+              ) : (
+                <Amount
+                  raw={total}
+                  asset={asset}
+                  logoId={token.logoId}
+                  symbol={token.symbol}
+                  size={16}
+                  className="text-foreground"
+                />
+              )}
+            </div>
           </section>
         )}
       </div>
 
       {/* summary */}
-      <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-        <section className="rounded-2xl border border-line bg-panel p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-mute">This run</p>
-          <p className="mt-3 flex items-center gap-2.5 font-display text-3xl tracking-tight text-foreground">
-            <span className="tnum">{formatAssetAmount(total, asset, 2)}</span>
-            <TokenLogo id={token.logoId} symbol={token.symbol} size={26} />
+      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+        <section className="gl-card max-sm:p-5 sm:p-6">
+          <p className="t-label">This run</p>
+          <p className="mt-4 flex items-center gap-2.5 text-foreground">
+            <span
+              className={`tnum text-[40px] font-light leading-none tracking-[-0.025em] ${
+                total === 0n ? "text-faint" : ""
+              }`}
+            >
+              {formatAssetAmount(total, asset, 2)}
+            </span>
+            <TokenLogo id={token.logoId} symbol={token.symbol} size={24} />
           </p>
-          <p className="mt-1 text-sm text-mute">
+          <p className="mt-2 text-[13px] text-mute">
             {validRows.length > 0
-              ? `${validRows.length} ${validRows.length === 1 ? "person" : "people"} · about ${Math.max(
-                  1,
-                  Math.round((validRows.length * SECONDS_PER_PERSON) / 60)
-                )} min`
+              ? `${people(validRows.length)} in ${token.symbol}, about ${minutes(validRows.length)} min`
               : "Add your team to see the total"}
           </p>
 
-          <div className="mt-5 rounded-xl bg-foreground/[0.03] p-4">
-            <div className="flex items-center justify-between text-sm">
+          <div className="mt-5 rounded-[14px] bg-surface p-4">
+            <div className="flex items-center justify-between gap-3 text-[13px]">
               <span className="text-mute">Private balance</span>
-              <span className="tnum font-medium text-foreground">
+              <span className="tnum text-foreground">
                 {formatAssetAmount(bal.total, asset, 2)} {token.symbol}
               </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-foreground/[0.08]" aria-hidden>
-              <div
-                className={`h-full rounded-full transition-[width] duration-500 ${
-                  plan.shortfall === 0n && total > 0n ? "bg-sealed" : "bg-foreground/60"
-                }`}
-                style={{ width: `${total > 0n ? coverage * 100 : 0}%` }}
-              />
+            <div className="mt-3">
+              <Rail value={total > 0n ? coverage : 0} reduce={reduce} tone={covered ? "sealed" : "ink"} />
             </div>
-            <p className="mt-2 text-xs text-mute">
+            <p
+              className={`mt-2.5 flex items-center gap-1.5 text-[12.5px] ${
+                covered ? "text-sealed" : plan.shortfall > 0n && total > 0n ? "text-foreground" : "text-mute"
+              }`}
+            >
+              {covered && <Icon name="check" className="h-3.5 w-3.5" />}
               {total === 0n
                 ? "Payments come out of your private balance."
                 : plan.shortfall === 0n
@@ -889,7 +1164,7 @@ export function PayrollView() {
             </p>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <RelayToggle
               available={relayAvailable}
               on={relayOn}
@@ -901,78 +1176,83 @@ export function PayrollView() {
             />
           </div>
 
+          {validRows.length > 0 && (
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-[13px] text-mute">Name this run</span>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} className="gl-input h-11 text-[14px]" />
+            </label>
+          )}
+
           <div className="mt-5">
             {validRows.length > 0 && plan.shortfall > 0n && isConnected ? (
-              <Link
-                href="/app/vault?tab=shield"
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
-              >
+              <Link href="/app/vault?tab=shield" className="btn btn-ink btn-lg btn-block">
                 Add {formatAssetAmount(plan.shortfall, asset, 2)} {token.symbol} privately
               </Link>
             ) : (
-              <button
-                type="button"
-                disabled={!canRun}
-                onClick={() => void startRun()}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background transition-opacity disabled:opacity-35"
-              >
-                {validRows.length > 0
-                  ? `Pay ${validRows.length} ${validRows.length === 1 ? "person" : "people"} privately`
-                  : "Pay privately"}
+              <button type="button" disabled={!canRun} onClick={() => void startRun()} className="btn btn-ink btn-lg btn-block">
+                {validRows.length > 0 ? `Pay ${people(validRows.length)} privately` : "Pay privately"}
               </button>
             )}
-            {blocker && <p className="mt-2 text-center text-xs text-mute">{blocker}</p>}
+            {blocker && <p className="mt-2.5 text-center text-[12.5px] text-mute">{blocker}</p>}
             {badCount > 0 && validRows.length > 0 && (
-              <p className="mt-2 text-center text-xs text-amber-700">
+              <p className="mt-2 text-center text-[12.5px] text-warn">
                 {badCount} {badCount === 1 ? "line" : "lines"} will be skipped until fixed.
               </p>
             )}
           </div>
-
-          {validRows.length > 0 && (
-            <label className="mt-4 block border-t border-line pt-4">
-              <span className="text-xs text-mute">Name this run</span>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 min-h-10 w-full rounded-lg border border-line bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
-              />
-            </label>
-          )}
         </section>
 
         {batches.length > 0 && (
-          <section className="rounded-2xl border border-line bg-panel p-5">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-mute">Past runs</p>
-            <ul className="mt-3 divide-y divide-line">
+          <section className="gl-card max-sm:p-5 sm:p-6">
+            <div className="flex items-center justify-between">
+              <p className="t-label">Past runs</p>
+              <span className="tnum text-[12px] text-faint">{batches.length}</span>
+            </div>
+            <ul className="-mx-2 mt-3 space-y-0.5">
               {batches.slice(0, 6).map((b) => {
                 const paid = b.rows.filter((r) => r.status === "paid");
                 const opt = assetOptions.find((o) => o.address === b.asset);
                 const sum = paid.reduce((s, r) => s + BigInt(r.amount), 0n);
                 const untouched = b.rows.every((r) => r.status === "queued");
                 return (
-                  <li key={b.id} className="flex items-center gap-3 py-2.5">
-                    <button type="button" onClick={() => setActive(b)} className="min-w-0 flex-1 text-left">
-                      <span className="block truncate text-sm font-medium text-foreground">{b.title}</span>
-                      <span className="tnum block text-xs text-mute">
-                        {paid.length}/{b.rows.length} paid · {formatAssetAmount(sum, b.asset, 2)} {opt?.symbol ?? ""}
+                  <li key={b.id} className="flex items-center gap-2 rounded-[12px] transition-colors hover:bg-surface">
+                    <button
+                      type="button"
+                      onClick={() => setActive(b)}
+                      className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 rounded-[12px] px-2 text-left"
+                    >
+                      {opt ? (
+                        <TokenLogo id={opt.logoId} symbol={opt.symbol} size={28} />
+                      ) : (
+                        <span className="h-7 w-7 shrink-0 rounded-full bg-surface" aria-hidden />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] text-foreground">{b.title}</span>
+                        <span className="tnum mt-0.5 block truncate text-[12px] text-mute">
+                          {paid.length} of {b.rows.length} paid, {formatAssetAmount(sum, b.asset, 2)} {opt?.symbol ?? ""}
+                        </span>
                       </span>
                     </button>
-                    {b.status === "done" ? (
-                      <span className="text-sealed" aria-label="Done">
-                        <Icon name="check" />
-                      </span>
-                    ) : untouched ? (
-                      <button
-                        type="button"
-                        onClick={() => void deleteBatch(b.id).then(reloadBatches)}
-                        className="text-xs text-mute hover:text-foreground"
-                      >
-                        Delete
-                      </button>
-                    ) : (
-                      <span className="text-xs text-amber-700">Paused</span>
-                    )}
+                    <span className="shrink-0 pr-2">
+                      {b.status === "done" ? (
+                        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
+                          <Icon name="check" className="h-3 w-3" />
+                          Paid
+                        </span>
+                      ) : untouched ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteBatch(b.id).then(reloadBatches)}
+                          className="inline-flex h-10 items-center rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <span className="inline-flex h-6 items-center rounded-full bg-warn-soft px-2.5 text-[12px] font-medium text-warn">
+                          Paused
+                        </span>
+                      )}
+                    </span>
                   </li>
                 );
               })}
@@ -984,12 +1264,28 @@ export function PayrollView() {
   );
 }
 
-function Line({ k, v }: { k: string; v: string }) {
+function Line({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-mute">{k}</span>
-      <span className="text-right font-medium text-foreground">{v}</span>
+    <div className="flex min-h-[44px] items-center justify-between gap-3 py-2">
+      <dt className="text-mute">{k}</dt>
+      <dd className="tnum text-right text-foreground">{v}</dd>
     </div>
+  );
+}
+
+/** Four small ticks: where this person's payment is in its own run. */
+function StepTicks({ step }: { step: number }) {
+  return (
+    <span className="mt-1.5 flex justify-end gap-1" aria-hidden>
+      {[1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className={`h-1 w-3.5 rounded-full transition-colors duration-300 ${
+            i < step ? "bg-foreground/70" : i === step ? "bg-foreground/35" : "bg-surface-2"
+          }`}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -1009,54 +1305,66 @@ function RunRow({
   onCopy: (key: string, text: string) => void;
 }) {
   const busy = r.status !== "paid" && r.status !== "failed" && r.status !== "queued";
+  const chip =
+    r.status === "paid"
+      ? "bg-sealed-soft text-sealed"
+      : r.status === "failed"
+        ? "bg-danger-soft text-danger"
+        : busy
+          ? "bg-panel text-foreground shadow-card"
+          : "text-faint";
   return (
     <li
-      className={`flex items-center gap-4 border-b border-line px-5 py-3.5 last:border-0 sm:px-7 ${
-        busy ? "bg-foreground/[0.02]" : ""
+      className={`flex min-h-[68px] items-center gap-3.5 max-sm:px-5 py-3 transition-colors duration-300 sm:px-7 ${
+        busy ? "bg-surface" : ""
       }`}
     >
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground/[0.06] text-xs font-semibold text-foreground">
-        {initials(r.name)}
-      </span>
+      <Avatar tone={r.status === "failed" ? "danger" : "plain"}>
+        {r.status === "failed" ? <Icon name="alert" className="h-4 w-4" /> : initials(r.name)}
+      </Avatar>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
-        <p className="flex items-center gap-1.5 truncate text-xs text-mute">
-          {r.kind === "gloam" ? <Icon name="shield" className="h-3.5 w-3.5" /> : <Icon name="link" className="h-3.5 w-3.5" />}
-          {r.kind === "gloam" ? (r.memoPosted ? "Gloam address, notified" : "Gloam address") : "Claim link"}
+        <p className="truncate text-[14px] text-foreground">{r.name}</p>
+        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-mute">
+          {r.kind === "gloam" ? (
+            <Icon name="shield" className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <Icon name="link" className="h-3.5 w-3.5 shrink-0" />
+          )}
+          <span className="truncate">
+            {r.kind === "gloam" ? (r.memoPosted ? "Gloam address, notified" : "Gloam address") : "Claim link"}
+          </span>
           {r.status === "paid" && r.kind === "link" && r.ticket && (
             <button
               type="button"
               onClick={() => onCopy(r.id, claimLink(window.location.origin, networkKey, r.ticket!))}
-              className="ml-1 font-medium text-foreground hover:underline"
+              className="-my-2.5 ml-1 shrink-0 py-2.5 font-medium text-foreground underline-offset-2 hover:underline"
             >
               {copied === r.id ? "Copied" : "Copy link"}
             </button>
           )}
         </p>
-        {r.error && r.status !== "paid" && <p className="mt-0.5 truncate text-xs text-amber-700">{r.error}</p>}
+        {r.error && r.status !== "paid" && <p className="mt-0.5 truncate text-[12px] text-danger">{r.error}</p>}
       </div>
-      <Amount
-        raw={r.amount}
-        asset={asset}
-        logoId={opt.logoId}
-        symbol={opt.symbol}
-        className="text-sm text-foreground"
-      />
-      <span
-        className={`inline-flex min-w-[112px] items-center justify-end gap-1.5 text-xs font-medium ${
-          r.status === "paid"
-            ? "text-sealed"
-            : r.status === "failed"
-              ? "text-amber-700"
-              : busy
-                ? "text-foreground"
-                : "text-mute"
-        }`}
-      >
-        {busy && <Spinner className="h-3 w-3" />}
-        {r.status === "paid" && <Icon name="check" className="h-3.5 w-3.5" />}
-        {STATUS_LABEL[r.status]}
-      </span>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <Amount
+          raw={r.amount}
+          asset={asset}
+          logoId={opt.logoId}
+          symbol={opt.symbol}
+          logo={false}
+          className="text-[14.5px] text-foreground"
+        />
+        <span
+          className={`inline-flex h-6 items-center gap-1.5 rounded-full text-[12px] font-medium ${
+            r.status === "queued" ? "px-0" : "px-2.5"
+          } ${chip}`}
+        >
+          {busy && <Spinner className="h-3 w-3" />}
+          {r.status === "paid" && <Icon name="lock" className="h-3 w-3" />}
+          {STATUS_LABEL[r.status]}
+        </span>
+        {busy && STEP_INDEX[r.status] != null && <StepTicks step={STEP_INDEX[r.status]!} />}
+      </div>
     </li>
   );
 }

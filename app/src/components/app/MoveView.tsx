@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useAccount,
   useChainId,
@@ -9,12 +10,15 @@ import {
   useWriteContract,
 } from "wagmi";
 import { formatUnits, type Hex } from "viem";
-import { AsciiImage } from "@/components/AsciiImage";
+import { SealedField } from "@/components/ui/SealedField";
+import { SealDots } from "@/components/ui/SealDots";
+import { shortAddress } from "@/lib/chain";
+import { shieldTokensFor } from "@/lib/tokens";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient } from "@/lib/rhClient";
-import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, isShieldDeployed, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
+import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
 import { syncShieldTree } from "@/lib/treeSync";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { buildTransferWitness } from "@/lib/proverTransfer";
@@ -65,12 +69,12 @@ import {
   relayUnshield,
   setRelayPreferred,
 } from "@/lib/relay/client";
-import { StatusPill } from "./StatusPill";
 import { RelayToggle } from "./RelayToggle";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
-import { VaultHealth } from "./VaultHealth";
+import { WalletMenu } from "./WalletMenu";
+import { TokenLogo } from "./TokenLogo";
 
 type Mode = "send" | "cashout" | "receive";
 /** Direct (pay to sticky tag) vs open bearer ticket */
@@ -98,7 +102,12 @@ export function MoveView() {
     refresh: refreshTree,
   } = useShieldTree();
 
-  const [mode, setMode] = useState<Mode>("send");
+  // ?mode=receive|cashout opens a specific action (e.g. "Cash out" links).
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() => {
+    const m = searchParams.get("mode");
+    return m === "receive" || m === "cashout" ? m : "send";
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendAmount, setSendAmount] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -207,7 +216,7 @@ export function MoveView() {
           setShareAmountLabel(pendingShare.current.amountLabel);
           pendingShare.current = null;
         }
-        setSuccessTitle("Private pay on-chain");
+        setSuccessTitle("Paid privately");
         void import("@/lib/track").then(({ track }) => {
           track("private_pay_success");
         });
@@ -281,7 +290,7 @@ export function MoveView() {
               pendingShare.current = null;
             }
             setError(
-              `Payment sent. We could not post their notification (${e instanceof Error ? e.message : "relay error"}), so share the payment code below instead.`
+              `Payment sent. We could not send their heads-up (${e instanceof Error ? e.message : "relay error"}), so share the claim code below instead.`
             );
             setShowSuccess(true);
             setBusy(false);
@@ -367,7 +376,7 @@ export function MoveView() {
 
     if (poolForCashOut != null && poolForCashOut < BigInt(selected.amountWei)) {
       setError(
-        `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, need ${formatAssetLabel(selected.amountWei, selected.asset)}). Someone needs to add more of this asset first.`
+        `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, ${formatAssetLabel(selected.amountWei, selected.asset)} needed). It opens up once more of this asset is added.`
       );
       return;
     }
@@ -382,8 +391,8 @@ export function MoveView() {
 
     try {
       const path = await pathForLeaf(selected.leafIndex!);
-      if (!path) throw new Error("Could not build path, resync the tree.");
-      setStatus("Building proof… this can take 10–30 seconds.");
+      if (!path) throw new Error("Could not read your private balance. Refresh and try again.");
+      setStatus("Proving privately, this takes 10 to 30 seconds…");
       const w = await buildPoseidonUnshieldWitness({
         secretHex: selected.secret,
         amount: BigInt(selected.amountWei),
@@ -392,7 +401,7 @@ export function MoveView() {
         path: path as PoseidonMerklePath,
       });
       if (!w.checks.commitmentMatches) {
-        throw new Error(w.blocker ?? "Note does not match");
+        throw new Error(w.blocker ?? "This balance does not match the vault.");
       }
       const { proofBytes } = await proveUnshieldInBrowser(w.circomInput);
       if (relayOn) {
@@ -410,7 +419,7 @@ export function MoveView() {
         setSuccessTitle("Cashed out");
         return;
       }
-      setStatus("Confirm cash out in your wallet…");
+      setStatus("Confirm the cash out in your wallet…");
       writeContract({
         address: network.pool,
         abi: shieldPoolAbi,
@@ -455,13 +464,13 @@ export function MoveView() {
         throw new Error("Enter a valid amount to send.");
       }
       if (amountPay > BigInt(selected.amountWei)) {
-        throw new Error("Amount is larger than this note.");
+        throw new Error("That is more than this balance holds.");
       }
 
       const path = await pathForLeaf(selected.leafIndex!);
-      if (!path) throw new Error("Could not build path, resync the tree.");
+      if (!path) throw new Error("Could not read your private balance. Refresh and try again.");
 
-      setStatus("Building private send proof…");
+      setStatus("Proving your payment privately…");
       const w = await buildTransferWitness({
         secretHex: selected.secret,
         amountIn: BigInt(selected.amountWei),
@@ -509,7 +518,7 @@ export function MoveView() {
         const tag = recipientTag.trim();
         if (!isReceiveTag(tag)) {
           throw new Error(
-            "Paste their Gloam address (gloamr1…) to pay them privately."
+            "Paste their Gloam address (it starts with gloamr1) to pay them privately."
           );
         }
         const plain = encodeNotePackage(pack);
@@ -558,7 +567,7 @@ export function MoveView() {
         });
         return;
       }
-      setStatus("Confirm private pay in your wallet…");
+      setStatus("Confirm the payment in your wallet…");
       writeContract({
         address: network.pool,
         abi: shieldPoolAbi,
@@ -577,8 +586,8 @@ export function MoveView() {
       });
       setSuccessTitle(
         payStyle === "direct" && isPayMemoLive()
-          ? "Private pay, confirm memo next"
-          : "Private pay submitted"
+          ? "Paid. Confirm the heads-up next"
+          : "Sent privately"
       );
       void import("@/lib/track").then(({ track }) => {
         track("private_send_submit");
@@ -596,11 +605,11 @@ export function MoveView() {
   async function scanInbox() {
     if (!isPayMemoLive()) {
       setInboxStatus(
-        "Message board not available yet. Share the claim link manually."
+        "Not available on this network yet. Ask the sender for a claim link."
       );
       return;
     }
-    setInboxStatus("Scanning chain for payments to your tag…");
+    setInboxStatus("Checking for payments to your Gloam address…");
     setInbox([]);
     try {
       const memos = await fetchPaymentMemos(getRhPublicClient());
@@ -622,11 +631,11 @@ export function MoveView() {
       setInbox(hits);
       setInboxStatus(
         hits.length
-          ? `Found ${hits.length} payment(s) for your tag.`
-          : "No new on-chain payments for this tag (or memo board empty)."
+          ? `Found ${hits.length} ${hits.length === 1 ? "payment" : "payments"} for you.`
+          : "No new payments yet."
       );
     } catch (e) {
-      setInboxStatus(e instanceof Error ? e.message : "Inbox scan failed");
+      setInboxStatus(e instanceof Error ? e.message : "Could not check for payments.");
     }
   }
 
@@ -635,7 +644,7 @@ export function MoveView() {
     setImportOk(null);
     try {
       if (!network.pool || !address) {
-        throw new Error("Connect wallet first.");
+        throw new Error("Connect a wallet first.");
       }
       const pack = await decodeNotePackage(
         importText,
@@ -646,7 +655,7 @@ export function MoveView() {
         pack.pool &&
         pack.pool.toLowerCase() !== network.pool.toLowerCase()
       ) {
-        throw new Error("This payment is for a different vault.");
+        throw new Error("This payment is for a different vault or network.");
       }
 
       const asset = pack.asset;
@@ -691,8 +700,8 @@ export function MoveView() {
       const ethLabel = formatAssetLabel(pack.amountWei, pack.asset);
       setImportOk(
         idx != null
-          ? `Got ${ethLabel} in the vault, open Cash out when ready.`
-          : `Got ${ethLabel}. Tap Refresh, then Cash out.`
+          ? `Claimed ${ethLabel} into your private balance. Send it or cash out when you are ready.`
+          : `Claimed ${ethLabel}. It shows up here once your balance refreshes.`
       );
       setMode("cashout");
     } catch (e) {
@@ -733,14 +742,14 @@ export function MoveView() {
             });
             if (!cancelled) {
               setClaimPreview(
-                `Encrypted to your tag · ${formatAssetLabel(pack.amountWei, pack.asset)}, ready to claim.`
+                `A payment of ${formatAssetLabel(pack.amountWei, pack.asset)} for you, ready to claim.`
               );
             }
             return;
           }
           if (isEncryptedPackage(t) && !importPassphrase.trim()) {
             if (!cancelled) {
-              setClaimPreview("This claim link is locked. Enter the phrase to preview.");
+              setClaimPreview("This claim link is locked. Enter the phrase to see it.");
             }
             return;
           }
@@ -750,7 +759,7 @@ export function MoveView() {
           );
           if (cancelled) return;
           setClaimPreview(
-            `Looks like a ${formatAssetLabel(pack.amountWei, pack.asset)} vault payment.`
+            `Looks like a payment of ${formatAssetLabel(pack.amountWei, pack.asset)}.`
           );
         } catch (e) {
           if (!cancelled) {
@@ -770,592 +779,807 @@ export function MoveView() {
   }, [importText, importPassphrase, mode]);
 
   const working = busy || isPending || confirming;
+  const connectedOk = isConnected && onProduct;
+  const memoLive = isPayMemoLive();
+
+  function selectMode(id: Mode) {
+    setMode(id);
+    setError(null);
+    setStatus(null);
+    setImportOk(null);
+    setClaimPreview(null);
+  }
+
+  const shieldTokens = shieldTokensFor(network.chainId);
+  const logoIdFor = (asset: string): string | null => {
+    if (isNativeAsset(asset)) return null;
+    return (
+      shieldTokens.find((t) => t.address.toLowerCase() === asset.toLowerCase())?.id ??
+      asset
+    );
+  };
+
+  const totals = (() => {
+    const m = new Map<string, bigint>();
+    for (const n of notes) {
+      const k = n.asset.toLowerCase();
+      m.set(k, (m.get(k) ?? 0n) + BigInt(n.amountWei || "0"));
+    }
+    return Array.from(m.entries()).map(([asset, amt]) => ({
+      asset,
+      label: assetLabel(asset),
+      logoId: logoIdFor(asset),
+      amount: formatAssetAmount(amt, asset),
+    }));
+  })();
+
+  const connectPrompt = (action: string) => (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-surface px-4 py-3">
+      <p className="text-[14px] text-mute">
+        {!isConnected
+          ? `Connect a wallet to ${action}.`
+          : `Switch to ${network.label} to ${action}.`}
+      </p>
+      <WalletMenu />
+    </div>
+  );
+
+  const relayToggle = (
+    <RelayToggle
+      available={relayAvailable}
+      on={relayOn}
+      onChange={(v) => {
+        setRelayOn(v);
+        setRelayPreferred(v);
+      }}
+    />
+  );
 
   return (
     <>
-      <div className="mx-auto max-w-xl">
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="space-y-5 p-5 sm:p-6">
-              <DevKeysBanner compact />
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="gl-card min-w-0 p-5 sm:p-7">
+          <DevKeysBanner compact />
 
-              {/* Mode tabs */}
-              <div className="flex gap-1 rounded-lg border border-line p-1">
-                {(
-                  [
-                    ["send", "Send privately"],
-                    ["receive", "Receive"],
-                    ["cashout", "Cash out"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setMode(id);
-                      setError(null);
-                      setStatus(null);
-                      setImportOk(null);
-                      setClaimPreview(null);
-                    }}
-                    className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
-                      mode === id
-                        ? "bg-lime text-background"
-                        : "text-mute hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+          {/* Mode tabs */}
+          <div
+            role="tablist"
+            aria-label="Pay"
+            className="flex rounded-full bg-surface p-1"
+          >
+            {(
+              [
+                ["send", "Send privately", "Send"],
+                ["receive", "Receive", "Receive"],
+                ["cashout", "Cash out", "Cash out"],
+              ] as const
+            ).map(([id, label, short]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={mode === id}
+                onClick={() => selectMode(id)}
+                className={`h-10 flex-1 whitespace-nowrap rounded-full px-3 text-[14px] transition-colors duration-200 ${
+                  mode === id
+                    ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
+                    : "text-mute hover:text-foreground"
+                }`}
+              >
+                <span className="max-sm:hidden">{label}</span>
+                <span className="sm:hidden">{short}</span>
+              </button>
+            ))}
+          </div>
 
-              {!poseidonMode && (
-                <p className="text-sm text-amber-600 dark:text-amber-500">
-                  The private vault isn’t connected right now. Try again shortly.
+          {!poseidonMode && (
+            <p className="mt-5 rounded-xl bg-warn-soft px-4 py-3 text-[13.5px] leading-relaxed text-warn">
+              The private vault is not connected right now. Try again shortly.
+            </p>
+          )}
+
+          {importOk && (
+            <div className="mt-5 flex items-start gap-3 rounded-xl bg-sealed-soft px-4 py-3 text-[13.5px] leading-relaxed text-foreground">
+              <span className="mt-0.5 text-sealed" aria-hidden>
+                <CheckIcon />
+              </span>
+              <span>{importOk}</span>
+            </div>
+          )}
+
+          {shieldLive && notes.length > 0 && mode !== "receive" ? (
+            <>
+              <section className="mt-6">
+                <p className="text-[13px] text-mute">
+                  {mode === "cashout" ? "Cash out from" : "Pay from"}
                 </p>
-              )}
-
-              {importOk && (
-                <div className="rounded-xl border border-lime/30 bg-lime/5 px-4 py-3 text-sm text-foreground">
-                  {importOk}
-                </div>
-              )}
-
-              {shieldLive && notes.length > 0 && mode !== "receive" ? (
-                <>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Your vault notes
-                    </p>
-                    <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
-                      {notes.map((n) => (
-                        <li key={n.id}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedId(n.id)}
-                            className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm ${
-                              selected?.id === n.id
-                                ? "bg-lime/10 text-foreground"
-                                : "text-mute hover:text-foreground"
+                <ul
+                  role="radiogroup"
+                  aria-label={mode === "cashout" ? "Cash out from" : "Pay from"}
+                  className="mt-2 max-h-[300px] space-y-2 overflow-y-auto"
+                >
+                  {notes.map((n) => {
+                    const active = selected?.id === n.id;
+                    const kind = !n.txHash
+                      ? "Claimed"
+                      : n.id.startsWith("chg-")
+                        ? "Change from a payment"
+                        : "Added";
+                    return (
+                      <li key={n.id}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setSelectedId(n.id)}
+                          className={`flex min-h-[60px] w-full items-center gap-3 rounded-[14px] border px-4 py-2.5 text-left transition-colors ${
+                            active
+                              ? "border-foreground bg-panel"
+                              : "border-line hover:border-line-strong hover:bg-surface"
+                          }`}
+                        >
+                          <AssetMark id={logoIdFor(n.asset)} symbol={assetLabel(n.asset)} size={32} />
+                          <span className="min-w-0 flex-1">
+                            <span className="tnum block truncate text-[16px] text-foreground">
+                              {formatAssetAmount(n.amountWei, n.asset)}{" "}
+                              <span className="text-mute">{assetLabel(n.asset)}</span>
+                            </span>
+                            <span className="block truncate text-[12px] text-mute">
+                              {kind},{" "}
+                              {new Date(n.createdAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </span>
+                          <span
+                            aria-hidden
+                            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors ${
+                              active ? "border-foreground bg-foreground" : "border-line-strong"
                             }`}
                           >
-                            <span>
-                              {formatAssetAmount(n.amountWei, n.asset)}{" "}
-                              {assetLabel(n.asset)}
-                              {!n.txHash && (
-                                <span className="ml-2 text-[10px] text-lime">
-                                  imported
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-[10px]">
-                              #{n.leafIndex ?? "?"}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                            {active && <span className="h-2 w-2 rounded-full bg-panel" />}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
 
-                  {mode === "send" && (
-                    <div className="space-y-3">
-                      {/* Same mental model as public Send: To + Amount */}
-                      <div>
-                        <label
-                          htmlFor="recv-tag"
-                          className="text-sm font-medium text-foreground"
-                        >
-                          To
-                        </label>
-                        <input
-                          id="recv-tag"
-                          value={recipientTag}
-                          onChange={(e) => {
-                            const v = e.target.value.trim();
-                            setRecipientTag(v);
-                            if (v.startsWith("gloamr1.")) setPayStyle("direct");
-                            else if (v === "") setPayStyle("direct");
-                          }}
-                          placeholder="Their Gloam address (gloamr1…)"
-                          className="mt-2 min-h-12 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
-                        />
-                        <p className="mt-1 text-xs text-mute">
-                          Same as “send to address”, private Gloam tag from
-                          their Move → Receive.
-                        </p>
-                        {contacts.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {contacts.map((c) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => setRecipientTag(c.tag)}
-                                className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mute hover:border-lime/40 hover:text-foreground"
-                              >
-                                {c.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+              {mode === "send" && (
+                <div className="mt-6 space-y-5">
+                  {/* Same mental model as public Send: To + Amount */}
+                  <div>
+                    <label htmlFor="recv-tag" className="text-[13px] text-mute">
+                      To
+                    </label>
+                    <input
+                      id="recv-tag"
+                      value={recipientTag}
+                      autoComplete="off"
+                      spellCheck={false}
+                      onChange={(e) => {
+                        const v = e.target.value.trim();
+                        setRecipientTag(v);
+                        if (v.startsWith("gloamr1.")) setPayStyle("direct");
+                        else if (v === "") setPayStyle("direct");
+                      }}
+                      placeholder="Their Gloam address (gloamr1…)"
+                      className="gl-input tnum mt-2"
+                    />
+                    <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                      Like sending to an address, but private. They find their
+                      Gloam address under Pay, Receive.
+                    </p>
+                    {(contacts.length > 0 || recipientTag.trim().startsWith("gloamr1.")) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        {contacts.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setRecipientTag(c.tag)}
+                            className={`h-10 rounded-full px-3.5 text-[13px] transition-colors ${
+                              recipientTag === c.tag
+                                ? "bg-ink text-on-ink"
+                                : "bg-surface text-soft hover:bg-surface-2 hover:text-foreground"
+                            }`}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
                         {recipientTag.trim().startsWith("gloamr1.") && (
                           <button
                             type="button"
-                            className="mt-2 text-[11px] text-lime hover:underline"
+                            className="h-10 rounded-full px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-surface"
                             onClick={() => {
                               const label =
-                                window.prompt("Save contact as", "Friend") ??
-                                "";
+                                window.prompt("Save contact as", "Friend") ?? "";
                               if (!label.trim()) return;
                               upsertContact(label, recipientTag);
                               setContacts(loadContacts());
                             }}
                           >
-                            Save tag to contacts
+                            + Save to contacts
                           </button>
                         )}
                       </div>
-                      <div>
-                        <label
-                          htmlFor="pay-amt"
-                          className="text-sm font-medium text-foreground"
-                        >
-                          Amount
-                        </label>
-                        <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="pay-amt" className="text-[13px] text-mute">
+                      Amount
+                    </label>
+                    <div className="mt-2 flex items-center gap-3 rounded-[16px] bg-surface py-2 pl-4 pr-2 focus-within:ring-2 focus-within:ring-foreground/15">
+                      <input
+                        id="pay-amt"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        value={sendAmount}
+                        onChange={(e) =>
+                          setSendAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                        }
+                        placeholder="0"
+                        className="tnum min-w-0 flex-1 bg-transparent text-[32px] font-light leading-[1.25] tracking-[-0.02em] text-foreground outline-none! placeholder:text-faint"
+                      />
+                      {selected && (
+                        <span className="shrink-0 text-[15px] text-mute">
+                          {assetLabel(selected.asset)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm shrink-0"
+                        onClick={() => setSendAmount(maxEth)}
+                      >
+                        Max
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                      The amount never shows up on the explorer. Anything left
+                      over stays in your private balance.
+                    </p>
+                  </div>
+
+                  {!recipientTag.trim() && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPayStyle((s) => (s === "bearer" ? "direct" : "bearer"))
+                        }
+                        aria-expanded={payStyle === "bearer"}
+                        className="-my-2 inline-flex min-h-10 items-center text-[13px] text-mute transition-colors hover:text-foreground"
+                      >
+                        {payStyle === "bearer"
+                          ? "Pay a Gloam address instead"
+                          : "No Gloam address? Pay with a claim link →"}
+                      </button>
+                      {payStyle === "bearer" && (
+                        <div className="mt-3 rounded-[16px] bg-surface p-[16px]">
+                          <p className="text-[13px] leading-relaxed text-mute">
+                            You get a link that holds the payment. Anyone with the
+                            link can claim it, so add a phrase to lock it and share
+                            the phrase separately.
+                          </p>
+                          <label
+                            htmlFor="send-pass"
+                            className="mt-4 block text-[13px] text-mute"
+                          >
+                            Phrase (optional)
+                          </label>
                           <input
-                            id="pay-amt"
-                            inputMode="decimal"
-                            value={sendAmount}
-                            onChange={(e) =>
-                              setSendAmount(
-                                e.target.value.replace(/[^0-9.]/g, "")
-                              )
-                            }
-                            placeholder="0.0"
-                            className="min-h-12 flex-1 bg-transparent px-4 text-lg outline-none"
+                            id="send-pass"
+                            type="text"
+                            autoComplete="off"
+                            value={sendPassphrase}
+                            onChange={(e) => setSendPassphrase(e.target.value)}
+                            placeholder="e.g. coffee-tuesday"
+                            className="gl-input mt-2"
                           />
-                          <button
-                            type="button"
-                            className="border-l border-line px-3 text-xs text-lime"
-                            onClick={() => setSendAmount(maxEth)}
-                          >
-                            Max
-                          </button>
                         </div>
-                        <p className="mt-1 text-xs text-mute">
-                          Stays in the vault. Amount is not a public transfer
-                          line. Change returns to you as a new note.
-                        </p>
-                      </div>
-                      {!recipientTag.trim() && (
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPayStyle((s) =>
-                                s === "bearer" ? "direct" : "bearer"
-                              )
-                            }
-                            className="text-xs text-mute hover:text-lime"
-                          >
-                            {payStyle === "bearer"
-                              ? "← Back to pay by tag"
-                              : "Advanced: claim link (no address) →"}
-                          </button>
-                          {payStyle === "bearer" && (
-                            <div className="mt-2">
-                              <label
-                                htmlFor="send-pass"
-                                className="text-sm font-medium text-foreground"
-                              >
-                                Optional passphrase
-                              </label>
-                              <input
-                                id="send-pass"
-                                type="text"
-                                autoComplete="off"
-                                value={sendPassphrase}
-                                onChange={(e) =>
-                                  setSendPassphrase(e.target.value)
-                                }
-                                placeholder="e.g. coffee-tuesday"
-                                className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        disabled={
-                          !isConnected ||
-                          !onProduct ||
-                          !selected ||
-                          matchesChain === false ||
-                          treeLoading ||
-                          working ||
-                          (payStyle !== "bearer" && !recipientTag.trim())
-                        }
-                        onClick={() => {
-                          if (recipientTag.trim()) setPayStyle("direct");
-                          void onPrivateSend();
-                        }}
-                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
-                      >
-                        {working &&
-                        (pendingAction.current === "send" ||
-                          pendingAction.current === "memo") ? (
-                          <>
-                            <span
-                              className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
-                              aria-hidden
-                            />
-                            {status || "Working…"}
-                          </>
-                        ) : treeLoading ? (
-                          "Syncing vault…"
-                        ) : (
-                          "Send privately"
-                        )}
-                      </button>
-                      {matchesChain === false && (
-                        <p className="text-center text-xs text-amber-600 dark:text-amber-400">
-                          Vault tree mismatch, tap Refresh above, then retry.
-                        </p>
-                      )}
-                      <RelayToggle
-                        available={relayAvailable}
-                        on={relayOn}
-                        onChange={(v) => {
-                          setRelayOn(v);
-                          setRelayPreferred(v);
-                        }}
-                      />
-                      {isPayMemoLive() && (
-                        <p className="text-center text-[11px] text-mute">
-                          After confirm: vault transfer + on-chain memo so they
-                          can Scan inbox (no QR required).
-                        </p>
-                      )}
-                      {shareBlob && (
-                        <PaymentTicketShare
-                          code={shareBlob}
-                          amountLabel={shareAmountLabel}
-                          locked={shareLocked}
-                        />
                       )}
                     </div>
                   )}
 
-                  {mode === "cashout" && (
-                    <div className="space-y-3">
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-mute">
-                        <p className="font-medium text-foreground">
-                          Cash out ends privacy for this note
-                        </p>
-                        <p className="mt-1">
-                          The explorer will show asset, amount, and your wallet.
-                          Prefer private send or private trade if you want size
-                          to stay off the public book.
-                        </p>
-                      </div>
-                      {selected && (
-                        <p className="text-sm text-mute">
-                          Withdraw{" "}
-                          <strong className="text-foreground">
-                            {formatAssetLabel(selected.amountWei, selected.asset)}
-                          </strong>{" "}
-                          to your connected wallet.
-                        </p>
+                  {relayToggle}
+
+                  {!connectedOk ? (
+                    connectPrompt("pay privately")
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={
+                        !isConnected ||
+                        !onProduct ||
+                        !selected ||
+                        matchesChain === false ||
+                        treeLoading ||
+                        working ||
+                        (payStyle !== "bearer" && !recipientTag.trim())
+                      }
+                      onClick={() => {
+                        if (recipientTag.trim()) setPayStyle("direct");
+                        void onPrivateSend();
+                      }}
+                      className="btn btn-ink btn-lg btn-block"
+                    >
+                      {working &&
+                      (pendingAction.current === "send" ||
+                        pendingAction.current === "memo") ? (
+                        <>
+                          <Spinner />
+                          <span className="truncate">{status || "Working…"}</span>
+                        </>
+                      ) : treeLoading ? (
+                        "Syncing your balance…"
+                      ) : (
+                        "Send privately"
                       )}
-                      {selected && (
-                        <div
-                          className={`rounded-lg border px-3 py-2 text-xs ${
-                            cashOutInventoryShort
-                              ? "border-amber-500/40 bg-amber-500/5 text-mute"
-                              : poolForCashOut != null
-                                ? "border-lime/30 bg-lime/5 text-mute"
-                                : "border-line text-mute"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span>
-                              Vault inventory ({assetLabel(selected.asset)})
-                            </span>
-                            <span className="font-medium text-foreground">
-                              {poolForCashOut != null
-                                ? formatAssetLabel(poolForCashOut, selected.asset)
-                                : "Checking…"}
-                            </span>
-                          </div>
-                          {cashOutInventoryShort ? (
-                            <p className="mt-1.5 leading-relaxed text-amber-600 dark:text-amber-500">
-                              Not enough in the vault to pay this note. Cash out
-                              is blocked until more{" "}
-                              {assetLabel(selected.asset)} is shielded.{" "}
-                              <Link
-                                href="/app/shield"
-                                className="underline hover:text-foreground"
-                              >
-                                Shield more →
-                              </Link>
-                            </p>
-                          ) : poolForCashOut != null ? (
-                            <p className="mt-1.5 text-[11px] text-mute">
-                              Vault can cover this cash out.
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-                      <RelayToggle
-                        available={relayAvailable}
-                        on={relayOn}
-                        onChange={(v) => {
-                          setRelayOn(v);
-                          setRelayPreferred(v);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={
-                          !isConnected ||
-                          !onProduct ||
-                          !selected ||
-                          matchesChain === false ||
-                          treeLoading ||
-                          working ||
-                          selected?.leafIndex == null ||
-                          cashOutInventoryShort
-                        }
-                        onClick={() => void onCashOut()}
-                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
-                      >
-                        {working && pendingAction.current === "cashout" ? (
-                          <>
-                            <span
-                              className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
-                              aria-hidden
-                            />
-                            {status || "Working…"}
-                          </>
-                        ) : cashOutInventoryShort ? (
-                          "Cash out blocked, low inventory"
-                        ) : (
-                          "Cash out (public amount)"
-                        )}
-                      </button>
-                      {selected?.leafIndex == null && (
-                        <p className="text-xs text-amber-600 dark:text-amber-500">
-                          Note not linked to the vault tree yet, tap Refresh
-                          above.
-                        </p>
-                      )}
-                    </div>
+                    </button>
                   )}
-                </>
-              ) : mode !== "receive" ? (
-                <div className="rounded-xl border border-line bg-background p-4 text-sm text-mute">
-                  <p className="text-foreground">No vault notes yet.</p>
-                  <p className="mt-1">
-                    <Link href="/app/shield" className="text-lime hover:underline">
-                      Shield
-                    </Link>{" "}
-                    first, or open <strong className="text-foreground">Receive</strong>{" "}
-                    to paste a payment ticket you were sent.
-                  </p>
-                </div>
-              ) : null}
-
-              {mode === "receive" && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-lime/30 bg-lime/5 p-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Your Gloam address
-                    </p>
-                    <p className="mt-1 text-xs text-mute">
-                      Share this once. Others paste it to pay you privately.
-                      Payments only open in{" "}
-                      <strong className="text-foreground">this browser</strong>,
-                      so back up your account if you clear your data.
-                    </p>
-                    {myIdentity ? (
-                      <>
-                        <div className="mt-3 break-all rounded-lg border border-line bg-panel p-3 text-[10px] text-mute">
-                          {myIdentity.tag}
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(
-                                  myIdentity.tag
-                                );
-                                setTagCopied(true);
-                                setTimeout(() => setTagCopied(false), 2000);
-                              } catch {
-                                setError("Could not copy tag.");
-                              }
-                            }}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-lime/40 text-sm font-medium text-lime"
-                          >
-                            {tagCopied ? "Copied" : "Copy tag"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void rotateReceiveIdentity().then(setMyIdentity);
-                            }}
-                            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-line px-3 text-xs text-mute hover:text-foreground"
-                          >
-                            Rotate
-                          </button>
-                        </div>
-                        <div className="mt-3">
-                          <PaymentTicketShare
-                            code={myIdentity.tag}
-                            amountLabel={null}
-                            locked={false}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <p className="mt-2 text-xs text-mute">
-                        Generating tag… (needs a secure browser context)
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-line bg-background p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">
-                        Inbox (on-chain memos)
-                      </p>
+                  {matchesChain === false && (
+                    <p className="flex flex-wrap items-center justify-center gap-x-2 text-center text-[12.5px] text-warn">
+                      Your private balance is out of sync.
                       <button
                         type="button"
-                        onClick={() => void scanInbox()}
-                        className="text-xs text-lime hover:underline"
+                        onClick={() => void refreshTree()}
+                        className="font-medium underline underline-offset-4"
                       >
-                        Scan chain
+                        Refresh
                       </button>
-                    </div>
-                    <p className="mt-1 text-xs text-mute">
-                      When the sender posts a note, payments show up here
-                      automatically, no QR needed.{" "}
-                      {isPayMemoLive()
-                        ? "Inbox is live."
-                        : "Inbox not available yet. Paste the claim link below."}
                     </p>
-                    {inboxStatus && (
-                      <p className="mt-2 text-xs text-mute">{inboxStatus}</p>
-                    )}
-                    {inbox.length > 0 && (
-                      <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
-                        {inbox.map((row) => (
-                          <li
-                            key={row.memo.paymentCommitment}
-                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
-                          >
-                            <span className="text-foreground">{row.label}</span>
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-lime"
-                              onClick={() => {
-                                setImportText(row.ticket);
-                                setClaimPreview(
-                                  `Selected ${row.label} from inbox.`
-                                );
-                              }}
-                            >
-                              Use
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-line bg-background p-4">
-                    <p className="text-sm font-medium text-foreground">
-                      Claim a payment
+                  )}
+                  {memoLive && payStyle === "direct" && (
+                    <p className="text-center text-[12.5px] leading-relaxed text-mute">
+                      They get a private heads-up, so the payment shows up under
+                      Receive on their side. No QR needed.
                     </p>
-                    <p className="mt-1 text-xs text-mute">
-                      Paste{" "}
-                      <span className="">gloam2t…</span> (to your tag),{" "}
-                      <span className="">gloam1…</span>, or locked{" "}
-                      <span className="">gloam1e…</span>.
-                    </p>
-                    <textarea
-                      value={importText}
-                      onChange={(e) => setImportText(e.target.value)}
-                      rows={4}
-                      className="mt-3 w-full rounded-md border border-line bg-transparent p-3 text-[11px] outline-none focus:border-lime"
-                      placeholder="gloam2t.… / gloam1.… / gloam1e.…"
+                  )}
+                  {shareBlob && (
+                    <PaymentTicketShare
+                      code={shareBlob}
+                      amountLabel={shareAmountLabel}
+                      locked={shareLocked}
                     />
-                    {claimPreview && (
-                      <p className="mt-2 text-xs text-lime">{claimPreview}</p>
-                    )}
-                    {(importText.trim().startsWith("gloam1e.") ||
-                      (isEncryptedPackage(importText) &&
-                        !isPayToTagSealed(importText))) && (
-                      <div className="mt-3">
-                        <label
-                          htmlFor="recv-pass"
-                          className="text-sm font-medium text-foreground"
-                        >
-                          Passphrase
-                        </label>
-                        <input
-                          id="recv-pass"
-                          type="text"
-                          autoComplete="off"
-                          value={importPassphrase}
-                          onChange={(e) => setImportPassphrase(e.target.value)}
-                          placeholder="Claim link phrase"
-                          className="mt-2 min-h-11 w-full rounded-md border border-line bg-transparent px-4 text-sm outline-none focus:border-lime"
-                        />
+                  )}
+                </div>
+              )}
+
+              {mode === "cashout" && (
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-[16px] bg-warn-soft px-4 py-3.5 text-[13px] leading-relaxed">
+                    <p className="font-medium text-warn">
+                      Cashing out makes this amount public
+                    </p>
+                    <p className="mt-1 text-soft">
+                      The explorer will show the asset, the amount and your
+                      wallet. To keep the size private, send it privately or
+                      trade privately instead.
+                    </p>
+                  </div>
+                  {selected && (
+                    <div className="rounded-[16px] bg-surface p-[16px] sm:p-5">
+                      <p className="text-[13px] text-mute">
+                        You get, in your connected wallet
+                      </p>
+                      <p className="tnum mt-2.5 truncate text-[32px] font-light leading-none tracking-[-0.02em] text-foreground">
+                        {formatAssetAmount(selected.amountWei, selected.asset)}{" "}
+                        <span className="text-[15px] tracking-normal text-mute">
+                          {assetLabel(selected.asset)}
+                        </span>
+                      </p>
+                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3 text-[13px]">
+                        <span className="text-mute">
+                          In the vault ({assetLabel(selected.asset)})
+                        </span>
+                        <span className="tnum truncate text-foreground">
+                          {poolForCashOut != null
+                            ? formatAssetLabel(poolForCashOut, selected.asset)
+                            : "Checking…"}
+                        </span>
                       </div>
-                    )}
+                      {cashOutInventoryShort ? (
+                        <p className="mt-2 text-[12.5px] leading-relaxed text-warn">
+                          Not enough in the vault to pay this out yet. Cash out
+                          opens once more {assetLabel(selected.asset)} is added.{" "}
+                          <Link
+                            href="/app/vault?tab=shield"
+                            className="font-medium underline underline-offset-4"
+                          >
+                            Add more
+                          </Link>
+                        </p>
+                      ) : poolForCashOut != null ? (
+                        <p className="mt-2 text-[12.5px] text-mute">
+                          The vault can cover this cash out.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                  {relayToggle}
+                  {!connectedOk ? (
+                    connectPrompt("cash out")
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={
+                        !isConnected ||
+                        !onProduct ||
+                        !selected ||
+                        matchesChain === false ||
+                        treeLoading ||
+                        working ||
+                        selected?.leafIndex == null ||
+                        cashOutInventoryShort
+                      }
+                      onClick={() => void onCashOut()}
+                      className="btn btn-ink btn-lg btn-block"
+                    >
+                      {working && pendingAction.current === "cashout" ? (
+                        <>
+                          <Spinner />
+                          <span className="truncate">{status || "Working…"}</span>
+                        </>
+                      ) : cashOutInventoryShort ? (
+                        "Not enough in the vault yet"
+                      ) : (
+                        "Cash out to my wallet"
+                      )}
+                    </button>
+                  )}
+                  {selected?.leafIndex == null && (
+                    <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-warn">
+                      This balance is not linked to the vault yet.
+                      <button
+                        type="button"
+                        onClick={() => void refreshTree()}
+                        className="font-medium underline underline-offset-4"
+                      >
+                        Refresh
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          ) : mode !== "receive" ? (
+            <div className="mt-6 rounded-[16px] bg-surface px-5 py-9 text-center">
+              <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-panel text-mute shadow-card">
+                <LockIcon />
+              </span>
+              <p className="mt-4 text-[15px] text-foreground">
+                Nothing in your private balance yet
+              </p>
+              <p className="mx-auto mt-1.5 max-w-[40ch] text-[13.5px] leading-relaxed text-mute">
+                Add money first, or open Receive to claim a payment someone sent
+                you.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <Link href="/app/vault?tab=shield" className="btn btn-ink">
+                  Add money
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => selectMode("receive")}
+                  className="btn btn-ghost"
+                >
+                  Receive
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {mode === "receive" && (
+            <div className="mt-6 space-y-7">
+              <section>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-[15px] font-medium text-foreground">
+                    Your Gloam address
+                  </h3>
+                  {myIdentity && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void rotateReceiveIdentity().then(setMyIdentity);
+                      }}
+                      title="Makes a new address. Payments sent to the old one stop opening here."
+                      className="btn btn-quiet btn-sm -mr-2 text-mute"
+                    >
+                      New address
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-[13px] leading-relaxed text-mute">
+                  Share it once. People paste it to pay you privately. Payments
+                  open only in{" "}
+                  <strong className="font-medium text-foreground">this browser</strong>,
+                  so back up your account before you clear your data.
+                </p>
+                {myIdentity ? (
+                  <>
+                    <div className="mt-3 rounded-[16px] border border-line p-[16px]">
+                      <p className="tnum break-all text-[13px] leading-relaxed text-foreground">
+                        {myIdentity.tag}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(myIdentity.tag);
+                            setTagCopied(true);
+                            setTimeout(() => setTagCopied(false), 2000);
+                          } catch {
+                            setError("Could not copy your address.");
+                          }
+                        }}
+                        aria-live="polite"
+                        className="btn btn-ink mt-3"
+                      >
+                        {tagCopied ? "Copied" : "Copy address"}
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      <PaymentTicketShare
+                        code={myIdentity.tag}
+                        amountLabel={null}
+                        locked={false}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 rounded-[16px] bg-surface p-[16px] text-[13px] text-mute">
+                    Making your address… This needs a secure browser connection.
+                  </p>
+                )}
+              </section>
+
+              <section className="border-t border-line pt-6">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-[15px] font-medium text-foreground">
+                    Payments to you
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => void scanInbox()}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Check now
+                  </button>
+                </div>
+                <p className="mt-1 text-[13px] leading-relaxed text-mute">
+                  When someone pays your Gloam address, it shows up here on its
+                  own. No QR needed.
+                  {memoLive
+                    ? ""
+                    : " Not available on this network yet, so paste the claim link below."}
+                </p>
+                {inboxStatus && (
+                  <p className="mt-3 text-[13px] text-soft" aria-live="polite">
+                    {inboxStatus}
+                  </p>
+                )}
+                {inbox.length > 0 && (
+                  <ul className="mt-3 divide-y divide-line overflow-hidden rounded-[16px] border border-line">
+                    {inbox.map((row) => (
+                      <li
+                        key={row.memo.paymentCommitment}
+                        className="flex min-h-14 items-center justify-between gap-3 px-4 py-2"
+                      >
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
+                            <LockIcon size={13} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="tnum block truncate text-[15px] text-foreground">
+                              {row.label}
+                            </span>
+                            <span className="block text-[12px] text-mute">
+                              Private payment
+                            </span>
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm shrink-0"
+                          onClick={() => {
+                            setImportText(row.ticket);
+                            setClaimPreview(`Selected ${row.label} from your payments.`);
+                          }}
+                        >
+                          Select
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="border-t border-line pt-6">
+                <h3 className="text-[15px] font-medium text-foreground">
+                  Claim a payment
+                </h3>
+                <p className="mt-1 text-[13px] leading-relaxed text-mute">
+                  Paste the claim link or payment code you were sent. Codes start
+                  with gloam2t, gloam1 or gloam1e.
+                </p>
+                <label htmlFor="claim-code" className="sr-only">
+                  Claim link or payment code
+                </label>
+                <textarea
+                  id="claim-code"
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows={4}
+                  spellCheck={false}
+                  className="gl-input tnum mt-3 h-auto min-h-[108px] resize-none py-3 text-[13px] leading-relaxed"
+                  placeholder="gloam2t… or gloam1…"
+                />
+                {claimPreview && (
+                  <p className="mt-2 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] leading-relaxed text-soft" aria-live="polite">
+                    {claimPreview}
+                  </p>
+                )}
+                {(importText.trim().startsWith("gloam1e.") ||
+                  (isEncryptedPackage(importText) &&
+                    !isPayToTagSealed(importText))) && (
+                  <div className="mt-4">
+                    <label htmlFor="recv-pass" className="text-[13px] text-mute">
+                      Phrase
+                    </label>
+                    <input
+                      id="recv-pass"
+                      type="text"
+                      autoComplete="off"
+                      value={importPassphrase}
+                      onChange={(e) => setImportPassphrase(e.target.value)}
+                      placeholder="The phrase the sender gave you"
+                      className="gl-input mt-2"
+                    />
+                  </div>
+                )}
+                <div className="mt-4">
+                  {!isConnected ? (
+                    connectPrompt("claim it")
+                  ) : (
                     <button
                       type="button"
                       onClick={() => void onImportNote()}
                       disabled={!importText.trim() || !isConnected}
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
+                      className="btn btn-ink btn-lg btn-block"
                     >
-                      Claim into my vault
+                      Claim to my private balance
                     </button>
-                  </div>
+                  )}
                 </div>
-              )}
-
-              {(error || writeError) && (
-                <p role="alert" className="text-sm text-red-500">
-                  {error || writeError?.message.slice(0, 200)}
-                </p>
-              )}
-              {status && !error && (
-                <p className="text-sm text-mute">{status}</p>
-              )}
-              {hash && !isSuccess && (
-                <p className="text-sm text-mute">
-                  Submitted…{" "}
-                  <a
-                    href={network.explorerTx(hash)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-lime hover:underline"
-                  >
-                    View tx
-                  </a>
-                </p>
-              )}
+              </section>
             </div>
-          </div>
+          )}
+
+          {(error || writeError) && (
+            <p
+              role="alert"
+              className="mt-5 break-words rounded-xl bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-danger"
+            >
+              {error || writeError?.message.slice(0, 200)}
+            </p>
+          )}
+          {txHash && !isSuccess && (
+            <p className="mt-4 flex items-center justify-center gap-2 text-[13.5px] text-mute">
+              Submitted.
+              <a
+                href={network.explorerTx(txHash)}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                View transaction
+              </a>
+            </p>
+          )}
         </div>
+
+        <aside className="space-y-4">
+          {mode === "receive" ? (
+            <div className="gl-card p-5">
+              <p className="text-[13px] text-mute">About your Gloam address</p>
+              <ul className="mt-3 divide-y divide-line text-[13.5px] leading-relaxed">
+                <li className="py-3">
+                  <p className="text-foreground">Not a wallet address</p>
+                  <p className="mt-0.5 text-mute">
+                    It never shows up on the explorer, so nobody can look up what
+                    you receive.
+                  </p>
+                </li>
+                <li className="py-3">
+                  <p className="text-foreground">Opens in this browser</p>
+                  <p className="mt-0.5 text-mute">
+                    Back up your account in{" "}
+                    <Link
+                      href="/app/settings"
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Settings
+                    </Link>{" "}
+                    so you can open payments on another device.
+                  </p>
+                </li>
+                <li className="pt-3">
+                  <p className="text-foreground">Claim links work too</p>
+                  <p className="mt-0.5 text-mute">
+                    Paste one under Claim a payment and it lands in your private
+                    balance.
+                  </p>
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <>
+              <PrivateBalanceCard rows={totals} />
+              <div className="gl-card p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[13px] text-mute">What the explorer shows</p>
+                  {mode === "send" ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 py-0.5 text-[12px] font-medium text-sealed">
+                      <LockIcon size={10} />
+                      Private
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-surface px-2.5 py-0.5 text-[12px] text-mute">
+                      Public
+                    </span>
+                  )}
+                </div>
+                <dl className="mt-3 divide-y divide-line text-[14px]">
+                  <div className="flex h-11 items-center justify-between gap-3">
+                    <dt className="text-mute">Sent by</dt>
+                    <dd className="truncate text-foreground">
+                      {relayOn ? "Gloam relay" : "Your wallet"}
+                    </dd>
+                  </div>
+                  <div className="flex h-11 items-center justify-between gap-3">
+                    <dt className="text-mute">To</dt>
+                    <dd className="tnum truncate text-foreground">
+                      {mode === "send" ? (
+                        <SealDots n={6} className="text-foreground/60" />
+                      ) : address ? (
+                        shortAddress(address, 4)
+                      ) : (
+                        "Your wallet"
+                      )}
+                    </dd>
+                  </div>
+                  <div className="flex h-11 items-center justify-between gap-3">
+                    <dt className="text-mute">Amount</dt>
+                    <dd className="tnum truncate text-foreground">
+                      {mode === "send" ? (
+                        <SealDots n={6} className="text-foreground/60" />
+                      ) : selected ? (
+                        formatAssetLabel(selected.amountWei, selected.asset)
+                      ) : (
+                        "The full amount"
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
+                  {mode === "send"
+                    ? relayOn
+                      ? "Nothing on the explorer links this payment to you or to them."
+                      : relayAvailable
+                        ? "Turn on Hide my wallet so your wallet stays off it too."
+                        : "The amount and the person you pay stay hidden. Your wallet shows as the sender while the relay is offline."
+                    : "A cash out is a public transfer. It ends privacy for this amount."}
+                </p>
+              </div>
+            </>
+          )}
+        </aside>
       </div>
 
       <SuccessModal
-        open={showSuccess && Boolean(hash)}
+        open={showSuccess && Boolean(txHash)}
         title={successTitle}
         body={
           pendingAction.current === "send" ||
@@ -1363,17 +1587,17 @@ export function MoveView() {
           shareBlob ? (
             <p>
               {memoPosted
-                ? "Encrypted memo posted on-chain. Recipient can Scan chain under Receive, no QR required. Backup package still below."
-                : "Payment package below (QR / copy / share) if they need handoff. Your vault change stays in this browser."}
+                ? "They got a private heads-up, so the payment shows up under Receive on their side. The claim code below is a backup."
+                : "Share the claim code below if they need it. Anything left over stays in your private balance, in this browser."}
             </p>
           ) : (
             <p>
-              Funds should be back in your open wallet. That amount is public on
-              the explorer, only cash out when you need the open balance.
+              The money is back in your wallet. That amount is public on the
+              explorer, so only cash out when you need it in the open.
             </p>
           )
         }
-        primaryHref={hash ? network.explorerTx(hash) : undefined}
+        primaryHref={txHash ? network.explorerTx(txHash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
         onClose={() => {
@@ -1382,5 +1606,136 @@ export function MoveView() {
         }}
       />
     </>
+  );
+}
+
+type BalanceRow = {
+  asset: string;
+  label: string;
+  logoId: string | null;
+  amount: string;
+};
+
+/** The private balance, only visible to its owner. Carries the sealed glow. */
+function PrivateBalanceCard({ rows }: { rows: BalanceRow[] }) {
+  const [hidden, setHidden] = useState(false);
+  return (
+    <div className="gl-card relative overflow-hidden p-5">
+      <SealedField tone="soft" />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] text-mute">Private balance</p>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-sealed">
+              <span className="h-1.5 w-1.5 rounded-full bg-sealed" aria-hidden />
+              Only you
+            </span>
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHidden((v) => !v)}
+                aria-pressed={hidden}
+                aria-label={hidden ? "Show amounts" : "Hide amounts"}
+                className="-mr-2 grid h-9 w-9 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <EyeIcon off={hidden} />
+              </button>
+            )}
+          </div>
+        </div>
+        {rows.length > 0 ? (
+          <ul className="mt-4 space-y-3.5">
+            {rows.map((r) => (
+              <li key={r.asset} className="flex items-center gap-3">
+                <AssetMark id={r.logoId} symbol={r.label} size={32} />
+                <p className="tnum min-w-0 truncate text-[26px] font-light leading-none tracking-[-0.02em] text-foreground">
+                  {hidden ? <SealDots n={6} className="text-foreground/60" /> : r.amount}{" "}
+                  <span className="text-[14px] tracking-normal text-mute">{r.label}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="mt-4">
+            <p className="tnum text-[34px] font-light leading-none tracking-[-0.02em] text-foreground">
+              0
+            </p>
+            <p className="mt-2 max-w-[30ch] text-[13px] leading-relaxed text-mute">
+              Add money or claim a payment to start. Nobody else can see this.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssetMark({
+  id,
+  symbol,
+  size = 28,
+}: {
+  id: string | null;
+  symbol: string;
+  size?: number;
+}) {
+  if (!id) return <EthMark size={size} />;
+  return <TokenLogo id={id} symbol={symbol} size={size} />;
+}
+
+/** The ETH mark, monochrome on an ink squircle (flips in dark mode). */
+function EthMark({ size = 28 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-grid shrink-0 place-items-center rounded-[30%] bg-ink text-on-ink"
+      style={{ width: size, height: size }}
+    >
+      <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5l6 9.75-6 3.5-6-3.5 6-9.75z" fill="currentColor" />
+        <path d="M6 13.6l6 3.5 6-3.5-6 8.4-6-8.4z" fill="currentColor" opacity="0.7" />
+      </svg>
+    </span>
+  );
+}
+
+function EyeIcon({ off = false }: { off?: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.6" />
+      {off && <path d="M4 20L20 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
+function LockIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-80 motion-reduce:animate-none"
+      aria-hidden
+    />
   );
 }

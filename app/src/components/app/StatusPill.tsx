@@ -1,3 +1,8 @@
+/**
+ * Quiet status chip. `lime` is the legacy name for the positive tone, which now
+ * reads as the sealed tint (private / ready / verified). `warn` is amber, `mute`
+ * is a plain surface chip.
+ */
 export function StatusPill({
   tone = "mute",
   dot = false,
@@ -10,19 +15,15 @@ export function StatusPill({
 }) {
   const styles =
     tone === "lime"
-      ? "border-lime/40 text-lime"
+      ? "bg-sealed-soft text-sealed"
       : tone === "warn"
-        ? "border-amber-500/40 text-amber-500"
-        : "border-line text-mute";
+        ? "bg-warn-soft text-warn"
+        : "bg-surface text-mute";
   const dotColor =
-    tone === "lime"
-      ? "bg-lime"
-      : tone === "warn"
-        ? "bg-amber-500"
-        : "bg-mute";
+    tone === "lime" ? "bg-sealed" : tone === "warn" ? "bg-warn" : "bg-faint";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.12em] ${styles}`}
+      className={`inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium leading-none ${styles}`}
     >
       {dot && (
         <span

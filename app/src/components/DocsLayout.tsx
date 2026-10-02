@@ -2,84 +2,197 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ThemeSegmented } from "./ThemeToggle";
+import { Footer } from "./Footer";
 import { DocsCopyEnhancer } from "./DocsCopyEnhancer";
+import {
+  DocsNavList,
+  FLAT_DOCS_NAV,
+  currentDoc,
+  findDocHeading,
+  slugify,
+  type DocNavItem,
+} from "./docs/DocsNav";
+import { DOCS_HEADER_OFFSET, DocsTopBar } from "./docs/DocsTopBar";
+import { CopyPageButton } from "./docs/CopyPageButton";
+import { OnThisPage, TocMenu, type TocHeading } from "./docs/DocsToc";
 
-export type DocNavItem = {
-  href: string;
-  label: string;
-  children?: { href: string; label: string }[];
-};
+export type { DocNavItem };
 
 export type GlanceRow = { label: string; value: string };
 
-const nav: { section: string; items: DocNavItem[] }[] = [
-  {
-    section: "Start here",
-    items: [
-      { href: "/docs", label: "Overview" },
-      { href: "/docs/quickstart", label: "Quickstart" },
-      { href: "/docs/testnet", label: "Testnet guide" },
-      { href: "/docs/product", label: "What ships when" },
-    ],
-  },
-  {
-    section: "Build on Gloam",
-    items: [
-      { href: "/docs/sdk", label: "SDK" },
-      { href: "/docs/sdk/reference", label: "API reference" },
-      { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
-      { href: "/docs/agents", label: "Agents" },
-    ],
-  },
-  {
-    section: "How it works",
-    items: [
-      { href: "/docs/encryption", label: "How shield works" },
-      { href: "/docs/private-pay", label: "Private pay" },
-      { href: "/docs/payroll", label: "Private payroll" },
-      { href: "/docs/sealed-trade", label: "Private trade" },
-      { href: "/docs/privacy-model", label: "What stays private" },
-      { href: "/docs/chain", label: "Networks" },
-      { href: "/docs/data", label: "Prices & oracles" },
-    ],
-  },
-  {
-    section: "Deeper",
-    items: [
-      { href: "/docs/production", label: "Production gate" },
-      { href: "/whitepaper", label: "Whitepaper" },
-    ],
-  },
+const DEFAULT_QUICK_LINKS = [
+  { href: "/app", label: "Open the app" },
+  { href: "/docs/testnet", label: "Testnet guide" },
+  { href: "/docs/payroll", label: "Private payroll" },
+  { href: "/docs/privacy-model", label: "What stays private" },
+  { href: "/whitepaper", label: "Whitepaper" },
+  { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
 ];
 
-const allNavHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
+/** Section ids scroll to just under the sticky header (100px mobile, 112px desktop). */
+const SPY_OFFSET = 150;
 
-function isActive(pathname: string, href: string) {
-  if (pathname === href) return true;
-  if (!pathname.startsWith(`${href}/`)) return false;
-  // Prefix match only counts if no more-specific nav item also matches, so a
-  // parent (e.g. /docs/sdk) does not light up on a child route (/docs/sdk/reference).
-  return !allNavHrefs.some(
-    (h) =>
-      h !== href &&
-      h.startsWith(`${href}/`) &&
-      (pathname === h || pathname.startsWith(`${h}/`))
+/**
+ * Reads the h2s out of the rendered prose, gives any that lack one a stable id,
+ * and tracks which section is in view. Navigation only: the content itself is
+ * server-rendered and never waits on this.
+ */
+function useHeadings(rootRef: RefObject<HTMLDivElement | null>, pathname: string) {
+  const [headings, setHeadings] = useState<TocHeading[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const els = Array.from(root.querySelectorAll<HTMLHeadingElement>("h2"));
+    const used = new Set<string>();
+    const list: TocHeading[] = els.map((el, i) => {
+      let id = el.id || slugify(el.textContent ?? "") || `section-${i + 1}`;
+      while (used.has(id)) id = `${id}-${i + 1}`;
+      used.add(id);
+      if (!el.id) el.id = id;
+      return { id, text: (el.textContent ?? "").trim() };
+    });
+
+    // Honour a deep link that arrived before the ids existed, including search
+    // links that point at a heading's text slug rather than its explicit id.
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    if (hash) findDocHeading(hash)?.scrollIntoView();
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      let current: string | null = list[0]?.id ?? null;
+      for (const el of els) {
+        if (el.getBoundingClientRect().top <= SPY_OFFSET) current = el.id;
+        else break;
+      }
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (atBottom && list.length) current = list[list.length - 1].id;
+      setActiveId(current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+
+    // Defer the first read so state is set outside the effect body.
+    const boot = window.requestAnimationFrame(() => {
+      setHeadings(list);
+      update();
+    });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.cancelAnimationFrame(boot);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [rootRef, pathname]);
+
+  return { headings, activeId };
+}
+
+/**
+ * Fits the sticky sidebar to the space under the header. While the launch
+ * banner above the header is still on screen the header sits lower, so a fixed
+ * calc(100dvh - 112px) would push the Appearance row below the fold.
+ */
+function useRailHeight(railRef: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    let frame = 0;
+    let last = "";
+    const fit = () => {
+      frame = 0;
+      const header = document.querySelector<HTMLElement>("[data-docs-header]");
+      const top = header ? Math.max(0, header.getBoundingClientRect().bottom) : 112;
+      const next = `${Math.round(window.innerHeight - top)}px`;
+      if (next !== last) {
+        last = next;
+        rail.style.height = next;
+      }
+    };
+    const onChange = () => {
+      if (!frame) frame = window.requestAnimationFrame(fit);
+    };
+    fit();
+    window.addEventListener("scroll", onChange, { passive: true });
+    window.addEventListener("resize", onChange);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onChange);
+      window.removeEventListener("resize", onChange);
+      rail.style.height = "";
+    };
+  }, [railRef]);
+}
+
+function QuickLink({ href, label }: { href: string; label: string }) {
+  const cls =
+    "inline-flex h-10 items-center gap-1.5 rounded-full border border-line px-3.5 text-[13px] text-soft transition-colors hover:border-line-strong hover:bg-surface/60 hover:text-foreground lg:h-8 lg:px-3";
+  if (href.startsWith("http")) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={cls}>
+        {label}
+        <span aria-hidden className="text-faint">
+          ↗
+        </span>
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={cls}>
+      {label}
+    </Link>
   );
 }
 
-function Mark({ size = 20 }: { size?: number }) {
+function glanceCols(n: number) {
+  if (n === 4) return "sm:grid-cols-4";
+  if (n === 2) return "sm:grid-cols-2";
+  return "sm:grid-cols-3";
+}
+
+function PagerLink({
+  href,
+  label,
+  section,
+  dir,
+}: {
+  href: string;
+  label: string;
+  section: string;
+  dir: "prev" | "next";
+}) {
+  const next = dir === "next";
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      aria-hidden
-      className="shrink-0"
+    <Link
+      href={href}
+      className={`group flex flex-col rounded-[18px] border border-line px-5 py-4 transition-colors hover:border-line-strong hover:bg-surface/50 ${
+        next ? "items-end text-right" : ""
+      }`}
     >
-      <rect width="32" height="32" rx="9" fill="#121316" />
-      <rect x="15" y="4" width="12" height="12" rx="3.5" fill="#F4F3EF" />
-    </svg>
+      <span className="text-[12.5px] text-mute">
+        {!next && (
+          <span aria-hidden className="mr-1.5 inline-block transition-transform group-hover:-translate-x-0.5">
+            ←
+          </span>
+        )}
+        {next ? "Next" : "Previous"}
+        <span className="text-faint">{` · ${section}`}</span>
+        {next && (
+          <span aria-hidden className="ml-1.5 inline-block transition-transform group-hover:translate-x-0.5">
+            →
+          </span>
+        )}
+      </span>
+      <span className="mt-1 text-[16px] font-medium tracking-[-0.01em] text-foreground">{label}</span>
+    </Link>
   );
 }
 
@@ -97,200 +210,114 @@ export function DocsLayout({
   quickLinks?: { href: string; label: string }[];
 }) {
   const pathname = usePathname();
+  const proseRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  const { headings, activeId } = useHeadings(proseRef, pathname);
+  useRailHeight(railRef);
+
+  const { index, item: here } = currentDoc(pathname);
+  const prev = index > 0 ? FLAT_DOCS_NAV[index - 1] : undefined;
+  const next = index >= 0 && index < FLAT_DOCS_NAV.length - 1 ? FLAT_DOCS_NAV[index + 1] : undefined;
+  const links = quickLinks ?? DEFAULT_QUICK_LINKS;
 
   return (
-    <div className="min-h-screen bg-[#F4F3EF] text-[#121316]">
-      {/* light chrome */}
-      <header className="sticky top-0 z-40 border-b border-[#E5E3DD] bg-[#F4F3EF]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[96rem] items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
-          <Link href="/" className="flex items-center gap-[10px]">
-            <Mark size={20} />
-            <span className="font-semibold tracking-[-0.01em]">Gloam</span>
-          </Link>
-          <nav className="flex items-center gap-6 text-sm text-[#6E6E76]">
-            <Link href="/docs" className="hover:text-[#121316]">
-              Docs
-            </Link>
-            <Link href="/whitepaper" className="hidden hover:text-[#121316] sm:inline">
-              Whitepaper
-            </Link>
-            <Link
-              href="/app"
-              className="rounded-[10px] bg-[#121316] px-4 py-2 text-[13px] font-semibold text-[#F4F3EF] transition-colors hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3B3766]"
-            >
-              Open app
-            </Link>
-          </nav>
-        </div>
-      </header>
+    <div id="top" className="min-h-screen bg-background text-foreground">
+      <DocsTopBar />
 
-      <div className="border-b border-[#E5E3DD]">
-        <div className="mx-auto grid max-w-[96rem] gap-x-14 lg:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_320px]">
-          {/* Left nav */}
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
+        <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-x-10 xl:grid-cols-[248px_minmax(0,1fr)_216px] xl:gap-x-12">
+          {/* Left: grouped nav, appearance at the foot */}
           <aside className="hidden lg:block">
-            <nav
-              className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto px-5 py-10"
-              aria-label="Docs"
+            <div
+              ref={railRef}
+              className={`sticky ${DOCS_HEADER_OFFSET} -ml-3 flex h-[calc(100dvh-112px)] flex-col`}
             >
-              {nav.map((group) => (
-                <div key={group.section} className="mb-8">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
-                    {group.section}
-                  </p>
-                  <ul className="mt-3 space-y-1">
-                    {group.items.map((item) => {
-                      const active = isActive(pathname, item.href);
-                      return (
-                        <li key={item.href}>
-                          <Link
-                            href={item.href}
-                            className={`block rounded-md px-2 py-1.5 text-sm transition-colors ${
-                              active
-                                ? "bg-black/[0.05] font-medium text-[#121316]"
-                                : "text-[#6E6E76] hover:bg-black/[0.03] hover:text-[#121316]"
-                            }`}
-                          >
-                            {item.label}
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </nav>
+              <nav aria-label="Docs" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-8 pr-2 pt-9">
+                <DocsNavList pathname={pathname} />
+              </nav>
+              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line py-4 pl-3">
+                <span className="text-[12.5px] text-mute">Appearance</span>
+                <ThemeSegmented />
+              </div>
+            </div>
           </aside>
 
-          {/* Main */}
-          <main className="min-w-0 px-5 py-12 sm:px-10 sm:py-16">
-            <div className="mb-8 flex flex-wrap gap-2 lg:hidden">
-              {nav.flatMap((g) => g.items).map((item) => {
-                const active = isActive(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      active
-                        ? "border-[#3B3766]/40 bg-white text-[#121316]"
-                        : "border-[#E5E3DD] text-[#6E6E76] hover:border-[#cfccc4] hover:text-[#121316]"
-                    }`}
-                  >
-                    {item.label.replace(/^\d+\.\s*/, "")}
-                  </Link>
-                );
-              })}
-            </div>
+          {/* Center: the reading column */}
+          <main className="min-w-0 pb-6 pt-7 sm:pt-9 lg:pt-10">
+            <article data-docs-article className="mx-auto w-full max-w-[760px]">
+              <div className="flex min-h-8 items-center justify-between gap-3">
+                <p className="truncate text-[13px] font-medium text-sealed">
+                  {here?.section ?? "Docs"}
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <CopyPageButton title={title} lede={lede} />
+                  <TocMenu headings={headings} activeId={activeId} />
+                </div>
+              </div>
 
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#3B3766]">
-              Documentation
-            </p>
-            <h1 className="mt-3 max-w-4xl text-4xl font-bold leading-[1.02] tracking-[-0.035em] sm:text-5xl">
-              {title}
-            </h1>
-            {lede && (
-              <p className="mt-5 max-w-4xl text-base leading-relaxed text-[#565660] sm:text-lg">
-                {lede}
-              </p>
-            )}
-            <div className="docs-prose mt-10 max-w-4xl space-y-4 text-[15px]">
-              {children}
-            </div>
-            <DocsCopyEnhancer />
+              <h1 className="mt-3 text-balance text-[30px] font-medium leading-[1.15] tracking-[-0.02em] text-foreground md:text-[36px] md:leading-[1.12]">
+                {title}
+              </h1>
+              {lede && (
+                <p className="mt-4 max-w-[64ch] text-pretty text-[17px] leading-[1.6] text-mute">{lede}</p>
+              )}
+
+              {glance && glance.length > 0 && (
+                <dl
+                  className={`gl-tile mt-8 grid grid-cols-2 gap-x-6 gap-y-5 p-5 sm:p-6 ${glanceCols(
+                    glance.length
+                  )}`}
+                >
+                  {glance.map((row) => (
+                    <div key={row.label} className="min-w-0">
+                      <dt className="t-label">{row.label}</dt>
+                      <dd className="tnum mt-1.5 break-words text-[15px] leading-snug text-foreground">
+                        {row.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+
+              {links.length > 0 && (
+                <nav
+                  aria-label="Quick links"
+                  className={`flex flex-wrap gap-2 ${glance && glance.length > 0 ? "mt-3" : "mt-7"}`}
+                >
+                  {links.map((l) => (
+                    <QuickLink key={l.href} {...l} />
+                  ))}
+                </nav>
+              )}
+
+              <div ref={proseRef} className="docs-prose mt-10 space-y-5 text-[16px] leading-[26px]">
+                {children}
+              </div>
+              <DocsCopyEnhancer />
+
+              {(prev || next) && (
+                <nav aria-label="Pagination" className="mt-16 grid gap-3 border-t border-line pt-10 sm:grid-cols-2">
+                  {prev ? (
+                    <PagerLink href={prev.href} label={prev.label} section={prev.section} dir="prev" />
+                  ) : (
+                    <span className="hidden sm:block" />
+                  )}
+                  {next && <PagerLink href={next.href} label={next.label} section={next.section} dir="next" />}
+                </nav>
+              )}
+            </article>
           </main>
 
-          {/* Right rail */}
-          <aside className="hidden border-l border-[#E5E3DD] xl:block">
-            <div className="sticky top-16 space-y-6 px-5 py-10">
-              {glance && glance.length > 0 && (
-                <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
-                    At a glance
-                  </p>
-                  <dl className="mt-4 space-y-3">
-                    {glance.map((row) => (
-                      <div
-                        key={row.label}
-                        className="border-b border-[#E5E3DD] pb-2.5 last:border-0 last:pb-0"
-                      >
-                        <dt className="text-[10px] uppercase tracking-[0.14em] text-[#8a8a90]">
-                          {row.label}
-                        </dt>
-                        <dd className="mt-1 break-words text-[13px] font-medium leading-snug text-[#121316]">
-                          {row.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              )}
-              <div className="rounded-lg border border-[#E5E3DD] bg-white/70 p-4">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[#8a8a90]">
-                  Quick links
-                </p>
-                <ul className="mt-3 space-y-2">
-                  {(
-                    quickLinks ?? [
-                      { href: "/app", label: "Open testnet" },
-                      { href: "/app/trade?path=sealed", label: "Private trade" },
-                      { href: "/docs/testnet", label: "Testnet guide" },
-                      { href: "/docs/privacy-model", label: "Privacy model" },
-                      { href: "/whitepaper", label: "Whitepaper" },
-                      { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
-                    ]
-                  ).map((l) => (
-                    <li key={l.href}>
-                      {l.href.startsWith("http") ? (
-                        <a
-                          href={l.href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-between text-sm text-[#6E6E76] transition-colors hover:text-[#121316]"
-                        >
-                          {l.label}
-                          <span className="text-[#3B3766]">→</span>
-                        </a>
-                      ) : (
-                        <Link
-                          href={l.href}
-                          className="flex items-center justify-between text-sm text-[#6E6E76] transition-colors hover:text-[#121316]"
-                        >
-                          {l.label}
-                          <span className="text-[#3B3766]">→</span>
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          {/* Right: on this page */}
+          <aside className="hidden xl:block">
+            <div className={`sticky ${DOCS_HEADER_OFFSET} max-h-[calc(100dvh-112px)] overflow-y-auto pb-12 pt-10`}>
+              <OnThisPage headings={headings} activeId={activeId} />
             </div>
           </aside>
         </div>
       </div>
 
-      {/* light footer */}
-      <footer className="mx-auto flex max-w-[96rem] flex-col gap-3 px-5 py-8 text-[12.5px] text-[#6E6E76] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-        <div className="flex items-center gap-[10px]">
-          <Mark size={18} />
-          <span>Gloam</span>
-        </div>
-        <div className="flex items-center gap-6">
-          <Link href="/docs" className="hover:text-[#121316]">
-            Docs
-          </Link>
-          <Link href="/whitepaper" className="hover:text-[#121316]">
-            Whitepaper
-          </Link>
-          <a
-            href="https://x.com/gloamtrade"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-[#121316]"
-          >
-            @gloamtrade
-          </a>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

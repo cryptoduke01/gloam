@@ -6,9 +6,14 @@ import { AuthState, useTurnkey } from "@turnkey/react-wallet-kit";
 /**
  * Compact passkey sign-in for the header. Once authenticated, the wagmi
  * auto-connect flips WalletMenu to the connected (address) state, so this
- * renders nothing.
+ * renders nothing. `className` lets the caller size the pill for where it
+ * sits (sidebar block, top-bar pill, or inline form button).
  */
-export function TurnkeyHeaderSignIn() {
+export function TurnkeyHeaderSignIn({
+  className = "btn btn-ink btn-sm",
+}: {
+  className?: string;
+} = {}) {
   const { authState, handleLogin } = useTurnkey();
   const [busy, setBusy] = useState(false);
 
@@ -26,7 +31,7 @@ export function TurnkeyHeaderSignIn() {
           setBusy(false);
         }
       }}
-      className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60"
+      className={className}
     >
       {busy ? "Opening…" : "Sign in"}
     </button>

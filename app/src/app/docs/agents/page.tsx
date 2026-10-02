@@ -30,7 +30,7 @@ export default function DocsAgentsPage() {
         An agent trading a public chain leaks its whole strategy: every position,
         size, and time is on the graph for anyone to copy or front-run. Agents run
         predictable, high-frequency strategies, so they are the easiest to
-        reverse-engineer. Gloam gives an agent a private execution surface — hold,
+        reverse-engineer. Gloam gives an agent a private execution surface: hold,
         move, and prove value with size hidden, so its edge stays its own.
       </p>
 
@@ -48,7 +48,7 @@ export default function DocsAgentsPage() {
         <li>
           <strong>Via the <code>@gloamtrade/mcp</code> server.</strong> An
           MCP-speaking model (Claude, etc.) gets Gloam as tools alongside its
-          other capabilities — the same way Robinhood&apos;s own MCP exposes
+          other capabilities, the same way Robinhood&apos;s own MCP exposes
           public trading. Best for a general assistant that should also act
           privately.
         </li>
@@ -82,8 +82,8 @@ const hash = await wallet.writeContract({
       </pre>
       <p>
         From there the agent can cash out, pay a receive tag, or prove a balance
-        to a counterparty with a <Link href="/docs/sdk/disclosure">disclosure</Link>{" "}
-        — all with the same core.
+        to a counterparty with a <Link href="/docs/sdk/disclosure">disclosure</Link>,
+        all with the same core.
       </p>
 
       <h2>The MCP server</h2>
@@ -93,68 +93,70 @@ const hash = await wallet.writeContract({
         and describe, in plain language, what is private and what is not;
         execution tools take a plan, sign it server-side, and broadcast.
       </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Does</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>gloam_info</code> / <code>gloam_privacy_status</code>
-            </td>
-            <td>What Gloam is; the honest current privacy posture (read)</td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_list_markets</code> / <code>gloam_quote</code>
-            </td>
-            <td>Markets and indicative quotes, with what stays private (read)</td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_plan_shield</code> / <code>gloam_plan_private_trade</code>
-            </td>
-            <td>Build an unsigned intent an agent can reason over (plan)</td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_execute_shield</code>
-            </td>
-            <td>
-              Real private deposit: mint a note, prove, and broadcast{" "}
-              <code>shieldBound</code> server-side (execute)
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_execute_transfer</code>
-            </td>
-            <td>Sign + broadcast a public testnet transfer for funding (execute)</td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_payment_requirements</code> /{" "}
-              <code>gloam_verify_payment</code>
-            </td>
-            <td>
-              Price a resource in a private x402 payment, and verify a presented
-              one (server)
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <code>gloam_pay_x402</code>
-            </td>
-            <td>
-              Plan the self-custodial private payment that satisfies a 402
-              challenge (agent)
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>gloam_info</code> / <code>gloam_privacy_status</code>
+              </td>
+              <td>What Gloam is; the honest current privacy posture (read)</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_list_markets</code> / <code>gloam_quote</code>
+              </td>
+              <td>Markets and indicative quotes, with what stays private (read)</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_plan_shield</code> / <code>gloam_plan_private_trade</code>
+              </td>
+              <td>Build an unsigned intent an agent can reason over (plan)</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_execute_shield</code>
+              </td>
+              <td>
+                Real private deposit: mint a note, prove, and broadcast{" "}
+                <code>shieldBound</code> server-side (execute)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_execute_transfer</code>
+              </td>
+              <td>Sign + broadcast a public testnet transfer for funding (execute)</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_payment_requirements</code> /{" "}
+                <code>gloam_verify_payment</code>
+              </td>
+              <td>
+                Price a resource in a private x402 payment, and verify a presented
+                one (server)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_pay_x402</code>
+              </td>
+              <td>
+                Plan the self-custodial private payment that satisfies a 402
+                challenge (agent)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <h2>Private agent payments (x402)</h2>
       <p>

@@ -1,4 +1,9 @@
+/* Layer order: vendor CSS (Turnkey's own Tailwind build) sits BELOW ours, so its
+   plain utilities can never beat our responsive ones. Previously it loaded after
+   us in the same named layers and silently broke sm:/lg: overrides on /app. */
+@layer vendor, theme, base, components, utilities;
 @import "tailwindcss";
+@import "@turnkey/react-wallet-kit/styles.css" layer(vendor);
 
 /* Aeonik, self-hosted (licensed .ttf → woff2). The brand typeface.
    Bold face covers 600–700; Medium italic covers the oblique accent. */
@@ -45,76 +50,184 @@
   font-display: swap;
 }
 
-:root,
-html.dark,
-html[data-theme="dark"] {
-  --ink: #000000;
-  --lime: #c8ff00;
-  --lime-dim: #a8d600;
-  --sealed: #34d17f;
-  --text: #ffffff;
-  --mute: #a3a3a3;
-  --line: #1a1a1a;
-  --panel: #0a0a0a;
-  --background: #000000;
-  --foreground: #ffffff;
-  --shadow-dock: 0 8px 30px rgba(0, 0, 0, 0.35);
-  --chart-up: #c8ff00;
-  --chart-down: #f87171;
-}
-
 /*
- * The product runs light-only now, the "Twilight" brand. The app views are
- * token-driven, so remapping these light tokens repaints the whole workspace:
- * paper ground, ink type, indigo accent (--lime is the accent slot), green for
- * live/verified. Primary buttons are `bg-lime text-background` = indigo on paper.
- */
-html.light,
-html[data-theme="light"] {
-  --ink: #121316;
-  --lime: #3b3766; /* twilight accent (indigo), the marketing site's accent */
-  --lime-dim: #2f2c52;
-  --sealed: #2e7d53; /* the one functional accent: sealed / private / verified */
-  --text: #121316;
-  --mute: #6e6e76;
-  --line: #e5e3dd;
-  --panel: #ffffff;
-  --background: #f4f3ef;
-  --foreground: #121316;
-  --shadow-dock: 0 10px 30px -12px rgba(18, 19, 22, 0.18);
-  --chart-up: #2e7d53;
-  --chart-down: #c0432f;
-}
-
-/*
- * The app workspace runs a monochrome palette: ink type + ink primary actions on
- * paper, with green reserved strictly for the sealed / private signal. Remapping
- * the accent slot to ink here (instead of the marketing indigo) keeps the whole
- * workspace black + cream, so no stray blue fights the page.
+ * "Gloam" system (Oct 2026 overhaul). Pure monochrome: ink and paper.
  *
- * `.gloam-app` covers in-tree content; `html.gloam-app-ctx` (set by AppThemeScope
- * while any app route is mounted) also covers modals that portal to <body>, which
- * sit outside .gloam-app and would otherwise fall back to the marketing indigo.
- * The marketing site never sets either, so it keeps its twilight indigo.
+ * Colour theory: an achromatic scheme with a cool hairline bias (greys lean a
+ * couple of degrees cool so they read as chosen, not default). Hierarchy comes
+ * from value, not hue: 60% paper, 30% ink type and graphite surfaces, 10% solid
+ * ink for the one thing that matters on each screen. The luminous field is a
+ * silver haze (light) / graphite moonlight (dark) with ONE tint of Gloam green
+ * (#2E7D53), the old brand green kept as a seasoning, never a flood: it marks
+ * private / sealed / verified, glints inside the field, and tints the soft
+ * pill. Under 5% of any screen, so it never reads as Robinhood. No yellow, no
+ * blue. Character comes from the etched art and the type.
+ *
+ * Light is :root. Dark applies when html[data-theme="dark"] is stamped (by the
+ * head script from the saved choice or the OS setting). `.theme-dark` scopes the
+ * dark tokens to one subtree (the footer, the developer panel) in either theme;
+ * `.theme-light` does the same for the light set.
  */
+:root,
+.theme-light {
+  color-scheme: light;
+  --ink: #0b0c0e;
+  --on-ink: #ffffff;
+  --lime: #0b0c0e; /* legacy accent slot = primary action colour */
+  --lime-dim: #26282c;
+  --navy: #0b0c0e; /* legacy aliases, now neutral */
+  --navy-700: #0b0c0e;
+  --navy-500: #4a4e55;
+  --navy-300: #a7abb2;
+  --navy-100: #e6e8eb;
+  --navy-50: #f2f3f5;
+  --sealed: #2e7d53; /* the private / sealed / verified signal: the green tint */
+  --sealed-soft: #e6f2ea;
+  --green: #2e7d53;
+  --green-soft: #e6f2ea;
+  --tint: #e2f0e7; /* soft pill ground, a breath of green */
+  --on-tint: #1d4f35;
+  --field-1: #c8cbd0;
+  --field-2: #e3e5e8;
+  --field-3: #f8f9fa;
+  --field-base: #f0f1f3;
+  --field-deep: #a6d4b9; /* the one green glint inside the silver haze */
+  --f-hi: #ffffff; /* light patches in the blend */
+  --f-mid: #d2d6db; /* silver shadow */
+  --f-deep: #b4bac2; /* deepest silver in the flow */
+  --f-g1: #a9d6bb; /* green wash, deep */
+  --f-g2: #cfe6d8; /* green wash, soft */
+  --f-a: #f3f4f5;
+  --f-b: #e5e7ea;
+  --f-c: #d6e9de;
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-line: rgba(255, 255, 255, 0.85);
+  --text: #0b0c0e;
+  --soft: #34373c;
+  --mute: #5f636a;
+  --faint: #979ba2;
+  --line: #e4e6e9;
+  --line-strong: #cfd2d6;
+  --panel: #ffffff;
+  --surface: #f3f4f5;
+  --surface-2: #eaebed;
+  --background: #ffffff;
+  --app-ground: #f4f4f5;
+  --foreground: #0b0c0e;
+  --danger: #b4362a;
+  --danger-soft: #fbecea;
+  --warn: #8a5a12;
+  --warn-soft: #fbf3e4;
+  --shadow-dock: 0 10px 30px -12px rgba(11, 12, 14, 0.16);
+  --shadow-card: 0 1px 2px rgba(11, 12, 14, 0.04), 0 10px 28px -16px rgba(11, 12, 14, 0.12);
+  --shadow-pop: 0 2px 6px rgba(11, 12, 14, 0.05), 0 28px 70px -24px rgba(11, 12, 14, 0.3);
+  --chart-up: #2e7d53;
+  --chart-down: #b4362a;
+}
+
+html[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+  --ink: #f4f5f6; /* primary action flips to a white pill */
+  --on-ink: #0b0c0e;
+  --lime: #f4f5f6;
+  --lime-dim: #d7d9dc;
+  --navy: #f4f5f6;
+  --navy-700: #f4f5f6;
+  --navy-500: #b9bdc3;
+  --navy-300: #5d6168;
+  --navy-100: #1f2125;
+  --navy-50: #16181b;
+  --sealed: #8fd3ad;
+  --sealed-soft: rgba(143, 211, 173, 0.12);
+  --green: #8fd3ad;
+  --green-soft: rgba(143, 211, 173, 0.12);
+  --tint: #16251d;
+  --on-tint: #b7e6cb;
+  --field-1: #26292d;
+  --field-2: #16171a;
+  --field-3: #0c0d0f;
+  --field-base: #0b0c0e;
+  --field-deep: #1f4733;
+  --f-hi: #24272b;
+  --f-mid: #0c0d0f;
+  --f-deep: #050506;
+  --f-g1: #1d3d2c;
+  --f-g2: #16241c;
+  --f-a: #121316;
+  --f-b: #0d0e10;
+  --f-c: #13201a;
+  --glass: rgba(255, 255, 255, 0.05);
+  --glass-line: rgba(255, 255, 255, 0.1);
+  --text: #f4f5f6;
+  --soft: #cdd0d4;
+  --mute: #9b9fa6;
+  --faint: #6c7077;
+  --line: #232529;
+  --line-strong: #33363b;
+  --panel: #111214;
+  --surface: #17181b;
+  --surface-2: #1e2023;
+  --background: #08090a;
+  --app-ground: #08090a;
+  --foreground: #f4f5f6;
+  --danger: #f08a7e;
+  --danger-soft: rgba(240, 138, 126, 0.12);
+  --warn: #e8b86a;
+  --warn-soft: rgba(232, 184, 106, 0.12);
+  --shadow-dock: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 30px -18px rgba(0, 0, 0, 0.7);
+  --shadow-pop: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 30px 80px -24px rgba(0, 0, 0, 0.85);
+  --chart-up: #8fd3ad;
+  --chart-down: #f08a7e;
+}
+
+/* Inside the app the ground drops to a soft neutral so cards float on it
+   (the app.zama.org pattern). Covers body-portaled modals via gloam-app-ctx. */
 .gloam-app,
 html.gloam-app-ctx {
-  --lime: #121316;
-  --lime-dim: #2b2b30;
+  --background: var(--app-ground);
 }
+html.gloam-app-ctx body {
+  background: var(--app-ground);
+}
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
   --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
   --color-lime: var(--lime);
   --color-lime-dim: var(--lime-dim);
+  --color-navy: var(--navy);
+  --color-navy-500: var(--navy-500);
+  --color-navy-300: var(--navy-300);
+  --color-navy-100: var(--navy-100);
+  --color-navy-50: var(--navy-50);
   --color-sealed: var(--sealed);
+  --color-sealed-soft: var(--sealed-soft);
+  --color-tint: var(--tint);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-on-tint: var(--on-tint);
+  --color-mint: var(--tint);
+  --color-soft: var(--soft);
   --color-mute: var(--mute);
+  --color-faint: var(--faint);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-panel: var(--panel);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
   --font-display: "Aeonik", system-ui, sans-serif;
   --font-sans: "Aeonik", system-ui, sans-serif;
+  --font-mono: "Aeonik", system-ui, sans-serif;
 }
 
 html {
@@ -124,307 +237,522 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-body), system-ui, sans-serif;
+  font-family: "Aeonik", system-ui, sans-serif;
+  font-feature-settings: "ss01" 0;
+  -webkit-font-smoothing: antialiased;
 }
 
-:focus-visible {
-  outline: 2px solid var(--lime);
-  outline-offset: 3px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--navy-500);
+    outline-offset: 3px;
+  }
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--lime) 35%, transparent);
-  color: #000;
+  background: var(--navy-100);
+  color: var(--foreground);
 }
 
 .font-display {
   font-family: "Aeonik", system-ui, sans-serif;
 }
 
-/* Main typeface: Avant Garde (Jost stand-in), set on <body>. Display headlines
-   use tight tracking + heavy weight for the geometric-poster look. */
+@layer components {
+/* ---------- Type scale ---------- */
+.t-display-xl {
+  font-weight: 300;
+  font-size: clamp(42px, 5.2vw, 76px);
+  line-height: 1.02;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+}
+.t-display-l {
+  font-weight: 300;
+  font-size: clamp(32px, 3.4vw, 48px);
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+.t-display-m {
+  font-weight: 300;
+  font-size: clamp(26px, 2.6vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+.t-title {
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.t-label {
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
 
-/*
- * Twilight atmosphere, Gloam means dusk. A layered dawn-gold → rose → violet →
- * indigo blend, grained to avoid banding. The signature background of the new brand.
- */
-.twilight-atmos {
+/* ---------- Buttons: pills ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-sm {
+  height: 2.25rem;
+  padding: 0 1rem;
+  font-size: 13px;
+}
+.btn-lg {
+  height: 3rem;
+  padding: 0 1.5rem;
+  font-size: 15px;
+}
+.btn-block {
+  width: 100%;
+}
+.btn-ink {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.btn-ink:hover:not(:disabled) {
+  background: var(--lime-dim);
+}
+.btn-accent,
+.btn-mint {
+  background: var(--tint);
+  color: var(--on-tint);
+}
+.btn-accent:hover:not(:disabled),
+.btn-mint:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tint) 85%, var(--navy));
+}
+.btn-ghost {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--foreground);
+  border-color: var(--line-strong);
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--foreground);
+  background: var(--panel);
+}
+.btn-quiet {
+  background: transparent;
+  color: var(--foreground);
+}
+.btn-danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+.btn-quiet:hover:not(:disabled) {
+  background: var(--surface);
+}
+
+/* ---------- Surfaces ---------- */
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+.shadow-pop {
+  box-shadow: var(--shadow-pop);
+}
+.gl-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  isolation: isolate;
+}
+.gl-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+.gl-tile {
+  background: var(--surface);
+  border-radius: 18px;
+}
+.gl-glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 16px;
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+/* The sealed field: the one luminous glow. Lives inside a .gl-panel. */
+.gl-field {
+  position: absolute;
+  inset: -12%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(48px);
   background:
-    radial-gradient(58% 52% at 84% 6%, rgba(238, 201, 150, 0.62), transparent 62%),
-    radial-gradient(52% 48% at 95% 26%, rgba(228, 166, 158, 0.5), transparent 64%),
-    radial-gradient(60% 55% at 66% 44%, rgba(150, 116, 178, 0.3), transparent 70%),
-    radial-gradient(72% 64% at 8% 96%, rgba(74, 73, 140, 0.34), transparent 68%),
-    radial-gradient(46% 42% at 30% 74%, rgba(120, 150, 200, 0.22), transparent 72%);
+    radial-gradient(62% 72% at 86% 104%, var(--f-g1) 0%, transparent 70%),
+    radial-gradient(48% 62% at 102% 42%, var(--f-g2) 0%, transparent 72%),
+    radial-gradient(60% 40% at 40% 112%, var(--f-g2) 0%, transparent 72%),
+    radial-gradient(46% 58% at 58% 78%, var(--f-mid) 0%, transparent 70%),
+    radial-gradient(52% 62% at 18% 22%, var(--f-hi) 0%, transparent 70%),
+    radial-gradient(38% 44% at 66% 26%, var(--f-hi) 0%, transparent 70%),
+    linear-gradient(135deg, var(--f-a) 0%, var(--f-b) 55%, var(--f-c) 100%);
+}
+.gl-field-soft {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(36px);
+  background:
+    radial-gradient(42% 46% at 92% 96%, color-mix(in srgb, var(--field-1) 80%, transparent) 0%, transparent 70%),
+    radial-gradient(36% 40% at 100% 40%, color-mix(in srgb, var(--field-2) 75%, transparent) 0%, transparent 70%);
+}
+.gl-field-edge {
+  position: absolute;
+  inset: auto -10% -40% -10%;
+  height: 90%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(46px);
+  background: radial-gradient(60% 60% at 50% 100%, var(--field-1) 0%, var(--field-2) 40%, transparent 72%);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .twilight-atmos {
-    animation: twilight-drift 26s ease-in-out infinite alternate;
+  .gl-field.gl-drift {
+    animation: gl-drift 22s ease-in-out infinite alternate;
   }
-  @keyframes twilight-drift {
+  @keyframes gl-drift {
     from {
       transform: translate3d(0, 0, 0) scale(1);
     }
     to {
-      transform: translate3d(-1.5%, 1%, 0) scale(1.05);
+      transform: translate3d(-2.5%, -1.5%, 0) scale(1.06);
     }
   }
 }
-.twilight-grain {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
+
+/* Sealed amount: a row of small dots, the privacy motif. */
+.seal-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+.seal-dots > i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.85;
 }
 
-/* Twilight ASCII: charcoal ink on paper (see AsciiImage indigo cast). */
-/* plate = dark source (white on black) inverted to ink on paper. */
-.ascii-plate {
-  filter: invert(1) grayscale(1) contrast(1.5) brightness(0.82);
+/* Inputs: one calm style the app can opt into. */
+.gl-input {
+  height: 3rem;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  padding: 0 0.95rem;
+  font-size: 15px;
+  color: var(--foreground);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
-/* ink = paper source (dark on light) kept, just desaturated. */
-.ascii-ink {
-  filter: grayscale(1) contrast(1.06);
+.gl-input::placeholder {
+  color: var(--faint);
+}
+.gl-input:focus {
+  outline: none;
+  border-color: var(--navy-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--navy-500) 18%, transparent);
+}
 }
 
-/* Docs prose, light "Twilight" reading column. Avant Garde (Jost) headings. */
+/* Docs prose: the reading column. 16/26 body, Aeonik throughout, theme tokens
+   only. Unlayered on purpose, so these beat utilities inside the column. */
+.docs-prose > :first-child {
+  margin-top: 0;
+}
+
 .docs-prose h2 {
-  margin-top: 2.5rem;
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: #121316;
+  margin-top: 3.5rem;
+  font-size: 1.875rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  text-wrap: balance;
+  scroll-margin-top: 8.5rem;
 }
 
 .docs-prose h3 {
-  margin-top: 1.5rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #121316;
+  margin-top: 2.25rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  text-wrap: balance;
+  scroll-margin-top: 8.5rem;
 }
 
 .docs-prose p,
 .docs-prose li {
-  color: #565660;
-  line-height: 1.72;
+  color: var(--soft);
+  line-height: 1.625;
 }
 
 .docs-prose strong {
-  color: #121316;
-  font-weight: 600;
+  color: var(--foreground);
+  font-weight: 500;
 }
 
 .docs-prose ul {
   list-style: disc;
-  padding-left: 1.25rem;
+  padding-left: 1.375rem;
 }
 
 .docs-prose ol {
   list-style: decimal;
-  padding-left: 1.25rem;
+  padding-left: 1.375rem;
+}
+
+.docs-prose li {
+  padding-left: 0.25rem;
+}
+.docs-prose li + li,
+.docs-prose li > ul,
+.docs-prose li > ol {
+  margin-top: 0.5rem;
+}
+.docs-prose li::marker {
+  color: var(--faint);
+}
+.docs-prose ol > li::marker {
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
 }
 
 .docs-prose a {
-  color: #3b3766;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(59, 55, 102, 0.3);
-}
-
-.docs-prose a:hover {
-  border-bottom-color: #3b3766;
-}
-
-.docs-prose code {
-  font-size: 0.92em;
+  color: var(--foreground);
   font-weight: 500;
-  color: #3b3766;
-  background: rgba(59, 55, 102, 0.07);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+  transition: text-decoration-color 0.15s ease;
+}
+.docs-prose a:hover {
+  text-decoration-color: var(--foreground);
 }
 
+/* Inline code: a soft surface chip; weight carries it, Aeonik like the rest. */
+.docs-prose :not(pre) > code {
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--surface);
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.docs-prose p > code,
+.docs-prose li > code {
+  overflow-wrap: anywhere;
+}
+
+/* Code blocks. The top 44px is reserved for the label + copy strip that
+   DocsCopyEnhancer adds, so the page never shifts when it arrives. */
 .docs-prose pre {
   position: relative;
   margin-top: 1.5rem;
-  overflow-x: auto;
-  border-radius: 14px;
-  border: 1px solid #e5e3dd;
-  background: #fbfaf7;
-  padding: 1.1rem 1.25rem;
-  line-height: 1.6;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 55%, var(--panel));
+  padding-top: 2.75rem;
+  font-size: 14px;
+  line-height: 1.75;
+  tab-size: 1.5em;
+  font-variant-numeric: tabular-nums;
 }
-.docs-prose pre code {
+.docs-prose pre::before {
+  content: "";
+  position: absolute;
+  inset: calc(2.75rem - 1px) 0 auto 0;
+  height: 1px;
+  background: var(--line);
+}
+.docs-prose pre > code {
+  display: block;
+  overflow-x: auto;
+  padding: 0.9rem 1.25rem 1rem;
   background: none;
-  padding: 0;
-  color: #2a2a30;
-  font-size: 0.86em;
+  color: var(--soft);
+  font-size: inherit;
   font-weight: 400;
   white-space: pre;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
-
-/* Copy button injected into every docs code block by DocsCopyEnhancer. */
-.docs-prose .copy-btn {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.55rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.26rem 0.5rem;
-  font-size: 0.72rem;
-  line-height: 1;
-  font-weight: 500;
-  color: #6e6e76;
-  background: #f4f3ef;
-  border: 1px solid #e5e3dd;
-  border-radius: 7px;
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.15s ease, color 0.15s ease,
-    border-color 0.15s ease, background 0.15s ease;
+.docs-prose pre > code[data-docs-src] {
+  display: none;
 }
-.docs-prose pre:hover .copy-btn,
-.docs-prose .copy-btn:focus-visible {
-  opacity: 1;
-  outline: none;
-}
-.docs-prose .copy-btn:hover {
-  color: #121316;
-  border-color: #cfccc4;
-  background: #ffffff;
-}
-.docs-prose .copy-btn.copied {
-  opacity: 1;
-  color: #2e7d53;
-  border-color: rgba(46, 125, 83, 0.4);
-  background: rgba(46, 125, 83, 0.08);
-}
-.docs-prose .copy-btn svg {
+/* While "Copy page" reads innerText: original source in, injected chrome out. */
+.docs-prose.is-copying pre > code[data-docs-src] {
   display: block;
+}
+.docs-prose.is-copying .docs-code-head,
+.docs-prose.is-copying .docs-code-hl {
+  display: none;
 }
 
 .docs-prose table {
   width: 100%;
-  margin-top: 1.5rem;
-  border-collapse: collapse;
-  font-size: 0.92em;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 14.5px;
+  line-height: 1.5;
 }
 .docs-prose th,
 .docs-prose td {
-  border-bottom: 1px solid #e5e3dd;
-  padding: 0.6rem 0.75rem;
+  padding: 0.7rem 1rem;
   text-align: left;
   vertical-align: top;
 }
 .docs-prose th {
-  color: #121316;
-  font-weight: 600;
-  font-size: 0.78em;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.docs-prose thead th:first-child {
+  border-top-left-radius: 13px;
+}
+.docs-prose thead th:last-child {
+  border-top-right-radius: 13px;
 }
 .docs-prose td {
-  color: #565660;
+  border-top: 1px solid var(--line);
+  color: var(--soft);
 }
 
-/* Single-typeface system: ITC Avant Garde Gothic Pro only. The "second voice"
-   comes from its own range, weight (100–700), case, and the oblique, not a
-   second family. `.font-accent` is that oblique display treatment. */
-.font-accent {
-  font-style: italic;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+@media (max-width: 767px) {
+  .docs-prose h2 {
+    margin-top: 2.75rem;
+    font-size: 1.5rem;
+  }
+  .docs-prose h3 {
+    font-size: 1.125rem;
+  }
+  .docs-prose pre {
+    border-radius: 14px;
+  }
+  .docs-prose pre > code {
+    padding-inline: 1rem;
+  }
+  .docs-prose th,
+  .docs-prose td {
+    padding: 0.6rem 0.8rem;
+  }
 }
 
-/* App header nav: plain media queries so the desktop/mobile swap is immune to
-   the Tailwind dev class-order bug (max-md:hidden losing to a base display). */
-.app-nav {
-  display: flex;
-}
-.app-burger {
+/* Oblique display accent (Aeonik italic). */
+
+/* App sidebar / mobile bar swap: plain media queries (immune to the Tailwind
+   dev class-order bug where hidden + lg:flex loses). */
+.gl-sidebar {
   display: none;
 }
-@media (max-width: 767px) {
-  .app-nav {
-    display: none;
-  }
-  .app-burger {
-    display: inline-flex;
-  }
-}
-
-/* Markets filter bar: real media query so the row/column swap is immune to the
-   Tailwind dev class-order bug (same reason as .app-nav). Filters left, search
-   right on desktop; stacked full-width on mobile. */
-.mkt-controls {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-.mkt-controls > input {
-  width: 100%;
-  max-width: 20rem;
-}
-@media (max-width: 639px) {
-  .mkt-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .mkt-controls > input {
-    max-width: none;
-  }
-}
-
-/* Vault action rail: horizontal scroller on mobile, sticky vertical rail on
-   desktop. Real media query, immune to the Tailwind dev class-order bug. */
-.vault-rail {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-}
-.vault-rail-item {
-  flex: none;
-  min-width: 148px;
+.gl-mobilebar {
+  display: block;
 }
 @media (min-width: 1024px) {
-  .vault-rail {
-    flex-direction: column;
-    gap: 0.375rem;
-    overflow: visible;
-    padding-bottom: 0;
-    position: sticky;
-    top: 6rem;
-    align-self: start;
+  .gl-sidebar {
+    display: flex;
   }
-  .vault-rail-item {
-    min-width: 0;
+  .gl-mobilebar {
+    display: none;
   }
 }
 
+/* App page header: title left, actions right on desktop; stacked on mobile. */
+.gl-pagehead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+@media (min-width: 640px) {
+  .gl-pagehead {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+@layer components {
 /* Legal pages, light. Overrides inline dark tokens via higher specificity. */
 .prose-legal h2 {
   margin-top: 2rem;
   font-family: "Aeonik", system-ui, sans-serif;
-  font-weight: 700;
-  font-size: 1.5rem;
-  letter-spacing: -0.03em;
-  color: #121316;
+  font-weight: 400;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
 }
 .prose-legal h3 {
   margin-top: 1.5rem;
   font-weight: 600;
-  color: #121316;
+  color: var(--foreground);
 }
 .prose-legal p,
 .prose-legal li {
-  color: #565660;
+  color: var(--soft);
 }
 .prose-legal strong {
-  color: #121316;
+  color: var(--foreground);
   font-weight: 600;
 }
 .prose-legal a {
-  color: #3b3766;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--navy-500) 50%, transparent);
+  text-underline-offset: 3px;
 }
 .prose-legal ul {
   list-style: disc;
@@ -434,6 +762,46 @@ body {
   list-style: decimal;
   padding-left: 1.25rem;
 }
+}
+
+/* Syntax colours (lib/highlight.ts). On-brand: graphite structure, green for
+   keywords (the one tint), warm sand strings, amber numbers. Light + dark. */
+:root,
+.theme-light {
+  --tok-kw: #2e7d53;
+  --tok-str: #8a5a12;
+  --tok-num: #a1491f;
+  --tok-com: #8b9098;
+  --tok-fn: #0b0c0e;
+  --tok-prop: #4b5059;
+  --tok-type: #1d4f35;
+  --tok-const: #a1491f;
+  --tok-lit: #a1491f;
+  --tok-punc: #8b9098;
+}
+html[data-theme="dark"],
+.theme-dark {
+  --tok-kw: #8fd3ad;
+  --tok-str: #e7c48d;
+  --tok-num: #f0a875;
+  --tok-com: #6c7077;
+  --tok-fn: #f4f5f6;
+  --tok-prop: #c3c8cf;
+  --tok-type: #b7e6cb;
+  --tok-const: #f0a875;
+  --tok-lit: #f0a875;
+  --tok-punc: #7d828a;
+}
+.tok-kw { color: var(--tok-kw); }
+.tok-str { color: var(--tok-str); }
+.tok-num { color: var(--tok-num); }
+.tok-com { color: var(--tok-com); font-style: italic; }
+.tok-fn { color: var(--tok-fn); font-weight: 500; }
+.tok-prop { color: var(--tok-prop); }
+.tok-type { color: var(--tok-type); }
+.tok-const { color: var(--tok-const); }
+.tok-lit { color: var(--tok-lit); }
+.tok-punc { color: var(--tok-punc); }
 
 /* Tabular figures so money + quantities align in columns */
 .tnum {
@@ -450,8 +818,8 @@ body {
 }
 .lift:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--lime) 35%, var(--line));
-  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--lime) 22%, transparent);
+  border-color: var(--line-strong);
+  box-shadow: 0 16px 36px -18px rgba(14, 15, 17, 0.18);
 }
 
 /* Editorial entrance for app views, staggered rise */
@@ -474,19 +842,6 @@ body {
   animation-delay: 0.1s;
 }
 
-/* Token page marquee */
-@keyframes token-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.token-marquee-track {
-  animation: token-marquee 36s linear infinite;
-}
-
 /* Live status dot, soft breathing pulse */
 @keyframes gloam-livedot {
   0%,
@@ -504,28 +859,6 @@ body {
 }
 
 /* Animated active-nav underline */
-.nav-underline {
-  position: relative;
-}
-.nav-underline::after {
-  content: "";
-  position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
-  bottom: 0.15rem;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--lime);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.nav-underline:hover::after {
-  transform: scaleX(0.4);
-}
-.nav-underline[data-active="true"]::after {
-  transform: scaleX(1);
-}
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -542,47 +875,6 @@ body {
   .livedot {
     animation: none;
   }
-  .nav-underline::after {
-    transition: none;
-  }
-  .token-marquee-track {
-    animation: none !important;
-  }
-}
-
-/* Animated SDK object — the Gloam mark extruded into a 3D slab that sways.
-   The slab is currentColor and the inset is the ambient background (--sdk-bg),
-   so it reads as the logo on the light page and inverted on the dark banner. */
-.sdk-mark-wrap {
-  display: inline-grid;
-  place-items: center;
-}
-.sdk-mark {
-  position: relative;
-  transform-style: preserve-3d;
-  animation: sdk-sway 7s ease-in-out infinite;
-}
-.sdk-slice {
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-}
-.sdk-inset {
-  position: absolute;
-  background: var(--sdk-bg, #f4f3ef);
-}
-@keyframes sdk-sway {
-  0%,
-  100% {
-    transform: rotateX(-12deg) rotateY(-44deg);
-  }
-  50% {
-    transform: rotateX(-6deg) rotateY(44deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sdk-mark {
-    animation: none;
-    transform: rotateX(-11deg) rotateY(-26deg);
-  }
+  
+  
 }

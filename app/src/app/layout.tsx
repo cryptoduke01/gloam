@@ -3,11 +3,12 @@ import { Analytics } from "@/components/Analytics";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
-const siteTitle = "Gloam · The Privacy Layer for Onchain Finance";
+const siteTitle = "Gloam · Private money on public chains";
 const siteDescription =
-  "The privacy layer for onchain finance, live on Robinhood Chain and Tempo. Shield a balance, then trade and pay with your size sealed. Settlement is public, your strategy is not.";
+  "Hold, pay and get paid in stablecoins without putting amounts or balances on the public record. Private payroll, private payments and proofs for people, teams and agents. Live on Robinhood Chain and Tempo.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gloam.trade"),
@@ -21,13 +22,14 @@ export const metadata: Metadata = {
   creator: "Gloam",
   keywords: [
     "Gloam",
-    "private layer for Robinhood",
+    "private payments",
+    "private payroll",
+    "stablecoin privacy",
     "Robinhood Chain",
-    "private trading",
-    "tokenized stocks",
-    "shielded balances",
-    "private swaps",
-    "crypto privacy",
+    "Tempo",
+    "USDG",
+    "agent payments",
+    "x402",
   ],
   icons: {
     icon: [
@@ -58,8 +60,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#000000" },
-    { media: "(prefers-color-scheme: light)", color: "#f7f7f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#08090c" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
   ],
   colorScheme: "dark light",
 };
@@ -70,7 +72,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light h-full antialiased" suppressHydrationWarning>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <meta
           name="ory-verify"
@@ -86,16 +88,12 @@ export default function RootLayout({
         />
         <link
           rel="preload"
-          href="/fonts/Aeonik-Bold.woff2"
+          href="/fonts/Aeonik-Light.woff2"
           as="font"
           type="font/woff2"
           crossOrigin=""
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var d=document.documentElement;d.dataset.theme='light';d.classList.add('light');d.classList.remove('dark')}catch(e){}})()`,
-          }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"

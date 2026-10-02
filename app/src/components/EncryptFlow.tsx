@@ -1,176 +1,128 @@
-"use client";
-
-import { motion, useReducedMotion } from "framer-motion";
+import type { ReactNode } from "react";
+import { SealedField } from "@/components/ui/SealedField";
 
 /**
- * Privacy stack flow, wallet → shield → note → private move/trade → cash out.
- * Labels stay exact (no image-model garble).
+ * The Gloam loop as three zones: a public wallet, the private vault, and a
+ * public exit. The boundary is the point, so the middle zone is the only one
+ * that carries the sealed signal. Labels stay exact text, never an image.
  */
-const steps = [
-  {
-    id: "clear",
-    label: "Your wallet",
-    sub: "Open balance",
-    detail:
-      "Normal wallet. Anyone who knows the address can see what it holds.",
-  },
+type Stage = { id: string; label: string; sub: string; detail: string };
+
+const enter: Stage = {
+  id: "clear",
+  label: "Your wallet",
+  sub: "Open balance",
+  detail: "A normal wallet. Anyone who knows the address can see what it holds.",
+};
+
+const inside: Stage[] = [
   {
     id: "encrypt",
     label: "Shield",
-    sub: "Enter vault",
+    sub: "Enter the vault",
     detail:
-      "You deposit into Gloam’s vault. A fingerprint of the deposit is written on-chain; the secret stays in your browser.",
+      "You deposit into the Gloam vault. A fingerprint of the deposit is written on-chain; the secret stays in your browser.",
   },
   {
     id: "note",
     label: "Vault note",
     sub: "Private claim",
-    detail:
-      "Your browser holds the secret that proves the deposit is yours. Export a backup.",
+    detail: "Your browser holds the secret that proves the deposit is yours. Export a backup.",
   },
   {
     id: "move",
     label: "Private rails",
-    sub: "Send · trade",
+    sub: "Send, trade",
     detail:
-      "Private send and private trade settle in the vault. Size stays off the open book by default.",
-  },
-  {
-    id: "read",
-    label: "Cash out",
-    sub: "Public exit",
-    detail:
-      "You prove ownership and money returns to a wallet. Exit publishes amount on purpose.",
+      "Private send and private trade settle inside the vault. Size stays off the open book by default.",
   },
 ];
 
-export function EncryptFlow() {
-  const reduce = useReducedMotion();
+const exit: Stage = {
+  id: "read",
+  label: "Cash out",
+  sub: "Public exit",
+  detail:
+    "You prove ownership and the money returns to a wallet. The exit publishes the amount on purpose.",
+};
 
+function Row({ s }: { s: Stage }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-panel">
-      <div className="border-b border-line px-5 py-4 sm:px-6">
-        <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
-          How Gloam works
-        </p>
-        <p className="mt-1 text-sm text-mute">
-          Wallet → shield → vault note → private send / trade → cash out only
-          when you choose.
-        </p>
-      </div>
-
-      {/* Desktop horizontal flow */}
-      <div className="hidden px-6 py-10 lg:block">
-        <svg
-          viewBox="0 0 1000 220"
-          className="h-auto w-full"
-          role="img"
-          aria-label="Flow from open wallet through vault privacy to cash out"
-        >
-          <line
-            x1="80"
-            y1="70"
-            x2="920"
-            y2="70"
-            stroke="currentColor"
-            className="text-line"
-            strokeWidth="1"
-          />
-          {steps.map((s, i) => {
-            const x = 80 + i * 210;
-            return (
-              <g key={s.id}>
-                {i < steps.length - 1 && (
-                  <path
-                    d={`M ${x + 52} 70 L ${x + 158} 70`}
-                    stroke="currentColor"
-                    className="text-lime"
-                    strokeWidth="1.5"
-                    fill="none"
-                    markerEnd="url(#arrow)"
-                  />
-                )}
-                <circle
-                  cx={x}
-                  cy={70}
-                  r="28"
-                  className="fill-panel stroke-lime"
-                  strokeWidth="2"
-                />
-                <text
-                  x={x}
-                  y={76}
-                  textAnchor="middle"
-                  className="fill-lime text-[11px]"
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </text>
-                <text
-                  x={x}
-                  y={120}
-                  textAnchor="middle"
-                  className="fill-foreground text-[13px]"
-                  style={{ fontFamily: "var(--font-display), Georgia, serif" }}
-                >
-                  {s.label}
-                </text>
-                <text
-                  x={x}
-                  y={140}
-                  textAnchor="middle"
-                  className="fill-mute text-[9px] uppercase"
-                >
-                  {s.sub}
-                </text>
-              </g>
-            );
-          })}
-          <defs>
-            <marker
-              id="arrow"
-              markerWidth="6"
-              markerHeight="6"
-              refX="5"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L6,3 L0,6 Z" className="fill-lime" />
-            </marker>
-          </defs>
-        </svg>
-      </div>
-
-      {/* Mobile / tablet list */}
-      <ol className="divide-y divide-line lg:hidden">
-        {steps.map((s, i) => (
-          <motion.li
-            key={s.id}
-            className="px-5 py-4 sm:px-6"
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ delay: i * 0.05 }}
-          >
-            <p className="text-[10px] uppercase tracking-[0.14em] text-lime">
-              {String(i + 1).padStart(2, "0")} · {s.sub}
-            </p>
-            <p className="mt-1 font-display text-xl text-foreground">
-              {s.label}
-            </p>
-            <p className="mt-1 text-sm leading-relaxed text-mute">{s.detail}</p>
-          </motion.li>
-        ))}
-      </ol>
-
-      <div className="hidden border-t border-line px-6 py-4 lg:block">
-        <div className="grid grid-cols-5 gap-3">
-          {steps.map((s) => (
-            <p key={s.id} className="text-xs leading-relaxed text-mute">
-              {s.detail}
-            </p>
-          ))}
-        </div>
-      </div>
+    <div className="grid gap-1 px-4 py-4 sm:grid-cols-[168px_minmax(0,1fr)] sm:gap-6 sm:px-5">
+      <span className="block">
+        <span className="block text-[15.5px] leading-snug tracking-[-0.01em] text-foreground">
+          {s.label}
+        </span>
+        <span className="mt-0.5 block text-[12.5px] text-mute">{s.sub}</span>
+      </span>
+      <span className="block text-[14px] leading-[1.55] text-mute">{s.detail}</span>
     </div>
+  );
+}
+
+function Zone({
+  label,
+  sealed = false,
+  children,
+}: {
+  label: string;
+  sealed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="gl-tile relative isolate overflow-hidden">
+      {sealed && <SealedField tone="soft" />}
+      <span className="relative flex items-center gap-2 px-4 pt-4 sm:px-5">
+        {sealed && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-sealed" />}
+        <span className={`t-label ${sealed ? "text-sealed" : ""}`}>{label}</span>
+      </span>
+      <div className="relative divide-y divide-line">{children}</div>
+    </div>
+  );
+}
+
+function Join() {
+  return (
+    <span aria-hidden className="flex justify-center py-1.5 text-faint">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M12 5v14m0 0l-5-5m5 5l5-5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+export function EncryptFlow() {
+  return (
+    <figure
+      className="my-10 rounded-[22px] border border-line p-2 sm:p-2.5"
+      aria-label="Flow from an open wallet, through the private vault, to a public cash out"
+    >
+      <figcaption className="flex flex-col gap-1 px-3 pb-3.5 pt-3 sm:px-3.5">
+        <span className="t-label">How Gloam works</span>
+        <span className="text-[13.5px] leading-snug text-mute">
+          Wallet, shield, vault note, private send or trade, then cash out only
+          when you choose.
+        </span>
+      </figcaption>
+      <Zone label="Public">
+        <Row s={enter} />
+      </Zone>
+      <Join />
+      <Zone label="Private, inside the vault" sealed>
+        {inside.map((s) => (
+          <Row key={s.id} s={s} />
+        ))}
+      </Zone>
+      <Join />
+      <Zone label="Public">
+        <Row s={exit} />
+      </Zone>
+    </figure>
   );
 }

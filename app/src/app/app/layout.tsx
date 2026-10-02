@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s · Gloam Testnet",
   },
   description:
-    "Gloam testnet, Trade Everything on Robinhood Privately. Portfolio, shield, move, trade.",
+    "The Gloam app on testnet: a private balance, private payments, payroll and proofs on Robinhood Chain and Tempo.",
 };
 
 export default function ProductLayout({
