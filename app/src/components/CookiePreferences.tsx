@@ -19,7 +19,7 @@ export function CookiePreferences() {
   };
 
   return (
-    <div className="rounded-2xl border border-line bg-panel p-5">
+    <div className="gl-card p-5">
       <p className="text-sm text-mute">
         Current choice:{" "}
         <span className="text-foreground">
@@ -34,20 +34,20 @@ export function CookiePreferences() {
         <button
           type="button"
           onClick={() => save("essential")}
-          className="min-h-10 rounded-md border border-line px-4 text-sm text-foreground hover:border-mute"
+          className="btn btn-ghost btn-sm"
         >
           Essential only
         </button>
         <button
           type="button"
           onClick={() => save("all")}
-          className="min-h-10 rounded-md bg-lime px-4 text-sm font-medium text-background hover:opacity-90"
+          className="btn btn-ink btn-sm"
         >
           Accept analytics
         </button>
       </div>
       {saved && (
-        <p className="mt-3 text-sm text-lime" role="status">
+        <p className="mt-3 text-sm text-sealed" role="status">
           Preferences saved.
         </p>
       )}

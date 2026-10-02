@@ -45,6 +45,7 @@ import { DevKeysBanner } from "./DevKeysBanner";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
+import { SealedField } from "@/components/ui/SealedField";
 
 type Support = "checking" | "ready" | "no_verifier" | "offline";
 /** Buy = vault ETH → vault stock · Sell = vault stock → vault ETH */
@@ -395,7 +396,7 @@ export function SealedTradePanel({
       const path = await pathForLeaf(leafIdx);
       if (!path) throw new Error("Vault sync failed. Tap Refresh and retry.");
 
-      setStatus("Building private proof… 10–40 seconds is normal.");
+      setStatus("Building private proof… 10 to 40 seconds is normal.");
       const { rateIn, rateOut } = rateQuote;
       // Do NOT publish exact amountOut as amountOutMin, that was the size leak.
       const amountOutMin = publicAmountOutMin(exact.amountOut, sizePrivacy);
@@ -508,7 +509,7 @@ export function SealedTradePanel({
 
   if (!shieldLive || !poseidonMode) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
+      <div className="gl-card p-6 text-[14px] text-mute">
         Private trade is not configured on this build.
       </div>
     );
@@ -520,30 +521,29 @@ export function SealedTradePanel({
         <DevKeysBanner compact />
 
         {support === "checking" && (
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
+          <div className="gl-card flex items-center gap-3 p-6 text-[14px] text-mute">
+            <Spinner />
             Connecting to the vault…
           </div>
         )}
 
         {support === "offline" && (
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="font-display text-2xl text-foreground">
-              Can&apos;t reach the vault
-            </p>
-            <p className="mt-2 leading-relaxed">
+          <div className="gl-card p-6">
+            <p className="t-title text-foreground">Can&apos;t reach the vault</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-mute">
               The app connects to the Robinhood testnet directly. Your wallet
               network does not matter here. Retry, or wait a few seconds if the
               network is slow.
             </p>
             {network.pool && (
-              <p className="mt-2 text-[10px] text-mute">
-                vault {shortAddress(network.pool, 6)}
+              <p className="tnum mt-3 text-[12px] text-faint">
+                Vault {shortAddress(network.pool, 6)}
               </p>
             )}
             <button
               type="button"
               onClick={() => void checkVault()}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
+              className="btn btn-ink btn-block mt-5"
             >
               Retry
             </button>
@@ -551,201 +551,230 @@ export function SealedTradePanel({
         )}
 
         {support === "no_verifier" && (
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="font-display text-2xl text-foreground">
-              Private trade offline
-            </p>
-            <p className="mt-2 leading-relaxed">
+          <div className="gl-card p-6">
+            <p className="t-title text-foreground">Private trade is offline</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-mute">
               The vault is up, but private trade is not switched on yet. Use
-              Shield or Move until then.
+              Shield or Cash out until then.
             </p>
           </div>
         )}
 
         {support === "ready" && (
-          <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="flex items-center justify-between border-b border-line px-5 py-4">
-              <div>
-                <p className="font-display text-2xl text-foreground">
-                  Private trade
-                </p>
-                <p className="text-sm text-mute">
-                  Vault {inSymbol} → vault {outSymbol}. Your amount stays hidden.
-                  No public market needed.
-                </p>
+          <div className="gl-card overflow-hidden">
+            {/* header strip on the sealed field: the private signal */}
+            <div className="relative overflow-hidden border-b border-line px-5 pb-5 pt-5">
+              <SealedField tone="soft" />
+              <div className="relative z-[1] flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="t-title text-foreground">Private trade</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-mute">
+                    Vault {inSymbol} to vault {outSymbol}. Your amount stays
+                    hidden. No public market needed.
+                  </p>
+                </div>
+                <StatusPill tone="lime" dot>
+                  Ready
+                </StatusPill>
               </div>
-              <StatusPill tone="lime" dot>
-                Ready
-              </StatusPill>
             </div>
+
             <div className="space-y-4 p-5">
               <div
-                className="flex gap-1 rounded-lg border border-line p-1"
+                className="grid grid-cols-2 gap-1 rounded-full bg-surface p-1"
                 role="group"
                 aria-label="Trade direction"
               >
-                <button
-                  type="button"
-                  disabled={working}
-                  onClick={() => setDir("buy")}
-                  className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
-                    dir === "buy"
-                      ? "bg-lime text-background"
-                      : "text-mute hover:text-foreground"
-                  }`}
-                >
-                  Buy {marketSymbol}
-                </button>
-                <button
-                  type="button"
-                  disabled={working}
-                  onClick={() => setDir("sell")}
-                  className={`min-h-10 flex-1 rounded-md text-sm font-medium ${
-                    dir === "sell"
-                      ? "bg-lime text-background"
-                      : "text-mute hover:text-foreground"
-                  }`}
-                >
-                  Sell {marketSymbol}
-                </button>
+                {(["buy", "sell"] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={working}
+                    onClick={() => setDir(d)}
+                    aria-pressed={dir === d}
+                    className={`h-10 truncate rounded-full px-2 text-[14px] font-medium transition-colors disabled:cursor-not-allowed ${
+                      dir === d
+                        ? "bg-panel text-foreground shadow-card dark:bg-surface-2"
+                        : "text-mute hover:text-foreground"
+                    }`}
+                  >
+                    {d === "buy" ? "Buy" : "Sell"} {marketSymbol}
+                  </button>
+                ))}
               </div>
 
-              <div className="rounded-xl border border-lime/25 bg-lime/5 px-4 py-3 text-xs leading-relaxed text-mute">
-                <p className="font-medium text-foreground">
-                  Amount privacy {sizePrivacy === "max" ? "on" : "relaxed"}
-                </p>
-                <p className="mt-1">
-                  {sizePrivacy === "max"
-                    ? "The network can't see how much you traded. It only sees that a private trade happened."
-                    : "This can reveal roughly how much you traded. Turn it back on to stay fully private."}
-                </p>
-                <label className="mt-2 flex cursor-pointer items-center gap-2 text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={sizePrivacy === "max"}
-                    onChange={(e) =>
-                      setSizePrivacy(e.target.checked ? "max" : "slippage")
-                    }
-                    className="accent-[var(--lime,#c8ff00)]"
-                  />
-                  Maximum amount privacy (recommended)
-                </label>
-              </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-[16px] bg-surface p-4">
+                <span
+                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors ${
+                    sizePrivacy === "max"
+                      ? "bg-sealed-soft text-sealed"
+                      : "bg-surface-2 text-mute"
+                  }`}
+                  aria-hidden
+                >
+                  <LockGlyph />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium text-foreground">
+                    Amount privacy {sizePrivacy === "max" ? "on" : "relaxed"}
+                  </span>
+                  <span className="mt-1 block text-[12.5px] leading-relaxed text-mute">
+                    {sizePrivacy === "max"
+                      ? "The network can't see how much you traded. It only sees that a private trade happened."
+                      : "This can reveal roughly how much you traded. Turn it back on to stay fully private."}
+                  </span>
+                  <span className="sr-only">
+                    Maximum amount privacy (recommended)
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={sizePrivacy === "max"}
+                  onChange={(e) =>
+                    setSizePrivacy(e.target.checked ? "max" : "slippage")
+                  }
+                  className="peer sr-only"
+                />
+                <span
+                  aria-hidden
+                  className="relative mt-1 h-6 w-10 shrink-0 rounded-full bg-surface-2 ring-1 ring-line-strong transition-colors after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-mute after:transition-transform peer-checked:bg-ink peer-checked:ring-ink peer-checked:after:translate-x-4 peer-checked:after:bg-on-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-navy-500"
+                />
+              </label>
 
-              <ol className="list-decimal space-y-1 pl-5 text-xs text-mute">
-                <li>
-                  <Link href="/app/shield" className="text-lime hover:underline">
-                    Shield {inSymbol}
-                  </Link>{" "}
-                  into the vault
+              <ol className="grid gap-2 text-[13px] text-mute">
+                <li className="flex items-center gap-2.5">
+                  <StepNum n={1} />
+                  <span>
+                    <Link
+                      href="/app/shield"
+                      className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                    >
+                      Shield {inSymbol}
+                    </Link>{" "}
+                    into the vault
+                  </span>
                 </li>
-                <li>
+                <li className="flex items-center gap-2.5">
+                  <StepNum n={2} />
                   Pick how much {inSymbol} to {dir === "buy" ? "spend" : "sell"}
                 </li>
-                <li>Wait for the proof, confirm in your wallet</li>
+                <li className="flex items-center gap-2.5">
+                  <StepNum n={3} />
+                  Wait for the proof, confirm in your wallet
+                </li>
               </ol>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-mute">
-                <span>
-                  {treeLoading
-                    ? "Syncing vault…"
-                    : treeError
-                      ? "Vault sync error"
-                      : `Vault ok · ${leafCount} private balances`}
-                  {network.pool
-                    ? ` · ${shortAddress(network.pool, 4)}`
-                    : ""}
+              <div className="flex items-center justify-between gap-2 border-t border-line pt-4 text-[12px] text-mute">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      treeLoading
+                        ? "bg-faint"
+                        : treeError
+                          ? "bg-danger"
+                          : "bg-sealed"
+                    }`}
+                  />
+                  <span className="truncate">
+                    {treeLoading
+                      ? "Syncing vault…"
+                      : treeError
+                        ? "Vault sync error"
+                        : `Vault in sync · ${leafCount} private balances`}
+                    {network.pool ? ` · ${shortAddress(network.pool, 4)}` : ""}
+                  </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => void refreshTree()}
                   disabled={treeLoading || working}
-                  className="text-lime hover:underline disabled:opacity-50"
+                  className="btn btn-quiet btn-sm shrink-0"
                 >
                   Refresh
                 </button>
               </div>
 
               <div>
-                <p className="text-sm font-medium text-foreground">
-                  Your vault {inSymbol}
-                </p>
+                <p className="text-[13px] text-mute">Your vault {inSymbol}</p>
                 {spendNotes.length === 0 ? (
-                  <div className="mt-2 rounded-xl border border-line bg-background/60 px-4 py-3 text-sm text-mute">
+                  <div className="mt-2 rounded-[16px] border border-dashed border-line-strong px-4 py-4 text-[13px] leading-relaxed text-mute">
                     <p>
                       No vault {inSymbol} yet. This side spends{" "}
-                      <strong className="text-foreground">
+                      <strong className="font-medium text-foreground">
                         {inSymbol} in the vault
                       </strong>
                       .
                     </p>
-                    <Link
-                      href="/app/shield"
-                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
-                    >
+                    <Link href="/app/shield" className="btn btn-ghost btn-block mt-3">
                       Shield {inSymbol}
                     </Link>
                     {dir === "sell" && (
                       <button
                         type="button"
-                        className="mt-2 w-full text-center text-xs text-lime hover:underline"
+                        className="btn btn-quiet btn-sm btn-block mt-1.5"
                         onClick={() => setDir("buy")}
                       >
                         Or buy {marketSymbol} privately first
                       </button>
                     )}
                     {notesMissingIndex > 0 && (
-                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      <p className="mt-2 text-[12px] text-warn">
                         Found balances that are not ready yet. Tap Refresh above.
                       </p>
                     )}
                   </div>
                 ) : (
-                  <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
-                    {spendNotes.map((n) => (
-                      <li key={n.id}>
-                        <button
-                          type="button"
-                          disabled={working}
-                          onClick={() => setNoteId(n.id)}
-                          className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm ${
-                            selected?.id === n.id
-                              ? "bg-lime/10 text-foreground"
-                              : "text-mute hover:text-foreground"
-                          }`}
-                        >
-                          <span className="font-medium text-foreground">
-                            {formatEth(BigInt(n.amountWei))} {inSymbol}
-                          </span>
-                          <span className="text-xs">{assetLabel(n.asset)}</span>
-                        </button>
-                      </li>
-                    ))}
+                  <ul className="mt-2 grid gap-1.5">
+                    {spendNotes.map((n) => {
+                      const on = selected?.id === n.id;
+                      return (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            disabled={working}
+                            onClick={() => setNoteId(n.id)}
+                            aria-pressed={on}
+                            className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-[14px] border px-4 py-2.5 text-left transition-colors ${
+                              on
+                                ? "border-foreground bg-panel"
+                                : "border-line hover:border-line-strong"
+                            }`}
+                          >
+                            <span className="flex items-center gap-3">
+                              <span
+                                aria-hidden
+                                className={`grid h-4 w-4 place-items-center rounded-full border ${
+                                  on ? "border-foreground" : "border-line-strong"
+                                }`}
+                              >
+                                {on && (
+                                  <span className="h-2 w-2 rounded-full bg-foreground" />
+                                )}
+                              </span>
+                              <span className="tnum text-[15px] font-medium text-foreground">
+                                {formatEth(BigInt(n.amountWei))} {inSymbol}
+                              </span>
+                            </span>
+                            <span className="text-[12px] text-mute">
+                              {assetLabel(n.asset)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
 
-              <div>
-                <label
-                  htmlFor="ss-amt"
-                  className="text-sm font-medium text-foreground"
-                >
-                  {inSymbol} to {dir === "buy" ? "spend" : "sell"}
-                </label>
-                <div className="mt-2 flex overflow-hidden rounded-md border border-line focus-within:border-lime">
-                  <input
-                    id="ss-amt"
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    placeholder="0.0"
-                    className="min-h-12 flex-1 bg-transparent px-4 text-lg outline-none"
-                  />
+              <div className="rounded-[18px] border border-line bg-surface/60 p-4 transition-colors focus-within:border-line-strong focus-within:bg-panel">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="ss-amt" className="text-[13px] text-mute">
+                    {inSymbol} to {dir === "buy" ? "spend" : "sell"}
+                  </label>
                   <button
                     type="button"
-                    className="border-l border-line px-3 text-xs text-lime"
+                    className="rounded-full bg-panel px-2.5 py-1 text-[12px] font-medium text-foreground ring-1 ring-line transition-colors hover:ring-line-strong"
                     aria-label="Use full balance"
                     onClick={() =>
                       selected &&
@@ -755,31 +784,44 @@ export function SealedTradePanel({
                     Max
                   </button>
                 </div>
+                <div className="mt-3 flex items-baseline gap-3">
+                  <input
+                    id="ss-amt"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) =>
+                      setAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                    }
+                    placeholder="0"
+                    className="tnum min-w-0 flex-1 bg-transparent text-[34px] font-light leading-none tracking-[-0.02em] text-foreground outline-none placeholder:text-faint"
+                  />
+                  <span className="shrink-0 text-[15px] font-medium text-mute">
+                    {inSymbol}
+                  </span>
+                </div>
               </div>
 
-              <div className="rounded-xl border border-line bg-background/60 px-4 py-3 text-sm">
+              <div className="space-y-2.5 rounded-[16px] bg-surface px-4 py-3.5 text-[13px]">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-mute">You get (est.)</span>
                   <span
                     key={`${dir}-${amount}-${expectedOut.toString()}`}
-                    className="font-medium text-foreground tabular-nums"
+                    className="tnum text-[15px] font-medium text-foreground"
                   >
                     {expectedOut > 0n
                       ? `${formatSealedAmount(expectedOut)} ${outSymbol}`
                       : amountEntered
                         ? `Can't price, try Max`
-                        : `, ${outSymbol}`}
+                        : `0 ${outSymbol}`}
                   </span>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
-                  <span>
+                <div className="flex items-center justify-between gap-3 text-[12px] text-mute">
+                  <span className="tnum min-w-0 truncate">
                     {rateQuote.source === "fallback_1_1"
                       ? "1:1 test rate"
-                      : `${formatUsd(rateQuote.ethUsd)} ETH · ${formatUsd(rateQuote.outUsd)} ${marketSymbol}`}
+                      : `ETH ${formatUsd(rateQuote.ethUsd)} · ${marketSymbol} ${formatUsd(rateQuote.outUsd)}`}
                   </span>
-                  <StatusPill
-                    tone={rateQuote.source === "live" ? "lime" : "mute"}
-                  >
+                  <StatusPill dot={rateQuote.source === "live"}>
                     {rateQuote.source === "live" ? "Live prices" : "Prices"}
                   </StatusPill>
                 </div>
@@ -787,23 +829,25 @@ export function SealedTradePanel({
                   amountSwapExact > 0n &&
                   amountSwapPreview != null &&
                   amountSwapExact !== amountSwapPreview && (
-                    <p className="mt-1 text-[11px] text-mute">
+                    <p className="tnum text-[12px] text-mute">
                       Exact amount {formatSealedAmount(amountSwapExact)}{" "}
                       {inSymbol} for the proof.
                     </p>
                   )}
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-mute">
+                <div className="flex items-center justify-between gap-3 border-t border-line pt-2.5 text-[12px] text-mute">
                   <span>Vault inventory ({outSymbol})</span>
-                  <span className="flex items-center gap-2 font-medium text-foreground">
-                    {invLoading
-                      ? "…"
-                      : poolOutDeposited != null
-                        ? formatSealedAmount(poolOutDeposited)
-                        : ", "}
+                  <span className="flex items-center gap-2">
+                    <span className="tnum font-medium text-foreground">
+                      {invLoading
+                        ? "…"
+                        : poolOutDeposited != null
+                          ? formatSealedAmount(poolOutDeposited)
+                          : "Unknown"}
+                    </span>
                     <button
                       type="button"
                       onClick={() => void refetchInv()}
-                      className="text-lime hover:underline"
+                      className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                     >
                       Refresh
                     </button>
@@ -812,34 +856,34 @@ export function SealedTradePanel({
               </div>
 
               {inventoryShort && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
+                <p className="rounded-[14px] bg-warn-soft px-4 py-3 text-[13px] leading-relaxed text-warn">
                   The vault holds less {outSymbol} than this trade. The private
                   trade can still go through, but cashing out {outSymbol} later
                   may fail until the vault is refilled.{" "}
-                  <Link href="/app/shield" className="underline">
+                  <Link href="/app/shield" className="font-medium underline underline-offset-4">
                     Shield more
                   </Link>
                 </p>
               )}
 
               {!isConnected ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-mute">
+                <div className="space-y-2.5">
+                  <p className="text-[13px] text-mute">
                     Connect a wallet to sign the trade. You can view the vault
                     without one.
                   </p>
-                  <WalletMenu />
+                  <WalletMenu variant="inline" />
                 </div>
               ) : !onProduct ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-mute">
-                    Wallet is on the wrong network. Switch to Robinhood testnet
-                    (46630) to sign.
+                <div className="space-y-2.5">
+                  <p className="text-[13px] text-mute">
+                    Your wallet is on another network. Switch to Robinhood
+                    testnet to sign.
                   </p>
                   <button
                     type="button"
                     onClick={() => void ensureRhTestnetWallet()}
-                    className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
+                    className="btn btn-ink btn-lg btn-block"
                   >
                     Switch to Robinhood testnet
                   </button>
@@ -857,59 +901,62 @@ export function SealedTradePanel({
                       treeLoading
                     }
                     onClick={() => void onSealedSwap()}
-                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
+                    className="btn btn-ink btn-lg btn-block"
                   >
                     {working ? (
                       <>
-                        <span
-                          className="h-4 w-4 animate-spin rounded-full border-2 border-black/20 border-t-black"
-                          aria-hidden
-                        />
-                        {status || "Working…"}
+                        <Spinner onInk />
+                        <span className="truncate">{status || "Working…"}</span>
                       </>
-                    ) : dir === "buy" ? (
-                      `Buy ${marketSymbol} privately`
                     ) : (
-                      `Sell ${marketSymbol} privately`
+                      <>
+                        <LockGlyph />
+                        {dir === "buy"
+                          ? `Buy ${marketSymbol} privately`
+                          : `Sell ${marketSymbol} privately`}
+                      </>
                     )}
                   </button>
                   {!working && selected && amountEntered && !quoteReady && (
-                    <p className="text-center text-xs text-amber-600 dark:text-amber-400">
+                    <p className="text-center text-[12px] text-warn">
                       Could not prepare a proof for that amount. Tap Max and try
                       again.
                     </p>
                   )}
                   {!working && !selected && (
-                    <p className="text-center text-xs text-mute">
-                      Select a vault ETH balance above.
+                    <p className="text-center text-[12px] text-mute">
+                      Select a vault {inSymbol} balance above.
                     </p>
                   )}
                   {!working && selected && !amountEntered && (
-                    <p className="text-center text-xs text-mute">
-                      Enter how much ETH to sell (or Max).
+                    <p className="text-center text-[12px] text-mute">
+                      Enter how much {inSymbol} to {dir === "buy" ? "spend" : "sell"}, or tap Max.
                     </p>
                   )}
                 </>
               )}
 
               {error && (
-                <p role="alert" className="text-sm text-red-500">
+                <p
+                  role="alert"
+                  className="rounded-[14px] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+                >
                   {error}
                 </p>
               )}
               {status && !error && (
-                <p className="text-sm text-mute">{status}</p>
+                <p className="text-[13px] text-mute">{status}</p>
               )}
               {hash && !isSuccess && (
-                <p className="text-sm text-mute">
-                  Submitted…{" "}
+                <p className="text-[13px] text-mute">
+                  Submitted.{" "}
                   <a
                     href={network.explorerTx(hash)}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-lime hover:underline"
+                    className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                   >
-                    View
+                    View on explorer
                   </a>
                 </p>
               )}
@@ -924,8 +971,8 @@ export function SealedTradePanel({
         body={
           <p>
             You received vault {outSymbol}. Your amount stayed hidden. The
-            network shows a private trade, not how much you traded. Cash out
-            later will show the amount publicly. Stay in the vault to stay
+            network shows a private trade, not how much you traded. Cashing out
+            later shows the amount publicly, so stay in the vault to stay
             private.
             {hash ? (
               <>
@@ -934,9 +981,9 @@ export function SealedTradePanel({
                   href={network.explorerTx(hash)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-lime hover:underline"
+                  className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                 >
-                  View tx
+                  View transaction
                 </a>
               </>
             ) : null}
@@ -947,5 +994,39 @@ export function SealedTradePanel({
         onClose={() => setShowSuccess(false)}
       />
     </>
+  );
+}
+
+function LockGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" fill="currentColor" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
+function StepNum({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden
+      className="tnum grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface text-[11px] font-medium text-soft"
+    >
+      {n}
+    </span>
+  );
+}
+
+/** Small ring spinner; still (no spin) under reduced motion. */
+function Spinner({ onInk = false }: { onInk?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`h-4 w-4 shrink-0 rounded-full border-2 motion-safe:animate-spin ${
+        onInk
+          ? "border-on-ink/30 border-t-on-ink"
+          : "border-line-strong border-t-foreground"
+      }`}
+    />
   );
 }

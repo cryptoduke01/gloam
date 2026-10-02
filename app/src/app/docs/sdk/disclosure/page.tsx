@@ -12,7 +12,7 @@ export default function DocsDisclosurePage() {
   return (
     <DocsLayout
       title="Selective disclosure"
-      lede="Private by default, proven by choice. A holder proves one shielded balance to a party they choose — an auditor, a counterparty — revealing nothing else."
+      lede="Private by default, proven by choice. A holder proves one shielded balance to a party they choose, such as an auditor or a counterparty, and reveals nothing else."
       glance={[
         { label: "Reveals", value: "one note, to one party" },
         { label: "Hides", value: "identity, secret, other notes" },
@@ -32,7 +32,7 @@ export default function DocsDisclosurePage() {
         sponsor cannot build on that. Gloam is private by default and{" "}
         <strong>provable on demand</strong>: the holder, and only the holder,
         chooses to prove a specific fact to a specific party. That is the
-        difference between privacy and opacity — and the answer to the dark-pool
+        difference between privacy and opacity, and the answer to the dark-pool
         objection.
       </p>
 
@@ -56,7 +56,7 @@ export default function DocsDisclosurePage() {
 
       <h2>How it works</h2>
       <p>
-        It reuses the <strong>shield circuit</strong> — no new trusted setup. The
+        It reuses the <strong>shield circuit</strong>, so there is no new trusted setup. The
         shield proof already proves{" "}
         <code>commitment == Poseidon(secret, amount, asset)</code> with the
         secret private. A disclosure is that proof plus the public commitment.
@@ -91,7 +91,7 @@ const disclosure = { v: 1, chainId, pool, commitment: publicSignals[0],
 
       <h2>Verify a disclosure</h2>
       <p>
-        Anyone can verify at <Link href="/verify">/verify</Link> — no wallet, no
+        Anyone can verify at <Link href="/verify">/verify</Link>, with no wallet and no
         account. The proof is checked locally with snarkjs and the note is looked
         up directly on Robinhood Chain. Verification is two independent checks:
       </p>

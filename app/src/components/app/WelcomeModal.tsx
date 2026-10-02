@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Mark } from "@/components/Logo";
+import { SealedField } from "@/components/ui/SealedField";
 
 const STORAGE_KEY = "gloam_testnet_welcome_v1";
 
@@ -36,75 +38,102 @@ export function WelcomeModal() {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="welcome-title"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         aria-label="Dismiss welcome"
         onClick={dismiss}
       />
-      <div className="relative z-[1] w-full max-w-md max-h-[min(90vh,720px)] overflow-y-auto overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_18%,transparent),0_24px_80px_rgba(0,0,0,0.55)]">
-        <div className="border-b border-line bg-background/60 px-6 py-5">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
-            Gloam testnet
-          </p>
-          <h2
-            id="welcome-title"
-            className="mt-2 font-display text-3xl tracking-tight text-foreground"
-          >
-            Welcome, you&apos;re live
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-mute">
-            Private money on Robinhood Chain and Tempo. This is a test version
-            with play money, so don&apos;t use real funds.
-          </p>
+      <div className="relative z-[1] max-h-[min(90dvh,720px)] w-full max-w-[440px] overflow-y-auto rounded-[24px] border border-line bg-panel shadow-pop">
+        <div className="relative overflow-hidden border-b border-line px-7 pb-6 pt-7">
+          <SealedField tone="soft" />
+          <div className="relative z-[1]">
+            <div className="mb-6 max-sm:hidden">
+              <Mark size={32} />
+            </div>
+            <p className="t-label">Gloam testnet</p>
+            <h2 id="welcome-title" className="t-display-m mt-2 text-foreground">
+              Welcome to Gloam
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-mute">
+              Private money on Robinhood Chain and Tempo. This is a test version
+              with play money, so don&apos;t use real funds.
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-3 px-6 py-5 text-sm text-mute">
-          <p className="font-medium text-foreground">Quick start</p>
-          <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
-            <li>Connect a wallet and pick a network: Robinhood Chain or Tempo.</li>
-            <li>
-              Claim test funds if you need them, see the{" "}
-              <Link
-                href="/docs/testnet"
-                className="text-lime underline-offset-2 hover:underline"
-                onClick={dismiss}
+        <div className="px-7 pt-5">
+          <p className="t-label">Quick start</p>
+          <ol className="mt-2">
+            {[
+              <>Connect a wallet and pick a network: Robinhood Chain or Tempo.</>,
+              <>
+                Claim test funds if you need them. The{" "}
+                <Link
+                  href="/docs/testnet"
+                  className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                  onClick={dismiss}
+                >
+                  testnet guide
+                </Link>{" "}
+                shows how.
+              </>,
+              <>
+                <span className="font-medium text-foreground">Add money</span>{" "}
+                to your private balance, pay or send it, then cash out when you
+                want it public.
+              </>,
+            ].map((body, i) => (
+              <li
+                key={i}
+                className="flex gap-3.5 border-t border-line py-3 text-[14px] leading-relaxed text-soft first:border-t-0"
               >
-                testnet guide
-              </Link>
-              .
-            </li>
-            <li>
-              <strong className="text-foreground">Add money</strong> to your
-              vault, pay or send it privately, then cash out when you want it
-              public.
-            </li>
+                <span
+                  aria-hidden
+                  className="tnum mt-px grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface text-[12px] font-medium text-foreground"
+                >
+                  {i + 1}
+                </span>
+                <span>{body}</span>
+              </li>
+            ))}
           </ol>
-          <p className="text-xs leading-relaxed text-mute">
-            Your private balance lives in this browser. Save a backup in Settings
-            before clearing your data.
+          <p className="mt-2 flex gap-3 rounded-[14px] bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-mute">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+              className="mt-0.5 shrink-0 text-sealed"
+            >
+              <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
+              <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.7" />
+            </svg>
+            Your private balance lives in this browser. Save a backup in
+            Settings before you clear your data.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t border-line px-6 py-4">
+        <div className="flex flex-wrap gap-2 px-7 pb-7 pt-5">
           <button
             type="button"
             onClick={dismiss}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-md bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+            className="btn btn-ink h-[44px] flex-1 px-[20px] sm:h-12 sm:px-6 sm:text-[15px]"
           >
-            Enter testnet
+            Enter the app
           </button>
           <Link
             href="/docs/testnet"
             onClick={dismiss}
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
+            className="btn btn-ghost h-[44px] px-[20px] sm:h-12 sm:px-6 sm:text-[15px]"
           >
-            Guide
+            Testnet guide
           </Link>
         </div>
       </div>

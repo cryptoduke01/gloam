@@ -27,12 +27,12 @@ export function AddressChip({
       type="button"
       onClick={copy}
       title={copied ? "Copied" : "Copy address"}
-      className={`group inline-flex items-center gap-1.5 rounded-md text-[11px] text-mute transition-colors hover:text-foreground ${className}`}
+      className={`group relative inline-flex items-center gap-1.5 rounded-full text-[12px] text-mute transition-colors before:absolute before:-inset-x-2 before:-inset-y-3 before:content-[''] hover:text-foreground ${className}`}
     >
-      <span>{shortAddress(address, 4)}</span>
-      <span className="inline-flex h-5 w-5 items-center justify-center rounded text-mute group-hover:text-lime">
+      <span className="tnum">{shortAddress(address, 4)}</span>
+      <span className="inline-flex h-4 w-4 items-center justify-center text-faint transition-colors group-hover:text-foreground">
         {copied ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden className="text-foreground">
             <path
               d="M5 12.5l4.5 4.5L19 7"
               stroke="currentColor"
@@ -48,7 +48,7 @@ export function AddressChip({
               y="9"
               width="11"
               height="11"
-              rx="2"
+              rx="2.5"
               stroke="currentColor"
               strokeWidth="1.75"
             />
@@ -61,7 +61,9 @@ export function AddressChip({
           </svg>
         )}
       </span>
-      <span className="sr-only">{copied ? "Copied" : "Copy address"}</span>
+      <span className="sr-only" aria-live="polite">
+        {copied ? "Copied" : "Copy address"}
+      </span>
     </button>
   );
 }

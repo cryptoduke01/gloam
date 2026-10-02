@@ -37,29 +37,30 @@ import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { VaultTradePanel } from "./VaultTradePanel";
 import { SealedTradePanel } from "./SealedTradePanel";
+import { TokenLogo } from "./TokenLogo";
 
 type Side = "buy" | "sell";
 type InputMode = "token" | "usd";
 type TxKind = "transfer" | "approve" | "buy" | "sell" | null;
 type PathMode = "public" | "vault" | "sealed";
 
-function LockGlyph() {
+function LockGlyph({ size = 14 }: { size?: number }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
-      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" fill="currentColor" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2.2" />
     </svg>
   );
 }
 function EyeGlyph() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path
-        d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"
+        d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.7"
       />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.7" />
     </svg>
   );
 }
@@ -462,12 +463,13 @@ export function TradeView() {
   }
 
   const tokenBalFmt =
-    tokenBal !== undefined ? formatUnits(tokenBal, 18) : ", ";
-  const ethBalFmt = ethBal ? formatEth(ethBal.value) : ", ";
+    tokenBal !== undefined ? formatUnits(tokenBal, 18) : "0";
+  const ethBalFmt = ethBal ? formatEth(ethBal.value) : "0";
 
   if (!isFetched && markets.length === 0) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
+      <div className="gl-card flex items-center gap-3 p-6 text-[14px] text-mute">
+        <Spinner />
         Loading markets…
       </div>
     );
@@ -475,7 +477,7 @@ export function TradeView() {
 
   if (!market) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-8 text-sm text-mute">
+      <div className="gl-card p-6 text-[14px] text-mute">
         No markets available.
       </div>
     );
@@ -496,215 +498,310 @@ export function TradeView() {
 
   const busy = isPending || confirming;
   const showTransferFields = mode === "transfer" || (!hasPool && hasToken);
+  const priceFmt = (n: number) =>
+    settings.showUsd ? formatUsd(n) : `$${formatMark(n)}`;
+
+  const paths: {
+    id: PathMode;
+    label: string;
+    hint: string;
+    icon: React.ReactNode;
+  }[] = [
+    { id: "sealed", label: "Private", hint: "Amount hidden. No public market.", icon: <LockGlyph /> },
+    { id: "public", label: "Wallet", hint: "Public on the explorer", icon: <EyeGlyph /> },
+    ...(shieldLive
+      ? [{ id: "vault" as const, label: "Via market", hint: "Public. Needs a pool.", icon: <EyeGlyph /> }]
+      : []),
+  ];
+
+  const marketHeader = (
+    <div className="flex items-center gap-3">
+      <TokenLogo id={market.id} symbol={market.symbol} size={40} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[17px] font-medium leading-tight text-foreground">
+          {market.symbol}
+        </p>
+        <p className="mt-0.5 truncate text-[13px] text-mute">{market.name}</p>
+      </div>
+      {hasPool ? (
+        <StatusPill>Pool live</StatusPill>
+      ) : hasToken ? (
+        <StatusPill>Transfer only</StatusPill>
+      ) : (
+        <StatusPill>Watch only</StatusPill>
+      )}
+    </div>
+  );
+
+  const stats = (
+    <div className="@container border-t border-line">
+      <dl className="grid grid-cols-2 gap-px bg-line @xl:grid-cols-4">
+        {(
+          [
+            [
+              "Visibility",
+              pathMode === "sealed" ? "Private, only you" : "Public",
+              pathMode === "sealed",
+            ],
+            ["Network", `${network.label}`, false],
+            ["Pool", hasPool ? "Yes" : "None", false],
+            ["Action", hasPool ? "Swap" : hasToken ? "Transfer" : "Watch", false],
+          ] as const
+        ).map(([k, val, sealed]) => (
+          <div key={k} className="min-w-0 bg-panel px-5 py-3.5">
+            <dt className="t-label">{k}</dt>
+            <dd
+              className={`mt-1 truncate text-[14px] ${
+                sealed ? "font-medium text-sealed" : "text-foreground"
+              }`}
+            >
+              {val}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="@container space-y-5">
+      <div className="flex min-h-6 flex-wrap items-center justify-between gap-3">
         <NetworkPulse />
-        <span className="text-xs text-mute">
+        <span className="ml-auto inline-flex items-center gap-2 text-[12px] text-mute">
           {isError ? (
             <button
               type="button"
               onClick={() => void refetch()}
-              className="text-lime hover:underline"
+              className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
             >
               Retry prices
             </button>
-          ) : isFetching ? (
-            "Updating…"
-          ) : liveCount > 0 ? (
-            "Live prices"
           ) : (
-            "Prices offline"
+            <>
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isFetching ? "bg-faint" : liveCount > 0 ? "bg-foreground" : "bg-line-strong"
+                }`}
+              />
+              {isFetching
+                ? "Updating…"
+                : liveCount > 0
+                  ? "Live prices"
+                  : "Prices offline"}
+            </>
           )}
         </span>
       </div>
 
-      {/* How you trade, the public / sealed choice is the product's core.
-          Sealed active = indigo, public active = ink, matching the motif. */}
+      {/* How you trade: the public / private choice is the product's core.
+          Private active carries the sealed tint; public options stay ink. */}
       <div>
-        <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
-          How you trade
-        </span>
-        <div className="mt-2 grid grid-cols-3 gap-1.5 rounded-xl border border-line bg-panel p-1.5 max-sm:grid-cols-1">
-          <button
-            type="button"
-            onClick={() => setPathMode("sealed")}
-            aria-pressed={pathMode === "sealed"}
-            className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
-              pathMode === "sealed"
-                ? "bg-lime text-background"
-                : "text-mute hover:bg-background hover:text-foreground"
-            }`}
-          >
-            <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <LockGlyph />
-              Private
-            </span>
-            <span className="text-[11px] opacity-80">Size sealed · no DEX</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPathMode("public")}
-            aria-pressed={pathMode === "public"}
-            className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
-              pathMode === "public"
-                ? "bg-foreground text-background"
-                : "text-mute hover:bg-background hover:text-foreground"
-            }`}
-          >
-            <span className="flex items-center gap-1.5 text-sm font-semibold">
-              <EyeGlyph />
-              Wallet
-            </span>
-            <span className="text-[11px] opacity-80">Public on the explorer</span>
-          </button>
-          {shieldLive && (
+        <p className="t-label">How you trade</p>
+        <div
+          role="group"
+          aria-label="How you trade"
+          className={`mt-2.5 grid grid-cols-1 gap-1 rounded-[18px] bg-surface p-1 ${
+            paths.length === 3 ? "@xl:grid-cols-3" : "@xl:grid-cols-2"
+          }`}
+        >
+          {paths.map((p) => {
+            const active = pathMode === p.id;
+            const sealed = p.id === "sealed";
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPathMode(p.id)}
+                aria-pressed={active}
+                className={`flex min-h-[60px] items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition-colors ${
+                  active
+                    ? "bg-panel shadow-card dark:bg-surface-2"
+                    : "hover:bg-surface-2"
+                }`}
+              >
+                <span
+                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+                    active
+                      ? sealed
+                        ? "bg-sealed-soft text-sealed"
+                        : "bg-ink text-on-ink"
+                      : "bg-surface-2 text-mute"
+                  }`}
+                >
+                  {p.icon}
+                </span>
+                <span className="min-w-0">
+                  <span
+                    className={`block text-[14px] font-medium ${
+                      active ? "text-foreground" : "text-soft"
+                    }`}
+                  >
+                    {p.label}
+                  </span>
+                  <span className="mt-0.5 block text-[12px] leading-snug text-mute">
+                    {p.hint}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {pathMode === "public" && (
+          <p className="mt-3 text-[13px] leading-relaxed text-mute">
+            Trades from your open wallet. Everyone can see them on the explorer.
+          </p>
+        )}
+        {pathMode === "vault" && (
+          <p className="mt-3 max-w-[64ch] text-[13px] leading-relaxed text-mute">
+            Takes money out of your vault, swaps on a public market, then puts the
+            result back. It needs a live pool for this stock, and many testnet
+            pairs are empty. For TSLA and the other faucet stocks, use{" "}
             <button
               type="button"
-              onClick={() => setPathMode("vault")}
-              aria-pressed={pathMode === "vault"}
-              className={`flex min-h-14 flex-col items-start justify-center gap-0.5 rounded-lg px-3.5 text-left transition-colors ${
-                pathMode === "vault"
-                  ? "bg-foreground text-background"
-                  : "text-mute hover:bg-background hover:text-foreground"
-              }`}
+              onClick={() => setPathMode("sealed")}
+              className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
             >
-              <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <EyeGlyph />
-                Via market
-              </span>
-              <span className="text-[11px] opacity-80">Public · needs a pool</span>
+              Private
             </button>
-          )}
-        </div>
+            .
+          </p>
+        )}
       </div>
 
-      {pathMode === "public" && (
-        <p className="text-sm text-mute">
-          Trades from your open wallet. Everyone can see them on the explorer.
-        </p>
-      )}
-      {pathMode === "vault" && (
-        <p className="text-sm text-mute">
-          Pulls from your vault, swaps on a public market, then can re-shield.
-          Needs a live DEX pool for this stock, many testnet pairs are empty.
-          Prefer <strong className="text-foreground">Private</strong> for TSLA
-          and other faucet stocks.
-        </p>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="rounded-xl border border-line bg-panel lg:col-span-4">
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Markets
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {(
-                [
-                  ["private", "Private"],
-                  ["onchain", "Onchain"],
-                  ["all", "All"],
-                  ["stocks", "Stocks"],
-                ] as const
-              ).map(([f, label]) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFilter(f)}
-                  className={`rounded-md px-2 py-1 text-[11px] ${
-                    filter === f
-                      ? "bg-lime text-background"
-                      : "text-mute hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <ul className="max-h-[32rem] overflow-y-auto">
-            {list.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-mute">
-                No markets in this filter. Try Onchain or All.
-              </li>
+      <div className="grid gap-5 @2xl:grid-cols-2 @2xl:items-start">
+        {/* Left column on wide containers: price, then the market list. On
+            narrow ones the children join the parent grid so the order reads
+            price, trade, list. */}
+        <div className="contents @2xl:flex @2xl:min-w-0 @2xl:flex-col @2xl:gap-5">
+          <div className="order-1 min-w-0">
+            {!settings.compactCharts && (
+              <PriceChart
+                points={spark}
+                mark={market.mark}
+                change24h={market.change24h}
+                header={marketHeader}
+                footer={stats}
+              />
             )}
-            {list.map((m) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() => setMarketId(m.id)}
-                  className={`flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 ${
-                    m.id === resolvedId
-                      ? "bg-background"
-                      : "hover:bg-background/60"
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-foreground">{m.symbol}</p>
-                    <p className="truncate text-xs text-mute">{m.name}</p>
-                  </div>
-                  <Sparkline
-                    points={
-                      m.spark && m.spark.length >= 2
-                        ? m.spark
-                        : m.mark > 0
-                          ? [m.mark * 0.98, m.mark, m.mark * 1.01]
-                          : []
-                    }
-                    up={m.change24h >= 0}
-                    width={64}
-                    height={28}
-                  />
-                  <div className="w-20 text-right">
-                    <p className="text-sm text-foreground">
-                      {settings.showUsd
-                        ? formatUsd(m.mark)
-                        : `$${formatMark(m.mark)}`}
+            {settings.compactCharts && (
+              <div className="gl-card overflow-hidden">
+                <div className="px-5 pt-5">{marketHeader}</div>
+                <div className="flex items-end justify-between gap-4 px-5 pb-5 pt-4">
+                  <div>
+                    <p className="t-label">Price</p>
+                    <p className="tnum mt-1.5 text-[28px] font-light leading-none tracking-[-0.018em] text-foreground">
+                      {formatUsd(market.mark)}
                     </p>
-                    <p
-                      className={`text-xs ${
-                        m.change24h >= 0
-                          ? "text-[var(--chart-up)]"
-                          : "text-[var(--chart-down)]"
+                  </div>
+                  {spark.length >= 2 && (
+                    <Sparkline
+                      points={spark}
+                      up={market.change24h >= 0}
+                      width={120}
+                      height={40}
+                    />
+                  )}
+                </div>
+                {stats}
+              </div>
+            )}
+          </div>
+
+          <div className="order-3 min-w-0">
+            <div className="gl-card overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+                <p className="t-label">Markets</p>
+                <div
+                  role="group"
+                  aria-label="Filter markets"
+                  className="inline-flex rounded-full bg-surface p-0.5"
+                >
+                  {(
+                    [
+                      ["private", "Private"],
+                      ["onchain", "Onchain"],
+                      ["all", "All"],
+                      ["stocks", "Stocks"],
+                    ] as const
+                  ).map(([f, label]) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFilter(f)}
+                      aria-pressed={filter === f}
+                      className={`h-8 rounded-full px-3 text-[12px] transition-colors ${
+                        filter === f
+                          ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
+                          : "text-mute hover:text-foreground"
                       }`}
                     >
-                      {m.change24h >= 0 ? "+" : ""}
-                      {m.change24h}%
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <ul className="max-h-[26rem] overflow-y-auto">
+                {list.length === 0 && (
+                  <li className="px-4 py-10 text-center text-[13px] text-mute">
+                    No markets in this filter. Try Onchain or All.
+                  </li>
+                )}
+                {list.map((m) => {
+                  const selectedRow = m.id === resolvedId;
+                  return (
+                    <li key={m.id} className="border-b border-line last:border-0">
+                      <button
+                        type="button"
+                        onClick={() => setMarketId(m.id)}
+                        aria-current={selectedRow ? "true" : undefined}
+                        className={`flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          selectedRow ? "bg-surface" : "hover:bg-surface/60"
+                        }`}
+                      >
+                        <TokenLogo id={m.id} symbol={m.symbol} size={32} />
+                        <div className="min-w-0 flex-1">
+                          <p className="flex items-center gap-1.5 text-[14px] font-medium text-foreground">
+                            {m.symbol}
+                            {m.privateReady && (
+                              <span className="text-sealed" title="Private-ready">
+                                <LockGlyph size={11} />
+                                <span className="sr-only">Private-ready</span>
+                              </span>
+                            )}
+                          </p>
+                          <p className="truncate text-[12px] text-mute">{m.name}</p>
+                        </div>
+                        <Sparkline
+                          points={
+                            m.spark && m.spark.length >= 2
+                              ? m.spark
+                              : m.mark > 0
+                                ? [m.mark * 0.98, m.mark, m.mark * 1.01]
+                                : []
+                          }
+                          up={m.change24h >= 0}
+                          width={56}
+                          height={24}
+                        />
+                        <div className="w-[76px] text-right">
+                          <p className="tnum text-[14px] text-foreground">
+                            {priceFmt(m.mark)}
+                          </p>
+                          <p className={`tnum text-[12px] ${changeTone(m.change24h)}`}>
+                            {fmtChange(m.change24h)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-4 lg:col-span-5">
-          {!settings.compactCharts && (
-            <PriceChart
-              points={spark}
-              mark={market.mark}
-              change24h={market.change24h}
-            />
-          )}
-          {settings.compactCharts && spark.length >= 2 && (
-            <div className="flex items-center justify-between rounded-xl border border-line bg-panel px-4 py-3">
-              <div>
-                <p className="font-display text-2xl text-foreground">
-                  {formatUsd(market.mark)}
-                </p>
-                <p className="text-xs text-mute">{market.symbol}</p>
-              </div>
-              <Sparkline
-                points={spark}
-                up={market.change24h >= 0}
-                width={120}
-                height={40}
-              />
-            </div>
-          )}
-
+        <div className="order-2 min-w-0 @2xl:sticky @2xl:top-6">
           {pathMode === "vault" && shieldLive ? (
             <VaultTradePanel
               marketId={resolvedId}
@@ -721,286 +818,250 @@ export function TradeView() {
               initialDir={sideParam === "sell" ? "sell" : "buy"}
             />
           ) : (
-          <div className="overflow-hidden rounded-xl border border-line bg-panel">
-            <div className="flex items-center justify-between border-b border-line px-5 py-4">
-              <div>
-                <p className="font-display text-2xl text-foreground">
-                  {market.symbol}
-                </p>
-                <p className="text-sm text-mute">{market.name}</p>
-              </div>
-              {hasPool ? (
-                <StatusPill tone="lime">Pool</StatusPill>
-              ) : hasToken ? (
-                <StatusPill tone="lime">Transfer</StatusPill>
-              ) : (
-                <StatusPill>Watch</StatusPill>
-              )}
-            </div>
-
-            <form onSubmit={onSubmit} className="space-y-4 p-5">
-              {hasToken && (
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (hasPool) {
-                        setMode("swap");
-                        setSide("buy");
-                      }
-                    }}
-                    disabled={!hasPool}
-                    className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-40 ${
-                      mode === "swap" && side === "buy"
-                        ? "bg-lime text-background"
-                        : "border border-line text-mute"
-                    }`}
-                  >
-                    Buy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (hasPool) {
-                        setMode("swap");
-                        setSide("sell");
-                      } else {
-                        setMode("transfer");
-                        setSide("sell");
-                      }
-                    }}
-                    className={`min-h-10 rounded-lg text-sm font-semibold ${
-                      (mode === "swap" && side === "sell") ||
-                      mode === "transfer"
-                        ? "bg-foreground text-background"
-                        : "border border-line text-mute"
-                    }`}
-                  >
-                    {hasPool ? "Sell" : "Send"}
-                  </button>
+            <div className="gl-card overflow-hidden">
+              <div className="flex items-start justify-between gap-3 px-5 pt-5">
+                <div className="min-w-0">
+                  <p className="t-title text-foreground">
+                    {showTransferFields ? "Send" : "Trade"} {market.symbol}
+                  </p>
+                  <p className="mt-1 text-[13px] text-mute">
+                    From your open wallet. Public on the explorer.
+                  </p>
                 </div>
-              )}
-
-              {!hasPool && hasToken && (
-                <p className="rounded-lg border border-line bg-background px-3 py-2 text-xs text-mute">
-                  No testnet pool for {market.symbol}. You can still send
-                  faucet tokens to any address.
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setInputMode("token")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] ${
-                    inputMode === "token"
-                      ? "bg-panel text-foreground ring-1 ring-line"
-                      : "text-mute"
-                  }`}
-                >
-                  {market.symbol}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode("usd")}
-                  className={`rounded-md px-2.5 py-1 text-[11px] ${
-                    inputMode === "usd"
-                      ? "bg-panel text-foreground ring-1 ring-line"
-                      : "text-mute"
-                  }`}
-                >
-                  USD
-                </button>
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface text-mute">
+                  <EyeGlyph />
+                </span>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="trade-amt"
-                    className="text-sm font-medium text-foreground"
-                  >
-                    {inputMode === "usd"
-                      ? "Amount (USD)"
-                      : `Amount (${market.symbol})`}
-                  </label>
-                  {isConnected && hasToken && (
+              <form onSubmit={onSubmit} className="space-y-4 p-5">
+                {hasToken && (
+                  <div className="grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
                     <button
                       type="button"
-                      className="text-xs text-lime hover:underline"
                       onClick={() => {
-                        if (tokenBal && tokenBal > 0n) {
-                          setInputMode("token");
-                          setAmount(formatUnits(tokenBal, 18));
+                        if (hasPool) {
+                          setMode("swap");
+                          setSide("buy");
                         }
                       }}
+                      disabled={!hasPool}
+                      aria-pressed={mode === "swap" && side === "buy"}
+                      className={`h-10 rounded-full text-[14px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                        mode === "swap" && side === "buy"
+                          ? "bg-panel text-foreground shadow-card dark:bg-surface-2"
+                          : "text-mute hover:text-foreground"
+                      }`}
                     >
-                      Max
+                      Buy
                     </button>
-                  )}
-                </div>
-                <div className="mt-2 flex overflow-hidden rounded-lg border border-line focus-within:border-lime">
-                  <input
-                    id="trade-amt"
-                    inputMode="decimal"
-                    placeholder="0.0"
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    className="min-h-12 flex-1 bg-transparent px-4 text-lg text-foreground outline-none placeholder:text-mute"
-                  />
-                  <span className="flex items-center border-l border-line px-4 text-sm text-mute">
-                    {inputMode === "usd" ? "USD" : market.symbol}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-mute">
-                  {inputMode === "usd" ? (
-                    <span>
-                      ≈{" "}
-                      {tokenAmt > 0
-                        ? tokenAmt.toLocaleString(undefined, {
-                            maximumFractionDigits: 4,
-                          })
-                        : ", "}{" "}
-                      {market.symbol}
-                    </span>
-                  ) : (
-                    <span>≈ {usdAmt > 0 ? formatUsd(usdAmt) : ", "}</span>
-                  )}
-                  {side === "buy" && buyEthIn > 0n && (
-                    <span>≈ {formatEth(buyEthIn, 5)} ETH</span>
-                  )}
-                  {quoteOut !== undefined && mode === "swap" && quoteOut > 0n && (
-                    <span className="text-lime">
-                      Quote:{" "}
-                      {side === "buy"
-                        ? `${Number(formatUnits(quoteOut, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${market.symbol}`
-                        : `${formatEth(quoteOut, 5)} ETH`}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {showTransferFields && (
-                <div>
-                  <label
-                    htmlFor="xfer-to"
-                    className="text-sm font-medium text-foreground"
-                  >
-                    Recipient
-                  </label>
-                  <input
-                    id="xfer-to"
-                    value={to}
-                    onChange={(e) => setTo(e.target.value.trim())}
-                    placeholder="0x…"
-                    className="mt-2 min-h-11 w-full rounded-lg border border-line bg-transparent px-4 text-sm text-foreground outline-none placeholder:text-mute focus:border-lime"
-                  />
-                </div>
-              )}
-
-              <div className="rounded-lg border border-line bg-background px-3 py-2 text-xs text-mute">
-                Balances:{" "}
-                <span className="text-foreground">{ethBalFmt} ETH</span>
-                {hasToken && (
-                  <>
-                    {" · "}
-                    <span className="text-foreground">
-                      {tokenBal !== undefined
-                        ? Number(tokenBalFmt).toLocaleString(undefined, {
-                            maximumFractionDigits: 4,
-                          })
-                        : ", "}{" "}
-                      {market.symbol}
-                    </span>
-                  </>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (hasPool) {
+                          setMode("swap");
+                          setSide("sell");
+                        } else {
+                          setMode("transfer");
+                          setSide("sell");
+                        }
+                      }}
+                      aria-pressed={
+                        (mode === "swap" && side === "sell") || mode === "transfer"
+                      }
+                      className={`h-10 rounded-full text-[14px] font-medium transition-colors ${
+                        (mode === "swap" && side === "sell") ||
+                        mode === "transfer"
+                          ? "bg-panel text-foreground shadow-card dark:bg-surface-2"
+                          : "text-mute hover:text-foreground"
+                      }`}
+                    >
+                      {hasPool ? "Sell" : "Send"}
+                    </button>
+                  </div>
                 )}
-              </div>
 
-              {!isConnected || !onProduct ? (
-                <WalletMenu />
-              ) : (
-                <button
-                  type="submit"
-                  disabled={busy || !hasToken}
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
-                >
-                  {busy
-                    ? pendingKind === "approve"
-                      ? "Approve in wallet…"
-                      : "Confirm in wallet…"
-                    : showTransferFields
-                      ? `Send ${market.symbol}`
-                      : side === "buy"
-                        ? `Buy ${market.symbol}`
-                        : sellAmountIn &&
-                            allowance !== undefined &&
-                            allowance < sellAmountIn
-                          ? `Approve ${market.symbol}`
-                          : `Sell ${market.symbol}`}
-                </button>
-              )}
+                {!hasPool && hasToken && (
+                  <p className="rounded-[14px] bg-surface px-4 py-3 text-[13px] leading-relaxed text-mute">
+                    No testnet pool for {market.symbol}. You can still send
+                    faucet tokens to any address.
+                  </p>
+                )}
+                {!hasToken && (
+                  <p className="rounded-[14px] bg-surface px-4 py-3 text-[13px] leading-relaxed text-mute">
+                    {market.symbol} is watch only on testnet. There is no
+                    token to trade yet.
+                  </p>
+                )}
 
-              {(error || writeError) && (
-                <p role="alert" className="text-sm text-red-500">
-                  {error || writeError?.message.slice(0, 160)}
-                </p>
-              )}
-            </form>
-          </div>
+                <div className="rounded-[18px] border border-line bg-surface/60 p-4 transition-colors focus-within:border-line-strong focus-within:bg-panel">
+                  <div className="flex items-center justify-between gap-3">
+                    <label htmlFor="trade-amt" className="text-[13px] text-mute">
+                      {showTransferFields
+                        ? "You send"
+                        : side === "buy"
+                          ? "You buy"
+                          : "You sell"}
+                    </label>
+                    <div
+                      role="group"
+                      aria-label="Enter amount in"
+                      className="inline-flex rounded-full border border-line bg-panel p-0.5"
+                    >
+                      {(
+                        [
+                          ["token", market.symbol],
+                          ["usd", "USD"],
+                        ] as const
+                      ).map(([m, label]) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setInputMode(m)}
+                          aria-pressed={inputMode === m}
+                          className={`h-7 rounded-full px-2.5 text-[12px] font-medium transition-colors ${
+                            inputMode === m
+                              ? "bg-ink text-on-ink"
+                              : "text-mute hover:text-foreground"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <input
+                      id="trade-amt"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={amount}
+                      onChange={(e) =>
+                        setAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                      }
+                      aria-describedby="trade-amt-unit"
+                      className="tnum w-full bg-transparent text-[34px] font-light leading-none tracking-[-0.02em] text-foreground outline-none placeholder:text-faint"
+                    />
+                    <span id="trade-amt-unit" className="sr-only">
+                      {inputMode === "usd" ? "in USD" : `in ${market.symbol}`}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[12px] text-mute">
+                    <span className="tnum">
+                      {inputMode === "usd"
+                        ? `≈ ${
+                            tokenAmt > 0
+                              ? tokenAmt.toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })
+                              : "0"
+                          } ${market.symbol}`
+                        : `≈ ${usdAmt > 0 ? formatUsd(usdAmt) : "$0"}`}
+                      {side === "buy" && buyEthIn > 0n && (
+                        <span> · {formatEth(buyEthIn, 5)} ETH</span>
+                      )}
+                    </span>
+                    {isConnected && hasToken && (
+                      <button
+                        type="button"
+                        className="rounded-full bg-panel px-2.5 py-1 font-medium text-foreground ring-1 ring-line transition-colors hover:ring-line-strong"
+                        onClick={() => {
+                          if (tokenBal && tokenBal > 0n) {
+                            setInputMode("token");
+                            setAmount(formatUnits(tokenBal, 18));
+                          }
+                        }}
+                      >
+                        Max
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {showTransferFields && (
+                  <div>
+                    <label
+                      htmlFor="xfer-to"
+                      className="mb-2 block text-[13px] text-mute"
+                    >
+                      Recipient
+                    </label>
+                    <input
+                      id="xfer-to"
+                      value={to}
+                      onChange={(e) => setTo(e.target.value.trim())}
+                      placeholder="0x…"
+                      className="gl-input tnum"
+                    />
+                  </div>
+                )}
+
+                <dl className="space-y-2 rounded-[14px] bg-surface px-4 py-3 text-[13px]">
+                  {quoteOut !== undefined && mode === "swap" && quoteOut > 0n && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-mute">You get (quote)</dt>
+                      <dd className="tnum font-medium text-foreground">
+                        {side === "buy"
+                          ? `${Number(formatUnits(quoteOut, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${market.symbol}`
+                          : `${formatEth(quoteOut, 5)} ETH`}
+                      </dd>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-mute">Wallet</dt>
+                    <dd className="tnum text-right text-foreground">
+                      {ethBalFmt} ETH
+                      {hasToken && (
+                        <>
+                          <span className="text-faint"> · </span>
+                          {tokenBal !== undefined
+                            ? Number(tokenBalFmt).toLocaleString(undefined, {
+                                maximumFractionDigits: 4,
+                              })
+                            : "0"}{" "}
+                          {market.symbol}
+                        </>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                {!isConnected || !onProduct ? (
+                  <WalletMenu variant="inline" />
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={busy || !hasToken}
+                    className="btn btn-ink btn-lg btn-block"
+                  >
+                    {busy && <Spinner onInk />}
+                    {busy
+                      ? pendingKind === "approve"
+                        ? "Approve in wallet…"
+                        : "Confirm in wallet…"
+                      : showTransferFields
+                        ? `Send ${market.symbol}`
+                        : side === "buy"
+                          ? `Buy ${market.symbol}`
+                          : sellAmountIn &&
+                              allowance !== undefined &&
+                              allowance < sellAmountIn
+                            ? `Approve ${market.symbol}`
+                            : `Sell ${market.symbol}`}
+                  </button>
+                )}
+
+                {(error || writeError) && (
+                  <p
+                    role="alert"
+                    className="rounded-[14px] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+                  >
+                    {error || writeError?.message.slice(0, 160)}
+                  </p>
+                )}
+              </form>
+            </div>
           )}
         </div>
-
-        <aside className="space-y-4 lg:col-span-3">
-          <div className="rounded-xl border border-line bg-panel p-4">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-mute">
-              Mark
-            </p>
-            <p className="mt-2 font-display text-2xl text-foreground">
-              {formatUsd(market.mark)}
-            </p>
-            <p
-              className={`mt-1 text-sm ${
-                market.change24h >= 0
-                  ? "text-[var(--chart-up)]"
-                  : "text-[var(--chart-down)]"
-              }`}
-            >
-              {market.change24h >= 0 ? "+" : ""}
-              {market.change24h}%
-            </p>
-            <dl className="mt-4 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <dt className="text-mute">Visibility</dt>
-                <dd
-                  className={
-                    pathMode === "sealed"
-                      ? "font-medium text-lime"
-                      : "text-foreground"
-                  }
-                >
-                  {pathMode === "sealed" ? "Sealed · only you" : "Public"}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-mute">Network</dt>
-                <dd className="text-foreground">Testnet</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-mute">Pool</dt>
-                <dd className={hasPool ? "text-lime" : "text-mute"}>
-                  {hasPool ? "Yes" : "None"}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-mute">Action</dt>
-                <dd className="text-foreground">
-                  {hasPool ? "Swap" : hasToken ? "Transfer" : "Watch"}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </aside>
       </div>
 
       <SuccessModal
@@ -1008,11 +1069,11 @@ export function TradeView() {
         title={successTitle}
         body={
           <p>
-            {market.symbol} · testnet
+            {market.symbol} on testnet.
             {lastHash && (
               <>
                 {" "}
-                <span className="text-foreground">
+                <span className="tnum text-foreground">
                   {shortAddress(lastHash, 4)}
                 </span>
               </>
@@ -1028,5 +1089,31 @@ export function TradeView() {
         }}
       />
     </div>
+  );
+}
+
+function fmtChange(n: number) {
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+function changeTone(n: number) {
+  return n > 0
+    ? "text-[var(--chart-up)]"
+    : n < 0
+      ? "text-[var(--chart-down)]"
+      : "text-mute";
+}
+
+/** Small ring spinner; still (no spin) under reduced motion. */
+function Spinner({ onInk = false }: { onInk?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`h-4 w-4 shrink-0 rounded-full border-2 motion-safe:animate-spin ${
+        onInk
+          ? "border-on-ink/30 border-t-on-ink"
+          : "border-line-strong border-t-foreground"
+      }`}
+    />
   );
 }

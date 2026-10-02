@@ -15,11 +15,29 @@ export function TurnkeyLoginButton() {
 
   if (signedIn) {
     return (
-      <div className="rounded-xl border border-lime/30 bg-lime/5 px-4 py-3 text-sm">
-        <p className="font-medium text-foreground">Signed in with passkey</p>
-        <p className="mt-0.5 text-xs text-mute">
-          {wallets.length} embedded wallet{wallets.length === 1 ? "" : "s"} ready
-        </p>
+      <div className="flex items-center gap-3 rounded-[16px] bg-surface px-4 py-3">
+        <span
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed"
+          aria-hidden
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path
+              d="m5.5 12.5 4 4 9-9"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-[14px] font-medium text-foreground">
+            Signed in with passkey
+          </p>
+          <p className="mt-0.5 text-[12px] text-mute">
+            {wallets.length} embedded wallet{wallets.length === 1 ? "" : "s"} ready
+          </p>
+        </div>
       </div>
     );
   }
@@ -36,7 +54,7 @@ export function TurnkeyLoginButton() {
           setBusy(false);
         }
       }}
-      className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime px-4 text-sm font-semibold text-background hover:opacity-90 disabled:opacity-50"
+      className="btn btn-ink btn-lg btn-block"
     >
       {busy ? "Opening…" : "Sign in with passkey"}
     </button>

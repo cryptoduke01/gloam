@@ -18,7 +18,6 @@ export default function DocsProductPage() {
         { label: "App", value: "gloam.trade/app" },
         { label: "Docs", value: "/docs" },
         { label: "Paper", value: "/whitepaper" },
-        { label: "Token", value: "Not live" },
         { label: "X", value: "@gloamtrade" },
       ]}
       quickLinks={[
@@ -44,9 +43,6 @@ export default function DocsProductPage() {
         </li>
         <li>
           <strong>Whitepaper</strong>, gloam.trade/whitepaper
-        </li>
-        <li>
-          <strong>$GLOAM</strong>, not launched (no tradable contract yet)
         </li>
       </ul>
 
@@ -81,8 +77,13 @@ export default function DocsProductPage() {
           },
           {
             n: "●",
-            title: "Private trade (size privacy)",
-            body: "Vault-settled sealedSwap on testnet. Max size privacy on by default (min-out floor). Dev keys.",
+            title: "Private payroll + relay",
+            body: "Upload a list and pay everyone from your private balance. The Gloam relay keeps your wallet off the record.",
+          },
+          {
+            n: "!",
+            title: "Private trade (paused)",
+            body: "Vault-settled sealedSwap is built, with max size privacy on by default. Paused on-chain until the H1 solvency fix lands.",
           },
           {
             n: "○",
@@ -93,11 +94,6 @@ export default function DocsProductPage() {
             n: "○",
             title: "Ethereum expansion",
             body: "Same private rails on Ethereum after RH testnet rails are solid.",
-          },
-          {
-            n: "○",
-            title: "$GLOAM token",
-            body: "Ticker reserved. No live contract until product, trust, and utility gates close.",
           },
         ]}
       />

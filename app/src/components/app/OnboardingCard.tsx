@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL } from "@/lib/faucet";
 import { useNetwork } from "./NetworkProvider";
 import { useTempoFaucet } from "@/hooks/useTempoFaucet";
+import { SealedField } from "@/components/ui/SealedField";
 import {
   ONBOARDING_STEPS,
   dismissOnboarding,
@@ -76,162 +77,196 @@ export function OnboardingCard() {
   const next = remaining[0] ?? null;
   const doneCount = ONBOARDING_STEPS.length - remaining.length;
 
+  const allDone = remaining.length === 0;
+
   // Portal to <body> so the fixed overlay centres in the viewport rather than
-  // inside the app's transformed (.rise) content wrapper.
+  // inside the app's content wrapper.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Getting started"
+      aria-labelledby="onboarding-title"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
     >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_24px_60px_-20px_rgba(18,19,22,0.45)]">
-        <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-5">
-          <p className="text-lg font-semibold tracking-tight text-foreground">
-            {remaining.length === 0 ? "You’re all set" : "Getting started"}
-          </p>
+      <div className="max-h-[min(90dvh,720px)] w-full max-w-[440px] overflow-y-auto rounded-[24px] border border-line bg-panel shadow-pop">
+        <div className="relative overflow-hidden px-7 pb-6 pt-7">
+          <SealedField tone="soft" />
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="-mr-1.5 -mt-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-mute transition-colors hover:bg-background hover:text-foreground"
+            className="absolute right-4 top-4 z-[2] grid h-10 w-10 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
             aria-label="Close"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
                 d="M6 6l12 12M18 6L6 18"
                 stroke="currentColor"
-                strokeWidth="1.9"
+                strokeWidth="1.7"
                 strokeLinecap="round"
               />
             </svg>
           </button>
+          <div className="relative z-[1] pr-10">
+            <p className="t-label">
+              {allDone
+                ? "Setup complete"
+                : `${doneCount} of ${ONBOARDING_STEPS.length} done`}
+            </p>
+            <h2
+              id="onboarding-title"
+              className="mt-2 text-[28px] font-light leading-[1.1] tracking-[-0.018em] text-foreground"
+            >
+              {allDone ? "You’re all set" : "Getting started"}
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-mute">
+              {allDone
+                ? "Add money privately, send it, and prove what you hold whenever you like."
+                : "A few steps to get going. Each one takes a minute."}
+            </p>
+          </div>
+          {!allDone && (
+            <div
+              className="relative z-[1] mt-5 h-1 w-full overflow-hidden rounded-full bg-surface-2"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={ONBOARDING_STEPS.length}
+              aria-valuenow={doneCount}
+              aria-label="Setup progress"
+            >
+              <span
+                className="block h-full rounded-full bg-ink transition-[width] duration-500"
+                style={{
+                  width: `${(doneCount / ONBOARDING_STEPS.length) * 100}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="px-6 py-5">
-          {remaining.length === 0 ? (
-            <p className="text-sm leading-relaxed text-mute">
-              You&apos;re ready. Add money privately, send it, and prove what you
-              hold whenever you like.
-            </p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between text-xs text-mute">
-                <span>A few steps to get going.</span>
-                <span className="tnum">
-                  {doneCount}/{ONBOARDING_STEPS.length}
-                </span>
-              </div>
-              <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-background">
-                <span
-                  className="h-full bg-lime transition-all"
-                  style={{
-                    width: `${(doneCount / ONBOARDING_STEPS.length) * 100}%`,
-                  }}
-                />
-              </div>
-
-              <ol className="mt-5 space-y-2.5">
-                {ONBOARDING_STEPS.map((step, i) => {
-                  const done = state.done.includes(step.id);
-                  const isNext = next?.id === step.id;
-                  return (
-                    <li
-                      key={step.id}
-                      className="flex items-center justify-between gap-3"
+        {!allDone && (
+          <ol className="border-t border-line px-7">
+            {ONBOARDING_STEPS.map((step, i) => {
+              const done = state.done.includes(step.id);
+              const isNext = next?.id === step.id;
+              return (
+                <li
+                  key={step.id}
+                  className="flex min-h-[60px] items-center justify-between gap-3 border-t border-line py-3 first:border-t-0"
+                >
+                  <span className="flex min-w-0 items-start gap-3">
+                    <span
+                      aria-hidden
+                      className={`tnum mt-px grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] font-medium ${
+                        done
+                          ? "bg-ink text-on-ink"
+                          : isNext
+                            ? "text-foreground ring-1 ring-foreground"
+                            : "bg-surface text-mute"
+                      }`}
                     >
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <span
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                            done
-                              ? "bg-lime text-background"
-                              : isNext
-                                ? "border border-lime text-foreground"
-                                : "border border-line text-mute"
-                          }`}
-                        >
-                          {done ? "✓" : i + 1}
-                        </span>
-                        <span
-                          className={`truncate text-sm ${
-                            done ? "text-mute line-through" : "text-foreground"
-                          }`}
-                        >
-                          {step.title}
-                        </span>
+                      {done ? (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <path
+                            d="m5.5 12.5 4 4 9-9"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
+                        i + 1
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span
+                        className={`block text-[14px] ${
+                          done
+                            ? "text-mute line-through decoration-line-strong"
+                            : "font-medium text-foreground"
+                        }`}
+                      >
+                        <span className="sr-only">{done ? "Done: " : ""}</span>
+                        {step.title}
                       </span>
-                      {!done &&
-                        (isNext ? (
-                          step.href === "external:faucet" ? (
-                            isTempo ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void tempoFaucet.claim();
-                                  markOnboardingStep(step.id);
-                                  refresh();
-                                }}
-                                disabled={
-                                  !tempoFaucet.ready ||
-                                  tempoFaucet.status === "pending"
-                                }
-                                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-60"
-                              >
-                                {tempoFaucet.status === "pending"
-                                  ? "Funding…"
-                                  : tempoFaucet.status === "done"
-                                    ? "Funded ✓"
-                                    : "Claim"}
-                              </button>
-                            ) : (
-                              <a
-                                href={FAUCET_URL}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={() => {
-                                  markOnboardingStep(step.id);
-                                  refresh();
-                                }}
-                                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"
-                              >
-                                Open
-                              </a>
-                            )
-                          ) : (
-                            <Link
-                              href={step.href}
-                              onClick={() => {
-                                markOnboardingStep(step.id);
-                                setOpen(false);
-                              }}
-                              className="shrink-0 rounded-lg bg-lime px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90"
-                            >
-                              Go
-                            </Link>
-                          )
-                        ) : (
+                      {isNext && step.body && (
+                        <span className="mt-0.5 block text-[12.5px] leading-relaxed text-mute">
+                          {step.body}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  {!done &&
+                    (isNext ? (
+                      step.href === "external:faucet" ? (
+                        isTempo ? (
                           <button
                             type="button"
+                            onClick={() => {
+                              void tempoFaucet.claim();
+                              markOnboardingStep(step.id);
+                              refresh();
+                            }}
+                            disabled={
+                              !tempoFaucet.ready ||
+                              tempoFaucet.status === "pending"
+                            }
+                            className="btn btn-ink btn-sm shrink-0"
+                          >
+                            {tempoFaucet.status === "pending"
+                              ? "Funding…"
+                              : tempoFaucet.status === "done"
+                                ? "Funded"
+                                : "Claim"}
+                          </button>
+                        ) : (
+                          <a
+                            href={FAUCET_URL}
+                            target="_blank"
+                            rel="noreferrer"
                             onClick={() => {
                               markOnboardingStep(step.id);
                               refresh();
                             }}
-                            className="shrink-0 text-[11px] text-mute transition-colors hover:text-foreground"
+                            className="btn btn-ink btn-sm shrink-0"
                           >
-                            Mark done
-                          </button>
-                        ))}
-                    </li>
-                  );
-                })}
-              </ol>
-            </>
-          )}
-        </div>
+                            Open
+                          </a>
+                        )
+                      ) : (
+                        <Link
+                          href={step.href}
+                          onClick={() => {
+                            markOnboardingStep(step.id);
+                            setOpen(false);
+                          }}
+                          className="btn btn-ink btn-sm shrink-0"
+                        >
+                          Go
+                        </Link>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          markOnboardingStep(step.id);
+                          refresh();
+                        }}
+                        className="btn btn-quiet btn-sm shrink-0 text-mute"
+                      >
+                        Mark done
+                      </button>
+                    ))}
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
-        <div className="flex items-center justify-between gap-3 border-t border-line px-6 py-3.5">
+        <div className="flex items-center justify-between gap-3 border-t border-line px-7 py-4">
           <button
             type="button"
             onClick={() => {
@@ -239,14 +274,14 @@ export function OnboardingCard() {
               refresh();
               setOpen(false);
             }}
-            className="text-xs text-mute transition-colors hover:text-foreground"
+            className="btn btn-quiet btn-sm -ml-3 text-mute"
           >
             Don’t show again
           </button>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-lg border border-line px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-mute"
+            className="btn btn-ghost btn-sm"
           >
             Close
           </button>

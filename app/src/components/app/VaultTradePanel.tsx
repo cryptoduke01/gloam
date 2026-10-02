@@ -554,7 +554,7 @@ export function VaultTradePanel({
     pendingReshield.current = null;
 
     setPipeline("prove");
-    setStatus("Building cash-out proof… 10–30s is normal.");
+    setStatus("Building cash-out proof… 10 to 30 seconds is normal.");
 
     try {
       const path = await pathForLeaf(selected.leafIndex);
@@ -617,11 +617,26 @@ export function VaultTradePanel({
 
   if (!shieldLive || !poseidonMode) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
+      <div className="gl-card p-6 text-[14px] text-mute">
         Vault trade needs the privacy vault. Shield is not configured.
       </div>
     );
   }
+
+  const steps: { label: string; active: boolean }[] = [
+    {
+      label: "Cash out from the vault (public step)",
+      active: phase === "unshield" || phase === "prove",
+    },
+    {
+      label: "Swap on the public market",
+      active: phase === "approve" || phase === "swap",
+    },
+    {
+      label: "Shield the result back into the vault",
+      active: phase === "reshield",
+    },
+  ];
 
   return (
     <>
@@ -629,14 +644,15 @@ export function VaultTradePanel({
         <DevKeysBanner compact />
 
         {!hasPool && (
-          <div className="rounded-xl border border-line bg-panel p-5 text-sm text-mute">
-            <p className="font-display text-2xl text-foreground">
+          <div className="gl-card p-6">
+            <p className="t-title text-foreground">
               No public pool for {marketSymbol}
             </p>
-            <p className="mt-2 leading-relaxed">
+            <p className="mt-2 text-[14px] leading-relaxed text-mute">
               This tab needs an open market. Testnet doesn&apos;t have one for{" "}
               {marketSymbol} yet. Use{" "}
-              <strong className="text-foreground">Private</strong> instead. It works without one.
+              <strong className="font-medium text-foreground">Private</strong>{" "}
+              instead. It works without one.
             </p>
             <button
               type="button"
@@ -648,7 +664,7 @@ export function VaultTradePanel({
                   window.location.href = u.toString();
                 }
               }}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background"
+              className="btn btn-ink btn-block mt-5"
             >
               Go to Private trade
             </button>
@@ -656,120 +672,144 @@ export function VaultTradePanel({
         )}
 
         <div
-          className={`overflow-hidden rounded-xl border border-line bg-panel ${
-            !hasPool ? "opacity-40 pointer-events-none" : ""
+          className={`gl-card overflow-hidden ${
+            !hasPool ? "pointer-events-none opacity-40" : ""
           }`}
         >
-          <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <div>
-              <p className="font-display text-2xl text-foreground">
-                {marketSymbol}
-              </p>
-              <p className="text-sm text-mute">
-                Via public market (amount is public)
+          <div className="flex items-start justify-between gap-3 px-5 pt-5">
+            <div className="min-w-0">
+              <p className="t-title text-foreground">{marketSymbol} via market</p>
+              <p className="mt-1 text-[13px] text-mute">
+                The amount is public while it swaps.
               </p>
             </div>
-            <StatusPill tone={hasPool ? "lime" : "mute"}>
+            <StatusPill dot={hasPool}>
               {hasPool ? "Pool live" : "No pool"}
             </StatusPill>
           </div>
 
           <div className="space-y-4 p-5">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setSide("buy")}
-                disabled={working}
-                className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-50 ${
-                  side === "buy"
-                    ? "bg-lime text-background"
-                    : "border border-line text-mute"
-                }`}
-              >
-                Buy with vault ETH
-              </button>
-              <button
-                type="button"
-                onClick={() => setSide("sell")}
-                disabled={working}
-                className={`min-h-10 rounded-lg text-sm font-semibold disabled:opacity-50 ${
-                  side === "sell"
-                    ? "bg-foreground text-background"
-                    : "border border-line text-mute"
-                }`}
-              >
-                Sell vault {marketSymbol}
-              </button>
+            <div className="grid grid-cols-2 gap-1 rounded-full bg-surface p-1">
+              {(["buy", "sell"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSide(s)}
+                  disabled={working}
+                  aria-pressed={side === s}
+                  className={`h-10 truncate rounded-full px-2 text-[14px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    side === s
+                      ? "bg-panel text-foreground shadow-card dark:bg-surface-2"
+                      : "text-mute hover:text-foreground"
+                  }`}
+                >
+                  {s === "buy" ? "Buy with vault ETH" : `Sell vault ${marketSymbol}`}
+                </button>
+              ))}
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground">
-                {side === "buy" ? "ETH vault balance" : `${marketSymbol} vault balance`}
+              <p className="text-[13px] text-mute">
+                {side === "buy"
+                  ? "ETH vault balance"
+                  : `${marketSymbol} vault balance`}
               </p>
               {eligible.length === 0 ? (
-                <p className="mt-2 text-sm text-mute">
+                <p className="mt-2 rounded-[16px] border border-dashed border-line-strong px-4 py-4 text-[13px] leading-relaxed text-mute">
                   No matching balances.{" "}
-                  <Link href="/app/shield" className="text-lime hover:underline">
+                  <Link
+                    href="/app/shield"
+                    className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                  >
                     Shield
                   </Link>{" "}
                   {side === "buy" ? "ETH" : marketSymbol} first.
                 </p>
               ) : (
-                <ul className="mt-2 divide-y divide-line rounded-xl border border-line">
-                  {eligible.map((n) => (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        disabled={working}
-                        onClick={() => setNoteId(n.id)}
-                        className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm ${
-                          selected?.id === n.id
-                            ? "bg-lime/10 text-foreground"
-                            : "text-mute hover:text-foreground"
-                        }`}
-                      >
-                        <span className="font-medium text-foreground">
-                          {isNativeAsset(n.asset)
-                            ? formatEth(BigInt(n.amountWei))
-                            : formatUnits(BigInt(n.amountWei), 18)}{" "}
-                          {assetLabel(n.asset)}
-                        </span>
-                        <span className="text-xs">
-                          {n.leafIndex != null ? "Ready" : "…"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                <ul className="mt-2 grid gap-1.5">
+                  {eligible.map((n) => {
+                    const on = selected?.id === n.id;
+                    return (
+                      <li key={n.id}>
+                        <button
+                          type="button"
+                          disabled={working}
+                          onClick={() => setNoteId(n.id)}
+                          aria-pressed={on}
+                          className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-[14px] border px-4 py-2.5 text-left transition-colors ${
+                            on
+                              ? "border-foreground bg-panel"
+                              : "border-line hover:border-line-strong"
+                          }`}
+                        >
+                          <span className="flex items-center gap-3">
+                            <span
+                              aria-hidden
+                              className={`grid h-4 w-4 place-items-center rounded-full border ${
+                                on ? "border-foreground" : "border-line-strong"
+                              }`}
+                            >
+                              {on && (
+                                <span className="h-2 w-2 rounded-full bg-foreground" />
+                              )}
+                            </span>
+                            <span className="tnum text-[15px] font-medium text-foreground">
+                              {isNativeAsset(n.asset)
+                                ? formatEth(BigInt(n.amountWei))
+                                : formatUnits(BigInt(n.amountWei), 18)}{" "}
+                              {assetLabel(n.asset)}
+                            </span>
+                          </span>
+                          <span className="text-[12px] text-mute">
+                            {n.leafIndex != null ? "Ready" : "…"}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
 
             {selected && quoteOut != null && quoteOut > 0n && (
-              <p className="text-sm text-mute">
-                Est. out ≈{" "}
-                <strong className="text-foreground">
-                  {side === "buy"
-                    ? `${formatUnits(quoteOut, 18)} ${marketSymbol}`
-                    : `${formatEther(quoteOut)} ETH`}
-                </strong>{" "}
-                (before price changes). Uses your whole balance.
-              </p>
+              <div className="rounded-[16px] bg-surface px-4 py-3.5 text-[13px]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-mute">You get (est.)</span>
+                  <span className="tnum text-[15px] font-medium text-foreground">
+                    {side === "buy"
+                      ? `${formatUnits(quoteOut, 18)} ${marketSymbol}`
+                      : `${formatEther(quoteOut)} ETH`}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-mute">
+                  Before price moves. Uses your whole balance.
+                </p>
+              </div>
             )}
 
-            <ol className="space-y-1 text-xs text-mute">
-              <li className={phase === "unshield" || phase === "prove" ? "text-lime" : ""}>
-                1. Cash out from the vault (public step)
-              </li>
-              <li className={phase === "approve" || phase === "swap" ? "text-lime" : ""}>
-                2. Swap on the public market
-              </li>
-              <li className={phase === "reshield" ? "text-lime" : ""}>
-                3. Shield the result back into the vault
-              </li>
+            <ol className="grid gap-2 text-[13px]">
+              {steps.map((st, i) => (
+                <li
+                  key={st.label}
+                  className={`flex items-center gap-2.5 ${
+                    st.active ? "font-medium text-foreground" : "text-mute"
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`tnum grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-medium ${
+                      st.active ? "bg-ink text-on-ink" : "bg-surface text-soft"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  {st.label}
+                </li>
+              ))}
             </ol>
 
             {!isConnected || !onProduct ? (
-              <WalletMenu />
+              <WalletMenu variant="inline" />
             ) : (
               <button
                 type="button"
@@ -780,25 +820,31 @@ export function VaultTradePanel({
                   matchesChain === false
                 }
                 onClick={() => void onStart()}
-                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background disabled:opacity-50"
+                className="btn btn-ink btn-lg btn-block"
               >
-                {working
-                  ? status || stepLabel || "Working…"
-                  : side === "buy"
-                    ? `Buy ${marketSymbol} from vault`
-                    : `Sell ${marketSymbol} from vault`}
+                {working && <Spinner onInk />}
+                <span className="truncate">
+                  {working
+                    ? status || stepLabel || "Working…"
+                    : side === "buy"
+                      ? `Buy ${marketSymbol} from vault`
+                      : `Sell ${marketSymbol} from vault`}
+                </span>
               </button>
             )}
 
             {error && (
-              <div role="alert" className="space-y-2 text-sm text-red-500">
+              <div
+                role="alert"
+                className="space-y-2 rounded-[14px] bg-danger-soft px-4 py-3 text-[13px] leading-relaxed text-danger"
+              >
                 <p>{error}</p>
                 {needsRecovery && (
                   <p className="text-mute">
                     Recovery:{" "}
                     <button
                       type="button"
-                      className="text-lime hover:underline"
+                      className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                       onClick={() => {
                         // parent TradeView pathMode, deep-link query
                         window.location.href = "/app/trade?path=public";
@@ -809,12 +855,15 @@ export function VaultTradePanel({
                     {" · "}
                     <Link
                       href="/app/shield"
-                      className="text-lime hover:underline"
+                      className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                     >
                       shield leftover
                     </Link>
                     {" · "}
-                    <Link href="/app/move" className="text-lime hover:underline">
+                    <Link
+                      href="/app/move"
+                      className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                    >
                       cash out other balances
                     </Link>
                   </p>
@@ -822,18 +871,18 @@ export function VaultTradePanel({
               </div>
             )}
             {status && !error && (
-              <p className="text-sm text-mute">{status}</p>
+              <p className="text-[13px] text-mute">{status}</p>
             )}
             {hash && phase !== "done" && (
-              <p className="text-sm text-mute">
-                Tx{" "}
+              <p className="text-[13px] text-mute">
+                Transaction sent.{" "}
                 <a
                   href={network.explorerTx(hash)}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-lime hover:underline"
+                  className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                 >
-                  view
+                  View on explorer
                 </a>
               </p>
             )}
@@ -853,9 +902,9 @@ export function VaultTradePanel({
                 href={network.explorerTx(lastHash)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-lime hover:underline"
+                className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
               >
-                Last tx
+                Last transaction
               </a>
             )}
           </p>
@@ -868,5 +917,19 @@ export function VaultTradePanel({
         }}
       />
     </>
+  );
+}
+
+/** Small ring spinner; still (no spin) under reduced motion. */
+function Spinner({ onInk = false }: { onInk?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`h-4 w-4 shrink-0 rounded-full border-2 motion-safe:animate-spin ${
+        onInk
+          ? "border-on-ink/30 border-t-on-ink"
+          : "border-line-strong border-t-foreground"
+      }`}
+    />
   );
 }

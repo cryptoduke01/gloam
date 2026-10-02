@@ -14,8 +14,8 @@ export function NetworkPulse() {
   const onProduct = chainId === network.chainId;
   const [busy, setBusy] = useState(false);
 
-  // On the right network (or not yet connected) there is no status chip — the
-  // header's network selector already names the chain. Only surface a control
+  // On the right network (or not yet connected) there is no status chip: the
+  // sidebar's network selector already names the chain. Only surface a control
   // when the wallet is on the wrong chain and needs switching.
   if (onProduct || !isConnected) {
     return null;
@@ -29,11 +29,11 @@ export function NetworkPulse() {
         setBusy(true);
         void ensureWalletOnChain(network.chain).finally(() => setBusy(false));
       }}
-      className="inline-flex items-center"
+      className="inline-flex min-h-10 items-center rounded-full transition-opacity hover:opacity-80 disabled:opacity-60"
       title={`Switch to ${network.label}`}
     >
       <StatusPill tone="warn" dot>
-        {busy ? "Switching…" : "Wrong network · tap to fix"}
+        {busy ? "Switching…" : `Wrong network. Tap to switch`}
       </StatusPill>
     </button>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -12,28 +12,30 @@ import {
 } from "@/lib/testnetLaunch";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { AsciiImage } from "@/components/AsciiImage";
-
-const ease = [0.22, 1, 0.36, 1] as const;
+import { SealedField } from "@/components/ui/SealedField";
+import { SealDots } from "@/components/ui/SealDots";
 
 const DEMO_X_URL =
   "https://x.com/dukedotsol/status/2077117792520634789";
 
 const plates = [
   {
-    src: "/ascii/shield.png",
     title: "Shield",
     body: "Add money to your vault. Your public wallet stops showing it.",
+    row: "Private balance",
+    status: "Sealed",
   },
   {
-    src: "/ascii/move.png",
     title: "Private pay",
     body: "Pay someone with a Gloam address, not a public transfer.",
+    row: "To gloam:7a3f…34cd",
+    status: "Paid",
   },
   {
-    src: "/ascii/trade.png",
     title: "Trade",
     body: "Private balances and payments today. Private trading is coming.",
+    row: "TSLA, amount hidden",
+    status: "Soon",
   },
 ] as const;
 
@@ -119,203 +121,191 @@ export function TestnetGate({ children }: { children: ReactNode }) {
     timeZoneName: "short",
   });
 
+  const plate = plates[activePlate];
+
   return (
     <div className="flex min-h-full flex-col bg-background">
       <Header />
 
-      <main className="relative flex flex-1 flex-col">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-          <div className="absolute -right-24 top-0 h-[420px] w-[420px] rounded-full bg-lime/[0.06] blur-[110px]" />
-          <div className="absolute -left-20 bottom-0 h-[280px] w-[280px] rounded-full bg-lime/[0.04] blur-[90px]" />
-        </div>
+      <main className="flex flex-1 flex-col">
+        {/* Hero panel on the sealed field: headline, CTAs, countdown */}
+        <section className="px-[16px] pt-2">
+          <div className="gl-panel mx-auto w-full max-w-[1400px] px-[24px] py-[64px] sm:px-12 sm:py-24">
+            <SealedField tone="full" drift />
+            <div className="relative mx-auto max-w-[1100px]">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="gl-glass inline-flex h-8 items-center gap-2 rounded-full px-3 text-[12px] font-medium text-foreground">
+                  <span className="livedot h-1.5 w-1.5 rounded-full bg-foreground" aria-hidden />
+                  Public testnet
+                </span>
+                <span className="tnum text-[12px] text-mute">
+                  Robinhood Chain testnet, chain 46630
+                </span>
+              </div>
 
-        <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-5 py-12 sm:gap-14 sm:px-8 sm:py-16 lg:gap-16 lg:py-20">
-          {/* Layer 1, headline + copy + CTAs + pronounced countdown */}
-          <motion.div
-            className="w-full"
-            initial={reduce ? false : { opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease }}
-          >
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-lime">
-                <span className="livedot h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_10px_var(--lime)]" />
-                Public testnet
-              </span>
-              <span className="text-[10px] uppercase tracking-[0.14em] text-mute">
-                RH · 46630
-              </span>
+              <h1 className="t-display-xl mt-8 max-w-[16ch] text-foreground">
+                Private money on Robinhood Chain
+              </h1>
+              <p className="mt-6 max-w-[56ch] text-[17px] leading-relaxed text-soft">
+                Shield, private send, private trade and cash out go live when
+                the clock hits zero. Read the guide now so you are ready on day
+                one.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-2.5">
+                <Link href="/docs/testnet" className="btn btn-ink btn-lg">
+                  Testnet guide
+                </Link>
+                <a
+                  href={DEMO_X_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-ghost btn-lg"
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                  Watch the demo
+                </a>
+              </div>
+
+              <div className="mt-14">
+                <p className="t-label">Opens in</p>
+                <div
+                  className="mt-3 grid max-w-[720px] grid-cols-4 gap-[8px] sm:gap-3"
+                  role="timer"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
+                >
+                  {(
+                    [
+                      ["Days", parts.d],
+                      ["Hours", parts.h],
+                      ["Mins", parts.m],
+                      ["Secs", parts.s],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="gl-glass rounded-[18px] px-2 py-[20px] text-center sm:py-7"
+                    >
+                      <p className="tnum text-[40px] font-light leading-none tracking-[-0.03em] text-foreground sm:text-[56px]">
+                        {pad(value)}
+                      </p>
+                      <p className="t-label mt-3">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[13px] text-mute">{opensLabel}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Preview: what opens on day one */}
+        <section className="mx-auto w-full max-w-[1200px] px-[20px] py-[80px] sm:px-8 sm:py-28">
+          <p className="t-label">Preview</p>
+          <h2 className="t-display-l mt-3 max-w-[18ch] text-foreground">
+            What opens on day one
+          </h2>
+
+          <div className="mt-10 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <div
+              className="grid gap-1.5 self-start"
+              role="tablist"
+              aria-label="Preview"
+            >
+              {plates.map((p, i) => (
+                <button
+                  key={p.title}
+                  type="button"
+                  role="tab"
+                  aria-selected={i === activePlate}
+                  onClick={() => setActivePlate(i)}
+                  className={`rounded-[18px] px-5 py-4 text-left transition-colors ${
+                    i === activePlate
+                      ? "bg-panel shadow-card ring-1 ring-line"
+                      : "hover:bg-surface"
+                  }`}
+                >
+                  <span
+                    className={`block text-[16px] font-medium ${
+                      i === activePlate ? "text-foreground" : "text-soft"
+                    }`}
+                  >
+                    {p.title}
+                  </span>
+                  <span className="mt-1 block text-[14px] leading-relaxed text-mute">
+                    {p.body}
+                  </span>
+                </button>
+              ))}
             </div>
 
-            <h1 className="mt-8 max-w-4xl font-display text-[2.5rem] leading-[1.08] tracking-tight text-foreground sm:mt-10 sm:text-5xl lg:text-[3.5rem] lg:leading-[1.06]">
-              Unlocking private money on Robinhood
-            </h1>
-
-            <p className="mt-6 max-w-2xl text-base leading-relaxed text-mute sm:mt-7 sm:text-lg">
-              Shield, private send, private trade, cash out, live when the
-              clock hits zero. Prep with the guide so you&apos;re ready on open.
-            </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3.5">
-              <Link
-                href="/docs/testnet"
-                className="inline-flex min-h-11 items-center rounded-md bg-lime px-5 text-sm font-semibold text-background hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+            <div className="gl-panel flex min-h-[320px] items-center justify-center p-6 sm:p-10">
+              <SealedField tone="full" />
+              <div
+                key={plate.title}
+                className="gl-glass relative w-full max-w-[380px] p-5"
+                role="tabpanel"
               >
-                Testnet guide
-              </Link>
-              <a
-                href={DEMO_X_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line px-4 text-sm font-medium text-foreground hover:border-mute"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-                Watch demo on X
-              </a>
-            </div>
-
-            {/* Countdown, full-width, high contrast */}
-            <div className="mt-12 sm:mt-14">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-lime">
-                    Opens in
-                  </p>
-                  <p className="mt-1 text-[11px] text-mute">
-                    {opensLabel}
-                  </p>
+                <p className="t-label">{plate.title}</p>
+                <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-panel px-4 py-3.5 shadow-card">
+                  <span className="min-w-0 truncate text-[14px] text-foreground">
+                    {plate.row}
+                  </span>
+                  <SealDots n={6} className="text-foreground" />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[12px]">
+                  <span className="text-mute">Visible only to you</span>
+                  <span
+                    className={`inline-flex h-6 items-center rounded-full px-2.5 font-medium ${
+                      plate.status === "Soon"
+                        ? "bg-surface text-mute"
+                        : "bg-sealed-soft text-sealed"
+                    }`}
+                  >
+                    {plate.status}
+                  </span>
                 </div>
               </div>
-              <div
-                className="mt-4 grid grid-cols-4 gap-2.5 sm:gap-4"
-                role="timer"
-                aria-live="polite"
-                aria-atomic="true"
-                aria-label={`Opens in ${parts.d} days ${parts.h} hours ${parts.m} minutes ${parts.s} seconds`}
-              >
-                {(
-                  [
-                    ["Days", parts.d],
-                    ["Hours", parts.h],
-                    ["Mins", parts.m],
-                    ["Secs", parts.s],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-2xl border border-lime/35 bg-panel px-2 py-5 text-center shadow-[0_0_40px_-12px_color-mix(in_srgb,var(--lime)_45%,transparent)] sm:px-4 sm:py-7"
-                  >
-                    <p className="tnum font-display text-4xl leading-none tracking-tight text-lime sm:text-5xl lg:text-6xl">
-                      {pad(value)}
-                    </p>
-                    <p className="mt-3 text-[10px] uppercase tracking-[0.2em] text-mute sm:text-[11px]">
-                      {label}
-                    </p>
-                  </div>
-                ))}
-              </div>
             </div>
-          </motion.div>
+          </div>
 
-          {/* Layer 2, preview plate (above X updates) */}
-          <motion.div
-            className="w-full"
-            initial={reduce ? false : { opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.08, ease }}
+          <a
+            href="https://x.com/gloamtrade"
+            target="_blank"
+            rel="noreferrer"
+            className="gl-card lift mt-10 flex w-full max-w-[640px] items-center gap-4 p-5"
           >
-            <div className="flex min-h-[min(48vh,440px)] w-full flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_0_0_1px_color-mix(in_srgb,var(--lime)_12%,transparent)] sm:min-h-[min(52vh,480px)]">
-              <div className="relative min-h-[min(40vh,360px)] flex-1 sm:min-h-[min(44vh,400px)]">
-                {plates.map((p, i) => (
-                  <div
-                    key={p.src}
-                    className={`absolute inset-0 transition-opacity duration-700 ${
-                      i === activePlate ? "opacity-100" : "opacity-0"
-                    }`}
-                  >
-                    <AsciiImage
-                      src={p.src}
-                      alt={p.title}
-                      tone="plate"
-                      fit="cover"
-                      priority={i === 0}
-                      className="h-full w-full"
-                      sizes="100vw"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-lime">
-                        {String(i + 1).padStart(2, "0")} · Preview
-                      </p>
-                      <p className="mt-1.5 font-display text-2xl text-white sm:text-3xl">
-                        {p.title}
-                      </p>
-                      <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70 sm:text-base">
-                        {p.body}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid shrink-0 grid-cols-3 divide-x divide-line border-t border-line">
-                {plates.map((p, i) => (
-                  <button
-                    key={p.title}
-                    type="button"
-                    onClick={() => setActivePlate(i)}
-                    className={`min-h-16 px-4 py-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-lime sm:px-6 ${
-                      i === activePlate
-                        ? "bg-lime/10 text-foreground"
-                        : "bg-background/50 text-mute hover:bg-panel hover:text-foreground"
-                    }`}
-                    aria-pressed={i === activePlate}
-                  >
-                    <span className="block text-[9px] uppercase tracking-[0.14em] text-lime">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="mt-1 block text-sm font-medium sm:text-base">
-                      {p.title}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Layer 3, X updates (below preview) */}
-          <motion.div
-            className="w-full"
-            initial={reduce ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.12, ease }}
-          >
-            <a
-              href="https://x.com/gloamtrade"
-              target="_blank"
-              rel="noreferrer"
-              className="lift flex w-full max-w-2xl items-start gap-4 rounded-xl border border-line bg-panel p-5 transition-colors hover:border-lime/40"
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-foreground">
+              <XIcon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-[15px] font-medium text-foreground">
+                Follow @gloamtrade for updates
+              </span>
+              <span className="mt-1 block text-[14px] leading-relaxed text-mute">
+                Go-live pings and clips land there first.
+              </span>
+            </span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+              className="shrink-0 text-mute"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-line bg-background text-foreground">
-                <XIcon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 text-left">
-                <span className="block text-[10px] uppercase tracking-[0.14em] text-lime">
-                  Updates
-                </span>
-                <span className="mt-1 block text-sm font-medium text-foreground">
-                  Look out for updates on X
-                </span>
-                <span className="mt-1.5 block text-sm leading-relaxed text-mute">
-                  Go-live pings and clips at{" "}
-                  <span className="text-foreground">@gloamtrade</span>. Follow
-                  so you don&apos;t miss unlock.
-                </span>
-              </span>
-              <span className="ml-auto shrink-0 self-center text-lime">→</span>
-            </a>
-          </motion.div>
-        </div>
+              <path
+                d="M5 12h13M13 6.5 18.5 12 13 17.5"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </a>
+        </section>
       </main>
 
       <Footer />

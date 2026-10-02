@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * Header network switch. Lists every Gloam network and lets the user pick the
- * active one. Live networks (Robinhood today) are selectable; `planned` ones
- * (Tempo until its pool deploys) render disabled with a "Soon" badge, so the
- * multichain roadmap is visible and honest without offering a chain that cannot
- * take writes yet. It auto-enables Tempo the moment `networks.ts` marks it live.
+ * Sidebar network switch. Lists every Gloam network and lets the user pick the
+ * active one. Live networks are selectable; `planned` ones render disabled with
+ * a "Soon" badge, so the multichain roadmap is visible and honest without
+ * offering a chain that cannot take writes yet. It auto-enables a network the
+ * moment `networks.ts` marks it live. Full width of its container: the sidebar
+ * on desktop (where the list flies out to the right so the notes have room),
+ * the sheet on mobile (where it drops down).
  */
 import { useEffect, useRef, useState } from "react";
 import { allNetworks, isNetworkWritable } from "@/lib/networks";
@@ -37,27 +39,51 @@ export function NetworkSelector() {
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative w-full">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex h-8 items-center gap-1.5 rounded-full border border-line pl-1 pr-2.5 text-xs text-foreground transition-colors hover:border-mute focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+        aria-label={`Network: ${network.label}. Change network`}
+        className={`flex h-[52px] w-full items-center gap-3 rounded-full pl-2 pr-4 text-left text-foreground transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 ${
+          open ? "bg-surface-2" : "bg-surface"
+        }`}
       >
-        <TokenLogo id={network.key} symbol={network.label} size={20} />
-        <span className="font-medium">{network.label}</span>
-        <span className="text-mute" aria-hidden>
-          {open ? "▴" : "▾"}
+        <TokenLogo id={network.key} symbol={network.label} size={34} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-medium leading-tight">
+            {network.label}
+          </span>
+          <span className="mt-0.5 block truncate text-[12px] leading-tight text-mute">
+            Testnet
+          </span>
         </span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden
+          className={`shrink-0 text-mute transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          <path
+            d="m7 10 5 5 5-5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
 
       {open && (
         <div
           role="menu"
           aria-label="Select network"
-          className="absolute left-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-line bg-background/98 shadow-xl backdrop-blur-md"
+          className="absolute left-0 right-0 top-full z-50 mt-2 rounded-[18px] border border-line bg-panel p-1.5 shadow-pop [.gl-sidebar_&]:left-full [.gl-sidebar_&]:right-auto [.gl-sidebar_&]:top-0 [.gl-sidebar_&]:ml-5 [.gl-sidebar_&]:mt-0 [.gl-sidebar_&]:w-[300px]"
         >
+          <p className="t-label px-2.5 pb-1.5 pt-2">Network</p>
           {nets.map((n) => {
             const active = n.key === network.key;
             const writable = isNetworkWritable(n);
@@ -73,38 +99,44 @@ export function NetworkSelector() {
                   setNetworkKey(n.key);
                   setOpen(false);
                 }}
-                className={`flex w-full items-start gap-2.5 border-b border-line/60 px-3 py-3 text-left last:border-b-0 transition-colors ${
-                  writable
-                    ? "hover:bg-panel"
-                    : "cursor-not-allowed opacity-70"
-                } ${active ? "bg-panel" : ""}`}
+                className={`flex w-full items-start gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors ${
+                  writable ? "hover:bg-surface" : "cursor-not-allowed opacity-60"
+                } ${active ? "bg-surface" : ""}`}
               >
-                <TokenLogo
-                  id={n.key}
-                  symbol={n.label}
-                  size={26}
-                  className="mt-0.5"
-                />
+                <TokenLogo id={n.key} symbol={n.label} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">
+                    <span className="text-[14px] font-medium text-foreground">
                       {n.label}
                     </span>
                     {n.status === "planned" && (
-                      <span className="rounded-full border border-line px-1.5 py-px text-[9px] uppercase tracking-[0.12em] text-mute">
+                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-mute">
                         Soon
                       </span>
                     )}
-                    {active && (
-                      <span className="ml-auto text-[10px] uppercase tracking-[0.12em] text-lime">
-                        Active
-                      </span>
-                    )}
                   </span>
-                  <span className="mt-0.5 block text-xs leading-snug text-mute">
+                  <span className="mt-0.5 block text-[12px] leading-snug text-mute">
                     {n.note}
                   </span>
                 </span>
+                {active && (
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden
+                    className="mt-1.5 shrink-0 text-foreground"
+                  >
+                    <path
+                      d="m5.5 12.5 4 4 9-9"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
               </button>
             );
           })}

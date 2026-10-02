@@ -19,7 +19,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { formatEth } from "@/lib/chain";
+import { formatEth, shortAddress } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import { erc20Abi } from "@/lib/dex";
@@ -27,10 +27,12 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
-import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
+import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
+import { SealedField } from "@/components/ui/SealedField";
+import { SealDots } from "@/components/ui/SealDots";
 import { WalletMenu } from "./WalletMenu";
-import { StatusPill } from "./StatusPill";
+import { TokenLogo } from "./TokenLogo";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 
@@ -192,7 +194,7 @@ export function ShieldView() {
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [successTitle, setSuccessTitle] = useState("Shielded");
+  const [successTitle, setSuccessTitle] = useState("Added privately");
   const [successBody, setSuccessBody] = useState<React.ReactNode>(null);
   const [pendingNote, setPendingNote] = useState<LocalNote | null>(null);
   const [pendingKind, setPendingKind] = useState<TxKind>(null);
@@ -250,7 +252,8 @@ export function ShieldView() {
       setSuccessBody(
         <>
           <p>
-            {assetLabel(assetAddress)} left the vault → owner wallet.
+            {assetLabel(assetAddress)} went back from the vault to the owner
+            wallet.
           </p>
           <p className="mt-2">Testnet recovery only.</p>
         </>
@@ -314,24 +317,16 @@ export function ShieldView() {
         asset: sentLabel.replace(/[\d.]+/g, "").trim().slice(0, 16) || "asset",
       });
     });
-    setSuccessTitle("Shielded");
+    setSuccessTitle("Added privately");
     setSuccessBody(
       <>
         <p>
-          <span className="font-medium text-foreground">{sentLabel}</span> is in
-          the vault.
+          <span className="tnum font-medium text-foreground">{sentLabel}</span>{" "}
+          is now in your private balance. Only you can see it.
         </p>
         <p className="mt-2">
-          <strong className="text-foreground">Move</strong> to private-send or
-          cash out. For size-private stock trades, shield{" "}
-          <strong className="text-foreground">ETH</strong>, then{" "}
-          <a
-            href="/app/trade?market=tsla&path=sealed"
-            className="text-lime hover:underline"
-          >
-            Trade → Private trade
-          </a>
-          .
+          Open <strong className="font-medium text-foreground">Pay</strong> to
+          send it privately or cash out.
         </p>
       </>
     );
@@ -414,7 +409,7 @@ export function ShieldView() {
         });
       } catch (err) {
         setFormError(
-          err instanceof Error ? err.message : "Could not build shield proof."
+          err instanceof Error ? err.message : "Could not prepare your private deposit. Try again."
         );
         setPendingKind(null);
         setPendingNote(null);
@@ -563,191 +558,319 @@ export function ShieldView() {
 
   if (!deployed) {
     return (
-      <div className="rounded-xl border border-line bg-panel p-6">
-        <StatusPill tone="warn">Not configured</StatusPill>
-        <p className="mt-3 text-sm text-mute">
-          Privacy vault address missing.
+      <div className="gl-card max-w-[620px] p-6 sm:p-8">
+        <span className="inline-flex items-center rounded-full bg-warn-soft px-2.5 py-1 text-[12px] font-medium text-warn">
+          Not set up
+        </span>
+        <p className="t-title mt-4 text-foreground">
+          The private vault is not on this network yet
+        </p>
+        <p className="mt-2 max-w-[52ch] text-[14px] leading-relaxed text-mute">
+          The vault address is missing for {network.label}. Pick another network
+          from the menu, or check back soon.
         </p>
       </div>
     );
   }
 
   const busy = isPending || confirming;
+  // The browser is building the proof that binds the deposit (hardened pools)
+  // before the wallet prompt opens.
+  const proving =
+    pendingKind === "shield" && !isPending && !confirming && !formError;
 
   const hasActiveShield = openNotes.length > 0;
+  const connectedOk = isConnected && onProduct;
+  const isTempo = network.key === "tempo";
+
+  const maxDisplay =
+    selectedToken && walletBalance !== undefined
+      ? formatAssetAmount(walletBalance, selectedToken.address)
+      : maxLabel;
+
+  const logoIdFor = (asset: string): string | null => {
+    if (isNativeAsset(asset)) return null;
+    return (
+      tokens.find((t) => t.address.toLowerCase() === asset.toLowerCase())?.id ??
+      asset
+    );
+  };
+
+  const balanceRows = hasActiveShield
+    ? assetRows.map((r) => ({
+        asset: r.asset,
+        label: r.label,
+        logoId: logoIdFor(r.asset),
+        amount: isNativeAsset(r.asset)
+          ? formatEth(r.amount)
+          : formatAssetAmount(r.amount, r.asset),
+        sub: isNativeAsset(r.asset) && myShieldUsd ? `≈ ${myShieldUsd}` : null,
+      }))
+    : [];
+
+  const ctaLabel =
+    isPending && pendingKind === "approve"
+      ? "Approve in your wallet…"
+      : confirming && pendingKind === "approve"
+        ? "Approving…"
+        : proving
+          ? "Preparing your private deposit…"
+          : isPending && pendingKind === "shield"
+            ? "Confirm in your wallet…"
+            : confirming && pendingKind === "shield"
+              ? "Adding privately…"
+              : selectedToken &&
+                  allowance !== undefined &&
+                  parseAmount() !== null &&
+                  (allowance as bigint) < (parseAmount() as bigint)
+                ? `Approve and add ${symbol}`
+                : `Add ${symbol} privately`;
 
   return (
     <>
-      <div className="mx-auto max-w-xl space-y-4">
-        <form
-          onSubmit={onSubmit}
-          className="space-y-5 rounded-2xl border border-line bg-panel p-6"
-        >
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form onSubmit={onSubmit} className="gl-card min-w-0 p-5 sm:p-7">
           <DevKeysBanner compact />
 
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
-                You&apos;re shielding
-              </span>
-              <span className="flex items-center gap-1.5 text-[11px] font-medium text-lime">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
-                  <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
-                </svg>
-                Amount hidden
-              </span>
-            </div>
-            <div className="mt-3 flex items-end gap-3">
-              <input
-                id="shield-amount"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                className="min-w-0 flex-1 bg-transparent text-4xl font-semibold tracking-tight text-foreground outline-none placeholder:text-mute/40"
-                aria-label="Amount to shield"
-              />
-              <div className="relative shrink-0">
-                <select
-                  value={assetChoice}
-                  onChange={(e) => {
-                    setAssetChoice(e.target.value);
-                    setAmount("");
+          <div className="min-w-0">
+            <h2 className="t-title text-foreground">Add money privately</h2>
+            <p className="mt-1 text-[14px] leading-relaxed text-mute">
+              Move funds from your wallet into your private balance. From there
+              you can pay anyone without the amount showing up.
+            </p>
+          </div>
+
+          <div className="mt-6">
+            {/* from: your wallet */}
+            <div className="rounded-[16px] bg-surface p-[16px] transition-shadow focus-within:ring-2 focus-within:ring-foreground/15 sm:p-5">
+              <div className="flex items-center justify-between gap-3 text-[13px]">
+                <label htmlFor="shield-amount" className="text-mute">
+                  You add
+                </label>
+                <button
+                  type="button"
+                  disabled={!isConnected}
+                  onClick={() => {
+                    if (walletBalance === undefined) return;
+                    if (selectedToken) {
+                      setAmount(formatUnits(walletBalance, decimals).slice(0, 18));
+                    } else {
+                      const leave = 50_000_000_000_000n;
+                      const v =
+                        walletBalance > leave ? walletBalance - leave : BigInt(0);
+                      setAmount(v === BigInt(0) ? "0" : formatEther(v).slice(0, 12));
+                    }
                   }}
-                  className="min-h-11 cursor-pointer appearance-none rounded-xl border border-line bg-background px-4 pr-9 text-sm font-semibold text-foreground outline-none focus:border-lime"
-                  aria-label="Asset to shield"
+                  className="tnum -my-2 inline-flex min-h-10 min-w-0 items-center gap-1.5 text-mute transition-colors hover:text-foreground disabled:opacity-45"
                 >
-                  {nativeOk && <option value="eth">ETH</option>}
-                  {tokens.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.symbol}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute">
-                  &#9662;
+                  <span className="truncate">
+                    Balance {isConnected ? maxDisplay : "0"} {symbol}
+                  </span>
+                  <span className="font-medium text-foreground">Max</span>
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <input
+                  id="shield-amount"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className="tnum min-w-0 flex-1 bg-transparent text-[40px] font-light leading-[1.15] tracking-[-0.02em] text-foreground outline-none! placeholder:text-faint sm:text-[46px]"
+                  aria-label="Amount to add"
+                />
+                <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-foreground/20">
+                  <div className="pointer-events-none flex h-11 items-center gap-2 rounded-full bg-panel pl-1.5 pr-3 text-[15px] font-medium text-foreground shadow-card">
+                    <AssetMark id={selectedToken?.id ?? null} symbol={symbol} size={30} />
+                    {symbol}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden className="text-mute">
+                      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <select
+                    value={assetChoice}
+                    onChange={(e) => {
+                      setAssetChoice(e.target.value);
+                      setAmount("");
+                    }}
+                    className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+                    aria-label="Asset to add"
+                  >
+                    {nativeOk && <option value="eth">ETH</option>}
+                    {tokens.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.symbol}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="tnum mt-1 min-h-5 text-[13px] text-mute">
+                {usdHint ? `≈ ${usdHint}` : " "}
+              </p>
+            </div>
+
+            <div
+              aria-hidden
+              className="relative z-10 mx-auto -my-3 grid h-9 w-9 place-items-center rounded-full border-4 border-panel bg-sealed-soft text-sealed"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5v14m0 0l-5-5m5 5l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+
+            {/* to: private balance */}
+            <div className="rounded-[16px] bg-surface p-[16px] sm:p-5">
+              <div className="flex items-center justify-between gap-3 text-[13px]">
+                <span className="text-mute">Into your private balance</span>
+                <span className="inline-flex items-center gap-1.5 font-medium text-sealed">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sealed" aria-hidden />
+                  Only you
                 </span>
               </div>
+              <p className="tnum mt-3 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
+                {amtNum > 0 ? amount : "0"}{" "}
+                <span className="text-[15px] tracking-normal text-mute">{symbol}</span>
+              </p>
             </div>
-            <div className="mt-2.5 flex items-center justify-between text-xs">
-              <span className="text-mute">{usdHint ? `≈ ${usdHint}` : ""}</span>
+          </div>
+
+          <dl className="mt-5 divide-y divide-line text-[14px]">
+            <div className="flex h-11 items-center justify-between gap-3">
+              <dt className="text-mute">Fee</dt>
+              <dd className="text-foreground">No fee</dd>
+            </div>
+            <div className="flex h-11 items-center justify-between gap-3">
+              <dt className="text-mute">Network</dt>
+              <dd className="text-foreground">{network.label}</dd>
+            </div>
+          </dl>
+
+          <div className="mt-5">
+            {!connectedOk ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-surface px-4 py-3">
+                <p className="text-[14px] text-mute">
+                  {!isConnected
+                    ? "Connect a wallet to add money."
+                    : `Switch to ${network.label} to add money.`}
+                </p>
+                <WalletMenu />
+              </div>
+            ) : (
               <button
-                type="button"
-                disabled={!isConnected}
-                onClick={() => {
-                  if (walletBalance === undefined) return;
-                  if (selectedToken) {
-                    setAmount(formatUnits(walletBalance, decimals).slice(0, 18));
-                  } else {
-                    const leave = 50_000_000_000_000n;
-                    const v =
-                      walletBalance > leave ? walletBalance - leave : BigInt(0);
-                    setAmount(v === BigInt(0) ? "0" : formatEther(v).slice(0, 12));
-                  }
-                }}
-                className="text-mute transition-colors hover:text-foreground disabled:opacity-40"
+                type="submit"
+                disabled={busy || proving}
+                className="btn btn-ink btn-lg btn-block"
               >
-                Balance: {isConnected ? maxLabel : "0"} {symbol} ·{" "}
-                <span className="font-medium text-lime">Max</span>
+                {(busy || proving) && <Spinner />}
+                {ctaLabel}
               </button>
-            </div>
+            )}
           </div>
-
-          <div className="flex items-center justify-between rounded-xl border border-line bg-background/40 px-4 py-3 text-sm">
-            <span className="text-mute">Shielding fee</span>
-            <span className="font-medium text-foreground">No fee</span>
-          </div>
-
-          {!isConnected || !onProduct ? (
-            <WalletMenu />
-          ) : (
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-lime text-sm font-semibold text-background hover:opacity-90 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
-            >
-              {isPending && pendingKind === "approve"
-                ? "Approve in wallet…"
-                : confirming && pendingKind === "approve"
-                  ? "Approving…"
-                  : isPending && pendingKind === "shield"
-                    ? "Confirm shield…"
-                    : confirming && pendingKind === "shield"
-                      ? "Shielding…"
-                      : selectedToken &&
-                          allowance !== undefined &&
-                          parseAmount() !== null &&
-                          (allowance as bigint) < (parseAmount() as bigint)
-                        ? `Approve & shield ${symbol}`
-                        : `Shield ${symbol}`}
-            </button>
-          )}
 
           {(formError || writeError) && (
-            <p role="alert" className="text-sm text-[#c0432f]">
+            <p
+              role="alert"
+              className="mt-4 break-words rounded-xl bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-danger"
+            >
               {formError || writeError?.message.slice(0, 180)}
             </p>
           )}
           {hash && !isSuccess && (
-            <p className="text-sm text-mute">
-              Submitted…{" "}
+            <p className="mt-4 flex items-center justify-center gap-2 text-[13.5px] text-mute">
+              Submitted.
               <a
                 href={network.explorerTx(hash)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-lime hover:underline"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
               >
-                View tx
+                View transaction
               </a>
             </p>
           )}
 
-          <p className="text-center text-xs leading-relaxed text-mute">
-            Your public wallet balance drops. Only you can see what is inside the
-            vault.
+          <p className="mt-5 text-center text-[12.5px] leading-relaxed text-mute">
+            Your public wallet balance goes down. Only you can see what is in your
+            private balance.
           </p>
         </form>
 
-        {hasActiveShield && (
-          <div className="rounded-2xl border border-line bg-[color-mix(in_srgb,var(--lime)_4%,var(--panel))] p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-[0.16em] text-mute">
-                In your vault
-              </span>
-              {syncing && <span className="text-[10px] text-mute">Syncing…</span>}
-            </div>
-            <ul className="mt-3 space-y-1.5">
-              {assetRows.map((r) => (
-                <li
-                  key={r.asset}
-                  className="tnum text-lg font-medium text-foreground"
-                >
-                  {isNativeAsset(r.asset)
-                    ? formatEth(r.amount)
-                    : formatUnits(r.amount, 18)}{" "}
-                  <span className="text-sm text-mute">{r.label}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 flex gap-4 text-xs">
-              <Link href="/app/vault?tab=send" className="text-lime hover:underline">
-                Send &#8594;
-              </Link>
-              <Link href="/app/vault?tab=move" className="text-lime hover:underline">
-                Cash out &#8594;
-              </Link>
-            </div>
-          </div>
-        )}
+        <aside className="space-y-4">
+          <PrivateBalanceCard
+            rows={balanceRows}
+            syncing={syncing}
+            actions={
+              balanceRows.length > 0 ? (
+                <>
+                  <Link href="/app/vault?tab=move" className="btn btn-ink btn-sm">
+                    Send privately
+                  </Link>
+                  <Link href="/app/vault?tab=move&mode=cashout" className="btn btn-ghost btn-sm">
+                    Cash out
+                  </Link>
+                </>
+              ) : null
+            }
+          />
 
+          <div className="gl-card p-5">
+            <p className="text-[13px] text-mute">What the explorer shows</p>
+            <dl className="mt-3 divide-y divide-line text-[14px]">
+              <div className="flex h-11 items-center justify-between gap-3">
+                <dt className="text-mute">Your deposit</dt>
+                <dd className="tnum truncate text-foreground">
+                  {amtNum > 0 ? `${amount} ${symbol}` : `The amount, in ${symbol}`}
+                </dd>
+              </div>
+              <div className="flex h-11 items-center justify-between gap-3">
+                <dt className="text-mute">From</dt>
+                <dd className="tnum truncate text-foreground">
+                  {address ? shortAddress(address, 4) : "Your wallet"}
+                </dd>
+              </div>
+              <div className="flex h-11 items-center justify-between gap-3">
+                <dt className="text-mute">Your private balance</dt>
+                <dd className="text-foreground/60">
+                  <SealDots n={6} />
+                </dd>
+              </div>
+              <div className="flex h-11 items-center justify-between gap-3">
+                <dt className="text-mute">Who you pay next</dt>
+                <dd className="text-foreground/60">
+                  <SealDots n={6} />
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
+              Adding money is a deposit like any other. What you hold and who you
+              pay after that stays private.
+            </p>
+          </div>
+        </aside>
       </div>
 
       <SuccessModal
         open={showSuccess && Boolean(hash)}
         title={successTitle}
-        body={successBody}
+        body={
+          <>
+            {successBody}
+            {successTitle === "Added privately" && !isTempo && (
+              <p className="mt-2">
+                For a private stock trade, add ETH, then open{" "}
+                <a
+                  href="/app/trade?market=tsla&path=sealed"
+                  className="font-medium text-foreground underline underline-offset-4"
+                >
+                  Trade, Private trade
+                </a>
+                .
+              </p>
+            )}
+          </>
+        }
         primaryHref={hash ? network.explorerTx(hash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
@@ -757,5 +880,140 @@ export function ShieldView() {
         }}
       />
     </>
+  );
+}
+
+type BalanceRow = {
+  asset: string;
+  label: string;
+  logoId: string | null;
+  amount: string;
+  sub: string | null;
+};
+
+/** The private balance, only visible to its owner. Carries the sealed glow. */
+function PrivateBalanceCard({
+  rows,
+  syncing,
+  actions,
+}: {
+  rows: BalanceRow[];
+  syncing: boolean;
+  actions?: React.ReactNode;
+}) {
+  const [hidden, setHidden] = useState(false);
+  return (
+    <div className="gl-card relative overflow-hidden p-5">
+      <SealedField tone="soft" />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] text-mute">Private balance</p>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-sealed">
+              <span className="h-1.5 w-1.5 rounded-full bg-sealed" aria-hidden />
+              {syncing ? "Syncing" : "Only you"}
+            </span>
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHidden((v) => !v)}
+                aria-pressed={hidden}
+                aria-label={hidden ? "Show amounts" : "Hide amounts"}
+                className="-mr-2 grid h-9 w-9 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <EyeIcon off={hidden} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {rows.length > 0 ? (
+          <ul className="mt-4 space-y-3.5">
+            {rows.map((r) => (
+              <li key={r.asset} className="flex items-center gap-3">
+                <AssetMark id={r.logoId} symbol={r.label} size={32} />
+                <div className="min-w-0">
+                  <p className="tnum truncate text-[26px] font-light leading-none tracking-[-0.02em] text-foreground">
+                    {hidden ? (
+                      <SealDots n={6} className="text-foreground/60" />
+                    ) : (
+                      r.amount
+                    )}{" "}
+                    <span className="text-[14px] tracking-normal text-mute">{r.label}</span>
+                  </p>
+                  {r.sub && !hidden && (
+                    <p className="tnum mt-1 text-[12.5px] text-mute">{r.sub}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="mt-4">
+            <p className="tnum text-[34px] font-light leading-none tracking-[-0.02em] text-foreground">
+              0
+            </p>
+            <p className="mt-2 max-w-[30ch] text-[13px] leading-relaxed text-mute">
+              Money you add shows up here. Nobody else can see it.
+            </p>
+          </div>
+        )}
+
+        {actions && <div className="mt-5 flex flex-wrap gap-2">{actions}</div>}
+      </div>
+    </div>
+  );
+}
+
+function AssetMark({
+  id,
+  symbol,
+  size = 28,
+}: {
+  id: string | null;
+  symbol: string;
+  size?: number;
+}) {
+  if (!id) return <EthMark size={size} />;
+  return <TokenLogo id={id} symbol={symbol} size={size} />;
+}
+
+/** The ETH mark, monochrome on an ink squircle (flips in dark mode). */
+function EthMark({ size = 28 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-grid shrink-0 place-items-center rounded-[30%] bg-ink text-on-ink"
+      style={{ width: size, height: size }}
+    >
+      <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none">
+        <path d="M12 2.5l6 9.75-6 3.5-6-3.5 6-9.75z" fill="currentColor" />
+        <path d="M6 13.6l6 3.5 6-3.5-6 8.4-6-8.4z" fill="currentColor" opacity="0.7" />
+      </svg>
+    </span>
+  );
+}
+
+function EyeIcon({ off = false }: { off?: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.6" />
+      {off && <path d="M4 20L20 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
+function Spinner() {
+  return (
+    <span
+      className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent opacity-80 motion-reduce:animate-none"
+      aria-hidden
+    />
   );
 }

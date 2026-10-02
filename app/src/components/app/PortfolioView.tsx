@@ -8,7 +8,6 @@ import {
   useChainId,
   useReadContracts,
 } from "wagmi";
-import { formatUnits } from "viem";
 import { formatEth } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { faucetFor } from "@/lib/faucet";
@@ -24,9 +23,11 @@ import {
 import { shieldTokensFor, erc20BalanceOfAbi } from "@/lib/tokens";
 import {
   assetLabel,
+  formatAssetAmount,
   isNativeAsset,
   isShieldDeployed,
 } from "@/lib/shield";
+import { SealedField } from "@/components/ui/SealedField";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
@@ -36,39 +37,21 @@ import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 
-/*, small marks that carry the public / sealed duality, */
+/* Small marks that carry the public / private duality. */
 function EyeIcon({ className = "" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-    >
-      <path
-        d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
 
 function LockIcon({ className = "" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-    >
-      <rect x="4" y="10.5" width="16" height="10" rx="2.2" fill="currentColor" />
-      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke="currentColor" strokeWidth="2" />
+    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="5" y="10.5" width="14" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
@@ -76,75 +59,57 @@ function LockIcon({ className = "" }: { className?: string }) {
 function KindBadge({ sealed }: { sealed: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] ${
-        sealed
-          ? "border-sealed/45 text-sealed"
-          : "border-line text-mute"
+      className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium ${
+        sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-mute"
       }`}
     >
       {sealed ? <LockIcon /> : <EyeIcon />}
-      {sealed ? "Sealed" : "Public"}
+      {sealed ? "Private" : "Public"}
     </span>
   );
 }
 
-function AccountCard({
+function StatCard({
   label,
   sealed,
   value,
   sub,
   loading,
+  children,
 }: {
   label: string;
   sealed: boolean;
   value: string;
   sub?: string;
   loading?: boolean;
+  children?: ReactNode;
 }) {
   return (
-    <div
-      className={`rounded-2xl border border-line p-5 ${
-        sealed
-          ? "bg-[color-mix(in_srgb,var(--sealed)_6%,var(--panel))]"
-          : "bg-panel"
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-[0.16em] text-mute">
-          {label}
-        </span>
+    <div className="gl-card flex min-w-0 flex-col p-5">
+      <div className="flex h-6 items-center justify-between gap-3">
+        <span className="text-[13px] text-mute">{label}</span>
         <KindBadge sealed={sealed} />
       </div>
-      <p className="tnum mt-3 font-display text-2xl tracking-tight text-foreground">
-        {loading ? "…" : value}
+      <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
+        {loading ? <span className="inline-block h-7 w-24 animate-pulse rounded-lg bg-surface align-middle" /> : value}
       </p>
-      {sub && <p className="mt-1 text-xs text-mute">{sub}</p>}
+      {sub && <p className="mt-2 truncate text-[13px] text-mute">{sub}</p>}
+      {children}
     </div>
   );
 }
 
-function ShieldIcon() {
+function AddIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 3l7 2.6v5c0 4.4-3 7.4-7 8.9-4-1.5-7-4.5-7-8.9v-5L12 3z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
 function SendIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 17L17 7M9 7h8v8"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M7 17L17 7M9 7h8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -168,38 +133,39 @@ function QuickAction({
   icon,
   primary = false,
   disabled = false,
+  className = "",
 }: {
   href: string;
   label: string;
   icon: ReactNode;
   primary?: boolean;
   disabled?: boolean;
+  className?: string;
 }) {
-  const base =
-    "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-all active:scale-[0.98]";
+  const cls = `btn ${primary ? "btn-ink" : "btn-ghost"} ${className}`;
   if (disabled) {
     return (
-      <span
-        className={`${base} cursor-not-allowed border border-line text-mute opacity-50`}
-        title="Not live yet"
-      >
+      <span className={cls} aria-disabled="true" title="Not live yet">
         {icon}
         {label}
       </span>
     );
   }
   return (
-    <Link
-      href={href}
-      className={`${base} ${
-        primary
-          ? "bg-lime text-background hover:opacity-90"
-          : "border border-line text-foreground hover:border-mute"
-      }`}
-    >
+    <Link href={href} className={cls}>
       {icon}
       {label}
     </Link>
+  );
+}
+
+function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-start gap-1 max-sm:px-5 py-10 sm:px-6">
+      <p className="text-[15px] text-foreground">{title}</p>
+      {body && <p className="max-w-[48ch] text-[13.5px] leading-relaxed text-mute">{body}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
   );
 }
 
@@ -214,14 +180,14 @@ export function PortfolioView() {
   // The public, unshielded asset differs by chain: equities on Robinhood,
   // stablecoins on Tempo.
   const publicAssetLabel = isTempo ? "Tokens" : "Stocks";
-  const publicAssetSub = isTempo ? "Faucet · stablecoins" : "Faucet · live marks";
+  const publicAssetSub = isTempo ? "Stablecoins in your wallet" : "Tokenized stocks, live prices";
   const { settings } = useTradingSettings();
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
-  const markets = marketData?.markets ?? [];
+  const markets = useMemo(() => marketData?.markets ?? [], [marketData]);
   // The native gas asset is priced differently per chain: Robinhood is ETH
   // (marked against ETH/USD), Tempo's native currency IS the US dollar, so a
-  // unit is worth $1 — never the ETH price. The wallet card labels it with the
+  // unit is worth $1, never the ETH price. The wallet card labels it with the
   // chain's own symbol rather than a hardcoded "ETH".
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
@@ -334,7 +300,7 @@ export function PortfolioView() {
   const stocksUsd = positions.reduce((s, p) => s + p.usd, 0);
   // On Robinhood the native ETH is a real holding and counts toward value. On
   // Tempo the native USD is a faucet balance (the faucet hands out an absurd
-  // amount), so it is NOT portfolio value — Total value there reflects only what
+  // amount), so it is NOT portfolio value. Total value there reflects only what
   // you actually hold and have shielded (stablecoins + vault).
   const nativeHeldUsd = isTempo ? 0 : (ethUsdVal ?? 0);
   const totalUsd = nativeHeldUsd + stocksUsd + shieldEthUsd + shieldStocksUsd;
@@ -353,8 +319,8 @@ export function PortfolioView() {
 
   // Balances only mean anything when the wallet is on this network. When it is
   // connected to a different chain, its on-chain reads belong to that foreign
-  // chain (and can be absurdly large), so hold everything at "—" until the
-  // wallet is switched — which is exactly what the wrong-network banner says.
+  // chain (and can be absurdly large), so hold everything at zero until the
+  // wallet is switched, which is exactly what the wrong-network banner says.
   const balancesVisible = isConnected && onProduct;
 
   const totalDisplay = !balancesVisible
@@ -369,12 +335,12 @@ export function PortfolioView() {
     ? `0 ${nativeSymbol}`
     : `${formatEth(bal?.value ?? BigInt(0))} ${nativeSymbol}`;
   const walletSub = !balancesVisible
-    ? "Open wallet"
+    ? "Visible on the explorer"
     : isTempo
       ? "Testnet balance"
       : ethUsdVal != null && settings.showUsd
         ? formatUsdCompact(ethUsdVal)
-        : "Open wallet";
+        : "Visible on the explorer";
 
   const vaultValue = !balancesVisible
     ? "0"
@@ -384,16 +350,31 @@ export function PortfolioView() {
         ? `${
             isNativeAsset(shieldRows[0].asset)
               ? formatEth(shieldRows[0].amount)
-              : formatUnits(shieldRows[0].amount, 18)
+              : formatAssetAmount(shieldRows[0].amount, shieldRows[0].asset)
           } ${shieldRows[0].label}`
         : `${shieldRows.length} assets`;
-  const vaultSub = !hasShield
-    ? shieldLive
-      ? "Add money to start"
-      : "Not live yet"
-    : settings.showUsd && sealedUsd > 0
+
+  // The hero number: what sits in the vault, only readable in this browser.
+  const privateDisplay = !balancesVisible
+    ? settings.showUsd
+      ? formatUsd(0)
+      : "0"
+    : settings.showUsd && (sealedUsd > 0 || !hasShield)
       ? formatUsdCompact(sealedUsd)
-      : "Amount stays hidden";
+      : vaultValue;
+  const privateSub = !isConnected
+    ? "Connect a wallet to see your private balance."
+    : !onProduct
+      ? `Switch your wallet to ${network.label} to see balances.`
+      : syncing
+        ? "Syncing your vault…"
+        : !hasShield
+          ? shieldLive
+            ? "Nothing here yet. Add money privately and only you will see this number."
+            : "The private vault is not live on this network yet."
+          : settings.showUsd && sealedUsd > 0
+            ? `${vaultValue} in your vault. Nobody else can see it.`
+            : "Hidden from the public. Only this browser can read it.";
 
   const stocksValue = !balancesVisible
     ? settings.showUsd
@@ -403,134 +384,130 @@ export function PortfolioView() {
       ? formatUsdCompact(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
+  const quietLink =
+    "inline-flex h-9 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60";
+
   return (
     <div className="space-y-5">
       <OnboardingCard />
-      {/*, Balance strip: total + public/sealed allocation + quick actions, */}
-      <div className="overflow-hidden rounded-2xl border border-line bg-panel">
-        <div className="flex gap-6 p-6 max-lg:flex-col lg:items-center lg:justify-between lg:gap-10">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-3">
+
+      {/* Private balance: the hero. The field behind it is the sealed signal. */}
+      <section className="gl-card relative overflow-hidden">
+        <SealedField tone="soft" />
+        <div className="relative z-[1] max-sm:p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[14px] text-soft">Private balance</span>
+              <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
+                <LockIcon />
+                Only you
+              </span>
+            </div>
+            <div className="-mr-2 flex flex-wrap items-center gap-0.5">
               <NetworkPulse />
               {isTempo ? (
-                <TempoFaucetButton className="text-xs text-mute transition-colors hover:text-foreground disabled:opacity-60" />
+                <TempoFaucetButton className={quietLink} />
               ) : (
                 <a
                   href={faucet.url}
                   target={faucetExternal ? "_blank" : undefined}
                   rel={faucetExternal ? "noreferrer" : undefined}
-                  className="text-xs text-mute transition-colors hover:text-foreground"
+                  className={quietLink}
                   title={faucet.blurb}
                 >
-                  Get testnet funds →
+                  Get test funds
                 </a>
               )}
-              <span className="text-line">·</span>
-              <button
-                type="button"
-                onClick={openOnboarding}
-                className="text-xs text-mute transition-colors hover:text-lime"
-              >
+              <button type="button" onClick={openOnboarding} className={quietLink}>
                 Getting started
               </button>
             </div>
-            <p className="mt-5 text-[10px] uppercase tracking-[0.18em] text-mute">
-              Total value
-            </p>
-            <p className="tnum mt-1 font-display text-4xl leading-none tracking-tight text-foreground sm:text-5xl">
-              {totalDisplay}
-            </p>
-
-            {/* allocation bar */}
-            <div className="mt-5 max-w-sm">
-              <div
-                className="flex h-2 w-full overflow-hidden rounded-full bg-background"
-                aria-hidden
-              >
-                {sealedPct != null ? (
-                  <>
-                    <span
-                      className="h-full bg-foreground"
-                      style={{ width: `${100 - sealedPct}%` }}
-                    />
-                    <span
-                      className="h-full bg-sealed"
-                      style={{ width: `${sealedPct}%` }}
-                    />
-                  </>
-                ) : (
-                  <span className="h-full w-full bg-line" />
-                )}
-              </div>
-              <div className="mt-2 flex items-center gap-4 text-[11px] text-mute">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-foreground" />
-                  Public{sealedPct != null ? ` ${100 - sealedPct}%` : ""}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-sealed" />
-                  Sealed{sealedPct != null ? ` ${sealedPct}%` : ""}
-                </span>
-              </div>
-            </div>
           </div>
 
-          {/* quick actions */}
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <QuickAction
-              href="/app/shield"
-              label="Shield"
-              icon={<ShieldIcon />}
-              primary
-              disabled={!shieldLive}
-            />
-            <QuickAction
-              href="/app/send"
-              label="Send"
-              icon={<SendIcon />}
-            />
-            <QuickAction
-              href="/app/move"
-              label="Move"
-              icon={<MoveIcon />}
-              disabled={!shieldLive}
-            />
+          <div className="max-lg:mt-6 flex max-lg:flex-col gap-7 lg:mt-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <p
+                className={`tnum truncate max-sm:text-[48px] font-light leading-none tracking-[-0.03em] sm:text-[64px] ${
+                  balancesVisible && hasShield ? "text-foreground" : "text-foreground/85"
+                }`}
+              >
+                {privateDisplay}
+              </p>
+              <p className="mt-3 max-w-[52ch] text-[14px] leading-relaxed text-mute">{privateSub}</p>
+            </div>
+
+            <div className="shrink-0 gap-2 max-sm:grid max-sm:grid-cols-2 sm:flex sm:flex-wrap">
+              <QuickAction
+                href="/app/shield"
+                label="Add privately"
+                icon={<AddIcon />}
+                primary
+                disabled={!shieldLive}
+                className="max-sm:col-span-2"
+              />
+              <QuickAction href="/app/send" label="Send" icon={<SendIcon />} />
+              <QuickAction href="/app/move" label="Move" icon={<MoveIcon />} disabled={!shieldLive} />
+            </div>
           </div>
         </div>
 
-        {/* network banner lives inside the strip footer; the header already
-            carries the connect / switch control, so no connect prompt here */}
+        {/* network banner lives in the card footer; the sidebar already
+            carries the connect control, so no connect prompt here */}
         {isConnected && !onProduct && (
-          <div className="flex flex-col gap-3 border-t border-line px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-[#c0432f]">
-              Switch your wallet to {network.label} to see balances.
-            </p>
+          <div className="relative z-[1] flex max-sm:flex-col gap-3 border-t border-line max-sm:px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <p className="text-[14px] text-danger">Switch your wallet to {network.label} to see balances.</p>
             <WalletMenu />
           </div>
         )}
         {isConnected && onProduct && address && (
-          <div className="border-t border-line px-6 py-3">
-            <AddressChip address={address} />
+          <div className="relative z-[1] flex items-center justify-between gap-3 border-t border-line max-sm:px-6 py-2.5 sm:px-8">
+            <span className="text-[12.5px] text-mute">Wallet</span>
+            <AddressChip address={address} className="min-h-9 text-[12.5px]" />
           </div>
         )}
-      </div>
+      </section>
 
-      {/*, Account cards: public wallet + sealed vault + public stocks, */}
+      {/* Total + public accounts */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <AccountCard
+        <div className="gl-card flex min-w-0 flex-col p-5">
+          <div className="flex h-6 items-center justify-between gap-3">
+            <span className="text-[13px] text-mute">Total value</span>
+            {sealedPct != null && (
+              <span className="tnum text-[12px] text-mute">{sealedPct}% private</span>
+            )}
+          </div>
+          <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
+            {totalDisplay}
+          </p>
+          <div className="mt-auto pt-4">
+            <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface" aria-hidden>
+              {sealedPct != null && (
+                <>
+                  <span className="h-full rounded-full bg-foreground/75" style={{ width: `${100 - sealedPct}%` }} />
+                  <span className="h-full rounded-full bg-sealed" style={{ width: `${sealedPct}%` }} />
+                </>
+              )}
+            </div>
+            <div className="mt-2.5 flex items-center gap-4 text-[12px] text-mute">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-foreground/75" />
+                Public{sealedPct != null ? ` ${100 - sealedPct}%` : ""}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-sealed" />
+                Private{sealedPct != null ? ` ${sealedPct}%` : ""}
+              </span>
+            </div>
+          </div>
+        </div>
+        <StatCard
           label="Wallet"
           sealed={false}
           value={walletValue}
           sub={walletSub}
           loading={isConnected && isLoading}
         />
-        <AccountCard
-          label="Vault"
-          sealed
-          value={vaultValue}
-          sub={syncing ? "Syncing…" : vaultSub}
-        />
-        <AccountCard
+        <StatCard
           label={publicAssetLabel}
           sealed={false}
           value={stocksValue}
@@ -538,70 +515,75 @@ export function PortfolioView() {
         />
       </div>
 
-      {/*, Main split: holdings + sealed notes / rail, */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="space-y-4 lg:col-span-8">
+      {/* Main split: vault + holdings, with the public feed alongside */}
+      <div className="grid gap-5 lg:grid-cols-12">
+        <div className="min-w-0 space-y-5 lg:col-span-8">
           {shieldNotes.length > 0 && (
-            <section className="overflow-hidden rounded-2xl border border-line bg-[color-mix(in_srgb,var(--sealed)_5%,var(--panel))]">
-              <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-mute">
-                  In the vault
-                </p>
+            <section className="gl-card overflow-hidden">
+              <header className="flex items-center justify-between gap-3 max-sm:px-5 pb-3 pt-5 sm:px-6">
+                <div>
+                  <h2 className="text-[17px] text-foreground">In your vault</h2>
+                  <p className="mt-0.5 text-[13px] text-mute">Only this browser can read these amounts</p>
+                </div>
                 <KindBadge sealed />
               </header>
-              <ul>
+              <ul className="divide-y divide-line border-t border-line">
                 {shieldNotes.slice(0, 6).map((n) => (
                   <li
                     key={n.id}
-                    className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5 last:border-0"
+                    className="flex min-h-[64px] items-center justify-between gap-3 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:px-6"
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground">
-                        {isNativeAsset(n.asset)
-                          ? formatEth(BigInt(n.amountWei))
-                          : formatUnits(BigInt(n.amountWei), 18)}{" "}
-                        {assetLabel(n.asset)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-mute">
-                        {n.leafIndex != null
-                          ? "Ready to send privately or cash out"
-                          : "Confirming…"}
-                        {n.source === "local" && n.id.startsWith("imp-")
-                          ? " · received"
-                          : ""}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed" aria-hidden>
+                        <LockIcon />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="tnum truncate text-[15px] text-foreground">
+                          {isNativeAsset(n.asset)
+                            ? formatEth(BigInt(n.amountWei))
+                            : formatAssetAmount(BigInt(n.amountWei), n.asset)}{" "}
+                          <span className="text-mute">{assetLabel(n.asset)}</span>
+                        </p>
+                        <p className="mt-0.5 truncate text-[12.5px] text-mute">
+                          {n.leafIndex != null
+                            ? "Ready to send privately or cash out"
+                            : "Confirming…"}
+                          {n.source === "local" && n.id.startsWith("imp-")
+                            ? ", received"
+                            : ""}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1">
                       {n.txHash && (
                         <a
                           href={network.explorerTx(n.txHash)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-sealed hover:underline"
+                          className="max-sm:hidden h-9 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground sm:inline-flex"
                         >
-                          Tx
+                          Receipt
                         </a>
                       )}
-                      <Link
-                        href={
-                          isNativeAsset(n.asset)
-                            ? "/app/trade?path=sealed"
-                            : `/app/trade?path=sealed&side=sell&market=${
-                                tokenSet.find(
-                                  (t) =>
-                                    t.address.toLowerCase() ===
-                                    n.asset.toLowerCase()
-                                )?.id ?? "tsla"
-                              }`
-                        }
-                        className="inline-flex min-h-9 items-center rounded-md border border-sealed/35 px-2.5 text-xs text-sealed hover:border-sealed/60"
-                      >
-                        Trade
-                      </Link>
-                      <Link
-                        href="/app/move"
-                        className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-mute"
-                      >
+                      {!isTempo && (
+                        <Link
+                          href={
+                            isNativeAsset(n.asset)
+                              ? "/app/trade?path=sealed"
+                              : `/app/trade?path=sealed&side=sell&market=${
+                                  tokenSet.find(
+                                    (t) =>
+                                      t.address.toLowerCase() ===
+                                      n.asset.toLowerCase()
+                                  )?.id ?? "tsla"
+                                }`
+                          }
+                          className="btn btn-quiet btn-sm h-10"
+                        >
+                          Trade
+                        </Link>
+                      )}
+                      <Link href="/app/move" className="btn btn-ghost btn-sm h-10">
                         Move
                       </Link>
                     </div>
@@ -612,92 +594,105 @@ export function PortfolioView() {
           )}
 
           {/* Holdings table */}
-          <section className="overflow-hidden rounded-2xl border border-line bg-panel">
-            <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-mute">
-                Holdings
-              </p>
+          <section className="gl-card overflow-hidden">
+            <header className="flex items-center justify-between gap-3 max-sm:px-5 pb-3 pt-5 sm:px-6">
+              <div>
+                <h2 className="text-[17px] text-foreground">Holdings</h2>
+                <p className="mt-0.5 text-[13px] text-mute">Public tokens in your wallet</p>
+              </div>
+              <KindBadge sealed={false} />
             </header>
             {!balancesVisible ? (
-              <p className="px-5 py-10 text-center text-sm text-mute">
-                {!isConnected
-                  ? "Connect to see your tokens from the faucet."
-                  : `Switch your wallet to ${network.label} to see your tokens.`}
-              </p>
+              <div className="border-t border-line">
+                <EmptyState
+                  title={!isConnected ? "Connect a wallet" : `Switch to ${network.label}`}
+                  body={
+                    !isConnected
+                      ? "Your tokens from the faucet show up here once you connect."
+                      : `Your wallet is on another network. Switch it to ${network.label} to see your tokens.`
+                  }
+                />
+              </div>
             ) : positions.length === 0 ? (
-              <p className="px-5 py-10 text-center text-sm text-mute">
-                No tokens yet.{" "}
-                <a
-                  href={faucet.url}
-                  target={faucetExternal ? "_blank" : undefined}
-                  rel={faucetExternal ? "noreferrer" : undefined}
-                  className="text-lime hover:underline"
-                >
-                  Claim from the faucet →
-                </a>
-              </p>
+              <div className="border-t border-line">
+                <EmptyState
+                  title="No tokens yet"
+                  body="Claim free test tokens to try paying and holding privately."
+                  action={
+                    <a
+                      href={faucet.url}
+                      target={faucetExternal ? "_blank" : undefined}
+                      rel={faucetExternal ? "noreferrer" : undefined}
+                      className="btn btn-ghost btn-sm h-10"
+                    >
+                      Claim from the faucet
+                    </a>
+                  }
+                />
+              </div>
             ) : (
-              <ul>
-                {positions.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-center gap-3 border-b border-line px-5 py-3.5 last:border-0"
-                  >
-                    <TokenLogo id={p.id} symbol={p.symbol} size={30} />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground">
-                        {p.symbol}
-                      </p>
-                      <p className="text-xs text-mute">{p.name}</p>
-                    </div>
-                    <Sparkline
-                      points={
-                        p.spark.length >= 2
-                          ? p.spark
-                          : p.mark > 0
-                            ? [p.mark * 0.98, p.mark * 1.01, p.mark]
-                            : []
-                      }
-                      up={p.change24h >= 0}
-                      width={72}
-                      height={28}
-                    />
-                    <div className="w-24 text-right">
-                      <p className="tnum text-sm text-foreground">
-                        {formatTokenAmount(p.raw, p.decimals)}
-                      </p>
-                      {settings.showUsd && p.mark > 0 && (
-                        <p className="text-xs text-mute">
-                          {p.usd > 0
-                            ? formatUsd(p.usd)
-                            : `$${formatMark(p.mark)}`}
+              <>
+                <div className="flex items-center border-t border-line max-sm:px-5 py-2.5 sm:px-6">
+                  <span className="t-label flex-1">Asset</span>
+                  <span className="t-label max-sm:hidden w-[88px] text-center sm:block">24h</span>
+                  <span className="t-label w-28 text-right">Balance</span>
+                  <span className="w-[200px] max-sm:hidden" aria-hidden />
+                </div>
+                <ul className="divide-y divide-line border-t border-line">
+                  {positions.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex min-h-[64px] items-center gap-3 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:px-6"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <TokenLogo id={p.id} symbol={p.symbol} size={34} />
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px] font-medium text-foreground">{p.symbol}</p>
+                          <p className="truncate text-[12.5px] text-mute">{p.name}</p>
+                        </div>
+                      </div>
+                      <div className="max-sm:hidden w-[88px] justify-center sm:flex">
+                        <Sparkline
+                          // Real history only: without it the line stays a flat hairline.
+                          points={p.spark.length >= 2 ? p.spark : []}
+                          up={p.change24h >= 0}
+                          width={72}
+                          height={26}
+                        />
+                      </div>
+                      <div className="w-28 text-right">
+                        <p className="tnum text-[14px] text-foreground">
+                          {formatTokenAmount(p.raw, p.decimals)}
                         </p>
-                      )}
-                    </div>
-                    <div className="hidden gap-1 sm:flex">
-                      {shieldLive && (
-                        <Link
-                          href="/app/shield"
-                          className="inline-flex min-h-9 items-center rounded-md border border-lime/30 px-2.5 text-xs text-lime hover:border-lime/50"
-                        >
-                          Shield
-                        </Link>
-                      )}
-                      <Link
-                        href={`/app/trade?market=${p.id}`}
-                        className="inline-flex min-h-9 items-center rounded-md border border-line px-2.5 text-xs text-foreground hover:border-lime/50"
-                      >
-                        Trade
-                      </Link>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                        {settings.showUsd && p.mark > 0 && (
+                          <p className="tnum text-[12.5px] text-mute">
+                            {p.usd > 0
+                              ? formatUsd(p.usd)
+                              : `$${formatMark(p.mark)}`}
+                          </p>
+                        )}
+                      </div>
+                      <div className="w-[200px] justify-end gap-1 max-sm:hidden sm:flex">
+                        {shieldLive && (
+                          <Link href="/app/shield" className="btn btn-ghost btn-sm">
+                            Add privately
+                          </Link>
+                        )}
+                        {!isTempo && (
+                          <Link href={`/app/trade?market=${p.id}`} className="btn btn-quiet btn-sm">
+                            Trade
+                          </Link>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </section>
         </div>
 
-        <div className="space-y-4 lg:col-span-4">
+        <div className="min-w-0 space-y-4 lg:col-span-4">
           <ActivityFeed />
         </div>
       </div>

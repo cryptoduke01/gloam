@@ -12,7 +12,7 @@ export default function DocsQuickstartPage() {
   return (
     <DocsLayout
       title="Quickstart"
-      lede="Go from an empty project to a real private balance on Robinhood Chain testnet in under ten minutes. Every step below runs — no mocks, real Groth16 proofs."
+      lede="Go from an empty project to a real private balance on Robinhood Chain testnet in under ten minutes. Every step below runs: no mocks, real Groth16 proofs."
       glance={[
         { label: "Time", value: "~10 minutes" },
         { label: "Runtime", value: "browser or node" },
@@ -41,12 +41,12 @@ cd my-private-app && npm install && npm run dev`}</code>
       <h2>What you need</h2>
       <ul>
         <li>
-          Node 18+ (or a browser app with a bundler — Next, Vite). The SDK ships
+          Node 18+ (or a browser app with a bundler, such as Next or Vite). The SDK ships
           TypeScript source, transpiled by your bundler.
         </li>
         <li>
           A funded testnet account. Point a wallet at Robinhood Chain testnet
-          (chain id <code>46630</code>) and get test ETH — see the{" "}
+          (chain id <code>46630</code>) and get test ETH. See the{" "}
           <Link href="/docs/testnet">testnet guide</Link>.
         </li>
         <li>
@@ -73,13 +73,13 @@ npm install snarkjs   # peer, for proving`}</code>
       </p>
       <ul>
         <li>
-          <code>shield.wasm</code> — the witness generator
+          <code>shield.wasm</code>: the witness generator
         </li>
         <li>
-          <code>shield_final.zkey</code> — the proving key
+          <code>shield_final.zkey</code>: the proving key
         </li>
         <li>
-          <code>shield_vkey.json</code> — the verifying key (only for{" "}
+          <code>shield_vkey.json</code>: the verifying key (only for{" "}
           <Link href="/docs/sdk/disclosure">disclosure verification</Link>)
         </li>
       </ul>
@@ -94,7 +94,7 @@ npm install snarkjs   # peer, for proving`}</code>
         <code>buildShieldBoundIntent</code> does the private half: it mints a note
         (a Poseidon commitment binding your secret to the amount and asset) and
         generates the shield proof. You sign the resolved call. The{" "}
-        <code>note.secret</code> it returns is your only spend authority — persist
+        <code>note.secret</code> it returns is your only spend authority, so persist
         it.
       </p>
       <pre>
@@ -152,7 +152,7 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
       <h2>4. Confirm it landed</h2>
       <p>
         The deposit inserts your commitment as a leaf in the pool&apos;s Merkle
-        tree. Check membership directly — no index, no backend:
+        tree. Check membership directly, with no index and no backend:
       </p>
       <pre>
         <code>{`const seen = await publicClient.readContract({
@@ -175,7 +175,7 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
         <code>syncTree</code> replays every leaf-inserting event in order (so the
         root matches even after transfers); <code>buildUnshieldIntent</code>{" "}
         builds the witness and proof. The amount, asset, and recipient become
-        public on exit — the source note stays unlinkable via the nullifier.
+        public on exit; the source note stays unlinkable via the nullifier.
       </p>
       <pre>
         <code>{`import { buildUnshieldIntent, artifactProver, syncTree, SEALED_VAULT } from "@gloamtrade/sdk";
@@ -204,19 +204,19 @@ await wallet.writeContract({
       <h2>Where to go next</h2>
       <ul>
         <li>
-          <Link href="/docs/sdk/reference">API reference</Link> — every builder,
+          <Link href="/docs/sdk/reference">API reference</Link>: every builder,
           the note and prover primitives, merkle, rates, and constants.
         </li>
         <li>
-          <Link href="/docs/private-pay">Private pay</Link> — send inside the
+          <Link href="/docs/private-pay">Private pay</Link>: send inside the
           vault to a receive tag with <code>buildPrivateSendIntent</code>.
         </li>
         <li>
-          <Link href="/docs/sdk/disclosure">Selective disclosure</Link> — prove
+          <Link href="/docs/sdk/disclosure">Selective disclosure</Link>: prove
           one balance to a chosen party, revealing nothing else.
         </li>
         <li>
-          <Link href="/docs/agents">Build a private agent</Link> — the same core,
+          <Link href="/docs/agents">Build a private agent</Link>: the same core,
           server-side, under policy.
         </li>
       </ul>
@@ -224,7 +224,7 @@ await wallet.writeContract({
       <h2>Honesty</h2>
       <p>
         Robinhood Chain testnet only, with dev-ceremony proving keys. Everything
-        here is real — real proofs, real on-chain state, no mocks. Sealed swaps
+        here is real: real proofs, real on-chain state, no mocks. Sealed swaps
         are disabled pending the H1 solvency work. Mainnet waits for a production
         ceremony and an external audit; see{" "}
         <Link href="/docs/production">the production gate</Link>.
