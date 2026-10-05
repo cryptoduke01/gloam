@@ -5,8 +5,10 @@
  * in-memory tree: a server prices a resource (402 requirements), an agent builds
  * a private payment of the required amount to the payee, and the server verifies
  * the payment binds the required amount + asset and settles through the right
- * pool. Also checks the issuer-scoped compliance disclosure shape and the
- * explicit Gloam-vs-Zone posture. No chain, no broadcast.
+ * pool. The payment note travels sealed to the payee's receive tag, so the
+ * server opens it with its receive key before verifying. Also checks the
+ * issuer-scoped compliance disclosure shape and the explicit Gloam-vs-Zone
+ * posture. No chain, no broadcast.
  *
  * Run after build:  node test/x402.selftest.mjs
  */
@@ -21,7 +23,9 @@ import {
   isComplianceDisclosureShape,
   verifyPaymentNoteBinding,
   decodePaymentHeader,
-  decodePaymentNote,
+  openGloamPaymentNote,
+  generateReceiveKey,
+  GLOAM_NOT_FINAL,
   encodeRequirements,
   decodeRequirements,
   GLOAM_X402_SCHEME,
@@ -55,13 +59,14 @@ await tree.insert(await noteCommitmentPoseidon(111n, 5n, STABLE));
 await tree.insert(await noteCommitmentPoseidon(222n, 7n, STABLE));
 const path = await tree.path(0);
 const senderSecretHex = fieldToHex(SECRET);
+const payee = await generateReceiveKey();
 
 // ── server: price the resource ────────────────────────────────────────────────
 const req = buildGloamPaymentRequirements({
   amountWei: PRICE,
   asset: STABLE,
   assetSymbol: "USD",
-  payTo: "gloam:rcpt:demo-payee",
+  payTo: payee.tag,
   resource: "mcp://gloam/tool/summarize",
   description: "Private payment for one summarize call",
   network: NETWORK,
@@ -89,7 +94,9 @@ assert(built.payload.payload.exec.poolAddress === SEALED_VAULT, "payload pool");
 assert(built.payload.payload.txHash === null, "payload txHash unset before broadcast");
 assert(built.changeNote && BigInt(built.changeNote.amountWei) === NOTE_AMOUNT - PRICE, "change note = note - price");
 
-const payNote = decodePaymentNote(built.payload.payload.paymentNote);
+assert(built.sealed === true && built.payload.payload.paymentNote.startsWith("gloam2t."), "payment note is sealed to payTo");
+const payNote = await openGloamPaymentNote(built.payload.payload.paymentNote, payee);
+assert(payNote.secret === built.paymentNote.secret, "payee's receive key opens the sealed note");
 assert(BigInt(payNote.amountWei) === PRICE, "payment note carries the required amount");
 assert(payNote.asset.toLowerCase() === STABLE.toLowerCase(), "payment note asset = stable");
 
@@ -98,11 +105,18 @@ const roundTrip = decodePaymentHeader(built.header);
 assert(roundTrip.payload.paymentNote === built.payload.payload.paymentNote, "header encode/decode");
 
 // ── server: verify the payment ────────────────────────────────────────────────
-const v = verifyGloamPayment({ requirements: req, payload: built.payload });
+// A sealed note cannot be read without the payee's key.
+const vSealed = verifyGloamPayment({ requirements: req, payload: built.payload });
+assert(vSealed.ok === false && /sealed/.test(vSealed.reason), "verify asks for the opened note when the note is sealed");
+const v = verifyGloamPayment({ requirements: req, payload: built.payload, note: payNote });
 assert(v.ok === true, `verify ok (got: ${v.reason})`);
+assert(v.sealed === true, "verify reports the note arrived sealed");
+assert(v.final === false && v.finality === GLOAM_NOT_FINAL, "verify without a sweep says plainly it is not final");
+assert(/spend the money back/.test(v.finality) && /settleGloamPayment/.test(v.finality), "not-final notice names the risk and the fix");
 assert(v.amountWei === PRICE.toString(), "verify surfaces amount");
 assert(v.commitment === payNote.commitment, "verify surfaces the commitment to check on-chain");
-assert(v.onchainChecksRequired.length === 4, "verify lists 4 on-chain checks");
+assert(v.onchainChecksRequired.length === 5, "verify lists 5 on-chain checks");
+assert(v.onchainChecksRequired.some((c) => /sweep/i.test(c)), "verify lists the sweep as a required step");
 assert(v.onchainChecksRequired.some((c) => /binding/i.test(c)), "verify flags the note-binding check");
 assert(v.onchainChecksRequired.some((c) => c.includes("not yet attached")), "verify flags missing settlement tx");
 
@@ -114,7 +128,7 @@ assert((await verifyPaymentNoteBinding(lyingNote)) === false, "lied-up payment n
 
 // after the agent broadcasts, it attaches the tx hash
 built.payload.payload.txHash = "0xabc123";
-const v2 = verifyGloamPayment({ requirements: req, payload: built.payload });
+const v2 = verifyGloamPayment({ requirements: req, payload: built.payload, note: payNote });
 assert(v2.ok === true, "verify ok with tx hash");
 assert(v2.onchainChecksRequired.some((c) => c.includes("0xabc123")), "verify references the settlement tx");
 
@@ -137,17 +151,21 @@ assert(builtProven.payload.payload.disclosure.stub === false, "payment with disc
 
 // ── negative cases ────────────────────────────────────────────────────────────
 // asset mismatch: a requirement for native ETH must reject a stable-asset note
-const reqEth = buildGloamPaymentRequirements({ amountWei: PRICE, payTo: "x", resource: "r", network: NETWORK });
-assert(verifyGloamPayment({ requirements: reqEth, payload: built.payload }).ok === false, "reject asset mismatch");
+const reqEth = buildGloamPaymentRequirements({ amountWei: PRICE, payTo: payee.tag, resource: "r", network: NETWORK });
+assert(verifyGloamPayment({ requirements: reqEth, payload: built.payload, note: payNote }).ok === false, "reject asset mismatch");
 // amount too low: tamper the requirement upward
 const reqHigh = { ...req, maxAmountRequired: (PRICE * 2n).toString() };
-assert(verifyGloamPayment({ requirements: reqHigh, payload: built.payload }).ok === false, "reject underpayment");
+assert(verifyGloamPayment({ requirements: reqHigh, payload: built.payload, note: payNote }).ok === false, "reject underpayment");
 // wrong pool
 const reqPool = { ...req, poolAddress: "0x0000000000000000000000000000000000000001" };
-assert(verifyGloamPayment({ requirements: reqPool, payload: built.payload }).ok === false, "reject wrong pool");
+assert(verifyGloamPayment({ requirements: reqPool, payload: built.payload, note: payNote }).ok === false, "reject wrong pool");
 // scheme mismatch
 const badScheme = { ...built.payload, scheme: "exact" };
-assert(verifyGloamPayment({ requirements: req, payload: badScheme }).ok === false, "reject non-gloam scheme");
+assert(verifyGloamPayment({ requirements: req, payload: badScheme, note: payNote }).ok === false, "reject non-gloam scheme");
+// a note that is not this transfer's payment output (e.g. replayed from an older payment)
+const otherNote = { ...payNote, commitment: fieldToHex(123n) };
+const vOther = verifyGloamPayment({ requirements: req, payload: built.payload, note: otherNote });
+assert(vOther.ok === false && /payment output/.test(vOther.reason), "reject a note that is not the transfer's payment output");
 // underfunded sender note
 let threw = false;
 try {

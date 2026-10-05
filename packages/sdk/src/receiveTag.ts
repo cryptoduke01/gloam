@@ -1,0 +1,258 @@
+/**
+ * Gloam receive tags: seal a payment so only its payee can open it.
+ *
+ * A payee publishes a receive tag, like a shielded address:
+ *
+ *   gloamr1.<base64url SPKI of a P-256 ECDH public key>
+ *
+ * A payer seals a payment ticket to that tag:
+ *
+ *   gloam2t.<base64url( ephemLen (2 bytes, big endian) | ephemSpki | iv (12) | AES-GCM ciphertext )>
+ *
+ * The AES-256-GCM key is HKDF-SHA256 (empty salt, info "gloam-pay-to-tag-v1")
+ * over the ECDH shared secret between a fresh ephemeral key and the tag. Only
+ * the holder of the tag's private key can open it. The ticket inside is a
+ * compact note package (gloam1.<base64url JSON>).
+ *
+ * Byte-compatible with the Gloam app (app/src/lib/receiveTag.ts and
+ * notePackage.ts): a ticket sealed here opens in the app's Receive screen, and a
+ * ticket the app seals opens here. Uses WebCrypto, so it runs in the browser
+ * and in Node 20+.
+ */
+
+import type { Address, Hex } from "viem";
+import { NATIVE_ASSET } from "./constants.js";
+import { noteNullifierPoseidon } from "./note.js";
+import { fieldToHex, hexToField } from "./poseidon.js";
+import type { NoteExport } from "./witness.js";
+
+export const RECEIVE_TAG_PREFIX = "gloamr1.";
+export const SEALED_TICKET_PREFIX = "gloam2t.";
+export const NOTE_PACKAGE_PREFIX = "gloam1.";
+
+const HKDF_INFO = "gloam-pay-to-tag-v1";
+const ECDH = { name: "ECDH", namedCurve: "P-256" } as const;
+/** DER header of an uncompressed P-256 public key in SPKI form (id-ecPublicKey, prime256v1). */
+const P256_SPKI_HEADER = "3059301306072a8648ce3d020106082a8648ce3d03010703420004";
+const P256_SPKI_LENGTH = 91;
+
+/** The private half of a receive tag, as a JWK (what the app keeps in localStorage). */
+export interface ReceiveKeyJwk {
+  kty?: string;
+  crv?: string;
+  x?: string;
+  y?: string;
+  d?: string;
+  ext?: boolean;
+  key_ops?: string[];
+}
+
+/** A receive identity: the tag to share and the private key that opens tickets sealed to it. */
+export interface ReceiveKey {
+  tag: string;
+  privateJwk: ReceiveKeyJwk;
+  createdAt?: number;
+}
+
+type WebCryptoKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
+
+// ── encoding helpers (same alphabet and padding rules as the app) ─────────────
+
+function b64urlEncode(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(s: string): Uint8Array {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Fresh ArrayBuffer-backed copy, so strict BufferSource typing accepts it. */
+function buf(bytes: Uint8Array) {
+  const out = new Uint8Array(bytes.byteLength);
+  out.set(bytes);
+  return out;
+}
+
+const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+
+// ── tags ──────────────────────────────────────────────────────────────────────
+
+/** The public key bytes inside a receive tag, or null if it is not a well-formed tag. */
+function tagSpki(tag: string): Uint8Array | null {
+  const t = tag.trim();
+  if (!t.startsWith(RECEIVE_TAG_PREFIX)) return null;
+  const body = t.slice(RECEIVE_TAG_PREFIX.length);
+  if (!/^[A-Za-z0-9_-]+$/.test(body)) return null;
+  let spki: Uint8Array;
+  try {
+    spki = b64urlDecode(body);
+  } catch {
+    return null;
+  }
+  if (spki.length !== P256_SPKI_LENGTH || !hex(spki).startsWith(P256_SPKI_HEADER)) return null;
+  return spki;
+}
+
+/** True for a well-formed Gloam receive tag (gloamr1. plus a P-256 public key). */
+export function isReceiveTag(input: string): boolean {
+  return typeof input === "string" && tagSpki(input) !== null;
+}
+
+/** Throw a plain error unless `input` is a receive tag. */
+export function assertReceiveTag(input: string, what = "payTo"): void {
+  if (isReceiveTag(input)) return;
+  const shown = typeof input === "string" && input.length > 40 ? `${input.slice(0, 24)}…` : String(input);
+  throw new Error(
+    `${what} must be a Gloam receive tag (gloamr1.…) so the payment can be sealed to the payee and only the payee can open it. Got "${shown}". A payee makes one with generateReceiveKey(), or copies it from the Gloam app under Receive.`
+  );
+}
+
+export function isSealedTicket(input: string): boolean {
+  return typeof input === "string" && input.trim().startsWith(SEALED_TICKET_PREFIX);
+}
+
+/** Make a new receive identity. Keep `privateJwk` secret; share `tag`. */
+export async function generateReceiveKey(): Promise<ReceiveKey> {
+  const pair = await crypto.subtle.generateKey(ECDH, true, ["deriveBits"]);
+  const privateJwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as ReceiveKeyJwk;
+  const spki = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
+  return { tag: RECEIVE_TAG_PREFIX + b64urlEncode(spki), privateJwk, createdAt: Date.now() };
+}
+
+async function importPublic(spki: Uint8Array): Promise<WebCryptoKey> {
+  return crypto.subtle.importKey("spki", buf(spki), ECDH, false, []);
+}
+
+async function importPrivate(jwk: ReceiveKeyJwk): Promise<WebCryptoKey> {
+  return crypto.subtle.importKey("jwk", jwk, ECDH, false, ["deriveBits"]);
+}
+
+async function ecdhAesKey(privateKey: WebCryptoKey, publicKey: WebCryptoKey): Promise<WebCryptoKey> {
+  const bits = await crypto.subtle.deriveBits({ name: "ECDH", public: publicKey }, privateKey, 256);
+  const base = await crypto.subtle.importKey("raw", bits, "HKDF", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: buf(new TextEncoder().encode(HKDF_INFO)) },
+    base,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+/** Seal a ticket (any string, usually a gloam1. note package) so only `tag`'s owner can open it. */
+export async function sealToReceiveTag(plaintext: string, tag: string): Promise<string> {
+  const theirSpki = tagSpki(tag);
+  if (!theirSpki) assertReceiveTag(tag, "The receive tag");
+  const theirPub = await importPublic(theirSpki!);
+  const ephem = await crypto.subtle.generateKey(ECDH, true, ["deriveBits"]);
+  const ephemSpki = new Uint8Array(await crypto.subtle.exportKey("spki", ephem.publicKey));
+  const aes = await ecdhAesKey(ephem.privateKey, theirPub);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: buf(iv) }, aes, buf(new TextEncoder().encode(plaintext)))
+  );
+  const out = new Uint8Array(2 + ephemSpki.length + 12 + cipher.length);
+  out[0] = (ephemSpki.length >> 8) & 0xff;
+  out[1] = ephemSpki.length & 0xff;
+  out.set(ephemSpki, 2);
+  out.set(iv, 2 + ephemSpki.length);
+  out.set(cipher, 2 + ephemSpki.length + 12);
+  return SEALED_TICKET_PREFIX + b64urlEncode(out);
+}
+
+/** Open a gloam2t. ticket with the receive key it was sealed to. Throws if it was sealed to someone else. */
+export async function openSealedTicket(sealed: string, key: ReceiveKey | ReceiveKeyJwk): Promise<string> {
+  const s = sealed.trim();
+  if (!s.startsWith(SEALED_TICKET_PREFIX)) throw new Error("Not a sealed Gloam ticket (gloam2t.…).");
+  const raw = b64urlDecode(s.slice(SEALED_TICKET_PREFIX.length));
+  if (raw.length < 2 + 12 + 16) throw new Error("Corrupt sealed ticket.");
+  const ephemLen = (raw[0]! << 8) | raw[1]!;
+  if (raw.length < 2 + ephemLen + 12 + 1) throw new Error("Corrupt sealed ticket length.");
+  const ephemSpki = raw.slice(2, 2 + ephemLen);
+  const iv = raw.slice(2 + ephemLen, 2 + ephemLen + 12);
+  const cipher = raw.slice(2 + ephemLen + 12);
+  const jwk = "privateJwk" in key ? key.privateJwk : key;
+  const aes = await ecdhAesKey(await importPrivate(jwk), await importPublic(ephemSpki));
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf(iv) }, aes, buf(cipher));
+    return new TextDecoder().decode(new Uint8Array(plain));
+  } catch {
+    throw new Error("This ticket was sealed to a different receive tag.");
+  }
+}
+
+// ── note packages (the ticket inside a seal) ─────────────────────────────────
+
+/** A spendable note as the app shares it. `secret` is the spend authority. */
+export interface NotePackage {
+  v: 1;
+  type: "gloam-private-note";
+  scheme: "poseidon";
+  pool: Address;
+  asset: Address;
+  amountWei: string;
+  secret: Hex;
+  commitment: Hex;
+  message?: string;
+}
+
+/** Compact gloam1. form, byte-identical to the app's encodeNotePackage. */
+export function encodeNotePackage(pack: Omit<NotePackage, "v" | "type" | "scheme"> & Partial<NotePackage>): string {
+  const json = JSON.stringify({
+    v: 1,
+    t: "gloam-private-note",
+    s: "poseidon",
+    p: pack.pool,
+    a: pack.asset ?? NATIVE_ASSET,
+    w: pack.amountWei,
+    k: pack.secret,
+    c: pack.commitment,
+  });
+  return NOTE_PACKAGE_PREFIX + b64urlEncode(new TextEncoder().encode(json));
+}
+
+/** Parse a gloam1. package or its JSON (compact or long keys). Sealed tickets must be opened first. */
+export function decodeNotePackage(input: string): NotePackage {
+  const s = input.trim();
+  let obj: Record<string, unknown>;
+  try {
+    obj = s.startsWith(NOTE_PACKAGE_PREFIX)
+      ? JSON.parse(new TextDecoder().decode(b64urlDecode(s.slice(NOTE_PACKAGE_PREFIX.length))))
+      : JSON.parse(s);
+  } catch {
+    throw new Error("Not a Gloam note package (gloam1.…).");
+  }
+  const pack: NotePackage = {
+    v: 1,
+    type: "gloam-private-note",
+    scheme: "poseidon",
+    pool: String(obj.pool ?? obj.p ?? "") as Address,
+    asset: String(obj.asset ?? obj.a ?? NATIVE_ASSET) as Address,
+    amountWei: String(obj.amountWei ?? obj.w ?? ""),
+    secret: String(obj.secret ?? obj.k ?? "") as Hex,
+    commitment: String(obj.commitment ?? obj.c ?? "") as Hex,
+  };
+  if (!/^0x[0-9a-fA-F]+$/.test(pack.secret) || !/^\d+$/.test(pack.amountWei) || !/^0x[0-9a-fA-F]+$/.test(pack.commitment)) {
+    throw new Error("Not a valid Gloam note package.");
+  }
+  return pack;
+}
+
+/** A note package as the NoteExport the spend builders take (nullifier derived). */
+export async function notePackageToExport(pack: NotePackage): Promise<NoteExport & { pool: Address }> {
+  const nullifier = await noteNullifierPoseidon(hexToField(pack.secret), hexToField(pack.commitment));
+  return {
+    secret: pack.secret,
+    commitment: pack.commitment,
+    nullifier: fieldToHex(nullifier),
+    amountWei: pack.amountWei,
+    asset: pack.asset,
+    pool: pack.pool,
+  };
+}

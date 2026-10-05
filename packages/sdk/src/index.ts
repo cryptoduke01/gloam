@@ -19,6 +19,8 @@
  *   rates     sealed-rate math + size-privacy policy (pure)
  *   builders  shieldBound | unshield | privateSend | privateTrade intents
  *   x402      private agent payments over HTTP 402 (settle-then-prove)
+ *   receive   receive tags: seal a payment so only its payee can open it
+ *   sweep     payee side: move a received payment to a fresh note (final)
  *   constants pool + verifier addresses, chain ids, networks, field prime
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
@@ -27,7 +29,7 @@
  * intent, but its on-chain path is disabled pending the H1 solvency work.
  */
 
-export const SDK_VERSION = "0.0.5";
+export const SDK_VERSION = "0.0.6";
 
 export * from "./intents.js";
 export * from "./rates.js";
@@ -43,4 +45,6 @@ export * from "./prove.js";
 export * from "./builders.js";
 export * from "./sync.js";
 export * from "./x402.js";
+export * from "./receiveTag.js";
+export * from "./sweep.js";
 export * from "./relay.js";

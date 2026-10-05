@@ -232,22 +232,36 @@ See [Build a private agent](https://gloam.trade/docs/agents).
 
 ## Private agent payments (x402)
 
-Agents pay for tools and data over HTTP 402. The pattern that won Colosseum (MCPay) paired x402 with stablecoins, but that settlement is fully public: the amount, the payer, and the payee all leak. Gloam's `gloam-private` scheme keeps the settlement private and self-custodial. The agent settles a shielded transfer to the payee itself (no operator or facilitator ever holds its key or funds), then presents the payment note plus the settlement tx as proof on the 402 retry.
+Agents pay for tools and data over HTTP 402. The pattern that won Colosseum (MCPay) paired x402 with stablecoins, but that settlement is fully public: the amount, the payer, and the payee all leak. Gloam's `gloam-private` scheme keeps the settlement private and self-custodial. The agent settles a shielded transfer to the payee itself (no operator or facilitator ever holds its key or funds), then presents the payment note plus the settlement tx on the 402 retry.
+
+Two rules keep the money safe:
+
+- **The payment note is sealed to the payee.** `payTo` must be the payee's receive tag (`gloamr1.…`). `buildGloamPayment` encrypts the payment note to it, so the agent, a proxy or a log that sees the `X-PAYMENT` header cannot open it. A `payTo` that is not a receive tag is refused.
+- **The payee sweeps before it serves.** The payer created the payment note, so it knows the secret too and could spend it back after being served. `settleGloamPayment` opens the note, verifies it, and moves it into a fresh note only the payee knows. Grant access only when it returns `grantAccess: true`. A `verifyGloamPayment` on its own always says `final: false`.
 
 ```ts
 import {
+  generateReceiveKey,
   buildGloamPaymentRequirements,
   buildGloamPayment,
-  verifyGloamPayment,
+  settleGloamPayment,
+  decodePaymentHeader,
+  sweepChainFromClient,
+  relaySubmitter,
+  transferCallArgs,
+  POOL_TRANSFER_ABI,
   artifactProver,
 } from "@gloamtrade/sdk";
 
+// Server, once: a receive key. Share the tag; keep privateJwk secret, server-side.
+const seller = await generateReceiveKey();
+
 // Server: price a resource. This is the 402 challenge.
 const requirements = buildGloamPaymentRequirements({
-  amountWei: parseUnits("0.25", 18),
+  amountWei: parseUnits("0.25", 6),
   asset: USD_TOKEN,          // a stable asset; omit for the chain's native unit
   assetSymbol: "USD",
-  payTo: "gloam:rcpt:...",   // payee receive tag
+  payTo: seller.tag,         // the payment is sealed to this
   resource: "mcp://tool/summarize",
 });
 
@@ -260,13 +274,30 @@ const pay = await buildGloamPayment({
   prove: artifactProver({ wasm, zkey }), // transfer artifacts
   issuerTag: "issuer:usd",               // optional issuer-scoped compliance disclosure
 });
-const hash = await wallet.writeContract({ ...pay.intent.exec }); // agent self-settles
+const hash = await wallet.writeContract({
+  address: pay.intent.exec.poolAddress, abi: POOL_TRANSFER_ABI, functionName: "transfer", args: transferCallArgs(pay.intent),
+}); // agent self-settles
 pay.payload.payload.txHash = hash;
+// Keep pay.changeNote (the agent's remaining balance). pay.paymentNote never needs to leave this process.
 
-// Server: verify before granting access, then run the listed on-chain checks.
-const v = verifyGloamPayment({ requirements, payload: pay.payload });
-// v.ok, plus v.onchainChecksRequired: note membership, tx landed, nullifier single-use.
+// Server: open, verify and sweep. Serve only when grantAccess is true.
+const result = await settleGloamPayment({
+  requirements,
+  payload: decodePaymentHeader(xPaymentHeader),
+  receiveKey: seller,
+  prove: artifactProver({ wasm, zkey }),                     // transfer artifacts
+  chain: sweepChainFromClient(publicClient, { pool, fromBlock }),
+  submit: relaySubmitter(),                                  // or your own wallet
+  beforeSubmit: (fresh) => saveNote(fresh),                  // persist before it is sent
+});
+if (result.grantAccess) serve(); // result.freshNote is the payment, in a note only you know
+// Otherwise result.status says why: already_spent (the payer took it back first),
+// not_settled (not in the pool yet), rejected, failed or unconfirmed.
 ```
+
+The sealed ticket is the same format the Gloam app uses for paying a receive tag (`gloam2t.…`, ECDH P-256 + HKDF-SHA256 + AES-256-GCM over a `gloam1.` note package), so a payment sealed by an agent opens in the app, and a tag made in the app works as `payTo`.
+
+**Upgrading from 0.0.5.** `payTo` must now be a receive tag, in `buildGloamPaymentRequirements` and `buildGloamPayment` (pass `legacyUnsealed: true` to pay an old server anyway; the note then travels in plain text, readable by anyone who sees the header). A sealed payment must be opened before `verifyGloamPayment` can read it (`openGloamPaymentNote`, then pass `note`); `settleGloamPayment` does all of this and the sweep.
 
 **This is not a Tempo Zone.** A Zone is operator-visible: the zone operator sees every transaction inside it. Gloam is private from the public and from any operator; only the payer and the payee learn the amount. Compliance visibility is opt-in per payment via `buildComplianceDisclosure`, an issuer-scoped disclosure that reuses the shield-circuit proof rather than handing an operator a blanket view. See [`TEMPO_EXPANSION.md`](https://github.com/cryptoduke01/gloam/blob/main/TEMPO_EXPANSION.md).
 
@@ -315,17 +346,34 @@ assertTreeMatchesChain(client, pool, synced): Promise<boolean>
 ### x402 payments
 
 ```ts
-buildGloamPaymentRequirements(p): GloamPaymentRequirements   // server: the 402 challenge
-buildGloamPayment(p): Promise<BuiltPayment>                  // agent: private send + X-PAYMENT header
-verifyGloamPayment({ requirements, payload }): VerifyResult  // server: structural verify + on-chain checklist
-verifyPaymentNoteBinding(note): Promise<boolean>             // crypto: amount binds to commitment (run before granting)
+buildGloamPaymentRequirements(p): GloamPaymentRequirements   // server: the 402 challenge (payTo must be a receive tag)
+buildGloamPayment(p): Promise<BuiltPayment>                  // agent: private send + X-PAYMENT header, note sealed to payTo
+settleGloamPayment(p): Promise<SettleResult>                 // server: open + verify + sweep; grant access on grantAccess
+openGloamPaymentNote(paymentNote, receiveKey?)               // server: open the sealed payment note
+verifyGloamPayment({ requirements, payload, note? }): VerifyResult  // structural verify, always final: false
+verifyPaymentNoteBinding(note): Promise<boolean>             // crypto: amount binds to commitment
 buildComplianceDisclosure(p): Promise<GloamComplianceDisclosure>  // optional issuer-scoped disclosure
 encodeRequirements / decodeRequirements                      // 402 body transport
 encodePaymentHeader / decodePaymentHeader                    // X-PAYMENT transport
-GLOAM_VS_ZONE, GLOAM_X402_SCHEME                             // posture + scheme id
+GLOAM_VS_ZONE, GLOAM_X402_SCHEME, GLOAM_NOT_FINAL            // posture, scheme id, the not-final notice
 ```
 
-`buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset and settles through the right pool; it never assumes settlement, returning `onchainChecksRequired` for the server to confirm against the chain. Run `verifyPaymentNoteBinding` alongside it so a payer cannot claim the full price for a note minted at a smaller amount.
+`buildGloamPayment` does not broadcast: the agent signs and broadcasts the returned `intent.exec` itself, staying self-custodial, then sets `payload.txHash`. `verifyGloamPayment` confirms the payment note binds the required amount and asset, is the payment output of the transfer, and settles through the right pool. It never makes a payment final: its result carries `final: false` and a plain `finality` notice. `settleGloamPayment` runs it, checks the binding, and sweeps.
+
+### Receive tags and sweeps
+
+```ts
+generateReceiveKey(): Promise<ReceiveKey>                    // { tag: "gloamr1.…", privateJwk }
+isReceiveTag(s) / assertReceiveTag(s)                        // strict: gloamr1. + a P-256 public key
+sealToReceiveTag(text, tag) / openSealedTicket(sealed, key)  // gloam2t.… tickets, app-compatible
+encodeNotePackage / decodeNotePackage                        // gloam1.… note packages, app-compatible
+sweepReceivedNote(p): Promise<SweepResult>                   // move a received note into a fresh one
+sweepChainFromClient(publicClient, { pool, fromBlock })      // the chain reads a sweep needs
+relaySubmitter(opts?)                                        // submit sweeps through the Gloam relay
+POOL_TRANSFER_ABI, POOL_STATE_ABI, transferCallArgs(intent)  // sign a transfer with your own wallet
+```
+
+A sweep spends the received note into a fresh note of the whole amount plus a zero-value change note, both with secrets only the payee knows. It checks the nullifier first (`already_spent` if the payer got there), stores nothing itself (persist the fresh note in `beforeSubmit`), and reports `final: true` only once the sweep confirms or its fresh note is seen on chain.
 
 ### Merkle, rates, privacy, constants
 
@@ -371,7 +419,7 @@ Four runnable references, one for each shape a builder starts from:
 | --- | --- | --- |
 | [agent-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/agent-shield) | Node | The smallest agent: mint a note, prove, deposit privately. |
 | [pay-bot](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-bot) | Node | A private payment end to end: shield, sync, send. |
-| [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay, verify. |
+| [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay sealed to the payee, sweep, serve. |
 | [web-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
 
 ![Shield a private balance in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
@@ -391,7 +439,8 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 - **Testnet only.** Robinhood Chain testnet (chain id `46630`), with dev-ceremony proving keys. Mainnet waits for a production trusted setup and an external audit.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
 - **Sealed swaps are disabled** pending the H1 solvency work. Shield, private send, cash out, and disclosure are live and proof-gated.
-- **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value.
+- **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.
+- **A received x402 payment is not yours until you sweep it.** The payer knows the payment note's secret. Use `settleGloamPayment` and serve only on `grantAccess`.
 
 ## Links
 

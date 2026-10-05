@@ -1,9 +1,12 @@
 /**
  * Reference agent payment over x402, private end to end, using only
- * @gloamtrade/sdk. A seller prices a resource (the 402 challenge); a buyer agent
- * shields a note to fund itself, builds a PRIVATE payment of the required amount
- * to the payee, broadcasts it itself (self-custodial, no operator holds its
- * key), presents the X-PAYMENT header, and the seller verifies it.
+ * @gloamtrade/sdk. A seller prices a resource (the 402 challenge) to its receive
+ * tag; a buyer agent shields a note to fund itself, builds a PRIVATE payment of
+ * the required amount sealed to that tag, broadcasts it itself (self-custodial,
+ * no operator holds its key), and presents the X-PAYMENT header. The seller
+ * opens the payment, verifies it, and sweeps it into a fresh note only the
+ * seller knows. It serves only after that sweep confirms: the buyer created the
+ * payment note, so until then the buyer could spend it back.
  *
  * This is the pattern that won Colosseum (x402 + stablecoins) with the
  * settlement made private: the amount and the parties never go on the public
@@ -32,8 +35,12 @@ import {
   buildShieldBoundIntent,
   buildGloamPaymentRequirements,
   buildGloamPayment,
-  verifyGloamPayment,
-  verifyPaymentNoteBinding,
+  generateReceiveKey,
+  settleGloamPayment,
+  sweepChainFromClient,
+  relaySubmitter,
+  transferCallArgs,
+  POOL_TRANSFER_ABI,
   encodePaymentHeader,
   decodePaymentHeader,
   artifactProver,
@@ -84,31 +91,6 @@ const shieldBoundAbi = [
   },
 ] as const;
 
-const transferAbi = [
-  {
-    type: "function",
-    name: "transfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "proof", type: "bytes" },
-      { name: "root", type: "bytes32" },
-      { name: "nullifier", type: "bytes32" },
-      { name: "newCommitments", type: "bytes32[2]" },
-    ],
-    outputs: [],
-  },
-] as const;
-
-const commitmentSeenAbi = [
-  {
-    type: "function",
-    name: "commitmentSeen",
-    stateMutability: "view",
-    inputs: [{ name: "commitment", type: "bytes32" }],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
 const erc20Abi = [
   {
     type: "function",
@@ -138,20 +120,22 @@ async function main() {
   const wallet = createWalletClient({ account, chain, transport: http(RPC) });
   const pub = createPublicClient({ chain, transport: http(RPC) });
 
-  // ── Seller: price the resource (the 402 challenge) ─────────────────────────
+  // ── Seller: a receive key, and the price (the 402 challenge) ───────────────
+  // A real seller makes its key once and keeps the private half server-side.
+  const seller = await generateReceiveKey();
   const price = parseUnits("0.0002", DECIMALS);
   const requirements = buildGloamPaymentRequirements({
     amountWei: price,
     asset: ASSET,
     assetSymbol: ASSET_SYMBOL,
-    payTo: "gloam:rcpt:demo-seller",
+    payTo: seller.tag, // payments are sealed to this; only the seller can open them
     resource: "mcp://gloam/tool/summarize",
     description: "One private summarize call",
     poolAddress: POOL,
     network: CHAIN_ID,
   });
   console.log("402 Payment Required:");
-  console.log(`  price ${formatUnits(price, DECIMALS)} ${requirements.assetSymbol} to ${requirements.payTo}`);
+  console.log(`  price ${formatUnits(price, DECIMALS)} ${requirements.assetSymbol} to ${requirements.payTo.slice(0, 24)}…`);
   console.log(`  ${requirements.privacy.oneLine}\n`);
 
   // ── Buyer: shield a note to fund itself ────────────────────────────────────
@@ -227,43 +211,44 @@ async function main() {
   console.log("Settling the private payment (self-custodial)…");
   const sendHash = await wallet.writeContract({
     address: payment.intent.exec.poolAddress,
-    abi: transferAbi,
+    abi: POOL_TRANSFER_ABI,
     functionName: "transfer",
-    args: payment.intent.exec.args as readonly [
-      `0x${string}`,
-      `0x${string}`,
-      `0x${string}`,
-      readonly [`0x${string}`, `0x${string}`],
-    ],
+    args: transferCallArgs(payment.intent),
   });
   const receipt = await pub.waitForTransactionReceipt({ hash: sendHash });
   if (receipt.status !== "success") throw new Error("Transfer reverted.");
   payment.payload.payload.txHash = sendHash;
 
-  // ── Seller: verify the presented X-PAYMENT before granting access ──────────
+  // ── Seller: open, verify and sweep the presented X-PAYMENT, then serve ─────
   // The agent attaches the settlement tx, then presents the header on the retry.
   const presented = decodePaymentHeader(encodePaymentHeader(payment.payload));
-  const v = verifyGloamPayment({ requirements, payload: presented });
-  console.log(`\nSeller verify: ${v.ok ? "OK" : "REJECTED: " + v.reason}`);
-  if (!v.ok || !v.commitment) throw new Error("Payment did not verify.");
-
-  // Crypto binding check: the note's claimed amount must bind to its commitment,
-  // so a lying payer cannot claim the full price for a smaller note.
-  const binds = await verifyPaymentNoteBinding(payment.paymentNote);
-  console.log(`  payment note binds amount to commitment: ${binds ? "yes ✓" : "NO ✗"}`);
-  if (!binds) throw new Error("Payment note amount does not bind to its commitment.");
-
-  // One of the on-chain checks the seller runs: the payment note is a real leaf.
-  const seen = await pub.readContract({
-    address: POOL,
-    abi: commitmentSeenAbi,
-    functionName: "commitmentSeen",
-    args: [v.commitment],
+  // settleGloamPayment opens the sealed note with the seller's key, checks it
+  // binds the price and asset in the right pool, then moves it into a fresh note
+  // only the seller knows. The sweep goes through the Gloam relay when
+  // GLOAM_RELAY_URL is set, else the seller's own wallet (here the same key).
+  const relayUrl = process.env.GLOAM_RELAY_URL?.trim();
+  const settled = await settleGloamPayment({
+    requirements,
+    payload: presented,
+    receiveKey: seller,
+    prove: artifactProver({ wasm: art("transfer.wasm"), zkey: art("transfer_final.zkey") }),
+    chain: sweepChainFromClient(pub, { pool: POOL, fromBlock: DEPLOY_BLOCK }),
+    submit: relayUrl
+      ? relaySubmitter({ url: relayUrl })
+      : (intent) =>
+          wallet.writeContract({
+            address: intent.exec.poolAddress,
+            abi: POOL_TRANSFER_ABI,
+            functionName: "transfer",
+            args: transferCallArgs(intent),
+          }),
+    // Store this before the sweep is sent; its secret is now the seller's money.
+    beforeSubmit: (fresh) => console.log(`  seller keeps fresh note ${fresh.commitment.slice(0, 12)}… (store its secret)`),
   });
-  console.log(`  payment note on-chain (commitmentSeen): ${seen ? "yes ✓" : "not yet"}`);
-  console.log("  remaining on-chain checks:");
-  for (const c of v.onchainChecksRequired) console.log(`   - ${c}`);
-  console.log("\nAccess granted. The public feed shows a shielded transfer, never the amount or the parties.");
+  console.log(`\nSeller settle: ${settled.status}${settled.reason ? ` (${settled.reason})` : ""}`);
+  if (!settled.grantAccess) throw new Error("Payment is not final. Do not serve.");
+  console.log(`  swept in ${settled.sweep?.hash}; the buyer can no longer spend it back`);
+  console.log("\nAccess granted. The public feed shows shielded transfers, never the amount or the parties.");
 }
 
 main().catch((e) => {
