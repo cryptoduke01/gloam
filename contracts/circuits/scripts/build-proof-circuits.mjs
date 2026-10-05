@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * Build the proof-of-funds (solvency) and proof-of-payment (receipt) circuits:
+ * Build the proof-of-funds (solvency), proof-of-payment (receipt) and payroll
+ * total (payroll_total) circuits:
  *   circom compile -> groth16 setup on pot16 -> one dev contribution -> vkey,
  * then copy the browser artifacts into app/public/circuits:
  *   funds.wasm, funds_final.zkey, funds_vkey.json
  *   receipt.wasm, receipt_final.zkey, receipt_vkey.json
+ *   payroll_total.wasm, payroll_total_final.zkey, payroll_total_vkey.json
  *
  * DEV KEYS: a single-party phase-2 contribution with throwaway entropy, same as
  * the other Gloam circuits on testnet. Not a production ceremony. Every run makes
  * NEW keys, so proofs made with the previous keys stop verifying.
  *
  *   cd contracts/circuits
- *   node scripts/build-proof-circuits.mjs            # both
- *   node scripts/build-proof-circuits.mjs receipt    # one
+ *   node scripts/build-proof-circuits.mjs                  # all three
+ *   node scripts/build-proof-circuits.mjs receipt          # one
+ *   node scripts/build-proof-circuits.mjs payroll_total    # one (37k constraints)
  *   node scripts/build-proof-circuits.mjs --no-copy  # keep app/public untouched
  */
 import { execFileSync } from "child_process";
@@ -35,6 +38,7 @@ const CIRCOM = existsSync(join(homedir(), ".cargo/bin/circom"))
 const CIRCUITS = [
   { name: "solvency", app: "funds" },
   { name: "receipt", app: "receipt" },
+  { name: "payroll_total", app: "payroll_total" },
 ];
 
 const args = process.argv.slice(2);

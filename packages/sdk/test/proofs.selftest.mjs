@@ -1,11 +1,11 @@
 /**
- * Proof-of-funds / proof-of-payment witness self-test.
+ * Proof-of-funds / proof-of-payment / payroll total witness self-test.
  *
  * Builds a small pool tree with the SDK's own Merkle tree, then checks the
  * witness builders (public signals, blockers) and the verifier context. When
- * the browser artifacts exist (app/public/circuits/{funds,receipt}*), it also
- * proves each witness with snarkjs and verifies against the shipped vkey, so a
- * drift between builder and circuit (signal order, encoding) fails here.
+ * the browser artifacts exist (app/public/circuits/{funds,receipt,payroll_total}*),
+ * it also proves each witness with snarkjs and verifies against the shipped
+ * vkey, so a drift between builder and circuit (signal order, encoding) fails here.
  *
  * Run after build:  node test/proofs.selftest.mjs
  */
@@ -24,6 +24,12 @@ import {
   fieldToHex,
   FIELD_PRIME,
   FUNDS_PROOF_SLOTS,
+  PAYROLL_PROOF_SLOTS,
+  buildPayrollWitness,
+  payrollPaymentsHash,
+  payrollParts,
+  readPayrollSignals,
+  poseidon3,
 } from "../dist/index.js";
 
 let checks = 0;
@@ -47,6 +53,8 @@ assert(proofContext({ ...ctxArgs, verifier: "Acme Bank " }) !== ctx, "label is b
 assert(proofContext({ ...ctxArgs, kind: "payment" }) !== ctx, "kind is bound");
 assert(proofContext({ ...ctxArgs, chainId: 46630 }) !== ctx, "chain is bound");
 assert(proofContext({ ...ctxArgs, expiresAt: ctxArgs.expiresAt + 1 }) !== ctx, "expiry is bound");
+assert(proofContext({ ...ctxArgs, kind: "payroll" }) !== ctx, "payroll kind is bound");
+assert(proofContext({ ...ctxArgs, kind: "payroll" }) !== proofContext({ ...ctxArgs, kind: "payment" }), "payroll is not payment");
 
 // ── tree with four USD notes + an ETH note ──
 const mk = async (secret, amount, asset) => {
@@ -140,9 +148,91 @@ if (existsSync(join(circuits, "funds_final.zkey")) && existsSync(join(circuits, 
   await prove("funds", fw2);
   await prove("receipt", rHidden);
   await prove("receipt", rShown);
-  // snarkjs keeps curve worker threads alive.
-  globalThis.curve_bn128?.terminate?.();
 }
+
+// ── payroll total ──
+const payCtx2 = proofContext({ ...ctxArgs, kind: "payroll" });
+const mkPay = async (secret, amount, spendSecret, spendAmount, asset = USD) => {
+  const commitment = await noteCommitmentPoseidon(secret, amount, asset);
+  const spendCommitment = await noteCommitmentPoseidon(spendSecret, spendAmount, asset);
+  return {
+    secretHex: fieldToHex(secret),
+    amount,
+    spendSecretHex: fieldToHex(spendSecret),
+    spendAmount,
+    commitment,
+    nullifier: await noteNullifierPoseidon(spendSecret, spendCommitment),
+  };
+};
+const run = [
+  await mkPay(101n, 6000n, 9001n, 30000n),
+  await mkPay(102n, 4800n, 9002n, 24000n),
+  await mkPay(103n, 4200n, 9003n, 19200n),
+  await mkPay(104n, 3600n, 9004n, 15000n),
+  await mkPay(105n, 2900n, 9005n, 11400n),
+];
+const asInput = (p) => ({ secretHex: p.secretHex, amount: p.amount, spendSecretHex: p.spendSecretHex, spendAmount: p.spendAmount });
+const pw = await buildPayrollWitness({ asset: USD, context: payCtx2, payments: run.map(asInput) });
+assert(pw.blocker === null, `payroll witness ready: ${pw.blocker}`);
+assert(pw.publicSignals.length === 5, "payroll signal count");
+const ps = readPayrollSignals(pw.publicSignals);
+assert(ps.asset === BigInt(USD) && ps.total === 21500n && ps.count === 5n && ps.context === payCtx2, "payroll asset/total/count/context");
+assert(pw.payments.length === 5, "payroll plain list has one entry per payment");
+assert(pw.payments.every((p, i) => p.commitment === run[i].commitment && p.nullifier === run[i].nullifier), "payroll list is (commitment, nullifier)");
+assert(ps.paymentsHash === (await payrollPaymentsHash(pw.payments)), "payroll hash recomputes from the plain list");
+{
+  // The hash by hand: 32 Poseidon(3) steps from 0, empty slots as (0, 0).
+  let h = 0n;
+  for (let i = 0; i < PAYROLL_PROOF_SLOTS; i++) h = await poseidon3(h, run[i]?.commitment ?? 0n, run[i]?.nullifier ?? 0n);
+  assert(h === ps.paymentsHash, "payroll hash matches the circuit's chain");
+}
+assert((await payrollPaymentsHash([pw.payments[1], pw.payments[0], ...pw.payments.slice(2)])) !== ps.paymentsHash, "payroll hash depends on order");
+assert(pw.circomInput.used.length === PAYROLL_PROOF_SLOTS && pw.circomInput.used.filter((u) => u === "1").length === 5, "payroll slots");
+assert(pw.circomInput.commitment[5] === "0" && pw.circomInput.nullifier[31] === "0", "empty payroll slots are zero");
+const withRecord = await buildPayrollWitness({
+  asset: USD, context: payCtx2, payments: run.map((p) => ({ ...asInput(p), commitment: fieldToHex(p.commitment), nullifier: fieldToHex(p.nullifier) })),
+});
+assert(withRecord.blocker === null, "recorded commitments and nullifiers match");
+const blocked = async (payments, msg) => {
+  const w = await buildPayrollWitness({ asset: USD, context: payCtx2, payments });
+  assert(w.blocker !== null, msg);
+};
+await blocked([], "no payments is blocked");
+await blocked(Array.from({ length: 33 }, () => asInput(run[0])), "more than 32 payments is blocked");
+await blocked([asInput(run[0]), asInput(run[0])], "duplicate payment is blocked");
+await blocked([{ ...asInput(run[0]), secretHex: fieldToHex(0n) }], "zero payee secret is blocked");
+await blocked([{ ...asInput(run[0]), spendSecretHex: fieldToHex(0n) }], "zero spend secret is blocked");
+await blocked([{ ...asInput(run[0]), amount: 0n }], "zero amount is blocked");
+await blocked([{ ...asInput(run[0]), spendAmount: 5999n }], "payment above its funding note is blocked");
+await blocked([{ ...asInput(run[0]), commitment: fieldToHex(run[1].commitment) }], "record commitment mismatch is blocked");
+await blocked([{ ...asInput(run[0]), nullifier: fieldToHex(run[1].nullifier) }], "record nullifier mismatch is blocked");
+{
+  const w = await buildPayrollWitness({ asset: "0x0000000000000000000000000000000000000000", context: payCtx2, payments: [{ ...asInput(run[0]), commitment: fieldToHex(run[0].commitment) }] });
+  assert(w.blocker !== null, "payment of another asset is blocked");
+}
+const parts = (n) => JSON.stringify(payrollParts(n));
+assert(parts(0) === "[]" && parts(1) === "[1]" && parts(32) === "[32]", "payroll parts: one proof up to 32");
+assert(parts(33) === "[17,16]" && parts(64) === "[32,32]" && parts(65) === "[22,22,21]", "payroll parts: balanced, never a lone salary");
+assert(parts(200) === "[29,29,29,29,28,28,28]", "payroll parts: 200 people in 7");
+assert(payrollParts(200).reduce((a, b) => a + b, 0) === 200, "payroll parts cover everyone");
+
+if (existsSync(join(circuits, "payroll_total_final.zkey"))) {
+  const snarkjs = await import("snarkjs");
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    pw.circomInput,
+    join(circuits, "payroll_total.wasm"),
+    join(circuits, "payroll_total_final.zkey")
+  );
+  const vkey = JSON.parse(readFileSync(join(circuits, "payroll_total_vkey.json"), "utf8"));
+  assert(await snarkjs.groth16.verify(vkey, publicSignals, proof), "payroll_total proof verifies");
+  assert(JSON.stringify(publicSignals) === JSON.stringify(pw.publicSignals), "payroll_total signals match the builder");
+  const tampered = publicSignals.slice();
+  tampered[1] = (21500n + 1n).toString();
+  assert(!(await snarkjs.groth16.verify(vkey, tampered, proof)), "payroll_total tampered total fails");
+  proved++;
+}
+// snarkjs keeps curve worker threads alive.
+globalThis.curve_bn128?.terminate?.();
 
 console.log(`proofs.selftest: ok (${checks} assertions${proved ? `, ${proved} proofs verified` : ", artifacts absent: proving skipped"})`);
 process.exit(0);

@@ -1,13 +1,17 @@
 /**
- * Witness builders for the two holder proofs (contracts/circuits/solvency and
- * contracts/circuits/receipt). Pure like ./witness.ts: each returns the circom
- * input plus the public signals the proof must carry; proving is separate.
+ * Witness builders for the holder proofs (contracts/circuits/solvency,
+ * contracts/circuits/receipt and contracts/circuits/payroll_total). Pure like
+ * ./witness.ts: each returns the circom input plus the public signals the proof
+ * must carry; proving is separate.
  *
  *   funds    "I hold at least `threshold` of `asset`" from 1 to 4 unspent notes.
  *            Public: [root, asset, threshold, context, nullifier0..3]
  *   receipt  "this note is a real payment of `asset`, worth `shownAmount` (or at
  *            least `minAmount`)". Public: [root, commitment, asset, minAmount,
  *            reveal, shownAmount, context]
+ *   payroll  "these `count` private payments I made add up to exactly `total` of
+ *            `asset`", 1 to 32 payments per proof, no single amount shown.
+ *            Public: [asset, total, count, paymentsHash, context]
  *
  * `context` ties a proof to one verifier, expiry, chain and pool (proofContext),
  * so a proof made for one party cannot be passed off as made for another.
@@ -17,7 +21,7 @@ import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 import { FIELD_PRIME } from "./constants.js";
 import { MERKLE_DEPTH, type PoseidonMerklePath } from "./merkle.js";
 import { noteCommitmentPoseidon, noteNullifierPoseidon } from "./note.js";
-import { hexToField, toField } from "./poseidon.js";
+import { hexToField, poseidon3, toField } from "./poseidon.js";
 
 /** Fixed slot count of the funds circuit. */
 export const FUNDS_PROOF_SLOTS = 4;
@@ -43,13 +47,18 @@ export const RECEIPT_PUBLIC_SIGNALS = [
   "context",
 ] as const;
 
+/** Fixed slot count of the payroll total circuit. */
+export const PAYROLL_PROOF_SLOTS = 32;
+
+export const PAYROLL_PUBLIC_SIGNALS = ["asset", "total", "count", "paymentsHash", "context"] as const;
+
 /** Notes are range checked to < 2^128 in every Gloam circuit (Kensho C2). */
 const AMOUNT_LIMIT = 1n << 128n;
 
 const CONTEXT_DOMAIN = "gloam.proof.v1";
 
 export type ProofContextArgs = {
-  kind: "funds" | "payment";
+  kind: "funds" | "payment" | "payroll";
   chainId: number;
   pool: Address;
   /** Who the proof is for, exactly as shown to them. */
@@ -300,4 +309,165 @@ export function readReceiptSignals(signals: readonly string[]) {
     shownAmount: v[5]!,
     context: v[6]!,
   };
+}
+
+// ── payroll total ──────────────────────────────────────────────────────────
+
+export type PayrollPaymentInput = {
+  /** The payee note the payer created: its secret and amount. */
+  secretHex: Hex;
+  amount: bigint;
+  /** The payer's own note that the transfer spent (its nullifier is public in Transferred). */
+  spendSecretHex: Hex;
+  spendAmount: bigint;
+  /** What the payer recorded at send time; when given, the openings must match. */
+  commitment?: Hex;
+  nullifier?: Hex;
+};
+
+/** One payment as the verifier sees it: the payee note and the transfer's nullifier. */
+export type PayrollPaymentPublic = { commitment: bigint; nullifier: bigint };
+
+export type PayrollWitness = {
+  circomInput: Record<string, string | string[]>;
+  publicInputs: {
+    asset: bigint;
+    total: bigint;
+    count: bigint;
+    paymentsHash: bigint;
+    context: bigint;
+  };
+  /** The plain list that travels with the proof, in slot order (used slots only). */
+  payments: PayrollPaymentPublic[];
+  /** The publicSignals a correct proof carries, in circuit order. */
+  publicSignals: string[];
+  blocker: string | null;
+};
+
+/**
+ * The payroll circuit's list hash over all 32 slots, empty ones as (0, 0):
+ * h0 = 0, h(i+1) = Poseidon(h(i), commitment(i), nullifier(i)). A verifier
+ * recomputes it from the plain list in the proof and compares it with the
+ * `paymentsHash` public signal.
+ */
+export async function payrollPaymentsHash(payments: readonly PayrollPaymentPublic[]): Promise<bigint> {
+  if (payments.length > PAYROLL_PROOF_SLOTS) throw new Error("Too many payments for one proof.");
+  let h = 0n;
+  for (let i = 0; i < PAYROLL_PROOF_SLOTS; i++) {
+    const p = payments[i];
+    h = await poseidon3(h, p ? p.commitment : 0n, p ? p.nullifier : 0n);
+  }
+  return h;
+}
+
+/**
+ * How a run of `n` payments splits into proofs: as few parts as fit, as even as
+ * possible, so no part is a lone salary (each part shows its own subtotal).
+ * 33 payments are 17 + 16, never 32 + 1.
+ */
+export function payrollParts(n: number): number[] {
+  if (!Number.isSafeInteger(n) || n <= 0) return [];
+  const parts = Math.ceil(n / PAYROLL_PROOF_SLOTS);
+  const base = Math.floor(n / parts);
+  const extra = n % parts;
+  return Array.from({ length: parts }, (_, i) => base + (i < extra ? 1 : 0));
+}
+
+export async function buildPayrollWitness(args: {
+  asset: Address;
+  context: bigint;
+  payments: PayrollPaymentInput[];
+}): Promise<PayrollWitness> {
+  const assetField = toField(BigInt(args.asset));
+  const n = args.payments.length;
+  let blocker: string | null = null;
+  if (n < 1 || n > PAYROLL_PROOF_SLOTS) {
+    blocker = `A payroll total proof covers 1 to ${PAYROLL_PROOF_SLOTS} payments.`;
+  }
+  if (!blocker && (args.context < 0n || args.context >= FIELD_PRIME)) {
+    blocker = "Bad proof context.";
+  }
+
+  const used: string[] = [];
+  const secrets: string[] = [];
+  const amounts: string[] = [];
+  const commitments: string[] = [];
+  const spendSecrets: string[] = [];
+  const spendAmounts: string[] = [];
+  const nullifiers: string[] = [];
+  const payments: PayrollPaymentPublic[] = [];
+  const seenC = new Set<bigint>();
+  const seenN = new Set<bigint>();
+  let total = 0n;
+
+  for (const p of args.payments.slice(0, PAYROLL_PROOF_SLOTS)) {
+    const secret = hexToField(p.secretHex);
+    const spendSecret = hexToField(p.spendSecretHex);
+    const commitment = await noteCommitmentPoseidon(secret, p.amount, args.asset);
+    const spendCommitment = await noteCommitmentPoseidon(spendSecret, p.spendAmount, args.asset);
+    const nullifier = await noteNullifierPoseidon(spendSecret, spendCommitment);
+    if (!blocker && (secret === 0n || spendSecret === 0n)) {
+      blocker = "A payment has no key on this device, so it cannot be proven.";
+    }
+    if (!blocker && (p.amount <= 0n || p.amount >= AMOUNT_LIMIT)) {
+      blocker = "A payment amount is out of range.";
+    }
+    if (!blocker && (p.spendAmount < p.amount || p.spendAmount >= AMOUNT_LIMIT)) {
+      blocker = "A payment is larger than the balance it was paid from.";
+    }
+    if (!blocker && p.commitment !== undefined && hexToField(p.commitment) !== commitment) {
+      blocker = "A payment's key does not open its record (wrong note or asset).";
+    }
+    if (!blocker && p.nullifier !== undefined && hexToField(p.nullifier) !== nullifier) {
+      blocker = "A payment's spent balance does not match its transaction.";
+    }
+    if (!blocker && (seenC.has(commitment) || seenN.has(nullifier))) {
+      blocker = "The same payment is listed twice.";
+    }
+    seenC.add(commitment);
+    seenN.add(nullifier);
+    used.push("1");
+    secrets.push(secret.toString());
+    amounts.push(p.amount.toString());
+    commitments.push(commitment.toString());
+    spendSecrets.push(spendSecret.toString());
+    spendAmounts.push(p.spendAmount.toString());
+    nullifiers.push(nullifier.toString());
+    payments.push({ commitment, nullifier });
+    total += p.amount;
+  }
+  // Empty slots: everything 0 (the circuit pins amount, commitment and nullifier).
+  while (used.length < PAYROLL_PROOF_SLOTS) {
+    for (const col of [used, secrets, amounts, commitments, spendSecrets, spendAmounts, nullifiers]) col.push("0");
+  }
+
+  const count = BigInt(payments.length);
+  const paymentsHash = await payrollPaymentsHash(payments);
+  return {
+    circomInput: {
+      asset: assetField.toString(),
+      total: total.toString(),
+      count: count.toString(),
+      paymentsHash: paymentsHash.toString(),
+      context: args.context.toString(),
+      used,
+      secret: secrets,
+      amount: amounts,
+      commitment: commitments,
+      spendSecret: spendSecrets,
+      spendAmount: spendAmounts,
+      nullifier: nullifiers,
+    },
+    publicInputs: { asset: assetField, total, count, paymentsHash, context: args.context },
+    payments,
+    publicSignals: [assetField, total, count, paymentsHash, args.context].map(String),
+    blocker,
+  };
+}
+
+/** Read a payroll total proof's public signals by name. */
+export function readPayrollSignals(signals: readonly string[]) {
+  if (signals.length !== PAYROLL_PUBLIC_SIGNALS.length) throw new Error("Wrong number of public signals.");
+  const v = signals.map((s) => BigInt(s));
+  return { asset: v[0]!, total: v[1]!, count: v[2]!, paymentsHash: v[3]!, context: v[4]! };
 }

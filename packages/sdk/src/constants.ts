@@ -42,6 +42,9 @@ export const TEMPO_PAY_MEMO: Address =
 /** Paxos Global Dollar (USDG) on Robinhood Chain testnet, 6 decimals. */
 export const RH_USDG: Address =
   "0x7E955252E15c84f5768B83c41a71F9eba181802F";
+/** OpenUSD (OUSD), Tempo's recommended stablecoin; 6 decimals, same address on mainnet and Moderato. */
+export const TEMPO_OUSD: Address =
+  "0x20c0000000000000000000006a37da5c996874be";
 /** PathUSD, the primary 6-decimal shieldable stablecoin on Tempo. */
 export const TEMPO_PATHUSD: Address =
   "0x20c0000000000000000000000000000000000000";
