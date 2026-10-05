@@ -3,9 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useAccount, useChainId, useWriteContract } from "wagmi";
+import { useWriteContract } from "wagmi";
 import type { Address, Hex } from "viem";
+import { demoHistory, simulatePayroll, useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
+import { PayrollInvoice } from "./PayrollInvoice";
+import { DueBanner } from "./payroll/DueBanner";
+import { ScheduleEditor } from "./payroll/ScheduleEditor";
+import { ScheduleList } from "./payroll/ScheduleList";
+import { ScheduleIcon } from "./payroll/scheduleUi";
+import { useSchedules } from "./payroll/useSchedules";
 import { RelayToggle } from "./RelayToggle";
 import { TokenLogo } from "./TokenLogo";
 import { SealDots } from "@/components/ui/SealDots";
@@ -18,6 +25,7 @@ import {
   NATIVE_ASSET,
   SHIELD_GAS_LIMIT,
   activeSpendableNotes,
+  assetDecimals,
   formatAssetAmount,
   shieldPoolAbi,
 } from "@/lib/shield";
@@ -46,6 +54,20 @@ import {
   type PayrollRow,
   type PayrollRowStatus,
 } from "@/lib/payroll";
+import {
+  cadenceLabel,
+  dayLabel,
+  isoDay,
+  newSchedule,
+  overCap,
+  peopleFromBatch,
+  peopleFromDraft,
+  runTitle,
+  scheduleCsv,
+  scheduleState,
+  sortSchedules,
+  type PayrollSchedule,
+} from "@/lib/payrollSchedule";
 
 // ------------------------------------------------------------------ bits
 
@@ -296,8 +318,7 @@ function Rail({
 
 export function PayrollView() {
   const reduce = useReducedMotion();
-  const { address, isConnected } = useAccount();
-  const walletChainId = useChainId();
+  const { address, isConnected, chainId: walletChainId, demo } = useAppAccount();
   const { network, networkKey } = useNetwork();
   const pool = network.pool;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
@@ -381,6 +402,7 @@ export function PayrollView() {
       setCsv(text.slice(0, 200_000));
       setFile({ name: f.name, size: f.size });
       setPasteOpen(false);
+      setFromSchedule(null);
     } finally {
       setReading(null);
     }
@@ -395,24 +417,45 @@ export function PayrollView() {
   function clearDraft() {
     setCsv("");
     setFile(null);
+    setFromSchedule(null);
     if (fileRef.current) fileRef.current.value = "";
   }
+
+  // ---------------------------------------------------------------- schedules
+  const sched = useSchedules({ chainId: network.chainId, pool, demo, demoAsset: assetOptions[0]?.address });
+  const { today } = sched;
+  /** The schedule (and payday) whose list is in the draft, so the run enforces its cap and counts for it. */
+  const [fromSchedule, setFromSchedule] = useState<{ id: string; payday: string } | null>(null);
+  const [editor, setEditor] = useState<{ base: PayrollSchedule; isNew: boolean } | null>(null);
+  const [bannerHidden, setBannerHidden] = useState(false);
+  const loaded = fromSchedule ? (sched.schedules.find((x) => x.id === fromSchedule.id) ?? null) : null;
+  const loadedSymbol = loaded ? (assetOptions.find((o) => o.address === loaded.asset)?.symbol ?? "") : "";
+  const wrongAsset = Boolean(loaded && loaded.asset.toLowerCase() !== asset.toLowerCase());
+  const capOver = loaded && !wrongAsset ? overCap(total, loaded) : 0n;
+  const dueItems = useMemo(
+    () =>
+      sortSchedules(sched.schedules, today)
+        .map((s) => ({ s, st: scheduleState(s, today) }))
+        .filter((x) => (x.st.status === "due" || x.st.status === "overdue") && x.s.id !== fromSchedule?.id),
+    [sched.schedules, today, fromSchedule?.id]
+  );
 
   // ---------------------------------------------------------------- relay
   const [relayAvailable, setRelayAvailable] = useState(false);
   const [relayOn, setRelayOn] = useState(false);
   useEffect(() => {
     let live = true;
-    void relayFor(network.chainId).then((r) => {
+    // A demo always has the relay, with the wallet hidden.
+    const enabled = demo ? Promise.resolve(true) : relayFor(network.chainId).then((r) => Boolean(r?.enabled));
+    void enabled.then((ok) => {
       if (!live) return;
-      const ok = Boolean(r?.enabled);
       setRelayAvailable(ok);
-      setRelayOn(ok && relayPreferred());
+      setRelayOn(ok && (demo || relayPreferred()));
     });
     return () => {
       live = false;
     };
-  }, [network.chainId]);
+  }, [network.chainId, demo]);
 
   // ---------------------------------------------------------------- runs
   const [batches, setBatches] = useState<PayrollBatch[]>([]);
@@ -420,22 +463,31 @@ export function PayrollView() {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const stopRef = useRef(false);
 
   const reloadBatches = useCallback(() => {
-    if (!pool) return Promise.resolve();
+    // A demo keeps its runs in memory only.
+    if (!pool || demo) return Promise.resolve();
     return loadBatches(network.chainId, pool).then(setBatches);
-  }, [network.chainId, pool]);
+  }, [network.chainId, pool, demo]);
   useEffect(() => {
     if (!pool) return;
     let live = true;
-    void loadBatches(network.chainId, pool).then((b) => {
+    const first = assetOptions[0];
+    const load =
+      demo && first
+        ? Promise.resolve(
+            demoHistory({ chainId: network.chainId, pool, asset: first.address, decimals: assetDecimals(first.address) })
+          )
+        : loadBatches(network.chainId, pool);
+    void load.then((b) => {
       if (live) setBatches(b);
     });
     return () => {
       live = false;
     };
-  }, [network.chainId, pool]);
+  }, [network.chainId, pool, demo, assetOptions]);
 
   const walletOnChain = walletChainId === network.chainId;
   const blocker = !isConnected
@@ -444,7 +496,11 @@ export function PayrollView() {
       ? "Payroll is not available on this network."
       : validRows.length === 0
         ? null
-        : !relayOn && !walletOnChain
+        : loaded && wrongAsset
+          ? `${loaded.name} pays in ${loadedSymbol}. Switch back to ${loadedSymbol} to run it.`
+          : loaded && capOver > 0n
+            ? `This list is ${formatAssetAmount(capOver, asset, 2)} ${token.symbol} over the schedule's cap, so the run is blocked. Edit the schedule or the list.`
+            : !relayOn && !walletOnChain
           ? `Switch your wallet to ${network.label}, or turn on Hide my wallet.`
           : treeLoading
             ? "Syncing your private balance…"
@@ -459,6 +515,21 @@ export function PayrollView() {
     setActive(batch);
     const useRelay = batch.relay && relayAvailable;
     const memoOn = isPayMemoLive();
+    if (demo) {
+      const done = await simulatePayroll(batch, {
+        onUpdate: (b) => setActive(b),
+        shouldStop: () => stopRef.current,
+      });
+      setActive({ ...done });
+      setBatches((prev) => [done, ...prev.filter((x) => x.id !== done.id)]);
+      if (done.status === "done") {
+        if (done.scheduleId && done.payday) void sched.markPaid(done.scheduleId, done.payday, done.id);
+        clearDraft();
+      }
+      setRunning(false);
+      refreshNotes();
+      return;
+    }
     try {
       const done = await runPayroll(batch, {
         client: getRhPublicClient(),
@@ -491,7 +562,11 @@ export function PayrollView() {
         shouldStop: () => stopRef.current,
       });
       setActive({ ...done });
-      if (done.status === "done") clearDraft();
+      if (done.status === "done") {
+        // A finished run (failed rows included) settles its payday, so the same list is never offered twice.
+        if (done.scheduleId && done.payday) await sched.markPaid(done.scheduleId, done.payday, done.id);
+        clearDraft();
+      }
     } catch (e) {
       setRunError(e instanceof Error ? e.message : "Payroll stopped.");
     } finally {
@@ -504,6 +579,8 @@ export function PayrollView() {
 
   async function startRun() {
     if (!address || !pool || !canRun) return;
+    // The schedule's cap is a hard stop, checked again right before anything is built.
+    if (loaded && (wrongAsset || overCap(total, loaded) > 0n)) return;
     const batch = newBatch({
       title: title.trim() || "Payroll",
       chainId: network.chainId,
@@ -512,9 +589,84 @@ export function PayrollView() {
       employer: address,
       relay: relayOn,
       rows: parsed.rows,
+      schedule: loaded && fromSchedule ? fromSchedule : undefined,
     });
-    await saveBatch(batch);
+    if (!demo) await saveBatch(batch);
     await execute(batch);
+  }
+
+  /** Run now: put the schedule's list in the normal run flow, linked so the cap applies. */
+  function runSchedule(s: PayrollSchedule) {
+    const st = scheduleState(s, today);
+    if (!st.payday || st.status === "ended") return;
+    // A run for this payday that stopped part way is resumed, never started twice.
+    const open = batches.find((b) => b.scheduleId === s.id && b.payday === st.payday && b.status !== "done");
+    if (open) {
+      setActive(open);
+      return;
+    }
+    // A run that finished but never got recorded (the tab closed in between)
+    // already paid this payday: record it now instead of paying it again.
+    const ran = batches.find((b) => b.scheduleId === s.id && b.payday === st.payday && b.status === "done");
+    if (ran) {
+      void sched.markPaid(s.id, st.payday, ran.id);
+      return;
+    }
+    setAsset(s.asset);
+    setCsv(scheduleCsv(s.people, s.asset));
+    setFile(null);
+    setPasteOpen(false);
+    setViewMode("you");
+    setTitle(runTitle(s, st.payday, today));
+    setFromSchedule({ id: s.id, payday: st.payday });
+    if (fileRef.current) fileRef.current.value = "";
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  }
+
+  function newScheduleFromDraft() {
+    if (!pool) return;
+    const from = validRows.length > 0 ? peopleFromDraft(parsed.rows) : [];
+    setEditor({
+      isNew: true,
+      base: newSchedule({
+        name: "Team payroll",
+        chainId: network.chainId,
+        pool,
+        asset,
+        cadence: { kind: "monthly", day: 1 },
+        cap: total,
+        people: from,
+        startsOn: today,
+      }),
+    });
+  }
+
+  /** "Repeat this run": a schedule prefilled from a finished run, monthly on its day. */
+  function repeatRun(b: PayrollBatch) {
+    const ran = new Date(b.createdAt);
+    const list = peopleFromBatch(b);
+    setEditor({
+      isNew: true,
+      base: newSchedule({
+        name: b.title.replace(/,?\s+[A-Z][a-z]{2}\s\d{1,2}$/, "").trim() || "Team payroll",
+        chainId: b.chainId,
+        pool: b.pool,
+        asset: b.asset,
+        cadence: { kind: "monthly", day: ran.getDate() },
+        cap: list.reduce((sum, p) => sum + BigInt(p.amount), 0n),
+        people: list,
+        startsOn: today,
+        // This run already covered its own payday; the schedule starts after it.
+        paidThrough: isoDay(ran),
+      }),
+    });
+  }
+
+  async function onSaveSchedule(s: PayrollSchedule) {
+    await sched.save(s);
+    setEditor(null);
+    // An edit to the list that is loaded right now shows up in it.
+    if (fromSchedule?.id === s.id) runSchedule(s);
   }
 
   function exportBatch(b: PayrollBatch) {
@@ -549,6 +701,18 @@ export function PayrollView() {
         transition: { duration: 0.22, ease },
       };
 
+  const editorNode = editor ? (
+    <ScheduleEditor
+      key={editor.base.id}
+      base={editor.base}
+      isNew={editor.isNew}
+      assetOptions={assetOptions}
+      today={today}
+      onSave={onSaveSchedule}
+      onClose={() => setEditor(null)}
+    />
+  ) : null;
+
   // ================================================================ run view
   if (active && active.status !== "draft") {
     const b = active;
@@ -562,6 +726,8 @@ export function PayrollView() {
     const links = paid.filter((r) => r.kind === "link" && r.ticket);
     const done = b.status === "done";
     const linkTotal = b.rows.filter((r) => r.kind === "link").length;
+    const runSched = b.scheduleId ? sched.schedules.find((x) => x.id === b.scheduleId) : undefined;
+    const runNext = runSched ? scheduleState(runSched, today) : null;
 
     return (
       <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
@@ -604,14 +770,18 @@ export function PayrollView() {
                         {running
                           ? current
                             ? `Paying ${current.name}`
-                            : "Starting…"
+                            : remaining === 0
+                              ? "Finishing up…"
+                              : "Starting…"
                           : b.status === "needs_funds"
                             ? "Paused, add money to continue"
                             : "Paused"}
                       </span>
                     </p>
                     <p className="mt-1.5 text-[13px] text-mute">
-                      About {minutes(remaining)} min left. Keep this tab open.
+                      {remaining === 0
+                        ? "Keep this tab open."
+                        : `About ${minutes(remaining)} min left. Keep this tab open.`}
                     </p>
                   </div>
                   <p className="tnum shrink-0 pt-6 text-right text-[13px] text-mute">
@@ -678,6 +848,20 @@ export function PayrollView() {
             <dl className="mt-5 divide-y divide-line border-y border-line text-[13.5px]">
               <Line k="Paid" v={`${paid.length} of ${b.rows.length}`} />
               <Line k="Sent by" v={b.relay ? "Gloam, wallet hidden" : "Your wallet"} />
+              {runSched && (
+                <Line
+                  k="Schedule"
+                  v={
+                    <span className="block max-w-[190px] truncate">
+                      {done && runNext?.payday
+                        ? `Next ${dayLabel(runNext.payday, today)}`
+                        : b.payday
+                          ? `Payday ${dayLabel(b.payday, today)}`
+                          : runSched.name}
+                    </span>
+                  }
+                />
+              )}
               <Line k="Claim links" v={String(linkTotal)} />
               <Line
                 k="The public sees"
@@ -714,10 +898,22 @@ export function PayrollView() {
                   Resume
                 </button>
               ) : (
-                <button type="button" onClick={() => exportBatch(b)} className="btn btn-ink btn-lg btn-block">
-                  <Icon name="download" />
-                  Download results
-                </button>
+                <>
+                  <button type="button" onClick={() => setInvoiceOpen(true)} className="btn btn-ink btn-lg btn-block">
+                    <Icon name="file" />
+                    View invoice
+                  </button>
+                  <button type="button" onClick={() => exportBatch(b)} className="btn btn-ghost btn-block">
+                    <Icon name="download" />
+                    Download results
+                  </button>
+                  {!runSched && (
+                    <button type="button" onClick={() => repeatRun(b)} className="btn btn-ghost btn-block">
+                      <ScheduleIcon name="repeat" />
+                      Repeat this run
+                    </button>
+                  )}
+                </>
               )}
               {!running && links.length > 0 && (
                 <button
@@ -747,6 +943,19 @@ export function PayrollView() {
             )}
           </section>
         </aside>
+
+        {done && invoiceOpen && (
+          <PayrollInvoice
+            batch={b}
+            symbol={opt.symbol}
+            networkLabel={network.label}
+            testnet={Boolean(network.chain.testnet)}
+            explorerTx={network.explorerTx}
+            linkRefs={!demo}
+            onClose={() => setInvoiceOpen(false)}
+          />
+        )}
+        {editorNode}
       </div>
     );
   }
@@ -759,507 +968,585 @@ export function PayrollView() {
   const covered = plan.shortfall === 0n && total > 0n;
 
   return (
-    <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
-      <div className="min-w-0 space-y-5">
-        {/* currency */}
-        <section className="gl-card max-sm:p-5 sm:p-6">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-[17px] text-foreground">Pay in</h2>
-            <p className="max-sm:hidden text-[13px] text-mute sm:block">Comes out of your private balance</p>
-          </div>
-          <div
-            className="max-sm:-mx-5 mt-4 flex gap-2 overflow-x-auto max-sm:px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
-            role="radiogroup"
-            aria-label="Currency"
-          >
-            {assetOptions.map((o, i) => {
-              const selected = o.address === asset;
-              const b = balances.get(o.address.toLowerCase())?.total ?? 0n;
-              if (!moreAssets && i >= leadCount && !selected) return null;
-              return (
-                <button
-                  key={o.address}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setAsset(o.address)}
-                  className={`flex h-14 shrink-0 items-center gap-3 rounded-full border pl-2 pr-5 text-left transition-[border-color,box-shadow,background-color] duration-200 ${
-                    selected
-                      ? "border-foreground bg-panel shadow-card"
-                      : "border-line bg-panel hover:border-line-strong hover:bg-surface"
-                  }`}
-                >
-                  <TokenLogo id={o.logoId} symbol={o.symbol} size={38} />
-                  <span className="min-w-0">
-                    <span className="block text-[14px] font-medium leading-tight text-foreground">{o.symbol}</span>
-                    <span className="tnum mt-0.5 block text-[12px] leading-tight text-mute">
-                      {b > 0n ? `${formatAssetAmount(b, o.address, 2)} private` : "No private balance"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-            {assetOptions.length > leadCount && (
-              <button
-                type="button"
-                onClick={() => setMoreAssets((v) => !v)}
-                aria-expanded={moreAssets}
-                className="flex h-14 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground"
-              >
-                {moreAssets ? "Fewer" : `${assetOptions.length - leadCount} more`}
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
-                  className={`transition-transform duration-200 ${moreAssets ? "rotate-180" : ""}`}
-                >
-                  <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </section>
-
-        {/* team list */}
-        <section className="gl-card max-sm:p-5 sm:p-6">
-          <div className="mb-4 flex items-baseline justify-between gap-3">
-            <h2 className="text-[17px] text-foreground">Your team</h2>
-            <button
-              type="button"
-              onClick={() => download("gloam-payroll-template.csv", PAYROLL_TEMPLATE)}
-              className="btn btn-quiet btn-sm -mr-3 text-mute hover:text-foreground"
+    <div className="space-y-5 lg:space-y-6">
+      {!bannerHidden && dueItems.length > 0 && (
+        <DueBanner
+          items={dueItems}
+          today={today}
+          assetOptions={assetOptions}
+          onRun={runSchedule}
+          onDismiss={() => setBannerHidden(true)}
+        />
+      )}
+      <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
+        <div className="min-w-0 space-y-5">
+          {/* currency */}
+          <section className="gl-card max-sm:p-5 sm:p-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-[17px] text-foreground">Pay in</h2>
+              <p className="max-sm:hidden text-[13px] text-mute sm:block">Comes out of your private balance</p>
+            </div>
+            <div
+              className="max-sm:-mx-5 mt-4 flex gap-2 overflow-x-auto max-sm:px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 [&::-webkit-scrollbar]:hidden"
+              role="radiogroup"
+              aria-label="Currency"
             >
-              <Icon name="download" className="h-3.5 w-3.5" />
-              Template
-            </button>
-          </div>
+              {assetOptions.map((o, i) => {
+                const selected = o.address === asset;
+                const b = balances.get(o.address.toLowerCase())?.total ?? 0n;
+                if (!moreAssets && i >= leadCount && !selected) return null;
+                return (
+                  <button
+                    key={o.address}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setAsset(o.address)}
+                    className={`flex h-14 shrink-0 items-center gap-3 rounded-full border pl-2 pr-5 text-left transition-[border-color,box-shadow,background-color] duration-200 ${
+                      selected
+                        ? "border-foreground bg-panel shadow-card"
+                        : "border-line bg-panel hover:border-line-strong hover:bg-surface"
+                    }`}
+                  >
+                    <TokenLogo id={o.logoId} symbol={o.symbol} size={38} />
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-medium leading-tight text-foreground">{o.symbol}</span>
+                      <span className="tnum mt-0.5 block text-[12px] leading-tight text-mute">
+                        {b > 0n ? `${formatAssetAmount(b, o.address, 2)} private` : "No private balance"}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {assetOptions.length > leadCount && (
+                <button
+                  type="button"
+                  onClick={() => setMoreAssets((v) => !v)}
+                  aria-expanded={moreAssets}
+                  className="flex h-14 shrink-0 items-center gap-2 rounded-full px-4 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground"
+                >
+                  {moreAssets ? "Fewer" : `${assetOptions.length - leadCount} more`}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden
+                    className={`transition-transform duration-200 ${moreAssets ? "rotate-180" : ""}`}
+                  >
+                    <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </section>
 
-          {(file || (pasted && !pasteOpen)) && !reading ? (
-            <div className="flex items-center rounded-[14px] bg-surface py-2.5 pl-2.5 pr-2 max-sm:gap-3 sm:gap-4">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] bg-panel text-foreground shadow-card">
-                <Icon name={file ? "file" : "paste"} className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] text-foreground">{file ? file.name : "Pasted list"}</p>
-                <p className="mt-0.5 text-[12.5px] text-mute">
-                  {people(validRows.length)} ready
-                  {badCount > 0 && <span className="text-warn">, {badCount} to fix</span>}
-                </p>
-              </div>
+          {/* team list */}
+          <section className="gl-card max-sm:p-5 sm:p-6">
+            <div className="mb-4 flex items-baseline justify-between gap-3">
+              <h2 className="text-[17px] text-foreground">Your team</h2>
               <button
                 type="button"
-                onClick={() => (file ? fileRef.current?.click() : setPasteOpen(true))}
-                className="btn btn-quiet btn-sm h-10 shrink-0 hover:bg-surface-2"
+                onClick={() => download("gloam-payroll-template.csv", PAYROLL_TEMPLATE)}
+                className="btn btn-quiet btn-sm -mr-3 text-mute hover:text-foreground"
               >
-                {file ? "Replace" : "Edit"}
-              </button>
-              <button
-                type="button"
-                onClick={clearDraft}
-                aria-label={file ? "Remove file" : "Clear list"}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
-              >
-                <Icon name="x" />
+                <Icon name="download" className="h-3.5 w-3.5" />
+                Template
               </button>
             </div>
-          ) : (
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-              className={`rounded-[16px] border border-dashed transition-colors duration-200 ${
-                dragging ? "border-foreground bg-surface" : "border-line-strong bg-surface/50"
-              } ${
-                pasteOpen && !reading && !dragging
-                  ? "flex items-center gap-3 p-2.5 text-left"
-                  : "flex flex-col items-center justify-center px-5 text-center max-sm:py-10 sm:py-12"
-              }`}
-            >
-              {reading ? (
-                <>
-                  <Spinner className="h-6 w-6 text-foreground" />
-                  <p className="mt-4 text-[15px] text-foreground">Reading {reading}</p>
-                  <p className="mt-1 text-[13px] text-mute">Checking names, addresses and amounts</p>
-                </>
-              ) : pasteOpen && !dragging ? (
-                <>
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-panel text-foreground shadow-card">
-                    <Icon name="upload" className="h-4 w-4" />
-                  </span>
-                  <p className="min-w-0 flex-1 truncate text-[13.5px] text-mute">
-                    <span className="max-sm:hidden">Drop a CSV here, or</span>
+
+            {(file || (pasted && !pasteOpen)) && !reading ? (
+              <div className="flex items-center rounded-[14px] bg-surface py-2.5 pl-2.5 pr-2 max-sm:gap-3 sm:gap-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] bg-panel text-foreground shadow-card">
+                  {loaded && !file ? (
+                    <ScheduleIcon name="calendar" className="h-5 w-5" />
+                  ) : (
+                    <Icon name={file ? "file" : "paste"} className="h-5 w-5" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] text-foreground">
+                    {file ? file.name : loaded ? loaded.name : "Pasted list"}
                   </p>
-                  <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ghost btn-sm h-10 shrink-0">
-                    Choose a file
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPasteOpen(false)}
-                    aria-expanded={pasteOpen}
-                    aria-label="Hide pasted list"
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
-                  >
-                    <Icon name="x" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="grid h-12 w-12 place-items-center rounded-full bg-panel text-foreground shadow-card">
-                    <Icon name="upload" className="h-5 w-5" />
-                  </span>
-                  <p className="mt-4 text-[17px] text-foreground">
-                    {dragging ? "Drop it here" : "Drop your team’s CSV"}
+                  <p className="mt-0.5 truncate text-[12.5px] text-mute">
+                    {people(validRows.length)} ready
+                    {badCount > 0 && <span className="text-warn">, {badCount} to fix</span>}
+                    {loaded && fromSchedule && !file && `, from your schedule`}
                   </p>
-                  <p className="mt-1.5 max-w-[42ch] text-[13.5px] leading-relaxed text-mute">
-                    One line per person. Leave the address blank and they get a claim link instead.
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5" aria-label="Columns">
-                    {["name", "gloam_address", "amount"].map((c) => (
-                      <span
-                        key={c}
-                        className="inline-flex h-7 items-center rounded-full bg-panel px-3 text-[12px] text-soft shadow-card"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-                    <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ink btn-sm h-10">
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (file ? fileRef.current?.click() : setPasteOpen(true))}
+                  className="btn btn-quiet btn-sm h-10 shrink-0 hover:bg-surface-2"
+                >
+                  {file ? "Replace" : "Edit"}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearDraft}
+                  aria-label={file ? "Remove file" : "Clear list"}
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+                >
+                  <Icon name="x" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={onDrop}
+                className={`rounded-[16px] border border-dashed transition-colors duration-200 ${
+                  dragging ? "border-foreground bg-surface" : "border-line-strong bg-surface/50"
+                } ${
+                  pasteOpen && !reading && !dragging
+                    ? "flex items-center gap-3 p-2.5 text-left"
+                    : "flex flex-col items-center justify-center px-5 text-center max-sm:py-10 sm:py-12"
+                }`}
+              >
+                {reading ? (
+                  <>
+                    <Spinner className="h-6 w-6 text-foreground" />
+                    <p className="mt-4 text-[15px] text-foreground">Reading {reading}</p>
+                    <p className="mt-1 text-[13px] text-mute">Checking names, addresses and amounts</p>
+                  </>
+                ) : pasteOpen && !dragging ? (
+                  <>
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-panel text-foreground shadow-card">
+                      <Icon name="upload" className="h-4 w-4" />
+                    </span>
+                    <p className="min-w-0 flex-1 truncate text-[13.5px] text-mute">
+                      <span className="max-sm:hidden">Drop a CSV here, or</span>
+                    </p>
+                    <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ghost btn-sm h-10 shrink-0">
                       Choose a file
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPasteOpen(true)}
-                      className="btn btn-ghost btn-sm h-10"
+                      onClick={() => setPasteOpen(false)}
                       aria-expanded={pasteOpen}
+                      aria-label="Hide pasted list"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
                     >
-                      <Icon name="paste" className="h-3.5 w-3.5" />
-                      Paste a list
+                      <Icon name="x" />
                     </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv,text/plain"
-            className="hidden"
-            onChange={(e) => void loadFile(e.target.files?.[0])}
-          />
-
-          {file && !reading && (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => setPasteOpen((v) => !v)}
-                className="btn btn-quiet btn-sm -ml-3 h-10 text-mute hover:text-foreground"
-                aria-expanded={pasteOpen}
-              >
-                <Icon name="paste" className="h-3.5 w-3.5" />
-                {pasteOpen ? "Hide pasted list" : "Edit as text"}
-              </button>
-            </div>
-          )}
-          <AnimatePresence initial={false}>
-            {pasteOpen && (
-              <motion.div
-                initial={reduce ? false : { height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease }}
-                className="overflow-hidden"
-              >
-                <label className="block pt-4">
-                  <span className="mb-2 block text-[13px] text-mute">Paste your list, one person per line</span>
-                  <textarea
-                    value={csv}
-                    onChange={(e) => {
-                      setCsv(e.target.value);
-                      setFile(null);
-                    }}
-                    rows={6}
-                    spellCheck={false}
-                    placeholder={PAYROLL_TEMPLATE}
-                    wrap="off"
-                    className="gl-input tnum h-auto resize-y overflow-x-auto whitespace-pre py-3 text-[13.5px] leading-[1.7]"
-                  />
-                </label>
-              </motion.div>
+                  </>
+                ) : (
+                  <>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-panel text-foreground shadow-card">
+                      <Icon name="upload" className="h-5 w-5" />
+                    </span>
+                    <p className="mt-4 text-[17px] text-foreground">
+                      {dragging ? "Drop it here" : "Drop your team’s CSV"}
+                    </p>
+                    <p className="mt-1.5 max-w-[42ch] text-[13.5px] leading-relaxed text-mute">
+                      One line per person. Leave the address blank and they get a claim link instead.
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5" aria-label="Columns">
+                      {["name", "gloam_address", "amount"].map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex h-7 items-center rounded-full bg-panel px-3 text-[12px] text-soft shadow-card"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                      <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ink btn-sm h-10">
+                        Choose a file
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPasteOpen(true)}
+                        className="btn btn-ghost btn-sm h-10"
+                        aria-expanded={pasteOpen}
+                      >
+                        <Icon name="paste" className="h-3.5 w-3.5" />
+                        Paste a list
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </AnimatePresence>
-          {parsed.error && (
-            <p className="mt-4 flex items-start gap-2 rounded-[12px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
-              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /> {parsed.error}
-            </p>
-          )}
-        </section>
-
-        {/* pay list, with the "who sees what" switch */}
-        {hasRows && (
-          <section className="gl-card overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-3 max-sm:px-5 pb-4 pt-5 sm:px-6">
-              <div className="min-w-0">
-                <h2 className="text-[17px] text-foreground">Pay list</h2>
-                <p className="mt-0.5 text-[13px] text-mute">
-                  {isPublic
-                    ? "What anyone can see on the explorer"
-                    : `${people(validRows.length)}, ${directCount} to Gloam ${
-                        directCount === 1 ? "address" : "addresses"
-                      }, ${linkCount} claim ${linkCount === 1 ? "link" : "links"}`}
-                </p>
-              </div>
-              <div
-                className="flex rounded-full bg-surface p-1 text-[12.5px]"
-                role="tablist"
-                aria-label="Who sees what"
-              >
-                {(["you", "public"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="tab"
-                    aria-selected={view === m}
-                    onClick={() => setViewMode(m)}
-                    className={`relative h-8 rounded-full px-3.5 transition-colors duration-200 ${
-                      view === m ? "text-foreground" : "text-mute hover:text-foreground"
-                    }`}
-                  >
-                    {view === m && (
-                      <motion.span
-                        layoutId="payroll-view-pill"
-                        className="absolute inset-0 rounded-full bg-panel shadow-card"
-                        transition={{ duration: reduce ? 0 : 0.25, ease }}
-                      />
-                    )}
-                    <span className="relative">{m === "you" ? "You see" : "The public sees"}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <ul className="border-t border-line" aria-live="polite">
-              <AnimatePresence initial={false} mode="popLayout">
-                {parsed.rows.map((r) => {
-                  const pub = isPublic && !r.error;
-                  return (
-                    <motion.li
-                      key={`${r.line}-${pub ? "p" : "y"}`}
-                      {...rowMotion}
-                      className="flex min-h-[64px] items-center gap-3.5 border-b border-line max-sm:px-5 py-3 transition-colors last:border-0 hover:bg-surface/60 sm:px-6"
-                    >
-                      {pub ? (
-                        <Avatar tone="sealed">
-                          <Icon name="lock" className="h-3.5 w-3.5" />
-                        </Avatar>
-                      ) : r.error ? (
-                        <Avatar tone="warn">
-                          <Icon name="alert" className="h-4 w-4" />
-                        </Avatar>
-                      ) : (
-                        <Avatar>{initials(r.name)}</Avatar>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] text-foreground">
-                          {pub ? "Private transfer" : r.name || `Line ${r.line}`}
-                        </p>
-                        <p className={`mt-0.5 truncate text-[12.5px] ${r.error ? "text-warn" : "text-mute"}`}>
-                          {r.error
-                            ? r.error
-                            : pub
-                              ? relayOn
-                                ? "Sent by Gloam. No name, no amount."
-                                : "No name, no amount."
-                              : r.kind === "gloam"
-                                ? `Gloam address ${short(r.recipient)}`
-                                : "Claim link, you share it after the run"}
-                        </p>
-                      </div>
-                      {pub ? (
-                        <SealDots n={6} className="text-foreground/55" />
-                      ) : r.amount != null ? (
-                        <Amount
-                          raw={r.amount}
-                          asset={asset}
-                          logoId={token.logoId}
-                          symbol={token.symbol}
-                          logo={false}
-                          className={`text-[15px] ${r.error ? "text-faint line-through" : "text-foreground"}`}
-                        />
-                      ) : (
-                        <span className="text-[13px] text-mute">{r.amountInput || "No amount"}</span>
-                      )}
-                    </motion.li>
-                  );
-                })}
-              </AnimatePresence>
-            </ul>
-
-            <div className="max-sm:mx-3 mb-3 flex items-center justify-between rounded-[12px] bg-surface px-3.5 py-3 text-[13.5px] sm:mx-3">
-              <span className="text-mute">{isPublic ? "Total" : `Total for ${people(validRows.length)}`}</span>
-              {isPublic ? (
-                <SealDots n={7} className="text-foreground/55" />
-              ) : (
-                <Amount
-                  raw={total}
-                  asset={asset}
-                  logoId={token.logoId}
-                  symbol={token.symbol}
-                  size={16}
-                  className="text-foreground"
-                />
-              )}
-            </div>
-          </section>
-        )}
-      </div>
-
-      {/* summary */}
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        <section className="gl-card max-sm:p-5 sm:p-6">
-          <p className="t-label">This run</p>
-          <p className="mt-4 flex items-center gap-2.5 text-foreground">
-            <span
-              className={`tnum text-[40px] font-light leading-none tracking-[-0.025em] ${
-                total === 0n ? "text-faint" : ""
-              }`}
-            >
-              {formatAssetAmount(total, asset, 2)}
-            </span>
-            <TokenLogo id={token.logoId} symbol={token.symbol} size={24} />
-          </p>
-          <p className="mt-2 text-[13px] text-mute">
-            {validRows.length > 0
-              ? `${people(validRows.length)} in ${token.symbol}, about ${minutes(validRows.length)} min`
-              : "Add your team to see the total"}
-          </p>
-
-          <div className="mt-5 rounded-[14px] bg-surface p-4">
-            <div className="flex items-center justify-between gap-3 text-[13px]">
-              <span className="text-mute">Private balance</span>
-              <span className="tnum text-foreground">
-                {formatAssetAmount(bal.total, asset, 2)} {token.symbol}
-              </span>
-            </div>
-            <div className="mt-3">
-              <Rail value={total > 0n ? coverage : 0} reduce={reduce} tone={covered ? "sealed" : "ink"} />
-            </div>
-            <p
-              className={`mt-2.5 flex items-center gap-1.5 text-[12.5px] ${
-                covered ? "text-sealed" : plan.shortfall > 0n && total > 0n ? "text-foreground" : "text-mute"
-              }`}
-            >
-              {covered && <Icon name="check" className="h-3.5 w-3.5" />}
-              {total === 0n
-                ? "Payments come out of your private balance."
-                : plan.shortfall === 0n
-                  ? "Covers this run."
-                  : `${formatAssetAmount(plan.shortfall, asset, 2)} ${token.symbol} short. Add it as one deposit.`}
-            </p>
-          </div>
-
-          <div className="mt-3">
-            <RelayToggle
-              available={relayAvailable}
-              on={relayOn}
-              onChange={(v) => {
-                setRelayOn(v);
-                setRelayPreferred(v);
-              }}
-              compact
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              className="hidden"
+              onChange={(e) => void loadFile(e.target.files?.[0])}
             />
-          </div>
 
-          {validRows.length > 0 && (
-            <label className="mt-4 block">
-              <span className="mb-1.5 block text-[13px] text-mute">Name this run</span>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} className="gl-input h-11 text-[14px]" />
-            </label>
-          )}
-
-          <div className="mt-5">
-            {validRows.length > 0 && plan.shortfall > 0n && isConnected ? (
-              <Link href="/app/vault?tab=shield" className="btn btn-ink btn-lg btn-block">
-                Add {formatAssetAmount(plan.shortfall, asset, 2)} {token.symbol} privately
-              </Link>
-            ) : (
-              <button type="button" disabled={!canRun} onClick={() => void startRun()} className="btn btn-ink btn-lg btn-block">
-                {validRows.length > 0 ? `Pay ${people(validRows.length)} privately` : "Pay privately"}
-              </button>
+            {file && !reading && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setPasteOpen((v) => !v)}
+                  className="btn btn-quiet btn-sm -ml-3 h-10 text-mute hover:text-foreground"
+                  aria-expanded={pasteOpen}
+                >
+                  <Icon name="paste" className="h-3.5 w-3.5" />
+                  {pasteOpen ? "Hide pasted list" : "Edit as text"}
+                </button>
+              </div>
             )}
-            {blocker && <p className="mt-2.5 text-center text-[12.5px] text-mute">{blocker}</p>}
-            {badCount > 0 && validRows.length > 0 && (
-              <p className="mt-2 text-center text-[12.5px] text-warn">
-                {badCount} {badCount === 1 ? "line" : "lines"} will be skipped until fixed.
+            <AnimatePresence initial={false}>
+              {pasteOpen && (
+                <motion.div
+                  initial={reduce ? false : { height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease }}
+                  className="overflow-hidden"
+                >
+                  <label className="block pt-4">
+                    <span className="mb-2 block text-[13px] text-mute">Paste your list, one person per line</span>
+                    <textarea
+                      value={csv}
+                      onChange={(e) => {
+                        setCsv(e.target.value);
+                        setFile(null);
+                      }}
+                      rows={6}
+                      spellCheck={false}
+                      placeholder={PAYROLL_TEMPLATE}
+                      wrap="off"
+                      className="gl-input tnum h-auto resize-y overflow-x-auto whitespace-pre py-3 text-[13.5px] leading-[1.7]"
+                    />
+                  </label>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {parsed.error && (
+              <p className="mt-4 flex items-start gap-2 rounded-[12px] bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
+                <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" /> {parsed.error}
               </p>
             )}
-          </div>
-        </section>
-
-        {batches.length > 0 && (
-          <section className="gl-card max-sm:p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <p className="t-label">Past runs</p>
-              <span className="tnum text-[12px] text-faint">{batches.length}</span>
-            </div>
-            <ul className="-mx-2 mt-3 space-y-0.5">
-              {batches.slice(0, 6).map((b) => {
-                const paid = b.rows.filter((r) => r.status === "paid");
-                const opt = assetOptions.find((o) => o.address === b.asset);
-                const sum = paid.reduce((s, r) => s + BigInt(r.amount), 0n);
-                const untouched = b.rows.every((r) => r.status === "queued");
-                return (
-                  <li key={b.id} className="flex items-center gap-2 rounded-[12px] transition-colors hover:bg-surface">
-                    <button
-                      type="button"
-                      onClick={() => setActive(b)}
-                      className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 rounded-[12px] px-2 text-left"
-                    >
-                      {opt ? (
-                        <TokenLogo id={opt.logoId} symbol={opt.symbol} size={28} />
-                      ) : (
-                        <span className="h-7 w-7 shrink-0 rounded-full bg-surface" aria-hidden />
-                      )}
-                      <span className="min-w-0">
-                        <span className="block truncate text-[14px] text-foreground">{b.title}</span>
-                        <span className="tnum mt-0.5 block truncate text-[12px] text-mute">
-                          {paid.length} of {b.rows.length} paid, {formatAssetAmount(sum, b.asset, 2)} {opt?.symbol ?? ""}
-                        </span>
-                      </span>
-                    </button>
-                    <span className="shrink-0 pr-2">
-                      {b.status === "done" ? (
-                        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
-                          <Icon name="check" className="h-3 w-3" />
-                          Paid
-                        </span>
-                      ) : untouched ? (
-                        <button
-                          type="button"
-                          onClick={() => void deleteBatch(b.id).then(reloadBatches)}
-                          className="inline-flex h-10 items-center rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
-                        >
-                          Delete
-                        </button>
-                      ) : (
-                        <span className="inline-flex h-6 items-center rounded-full bg-warn-soft px-2.5 text-[12px] font-medium text-warn">
-                          Paused
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
           </section>
-        )}
-      </aside>
+
+          {/* pay list, with the "who sees what" switch */}
+          {hasRows && (
+            <section className="gl-card overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 max-sm:px-5 pb-4 pt-5 sm:px-6">
+                <div className="min-w-0">
+                  <h2 className="text-[17px] text-foreground">Pay list</h2>
+                  <p className="mt-0.5 text-[13px] text-mute">
+                    {isPublic
+                      ? "What anyone can see on the explorer"
+                      : `${people(validRows.length)}, ${directCount} to Gloam ${
+                          directCount === 1 ? "address" : "addresses"
+                        }, ${linkCount} claim ${linkCount === 1 ? "link" : "links"}`}
+                  </p>
+                </div>
+                <div
+                  className="flex rounded-full bg-surface p-1 text-[12.5px]"
+                  role="tablist"
+                  aria-label="Who sees what"
+                >
+                  {(["you", "public"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={view === m}
+                      onClick={() => setViewMode(m)}
+                      className={`relative h-8 rounded-full px-3.5 transition-colors duration-200 ${
+                        view === m ? "text-foreground" : "text-mute hover:text-foreground"
+                      }`}
+                    >
+                      {view === m && (
+                        <motion.span
+                          layoutId="payroll-view-pill"
+                          className="absolute inset-0 rounded-full bg-panel shadow-card"
+                          transition={{ duration: reduce ? 0 : 0.25, ease }}
+                        />
+                      )}
+                      <span className="relative">{m === "you" ? "You see" : "The public sees"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <ul className="border-t border-line" aria-live="polite">
+                <AnimatePresence initial={false} mode="popLayout">
+                  {parsed.rows.map((r) => {
+                    const pub = isPublic && !r.error;
+                    return (
+                      <motion.li
+                        key={`${r.line}-${pub ? "p" : "y"}`}
+                        {...rowMotion}
+                        className="flex min-h-[64px] items-center gap-3.5 border-b border-line max-sm:px-5 py-3 transition-colors last:border-0 hover:bg-surface/60 sm:px-6"
+                      >
+                        {pub ? (
+                          <Avatar tone="sealed">
+                            <Icon name="lock" className="h-3.5 w-3.5" />
+                          </Avatar>
+                        ) : r.error ? (
+                          <Avatar tone="warn">
+                            <Icon name="alert" className="h-4 w-4" />
+                          </Avatar>
+                        ) : (
+                          <Avatar>{initials(r.name)}</Avatar>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14px] text-foreground">
+                            {pub ? "Private transfer" : r.name || `Line ${r.line}`}
+                          </p>
+                          <p className={`mt-0.5 truncate text-[12.5px] ${r.error ? "text-warn" : "text-mute"}`}>
+                            {r.error
+                              ? r.error
+                              : pub
+                                ? relayOn
+                                  ? "Sent by Gloam. No name, no amount."
+                                  : "No name, no amount."
+                                : r.kind === "gloam"
+                                  ? `Gloam address ${short(r.recipient)}`
+                                  : "Claim link, you share it after the run"}
+                          </p>
+                        </div>
+                        {pub ? (
+                          <SealDots n={6} className="text-foreground/55" />
+                        ) : r.amount != null ? (
+                          <Amount
+                            raw={r.amount}
+                            asset={asset}
+                            logoId={token.logoId}
+                            symbol={token.symbol}
+                            logo={false}
+                            className={`text-[15px] ${r.error ? "text-faint line-through" : "text-foreground"}`}
+                          />
+                        ) : (
+                          <span className="text-[13px] text-mute">{r.amountInput || "No amount"}</span>
+                        )}
+                      </motion.li>
+                    );
+                  })}
+                </AnimatePresence>
+              </ul>
+
+              <div className="max-sm:mx-3 mb-3 flex items-center justify-between rounded-[12px] bg-surface px-3.5 py-3 text-[13.5px] sm:mx-3">
+                <span className="text-mute">{isPublic ? "Total" : `Total for ${people(validRows.length)}`}</span>
+                {isPublic ? (
+                  <SealDots n={7} className="text-foreground/55" />
+                ) : (
+                  <Amount
+                    raw={total}
+                    asset={asset}
+                    logoId={token.logoId}
+                    symbol={token.symbol}
+                    size={16}
+                    className="text-foreground"
+                  />
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* summary */}
+        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+          <section className="gl-card max-sm:p-5 sm:p-6">
+            <p className="t-label">This run</p>
+            <p className="mt-4 flex items-center gap-2.5 text-foreground">
+              <span
+                className={`tnum text-[40px] font-light leading-none tracking-[-0.025em] ${
+                  total === 0n ? "text-faint" : ""
+                }`}
+              >
+                {formatAssetAmount(total, asset, 2)}
+              </span>
+              <TokenLogo id={token.logoId} symbol={token.symbol} size={24} />
+            </p>
+            <p className="mt-2 text-[13px] text-mute">
+              {validRows.length > 0
+                ? `${people(validRows.length)} in ${token.symbol}, about ${minutes(validRows.length)} min`
+                : "Add your team to see the total"}
+            </p>
+
+            {loaded && fromSchedule && (
+              <div className="mt-5 rounded-[14px] border border-line p-4">
+                <p className="flex min-w-0 items-center gap-2 text-[13.5px] text-foreground">
+                  <ScheduleIcon name="calendar" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{loaded.name}</span>
+                </p>
+                <p className="mt-0.5 text-[12.5px] text-mute">
+                  Payday {dayLabel(fromSchedule.payday, today)}. {cadenceLabel(loaded.cadence, today)}.
+                </p>
+                <div className="mt-3.5 flex items-center justify-between gap-3 text-[13px]">
+                  <span className="text-mute">Cap per run</span>
+                  <span className="tnum text-foreground">
+                    {formatAssetAmount(loaded.cap, loaded.asset, 2)} {loadedSymbol}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <Rail
+                    value={BigInt(loaded.cap) > 0n ? Number((total * 1000n) / BigInt(loaded.cap)) / 1000 : 1}
+                    reduce={reduce}
+                    tone="ink"
+                  />
+                </div>
+                <p className={`mt-2.5 text-[12.5px] ${capOver > 0n || wrongAsset ? "text-warn" : "text-mute"}`}>
+                  {wrongAsset
+                    ? `This schedule pays in ${loadedSymbol}.`
+                    : capOver > 0n
+                      ? `${formatAssetAmount(capOver, asset, 2)} ${token.symbol} over the cap. This run is blocked.`
+                      : `${formatAssetAmount(BigInt(loaded.cap) - total, asset, 2)} ${token.symbol} under the cap.`}
+                </p>
+              </div>
+            )}
+
+            <div className={`${loaded ? "mt-3" : "mt-5"} rounded-[14px] bg-surface p-4`}>
+              <div className="flex items-center justify-between gap-3 text-[13px]">
+                <span className="text-mute">Private balance</span>
+                <span className="tnum text-foreground">
+                  {formatAssetAmount(bal.total, asset, 2)} {token.symbol}
+                </span>
+              </div>
+              <div className="mt-3">
+                <Rail value={total > 0n ? coverage : 0} reduce={reduce} tone={covered ? "sealed" : "ink"} />
+              </div>
+              <p
+                className={`mt-2.5 flex items-center gap-1.5 text-[12.5px] ${
+                  covered ? "text-sealed" : plan.shortfall > 0n && total > 0n ? "text-foreground" : "text-mute"
+                }`}
+              >
+                {covered && <Icon name="check" className="h-3.5 w-3.5" />}
+                {total === 0n
+                  ? "Payments come out of your private balance."
+                  : plan.shortfall === 0n
+                    ? "Covers this run."
+                    : `${formatAssetAmount(plan.shortfall, asset, 2)} ${token.symbol} short. Add it as one deposit.`}
+              </p>
+            </div>
+
+            <div className="mt-3">
+              <RelayToggle
+                available={relayAvailable}
+                on={relayOn}
+                onChange={(v) => {
+                  setRelayOn(v);
+                  setRelayPreferred(v);
+                }}
+                compact
+              />
+            </div>
+
+            {validRows.length > 0 && (
+              <label className="mt-4 block">
+                <span className="mb-1.5 block text-[13px] text-mute">Name this run</span>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className="gl-input h-11 text-[14px]" />
+              </label>
+            )}
+
+            <div className="mt-5">
+              {validRows.length > 0 && plan.shortfall > 0n && isConnected ? (
+                <Link href="/app/vault?tab=shield" className="btn btn-ink btn-lg btn-block">
+                  Add {formatAssetAmount(plan.shortfall, asset, 2)} {token.symbol} privately
+                </Link>
+              ) : (
+                <button type="button" disabled={!canRun} onClick={() => void startRun()} className="btn btn-ink btn-lg btn-block">
+                  {validRows.length > 0 ? `Pay ${people(validRows.length)} privately` : "Pay privately"}
+                </button>
+              )}
+              {blocker && <p className="mt-2.5 text-center text-[12.5px] text-mute">{blocker}</p>}
+              {badCount > 0 && validRows.length > 0 && (
+                <p className="mt-2 text-center text-[12.5px] text-warn">
+                  {badCount} {badCount === 1 ? "line" : "lines"} will be skipped until fixed.
+                </p>
+              )}
+              {validRows.length > 0 && !loaded && pool && (
+                <button
+                  type="button"
+                  onClick={newScheduleFromDraft}
+                  className="btn btn-quiet btn-block mt-2 text-mute hover:text-foreground"
+                >
+                  <ScheduleIcon name="calendar" className="h-3.5 w-3.5" />
+                  Save as a schedule
+                </button>
+              )}
+            </div>
+          </section>
+
+          {pool && (
+            <ScheduleList
+              schedules={sched.schedules}
+              today={today}
+              assetOptions={assetOptions}
+              loadedId={fromSchedule?.id ?? null}
+              onRun={runSchedule}
+              onTogglePause={(s) => void sched.togglePause(s)}
+              onEdit={(s) => setEditor({ base: s, isNew: false })}
+              onDelete={(s) => {
+                if (fromSchedule?.id === s.id) setFromSchedule(null);
+                void sched.remove(s.id);
+              }}
+              onNew={newScheduleFromDraft}
+            />
+          )}
+
+          {batches.length > 0 && (
+            <section className="gl-card max-sm:p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <p className="t-label">Past runs</p>
+                <span className="tnum text-[12px] text-faint">{batches.length}</span>
+              </div>
+              <ul className="-mx-2 mt-3 space-y-0.5">
+                {batches.slice(0, 6).map((b) => {
+                  const paid = b.rows.filter((r) => r.status === "paid");
+                  const opt = assetOptions.find((o) => o.address === b.asset);
+                  const sum = paid.reduce((s, r) => s + BigInt(r.amount), 0n);
+                  const untouched = b.rows.every((r) => r.status === "queued");
+                  return (
+                    <li key={b.id} className="flex items-center gap-2 rounded-[12px] transition-colors hover:bg-surface">
+                      <button
+                        type="button"
+                        onClick={() => setActive(b)}
+                        className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 rounded-[12px] px-2 text-left"
+                      >
+                        {opt ? (
+                          <TokenLogo id={opt.logoId} symbol={opt.symbol} size={28} />
+                        ) : (
+                          <span className="h-7 w-7 shrink-0 rounded-full bg-surface" aria-hidden />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-[14px] text-foreground">{b.title}</span>
+                          <span className="tnum mt-0.5 block truncate text-[12px] text-mute">
+                            {paid.length} of {b.rows.length} paid, {formatAssetAmount(sum, b.asset, 2)} {opt?.symbol ?? ""}
+                          </span>
+                        </span>
+                      </button>
+                      <span className="shrink-0 pr-2">
+                        {b.status === "done" ? (
+                          <span className="inline-flex h-6 items-center gap-1 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
+                            <Icon name="check" className="h-3 w-3" />
+                            Paid
+                          </span>
+                        ) : untouched ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteBatch(b.id).then(reloadBatches)}
+                            className="inline-flex h-10 items-center rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+                          >
+                            Delete
+                          </button>
+                        ) : (
+                          <span className="inline-flex h-6 items-center rounded-full bg-warn-soft px-2.5 text-[12px] font-medium text-warn">
+                            Paused
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+        </aside>
+      </div>
+      {editorNode}
     </div>
   );
 }

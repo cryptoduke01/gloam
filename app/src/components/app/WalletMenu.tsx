@@ -2,13 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-  useAccount,
-  useConnect,
-  useDisconnect,
-  useSwitchChain,
-  useChainId,
-} from "wagmi";
+import { useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { exitDemo, useAppAccount } from "@/lib/demo";
 import { ensureRhTestnetWallet, shortAddress } from "@/lib/chain";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
@@ -35,11 +30,11 @@ function detectVariant(el: HTMLElement | null): WalletMenuVariant {
 }
 
 export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
-  const { address, isConnected, isConnecting } = useAccount();
+  const { address, isConnected, isConnecting, chainId, demo } = useAppAccount();
   const { connect, connectors, isPending, error } = useConnect();
-  const { disconnect } = useDisconnect();
+  const { disconnect: wagmiDisconnect } = useDisconnect();
+  const disconnect = demo ? exitDemo : wagmiDisconnect;
   const { network } = useNetwork();
-  const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const [env, setEnv] = useState<{ mounted: boolean; auto: WalletMenuVariant }>(
     { mounted: false, auto: "inline" }

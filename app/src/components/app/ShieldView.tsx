@@ -2,15 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  useAccount,
-  useBalance,
-  useChainId,
-  useReadContract,
-  useReadContracts,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from "wagmi";
+import { useReadContract, useReadContracts } from "wagmi";
 import {
   decodeEventLog,
   formatEther,
@@ -20,6 +12,13 @@ import {
   type Hex,
 } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
+import {
+  useAppAccount,
+  useAppBalance,
+  useAppTokenBalance,
+  useAppTxReceipt,
+  useAppWriteContract,
+} from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import { erc20Abi } from "@/lib/dex";
@@ -40,9 +39,8 @@ type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
 
 export function ShieldView() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId, demo } = useAppAccount();
   const { network } = useNetwork();
-  const chainId = useChainId();
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { data: marketData } = useLiveMarkets();
@@ -74,22 +72,20 @@ export function ShieldView() {
     ? selectedToken.address
     : NATIVE_ASSET;
 
-  const { data: ethBal, refetch: refetchEth } = useBalance({
+  const { data: ethBal, refetch: refetchEth } = useAppBalance({
     address,
     chainId: network.chainId,
-    query: { enabled: Boolean(address) },
+    enabled: Boolean(address),
   });
 
-  const { data: tokenBal, refetch: refetchTok } = useReadContract({
-    address: selectedToken?.address,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
+  const { data: tokenBal, refetch: refetchTok } = useAppTokenBalance({
+    token: selectedToken?.address,
+    address,
     chainId: network.chainId,
-    query: { enabled: Boolean(address && selectedToken && onProduct) },
+    enabled: Boolean(selectedToken && onProduct),
   });
 
-  const { data: allowance, refetch: refetchAllow } = useReadContract({
+  const { data: allowanceRead, refetch: refetchAllow } = useReadContract({
     address: selectedToken?.address,
     abi: erc20Abi,
     functionName: "allowance",
@@ -98,8 +94,10 @@ export function ShieldView() {
         ? [address, network.pool]
         : undefined,
     chainId: network.chainId,
-    query: { enabled: Boolean(address && selectedToken && onProduct) },
+    query: { enabled: Boolean(address && selectedToken && onProduct && !demo) },
   });
+  // The pretend wallet approved the vault long ago, so a demo deposit is one step.
+  const allowance = demo ? maxUint256 : allowanceRead;
 
   const { data: poolData, refetch: refetchPool } = useReadContracts({
     contracts: deployed
@@ -150,7 +148,7 @@ export function ShieldView() {
           },
         ]
       : [],
-    query: { enabled: deployed, refetchInterval: 12_000 },
+    query: { enabled: deployed && !demo, refetchInterval: 12_000 },
   });
 
   const nextIndex =
@@ -183,9 +181,11 @@ export function ShieldView() {
       : null;
   // C1: when the pool enforces bound shields, plain shield() reverts and we must
   // prove commitment == Poseidon(secret, amount, asset) via shieldBound().
+  // A demo takes that path without asking the chain (both live pools enforce it).
   const shieldVerifierLive =
-    Boolean(shieldVerifierAddr) &&
-    shieldVerifierAddr !== "0x0000000000000000000000000000000000000000";
+    demo ||
+    (Boolean(shieldVerifierAddr) &&
+      shieldVerifierAddr !== "0x0000000000000000000000000000000000000000");
 
   const verifierLive =
     Boolean(verifier) &&
@@ -212,13 +212,13 @@ export function ShieldView() {
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useAppWriteContract();
 
   const {
     isLoading: confirming,
     isSuccess,
     data: receipt,
-  } = useWaitForTransactionReceipt({
+  } = useAppTxReceipt({
     hash,
     chainId: network.chainId,
   });
@@ -857,7 +857,8 @@ export function ShieldView() {
         body={
           <>
             {successBody}
-            {successTitle === "Added privately" && !isTempo && (
+            {/* Private trade is not live yet, so a recording never points at it. */}
+            {successTitle === "Added privately" && !isTempo && !demo && (
               <p className="mt-2">
                 For a private stock trade, add ETH, then open{" "}
                 <a

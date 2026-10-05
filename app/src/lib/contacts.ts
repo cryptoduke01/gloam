@@ -2,6 +2,9 @@
  * Local address book for Gloam receive tags (private pay contacts).
  */
 
+import { readDemo } from "./demoFlag";
+import { DEMO_CONTACTS } from "./demo/chain";
+
 const KEY = "gloam.contacts.v1";
 
 export type GloamContact = {
@@ -11,8 +14,13 @@ export type GloamContact = {
   createdAt: number;
 };
 
+/** Recording demo: edits stay in this tab's memory, never in the real address book. */
+let demoList: GloamContact[] | null = null;
+
 export function loadContacts(): GloamContact[] {
   if (typeof window === "undefined") return [];
+  // Recording demo: the pretend wallet's own people to pay.
+  if (readDemo()) return demoList ?? DEMO_CONTACTS;
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
@@ -25,6 +33,10 @@ export function loadContacts(): GloamContact[] {
 
 export function saveContacts(list: GloamContact[]) {
   if (typeof window === "undefined") return;
+  if (readDemo()) {
+    demoList = list.slice(0, 50);
+    return;
+  }
   localStorage.setItem(KEY, JSON.stringify(list.slice(0, 50)));
 }
 

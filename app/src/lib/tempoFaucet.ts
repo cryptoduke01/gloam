@@ -1,3 +1,6 @@
+import { readDemo } from "./demoFlag";
+import { demoFundTempo } from "./demo/chain";
+
 /**
  * Tempo Moderato testnet faucet. Tempo funds an address (native USD + the test
  * stablecoins PathUSD / AlphaUSD / BetaUSD / ThetaUSD) through a single RPC
@@ -9,6 +12,8 @@ export async function fundTempoAddress(
   rpcUrl: string,
   address: string
 ): Promise<string[]> {
+  // Recording demo: the pretend wallet is funded, nothing is asked of the chain.
+  if (readDemo()) return demoFundTempo();
   const res = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },

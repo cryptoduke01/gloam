@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount } from "wagmi";
 import { formatEther } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
+import { useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { useActivity } from "@/hooks/useActivity";
 
@@ -57,7 +57,7 @@ function Header() {
 }
 
 export function ActivityFeed() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected } = useAppAccount();
   const { network } = useNetwork();
   const { data, isLoading, isError } = useActivity(address);
   const txs = useMemo(() => data?.txs ?? [], [data]);

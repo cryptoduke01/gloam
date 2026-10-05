@@ -84,6 +84,9 @@ export type PayrollBatch = {
   relay: boolean;
   status: "draft" | "running" | "paused" | "needs_funds" | "done";
   rows: PayrollRow[];
+  /** Set when the run pays a saved schedule (lib/payrollSchedule): which one, and for which payday. */
+  scheduleId?: string;
+  payday?: string;
 };
 
 export type DraftRow = {
@@ -289,9 +292,12 @@ export function newBatch(args: {
   employer: Address;
   relay: boolean;
   rows: DraftRow[];
+  /** The schedule this run pays, and the payday (YYYY-MM-DD) it covers. */
+  schedule?: { id: string; payday: string };
 }): PayrollBatch {
   const stamp = Date.now();
   return {
+    ...(args.schedule ? { scheduleId: args.schedule.id, payday: args.schedule.payday } : {}),
     id: `pr-${stamp}`,
     title: args.title,
     createdAt: stamp,

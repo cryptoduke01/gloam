@@ -878,3 +878,31 @@ html[data-theme="dark"],
   
   
 }
+
+/* Invoice: printing (Download PDF) shows only the sheet, in full colour. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  body:has(#gl-invoice) > :not(#gl-invoice) {
+    display: none !important;
+  }
+  #gl-invoice {
+    position: static !important;
+    overflow: visible !important;
+  }
+  #gl-invoice > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  #gl-invoice .gl-invoice-backdrop,
+  #gl-invoice .gl-invoice-actions {
+    display: none !important;
+  }
+  #gl-invoice .gl-invoice-sheet {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

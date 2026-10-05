@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL } from "@/lib/faucet";
 import { useNetwork } from "./NetworkProvider";
 import { useTempoFaucet } from "@/hooks/useTempoFaucet";
+import { readDemo } from "@/lib/demoFlag";
 import { SealedField } from "@/components/ui/SealedField";
 import {
   ONBOARDING_STEPS,
@@ -44,7 +45,8 @@ export function OnboardingCard() {
     const s = loadOnboarding();
     setState(s);
     const remaining = ONBOARDING_STEPS.filter((x) => !s.done.includes(x.id));
-    if (!s.dismissed && remaining.length > 0) setOpen(true);
+    // A recording opens on a wallet that is already set up.
+    if (!s.dismissed && remaining.length > 0 && !readDemo()) setOpen(true);
   }, []);
 
   // Let any "Getting started" trigger reopen it (even after dismiss).

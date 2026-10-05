@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useDemoActivity } from "@/lib/demo";
 
 export type ActivityTx = {
   hash: string;
@@ -21,11 +22,14 @@ async function fetchActivity(address: string) {
 }
 
 export function useActivity(address: string | undefined) {
-  return useQuery({
+  // Recording demo: the pretend wallet's history, nothing fetched.
+  const demo = useDemoActivity();
+  const query = useQuery({
     queryKey: ["activity", address],
     queryFn: () => fetchActivity(address!),
-    enabled: Boolean(address),
+    enabled: Boolean(address) && !demo,
     staleTime: 12_000,
     refetchInterval: 30_000,
   });
+  return demo ?? query;
 }

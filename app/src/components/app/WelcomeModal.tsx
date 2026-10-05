@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Mark } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
+import { readDemo } from "@/lib/demoFlag";
 
 const STORAGE_KEY = "gloam_testnet_welcome_v1";
 
@@ -18,7 +19,7 @@ export function WelcomeModal() {
 
   useEffect(() => {
     try {
-      if (localStorage.getItem(STORAGE_KEY) === "1") return;
+      if (localStorage.getItem(STORAGE_KEY) === "1" || readDemo()) return;
       setOpen(true);
     } catch {
       setOpen(true);

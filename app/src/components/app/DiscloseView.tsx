@@ -1,264 +1,95 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import { useAccount } from "wagmi";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
-import { assetLabel, formatAssetAmount, type LocalNote } from "@/lib/shield";
-import { buildDisclosure, encodeDisclosure } from "@/lib/disclosure";
-import { SealDots } from "@/components/ui/SealDots";
-import { SealedField } from "@/components/ui/SealedField";
-import { WalletMenu } from "./WalletMenu";
+import { useAppAccount } from "@/lib/demo";
+import type { LocalNote } from "@/lib/shield";
+import { ExactBalance } from "./prove/ExactBalance";
+import { FundsFlow } from "./prove/FundsFlow";
+import { PaymentFlow } from "./prove/PaymentFlow";
+import { ConnectCard, NoBalanceCard, ProveLayout, SafeToShare } from "./prove/ProofParts";
 
-function ShieldCheck({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 3.5l7 3v5.25c0 4.1-2.9 7.6-7 8.75-4.1-1.15-7-4.65-7-8.75V6.5l7-3z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="M9 12.25l2.1 2.1L15.25 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+/**
+ * Prove what you hold, three ways: one balance exactly, "at least" an amount
+ * with the balance hidden, or a payment you received. `?mode=` picks the tab
+ * so a link can open straight onto one.
+ */
+const MODES = [
+  { id: "exact", label: "Exact balance", hint: "Show one private balance exactly" },
+  { id: "funds", label: "At least", hint: "Show you hold at least an amount, balance hidden" },
+  { id: "payment", label: "Payment", hint: "Show you were paid, the amount or a minimum" },
+] as const;
 
-function Spinner() {
-  return (
-    <span
-      aria-hidden
-      className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-[1.5px] border-current border-t-transparent opacity-70 motion-reduce:animate-none"
-    />
-  );
-}
-
-/** What each party sees, as a quiet two-column list. */
-const SEES: { who: string; sees: string; hidden?: boolean }[] = [
-  { who: "The person you share with", sees: "That one balance, checked against the vault" },
-  { who: "Everyone else", sees: "Nothing", hidden: true },
-  { who: "Never shared", sees: "Your wallet, other balances, history", hidden: true },
-];
+type ModeId = (typeof MODES)[number]["id"];
 
 export function DiscloseView() {
-  const { address } = useAccount();
-  const { open } = useLocalShieldNotes(address);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const raw = sp.get("mode");
+  const mode: ModeId = MODES.some((m) => m.id === raw) ? (raw as ModeId) : "exact";
 
-  const notes = (open as LocalNote[]).filter(
+  const { address } = useAppAccount();
+  const { open, merged } = useLocalShieldNotes(address);
+
+  const exactNotes = (open as LocalNote[]).filter(
     (n) => n.secret && n.bound && n.status !== "recovered"
   );
 
-  async function make(n: LocalNote) {
-    setErr(null);
-    setBusyId(n.id);
-    try {
-      const d = await buildDisclosure({
-        chainId: n.chainId,
-        pool: n.pool,
-        secret: n.secret,
-        commitment: n.commitment,
-        amount: BigInt(n.amountWei),
-        asset: n.asset,
-      });
-      setTokens((t) => ({ ...t, [n.id]: encodeDisclosure(d) }));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not build the proof.");
-    } finally {
-      setBusyId(null);
-    }
+  function select(id: ModeId) {
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    if (id === "exact") params.delete("mode");
+    else params.set("mode", id);
+    const q = params.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
   }
 
-  async function copy(id: string, token: string) {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(id);
-      setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
-    } catch {
-      /* ignore */
-    }
-  }
+  const what = mode === "payment" ? "a payment" : "a balance";
 
   return (
-    <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
-      <div className="min-w-0 space-y-5">
-        {err && (
-          <p className="flex items-start gap-2.5 rounded-[14px] bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-danger" role="alert">
-            <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
-              <path d="M12 7.75v5M12 16.25v.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            <span className="min-w-0 break-words">{err}</span>
-          </p>
-        )}
-
-        {!address && (
-          <section className="gl-card relative overflow-hidden">
-            <SealedField tone="soft" />
-            <div className="relative z-[1] flex flex-col items-start max-sm:p-6 sm:p-8">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-panel text-foreground shadow-card">
-                <ShieldCheck className="h-5 w-5" />
-              </span>
-              <h2 className="mt-5 text-[22px] font-light tracking-[-0.012em] text-foreground">
-                Connect to prove a balance
-              </h2>
-              <p className="mt-2 max-w-[48ch] text-[14px] leading-relaxed text-mute">
-                Your private balances live in this browser. Connect the wallet you
-                used, and pick one to prove.
-              </p>
-              <div className="mt-6">
-                <WalletMenu />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {address && notes.length === 0 && (
-          <section className="gl-card relative overflow-hidden">
-            <SealedField tone="soft" />
-            <div className="relative z-[1] flex flex-col items-start max-sm:p-6 sm:p-8">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-panel text-foreground shadow-card">
-                <ShieldCheck className="h-5 w-5" />
-              </span>
-              <h2 className="mt-5 text-[22px] font-light tracking-[-0.012em] text-foreground">
-                No private balance yet
-              </h2>
-              <p className="mt-2 max-w-[48ch] text-[14px] leading-relaxed text-mute">
-                Add money to your vault first. Then come back and prove it to anyone,
-                without showing them anything else.
-              </p>
-              <Link href="/app/vault?tab=shield" className="btn btn-ink mt-6">
-                Add privately
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {notes.length > 0 && (
-          <p className="text-[13px] text-mute">
-            {notes.length === 1
-              ? "One private balance you can prove."
-              : `${notes.length} private balances you can prove. Each proof covers one.`}
-          </p>
-        )}
-
-        {notes.map((n) => {
-          const token = tokens[n.id];
-          const busy = busyId === n.id;
+    <div className="space-y-6">
+      <div
+        role="tablist"
+        aria-label="What to prove"
+        className="inline-flex max-w-full rounded-full bg-surface-2 p-1 max-sm:flex max-sm:w-full dark:bg-panel dark:ring-1 dark:ring-line"
+      >
+        {MODES.map((m) => {
+          const active = m.id === mode;
           return (
-            <section key={n.id} className="gl-card overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-4 max-sm:p-5 sm:p-6">
-                <div className="flex min-w-0 items-center gap-3.5">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                      <rect x="5" y="10.5" width="14" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-foreground">
-                      <span className="tnum text-[26px] font-light leading-none tracking-[-0.02em]">
-                        {formatAssetAmount(n.amountWei, n.asset)}
-                      </span>{" "}
-                      <span className="text-[15px] text-mute">{assetLabel(n.asset)}</span>
-                    </p>
-                    <p className="mt-1.5 text-[12.5px] text-mute">Private balance, only you can see it</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void make(n)}
-                  disabled={busy}
-                  className={`btn btn-sm h-10 ${token ? "btn-quiet text-mute" : "btn-ghost"}`}
-                >
-                  {busy ? <Spinner /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  {busy ? "Proving…" : token ? "New proof" : "Create proof"}
-                </button>
-              </div>
-
-              {busy && (
-                <p className="border-t border-line bg-surface/60 max-sm:px-5 py-3 text-[12.5px] text-mute sm:px-6">
-                  Building the proof on this device. It takes a few seconds, and your
-                  key never leaves this browser.
-                </p>
-              )}
-
-              {token && (
-                <div className="border-t border-line bg-surface/50 max-sm:p-5 sm:p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label htmlFor={`proof-${n.id}`} className="text-[13px] text-mute">
-                      Your proof. Share it with whoever you choose.
-                    </label>
-                    <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Ready
-                    </span>
-                  </div>
-                  <textarea
-                    id={`proof-${n.id}`}
-                    readOnly
-                    value={token}
-                    rows={3}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="gl-input tnum mt-2 h-auto resize-none break-all py-3 text-[12px] leading-relaxed text-soft"
-                  />
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => void copy(n.id, token)} className="btn btn-ink btn-sm h-10">
-                      {copied === n.id ? "Copied" : "Copy proof"}
-                    </button>
-                    <Link href="/verify" className="btn btn-quiet btn-sm h-10">
-                      Open the verifier
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </section>
+            <button
+              key={m.id}
+              id={`prove-tab-${m.id}`}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              aria-controls="prove-panel"
+              title={m.hint}
+              onClick={() => select(m.id)}
+              className={`h-10 whitespace-nowrap rounded-full px-[18px] text-[14px] transition-colors duration-200 max-sm:flex-auto max-sm:px-3 ${
+                active
+                  ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
+                  : "text-mute hover:text-foreground"
+              }`}
+            >
+              {m.label}
+            </button>
           );
         })}
       </div>
 
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        <section className="gl-card max-sm:p-5 sm:p-6">
-          <p className="t-label">What a proof shows</p>
-          <div className="mt-4 rounded-[14px] bg-surface p-4">
-            <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
-                <ShieldCheck />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[14px] text-foreground">Holds this balance</p>
-                <p className="text-[12px] text-mute">Checked against the Gloam vault</p>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[12.5px]">
-              <span className="text-mute">Wallet, history, other balances</span>
-              <SealDots n={5} className="text-foreground/50" />
-            </div>
-          </div>
-          <dl className="mt-4 divide-y divide-line">
-            {SEES.map((r) => (
-              <div key={r.who} className="py-3">
-                <dt className="text-[12.5px] text-mute">{r.who}</dt>
-                <dd className={`mt-0.5 text-[14px] ${r.hidden ? "text-soft" : "text-foreground"}`}>{r.sees}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-        <section className="rounded-[18px] border border-line max-sm:p-5 sm:p-6">
-          <p className="text-[14px] text-foreground">Safe to share</p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-mute">
-            A proof is not your key. It can never be used to spend your money. Whoever
-            gets it can check it in their browser at{" "}
-            <Link href="/verify" className="text-foreground underline decoration-line-strong underline-offset-2 hover:decoration-foreground">
-              gloam.trade/verify
-            </Link>
-            .
-          </p>
-        </section>
-      </aside>
+      <div id="prove-panel" role="tabpanel" aria-labelledby={`prove-tab-${mode}`} className="min-w-0">
+        {!address ? (
+          <ProveLayout aside={<SafeToShare />}>
+            <ConnectCard what={what} />
+          </ProveLayout>
+        ) : mode === "funds" ? (
+          <FundsFlow notes={open} empty={<NoBalanceCard />} />
+        ) : mode === "payment" ? (
+          <PaymentFlow notes={merged} />
+        ) : (
+          <ExactBalance notes={exactNotes} empty={exactNotes.length === 0 ? <NoBalanceCard /> : null} />
+        )}
+      </div>
     </div>
   );
 }

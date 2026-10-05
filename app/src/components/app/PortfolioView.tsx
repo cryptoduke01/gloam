@@ -2,13 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
-import {
-  useAccount,
-  useBalance,
-  useChainId,
-  useReadContracts,
-} from "wagmi";
 import { formatEth } from "@/lib/chain";
+import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { faucetFor } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -20,7 +15,7 @@ import {
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
-import { shieldTokensFor, erc20BalanceOfAbi } from "@/lib/tokens";
+import { shieldTokensFor } from "@/lib/tokens";
 import {
   assetLabel,
   formatAssetAmount,
@@ -170,9 +165,8 @@ function EmptyState({ title, body, action }: { title: string; body?: string; act
 }
 
 export function PortfolioView() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAppAccount();
   const { network } = useNetwork();
-  const chainId = useChainId();
   const onProduct = chainId === network.chainId;
   const faucet = faucetFor(network.key);
   const faucetExternal = faucet.url.startsWith("http");
@@ -195,10 +189,10 @@ export function PortfolioView() {
     useLocalShieldNotes(address);
   const shieldLive = isShieldDeployed();
 
-  const { data: bal, isLoading } = useBalance({
+  const { data: bal, isLoading } = useAppBalance({
     address,
     chainId: network.chainId,
-    query: { enabled: Boolean(address) },
+    enabled: Boolean(address),
   });
 
   // Public tokens differ by chain: equities on Robinhood, faucet stablecoins on
@@ -209,30 +203,18 @@ export function PortfolioView() {
     [network.chainId]
   );
 
-  const tokenContracts = useMemo(
-    () =>
-      tokenSet.map((t) => ({
-        address: t.address,
-        abi: erc20BalanceOfAbi,
-        functionName: "balanceOf" as const,
-        args: [address!] as const,
-        chainId: network.chainId,
-      })),
-    [address, tokenSet, network.chainId]
-  );
-
-  const { data: tokenBals } = useReadContracts({
-    contracts: tokenContracts,
-    query: { enabled: Boolean(address && onProduct) },
+  const tokenAddresses = useMemo(() => tokenSet.map((t) => t.address), [tokenSet]);
+  const tokenBals = useAppTokenBalances({
+    tokens: tokenAddresses,
+    address,
+    chainId: network.chainId,
+    enabled: onProduct,
   });
 
   const positions = useMemo(() => {
     return tokenSet
       .map((t, i) => {
-        const raw =
-          tokenBals?.[i]?.status === "success"
-            ? (tokenBals[i].result as bigint)
-            : BigInt(0);
+        const raw = tokenBals[i] ?? BigInt(0);
         const m = markets.find((x) => x.id === t.id);
         // Stablecoins are worth $1; equities use their live mark.
         const mark = t.kind === "stablecoin" ? 1 : (m?.mark ?? 0);

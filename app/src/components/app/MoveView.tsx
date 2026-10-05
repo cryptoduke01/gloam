@@ -3,16 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  useAccount,
-  useChainId,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from "wagmi";
 import { formatUnits, type Hex } from "viem";
 import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
 import { shortAddress } from "@/lib/chain";
+import { useAppAccount, useAppTxReceipt, useAppWriteContract } from "@/lib/demo";
 import { shieldTokensFor } from "@/lib/tokens";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
@@ -70,6 +65,12 @@ import {
   setRelayPreferred,
 } from "@/lib/relay/client";
 import { RelayToggle } from "./RelayToggle";
+import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
+import {
+  readPaymentRequest,
+  requestParamsFrom,
+  type PaymentRequest,
+} from "@/lib/paymentRequest";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
@@ -87,9 +88,8 @@ type PayStyle = "direct" | "bearer";
 export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAppAccount();
   const { network } = useNetwork();
-  const chainId = useChainId();
   const onProduct = chainId === network.chainId;
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const {
@@ -108,8 +108,18 @@ export function MoveView() {
     const m = searchParams.get("mode");
     return m === "receive" || m === "cashout" ? m : "send";
   });
+  // Payment request links (lib/paymentRequest, mode=pay) open Send with the
+  // recipient, amount and token filled in. Read once; the payer still sends.
+  const [request, setRequest] = useState<PaymentRequest | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : readPaymentRequest(
+          requestParamsFrom(window.location.search, window.location.hash),
+          network.key
+        )
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sendAmount, setSendAmount] = useState("");
+  const [sendAmount, setSendAmount] = useState(() => request?.amount ?? "");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<string | null>(null);
@@ -123,7 +133,7 @@ export function MoveView() {
   const [busy, setBusy] = useState(false);
   const [claimPreview, setClaimPreview] = useState<string | null>(null);
   const [payStyle, setPayStyle] = useState<PayStyle>("direct");
-  const [recipientTag, setRecipientTag] = useState("");
+  const [recipientTag, setRecipientTag] = useState(() => request?.to ?? "");
   const [myIdentity, setMyIdentity] = useState<ReceiveIdentity | null>(null);
   const [tagCopied, setTagCopied] = useState(false);
   const [shareLocked, setShareLocked] = useState(false);
@@ -144,10 +154,10 @@ export function MoveView() {
     isPending,
     error: writeError,
     reset,
-  } = useWriteContract();
+  } = useAppWriteContract();
 
   const txHash = relayHash ?? hash;
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
+  const { isLoading: confirming, isSuccess } = useAppTxReceipt({
     hash: txHash,
     chainId: network.chainId,
   });
@@ -171,6 +181,39 @@ export function MoveView() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [networkKey, setNetworkKey]);
+
+  // A request link opened in a tab that already shows Pay only changes the
+  // fragment, so pick it up here too.
+  useEffect(() => {
+    const onHash = () => {
+      const r = readPaymentRequest(
+        requestParamsFrom(window.location.search, window.location.hash),
+        networkKey
+      );
+      if (!r) return;
+      requestSwitched.current = false;
+      setRequest(r);
+      setMode("send");
+      setSelectedId(null);
+      setRecipientTag(r.to ?? "");
+      setSendAmount(r.amount ?? "");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [networkKey]);
+
+  // A request names its network: move there once so the right balance shows.
+  // After that the banner offers the switch instead of forcing it again.
+  const requestSwitched = useRef(false);
+  useEffect(() => {
+    const want = request?.network;
+    if (!want || want === networkKey || requestSwitched.current) return;
+    const t = window.setTimeout(() => {
+      requestSwitched.current = true;
+      setNetworkKey(want);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [request, networkKey, setNetworkKey]);
 
   useEffect(() => {
     let live = true;
@@ -352,8 +395,28 @@ export function MoveView() {
       .filter((n) => n.leafIndex != null);
   }, [open, poseidonMode, leafIndexForCommitment]);
 
+  // For a request, default to a balance in the requested token: the smallest
+  // one that covers the amount, else the largest. A manual pick still wins.
+  const requestNoteId = useMemo(() => {
+    const asset = request?.asset;
+    if (!asset) return null;
+    const same = notes.filter(
+      (n) => n.asset.toLowerCase() === asset.address.toLowerCase()
+    );
+    if (!same.length) return null;
+    const need = request.amount ? parseAssetAmount(request.amount, asset.address) : null;
+    const bySize = [...same].sort((a, b) =>
+      BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1
+    );
+    const covering = need ? bySize.find((n) => BigInt(n.amountWei) >= need) : null;
+    return (covering ?? bySize[bySize.length - 1]).id;
+  }, [request, notes]);
+
   const selected =
-    notes.find((n) => n.id === selectedId) ?? notes[0] ?? null;
+    notes.find((n) => n.id === selectedId) ??
+    notes.find((n) => n.id === requestNoteId) ??
+    notes[0] ??
+    null;
 
   const maxEth = selected
     ? formatUnits(BigInt(selected.amountWei), assetDecimals(selected.asset))
@@ -782,6 +845,36 @@ export function MoveView() {
   const connectedOk = isConnected && onProduct;
   const memoLive = isPayMemoLive();
 
+  // Payment request: who asked (only a saved contact counts as known) and
+  // whether a private balance can cover it on this network.
+  const requestContact = request?.to
+    ? (contacts.find((c) => c.tag === request.to)?.label ?? null)
+    : null;
+  const requestHint = ((): { text: string; addHref?: string } | null => {
+    const asset = request?.asset;
+    if (!asset || !shieldLive) return null;
+    if (!requestNoteId) {
+      return {
+        text: `You have no private ${asset.symbol} on ${network.label} yet. Add some, then open this link again.`,
+        addHref: "/app/vault?tab=shield",
+      };
+    }
+    if (!selected) return null;
+    if (selected.asset.toLowerCase() !== asset.address.toLowerCase()) {
+      return {
+        text: `This request is for ${asset.symbol}. The balance picked below holds ${assetLabel(selected.asset)}.`,
+      };
+    }
+    const need = request.amount ? parseAssetAmount(request.amount, asset.address) : null;
+    if (need && BigInt(selected.amountWei) < need) {
+      return {
+        text: `Each payment comes from one balance, and your largest ${asset.symbol} balance is ${formatAssetLabel(selected.amountWei, selected.asset)}. Add more to pay it in full.`,
+        addHref: "/app/vault?tab=shield",
+      };
+    }
+    return null;
+  })();
+
   function selectMode(id: Mode) {
     setMode(id);
     setError(null);
@@ -876,6 +969,17 @@ export function MoveView() {
             <p className="mt-5 rounded-xl bg-warn-soft px-4 py-3 text-[13.5px] leading-relaxed text-warn">
               The private vault is not connected right now. Try again shortly.
             </p>
+          )}
+
+          {mode === "send" && request && (
+            <PaymentRequestBanner
+              request={request}
+              contactLabel={requestContact}
+              currentNetwork={networkKey}
+              onSwitchNetwork={setNetworkKey}
+              onDismiss={() => setRequest(null)}
+              balanceHint={requestHint}
+            />
           )}
 
           {importOk && (
@@ -994,7 +1098,7 @@ export function MoveView() {
                             className="h-10 rounded-full px-3 text-[13px] font-medium text-foreground transition-colors hover:bg-surface"
                             onClick={() => {
                               const label =
-                                window.prompt("Save contact as", "Friend") ?? "";
+                                window.prompt("Save contact as", request?.name ?? "Friend") ?? "";
                               if (!label.trim()) return;
                               upsertContact(label, recipientTag);
                               setContacts(loadContacts());
@@ -1303,22 +1407,36 @@ export function MoveView() {
                       <p className="tnum break-all text-[13px] leading-relaxed text-foreground">
                         {myIdentity.tag}
                       </p>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(myIdentity.tag);
-                            setTagCopied(true);
-                            setTimeout(() => setTagCopied(false), 2000);
-                          } catch {
-                            setError("Could not copy your address.");
-                          }
-                        }}
-                        aria-live="polite"
-                        className="btn btn-ink mt-3"
-                      >
-                        {tagCopied ? "Copied" : "Copy address"}
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(myIdentity.tag);
+                              setTagCopied(true);
+                              setTimeout(() => setTagCopied(false), 2000);
+                            } catch {
+                              setError("Could not copy your address.");
+                            }
+                          }}
+                          aria-live="polite"
+                          className="btn btn-ink"
+                        >
+                          {tagCopied ? "Copied" : "Copy address"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById("req-amount");
+                            const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                            el?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
+                            el?.focus({ preventScroll: true });
+                          }}
+                          className="btn btn-ghost"
+                        >
+                          Request a payment
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-3">
                       <PaymentTicketShare
@@ -1334,6 +1452,19 @@ export function MoveView() {
                   </p>
                 )}
               </section>
+
+              {myIdentity && (
+                <section className="border-t border-line pt-6">
+                  <h3 className="text-[15px] font-medium text-foreground">
+                    Request a payment
+                  </h3>
+                  <p className="mt-1 text-[13px] leading-relaxed text-mute">
+                    Make a link with the amount and a note filled in, like an
+                    invoice. They open it, check it and pay you privately.
+                  </p>
+                  <RequestPaymentCard tag={myIdentity.tag} />
+                </section>
+              )}
 
               <section className="border-t border-line pt-6">
                 <div className="flex items-center justify-between gap-3">
@@ -1503,6 +1634,13 @@ export function MoveView() {
                       Settings
                     </Link>{" "}
                     so you can open payments on another device.
+                  </p>
+                </li>
+                <li className="py-3">
+                  <p className="text-foreground">Requests stay off chain</p>
+                  <p className="mt-0.5 text-mute">
+                    A request link carries your address, the amount and a note.
+                    Nothing about it is posted on chain.
                   </p>
                 </li>
                 <li className="pt-3">

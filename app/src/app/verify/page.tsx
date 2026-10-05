@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import { formatUnits, toHex } from "viem";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { toHex } from "viem";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
@@ -13,9 +13,17 @@ import {
   verifyDisclosureProof,
   type Disclosure,
 } from "@/lib/disclosure";
+import { demoCommitmentSeen, isDemoProof } from "@/lib/demo/proof";
+import {
+  decodeProof,
+  isGloamProof,
+  verifyProof,
+  type AnyProof,
+  type VerifyResult,
+} from "@/lib/proofs";
+import { ProofVerdict, amountOf, symbolOf } from "@/components/verify/ProofVerdict";
+import { clientFor, commitmentSeen, networkForChain } from "@/lib/proofs/chain";
 import { getNetwork, type GloamNetwork } from "@/lib/networks";
-import { getRhPublicClient } from "@/lib/rhClient";
-import { shieldPoolAbi } from "@/lib/shield";
 
 type Result =
   | { kind: "idle" }
@@ -25,12 +33,42 @@ type Result =
       d: Disclosure;
       onchain: boolean;
     }
-  | { kind: "bad"; reason: string };
+  | { kind: "proof"; p: AnyProof; r: VerifyResult; at: number }
+  | { kind: "bad"; reason: string; title?: string };
 
-function assetLabel(asset: string): string {
-  if (asset === "0" || BigInt(asset) === 0n) return "ETH";
-  const addr = toHex(BigInt(asset), { size: 20 });
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+/**
+ * A proof handed over in the link: `#proof=` (stays in the browser) or
+ * `?proof=`. URLSearchParams turns a bare "+" into a space, and base64 never
+ * has spaces, so those go back to "+".
+ */
+function proofFromUrl(): string | null {
+  try {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const query = new URLSearchParams(window.location.search);
+    const raw = hash.get("proof") || query.get("proof");
+    return raw ? raw.trim().replace(/ /g, "+") : null;
+  } catch {
+    return null;
+  }
+}
+
+function onUrlChange(cb: () => void) {
+  window.addEventListener("hashchange", cb);
+  window.addEventListener("popstate", cb);
+  return () => {
+    window.removeEventListener("hashchange", cb);
+    window.removeEventListener("popstate", cb);
+  };
+}
+const noProof = () => null;
+
+/** A disclosure carries its asset as a field element; back to an address. */
+function assetAddress(asset: string): string {
+  try {
+    return toHex(BigInt(asset), { size: 20 });
+  } catch {
+    return asset;
+  }
 }
 
 const GITHUB = "https://github.com/cryptoduke01/gloam";
@@ -184,14 +222,61 @@ const FACTS = [
 ];
 
 export default function VerifyPage() {
-  const [token, setToken] = useState("");
+  const urlProof = useSyncExternalStore(onUrlChange, proofFromUrl, noProof);
+  const [typed, setTyped] = useState<string | null>(null);
+  const token = typed ?? urlProof ?? "";
   const [result, setResult] = useState<Result>({ kind: "idle" });
 
-  async function onVerify() {
+  // Opened from a shared link: check the proof straight away and bring the result into view.
+  useEffect(() => {
+    if (!urlProof) return;
+    const t = window.setTimeout(() => {
+      document.getElementById("proof")?.scrollIntoView({ block: "start" });
+      void onVerify(urlProof);
+    }, 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per proof in the link
+  }, [urlProof]);
+
+  /** Proof of funds and proof of payment: decode, then every check in lib/proofs. */
+  async function onVerifyProof(text: string) {
+    setResult({ kind: "checking", step: "Reading the proof" });
+    let p: AnyProof;
+    try {
+      p = decodeProof(text);
+    } catch (e) {
+      setResult({
+        kind: "bad",
+        title: "Could not read this proof",
+        reason:
+          e instanceof Error && e.message !== "Not a Gloam proof."
+            ? e.message
+            : "That does not look like a Gloam proof. Check that you copied all of it.",
+      });
+      return;
+    }
+    try {
+      setResult({ kind: "checking", step: "Checking it against the vault" });
+      const r = await verifyProof(p);
+      setResult({ kind: "proof", p, r, at: Math.floor(Date.now() / 1000) });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setResult({
+        kind: "bad",
+        title: "Could not check this proof",
+        reason: /not built yet/i.test(msg)
+          ? "This version of the verifier cannot check proofs of funds or payment yet. Try again after the next update."
+          : msg || "Something went wrong while checking. Try again in a moment.",
+      });
+    }
+  }
+
+  async function onVerify(input: string = token) {
+    if (isGloamProof(input)) return onVerifyProof(input);
     setResult({ kind: "checking", step: "Reading the proof" });
     let d: Disclosure;
     try {
-      d = decodeDisclosure(token);
+      d = decodeDisclosure(input);
     } catch {
       setResult({ kind: "bad", reason: "That is not a valid Gloam proof." });
       return;
@@ -205,20 +290,39 @@ export default function VerifyPage() {
         return;
       }
 
+      // The shield proof alone holds for any amount anyone makes up; only a note
+      // in Gloam's own vault, on the network the proof names, backs it.
+      const net = networkForChain(Number(d.chainId));
+      if (!net?.pool || typeof d.pool !== "string" || net.pool.toLowerCase() !== d.pool.toLowerCase()) {
+        setResult({
+          kind: "bad",
+          reason: "This proof points at a vault that is not Gloam's current vault, so its balance cannot be trusted.",
+        });
+        return;
+      }
+
       // Membership: is this commitment a real note in the pool?
       setResult({ kind: "checking", step: "Finding the balance on-chain" });
-      let onchain = false;
+      let onchain: boolean | null;
       try {
-        const client = getRhPublicClient();
         const commitment32 = toHex(BigInt(d.commitment), { size: 32 });
-        onchain = (await client.readContract({
-          address: d.pool as `0x${string}`,
-          abi: shieldPoolAbi,
-          functionName: "commitmentSeen",
-          args: [commitment32],
-        })) as boolean;
+        // Recording demo: a pretend wallet's proof is found in the pretend vault.
+        onchain = isDemoProof(d.proof)
+          ? await demoCommitmentSeen()
+          : await commitmentSeen(clientFor(net), net.pool, commitment32);
       } catch {
-        onchain = false; // treat RPC failure as "unconfirmed", not "invalid"
+        onchain = null;
+      }
+      if (onchain !== true) {
+        setResult({
+          kind: "bad",
+          title: onchain === null ? "Could not check this proof" : undefined,
+          reason:
+            onchain === null
+              ? `Could not reach ${net.label} to find this balance. Try again in a moment.`
+              : "The vault has no record of this balance.",
+        });
+        return;
       }
 
       setResult({ kind: "ok", d, onchain });
@@ -293,10 +397,10 @@ export default function VerifyPage() {
             <div>
               <h2 className="t-display-l max-w-[12ch]">Verify a proof</h2>
               <p className="mt-5 max-w-[46ch] text-[16px] leading-relaxed text-mute">
-                Someone sent you a Gloam proof. Paste it here to confirm they hold
-                that balance in the Gloam vault. It shows the one balance they
-                chose to share, and nothing about who they are or what else they
-                hold.
+                Someone sent you a Gloam proof. Paste it here to check it: an
+                exact balance, a minimum they hold, or a payment they received.
+                You see only what they chose to prove, and nothing about who they
+                are or what else they hold.
               </p>
               <ul className="mt-10 divide-y divide-line border-y border-line text-[15px]">
                 <li className="flex justify-between gap-6 py-4">
@@ -304,20 +408,28 @@ export default function VerifyPage() {
                   <span className="text-right text-mute">Checked in your browser</span>
                 </li>
                 <li className="flex justify-between gap-6 py-4">
-                  <span>The balance</span>
-                  <span className="text-right text-mute">Looked up on Robinhood Chain</span>
+                  <span>The vault</span>
+                  <span className="text-right text-mute">Looked up on chain</span>
                 </li>
                 <li className="flex justify-between gap-6 py-4">
                   <span>Sent to Gloam</span>
                   <span className="text-right text-mute">Nothing</span>
                 </li>
               </ul>
-              <Link
-                href="/app/disclose"
-                className="t-label mt-8 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
-              >
-                Make a proof of your own <span aria-hidden>→</span>
-              </Link>
+              <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3">
+                <Link
+                  href="/app/disclose"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                >
+                  Make a proof of your own <span aria-hidden>→</span>
+                </Link>
+                <Link
+                  href="/docs/proofs"
+                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                >
+                  How proofs work <span aria-hidden>→</span>
+                </Link>
+              </div>
             </div>
 
             <div className="min-w-0">
@@ -328,14 +440,16 @@ export default function VerifyPage() {
                 <textarea
                   id="disc"
                   value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="gloamdisc1:…"
+                  onChange={(e) => setTyped(e.target.value)}
+                  placeholder="gloamfunds1:…"
                   rows={6}
                   spellCheck={false}
                   className="tnum mt-2 w-full resize-y break-all rounded-xl border border-line-strong bg-panel px-4 py-3.5 text-[14px] leading-relaxed text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-faint focus:border-foreground focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--foreground)_12%,transparent)]"
                 />
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-[12.5px] text-faint">Starts with gloamdisc1:</p>
+                  <p className="text-[12.5px] text-faint">
+                    Starts with gloamfunds1:, gloampay1: or gloamdisc1:
+                  </p>
                   <button
                     type="button"
                     onClick={() => void onVerify()}
@@ -349,10 +463,12 @@ export default function VerifyPage() {
 
               {result.kind === "bad" && (
                 <div role="alert" className="mt-4 rounded-[18px] bg-danger-soft p-5 sm:p-6">
-                  <p className="text-[13px] font-medium text-danger">Not verified</p>
+                  <p className="text-[13px] font-medium text-danger">{result.title ?? "Not verified"}</p>
                   <p className="mt-1.5 text-[15px] text-foreground">{result.reason}</p>
                 </div>
               )}
+
+              {result.kind === "proof" && <ProofVerdict proof={result.p} result={result.r} checkedAt={result.at} />}
 
               {result.kind === "ok" && (
                 <div className="gl-card relative mt-4 overflow-hidden">
@@ -363,12 +479,16 @@ export default function VerifyPage() {
                         <CheckMark size={12} /> Verified
                       </span>
                       <p className="t-display-m tnum mt-4">
-                        {formatUnits(BigInt(result.d.amount), 18)}{" "}
-                        <span className="text-mute">{assetLabel(result.d.asset)}</span>
+                        {amountOf(result.d.amount, assetAddress(result.d.asset))}{" "}
+                        <span className="text-mute">
+                          {symbolOf(assetAddress(result.d.asset), result.d.chainId)}
+                        </span>
                       </p>
                       <p className="mt-2 max-w-[52ch] text-[14px] leading-relaxed text-mute">
-                        held in the Gloam vault. The holder proved they own this
-                        balance without revealing the key that spends it.
+                        put into the Gloam vault. The holder proved they own this
+                        balance without revealing the key that spends it. This
+                        older proof does not show whether it has moved since; ask
+                        for a proof of funds to check that.
                       </p>
                     </div>
                   </div>

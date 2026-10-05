@@ -6,6 +6,7 @@
  */
 
 import { analyticsAllowed } from "@/lib/consent";
+import { readDemo } from "@/lib/demoFlag";
 
 export type TrackPayload = {
   t: string;
@@ -45,6 +46,8 @@ export function track(
 ) {
   if (typeof window === "undefined") return;
   if (opts?.requireConsent && !analyticsAllowed()) return;
+  // Recording demo: pretend activity never counts toward real traction.
+  if (readDemo()) return;
 
   send({
     t: event,

@@ -14,6 +14,8 @@ import {
   assertUnshieldArtifacts,
   CIRCUIT_ARTIFACTS,
 } from "./circuitArtifacts";
+import { readDemo } from "./demoFlag";
+import { demoProve } from "./demo/proof";
 
 export { fieldToBytes32 } from "@gloamtrade/sdk";
 export type { Groth16Proof };
@@ -48,6 +50,8 @@ async function fullProve(
 export async function proveUnshieldInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  // Recording demo: no proof is built, it only takes as long as one.
+  if (readDemo()) return demoProve(circomInput);
   await assertUnshieldArtifacts();
   return fullProve(circomInput, UNSHIELD_WASM, UNSHIELD_ZKEY);
 }
@@ -55,6 +59,7 @@ export async function proveUnshieldInBrowser(
 export async function proveTransferInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  if (readDemo()) return demoProve(circomInput);
   await assertTransferArtifacts();
   return fullProve(circomInput, TRANSFER_WASM, TRANSFER_ZKEY);
 }
@@ -63,6 +68,7 @@ export async function proveTransferInBrowser(
 export async function proveSealedSwapInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  if (readDemo()) return demoProve(circomInput);
   await assertSealedSwapArtifacts();
   return fullProve(circomInput, SEALED_SWAP_WASM, SEALED_SWAP_ZKEY);
 }
@@ -75,6 +81,7 @@ export async function proveSealedSwapInBrowser(
 export async function proveShieldInBrowser(
   circomInput: Record<string, string | string[]>
 ) {
+  if (readDemo()) return demoProve(circomInput, ["commitment", "amount", "asset"]);
   await assertShieldArtifacts();
   return fullProve(circomInput, SHIELD_WASM, SHIELD_ZKEY);
 }

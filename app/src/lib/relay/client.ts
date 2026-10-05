@@ -4,6 +4,8 @@
  */
 import type { Address, Hex } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { readDemo } from "@/lib/demoFlag";
+import { demoRelay, demoRelayStatus } from "@/lib/demo/chain";
 
 export type RelayNetworkStatus = {
   chainId: number;
@@ -19,6 +21,8 @@ let statusCache: { at: number; networks: RelayNetworkStatus[] } | null = null;
 
 /** Relay availability per network (cached for a minute). */
 export async function fetchRelayStatus(force = false): Promise<RelayNetworkStatus[]> {
+  // Recording demo: the relay is always up and nothing is ever posted to it.
+  if (readDemo()) return demoRelayStatus();
   if (!force && statusCache && Date.now() - statusCache.at < 60_000) return statusCache.networks;
   try {
     const res = await fetch("/api/relay", { cache: "no-store" });
@@ -63,6 +67,7 @@ export class RelaySubmitError extends Error {
 }
 
 async function post(body: Record<string, unknown>): Promise<Hex> {
+  if (readDemo()) return demoRelay(body);
   let res: Response;
   try {
     res = await fetch("/api/relay", {

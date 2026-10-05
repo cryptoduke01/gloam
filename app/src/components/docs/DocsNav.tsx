@@ -41,6 +41,7 @@ export const DOCS_NAV: DocNavGroup[] = [
       { href: "/docs/private-pay", label: "Private pay" },
       { href: "/docs/encryption", label: "How shield works" },
       { href: "/docs/privacy-model", label: "What stays private" },
+      { href: "/docs/proofs", label: "Proofs" },
       { href: "/docs/sealed-trade", label: "Private trade" },
       { href: "/docs/chain", label: "Networks" },
       { href: "/docs/data", label: "Prices & oracles" },
@@ -77,7 +78,7 @@ export const DOCS_TABS: DocsTab[] = [
   {
     label: "Privacy",
     href: "/docs/privacy-model",
-    match: ["/docs/privacy-model", "/docs/encryption", "/docs/sealed-trade"],
+    match: ["/docs/privacy-model", "/docs/encryption", "/docs/proofs", "/docs/sealed-trade"],
   },
   { label: "Networks", href: "/docs/chain", match: ["/docs/chain", "/docs/data"] },
   {

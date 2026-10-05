@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getConsent, setConsent, type ConsentValue } from "@/lib/consent";
+import { readDemo } from "@/lib/demoFlag";
 
 export function CookieBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    setVisible(getConsent() === null);
+    // Stays out of the way while recording the demo.
+    setVisible(getConsent() === null && !readDemo());
   }, []);
 
   const accept = (value: ConsentValue) => {

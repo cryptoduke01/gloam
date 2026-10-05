@@ -138,6 +138,40 @@ Robin,gloamr1.3mPz...c4Ta,4200`}</code>
         too. More detail in <Link href="/docs/privacy-model">What stays private</Link>.
       </p>
 
+      <h2 id="schedules">Scheduled payroll</h2>
+      <p>
+        Pay the same team every month without rebuilding the list. Save a pay
+        list as a schedule, from New schedule, Save as a schedule under the Pay
+        button, or Repeat this run on a finished run.
+      </p>
+      <ul>
+        <li>
+          <strong>When:</strong> monthly on a day you pick, every two weeks,
+          weekly on a weekday, or one time on a date. Add an end date if the
+          schedule should stop.
+        </li>
+        <li>
+          <strong>Cap per run:</strong> the most one run may pay out. If the list
+          grows past it, Pay stays off and says why, so a typo cannot send ten
+          times the payroll.
+        </li>
+        <li>
+          <strong>Payroll due:</strong> when payday comes, the Payroll page shows
+          a reminder with Run now. It loads the list into the normal run, with
+          the same progress, resume and receipt.
+        </li>
+        <li>
+          <strong>Pause, edit or delete</strong> a schedule at any time. Each
+          payday is run once, oldest first, so a missed month stays visible.
+        </li>
+      </ul>
+      <p>
+        <strong>Why it does not pay on its own.</strong> Gloam never holds your
+        keys, so no server can pay for you. The schedule reminds you and runs in
+        one click, from your browser. Schedules are stored encrypted in this
+        browser, like your runs.
+      </p>
+
       <h2>If something goes wrong</h2>
       <ul>
         <li>

@@ -88,8 +88,23 @@ export default function DocsOverviewPage() {
         <li>Cash out (unshield) with a real zero-knowledge proof</li>
         <li>Selective disclosure, verified in the browser</li>
         <li>
+          <Link href="/docs/proofs">Proof of funds and proof of payment</Link>:
+          show you hold at least an amount, or that you were paid, without
+          showing your balance
+        </li>
+        <li>
           <Link href="/docs/payroll">Private payroll</Link>: upload a list and
-          pay everyone from your private balance
+          pay everyone from your private balance, once or on a{" "}
+          <Link href="/docs/payroll#schedules">schedule</Link> with a cap per run
+        </li>
+        <li>Payment requests: a link or QR that fills in what to pay you</li>
+        <li>
+          <Link href="/transparency">Transparency</Link>: what anyone can see
+          about the vault, live from the chain
+        </li>
+        <li>
+          <Link href="/docs/agents">Agent spending limits</Link> in the MCP
+          server: caps per payment and per day, allowed payees, expiry
         </li>
         <li>The Gloam relay, which keeps your wallet off the record</li>
         <li>Note backup (optional lock) in Settings</li>

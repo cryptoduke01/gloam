@@ -5,6 +5,8 @@
 
 import type { Address, Hex, PublicClient } from "viem";
 import { getActiveNetwork, type PayMemoBoard } from "./networks";
+import { readDemo } from "./demoFlag";
+import { demoPaymentMemos } from "./demo/chain";
 
 /** Live RH testnet deploy (see contracts/deployments/poseidon-testnet.json) */
 export const TESTNET_PAY_MEMO =
@@ -78,6 +80,8 @@ export async function fetchPaymentMemos(
   fromBlockOverride?: bigint,
   toBlock?: bigint
 ): Promise<ScannedMemo[]> {
+  // Recording demo: the board holds the one payment waiting for the pretend wallet.
+  if (readDemo()) return demoPaymentMemos();
   const board = activePayMemo();
   if (!board) return [];
   const fromBlock = fromBlockOverride ?? board.deployBlock;

@@ -15,6 +15,8 @@
  * the encrypted store before it has been merged into the cache.
  */
 import type { LocalNote } from "./shield";
+import { readDemo } from "./demoFlag";
+import { demoNotes, setDemoNotes } from "./demo/store";
 
 export const NOTES_KEY = "gloam.shield.notes.v1";
 const ENC_PREFIX = "gloamenc1:";
@@ -152,11 +154,14 @@ export async function syncFromDisk(): Promise<void> {
 
 /** All notes in the in-memory cache (unfiltered). */
 export function getAllNotes(): LocalNote[] {
+  // Recording demo: the pretend wallet's notes, never this browser's own.
+  if (readDemo()) return demoNotes();
   return cache;
 }
 
 /** Replace the cache and persist it encrypted (after ensuring unlock). */
 export function setAllNotes(next: LocalNote[]): void {
+  if (readDemo()) return setDemoNotes(next);
   cache = next;
   if (typeof window === "undefined") return;
   void (async () => {

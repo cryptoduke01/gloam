@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNetwork } from "@/components/app/NetworkProvider";
+import { useAppAccount } from "@/lib/demo";
 import { fundTempoAddress } from "@/lib/tempoFaucet";
 
 export type FaucetStatus = "idle" | "pending" | "done" | "error";
@@ -15,7 +15,7 @@ export type FaucetStatus = "idle" | "pending" | "done" | "error";
  * wherever it is triggered.
  */
 export function useTempoFaucet() {
-  const { address } = useAccount();
+  const { address } = useAppAccount();
   const { network } = useNetwork();
   const qc = useQueryClient();
   const [status, setStatus] = useState<FaucetStatus>("idle");

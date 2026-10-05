@@ -3,15 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import {
-  useAccount,
-  useBalance,
-  useSendTransaction,
-  useWaitForTransactionReceipt,
-  useChainId,
-} from "wagmi";
 import { isAddress } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
+import {
+  useAppAccount,
+  useAppBalance,
+  useAppSendTransaction,
+  useAppTxReceipt,
+} from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { safeParseEther } from "@/lib/amount";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
@@ -21,16 +20,15 @@ import { WalletMenu } from "./WalletMenu";
 import { SuccessModal } from "./SuccessModal";
 
 export function SendView() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAppAccount();
   const { network } = useNetwork();
-  const chainId = useChainId();
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { settings } = useTradingSettings();
-  const { data: bal, refetch } = useBalance({
+  const { data: bal, refetch } = useAppBalance({
     address,
     chainId: network.chainId,
-    query: { enabled: Boolean(address) },
+    enabled: Boolean(address),
   });
 
   const [to, setTo] = useState("");
@@ -47,9 +45,9 @@ export function SendView() {
     isPending,
     error: sendError,
     reset,
-  } = useSendTransaction();
+  } = useAppSendTransaction();
 
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
+  const { isLoading: confirming, isSuccess } = useAppTxReceipt({
     hash,
     chainId: network.chainId,
   });

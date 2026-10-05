@@ -1,0 +1,267 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import type { AnyProof, CheckState, VerifyResult } from "@/lib/proofs";
+import { allNetworks } from "@/lib/networks";
+import { assetDecimals, isNativeAsset } from "@/lib/shield";
+import { RH_STABLE_TOKENS, TEMPO_STABLE_TOKENS, TESTNET_STOCK_TOKENS } from "@/lib/tokens";
+import { SealedField } from "@/components/ui/SealedField";
+import { formatUnits } from "viem";
+
+/**
+ * The result of checking a proof of funds or a proof of payment: one verdict
+ * line in plain words, who it was made for and until when, then every check the
+ * verifier ran.
+ */
+
+const TOKENS = [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS, ...TEMPO_STABLE_TOKENS];
+
+function netFor(chainId: number) {
+  return allNetworks().find((n) => n.chainId === chainId);
+}
+
+/** Symbol for an asset on the proof's own network (not the app's active one). */
+export function symbolOf(asset: string, chainId: number): string {
+  if (isNativeAsset(asset)) return netFor(chainId)?.primaryAsset.symbol ?? "ETH";
+  const t = TOKENS.find((x) => x.address.toLowerCase() === asset.toLowerCase());
+  return t?.symbol ?? `${asset.slice(0, 6)}…${asset.slice(-4)}`;
+}
+
+/** A raw amount in the asset's real decimals (USDG 6, ETH 18). */
+export function amountOf(raw: string, asset: string): string {
+  let v: bigint;
+  try {
+    v = BigInt(raw);
+  } catch {
+    return raw;
+  }
+  const n = Number(formatUnits(v, assetDecimals(asset)));
+  if (!Number.isFinite(n)) return formatUnits(v, assetDecimals(asset));
+  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+}
+
+function day(unix: number): string {
+  return new Date(unix * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function dateTime(unix: number): string {
+  return new Date(unix * 1000).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+}
+
+/* ---------- icons ---------- */
+
+function CheckMark({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CrossMark({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M7 7l10 10M17 7L7 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function QuestionMark({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M7 12h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const STATE: Record<CheckState, { icon: ReactNode; tone: string; word: string }> = {
+  pass: { icon: <CheckMark size={11} />, tone: "bg-sealed-soft text-sealed", word: "Passed" },
+  fail: { icon: <CrossMark size={11} />, tone: "bg-danger-soft text-danger", word: "Failed" },
+  unknown: { icon: <QuestionMark size={11} />, tone: "bg-surface-2 text-mute", word: "Could not check" },
+};
+
+/* ---------- copy button ---------- */
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        } catch {
+          /* clipboard unavailable */
+        }
+      }}
+      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
+    >
+      {copied ? <CheckMark /> : null}
+      <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
+    </button>
+  );
+}
+
+/* ---------- verdict ---------- */
+
+type Verdict = "verified" | "expired" | "failed" | "incomplete";
+
+function verdictOf(r: VerifyResult): Verdict {
+  if (r.ok) return "verified";
+  const fails = r.checks.filter((c) => c.state === "fail" && !(r.expired && c.label === "Expired"));
+  if (fails.length > 0) return "failed";
+  if (r.expired) return "expired";
+  return "incomplete";
+}
+
+/** "Holds at least 10,000 USDG" / "Paid 1,250 USDG on Oct 3" / "Paid at least 1,000 USDG". */
+function claimOf(p: AnyProof, r: VerifyResult): { lead: string; amount: string; sym: string; tail?: string } {
+  const sym = symbolOf(p.asset, p.chainId);
+  if (p.kind === "funds") return { lead: "Holds at least", amount: amountOf(p.threshold, p.asset), sym };
+  const tail = r.paidAt ? `on ${day(r.paidAt)}` : undefined;
+  if (p.amount != null) return { lead: "Paid", amount: amountOf(p.amount, p.asset), sym, tail };
+  return { lead: "Paid at least", amount: amountOf(p.minAmount, p.asset), sym, tail };
+}
+
+export function ProofVerdict({
+  proof: p,
+  result: r,
+  checkedAt,
+}: {
+  proof: AnyProof;
+  result: VerifyResult;
+  /** Unix seconds when the check ran, for the "expires soon" hint. */
+  checkedAt: number;
+}) {
+  const verdict = verdictOf(r);
+  const claim = claimOf(p, r);
+  const net = netFor(p.chainId);
+  const firstFail = r.checks.find((c) => c.state === "fail" && c.label !== "Expired");
+  const firstUnknown = r.checks.find((c) => c.state === "unknown");
+
+  const badge =
+    verdict === "verified"
+      ? { cls: "bg-sealed-soft text-sealed", icon: <CheckMark size={12} />, text: "Verified" }
+      : verdict === "expired"
+        ? { cls: "bg-warn-soft text-warn", icon: <QuestionMark size={12} />, text: "Expired" }
+        : verdict === "incomplete"
+          ? { cls: "bg-warn-soft text-warn", icon: <QuestionMark size={12} />, text: "Not fully checked" }
+          : { cls: "bg-danger-soft text-danger", icon: <CrossMark size={12} />, text: "Not verified" };
+
+  const explain =
+    verdict === "verified"
+      ? p.kind === "funds"
+        ? `in Gloam's vault on ${net?.label ?? "this network"}. Their balance, wallet and history stay hidden.`
+        : `received in a private payment through Gloam's vault on ${net?.label ?? "this network"}.${
+            p.amount == null ? " The exact amount stays hidden." : ""
+          } The proof does not show who sent it.`
+      : verdict === "expired"
+        ? `This proof checked out, but it expired on ${day(p.expiresAt)}. Ask them for a fresh one.`
+        : verdict === "incomplete"
+          ? firstUnknown?.detail ?? "Some checks could not finish. Try again in a moment."
+          : `Do not rely on it. ${firstFail?.detail ?? firstFail?.label ?? "One of the checks failed."}`;
+
+  return (
+    <div className="gl-card relative mt-4 overflow-hidden" role="region" aria-label="Proof result">
+      <div className="relative overflow-hidden border-b border-line px-5 py-6 sm:px-7">
+        {verdict === "verified" && <SealedField tone="soft" />}
+        <div className="relative">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${badge.cls}`}>
+            {badge.icon} {badge.text}
+          </span>
+          {verdict === "failed" ? (
+            <>
+              <p className="t-display-m mt-4">This proof did not check out</p>
+              <p className="tnum mt-2 text-[14px] text-mute">
+                It claims: {claim.lead.toLowerCase()} {claim.amount} {claim.sym}
+              </p>
+            </>
+          ) : (
+            <p className="t-display-m tnum mt-4">
+              {claim.lead} {claim.amount} <span className="text-mute">{claim.sym}</span>
+              {claim.tail ? <span className="text-mute"> {claim.tail}</span> : null}
+            </p>
+          )}
+          <p
+            className={`mt-2 max-w-[52ch] text-[14px] leading-relaxed ${
+              verdict === "failed" ? "text-danger" : verdict === "verified" ? "text-mute" : "text-warn"
+            }`}
+          >
+            {explain}
+          </p>
+        </div>
+      </div>
+
+      <dl className="divide-y divide-line text-[14px]">
+        <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+          <dt className="shrink-0 text-mute">For</dt>
+          <dd className="min-w-0 break-words text-foreground sm:text-right">{p.verifier}</dd>
+        </div>
+        <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+          <dt className="shrink-0 text-mute">{r.expired ? "Expired" : "Expires"}</dt>
+          <dd className={`sm:text-right ${r.expired ? "text-warn" : "text-foreground"}`}>
+            {dateTime(p.expiresAt)}
+            {!r.expired && p.expiresAt - checkedAt < 86_400 ? " (within a day)" : ""}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+          <dt className="shrink-0 text-mute">Network</dt>
+          <dd className="text-foreground sm:text-right">{net ? `${net.label} testnet` : `Chain ${p.chainId}`}</dd>
+        </div>
+        <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+          <dt className="shrink-0 text-mute">Vault</dt>
+          <dd className="flex min-w-0 items-center gap-1">
+            <span className="tnum min-w-0 truncate text-foreground" title={p.pool}>
+              {p.pool}
+            </span>
+            <CopyButton value={p.pool} label="vault address" />
+          </dd>
+        </div>
+        {p.kind === "payment" && p.txHash && net && (
+          <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+            <dt className="shrink-0 text-mute">Transaction</dt>
+            <dd className="flex min-w-0 items-center gap-1">
+              <span className="tnum min-w-0 truncate text-foreground" title={p.txHash}>
+                {p.txHash}
+              </span>
+              <a
+                href={net.explorerTx(p.txHash)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
+              >
+                Explorer <span aria-hidden>↗</span>
+              </a>
+            </dd>
+          </div>
+        )}
+      </dl>
+
+      <div className="border-t border-line bg-surface/50 px-5 py-5 sm:px-7">
+        <p className="text-[13px] text-mute">What was checked, in your browser</p>
+        <ul className="mt-3 space-y-3">
+          {r.checks.map((c, i) => {
+            const s = STATE[c.state];
+            return (
+              <li key={`${c.label}-${i}`} className="flex items-start gap-3">
+                <span className={`mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full ${s.tone}`}>
+                  {s.icon}
+                  <span className="sr-only">{s.word}:</span>
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[14px] leading-snug text-foreground">{c.label}</span>
+                  {c.detail && (
+                    <span className="mt-0.5 block text-[12.5px] leading-relaxed text-mute">{c.detail}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}

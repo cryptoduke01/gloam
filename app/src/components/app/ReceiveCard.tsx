@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
 import { shortAddress } from "@/lib/chain";
+import { useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 
 export function ReceiveCard() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected } = useAppAccount();
   const { network } = useNetwork();
   const [copied, setCopied] = useState(false);
 

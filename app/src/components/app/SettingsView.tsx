@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useAccount, useDisconnect, useChainId } from "wagmi";
+import { useDisconnect } from "wagmi";
 import { walletParamsForChain } from "@/lib/chain";
+import { exitDemo, useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { faucetFor } from "@/lib/faucet";
 import {
@@ -171,10 +172,10 @@ function Status({ children }: { children: ReactNode }) {
 /* ------------------------------------------------------------ view */
 
 export function SettingsView() {
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
+  const { address, isConnected, chainId, demo } = useAppAccount();
+  const { disconnect: wagmiDisconnect } = useDisconnect();
+  const disconnect = demo ? exitDemo : wagmiDisconnect;
   const { network } = useNetwork();
-  const chainId = useChainId();
   const { settings, setSettings } = useTradingSettings();
   const [copied, setCopied] = useState(false);
   const [netMsg, setNetMsg] = useState<string | null>(null);

@@ -81,6 +81,21 @@ export default function DocsProductPage() {
             body: "Upload a list and pay everyone from your private balance. The Gloam relay keeps your wallet off the record.",
           },
           {
+            n: "●",
+            title: "Scheduled payroll + payment requests",
+            body: "Save a pay list as a schedule with a cap per run; Gloam reminds you on payday and runs it in one click. Request links fill in what to pay you.",
+          },
+          {
+            n: "●",
+            title: "Proof of funds + proof of payment",
+            body: "Two new circuits: prove you hold at least an amount, or that you were paid, for one named verifier, checked in the browser against the live vault.",
+          },
+          {
+            n: "●",
+            title: "Agent limits + transparency",
+            body: "Agents spend only inside the owner's caps, payees and expiry. A public page shows what anyone can see about the vault.",
+          },
+          {
             n: "!",
             title: "Private trade (paused)",
             body: "Vault-settled sealedSwap is built, with max size privacy on by default. Paused on-chain until the H1 solvency fix lands.",

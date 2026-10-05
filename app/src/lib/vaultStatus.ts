@@ -9,6 +9,8 @@ import {
 } from "./config";
 import { getRhPublicClient } from "./rhClient";
 import { SHIELD_POOL_ADDRESS, shieldPoolAbi } from "./shield";
+import { readDemo } from "./demoFlag";
+import { demoPoolInventory } from "./demo/chain";
 
 /** Sealed-swap IVerifier on the hardened RH testnet pool (poseidon-testnet.json).
  *  Used only as a transient-RPC-error fallback, never to mask a real disable. */
@@ -68,6 +70,8 @@ export async function readVaultSealedReadiness(): Promise<VaultReadiness> {
 }
 
 export async function readPoolDeposited(asset: Address): Promise<bigint | null> {
+  // Recording demo: the vault always holds enough to cover the pretend wallet.
+  if (readDemo()) return demoPoolInventory(asset);
   const pool = SHIELD_POOL_ADDRESS;
   if (!pool) return null;
   try {

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { useDemoLive } from "@/lib/demo";
+import { readDemo } from "@/lib/demoFlag";
 import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
 import {
   activeSpendableNotes,
@@ -27,6 +29,9 @@ import { useNetwork } from "@/components/app/NetworkProvider";
  */
 export function useLocalShieldNotes(address?: string | null) {
   const { network } = useNetwork();
+  // Recording demo: the pretend wallet's notes are read on every render, so a
+  // network switch or a change made in another view shows straight away.
+  const demo = useDemoLive();
   const [local, setLocal] = useState<LocalNote[]>([]);
   const [chain, setChain] = useState<LocalNote[]>([]);
   const [ready, setReady] = useState(false);
@@ -76,7 +81,8 @@ export function useLocalShieldNotes(address?: string | null) {
   );
 
   const syncChain = useCallback(async () => {
-    if (!address || !network.pool) {
+    // Recording demo: the pretend wallet has no chain history to merge in.
+    if (!address || !network.pool || readDemo()) {
       setChain([]);
       return;
     }
@@ -161,9 +167,10 @@ export function useLocalShieldNotes(address?: string | null) {
     };
   }, [refresh, refreshLocal]);
 
+  const demoLocal = demo ? loadLocalNotes(address) : null;
   const merged = useMemo(
-    () => mergeNotes(local, chain),
-    [local, chain]
+    () => mergeNotes(demoLocal ?? local, chain),
+    [demoLocal, local, chain]
   );
   const open = useMemo(
     () => activeSpendableNotes(merged),

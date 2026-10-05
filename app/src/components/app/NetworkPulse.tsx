@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useChainId } from "wagmi";
 import { ensureWalletOnChain } from "@/lib/chain";
+import { useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { StatusPill } from "./StatusPill";
 
 /** Minimal network status, one-tap fix when on the wrong chain. */
 export function NetworkPulse() {
   const { network } = useNetwork();
-  const chainId = useChainId();
-  const { isConnected } = useAccount();
+  const { isConnected, chainId } = useAppAccount();
   const onProduct = chainId === network.chainId;
   const [busy, setBusy] = useState(false);
 

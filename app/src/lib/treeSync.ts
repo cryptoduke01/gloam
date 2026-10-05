@@ -15,6 +15,8 @@ import { IncrementalMerkleTreePoseidon } from "./merklePoseidon";
 import type { MerklePath } from "./merkle";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
+import { readDemo } from "./demoFlag";
+import { demoSyncedTree } from "./demo/chain";
 
 export type ChainLeaf = {
   leafIndex: number;
@@ -207,6 +209,8 @@ function mergeInserts(prev: RawInsert[], next: RawInsert[]): RawInsert[] {
 }
 
 export function syncShieldTree(client: PublicClient): Promise<SyncedTree | null> {
+  // Recording demo: the pretend wallet's tree, nothing read from the chain.
+  if (readDemo()) return Promise.resolve(demoSyncedTree());
   const net = getActiveNetwork();
   const pool = net.pool;
   if (!pool) return Promise.resolve(null);
@@ -361,6 +365,7 @@ export async function assertTreeMatchesChain(
   client: PublicClient,
   synced: SyncedTree
 ): Promise<boolean> {
+  if (readDemo()) return true;
   const pool = getActiveNetwork().pool;
   if (!pool) return false;
   const onchain = (await client.readContract({

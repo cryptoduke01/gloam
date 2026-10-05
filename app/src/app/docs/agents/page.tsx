@@ -154,6 +154,25 @@ const hash = await wallet.writeContract({
                 challenge (agent)
               </td>
             </tr>
+            <tr>
+              <td>
+                <code>gloam_execute_private_pay</code>
+              </td>
+              <td>
+                Settle that payment from a held note: prove and broadcast the
+                shielded transfer (execute)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_get_limits</code> /{" "}
+                <code>gloam_get_spending_report</code>
+              </td>
+              <td>
+                The agent&apos;s spending limits, and what it spent and has left in the
+                last 24 hours (read)
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -178,6 +197,74 @@ const hash = await wallet.writeContract({
         issuer-scoped disclosure, not a blanket view handed to an operator. See
         the <Link href="/docs/privacy-model">privacy model</Link> for what stays
         hidden and what does not.
+      </p>
+
+      <h2>Spending limits</h2>
+      <p>
+        An agent that can sign can spend, so the owner sets its limits and every
+        tool that moves money (pay, send, shield) checks them before anything is
+        proved or signed. A spend that breaks a limit is refused with a plain
+        reason the agent can act on, for example &ldquo;that would bring today to
+        14 PathUSD, over the limit of 12 a day&rdquo;.
+      </p>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Limit</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Assets</td>
+              <td>Which stablecoins or tokens the agent may move, matched by contract address</td>
+            </tr>
+            <tr>
+              <td>Per payment</td>
+              <td>The most it may send in one payment</td>
+            </tr>
+            <tr>
+              <td>Per day</td>
+              <td>The most it may send in any 24 hours</td>
+            </tr>
+            <tr>
+              <td>Recipients</td>
+              <td>Anyone, or only the payees you list</td>
+            </tr>
+            <tr>
+              <td>Expiry</td>
+              <td>A date after which the agent cannot spend at all</td>
+            </tr>
+            <tr>
+              <td>Tools</td>
+              <td>Which of pay, send and shield it may use</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        No limits means no spending: a server with a key but no limits refuses
+        every spend until you set them (or turn them off on purpose). Every
+        spend is logged before it is signed, under a lock, so two calls at once
+        cannot both squeeze under the daily cap. Configuration lives in the{" "}
+        <a href="https://github.com/cryptoduke01/gloam/tree/main/mcp#spending-limits">
+          MCP README
+        </a>
+        .
+      </p>
+      <p>
+        <strong>Where they are enforced.</strong> These limits are enforced by the
+        MCP server you run, off-chain, not by the vault contract. They stop a
+        confused or manipulated agent; they do not stop someone who has the raw
+        key. For that, use a policy wallet underneath, as below.
+      </p>
+      <p>
+        <strong>What they cannot stop.</strong> A private balance is a note, and
+        whoever knows its secret can spend it. The tools pass note secrets to the
+        agent today, so an agent tricked into pasting one somewhere else has given
+        that money away. Treat anything the agent can read as money. Keeping
+        secrets inside the server, with handles for the agent, is on the roadmap.
       </p>
 
       <h2>Policy and key custody</h2>

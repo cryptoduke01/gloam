@@ -10,6 +10,7 @@
  */
 import type { Hex } from "viem";
 import { proveShieldInBrowser } from "./proveClient";
+import { demoVerifyProof, isDemoProof } from "./demo/proof";
 
 export type Disclosure = {
   v: 1;
@@ -75,6 +76,8 @@ export function decodeDisclosure(s: string): Disclosure {
  * separate on-chain check done by the caller via pool.commitmentSeen.
  */
 export async function verifyDisclosureProof(d: Disclosure): Promise<boolean> {
+  // Recording demo: a proof from the pretend wallet checks out (only in a demo tab).
+  if (isDemoProof(d.proof)) return demoVerifyProof();
   const snarkjs = await import("snarkjs");
   const res = await fetch(VKEY_PATH, { cache: "force-cache" });
   if (!res.ok) throw new Error("Could not load the disclosure verification key.");
