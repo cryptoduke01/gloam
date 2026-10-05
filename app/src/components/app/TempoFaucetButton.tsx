@@ -21,7 +21,9 @@ export function TempoFaucetButton({
         ? "Funded. Balances updating…"
         : status === "error"
           ? "Faucet failed, try again"
-          : "Get testnet funds →";
+          : status === "enough"
+            ? "You already have plenty of test funds"
+            : "Get testnet funds →";
 
   return (
     <button

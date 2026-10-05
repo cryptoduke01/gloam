@@ -222,7 +222,9 @@ export function OnboardingCard() {
                               ? "Funding…"
                               : tempoFaucet.status === "done"
                                 ? "Funded"
-                                : "Claim"}
+                                : tempoFaucet.status === "enough"
+                                  ? "Already funded"
+                                  : "Claim"}
                           </button>
                         ) : (
                           <a

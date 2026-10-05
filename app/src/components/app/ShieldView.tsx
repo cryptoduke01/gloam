@@ -290,7 +290,8 @@ export function ShieldView() {
       const pending = pendingShieldArgs.current;
       if (pending && network.pool && autoShieldAfterApprove.current) {
         autoShieldAfterApprove.current = false;
-        handledHash.current = null;
+        // Keep handledHash on the approval: the deposit has its own hash, and
+        // clearing it here let this approval's receipt count as the deposit.
         // Route through executeShield so the shieldBound (C1) branch applies
         // after an ERC20 approval too.
         void executeShield(pending.value, pending.note, pending.commitment);
@@ -314,6 +315,9 @@ export function ShieldView() {
         /* not ours */
       }
     }
+    // Only the deposit itself emits Shielded; any other receipt is not a deposit.
+    // (Demo receipts carry no logs; the pretend chain only plays the deposit.)
+    if (pendingKind !== "shield" || (leafIndex === undefined && !demo)) return;
 
     if (pendingNote) {
       // Persist only after on-chain success (avoids ghost notes on reject)
@@ -370,6 +374,7 @@ export function ShieldView() {
     refetchAllow,
     refetchPool,
     writeContract,
+    demo,
   ]);
 
   function parseAmount(): bigint | null {

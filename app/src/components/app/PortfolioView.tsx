@@ -271,7 +271,10 @@ export function PortfolioView() {
     });
   }, [byAsset, nativeUsdRate, markets, tokenSet]);
 
-  const ethAmt = bal ? Number(bal.value) / 1e18 : 0;
+  // Tempo has no native coin: its nodes answer a wallet's native balance with a
+  // huge placeholder, so on Tempo the wallet's public money is its stablecoins.
+  const nativeWei = isTempo ? BigInt(0) : (bal?.value ?? BigInt(0));
+  const ethAmt = Number(nativeWei) / 1e18;
   const shieldEthUsd =
     nativeUsdRate != null && shieldedWei > BigInt(0)
       ? (Number(shieldedWei) / 1e18) * nativeUsdRate
@@ -312,15 +315,17 @@ export function PortfolioView() {
       : `0 ${nativeSymbol}`
     : totalUsd != null && settings.showUsd
       ? formatUsdCompact(totalUsd)
-      : `${formatEth((bal?.value ?? BigInt(0)) + shieldedWei)} ${nativeSymbol}`;
+      : `${formatEth(nativeWei + shieldedWei)} ${nativeSymbol}`;
 
-  const walletValue = !balancesVisible
-    ? `0 ${nativeSymbol}`
-    : `${formatEth(bal?.value ?? BigInt(0))} ${nativeSymbol}`;
-  const walletSub = !balancesVisible
-    ? "Visible on the explorer"
-    : isTempo
-      ? "Testnet balance"
+  const walletValue = isTempo
+    ? formatUsdCompact(balancesVisible ? stocksUsd : 0)
+    : !balancesVisible
+      ? `0 ${nativeSymbol}`
+      : `${formatEth(nativeWei)} ${nativeSymbol}`;
+  const walletSub = isTempo
+    ? "Stablecoins, visible on the explorer"
+    : !balancesVisible
+      ? "Visible on the explorer"
       : ethUsdVal != null && settings.showUsd
         ? formatUsdCompact(ethUsdVal)
         : "Visible on the explorer";

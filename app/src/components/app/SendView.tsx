@@ -127,6 +127,24 @@ export function SendView() {
   const connectedOk = isConnected && onProduct;
   const busy = isPending || confirming;
 
+  // Tempo has no native coin to send (its nodes report a placeholder balance),
+  // so money there is stablecoins, which move privately from Move.
+  if (network.key === "tempo") {
+    return (
+      <div className="gl-card p-5 sm:p-7">
+        <h2 className="t-title text-foreground">Send on Tempo</h2>
+        <p className="mt-1 max-w-[56ch] text-[14px] leading-relaxed text-mute">
+          Tempo has no native coin to send. Money on Tempo is stablecoins like OUSD:
+          add them to your private balance and pay from Move, or send them from your
+          wallet app.
+        </p>
+        <Link href="/app/vault?tab=move&mode=pay" className="btn btn-ink mt-5 inline-flex">
+          Pay privately
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
