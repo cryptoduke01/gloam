@@ -10,6 +10,12 @@
  * This exposes read + planning tools that work today, and returns honest
  * "intent" objects for write actions (shield / pay / send) that need a connected
  * agent wallet with signing. It never fakes a private fill or settlement.
+ *
+ * Every tool that moves money (shield, public send, private pay) first passes
+ * the owner's spending limits (src/policy.ts, src/spendGuard.ts): allowed
+ * tools, assets, recipients, a cap per payment and per rolling day, and an
+ * expiry. No limits configured means no spending. The limits are enforced here,
+ * off-chain, not by the vault contract.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -41,6 +47,8 @@ import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getSigner } from "./signer.js";
 import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
 import { networkByKey, networkByChainId, MCP_NETWORKS } from "./networks.js";
+import type { Spend } from "./policy.js";
+import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
 
 const erc20Abi = [
   {
@@ -134,7 +142,11 @@ server.registerTool(
         "gloam_pay_x402: plan the self-custodial private payment for a 402 challenge (agent side)",
         "gloam_execute_private_pay: REAL private x402 settlement from a held note — sync, prove, broadcast transfer (execution; needs a signer)",
         "gloam_verify_payment: verify a presented x402 private payment, list the on-chain settlement checks (server side)",
+        "gloam_get_limits: this agent's spending limits (read)",
+        "gloam_get_spending_report: spent and remaining in the last 24 hours, recent payments and refusals (read)",
       ],
+      spendingLimits:
+        "Every execute tool that moves money checks the owner's limits first (tools, assets, recipients, per payment, per day, expiry) and logs the spend. The MCP server enforces them, off-chain; the vault contract does not.",
       privatePayments:
         "x402 agent payments settle privately through the Gloam pool. Unlike a Tempo Zone, there is no operator that sees the transaction: it is private from the public and self-custodial, with optional per-payment compliance disclosure.",
     })
@@ -303,15 +315,27 @@ server.registerTool(
     const dec = decimals ?? (asset ? 18 : net.defaultAssetDecimals);
     const amountWei = parseUnits(String(amount), dec);
     const isNative = assetAddr.toLowerCase() === NATIVE_ASSET.toLowerCase();
+    const spend: Spend = {
+      tool: "shield",
+      network: net.key,
+      chainId: net.chainId,
+      asset: assetAddr,
+      amountWei,
+      recipient: null,
+    };
     const signer = getSigner(net);
     if (!signer) {
       return text({
         status: "no_signer",
         plan: { action: "shield", amount, asset: assetAddr, network: net.key, chainId: net.chainId, pool: net.pool },
+        limits: previewSpend(spend),
         message:
           "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
       });
     }
+    const gate = authorizeSpend(spend);
+    if (!gate.ok) return text(gate.refusal);
+    let hash: Hex | undefined;
     try {
       const { wasm, zkey } = await shieldArtifacts();
       const intent = await buildShieldBoundIntent({
@@ -332,15 +356,17 @@ server.registerTool(
         });
         await signer.publicClient.waitForTransactionReceipt({ hash: approveHash });
       }
-      const hash = await signer.walletClient.writeContract({
+      hash = await signer.walletClient.writeContract({
         address: intent.exec.poolAddress,
         abi: shieldPoolAbi,
         functionName: "shieldBound",
         args: intent.exec.args as readonly [Address, bigint, Hex, Hex],
         value: intent.exec.valueWei,
       });
+      const logWarning = settleSpend(gate, "sent", { hash });
       return text({
         status: "submitted",
+        ...(logWarning ? { logWarning } : {}),
         network: net.key,
         approveHash,
         hash,
@@ -359,10 +385,9 @@ server.registerTool(
           "The deposit amount is public. The note hides who can spend it, so future private sends are unlinkable to this deposit.",
       });
     } catch (err) {
-      return text({
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const error = err instanceof Error ? err.message : String(err);
+      settleSpend(gate, hash ? "unconfirmed" : "failed", { hash, reason: error });
+      return text({ status: "error", error, ...(hash ? { hash } : {}) });
     }
   }
 );
@@ -382,31 +407,43 @@ server.registerTool(
     if (!isAddress(to)) {
       return text({ status: "error", error: `"${to}" is not a valid address.` });
     }
+    const spend: Spend = {
+      tool: "send",
+      network: "robinhood",
+      chainId: CHAIN.chainId,
+      asset: NATIVE_ASSET,
+      amountWei: parseEther(String(eth)),
+      recipient: to,
+    };
     const signer = getSigner();
     if (!signer) {
       return text({
         status: "no_signer",
         plan: { action: "transfer", to, eth, chainId: CHAIN.chainId },
+        limits: previewSpend(spend),
         message:
           "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to let the agent execute, or wire a Turnkey server wallet with policy for production.",
       });
     }
+    const gate = authorizeSpend(spend);
+    if (!gate.ok) return text(gate.refusal);
     try {
       const hash = await signer.walletClient.sendTransaction({
         to: to as Address,
-        value: parseEther(String(eth)),
+        value: spend.amountWei,
       });
+      const logWarning = settleSpend(gate, "sent", { hash });
       return text({
         status: "submitted",
+        ...(logWarning ? { logWarning } : {}),
         hash,
         from: signer.account.address,
         explorer: `${CHAIN.explorer}/tx/${hash}`,
       });
     } catch (err) {
-      return text({
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const error = err instanceof Error ? err.message : String(err);
+      settleSpend(gate, "failed", { reason: error });
+      return text({ status: "error", error });
     }
   }
 );
@@ -577,15 +614,33 @@ server.registerTool(
     // The requirements name the network to settle on; use it for the signer,
     // tree scan, and explorer so an agent can pay privately on Tempo or Robinhood.
     const net = networkByChainId(Number(req.network)) ?? MCP_NETWORKS.robinhood;
+    let spend: Spend & { pool?: Address };
+    try {
+      spend = {
+        tool: "pay",
+        network: net.key,
+        chainId: net.chainId,
+        asset: ((req.asset as Address | undefined) ?? NATIVE_ASSET) as Address,
+        amountWei: BigInt(String(req.maxAmountRequired)),
+        recipient: String(req.payTo ?? ""),
+        pool: req.poolAddress as Address,
+      };
+    } catch {
+      return text({ status: "error", error: "The requirements carry an amount that is not a whole number of base units." });
+    }
     const signer = getSigner(net);
     if (!signer) {
       return text({
         status: "no_signer",
         plan: { action: "private_pay_x402", network: net.key, pay: req.maxAmountRequired, asset: req.asset, payTo: req.payTo, pool: req.poolAddress },
+        limits: previewSpend(spend),
         message: "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.",
         notVsZone: GLOAM_VS_ZONE.oneLine,
       });
     }
+    const gate = authorizeSpend(spend);
+    if (!gate.ok) return text(gate.refusal);
+    let hash: Hex | undefined;
     try {
       const dec = decimals ?? net.defaultAssetDecimals;
       const noteAmountWei = parseUnits(String(noteAmount), dec);
@@ -599,6 +654,7 @@ server.registerTool(
       });
       const path = await synced.pathForCommitment(commitment);
       if (!path) {
+        settleSpend(gate, "failed", { reason: "note not in the pool tree" });
         return text({ status: "error", error: "That note is not in the pool tree yet. Shield it first, or wait for the deposit to confirm." });
       }
       const { wasm, zkey } = await transferArtifacts();
@@ -614,7 +670,7 @@ server.registerTool(
       // payment (GLOAM_USE_RELAY=1, or GLOAM_RELAY_URL for a self-hosted relay).
       const relayUrl =
         process.env.GLOAM_RELAY_URL?.trim() || (process.env.GLOAM_USE_RELAY === "1" ? GLOAM_RELAY_URL : "");
-      const hash = relayUrl
+      hash = relayUrl
         ? await relayIntent(payment.intent, { url: relayUrl })
         : await signer.walletClient.writeContract({
             address: payment.intent.exec.poolAddress,
@@ -624,12 +680,15 @@ server.registerTool(
           });
       const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
+        settleSpend(gate, "reverted", { hash });
         return text({ status: "error", error: `Transfer reverted (${hash}).` });
       }
+      const logWarning = settleSpend(gate, "sent", { hash });
       payment.payload.payload.txHash = hash;
       const verify = verifyGloamPayment({ requirements: req, payload: payment.payload });
       return text({
         status: "submitted",
+        ...(logWarning ? { logWarning } : {}),
         network: net.key,
         submittedBy: relayUrl ? "gloam-relay (agent wallet hidden)" : "agent wallet",
         hash,
@@ -649,9 +708,37 @@ server.registerTool(
         notVsZone: GLOAM_VS_ZONE.oneLine,
       });
     } catch (err) {
-      return text({ status: "error", error: err instanceof Error ? err.message : String(err) });
+      const error = err instanceof Error ? err.message : String(err);
+      // Broadcast but unconfirmed still counts against the limit, to be safe.
+      settleSpend(gate, hash ? "unconfirmed" : "failed", { hash, reason: error });
+      return text({ status: "error", error, ...(hash ? { hash } : {}) });
     }
   }
+);
+
+// ── spending limits ───────────────────────────────────────────────────────────
+
+server.registerTool(
+  "gloam_get_limits",
+  {
+    title: "Spending limits",
+    description:
+      "This agent's spending limits as the owner set them: which money tools it may use, which assets, the cap per payment and per rolling 24 hours, allowed recipients, and when its permission expires. Check this before planning a payment. Limits are enforced by this MCP server (off-chain), not by the vault contract.",
+  },
+  async () => text(limitsReport())
+);
+
+server.registerTool(
+  "gloam_get_spending_report",
+  {
+    title: "Spending report",
+    description:
+      "What this agent has spent in the last 24 hours and how much is left under its daily limit, per asset, plus its most recent payments and any refused attempts. Read from the local spending log this server keeps.",
+    inputSchema: {
+      recent: z.number().int().min(1).max(50).default(10).describe("How many recent payments to list."),
+    },
+  },
+  async ({ recent }) => text(spendingReport(recent))
 );
 
 async function main() {
