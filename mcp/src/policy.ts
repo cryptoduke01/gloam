@@ -79,6 +79,7 @@ const TEMPO = GLOAM_NETWORKS.tempo.chainId;
 export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "ETH", chainId: RH, address: NATIVE_ASSET, decimals: 18 },
   { symbol: "USDG", chainId: RH, address: RH_USDG, decimals: 6 },
+  { symbol: "OUSD", chainId: TEMPO, address: "0x20c0000000000000000000006a37da5c996874be", decimals: 6 },
   { symbol: "PathUSD", chainId: TEMPO, address: TEMPO_PATHUSD, decimals: 6 },
   { symbol: "AlphaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000001", decimals: 6 },
   { symbol: "BetaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000002", decimals: 6 },
