@@ -10,15 +10,18 @@
  * they stay between the two people who share the link. The same fields are
  * also read from the query string, so hand-made `?to=…&amount=…` links work.
  * The payer still checks the details and presses send, and every field is
- * validated before it is used.
+ * validated before it is used. The note then travels inside the payment
+ * itself, sealed so only the payee can read it (lib/paymentNote).
  */
 
 import { zeroAddress, type Address } from "viem";
 import { getNetwork, isNetworkKey, type NetworkKey } from "./networks";
+import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { RECEIVE_TAG_PREFIX } from "./receiveTag";
 import { shieldTokensFor, supportsNativeShield } from "./tokens";
 
-export const REQUEST_NOTE_MAX = 80;
+/** Same cap as the private note the payment carries (lib/paymentNote). */
+export const REQUEST_NOTE_MAX = PAYMENT_NOTE_MAX;
 export const REQUEST_NAME_MAX = 40;
 
 /** A token someone can ask to be paid in, on one network. */
@@ -120,16 +123,7 @@ export function formatRequestAmount(amount: string): string {
 
 /** Drops control and direction-override characters, squeezes spaces, caps length. */
 export function cleanRequestText(raw: string | null | undefined, max: number): string {
-  if (!raw) return "";
-  return Array.from(
-    raw
-      .replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩﻿]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-  )
-    .slice(0, max)
-    .join("")
-    .trim();
+  return cleanText(raw, max);
 }
 
 export type PaymentRequestDraft = {

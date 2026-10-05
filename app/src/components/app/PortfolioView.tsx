@@ -26,6 +26,7 @@ import { SealedField } from "@/components/ui/SealedField";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
+import { PaymentNoteLine } from "./PaymentNote";
 import { TokenLogo } from "./TokenLogo";
 import { TempoFaucetButton } from "./TempoFaucetButton";
 import { WalletMenu } from "./WalletMenu";
@@ -534,6 +535,13 @@ export function PortfolioView() {
                             ? ", received"
                             : ""}
                         </p>
+                        {n.note && (
+                          <PaymentNoteLine
+                            note={n.note}
+                            label="Their note"
+                            className="mt-0.5 text-[12.5px] text-soft"
+                          />
+                        )}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">

@@ -159,8 +159,26 @@ const hash = await wallet.writeContract({
                 <code>gloam_execute_private_pay</code>
               </td>
               <td>
-                Settle that payment from a held note: prove and broadcast the
-                shielded transfer (execute)
+                Settle that payment from one of the agent&apos;s notes, by handle,
+                sealed to the payee (execute)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_fetch_paid</code>
+              </td>
+              <td>
+                Fetch a URL and, on a Gloam 402, pay privately and retry, all inside
+                the server (execute)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_list_notes</code> / <code>gloam_receive_tag</code>
+              </td>
+              <td>
+                The agent&apos;s balances as handles, never secrets, and the tag
+                others pay it at (read)
               </td>
             </tr>
             <tr>
@@ -184,10 +202,11 @@ const hash = await wallet.writeContract({
         public: the amount, the payer, and the payee all leak. Gloam&apos;s{" "}
         <code>gloam-private</code> scheme keeps it private and self-custodial. The
         agent settles a shielded transfer to the payee itself, so no operator or
-        facilitator ever holds its key or funds, then presents the payment note
-        plus the settlement transaction as proof on the 402 retry. The payee
-        opens the note to see the amount; the public sees only that a shielded
-        transfer happened.
+        facilitator ever holds its key or funds, then presents the payment note,
+        sealed to the payee&apos;s receive tag, plus the settlement transaction on
+        the 402 retry. The payee opens the note and moves it into a fresh note
+        only it knows before serving, so the payer cannot spend it back. The
+        public sees only shielded transfers.
       </p>
       <p>
         <strong>This is not a Tempo Zone.</strong> A Zone is operator-visible:
@@ -260,11 +279,12 @@ const hash = await wallet.writeContract({
         key. For that, use a policy wallet underneath, as below.
       </p>
       <p>
-        <strong>What they cannot stop.</strong> A private balance is a note, and
-        whoever knows its secret can spend it. The tools pass note secrets to the
-        agent today, so an agent tricked into pasting one somewhere else has given
-        that money away. Treat anything the agent can read as money. Keeping
-        secrets inside the server, with handles for the agent, is on the roadmap.
+        <strong>The agent never holds the money itself.</strong> A private balance
+        is a note, and whoever knows its secret can spend it, so the server keeps
+        every note in an encrypted store and gives the agent short handles
+        instead. A payment it makes is sealed to the payee&apos;s receive tag, so
+        the agent cannot open that either. What limits still cannot stop: an agent
+        tricked into spending within its limits to a payee you allowed.
       </p>
 
       <h2>Policy and key custody</h2>

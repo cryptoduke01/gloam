@@ -122,6 +122,7 @@ export async function demoPaymentMemos(): Promise<ScannedMemo[]> {
       amountWei: incoming.amountWei,
       secret: incoming.secret,
       commitment: incoming.commitment,
+      note: incoming.note,
     });
     ticket = await encryptTicketForTag(encodeNotePackage(pack), tag);
     setDemoIncomingTicket(net.chainId, tag, ticket);

@@ -167,7 +167,10 @@ export function PayrollInvoice({
                 <tbody>
                   {paid.map((r) => (
                     <tr key={r.id} className="border-b border-line align-top">
-                      <td className="py-3.5 pr-4 text-foreground">{r.name}</td>
+                      <td className="py-3.5 pr-4 text-foreground">
+                        {r.name}
+                        {r.note && <span className="block break-words text-[12px] text-mute">{r.note}</span>}
+                      </td>
                       <td className="py-3.5 pr-4 text-soft">
                         {r.kind === "gloam" ? (
                           <>

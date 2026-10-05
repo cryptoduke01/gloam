@@ -71,6 +71,8 @@ import {
   requestParamsFrom,
   type PaymentRequest,
 } from "@/lib/paymentRequest";
+import { PAYMENT_NOTE_MAX, cleanPaymentNote } from "@/lib/paymentNote";
+import { NoteGlyph, PaymentNoteLine } from "./PaymentNote";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
@@ -120,6 +122,12 @@ export function MoveView() {
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendAmount, setSendAmount] = useState(() => request?.amount ?? "");
+  // Private note that travels inside the payment (lib/paymentNote). A request's
+  // note comes along by default; the payer can change or remove it.
+  const [payNote, setPayNote] = useState(() => request?.note ?? "");
+  const [noteOpen, setNoteOpen] = useState(() => Boolean(request?.note));
+  /** The note the last payment carried, for the success message. */
+  const [sentNote, setSentNote] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shareBlob, setShareBlob] = useState<string | null>(null);
@@ -127,18 +135,18 @@ export function MoveView() {
   const [sendPassphrase, setSendPassphrase] = useState("");
   const [importText, setImportText] = useState("");
   const [importPassphrase, setImportPassphrase] = useState("");
-  const [importOk, setImportOk] = useState<string | null>(null);
+  const [importOk, setImportOk] = useState<{ text: string; note?: string } | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Done");
   const [busy, setBusy] = useState(false);
-  const [claimPreview, setClaimPreview] = useState<string | null>(null);
+  const [claimPreview, setClaimPreview] = useState<{ text: string; note?: string } | null>(null);
   const [payStyle, setPayStyle] = useState<PayStyle>("direct");
   const [recipientTag, setRecipientTag] = useState(() => request?.to ?? "");
   const [myIdentity, setMyIdentity] = useState<ReceiveIdentity | null>(null);
   const [tagCopied, setTagCopied] = useState(false);
   const [shareLocked, setShareLocked] = useState(false);
   const [inbox, setInbox] = useState<
-    { memo: ScannedMemo; label: string; ticket: string }[]
+    { memo: ScannedMemo; label: string; ticket: string; note?: string }[]
   >([]);
   const [inboxStatus, setInboxStatus] = useState<string | null>(null);
   const [memoPosted, setMemoPosted] = useState(false);
@@ -197,6 +205,8 @@ export function MoveView() {
       setSelectedId(null);
       setRecipientTag(r.to ?? "");
       setSendAmount(r.amount ?? "");
+      setPayNote(r.note ?? "");
+      setNoteOpen(Boolean(r.note));
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -567,14 +577,17 @@ export function MoveView() {
         pendingChange.current = null;
       }
 
-      // Share package for recipient (shown only after on-chain success)
+      // Share package for recipient (shown only after on-chain success).
+      // The note rides inside it, so it is sealed or locked with the payment.
       const pack = buildNotePackage({
         pool: network.pool,
         asset: w.paymentNote.asset,
         amountWei: w.paymentNote.amountWei,
         secret: w.paymentNote.secret,
         commitment: w.paymentNote.commitment,
+        note: payNote,
       });
+      setSentNote(pack.note ?? null);
       let share: string;
       let locked = false;
       if (payStyle === "direct") {
@@ -676,7 +689,7 @@ export function MoveView() {
     setInbox([]);
     try {
       const memos = await fetchPaymentMemos(getRhPublicClient());
-      const hits: { memo: ScannedMemo; label: string; ticket: string }[] = [];
+      const hits: { memo: ScannedMemo; label: string; ticket: string; note?: string }[] = [];
       for (const m of memos) {
         try {
           const pack = await decodeNotePackage(m.ticket, undefined, {
@@ -686,6 +699,7 @@ export function MoveView() {
             memo: m,
             ticket: m.ticket,
             label: formatAssetLabel(pack.amountWei, pack.asset),
+            note: pack.note,
           });
         } catch {
           /* not for us */
@@ -754,6 +768,8 @@ export function MoveView() {
         status: "open",
         source: "local",
         leafIndex: idx ?? undefined,
+        // The payer's private note, kept with the balance (encrypted at rest).
+        ...(pack.note ? { note: pack.note } : {}),
       };
       saveLocalNote(note);
       refreshNotes();
@@ -761,11 +777,13 @@ export function MoveView() {
       setImportText("");
       setImportPassphrase("");
       const ethLabel = formatAssetLabel(pack.amountWei, pack.asset);
-      setImportOk(
-        idx != null
-          ? `Claimed ${ethLabel} into your private balance. Send it or cash out when you are ready.`
-          : `Claimed ${ethLabel}. It shows up here once your balance refreshes.`
-      );
+      setImportOk({
+        text:
+          idx != null
+            ? `Claimed ${ethLabel} into your private balance. Send it or cash out when you are ready.`
+            : `Claimed ${ethLabel}. It shows up here once your balance refreshes.`,
+        note: pack.note,
+      });
       setMode("cashout");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
@@ -804,15 +822,16 @@ export function MoveView() {
               tryTagDecrypt: true,
             });
             if (!cancelled) {
-              setClaimPreview(
-                `A payment of ${formatAssetLabel(pack.amountWei, pack.asset)} for you, ready to claim.`
-              );
+              setClaimPreview({
+                text: `A payment of ${formatAssetLabel(pack.amountWei, pack.asset)} for you, ready to claim.`,
+                note: pack.note,
+              });
             }
             return;
           }
           if (isEncryptedPackage(t) && !importPassphrase.trim()) {
             if (!cancelled) {
-              setClaimPreview("This claim link is locked. Enter the phrase to see it.");
+              setClaimPreview({ text: "This claim link is locked. Enter the phrase to see it." });
             }
             return;
           }
@@ -821,14 +840,15 @@ export function MoveView() {
             importPassphrase || undefined
           );
           if (cancelled) return;
-          setClaimPreview(
-            `Looks like a payment of ${formatAssetLabel(pack.amountWei, pack.asset)}.`
-          );
+          setClaimPreview({
+            text: `Looks like a payment of ${formatAssetLabel(pack.amountWei, pack.asset)}.`,
+            note: pack.note,
+          });
         } catch (e) {
           if (!cancelled) {
             setClaimPreview(
               e instanceof Error && e.message.includes("someone else")
-                ? e.message
+                ? { text: e.message }
                 : null
             );
           }
@@ -987,7 +1007,16 @@ export function MoveView() {
               <span className="mt-0.5 text-sealed" aria-hidden>
                 <CheckIcon />
               </span>
-              <span>{importOk}</span>
+              <span className="min-w-0">
+                <span className="block">{importOk.text}</span>
+                {importOk.note && (
+                  <PaymentNoteLine
+                    note={importOk.note}
+                    label="Their note"
+                    className="mt-1 text-soft"
+                  />
+                )}
+              </span>
             </div>
           )}
 
@@ -1035,6 +1064,12 @@ export function MoveView() {
                                 day: "numeric",
                               })}
                             </span>
+                            {n.note && (
+                              <PaymentNoteLine
+                                note={n.note}
+                                className="mt-0.5 text-[12px] text-soft"
+                              />
+                            )}
                           </span>
                           <span
                             aria-hidden
@@ -1145,6 +1180,16 @@ export function MoveView() {
                       over stays in your private balance.
                     </p>
                   </div>
+
+                  <PayNoteField
+                    value={payNote}
+                    open={noteOpen}
+                    onOpen={setNoteOpen}
+                    onChange={setPayNote}
+                    fromRequest={Boolean(request?.note) && cleanPaymentNote(payNote) === request?.note}
+                    bearer={payStyle === "bearer" && !recipientTag.trim()}
+                    locked={Boolean(sendPassphrase.trim())}
+                  />
 
                   {!recipientTag.trim() && (
                     <div>
@@ -1506,9 +1551,16 @@ export function MoveView() {
                             <span className="tnum block truncate text-[15px] text-foreground">
                               {row.label}
                             </span>
-                            <span className="block text-[12px] text-mute">
-                              Private payment
-                            </span>
+                            {row.note ? (
+                              <PaymentNoteLine
+                                note={row.note}
+                                className="text-[12px] text-soft"
+                              />
+                            ) : (
+                              <span className="block text-[12px] text-mute">
+                                Private payment
+                              </span>
+                            )}
                           </span>
                         </span>
                         <button
@@ -1516,7 +1568,10 @@ export function MoveView() {
                           className="btn btn-ghost btn-sm shrink-0"
                           onClick={() => {
                             setImportText(row.ticket);
-                            setClaimPreview(`Selected ${row.label} from your payments.`);
+                            setClaimPreview({
+                              text: `Selected ${row.label} from your payments.`,
+                              note: row.note,
+                            });
                           }}
                         >
                           Select
@@ -1548,9 +1603,16 @@ export function MoveView() {
                   placeholder="gloam2t… or gloam1…"
                 />
                 {claimPreview && (
-                  <p className="mt-2 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] leading-relaxed text-soft" aria-live="polite">
-                    {claimPreview}
-                  </p>
+                  <div className="mt-2 rounded-xl bg-surface px-3.5 py-2.5 text-[13px] leading-relaxed text-soft" aria-live="polite">
+                    <p>{claimPreview.text}</p>
+                    {claimPreview.note && (
+                      <PaymentNoteLine
+                        note={claimPreview.note}
+                        label="Their note"
+                        className="mt-1 text-foreground"
+                      />
+                    )}
+                  </div>
                 )}
                 {(importText.trim().startsWith("gloam1e.") ||
                   (isEncryptedPackage(importText) &&
@@ -1637,10 +1699,11 @@ export function MoveView() {
                   </p>
                 </li>
                 <li className="py-3">
-                  <p className="text-foreground">Requests stay off chain</p>
+                  <p className="text-foreground">Requests stay private</p>
                   <p className="mt-0.5 text-mute">
                     A request link carries your address, the amount and a note.
-                    Nothing about it is posted on chain.
+                    When they pay, the note comes back sealed inside the
+                    payment, so only the two of you can read it.
                   </p>
                 </li>
                 <li className="pt-3">
@@ -1723,11 +1786,19 @@ export function MoveView() {
           pendingAction.current === "send" ||
           pendingAction.current === "memo" ||
           shareBlob ? (
-            <p>
-              {memoPosted
-                ? "They got a private heads-up, so the payment shows up under Receive on their side. The claim code below is a backup."
-                : "Share the claim code below if they need it. Anything left over stays in your private balance, in this browser."}
-            </p>
+            <>
+              <p>
+                {memoPosted
+                  ? "They got a private heads-up, so the payment shows up under Receive on their side. The claim code below is a backup."
+                  : "Share the claim code below if they need it. Anything left over stays in your private balance, in this browser."}
+              </p>
+              {sentNote && (
+                <p className="mt-3 break-words">
+                  Your note went with it:{" "}
+                  <span className="text-foreground">{sentNote}</span>
+                </p>
+              )}
+            </>
           ) : (
             <p>
               The money is back in your wallet. That amount is public on the
@@ -1744,6 +1815,118 @@ export function MoveView() {
         }}
       />
     </>
+  );
+}
+
+/**
+ * Pay → Note: an optional private note that travels inside the payment
+ * (lib/paymentNote), like "Invoice 042". One quiet button until it is wanted.
+ */
+function PayNoteField({
+  value,
+  open,
+  onOpen,
+  onChange,
+  fromRequest,
+  bearer,
+  locked,
+}: {
+  value: string;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+  onChange: (value: string) => void;
+  /** The note is the one the payment request asked for. */
+  fromRequest: boolean;
+  /** Paying with a claim link rather than to a Gloam address. */
+  bearer: boolean;
+  /** The claim link is locked with a phrase. */
+  locked: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  // Where focus goes once the field opens or closes, so it is never dropped.
+  const focusNext = useRef<"input" | "add" | null>(null);
+  const shown = open || value.length > 0;
+  useEffect(() => {
+    const next = focusNext.current;
+    if (!next) return;
+    focusNext.current = null;
+    (next === "input" ? inputRef : addRef).current?.focus();
+  }, [shown]);
+
+  if (!shown) {
+    return (
+      <div>
+        <button
+          ref={addRef}
+          type="button"
+          onClick={() => {
+            focusNext.current = "input";
+            onOpen(true);
+          }}
+          className="-my-2 inline-flex min-h-10 items-center gap-2 text-[13px] text-mute transition-colors hover:text-foreground"
+        >
+          <NoteGlyph size={14} />
+          Add a note
+        </button>
+      </div>
+    );
+  }
+
+  const length = Array.from(value).length;
+  const hint = bearer
+    ? locked
+      ? "It is locked inside the claim link with your phrase, so only the person you pay can read it."
+      : "It rides inside the claim link, so whoever has the link can read it. Add a phrase below to lock both."
+    : "Only the person you pay can read it. It travels sealed inside the payment.";
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor="pay-note" className="text-[13px] text-mute">
+          Note <span className="text-faint">(optional)</span>
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            focusNext.current = "add";
+            onChange("");
+            onOpen(false);
+          }}
+          className="-my-2 -mr-2 inline-flex min-h-10 items-center rounded-full px-2 text-[13px] text-mute transition-colors hover:text-foreground"
+        >
+          Remove note
+        </button>
+      </div>
+      <input
+        ref={inputRef}
+        id="pay-note"
+        type="text"
+        autoComplete="off"
+        maxLength={PAYMENT_NOTE_MAX}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="e.g. Invoice 042"
+        aria-describedby="pay-note-hint"
+        className="gl-input mt-2"
+      />
+      <p
+        id="pay-note-hint"
+        className="mt-2 flex items-start gap-2 text-[12.5px] leading-relaxed text-mute"
+      >
+        <span className="mt-[3px] shrink-0 text-sealed" aria-hidden>
+          <LockIcon size={12} />
+        </span>
+        <span className="min-w-0 flex-1">
+          {fromRequest ? "From their request. " : ""}
+          {hint}
+        </span>
+        {length > PAYMENT_NOTE_MAX - 20 && (
+          <span className="tnum shrink-0 text-faint">
+            {length}/{PAYMENT_NOTE_MAX}
+          </span>
+        )}
+      </p>
+    </div>
   );
 }
 

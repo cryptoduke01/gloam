@@ -311,20 +311,28 @@ interface SyncedTree {
         disclosure.
       </p>
       <pre>
-        <code>{`// server: the 402 challenge
+        <code>{`// server, once: a receive key (share the tag, keep privateJwk)
+generateReceiveKey(): Promise<ReceiveKey>        // { tag: "gloamr1.…", privateJwk }
+isReceiveTag(s) / assertReceiveTag(s)
+
+// server: the 402 challenge (payTo must be a receive tag)
 buildGloamPaymentRequirements(p): GloamPaymentRequirements
 
 // agent: build the private send + X-PAYMENT header (does not broadcast)
 buildGloamPayment(p): Promise<BuiltPayment>
 //   p: { requirements, senderSecretHex, senderNoteAmountWei, path, prove,
-//        issuerTag?, disclosureProver? }
-//   returns { payload, intent, paymentNote, changeNote, header }
+//        issuerTag?, disclosureProver?, legacyUnsealed? }
+//   the payment note is sealed to requirements.payTo
 
-// server: structural verify + the on-chain checks it must still run
-verifyGloamPayment({ requirements, payload }): VerifyResult
-//   VerifyResult: { ok, reason, amountWei, asset, commitment, onchainChecksRequired[] }
+// server: open + verify + sweep; serve only when grantAccess is true
+settleGloamPayment(p): Promise<SettleResult>
+//   p: { requirements, payload, receiveKey, prove, chain, submit, beforeSubmit? }
+//   SettleResult: { grantAccess, final, status, freshNote, reason }
 
-// crypto check: the note's claimed amount binds to its commitment (run before granting)
+// lower level
+openGloamPaymentNote(paymentNote, receiveKey)    // open the sealed note
+verifyGloamPayment({ requirements, payload, note }): VerifyResult   // always final: false
+sweepReceivedNote(p)                             // move a received note to a fresh one
 verifyPaymentNoteBinding(note): Promise<boolean>
 
 // optional issuer-scoped compliance disclosure over the payment note
@@ -336,13 +344,14 @@ GLOAM_VS_ZONE, GLOAM_X402_SCHEME`}</code>
       </pre>
       <p>
         The agent signs and broadcasts <code>payment.intent.exec</code> itself,
-        then sets <code>payload.txHash</code>. <code>verifyGloamPayment</code>{" "}
-        confirms the payment note binds the required amount and asset; it never
-        assumes settlement, returning the on-chain checks (note membership, tx
-        landed, nullifier single-use) for the server to confirm. Run{" "}
-        <code>verifyPaymentNoteBinding</code> too, so a payer cannot claim the
-        full price for a note minted at a smaller amount. Worked example:{" "}
-        <code>examples/pay-x402</code>.
+        then sets <code>payload.txHash</code>. The payment note travels sealed to
+        the payee&apos;s receive tag, so nobody who sees the header can open it.
+        The payer made that note, so it knows the secret too: a payment is only
+        final once the payee has swept it into a note only the payee knows.{" "}
+        <code>settleGloamPayment</code> opens, checks and sweeps, and returns{" "}
+        <code>grantAccess: true</code> only after the sweep confirms. If the payer
+        spent the note back first, the sweep fails and access is refused. Worked
+        example: <code>examples/pay-x402</code>.
       </p>
 
       {/* ─────────────────────────  witness  ───────────────────────── */}

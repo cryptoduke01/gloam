@@ -62,8 +62,8 @@ type Seed = {
   wallet: [string, string][];
   /** What the explorer shows, newest first: a vault deposit (with any native value), money in, or an approval. */
   activity: (["vault", string, number] | ["in", string, number] | ["approve", string, number])[];
-  /** A private payment waiting under Pay, Receive. */
-  incoming: [string, string];
+  /** A private payment waiting under Pay, Receive: symbol, amount, and the payer's private note. */
+  incoming: [string, string, string?];
   /** Private balances already in the vault (the tree size). */
   leaves: number;
 };
@@ -101,7 +101,7 @@ const SEEDS: Record<NetworkKey, Seed> = {
       ["approve", "USDG", 21],
       ["in", "4", 25],
     ],
-    incoming: ["USDG", "1250"],
+    incoming: ["USDG", "1250", "Invoice 042"],
     leaves: 1284,
   },
   tempo: {
@@ -129,7 +129,7 @@ const SEEDS: Record<NetworkKey, Seed> = {
       ["vault", "0", 19],
       ["approve", "PathUSD", 19],
     ],
-    incoming: ["PathUSD", "800"],
+    incoming: ["PathUSD", "800", "Invoice 017"],
     leaves: 312,
   },
 };
@@ -182,6 +182,8 @@ export type DemoIncoming = {
   secret: Hex;
   commitment: Hex;
   leafIndex: number;
+  /** The payer's private note, sealed inside the payment like a real one. */
+  note?: string;
   /** The encrypted memo, once built for this browser's Gloam address. */
   tag?: string;
   ticket?: string;
@@ -237,7 +239,7 @@ function seed(): DemoState {
       timestamp: now - days * DAY,
       ok: true,
     }));
-    const [inSymbol, inAmount] = s.incoming;
+    const [inSymbol, inAmount, inNote] = s.incoming;
     const inAsset = assetOf(net, inSymbol);
     chains[net.chainId] = {
       wallet,
@@ -249,6 +251,7 @@ function seed(): DemoState {
         secret: randomField(),
         commitment: randomField(),
         leafIndex: s.leaves - 4,
+        ...(inNote ? { note: inNote } : {}),
       },
     };
   }

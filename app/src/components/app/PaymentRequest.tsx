@@ -4,7 +4,8 @@
  * Payment requests (lib/paymentRequest): the "Request a payment" card on
  * Receive, and the banner the payer sees when a request link opens Pay.
  * A request is only a link. Nothing about it is posted on chain or sent to a
- * Gloam server; the payer checks the pre-filled form and presses send.
+ * Gloam server; the payer checks the pre-filled form and presses send. The
+ * note then travels sealed inside the payment (lib/paymentNote).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,7 @@ import { useNetwork } from "./NetworkProvider";
 import { TokenLogo } from "./TokenLogo";
 
 const PRIVACY_LINE =
-  "This link stays between you and the person you send it to. Nothing about the request goes on chain.";
+  "This link stays between you and the person you send it to. Nothing about the request is public on chain.";
 
 type Created = {
   url: string;
@@ -297,7 +298,8 @@ function RequestLinkResult({ created }: { created: Created }) {
           </p>
           <p className="mt-1 text-[13px] leading-relaxed text-mute">
             Send it any way you like, or let them scan the code. Gloam fills in
-            your address, the amount and your note. They check it and press send.
+            your address, the amount and your note. They check it and press send,
+            and your note comes back sealed inside the payment.
           </p>
           <div className="tnum mt-3 max-h-24 overflow-y-auto break-all rounded-xl bg-panel px-3 py-2.5 text-[12px] leading-relaxed text-mute">
             {created.url}

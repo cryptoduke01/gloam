@@ -39,6 +39,8 @@ export type SchedulePerson = {
   kind: PayeeKind;
   /** raw units of the schedule's asset */
   amount: string;
+  /** Private note sealed into each of their payments, e.g. "Monthly retainer". */
+  note?: string;
 };
 
 export type PayrollSchedule = {
@@ -281,10 +283,19 @@ function csvCell(v: string): string {
 /** A schedule's people as the payroll CSV, so a run goes through the normal list. */
 export function scheduleCsv(people: SchedulePerson[], asset: Address): string {
   const decimals = assetDecimals(asset);
+  // The note column only when someone has one, so a list without notes reads as before.
+  const notes = people.some((p) => p.note);
   return [
-    "name,gloam_address,amount",
+    notes ? "name,gloam_address,amount,note" : "name,gloam_address,amount",
     ...people.map((p) =>
-      [p.name, p.kind === "gloam" ? p.recipient : "", formatUnits(BigInt(p.amount), decimals)].map(csvCell).join(",")
+      [
+        p.name,
+        p.kind === "gloam" ? p.recipient : "",
+        formatUnits(BigInt(p.amount), decimals),
+        ...(notes ? [p.note ?? ""] : []),
+      ]
+        .map(csvCell)
+        .join(",")
     ),
   ].join("\n");
 }
@@ -292,7 +303,13 @@ export function scheduleCsv(people: SchedulePerson[], asset: Address): string {
 export function peopleFromDraft(rows: DraftRow[]): SchedulePerson[] {
   return rows
     .filter((r) => !r.error && r.amount != null)
-    .map((r) => ({ name: r.name, recipient: r.recipient, kind: r.kind, amount: r.amount!.toString() }));
+    .map((r) => ({
+      name: r.name,
+      recipient: r.recipient,
+      kind: r.kind,
+      amount: r.amount!.toString(),
+      ...(r.note ? { note: r.note } : {}),
+    }));
 }
 
 export function peopleFromBatch(b: PayrollBatch): SchedulePerson[] {
@@ -302,6 +319,7 @@ export function peopleFromBatch(b: PayrollBatch): SchedulePerson[] {
     recipient: r.kind === "gloam" ? r.recipient : "",
     kind: r.kind === "gloam" && r.recipient ? "gloam" : "link",
     amount: r.amount,
+    ...(r.note ? { note: r.note } : {}),
   }));
 }
 

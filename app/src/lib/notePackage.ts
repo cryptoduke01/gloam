@@ -4,10 +4,17 @@
  * - Compact: gloam1.<base64url>
  * - Optional passphrase: gloam1e.<base64url> (AES-GCM)
  * Still accepts legacy JSON for older shares.
+ *
+ * A package can carry the payer's private note ("Invoice 042", lib/paymentNote)
+ * under its own key: `n` in the compact form, `note` in the full JSON that
+ * gloam1e locks. It is optional both ways: packages without it decode as
+ * before, and older app versions skip the key they do not know. The note only
+ * ever sits inside the payment (sealed, locked or in a claim link's fragment).
  */
 
 import type { Address, Hex } from "viem";
 import { NATIVE_ASSET } from "./shield";
+import { cleanPaymentNote } from "./paymentNote";
 
 export type NotePackage = {
   v: 1;
@@ -19,6 +26,8 @@ export type NotePackage = {
   secret: Hex;
   commitment: Hex;
   message?: string;
+  /** The payer's private note to the payee, cleaned, at most 80 characters. */
+  note?: string;
 };
 
 const PREFIX_PLAIN = "gloam1.";
@@ -60,7 +69,10 @@ export function buildNotePackage(args: {
   amountWei: string;
   secret: Hex;
   commitment: Hex;
+  /** Optional private note for the payee ("Invoice 042"). */
+  note?: string;
 }): NotePackage {
+  const note = cleanPaymentNote(args.note);
   return {
     v: 1,
     type: "gloam-private-note",
@@ -71,11 +83,13 @@ export function buildNotePackage(args: {
     secret: args.secret,
     commitment: args.commitment,
     message: "Gloam payment, import under Move → Receive. Keep secret.",
+    ...(note ? { note } : {}),
   };
 }
 
 /** Compact share string (no passphrase). */
 export function encodeNotePackage(pack: NotePackage): string {
+  const note = cleanPaymentNote(pack.note);
   const json = JSON.stringify({
     v: pack.v,
     t: pack.type,
@@ -85,6 +99,8 @@ export function encodeNotePackage(pack: NotePackage): string {
     w: pack.amountWei,
     k: pack.secret,
     c: pack.commitment,
+    // Only when there is one, so a package without a note is byte-for-byte the old format.
+    ...(note ? { n: note } : {}),
   });
   return PREFIX_PLAIN + b64urlEncode(utf8(json));
 }
@@ -120,7 +136,9 @@ export async function encodeNotePackageEncrypted(
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase.trim(), salt);
-  const plain = buf(utf8(JSON.stringify(pack)));
+  const { note: rawNote, ...rest } = pack;
+  const note = cleanPaymentNote(rawNote);
+  const plain = buf(utf8(JSON.stringify(note ? { ...rest, note } : rest)));
   const cipher = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: buf(iv) }, key, plain)
   );
@@ -129,6 +147,12 @@ export async function encodeNotePackageEncrypted(
   out.set(iv, 16);
   out.set(cipher, 28);
   return PREFIX_ENC + b64urlEncode(out);
+}
+
+/** The note as the payee keeps it: whatever the sender put there, cleaned again. */
+function noteOf(obj: Record<string, unknown>): { note?: string } {
+  const note = cleanPaymentNote(obj.note ?? obj.n);
+  return note ? { note } : {};
 }
 
 function expandCompact(obj: Record<string, unknown>): NotePackage | null {
@@ -144,6 +168,7 @@ function expandCompact(obj: Record<string, unknown>): NotePackage | null {
         amountWei: String(obj.w),
         secret: String(obj.k) as Hex,
         commitment: String(obj.c || "0x") as Hex,
+        ...noteOf(obj),
       };
     }
     return null;
@@ -158,6 +183,7 @@ function expandCompact(obj: Record<string, unknown>): NotePackage | null {
     secret: String(obj.secret || obj.k) as Hex,
     commitment: String(obj.commitment || obj.c || "0x") as Hex,
     message: obj.message ? String(obj.message) : undefined,
+    ...noteOf(obj),
   };
 }
 

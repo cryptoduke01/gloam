@@ -9,6 +9,8 @@
  *   - People with a Gloam address are paid directly: their payment is
  *     encrypted to their address and (where the memo board is live) posted
  *     on-chain so it shows up in their app. Everyone else gets a claim link.
+ *   - An optional note column ("September salary") travels inside each
+ *     payment, so only that person reads it (lib/paymentNote).
  *   - Through the relay, the employer's wallet never appears next to any of
  *     the payments. The public sees private transfers, never who or how much.
  *
@@ -24,6 +26,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { buildNotePackage, encodeNotePackage } from "@/lib/notePackage";
 import { encryptTicketForTag, isReceiveTag } from "@/lib/receiveTag";
 import { ticketToMemoBytes } from "@/lib/payMemo";
+import { cleanPaymentNote } from "@/lib/paymentNote";
 import { openJson, sealJson } from "@/lib/noteVault";
 import {
   activeSpendableNotes,
@@ -59,6 +62,8 @@ export type PayrollRow = {
   kind: PayeeKind;
   /** raw units of the batch asset */
   amount: string;
+  /** Private note sealed into their payment, e.g. "September salary". */
+  note?: string;
   status: PayrollRowStatus;
   error?: string;
   attempts?: number;
@@ -96,6 +101,8 @@ export type DraftRow = {
   kind: PayeeKind;
   amountInput: string;
   amount: bigint | null;
+  /** From the optional note column, cleaned ("" when none). */
+  note?: string;
   error: string | null;
 };
 
@@ -103,10 +110,11 @@ export type DraftRow = {
 
 export const PAYROLL_MAX_ROWS = 200;
 
+/** The note column is optional: lists without it work as they always have. */
 export const PAYROLL_TEMPLATE = [
-  "name,gloam_address,amount",
-  "Ada Obi,gloamr1.PASTE_THEIR_GLOAM_ADDRESS,1250",
-  "Tunde Bello,,980",
+  "name,gloam_address,amount,note",
+  "Ada Obi,gloamr1.PASTE_THEIR_GLOAM_ADDRESS,1250,September salary",
+  "Tunde Bello,,980,Invoice 7",
 ].join("\n");
 
 function splitCsvLine(line: string): string[] {
@@ -140,6 +148,7 @@ function splitCsvLine(line: string): string[] {
 const NAME_KEYS = ["name", "payee", "employee", "person", "contractor", "full name"];
 const RECIPIENT_KEYS = ["gloam_address", "gloam address", "gloam", "address", "recipient", "to", "wallet"];
 const AMOUNT_KEYS = ["amount", "pay", "salary", "usd", "value", "total"];
+const NOTE_KEYS = ["note", "notes", "memo", "reference", "ref", "description"];
 
 function findCol(header: string[], keys: string[]): number {
   return header.findIndex((h) => keys.includes(h.toLowerCase().replace(/\s+/g, " ").trim()));
@@ -154,7 +163,8 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
     .filter((x) => x.l.length > 0);
   if (!lines.length) return { rows: [], error: null };
 
-  let cols = { name: 0, recipient: 1, amount: 2 };
+  // Without a header: name, address, amount, then an optional note.
+  let cols = { name: 0, recipient: 1, amount: 2, note: 3 };
   let start = 0;
   const first = splitCsvLine(lines[0].l);
   const looksLikeHeader = first.some((c) =>
@@ -165,10 +175,10 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
     const r = findCol(first, RECIPIENT_KEYS);
     const a = findCol(first, AMOUNT_KEYS);
     if (a < 0) return { rows: [], error: "Add an amount column (name, gloam_address, amount)." };
-    cols = { name: n, recipient: r, amount: a };
+    cols = { name: n, recipient: r, amount: a, note: findCol(first, NOTE_KEYS) };
     start = 1;
   } else if (first.length === 2) {
-    cols = { name: 0, recipient: -1, amount: 1 };
+    cols = { name: 0, recipient: -1, amount: 1, note: -1 };
   }
 
   const body = lines.slice(start);
@@ -181,6 +191,7 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
     const name = (cols.name >= 0 ? c[cols.name] : "")?.slice(0, 60) || `Person ${idx + 1}`;
     const recipient = (cols.recipient >= 0 ? c[cols.recipient] : "")?.trim() ?? "";
     const amountInput = (c[cols.amount] ?? "").replace(/[$\s]/g, "");
+    const note = cols.note >= 0 ? cleanPaymentNote(c[cols.note]) : "";
     let error: string | null = null;
     let kind: PayeeKind = "link";
     if (recipient) {
@@ -198,7 +209,7 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
     } else if (!error && (amount === null || amount <= 0n)) {
       error = "Enter an amount above zero.";
     }
-    return { line: i, name, recipient: kind === "gloam" ? recipient : "", kind, amountInput, amount, error };
+    return { line: i, name, recipient: kind === "gloam" ? recipient : "", kind, amountInput, amount, note, error };
   });
   return { rows, error: null };
 }
@@ -315,6 +326,7 @@ export function newBatch(args: {
         recipient: r.recipient,
         kind: r.kind,
         amount: r.amount!.toString(),
+        ...(r.note ? { note: r.note } : {}),
         status: "queued" as const,
       })),
   };
@@ -335,7 +347,9 @@ export function exportResultsCsv(
   batch: PayrollBatch,
   opts: { origin: string; networkKey: string; assetLabel: string; explorerTx: (h: string) => string }
 ): string {
-  const head = ["name", "paid_to", "amount", "asset", "status", "claim_link", "payment_code", "transaction"];
+  // The note column only shows up when the run had notes, so older exports read the same.
+  const withNotes = batch.rows.some((r) => r.note);
+  const head = ["name", "paid_to", "amount", "asset", "status", "claim_link", "payment_code", "transaction", ...(withNotes ? ["note"] : [])];
   const lines = batch.rows.map((r) => {
     const link = r.kind === "link" && r.ticket ? claimLink(opts.origin, opts.networkKey, r.ticket) : "";
     // Direct payees whose notification did not post need their encrypted code.
@@ -349,6 +363,7 @@ export function exportResultsCsv(
       link,
       code,
       r.txHash ? opts.explorerTx(r.txHash) : "",
+      ...(withNotes ? [r.note ?? ""] : []),
     ]
       .map(csvCell)
       .join(",");
@@ -506,6 +521,7 @@ async function payRow(
         amountWei: w.paymentNote.amountWei,
         secret: w.paymentNote.secret,
         commitment: w.paymentNote.commitment,
+        note: row.note,
       });
       const plain = encodeNotePackage(pack);
       const ticket = row.kind === "gloam" ? await encryptTicketForTag(plain, row.recipient) : plain;

@@ -444,7 +444,8 @@ export function ScheduleEditor({
                 >
                   <label className="block pt-3">
                     <span className="mb-2 block text-[12.5px] text-mute">
-                      One person per line: name, Gloam address (blank for a claim link), amount
+                      One person per line: name, Gloam address (blank for a claim link), amount, and a
+                      private note if you like
                     </span>
                     <textarea
                       value={peopleText}

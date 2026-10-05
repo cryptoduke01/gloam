@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { encodeProof, provePayment } from "@/lib/proofs";
 import { assetLabel, formatAssetAmount, parseAssetAmount, type LocalNote } from "@/lib/shield";
+import { PaymentNoteLine } from "../PaymentNote";
 import {
   AssetMark,
   EmptyCard,
@@ -38,6 +39,8 @@ type Done = {
   verifier: string;
   expiresAt: number;
   chainId: number;
+  /** The payer's note on this payment. Shown here only, never in the proof. */
+  note?: string;
 };
 
 export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
@@ -116,6 +119,7 @@ export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
         verifier: p.verifier,
         expiresAt: p.expiresAt,
         chainId: note.chainId,
+        note: note.note,
       });
     } catch (e) {
       setErr(friendlyProveError(e, "payment"));
@@ -162,6 +166,13 @@ export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
           ]}
           onEdit={() => setDone(null)}
         />
+        {done.note && (
+          <p className="px-1 text-[13px] leading-relaxed text-mute">
+            For the payment with the note{" "}
+            <span className="break-words text-foreground">{done.note}</span>. The note stays with
+            you. It is not in the proof.
+          </p>
+        )}
       </ProveLayout>
     );
   }
@@ -208,6 +219,13 @@ export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
                         Received privately, {shortDate(p.createdAt)}
                         {p.status === "recovered" ? ", spent since" : ""}
                       </span>
+                      {p.note && (
+                        <PaymentNoteLine
+                          note={p.note}
+                          label="Their note"
+                          className="mt-0.5 text-[12.5px] text-soft"
+                        />
+                      )}
                     </span>
                     <span
                       aria-hidden
@@ -358,11 +376,13 @@ function PaymentAside({
           { label: "Who it is for", value: verifier.trim() || unset },
           { label: "Good until", value: longDate(until * 1000) },
         ]}
-        never={
-          reveal
-            ? ["Your balance", "Your other payments", "Your wallet"]
-            : ["The exact amount", "Your balance", "Your other payments", "Your wallet"]
-        }
+        never={[
+          ...(reveal ? [] : ["The exact amount"]),
+          ...(note?.note ? ["The note on this payment"] : []),
+          "Your balance",
+          "Your other payments",
+          "Your wallet",
+        ]}
         note={
           <p>
             The proof points at this payment&apos;s record in the vault, so they can see when it

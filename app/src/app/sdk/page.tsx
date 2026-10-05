@@ -141,17 +141,24 @@ const send = await buildPrivateSendIntent({
 const hash = await relayIntent(send);`;
 
 const X402_SNIPPET = `import {
+  generateReceiveKey,
   buildGloamPaymentRequirements,
   buildGloamPayment,
-  verifyGloamPayment,
+  settleGloamPayment,
+  decodePaymentHeader,
+  sweepChainFromClient,
+  relaySubmitter,
   artifactProver,
 } from "@gloamtrade/sdk";
 
+// Server, once: a receive key. Share the tag, keep the key.
+const seller = await generateReceiveKey();
+
 // Server: price a tool. This is the 402 challenge.
 const requirements = buildGloamPaymentRequirements({
-  amountWei: parseUnits("0.25", 18),
+  amountWei: parseUnits("0.25", 6),
   assetSymbol: "USD",
-  payTo: "gloam:rcpt:...",
+  payTo: seller.tag, // the payment is sealed to this
   resource: "mcp://tool/summarize",
 });
 
@@ -164,8 +171,16 @@ const pay = await buildGloamPayment({
   prove: artifactProver({ wasm, zkey }),
 });
 
-// Server: check the payment before it serves the tool.
-const result = verifyGloamPayment({ requirements, payload: pay.payload });`;
+// Server: open, check and sweep the payment into a note only it knows.
+const result = await settleGloamPayment({
+  requirements,
+  payload: decodePaymentHeader(xPaymentHeader),
+  receiveKey: seller,
+  prove: artifactProver({ wasm, zkey }),
+  chain: sweepChainFromClient(publicClient, { pool, fromBlock }),
+  submit: relaySubmitter(),
+});
+if (result.grantAccess) serve();`;
 
 const CASHOUT_SNIPPET = `import {
   buildUnshieldIntent,
@@ -197,9 +212,11 @@ const TABS: CodeTab[] = [
 
 const MCP_TOOLS = [
   { name: "gloam_execute_shield", body: "Add money to the agent's private balance" },
+  { name: "gloam_fetch_paid", body: "Fetch a URL and pay its 402 privately, in one call" },
   { name: "gloam_payment_requirements", body: "Price a tool or a dataset with a 402" },
-  { name: "gloam_execute_private_pay", body: "Pay a 402 from the private balance" },
-  { name: "gloam_verify_payment", body: "Check a payment before serving" },
+  { name: "gloam_verify_payment", body: "Check a payment and sweep it before serving" },
+  { name: "gloam_list_notes", body: "The agent's balances, as handles, never secrets" },
+  { name: "gloam_get_spending_report", body: "What it spent today and what is left" },
 ];
 
 const MCP_CONFIG = `{

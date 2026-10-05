@@ -352,6 +352,12 @@ export type LocalNote = {
   status?: "open" | "recovered";
   /** local = browser secret; chain = public Shielded event */
   source?: "local" | "chain";
+  /**
+   * The payer's private note on a received payment ("Invoice 042"), from the
+   * payment itself (lib/paymentNote). Kept with the note's secret, so it is
+   * encrypted at rest; never part of a proof.
+   */
+  note?: string;
 };
 
 export function confirmedNotes(notes: LocalNote[]): LocalNote[] {

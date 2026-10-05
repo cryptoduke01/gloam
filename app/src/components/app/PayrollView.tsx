@@ -8,6 +8,7 @@ import type { Address, Hex } from "viem";
 import { demoHistory, simulatePayroll, useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { PayrollInvoice } from "./PayrollInvoice";
+import { PaymentNoteLine } from "./PaymentNote";
 import { DueBanner } from "./payroll/DueBanner";
 import { ScheduleEditor } from "./payroll/ScheduleEditor";
 import { ScheduleList } from "./payroll/ScheduleList";
@@ -1153,6 +1154,12 @@ export function PayrollView() {
                           {c}
                         </span>
                       ))}
+                      <span
+                        className="inline-flex h-7 items-center rounded-full border border-dashed border-line-strong px-3 text-[12px] text-mute"
+                        title="Optional. A private note only that person can read, like September salary."
+                      >
+                        note, optional
+                      </span>
                     </div>
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                       <button type="button" onClick={() => fileRef.current?.click()} className="btn btn-ink btn-sm h-10">
@@ -1306,6 +1313,13 @@ export function PayrollView() {
                                   ? `Gloam address ${short(r.recipient)}`
                                   : "Claim link, you share it after the run"}
                           </p>
+                          {!pub && !r.error && r.note && (
+                            <PaymentNoteLine
+                              note={r.note}
+                              label="Private note"
+                              className="mt-0.5 text-[12.5px] text-soft"
+                            />
+                          )}
                         </div>
                         {pub ? (
                           <SealDots n={6} className="text-foreground/55" />
@@ -1630,6 +1644,7 @@ function RunRow({
             </button>
           )}
         </p>
+        {r.note && <PaymentNoteLine note={r.note} label="Private note" className="mt-0.5 text-[12.5px] text-soft" />}
         {r.error && r.status !== "paid" && <p className="mt-0.5 truncate text-[12px] text-danger">{r.error}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5">
