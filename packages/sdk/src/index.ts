@@ -14,6 +14,7 @@
  *   merkle    depth-20 incremental Merkle tree + circom path builder
  *   sync      rebuild the pool tree from chain -> membership paths for spends
  *   witness   unshield / transfer / sealedSwap witness builders
+ *   proofs    proof-of-funds + proof-of-payment witnesses, verifier context
  *   prove     injected Groth16 prover (artifactProver) + proof packing
  *   rates     sealed-rate math + size-privacy policy (pure)
  *   builders  shieldBound | unshield | privateSend | privateTrade intents
@@ -37,6 +38,7 @@ export * from "./note.js";
 export * from "./merkle.js";
 export * from "./proof.js";
 export * from "./witness.js";
+export * from "./proofs.js";
 export * from "./prove.js";
 export * from "./builders.js";
 export * from "./sync.js";
