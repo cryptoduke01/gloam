@@ -1,0 +1,1383 @@
+/**
+ * The Gloam MCP tools.
+ *
+ * Gives an AI agent private execution tools across Gloam's networks: private
+ * stablecoin payments on Tempo and private trading on Robinhood Chain. The x402
+ * payment tools target either network (pass `network`), so an agent can settle a
+ * 402 challenge privately in PathUSD on Tempo or in the RH asset on Robinhood.
+ *
+ * This exposes read + planning tools that work today, and returns honest
+ * "intent" objects for write actions (shield / pay / send) when there is no
+ * signer. It never fakes a private fill or settlement.
+ *
+ * Every tool that moves money (shield, public send, private pay) first passes
+ * the owner's spending limits (src/policy.ts, src/spendGuard.ts): allowed
+ * tools, assets, recipients, a cap per payment and per rolling day, and an
+ * expiry. No limits configured means no spending. The limits are enforced here,
+ * off-chain, not by the vault contract.
+ *
+ * Note secrets never reach the agent. Notes live in an encrypted store inside
+ * this server (src/noteStore.ts); tools hand out and take back short handles.
+ * Payments are sealed to the payee's receive tag, and a payee settles a
+ * received payment by sweeping it into a fresh note before granting access.
+ * GLOAM_EXPOSE_NOTE_SECRETS=1 brings back the old secret-passing behavior; it is
+ * unsafe and off by default.
+ */
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
+import {
+  buildShieldBoundIntent,
+  artifactProver,
+  NATIVE_ASSET,
+  buildGloamPaymentRequirements,
+  buildGloamPayment,
+  verifyGloamPayment,
+  verifyPaymentNoteBinding,
+  encodeRequirements,
+  decodeRequirements,
+  encodePaymentHeader,
+  decodePaymentHeader,
+  openGloamPaymentNote,
+  sweepReceivedNote,
+  generateReceiveKey,
+  isReceiveTag,
+  isSealedTicket,
+  syncTree,
+  noteCommitmentPoseidon,
+  noteNullifierPoseidon,
+  fieldToHex,
+  hexToField,
+  transferCallArgs,
+  POOL_TRANSFER_ABI,
+  POOL_STATE_ABI,
+  GLOAM_NOT_FINAL,
+  GLOAM_VS_ZONE,
+  GLOAM_NETWORKS,
+  GLOAM_RELAY_URL,
+  GLOAM_X402_SCHEME,
+  relayIntent,
+  type GloamIntent,
+  type GloamPaymentPayload,
+  type GloamPaymentRequirements,
+  type NoteExport,
+  type Prover,
+  type RelayOptions,
+  type SweepChain,
+} from "@gloamtrade/sdk";
+import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
+import { getPublicClient, getSigner, type Signer } from "./signer.js";
+import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+import { networkByKey, networkByChainId, MCP_NETWORKS, type McpNetwork } from "./networks.js";
+import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
+import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
+import { balances, noteView, openNoteStore, type NoteStore, type StoredNote } from "./noteStore.js";
+import { guardedFetch } from "./safeFetch.js";
+
+type Env = Record<string, string | undefined>;
+type ChainClient = Signer["publicClient"];
+
+/** Everything the tools touch outside this file, injectable for tests. */
+export interface ServerDeps {
+  /** Read at call time (limits, relay, keys), except GLOAM_EXPOSE_NOTE_SECRETS, read once at startup. */
+  env: Env;
+  signer(net: McpNetwork): Signer | null;
+  publicClient(net: McpNetwork): ChainClient;
+  shieldProver(): Promise<Prover>;
+  transferProver(): Promise<Prover>;
+  syncTree: typeof syncTree;
+  relay(intent: GloamIntent, opts: RelayOptions): Promise<Hex>;
+  fetch: typeof fetch;
+}
+
+function defaultDeps(env: Env): ServerDeps {
+  return {
+    env,
+    signer: (net) => getSigner(net, env),
+    publicClient: (net) => getPublicClient(net),
+    shieldProver: async () => artifactProver(await shieldArtifacts()),
+    transferProver: async () => artifactProver(await transferArtifacts()),
+    syncTree,
+    relay: relayIntent,
+    fetch: guardedFetch(env),
+  };
+}
+
+const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+const shieldPoolAbi = [
+  {
+    type: "function",
+    name: "shieldBound",
+    stateMutability: "payable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "commitment", type: "bytes32" },
+      { name: "proof", type: "bytes" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+function text(value: unknown) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text:
+          typeof value === "string"
+            ? value
+            : JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2),
+      },
+    ],
+  };
+}
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+function parseRequirements(input: string): GloamPaymentRequirements | null {
+  try {
+    return decodeRequirements(input);
+  } catch {
+    try {
+      return JSON.parse(input) as GloamPaymentRequirements;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parsePayment(input: string): GloamPaymentPayload | null {
+  try {
+    return decodePaymentHeader(input);
+  } catch {
+    try {
+      return JSON.parse(input) as GloamPaymentPayload;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function assetInfo(chainId: number, asset: Address, fallbackDecimals = 18) {
+  const known = KNOWN_ASSETS.find((a) => a.chainId === chainId && a.address.toLowerCase() === asset.toLowerCase());
+  return { symbol: known?.symbol ?? assetLabel(chainId, asset), decimals: known?.decimals ?? fallbackDecimals };
+}
+
+/** A spend reservation with no transaction after this long was never sent (a crash between reserve and broadcast). */
+const STUCK_MS = 10 * 60 * 1000;
+
+const shortTag = (t: string) => (t.length > 30 ? `${t.slice(0, 18)}…${t.slice(-6)}` : t);
+
+const AGENT_WALLET_NOTE =
+  "This build does not sign or broadcast. Connect an agent wallet with signing (e.g. Turnkey embedded wallet + policy) to execute this intent. Returned as a plan an agent or human can approve.";
+
+const NO_SIGNER =
+  "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.";
+
+const LEGACY_WARNING =
+  "GLOAM_EXPOSE_NOTE_SECRETS=1 is set: note secrets are passed to and from the agent. Anyone who reads a secret can spend that money, and spending limits cannot stop that. Turn it off unless you are migrating old notes.";
+
+/** Build a Gloam MCP server. Pass deps to test it without a chain. */
+export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServer {
+  const deps: ServerDeps = { ...defaultDeps(overrides.env ?? process.env), ...overrides };
+  const env = deps.env;
+  /** Old behavior: secrets in tool results and arguments. Read once; restart to change. */
+  const legacy = env.GLOAM_EXPOSE_NOTE_SECRETS?.trim() === "1";
+  const server = new McpServer({ name: "gloam", version: "0.1.0" });
+
+  const relayUrl = () =>
+    env.GLOAM_RELAY_URL?.trim() || (env.GLOAM_USE_RELAY?.trim() === "1" ? GLOAM_RELAY_URL : "");
+
+  /** Never throws: a broken store must not hide that money already moved. */
+  const tryStore = (fn: () => void): string | undefined => {
+    try {
+      fn();
+      return undefined;
+    } catch (e) {
+      return `Could not update the note store: ${errMsg(e)}`;
+    }
+  };
+
+  function openStore(): { ok: true; store: NoteStore } | { ok: false; error: string } {
+    try {
+      const store = openNoteStore(env);
+      store.read(); // fail now, before anything is reserved or signed
+      return { ok: true, store };
+    } catch (e) {
+      return { ok: false, error: errMsg(e) };
+    }
+  }
+
+  function sweepChain(client: ChainClient, net: McpNetwork): SweepChain {
+    return {
+      isSpent: (nullifier) =>
+        client.readContract({ address: net.pool, abi: POOL_STATE_ABI, functionName: "isSpent", args: [nullifier] }),
+      isCommitmentSeen: (commitment) =>
+        client.readContract({ address: net.pool, abi: POOL_STATE_ABI, functionName: "commitmentSeen", args: [commitment] }),
+      pathForCommitment: async (commitment) =>
+        (await deps.syncTree(client, { pool: net.pool, fromBlock: net.deployBlock })).pathForCommitment(commitment),
+      waitForReceipt: async (hash) => ({ status: (await client.waitForTransactionReceipt({ hash })).status }),
+    };
+  }
+
+  server.registerTool(
+    "gloam_info",
+    {
+      title: "About Gloam",
+      description:
+        "What Gloam is and what an agent can do with it. Call this first to understand the private-trading tools available.",
+    },
+    async () =>
+      text({
+        what: "Gloam is private trading on Robinhood Chain. Hold, send, and trade stocks and crypto without broadcasting size or strategy to the public chain.",
+        whyAgentsCareMost:
+          "Agents run predictable, high-frequency strategies. On a public chain every move is copyable and front-runnable. Gloam keeps an agent's positions and size private.",
+        chain: CHAIN,
+        tools: [
+          "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
+          "gloam_list_markets: tradable markets and marks (read)",
+          "gloam_quote: indicative quote and what stays private (read)",
+          "gloam_plan_private_trade: build a private-trade intent, no execution (planning)",
+          "gloam_plan_shield: describe a shield before executing (planning)",
+          "gloam_execute_shield: REAL private deposit. Mints a note, proves, and broadcasts shieldBound; returns a note handle (execution; needs a signer)",
+          "gloam_execute_transfer: sign and broadcast a public testnet transfer (execution; needs a signer)",
+          "gloam_list_notes: this server's private notes as handles, and the private balance per asset (read)",
+          "gloam_receive_tag: this server's receive tag, for others to pay it privately (read)",
+          "gloam_payment_requirements: price an agent resource in a private x402 payment (server side)",
+          "gloam_pay_x402: plan the private payment for a 402 challenge (agent side)",
+          "gloam_execute_private_pay: REAL private x402 settlement from a note handle: sync, prove, broadcast transfer; returns the X-PAYMENT header (execution; needs a signer)",
+          "gloam_fetch_paid: fetch a URL and, if it answers 402 with a Gloam price, pay privately and retry, all inside this server (execution; needs a signer)",
+          "gloam_verify_payment: open a presented x402 payment, verify it, and sweep it into a fresh note; grant access only when it says so (server side)",
+          "gloam_get_limits: this agent's spending limits (read)",
+          "gloam_get_spending_report: spent and remaining in the last 24 hours, recent payments and refusals (read)",
+        ],
+        notes: legacy
+          ? LEGACY_WARNING
+          : "Note secrets stay inside this server, encrypted. Tools give the agent handles (like n-k3x9p2qw7m) and amounts, never a secret.",
+        spendingLimits:
+          "Every execute tool that moves money checks the owner's limits first (tools, assets, recipients, per payment, per day, expiry) and logs the spend. The MCP server enforces them, off-chain; the vault contract does not.",
+        privatePayments:
+          "x402 agent payments settle privately through the Gloam pool, sealed to the payee's receive tag. The payee sweeps each payment into a fresh note before serving, so a payer cannot take it back. Unlike a Tempo Zone, there is no operator that sees the transaction.",
+      })
+  );
+
+  server.registerTool(
+    "gloam_privacy_status",
+    {
+      title: "Privacy status",
+      description:
+        "Honest, current privacy posture: what is live, what is not, and how strong the anonymity set is. Agents should check this before assuming a trade is fully private.",
+    },
+    async () => text(PRIVACY_STATUS)
+  );
+
+  server.registerTool(
+    "gloam_list_markets",
+    {
+      title: "List markets",
+      description: "List the markets an agent can trade privately on Gloam, with indicative testnet marks.",
+      inputSchema: {
+        kind: z.enum(["stock", "crypto", "all"]).default("all").describe("Filter by asset kind."),
+      },
+    },
+    async ({ kind }) => {
+      const list = kind === "all" ? MARKETS : MARKETS.filter((m) => m.kind === kind);
+      return text({ count: list.length, note: "Marks are indicative testnet values.", markets: list });
+    }
+  );
+
+  server.registerTool(
+    "gloam_quote",
+    {
+      title: "Quote a private trade",
+      description:
+        "Indicative quote for buying or selling a market, plus exactly what stays private and what becomes public.",
+      inputSchema: {
+        market: z.string().describe("Symbol or id, e.g. TSLA or eth."),
+        side: z.enum(["buy", "sell"]),
+        usd: z.number().positive().describe("Trade size in USD."),
+      },
+    },
+    async ({ market, side, usd }) => {
+      const m = findMarket(market);
+      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
+      const units = usd / m.mark;
+      return text({
+        market: m.symbol,
+        side,
+        usd,
+        estimatedUnits: Number(units.toFixed(6)),
+        markUsd: m.mark,
+        staysPrivate: ["your size", "your position", "who you are"],
+        becomesPublic: ["only that a private trade occurred, not the amount"],
+        note: "Indicative only. Size privacy depends on the current anonymity set (see gloam_privacy_status).",
+      });
+    }
+  );
+
+  server.registerTool(
+    "gloam_plan_private_trade",
+    {
+      title: "Plan a private trade",
+      description:
+        "Build a private-trade intent (does not execute). Returns the exact action a connected agent wallet would sign.",
+      inputSchema: {
+        market: z.string().describe("Symbol or id, e.g. TSLA."),
+        side: z.enum(["buy", "sell"]),
+        usd: z.number().positive(),
+        agentAddress: z.string().optional().describe("The agent wallet address that would own the private position."),
+      },
+    },
+    async ({ market, side, usd, agentAddress }) => {
+      const m = findMarket(market);
+      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
+      return text({
+        intent: "private_trade",
+        chainId: CHAIN.chainId,
+        market: m.symbol,
+        side,
+        usd,
+        estimatedUnits: Number((usd / m.mark).toFixed(6)),
+        agentAddress: agentAddress ?? null,
+        privacy: "Size and position stay off the public chain.",
+        execution: AGENT_WALLET_NOTE,
+      });
+    }
+  );
+
+  server.registerTool(
+    "gloam_plan_shield",
+    {
+      title: "Plan a shield (deposit to private)",
+      description:
+        "Build an intent to move funds into a private balance (shield), the first step before private trading or sending.",
+      inputSchema: {
+        asset: z.string().default("ETH").describe("Asset to shield, e.g. ETH or TSLA."),
+        usd: z.number().positive().describe("Amount to shield, in USD."),
+        agentAddress: z.string().optional(),
+      },
+    },
+    async ({ asset, usd, agentAddress }) =>
+      text({
+        intent: "shield",
+        chainId: CHAIN.chainId,
+        asset: asset.toUpperCase(),
+        usd,
+        agentAddress: agentAddress ?? null,
+        result: "Funds enter a private balance. The public chain loses the trail.",
+        execution: AGENT_WALLET_NOTE,
+      })
+  );
+
+  server.registerTool(
+    "gloam_execute_shield",
+    {
+      title: "Execute a private shield",
+      description:
+        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token, e.g. PathUSD on Tempo). The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+      inputSchema: {
+        amount: z
+          .number()
+          .positive()
+          .describe("Amount to shield into a private balance, in the asset's units (e.g. PathUSD on Tempo, ETH on Robinhood)."),
+        network: z
+          .enum(["robinhood", "tempo"])
+          .default("robinhood")
+          .describe("Which network to shield on. Tempo shields the PathUSD stablecoin; Robinhood shields native ETH by default."),
+        asset: z
+          .string()
+          .optional()
+          .describe("ERC-20 token address to shield; omit to use the network default (PathUSD on Tempo, native ETH on Robinhood)."),
+        decimals: z
+          .number()
+          .int()
+          .optional()
+          .describe("Decimals of the asset; omit to use the network default (6 for PathUSD, 18 for ETH)."),
+      },
+    },
+    async ({ amount, network, asset, decimals }) => {
+      if (asset !== undefined && !isAddress(asset)) {
+        return text({ status: "error", error: `"${asset}" is not a valid token address.` });
+      }
+      const net = networkByKey(network);
+      const assetAddr = (asset as Address | undefined) ?? net.defaultAsset;
+      const dec = decimals ?? (asset ? assetInfo(net.chainId, assetAddr).decimals : net.defaultAssetDecimals);
+      const amountWei = parseUnits(String(amount), dec);
+      const isNative = assetAddr.toLowerCase() === NATIVE_ASSET.toLowerCase();
+      const spend: Spend = {
+        tool: "shield",
+        network: net.key,
+        chainId: net.chainId,
+        asset: assetAddr,
+        amountWei,
+        recipient: null,
+      };
+      const signer = deps.signer(net);
+      if (!signer) {
+        return text({
+          status: "no_signer",
+          plan: { action: "shield", amount, asset: assetAddr, network: net.key, chainId: net.chainId, pool: net.pool },
+          limits: previewSpend(spend, env),
+          message: NO_SIGNER,
+        });
+      }
+      // The note must have somewhere safe to live before any money moves.
+      const opened = openStore();
+      if (!opened.ok) return text({ status: "error", error: opened.error });
+      const notes = opened.store;
+      const gate = authorizeSpend(spend, env);
+      if (!gate.ok) return text(gate.refusal);
+      let hash: Hex | undefined;
+      let held: StoredNote | undefined;
+      try {
+        const intent = await buildShieldBoundIntent({
+          amountWei,
+          asset: assetAddr,
+          poolAddress: net.pool,
+          prover: await deps.shieldProver(),
+        });
+        // Keep the note before anything is broadcast, so a crash mid-flight cannot lose it.
+        held = notes.add({
+          network: net.key,
+          chainId: net.chainId,
+          pool: net.pool,
+          asset: assetAddr,
+          symbol: assetInfo(net.chainId, assetAddr, dec).symbol,
+          decimals: dec,
+          amountWei: amountWei.toString(),
+          secret: intent.note.secret,
+          commitment: intent.note.commitment,
+          nullifier: intent.note.nullifier,
+          status: "pending",
+          pending: "create",
+          origin: "shield",
+          createdTx: null,
+        });
+        // ERC-20 shields (e.g. PathUSD on Tempo) approve the pool to pull the
+        // tokens before shieldBound; native shields carry value instead.
+        let approveHash: Hex | undefined;
+        if (!isNative) {
+          approveHash = await signer.walletClient.writeContract({
+            address: assetAddr,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [net.pool, amountWei],
+          });
+          await signer.publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+        hash = await signer.walletClient.writeContract({
+          address: intent.exec.poolAddress,
+          abi: shieldPoolAbi,
+          functionName: "shieldBound",
+          args: intent.exec.args as readonly [Address, bigint, Hex, Hex],
+          value: intent.exec.valueWei,
+        });
+        const sentHash = hash;
+        const storeWarning = tryStore(() => notes.update(held!.handle, { createdTx: sentHash }));
+        const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          settleSpend(gate, "reverted", { hash });
+          tryStore(() => notes.remove(held!.handle));
+          return text({ status: "error", error: `Shield reverted (${hash}). Nothing moved.`, hash });
+        }
+        const logWarning = settleSpend(gate, "sent", { hash });
+        let stored: StoredNote = { ...held, status: "unspent", createdTx: hash };
+        const confirmWarning = tryStore(() => {
+          stored = notes.update(held!.handle, { status: "unspent", createdTx: sentHash }) ?? stored;
+        });
+        const noteWarning = storeWarning ?? confirmWarning;
+        return text({
+          status: "confirmed",
+          ...(logWarning ? { logWarning } : {}),
+          ...(noteWarning ? { noteWarning } : {}),
+          network: net.key,
+          approveHash,
+          hash,
+          from: signer.account.address,
+          explorer: `${net.explorer}/tx/${hash}`,
+          note: legacy
+            ? { ...noteView(stored), secret: intent.note.secret, commitment: intent.note.commitment, decimals: dec }
+            : noteView(stored),
+          ...(legacy
+            ? { warning: LEGACY_WARNING }
+            : { keep: "Pay from this balance with gloam_execute_private_pay (by note handle, or let the server pick). The secret stays in this server." }),
+          privacy:
+            "The deposit amount is public. The note hides who can spend it, so future private sends are unlinkable to this deposit.",
+        });
+      } catch (err) {
+        const error = errMsg(err);
+        settleSpend(gate, hash ? "unconfirmed" : "failed", { hash, reason: error });
+        // Nothing broadcast: forget the note. Broadcast: keep it pending, it may still land.
+        if (held && !hash) tryStore(() => notes.remove(held!.handle));
+        return text({
+          status: "error",
+          error,
+          ...(hash ? { hash, note: held ? { handle: held.handle, status: "pending" } : undefined, check: "Call gloam_list_notes with refresh to see whether it landed." } : {}),
+        });
+      }
+    }
+  );
+
+  server.registerTool(
+    "gloam_execute_transfer",
+    {
+      title: "Execute a transfer (public)",
+      description:
+        "Send testnet ETH publicly on Robinhood Chain from the agent wallet. This is the PUBLIC rail (amount and recipient are visible), useful for funding. For private movement, use gloam_execute_shield. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan only.",
+      inputSchema: {
+        to: z.string().describe("Recipient 0x address."),
+        eth: z.number().positive().describe("Amount of testnet ETH to send."),
+      },
+    },
+    async ({ to, eth }) => {
+      if (!isAddress(to)) {
+        return text({ status: "error", error: `"${to}" is not a valid address.` });
+      }
+      const spend: Spend = {
+        tool: "send",
+        network: "robinhood",
+        chainId: CHAIN.chainId,
+        asset: NATIVE_ASSET,
+        amountWei: parseEther(String(eth)),
+        recipient: to,
+      };
+      const signer = deps.signer(MCP_NETWORKS.robinhood);
+      if (!signer) {
+        return text({
+          status: "no_signer",
+          plan: { action: "transfer", to, eth, chainId: CHAIN.chainId },
+          limits: previewSpend(spend, env),
+          message: NO_SIGNER,
+        });
+      }
+      const gate = authorizeSpend(spend, env);
+      if (!gate.ok) return text(gate.refusal);
+      try {
+        const hash = await signer.walletClient.sendTransaction({ to: to as Address, value: spend.amountWei });
+        const logWarning = settleSpend(gate, "sent", { hash });
+        return text({
+          status: "submitted",
+          ...(logWarning ? { logWarning } : {}),
+          hash,
+          from: signer.account.address,
+          explorer: `${CHAIN.explorer}/tx/${hash}`,
+        });
+      } catch (err) {
+        const error = errMsg(err);
+        settleSpend(gate, "failed", { reason: error });
+        return text({ status: "error", error });
+      }
+    }
+  );
+
+  // ── notes ───────────────────────────────────────────────────────────────────
+
+  server.registerTool(
+    "gloam_list_notes",
+    {
+      title: "Private notes and balance",
+      description:
+        "This server's private notes as handles, with network, asset, amount, status (unspent, pending, spent) and the transaction that created each one, plus the spendable private balance per asset. Never shows a secret. Pass refresh to check pending notes against the chain.",
+      inputSchema: {
+        network: z.enum(["robinhood", "tempo"]).optional().describe("Only this network."),
+        includeSpent: z.boolean().default(false).describe("Also list spent notes."),
+        refresh: z.boolean().default(false).describe("Check pending notes on chain first (read-only calls)."),
+      },
+    },
+    async ({ network, includeSpent, refresh }) => {
+      const opened = openStore();
+      if (!opened.ok) return text({ status: "error", error: opened.error });
+      const notes = opened.store;
+      const refreshed: string[] = [];
+      if (refresh) {
+        for (const n of notes.list().filter((x) => x.status === "pending")) {
+          const net = networkByChainId(n.chainId);
+          if (!net) continue;
+          try {
+            const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
+            const chain = sweepChain(client, net);
+            const failed = async (hash: Hex | null | undefined) =>
+              !!hash && (await client.getTransactionReceipt({ hash }).then((r) => r.status === "reverted", () => false));
+            if (n.pending === "spend") {
+              if (await chain.isSpent(n.nullifier)) {
+                notes.update(n.handle, { status: "spent" });
+                refreshed.push(`${n.handle}: spent`);
+              } else if (n.spentTx ? await failed(n.spentTx) : Date.now() - Date.parse(n.updatedAt) > STUCK_MS) {
+                // Never spent on chain, and its spend reverted or was never sent: spendable again.
+                // (If a copy is still in flight it will revert: the nullifier spends once.)
+                notes.update(n.handle, { status: "unspent", spentTx: null });
+                refreshed.push(`${n.handle}: spendable again`);
+              }
+            } else if (await chain.isCommitmentSeen(n.commitment)) {
+              notes.update(n.handle, { status: "unspent" });
+              refreshed.push(`${n.handle}: confirmed`);
+            } else if (await failed(n.createdTx)) {
+              // Its creating transaction reverted, so the note never existed.
+              notes.remove(n.handle);
+              refreshed.push(`${n.handle}: removed, its transaction reverted`);
+            }
+          } catch (e) {
+            refreshed.push(`${n.handle}: could not check (${errMsg(e)})`);
+          }
+        }
+      }
+      const all = notes.list().filter((n) => !network || n.network === network);
+      return text({
+        balances: balances(all),
+        notes: all.filter((n) => includeSpent || n.status !== "spent").map(noteView),
+        ...(refresh ? { refreshed } : {}),
+        ...(legacy ? { warning: LEGACY_WARNING } : {}),
+        secrets: "Kept encrypted inside this server. Pay with a handle; nobody needs the secret.",
+      });
+    }
+  );
+
+  async function ownReceiveKey(notes: NoteStore) {
+    return notes.receiveKey() ?? notes.keepReceiveKey(await generateReceiveKey());
+  }
+
+  server.registerTool(
+    "gloam_receive_tag",
+    {
+      title: "This server's receive tag",
+      description:
+        "The receive tag (gloamr1.…) others pay this server to. Payments sealed to it open only with the key this server keeps. Created on first use. Share it freely: it is a public key, not a secret.",
+    },
+    async () => {
+      const opened = openStore();
+      if (!opened.ok) return text({ status: "error", error: opened.error });
+      try {
+        const key = await ownReceiveKey(opened.store);
+        return text({ tag: key.tag, use: "Put this in payTo (gloam_payment_requirements does it for you when payTo is left out)." });
+      } catch (e) {
+        return text({ status: "error", error: errMsg(e) });
+      }
+    }
+  );
+
+  // ── x402 private agent payments ─────────────────────────────────────────────
+
+  server.registerTool(
+    "gloam_payment_requirements",
+    {
+      title: "Price a resource in private payments (x402)",
+      description:
+        "SERVER side. Build the HTTP 402 payment requirements an agent-paid resource returns, priced in a private Gloam settlement. This is the MCPay pattern (x402 + stablecoins) but the settlement is private: the amount and parties never go public. payTo defaults to this server's own receive tag. Returns the requirements object and its encoded form to put in a 402 response.",
+      inputSchema: {
+        amount: z.number().positive().describe("Price in the asset's display units, e.g. 0.25."),
+        decimals: z.number().int().min(0).max(36).default(18).describe("Decimals of the settlement asset."),
+        assetSymbol: z.string().default("ETH").describe("Asset label, e.g. USD on Tempo or ETH on Robinhood testnet."),
+        asset: z.string().optional().describe("Settlement token address; omit for the chain's native unit."),
+        payTo: z
+          .string()
+          .optional()
+          .describe("Payee receive tag (gloamr1.…). Omit to be paid to this server's own tag, which gloam_verify_payment can open."),
+        resource: z.string().describe("What is being paid for: a URL or an MCP tool id."),
+        network: z
+          .enum(["robinhood", "tempo"])
+          .default("robinhood")
+          .describe("Which Gloam network to settle on. Tempo is the stablecoin-payments chain (pay in PathUSD); Robinhood is the equities chain."),
+      },
+    },
+    async ({ amount, decimals, assetSymbol, asset, payTo, resource, network }) => {
+      if (asset !== undefined && !isAddress(asset)) {
+        return text({ status: "error", error: `"${asset}" is not a valid token address.` });
+      }
+      let tag = payTo?.trim();
+      if (!tag) {
+        const opened = openStore();
+        if (!opened.ok) return text({ status: "error", error: `payTo was left out and this server's receive tag is unavailable: ${opened.error}` });
+        try {
+          tag = (await ownReceiveKey(opened.store)).tag;
+        } catch (e) {
+          return text({ status: "error", error: errMsg(e) });
+        }
+      }
+      const net = GLOAM_NETWORKS[network];
+      try {
+        const req = buildGloamPaymentRequirements({
+          amountWei: parseUnits(String(amount), decimals),
+          asset: (asset as Address | undefined) ?? NATIVE_ASSET,
+          assetSymbol,
+          payTo: tag,
+          resource,
+          network: net.chainId,
+          poolAddress: net.pool,
+        });
+        return text({
+          requirements: req,
+          encoded: encodeRequirements(req),
+          httpHint:
+            "Return HTTP 402 with this requirements object; the agent retries with an X-PAYMENT header. Check it with gloam_verify_payment and serve only when it says grantAccess.",
+          notVsZone: GLOAM_VS_ZONE.oneLine,
+        });
+      } catch (e) {
+        return text({ status: "error", error: errMsg(e) });
+      }
+    }
+  );
+
+  server.registerTool(
+    "gloam_pay_x402",
+    {
+      title: "Plan a private payment for a 402 challenge",
+      description:
+        "AGENT side. Given a Gloam 402 challenge, describe the private payment the agent would make: a self-custodial private send of the required amount to the payee, sealed to the payee's receive tag, broadcast by this server (no operator or facilitator holds its key). Plans only; to pay, call gloam_execute_private_pay, or gloam_fetch_paid to do the whole request.",
+      inputSchema: {
+        requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or the raw JSON)."),
+        note: z.string().optional().describe("Handle of the note to pay from (gloam_list_notes), if you want a specific one."),
+      },
+    },
+    async ({ requirements, note }) => {
+      const req = parseRequirements(requirements);
+      if (!req) return text({ status: "error", error: "Could not parse requirements." });
+      const netForReq = Object.values(GLOAM_NETWORKS).find((n) => n.chainId === Number(req.network));
+      const tagOk = isReceiveTag(String(req.payTo ?? ""));
+      return text({
+        status: "plan",
+        intent: "private_pay_x402",
+        network: req.network,
+        pay: {
+          amountWei: req.maxAmountRequired,
+          asset: req.asset,
+          assetSymbol: req.assetSymbol,
+          payTo: req.payTo,
+          pool: req.poolAddress,
+        },
+        payTo: tagOk
+          ? "A receive tag: the payment note will be sealed so only the payee can open it."
+          : legacy
+            ? "Not a receive tag. With GLOAM_EXPOSE_NOTE_SECRETS=1 the note would go in the header unsealed, readable by anyone who sees it."
+            : "Not a receive tag, so this payment would be refused. Ask the payee for its gloamr1. tag.",
+        poolStatus: netForReq
+          ? `Live: pool ${netForReq.pool} on ${netForReq.label} (chain ${netForReq.chainId}).`
+          : `Unknown network ${req.network}.`,
+        execute:
+          "gloam_execute_private_pay({ requirements, note? }) pays and returns the X-PAYMENT header; gloam_fetch_paid({ url }) also makes the request and the retry.",
+        settlement:
+          "Self-custodial: this server signs and broadcasts the shielded transfer. Only the payee can open the payment note; the public sees only that a shielded transfer occurred.",
+        notVsZone: GLOAM_VS_ZONE,
+        sourceNote: note ?? "the smallest note that covers the amount",
+      });
+    }
+  );
+
+  type PayResult = { ok: false; result: Record<string, unknown> } | { ok: true; result: Record<string, unknown>; header: string };
+
+  /**
+   * Pay a 402 privately: pick or take a note by handle, pass the spend gate,
+   * prove, broadcast, and keep the change. Secrets stay in this function and the
+   * note store; the result carries handles and the sealed X-PAYMENT header.
+   */
+  async function payPrivately(
+    req: GloamPaymentRequirements,
+    opts: { handle?: string; issuerTag?: string; legacyNote?: { secret: string; amount: number; decimals?: number } }
+  ): Promise<PayResult> {
+    const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
+    if (req.scheme !== GLOAM_X402_SCHEME) return fail({ status: "error", error: `Not a Gloam private payment (scheme "${req.scheme}").` });
+    // The requirements name the network to settle on; use it for the signer,
+    // tree scan, and explorer so an agent can pay privately on Tempo or Robinhood.
+    const net = networkByChainId(Number(req.network)) ?? MCP_NETWORKS.robinhood;
+    let spend: Spend & { pool?: Address };
+    try {
+      spend = {
+        tool: "pay",
+        network: net.key,
+        chainId: net.chainId,
+        asset: ((req.asset as Address | undefined) ?? NATIVE_ASSET) as Address,
+        amountWei: BigInt(String(req.maxAmountRequired)),
+        recipient: String(req.payTo ?? ""),
+        pool: req.poolAddress as Address,
+      };
+    } catch {
+      return fail({ status: "error", error: "The requirements carry an amount that is not a whole number of base units." });
+    }
+    const sealed = isReceiveTag(String(req.payTo ?? ""));
+    if (!sealed && !legacy) {
+      return fail({
+        status: "refused",
+        code: "payto_not_receive_tag",
+        message: `payTo "${shortTag(String(req.payTo ?? ""))}" is not a Gloam receive tag (gloamr1.…). The payment note must be sealed to the payee so only the payee can open it. Ask the payee for its receive tag.`,
+      });
+    }
+    const signer = deps.signer(net);
+    if (!signer) {
+      return fail({
+        status: "no_signer",
+        plan: { action: "private_pay_x402", network: net.key, pay: req.maxAmountRequired, asset: req.asset, payTo: req.payTo, pool: req.poolAddress },
+        limits: previewSpend(spend, env),
+        message: NO_SIGNER,
+        notVsZone: GLOAM_VS_ZONE.oneLine,
+      });
+    }
+    const opened = openStore();
+    if (!opened.ok) return fail({ status: "error", error: opened.error });
+    const notes = opened.store;
+    const { symbol, decimals } = assetInfo(net.chainId, spend.asset);
+    const fits = (n: StoredNote): string | null => {
+      if (n.chainId !== net.chainId || n.pool.toLowerCase() !== String(req.poolAddress).toLowerCase()) {
+        return `Note ${n.handle} is on ${n.network}, in a different pool than this payment.`;
+      }
+      if (n.asset.toLowerCase() !== spend.asset.toLowerCase()) return `Note ${n.handle} holds ${n.symbol}, not ${symbol}.`;
+      if (BigInt(n.amountWei) < spend.amountWei) {
+        return `Note ${n.handle} holds ${formatUnits(BigInt(n.amountWei), n.decimals)} ${n.symbol}, less than the ${formatUnits(spend.amountWei, decimals)} asked.`;
+      }
+      return null;
+    };
+
+    // Which note pays: a legacy secret, a handle, or the smallest that covers it.
+    let input: { secret: Hex; amountWei: bigint; handle: string | null };
+    if (opts.legacyNote) {
+      const dec = opts.legacyNote.decimals ?? net.defaultAssetDecimals;
+      input = { secret: opts.legacyNote.secret as Hex, amountWei: parseUnits(String(opts.legacyNote.amount), dec), handle: null };
+    } else {
+      let chosen: StoredNote | undefined;
+      if (opts.handle) {
+        chosen = notes.get(opts.handle);
+        if (!chosen) return fail({ status: "error", error: `There is no note "${opts.handle}". Call gloam_list_notes.` });
+        if (chosen.status !== "unspent") return fail({ status: "error", error: `Note ${chosen.handle} is ${chosen.status}, not spendable.` });
+        const why = fits(chosen);
+        if (why) return fail({ status: "error", error: why });
+      } else {
+        chosen = notes
+          .list()
+          .filter((n) => n.status === "unspent" && fits(n) === null)
+          .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1))[0];
+        if (!chosen) {
+          return fail({
+            status: "error",
+            error: `No single private note on ${net.name} holds ${formatUnits(spend.amountWei, decimals)} ${symbol}. Shield more first (gloam_execute_shield). A payment spends one note; notes are not combined.`,
+            balances: balances(notes.list().filter((n) => n.chainId === net.chainId)),
+          });
+        }
+      }
+      input = { secret: chosen.secret, amountWei: BigInt(chosen.amountWei), handle: chosen.handle };
+    }
+
+    const gate = authorizeSpend(spend, env);
+    if (!gate.ok) return fail(gate.refusal);
+    if (input.handle) {
+      try {
+        notes.reserveForSpend(input.handle, fits);
+      } catch (e) {
+        settleSpend(gate, "failed", { reason: errMsg(e) });
+        return fail({ status: "error", error: errMsg(e) });
+      }
+    }
+    const release = () => input.handle && tryStore(() => notes.update(input.handle!, { status: "unspent" }));
+
+    let hash: Hex | undefined;
+    let change: StoredNote | undefined;
+    try {
+      const asset = spend.asset;
+      const commitment = fieldToHex(await noteCommitmentPoseidon(hexToField(input.secret), input.amountWei, asset));
+      const synced = await deps.syncTree(signer.publicClient, { pool: req.poolAddress as Address, fromBlock: net.deployBlock });
+      const path = await synced.pathForCommitment(commitment);
+      if (!path) {
+        settleSpend(gate, "failed", { reason: "note not in the pool tree" });
+        release();
+        return fail({ status: "error", error: "That note is not in the pool tree yet. Shield it first, or wait for the deposit to confirm." });
+      }
+      const payment = await buildGloamPayment({
+        requirements: req,
+        senderSecretHex: input.secret,
+        senderNoteAmountWei: input.amountWei,
+        path,
+        prove: await deps.transferProver(),
+        issuerTag: opts.issuerTag,
+        legacyUnsealed: legacy && !sealed,
+      });
+      if (BigInt(payment.changeNote.amountWei) > 0n) {
+        change = notes.add({
+          network: net.key,
+          chainId: net.chainId,
+          pool: req.poolAddress as Address,
+          asset,
+          symbol,
+          decimals,
+          amountWei: payment.changeNote.amountWei,
+          secret: payment.changeNote.secret,
+          commitment: payment.changeNote.commitment,
+          nullifier: payment.changeNote.nullifier,
+          status: "pending",
+          pending: "create",
+          origin: "change",
+          createdTx: null,
+          label: `change from paying ${req.resource}`,
+        });
+      }
+      // With the Gloam relay the agent's wallet never appears next to the
+      // payment (GLOAM_USE_RELAY=1, or GLOAM_RELAY_URL for a self-hosted relay).
+      const relay = relayUrl();
+      hash = relay
+        ? await deps.relay(payment.intent, { url: relay })
+        : await signer.walletClient.writeContract({
+            address: payment.intent.exec.poolAddress,
+            abi: POOL_TRANSFER_ABI,
+            functionName: "transfer",
+            args: transferCallArgs(payment.intent),
+          });
+      const sentHash = hash;
+      const storeWarnings = [
+        input.handle ? tryStore(() => notes.update(input.handle!, { spentTx: sentHash })) : undefined,
+        change ? tryStore(() => notes.update(change!.handle, { createdTx: sentHash })) : undefined,
+      ].filter(Boolean);
+      const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        settleSpend(gate, "reverted", { hash });
+        if (change) tryStore(() => notes.remove(change!.handle));
+        // A revert usually means nothing moved, unless the note was already spent elsewhere.
+        const nullifier = fieldToHex(await noteNullifierPoseidon(hexToField(input.secret), hexToField(commitment)));
+        const spentElsewhere = await sweepChain(signer.publicClient, net).isSpent(nullifier).catch(() => false);
+        if (spentElsewhere && input.handle) tryStore(() => notes.update(input.handle!, { status: "spent", spentTx: null }));
+        else release();
+        return fail({
+          status: "error",
+          error: spentElsewhere
+            ? `Transfer reverted (${hash}): that note was already spent by another transaction.`
+            : `Transfer reverted (${hash}). Nothing moved; the note is spendable again.`,
+        });
+      }
+      const logWarning = settleSpend(gate, "sent", { hash });
+      if (input.handle) storeWarnings.push(tryStore(() => notes.update(input.handle!, { status: "spent", spentTx: sentHash })));
+      let changeView = change ? noteView({ ...change, status: "unspent", createdTx: hash }) : null;
+      if (change) {
+        storeWarnings.push(
+          tryStore(() => {
+            const c = notes.update(change!.handle, { status: "unspent", createdTx: sentHash });
+            if (c) changeView = noteView(c);
+          })
+        );
+      }
+      payment.payload.payload.txHash = hash;
+      const header = encodePaymentHeader(payment.payload);
+      const noteWarning = storeWarnings.filter(Boolean).join(" ") || undefined;
+      return {
+        ok: true,
+        header,
+        result: {
+          status: "paid",
+          ...(logWarning ? { logWarning } : {}),
+          ...(noteWarning ? { noteWarning } : {}),
+          network: net.key,
+          submittedBy: relay ? "gloam-relay (agent wallet hidden)" : "agent wallet",
+          hash,
+          explorer: `${net.explorer}/tx/${hash}`,
+          paid: { amount: formatUnits(spend.amountWei, decimals), symbol, payTo: shortTag(String(req.payTo)), resource: req.resource },
+          sealedToPayee: payment.sealed,
+          spentNote: input.handle,
+          change: changeView,
+          ...(legacy
+            ? {
+                warning: LEGACY_WARNING,
+                paymentNote: { secret: payment.paymentNote.secret, commitment: payment.paymentNote.commitment, amountWei: payment.paymentNote.amountWei },
+                persistChangeNote: { secret: payment.changeNote.secret, amountWei: payment.changeNote.amountWei },
+              }
+            : {}),
+          privacy: "The public feed shows a shielded transfer, never the amount or the parties. Only the payee can open the payment note.",
+          notVsZone: GLOAM_VS_ZONE.oneLine,
+        },
+      };
+    } catch (err) {
+      const error = errMsg(err);
+      // Broadcast but unconfirmed still counts against the limit, to be safe.
+      settleSpend(gate, hash ? "unconfirmed" : "failed", { hash, reason: error });
+      if (!hash) {
+        release();
+        if (change) tryStore(() => notes.remove(change!.handle));
+      }
+      return fail({
+        status: "error",
+        error,
+        ...(hash ? { hash, check: "It was broadcast and may still land. Call gloam_list_notes with refresh before paying again." } : {}),
+      });
+    }
+  }
+
+  const PAY_SHAPE = {
+    requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or raw JSON)."),
+    note: z
+      .string()
+      .optional()
+      .describe("Handle of the note to pay from (gloam_list_notes). Omit to use the smallest note that covers the amount."),
+    issuerTag: z.string().optional().describe("Optional issuer tag to attach a compliance disclosure."),
+    noteSecret: z.string().optional().describe("LEGACY, UNSAFE: the 0x secret of a note held outside this server."),
+    noteAmount: z.number().positive().optional().describe("LEGACY: the full amount of that note in the asset's units."),
+    decimals: z.number().int().optional().describe("LEGACY: decimals of that note's asset; omit for the network default."),
+  };
+  const SAFE_PAY_SHAPE = { requirements: PAY_SHAPE.requirements, note: PAY_SHAPE.note, issuerTag: PAY_SHAPE.issuerTag };
+
+  server.registerTool(
+    "gloam_execute_private_pay",
+    {
+      title: "Execute a private payment (x402)",
+      description:
+        "AGENT side, REAL execution. Settle an x402 payment privately from a note this server holds: syncs the pool tree, builds the private send to the payee, seals the payment note to the payee's receive tag, generates the Groth16 transfer proof, and broadcasts transfer(). Self-custodial (this server's key signs; no operator holds funds). Returns the X-PAYMENT header to retry the request with, and the change as a note handle. payTo must be a receive tag. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+      // The legacy secret fields are only offered when GLOAM_EXPOSE_NOTE_SECRETS=1.
+      inputSchema: (legacy ? PAY_SHAPE : SAFE_PAY_SHAPE) as typeof PAY_SHAPE,
+    },
+    async ({ requirements, note, issuerTag, noteSecret, noteAmount, decimals }) => {
+      const req = parseRequirements(requirements);
+      if (!req) return text({ status: "error", error: "Could not parse requirements." });
+      if (legacy && noteSecret && noteAmount === undefined) {
+        return text({ status: "error", error: "noteSecret needs noteAmount (the note's full value)." });
+      }
+      const paid = await payPrivately(req, {
+        handle: note,
+        issuerTag,
+        legacyNote: legacy && noteSecret && noteAmount !== undefined ? { secret: noteSecret, amount: noteAmount, decimals } : undefined,
+      });
+      if (!paid.ok) return text(paid.result);
+      return text({
+        ...paid.result,
+        paymentHeader: paid.header,
+        next: "Retry the request with the header X-PAYMENT set to paymentHeader. The payee sweeps the payment before serving.",
+      });
+    }
+  );
+
+  /** Pull Gloam requirements out of a 402 response: a header, the body, or an x402 `accepts` list. */
+  function requirementsFrom402(headers: Headers, body: string): GloamPaymentRequirements | string {
+    for (const name of ["x-payment-required", "payment-required"]) {
+      const h = headers.get(name);
+      if (h?.trim().startsWith("gloamx402req1:")) return decodeRequirements(h.trim());
+    }
+    const t = body.trim();
+    if (t.startsWith("gloamx402req1:")) return decodeRequirements(t);
+    let json: unknown;
+    try {
+      json = JSON.parse(t);
+    } catch {
+      return "The 402 response carries no Gloam payment requirements.";
+    }
+    const o = json as Record<string, unknown>;
+    const candidates: unknown[] = [o, o.requirements, ...(Array.isArray(o.accepts) ? o.accepts : [])];
+    if (typeof o.encoded === "string" && o.encoded.startsWith("gloamx402req1:")) return decodeRequirements(o.encoded);
+    for (const c of candidates) {
+      if (c && typeof c === "object" && (c as GloamPaymentRequirements).scheme === GLOAM_X402_SCHEME) return c as GloamPaymentRequirements;
+    }
+    const offered = Array.isArray(o.accepts) ? o.accepts.map((a) => (a as { scheme?: string })?.scheme).filter(Boolean) : [];
+    return `The 402 response does not offer a Gloam private payment${offered.length ? ` (it offers: ${offered.join(", ")})` : ""}.`;
+  }
+
+  const BODY_LIMIT = 20_000;
+  async function readBody(res: Response) {
+    const raw = await res.text();
+    return {
+      httpStatus: res.status,
+      contentType: res.headers.get("content-type"),
+      body: raw.length > BODY_LIMIT ? `${raw.slice(0, BODY_LIMIT)}… (${raw.length - BODY_LIMIT} more characters)` : raw,
+    };
+  }
+
+  server.registerTool(
+    "gloam_fetch_paid",
+    {
+      title: "Fetch a paid resource (x402, paid privately)",
+      description:
+        "AGENT side, REAL execution. Request a URL; if it answers 402 with a Gloam private price, pay it privately from this server's notes (same limits as gloam_execute_private_pay), retry with the X-PAYMENT header, and return the response. The agent never handles a note secret or the payment header unless a retry is needed. Requires GLOAM_AGENT_PRIVATE_KEY to pay.",
+      inputSchema: {
+        url: z.string().url().describe("http(s) URL of the resource."),
+        method: z.enum(["GET", "POST"]).default("GET"),
+        body: z.string().optional().describe("Request body for POST."),
+        contentType: z.string().optional().describe("Content-Type for the body (default application/json)."),
+        note: z.string().optional().describe("Handle of the note to pay from; omit to use the smallest that covers the price."),
+        maxAmount: z.number().positive().optional().describe("Refuse if the 402 asks for more than this, in the asset's units."),
+        paymentHeader: z
+          .string()
+          .optional()
+          .describe("Present a payment already made (paymentHeader from an earlier result) instead of paying again."),
+      },
+    },
+    async ({ url, method, body, contentType, note, maxAmount, paymentHeader }) => {
+      if (!/^https?:\/\//i.test(url)) return text({ status: "error", error: "Only http and https URLs." });
+      const request = (xPayment?: string) =>
+        deps.fetch(url, {
+          method,
+          headers: {
+            ...(body !== undefined ? { "content-type": contentType ?? "application/json" } : {}),
+            ...(xPayment ? { "x-payment": xPayment } : {}),
+          },
+          body: method === "POST" ? body : undefined,
+          signal: AbortSignal.timeout(30_000),
+        });
+      let first: Response;
+      try {
+        first = await request(paymentHeader);
+      } catch (e) {
+        return text({ status: "error", error: `Request failed: ${errMsg(e)}` });
+      }
+      if (first.status !== 402) {
+        return text({ status: first.ok ? "ok" : "http_error", paid: false, ...(await readBody(first)) });
+      }
+      const firstBody = await first.text();
+      if (paymentHeader) {
+        return text({
+          status: "payment_not_accepted",
+          message: "The server still asks for payment. It may not have seen the transfer yet; wait a little and retry with the same paymentHeader. Do not pay again until you know it failed.",
+          httpStatus: 402,
+          body: firstBody.slice(0, BODY_LIMIT),
+        });
+      }
+      let req: GloamPaymentRequirements | string;
+      try {
+        req = requirementsFrom402(first.headers, firstBody);
+      } catch {
+        req = "The 402 response carries Gloam requirements that do not decode.";
+      }
+      if (typeof req === "string") return text({ status: "error", httpStatus: 402, error: req, body: firstBody.slice(0, 2000) });
+      if (maxAmount !== undefined) {
+        const { symbol, decimals } = assetInfo(Number(req.network), req.asset);
+        let asked: bigint;
+        try {
+          asked = BigInt(String(req.maxAmountRequired));
+        } catch {
+          return text({ status: "error", error: "The 402 asks for an amount that is not a whole number of base units." });
+        }
+        if (asked > parseUnits(String(maxAmount), decimals)) {
+          return text({
+            status: "refused",
+            code: "over_max_amount",
+            message: `The resource asks ${formatUnits(asked, decimals)} ${symbol}, more than your maxAmount of ${maxAmount}. Not paying.`,
+          });
+        }
+      }
+      const paid = await payPrivately(req, { handle: note });
+      if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
+      let second: Response;
+      try {
+        second = await request(paid.header);
+      } catch (e) {
+        return text({
+          ...paid.result,
+          status: "paid_not_served",
+          message: `Paid, but the retry failed (${errMsg(e)}). Call gloam_fetch_paid again with paymentHeader to present this payment without paying twice.`,
+          paymentHeader: paid.header,
+        });
+      }
+      const served = await readBody(second);
+      if (!second.ok) {
+        return text({
+          ...paid.result,
+          status: "paid_not_served",
+          message: "Paid, but the server did not serve the resource yet (it may still be confirming the payment). Retry with paymentHeader; do not pay again.",
+          paymentHeader: paid.header,
+          ...served,
+        });
+      }
+      return text({
+        ...paid.result,
+        status: "ok",
+        ...served,
+        paymentResponse: second.headers.get("x-payment-response"),
+      });
+    }
+  );
+
+  server.registerTool(
+    "gloam_verify_payment",
+    {
+      title: "Verify and settle a private payment (x402)",
+      description:
+        "SERVER side. Check a presented X-PAYMENT against its requirements and make it final: opens the payment note with this server's receive key, checks it binds the required amount and asset in the right pool, then sweeps it into a fresh note only this server knows and waits for that to confirm. Grant access only when the result says grantAccess: true. A payer creates the payment note, so without the sweep it could spend the money back after being served. Needs GLOAM_AGENT_PRIVATE_KEY or the relay (GLOAM_USE_RELAY=1) to sweep.",
+      inputSchema: {
+        requirements: z.string().describe("The requirements you issued: encoded, or raw JSON."),
+        payment: z.string().describe("The X-PAYMENT header value presented by the payer (or the raw JSON payload)."),
+      },
+    },
+    async ({ requirements, payment }) => {
+      const req = parseRequirements(requirements);
+      if (!req) return text({ status: "error", error: "Could not parse requirements." });
+      const pay = parsePayment(payment);
+      if (!pay?.payload?.paymentNote) return text({ status: "error", error: "Could not parse payment." });
+      const reject = (message: string, extra: Record<string, unknown> = {}) =>
+        text({ status: "rejected", grantAccess: false, final: false, message, ...extra });
+
+      const net = networkByChainId(Number(req.network));
+      if (!net || String(req.poolAddress).toLowerCase() !== net.pool.toLowerCase()) {
+        return reject(`These requirements name pool ${req.poolAddress} on chain ${req.network}, which is not a Gloam pool. Not settling there.`);
+      }
+      const opened = openStore();
+      if (!opened.ok) return text({ status: "error", grantAccess: false, error: opened.error });
+      const notes = opened.store;
+      const receiveKey = notes.receiveKey();
+      const sealed = isSealedTicket(pay.payload.paymentNote);
+      if (sealed && !receiveKey) return reject("This server has no receive tag yet, so a sealed payment cannot be for it.");
+      if (sealed && receiveKey && String(req.payTo).trim() !== receiveKey.tag) {
+        return reject("payTo in these requirements is not this server's receive tag, so this server cannot open the payment.");
+      }
+      let note: NoteExport;
+      try {
+        note = await openGloamPaymentNote(pay.payload.paymentNote, receiveKey ?? undefined);
+      } catch (e) {
+        return reject(`Could not open the payment note: ${errMsg(e)}`);
+      }
+      const verify = verifyGloamPayment({ requirements: req, payload: pay, note });
+      // Do not echo the commitment back: it names the leaf this server now owns.
+      const verifyView = { ok: verify.ok, reason: verify.reason, sealed: verify.sealed, amountWei: verify.amountWei, asset: verify.asset };
+      if (!verify.ok) return reject(verify.reason ?? "The payment did not verify.", { verify: verifyView });
+      // A structural pass alone would trust a lying payer; the amount must bind to the commitment.
+      if (!(await verifyPaymentNoteBinding(note))) return reject("The payment note's amount does not bind to its commitment.");
+      const paymentNullifier = fieldToHex(await noteNullifierPoseidon(hexToField(note.secret), hexToField(note.commitment)));
+      const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
+      if (earlier) {
+        return text({
+          status: "already_settled",
+          grantAccess: false,
+          final: false,
+          message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
+        });
+      }
+
+      const signer = deps.signer(net);
+      const relay = relayUrl();
+      const { symbol, decimals } = assetInfo(net.chainId, note.asset);
+      if (!signer && !relay) {
+        return text({
+          status: "verified_not_final",
+          grantAccess: false,
+          final: false,
+          finality: GLOAM_NOT_FINAL,
+          message: "The payment checks out but this server cannot sweep it: set GLOAM_AGENT_PRIVATE_KEY, or GLOAM_USE_RELAY=1 to sweep through the Gloam relay. Until it is swept, do not grant access.",
+          verify: verifyView,
+        });
+      }
+      const client = signer?.publicClient ?? deps.publicClient(net);
+      let held: StoredNote | undefined;
+      try {
+        const sweep = await sweepReceivedNote({
+          note,
+          poolAddress: net.pool,
+          chainId: net.chainId,
+          prove: await deps.transferProver(),
+          chain: sweepChain(client, net),
+          submit: (intent) =>
+            relay
+              ? deps.relay(intent, { url: relay })
+              : signer!.walletClient.writeContract({
+                  address: net.pool,
+                  abi: POOL_TRANSFER_ABI,
+                  functionName: "transfer",
+                  args: transferCallArgs(intent),
+                }),
+          // The fresh note's secret is the money: store it before the sweep is sent.
+          beforeSubmit: (fresh) => {
+            held = notes.add({
+              network: net.key,
+              chainId: net.chainId,
+              pool: net.pool,
+              asset: fresh.asset,
+              symbol,
+              decimals,
+              amountWei: fresh.amountWei,
+              secret: fresh.secret,
+              commitment: fresh.commitment,
+              nullifier: fresh.nullifier,
+              status: "pending",
+              pending: "create",
+              origin: "received",
+              createdTx: null,
+              sweptFrom: paymentNullifier,
+              label: req.resource,
+            });
+          },
+        });
+        if (sweep.status === "swept") {
+          let received = held ? noteView({ ...held, status: "unspent", createdTx: sweep.hash }) : null;
+          const noteWarning = held
+            ? tryStore(() => {
+                const r = notes.update(held!.handle, { status: "unspent", createdTx: sweep.hash });
+                if (r) received = noteView(r);
+              })
+            : undefined;
+          return text({
+            status: "settled",
+            grantAccess: true,
+            final: true,
+            ...(noteWarning ? { noteWarning } : {}),
+            message: "Paid and final: the payment now sits in a note only this server knows. Serve the resource.",
+            received,
+            amount: formatUnits(BigInt(note.amountWei), decimals),
+            symbol,
+            sealed,
+            sweptBy: relay ? "gloam-relay" : "server wallet",
+            hash: sweep.hash,
+            explorer: sweep.hash ? `${net.explorer}/tx/${sweep.hash}` : null,
+          });
+        }
+        if (sweep.status === "unconfirmed") {
+          if (held && sweep.hash) tryStore(() => notes.update(held!.handle, { createdTx: sweep.hash }));
+          return text({
+            status: "unconfirmed",
+            grantAccess: false,
+            final: false,
+            message: `${sweep.reason} Check with gloam_list_notes (refresh), then verify again.`,
+            hash: sweep.hash,
+          });
+        }
+        if (held) tryStore(() => notes.remove(held!.handle));
+        return text({
+          status: sweep.status,
+          grantAccess: false,
+          final: false,
+          message: sweep.reason,
+          ...(sweep.hash ? { hash: sweep.hash } : {}),
+        });
+      } catch (e) {
+        if (held) tryStore(() => notes.remove(held!.handle));
+        return text({ status: "error", grantAccess: false, final: false, error: errMsg(e) });
+      }
+    }
+  );
+
+  // ── spending limits ─────────────────────────────────────────────────────────
+
+  server.registerTool(
+    "gloam_get_limits",
+    {
+      title: "Spending limits",
+      description:
+        "This agent's spending limits as the owner set them: which money tools it may use, which assets, the cap per payment and per rolling 24 hours, allowed recipients, and when its permission expires. Check this before planning a payment. Limits are enforced by this MCP server (off-chain), not by the vault contract.",
+    },
+    async () => text(limitsReport(env))
+  );
+
+  server.registerTool(
+    "gloam_get_spending_report",
+    {
+      title: "Spending report",
+      description:
+        "What this agent has spent in the last 24 hours and how much is left under its daily limit, per asset, plus its most recent payments and any refused attempts. Read from the local spending log this server keeps.",
+      inputSchema: {
+        recent: z.number().int().min(1).max(50).default(10).describe("How many recent payments to list."),
+      },
+    },
+    async ({ recent }) => text(spendingReport(recent, env))
+  );
+
+  return server;
+}

@@ -24,8 +24,8 @@ function chainFor(net: McpNetwork) {
  * guardrails (spend limits, allowed contracts) so the agent never holds a raw
  * key. Tools return plans instead of executing when no signer is configured.
  */
-export function getSigner(net: McpNetwork = MCP_NETWORKS.robinhood) {
-  const pk = process.env.GLOAM_AGENT_PRIVATE_KEY;
+export function getSigner(net: McpNetwork = MCP_NETWORKS.robinhood, env: Record<string, string | undefined> = process.env) {
+  const pk = env.GLOAM_AGENT_PRIVATE_KEY;
   if (!pk) return null;
   const key = (pk.startsWith("0x") ? pk : `0x${pk}`) as `0x${string}`;
   const account = privateKeyToAccount(key);
@@ -36,4 +36,11 @@ export function getSigner(net: McpNetwork = MCP_NETWORKS.robinhood) {
     walletClient: createWalletClient({ account, chain, transport: http(net.rpc) }),
     publicClient: createPublicClient({ chain, transport: http(net.rpc) }),
   };
+}
+
+export type Signer = NonNullable<ReturnType<typeof getSigner>>;
+
+/** A read-only client for a network, for chain reads when this server has no signer (e.g. a payee that sweeps through the relay). */
+export function getPublicClient(net: McpNetwork = MCP_NETWORKS.robinhood) {
+  return createPublicClient({ chain: chainFor(net), transport: http(net.rpc) });
 }

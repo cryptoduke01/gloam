@@ -3,7 +3,8 @@
  * stablecoin payment end to end.
  *
  *   fund the agent (tempo_fundAddress) -> shield PathUSD -> settle a private
- *   x402 payment -> verify it -> print the change note.
+ *   x402 payment, sealed to the payee's receive tag -> the payee opens it and
+ *   sweeps it into a fresh note -> print the result.
  *
  * Everything is broadcast by the agent's own key. No operator, no sequencer, no
  * facilitator holds funds or can see the amounts. This is the "for agents" half
@@ -14,19 +15,26 @@
  *   (add GLOAM_RELAY_URL=http://localhost:3000/api/relay to settle through the relay)
  *
  * Optional env: AMOUNT (PathUSD to shield, default 10), PAY (to send, default 1),
- * PAYTO (payee receive tag, default a demo tag), SKIP_FUND=1 to skip the faucet.
+ * SKIP_FUND=1 to skip the faucet. The payee is a fresh receive key made in this
+ * process, so the demo can play both sides; the payee's sweep is signed by the
+ * same key (or the relay).
  */
 import { parseUnits, type Address, type Hex } from "viem";
 import {
   buildShieldBoundIntent,
   buildGloamPaymentRequirements,
   buildGloamPayment,
-  verifyGloamPayment,
+  generateReceiveKey,
+  settleGloamPayment,
+  sweepChainFromClient,
+  transferCallArgs,
+  POOL_TRANSFER_ABI,
   artifactProver,
   syncTree,
   TEMPO_PATHUSD,
   GLOAM_RELAY_URL,
   relayIntent,
+  type PrivateSendIntent,
 } from "@gloamtrade/sdk";
 import { MCP_NETWORKS } from "../src/networks.js";
 import { getSigner } from "../src/signer.js";
@@ -36,7 +44,6 @@ const net = MCP_NETWORKS.tempo;
 const DEC = 6; // PathUSD
 const SHIELD_AMT = process.env.AMOUNT ?? "10";
 const PAY_AMT = process.env.PAY ?? "1";
-const PAYTO = process.env.PAYTO ?? "gloam:demo-payee";
 
 const erc20Abi = [
   {
@@ -61,21 +68,6 @@ const shieldPoolAbi = [
       { name: "amount", type: "uint256" },
       { name: "commitment", type: "bytes32" },
       { name: "proof", type: "bytes" },
-    ],
-    outputs: [],
-  },
-] as const;
-
-const transferAbi = [
-  {
-    type: "function",
-    name: "transfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "proof", type: "bytes" },
-      { name: "root", type: "bytes32" },
-      { name: "nullifier", type: "bytes32" },
-      { name: "newCommitments", type: "bytes32[2]" },
     ],
     outputs: [],
   },
@@ -109,13 +101,13 @@ async function main() {
   console.log(`Network: ${net.name} (chain ${net.chainId}), pool ${net.pool}\n`);
 
   if (!process.env.SKIP_FUND) {
-    console.log("1/5  Funding the agent via tempo_fundAddress...");
+    console.log("1/6  Funding the agent via tempo_fundAddress...");
     const txs = await fundTempo(agent);
     console.log(`     funded (${txs.length} txs)\n`);
     await new Promise((r) => setTimeout(r, 2500));
   }
 
-  console.log(`2/5  Shielding ${SHIELD_AMT} PathUSD (approve -> shieldBound)...`);
+  console.log(`2/6  Shielding ${SHIELD_AMT} PathUSD (approve -> shieldBound)...`);
   const shieldWei = parseUnits(SHIELD_AMT, DEC);
   const sArt = await shieldArtifacts();
   const shield = await buildShieldBoundIntent({
@@ -142,19 +134,20 @@ async function main() {
   console.log(`     shielded. tx ${net.explorer}/tx/${shieldHash}`);
   console.log(`     note commitment ${shield.note.commitment}\n`);
 
-  console.log(`3/5  Building the x402 payment requirement (${PAY_AMT} PathUSD to ${PAYTO})...`);
+  const payee = await generateReceiveKey();
+  console.log(`3/6  Building the x402 payment requirement (${PAY_AMT} PathUSD to the payee's receive tag)...`);
   const req = buildGloamPaymentRequirements({
     amountWei: parseUnits(PAY_AMT, DEC),
     asset,
     assetSymbol: "PathUSD",
-    payTo: PAYTO,
+    payTo: payee.tag,
     resource: "demo:agent-tempo",
     network: net.chainId,
     poolAddress: net.pool,
   });
   console.log("     requirement built\n");
 
-  console.log("4/5  Settling privately (sync tree -> prove transfer -> broadcast)...");
+  console.log("4/6  Paying privately (sync tree -> prove transfer -> broadcast)...");
   const synced = await syncTree(signer.publicClient, {
     pool: net.pool,
     fromBlock: net.deployBlock,
@@ -173,14 +166,16 @@ async function main() {
   // submits the payment, so the agent's wallet never appears next to it.
   const relayUrl =
     process.env.GLOAM_RELAY_URL?.trim() || (process.env.GLOAM_USE_RELAY === "1" ? GLOAM_RELAY_URL : "");
-  const payHash = relayUrl
-    ? await relayIntent(payment.intent, { url: relayUrl })
-    : await signer.walletClient.writeContract({
-        address: payment.intent.exec.poolAddress,
-        abi: transferAbi,
-        functionName: "transfer",
-        args: payment.intent.exec.args as readonly [Hex, Hex, Hex, readonly [Hex, Hex]],
-      });
+  const submit = (intent: PrivateSendIntent): Promise<Hex> =>
+    relayUrl
+      ? relayIntent(intent, { url: relayUrl })
+      : signer.walletClient.writeContract({
+          address: intent.exec.poolAddress,
+          abi: POOL_TRANSFER_ABI,
+          functionName: "transfer",
+          args: transferCallArgs(intent),
+        });
+  const payHash = await submit(payment.intent);
   const receipt = await signer.publicClient.waitForTransactionReceipt({ hash: payHash });
   if (receipt.status !== "success") throw new Error(`transfer reverted (${payHash})`);
   if (relayUrl) {
@@ -188,15 +183,27 @@ async function main() {
     console.log(`     submitted by the Gloam relay ${receipt.from} (agent wallet hidden: ${hidden})`);
   }
   payment.payload.payload.txHash = payHash;
-  console.log(`     settled. tx ${net.explorer}/tx/${payHash}\n`);
+  console.log(`     paid. tx ${net.explorer}/tx/${payHash}`);
+  console.log(`     payment note sealed to the payee: ${payment.sealed}\n`);
 
-  console.log("5/5  Verifying the payment...");
-  const verify = verifyGloamPayment({ requirements: req, payload: payment.payload });
-  console.log(`     verified: ${verify.ok}`);
-  console.log(`     payee note (opens to ${PAY_AMT} PathUSD): ${payment.paymentNote.commitment}`);
+  console.log("5/6  Payee: open the payment, verify it, sweep it into a fresh note...");
+  const settled = await settleGloamPayment({
+    requirements: req,
+    payload: payment.payload,
+    receiveKey: payee,
+    prove: artifactProver(tArt),
+    chain: sweepChainFromClient(signer.publicClient, { pool: net.pool, fromBlock: net.deployBlock }),
+    submit,
+  });
+  if (!settled.grantAccess) throw new Error(`payee did not settle: ${settled.status} (${settled.reason})`);
+  console.log(`     swept. tx ${net.explorer}/tx/${settled.sweep?.hash}`);
+  console.log(`     final: ${settled.final}. The payer can no longer spend this payment back.\n`);
+
+  console.log("6/6  Result");
+  console.log(`     payee holds ${PAY_AMT} PathUSD in a note only it knows (${settled.freshNote?.commitment})`);
   console.log(`     agent change note (remaining balance): ${payment.changeNote.amountWei} base units`);
   console.log(
-    "\nDone. The public feed shows two shielded transactions and nothing else: not the amount, not the parties. Only the payee can open the payment note.\n"
+    "\nDone. The public feed shows three shielded transactions and nothing else: not the amount, not the parties. Only the payee could open the payment note, and it moved the money before serving.\n"
   );
 }
 

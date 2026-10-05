@@ -8,9 +8,9 @@
  * moved). Pending, sent and unconfirmed count against the limit; refusals are
  * logged too, so the owner can see what an agent tried.
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { Address } from "viem";
+import { withFileLock } from "./fileLock.js";
 import { DAY_MS, type CountedSpend, type SpendTool } from "./policy.js";
 
 export type SpendStatus = "pending" | "sent" | "unconfirmed" | "reverted" | "failed" | "refused";
@@ -44,39 +44,12 @@ type LogFile = { version: 1; entries: SpendEntry[] };
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 const KEEP_MAX = 2000;
 
-const sleeper = new Int32Array(new SharedArrayBuffer(4));
-function pause(ms: number) {
-  Atomics.wait(sleeper, 0, 0, ms);
-}
-
 export class SpendLog {
   constructor(readonly path: string) {}
 
   /** Run fn while holding an exclusive lock file next to the log (also across server processes). */
   private locked<T>(fn: () => T): T {
-    const lock = `${this.path}.lock`;
-    mkdirSync(dirname(this.path), { recursive: true });
-    for (let i = 0; ; i++) {
-      try {
-        closeSync(openSync(lock, "wx"));
-        break;
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-        // A lock left by a crashed process is cleared after 10 seconds.
-        try {
-          if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { force: true });
-        } catch {
-          /* it went away */
-        }
-        if (i > 200) throw new Error(`The spending log is locked (${lock}). Try again.`);
-        pause(15);
-      }
-    }
-    try {
-      return fn();
-    } finally {
-      rmSync(lock, { force: true });
-    }
+    return withFileLock(this.path, "spending log", fn);
   }
 
   read(): SpendEntry[] {
