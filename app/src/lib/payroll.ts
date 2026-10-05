@@ -17,13 +17,21 @@
  * Crash safety: before a payment is submitted, its change note and the batch
  * row are persisted. On resume a row that was mid-flight is reconciled against
  * the pool's `spent` map, so a refresh can never lose or double-pay money.
+ *
+ * Proving the total: each row also keeps the payee note's secret and the
+ * opening of the note it spent (sealed at rest with the batch, like claim
+ * links), so a finished run can later prove "paid exactly T to N people"
+ * (lib/proofs, payroll_total). Runs paid before that was kept cannot, unless
+ * every payee was a claim link and the spent notes are still on this device.
  */
 import type { Address, Hex, PublicClient } from "viem";
+import { fieldToHex, noteCommitmentPoseidon, noteNullifierPoseidon, randomSecretField } from "@gloamtrade/sdk";
 import { buildTransferWitness } from "@/lib/proverTransfer";
 import { fieldToBytes32, proveTransferInBrowser } from "@/lib/proveClient";
 import { syncShieldTree, type SyncedTree } from "@/lib/treeSync";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
-import { buildNotePackage, encodeNotePackage } from "@/lib/notePackage";
+import { buildNotePackage, decodeNotePackage, encodeNotePackage } from "@/lib/notePackage";
+import type { PayrollNote } from "@/lib/proofs";
 import { encryptTicketForTag, isReceiveTag } from "@/lib/receiveTag";
 import { ticketToMemoBytes } from "@/lib/payMemo";
 import { cleanPaymentNote } from "@/lib/paymentNote";
@@ -76,6 +84,12 @@ export type PayrollRow = {
   ticket?: string;
   txHash?: Hex;
   memoPosted?: boolean;
+  // kept for the payroll total proof (sealed with the batch, never exported)
+  /** The secret of the note this row paid them (the payer creates it). */
+  paymentSecret?: Hex;
+  /** The opening of the payer's note this row spent: its spend marker is spendNullifier. */
+  spendSecret?: Hex;
+  spendAmount?: string;
 };
 
 export type PayrollBatch = {
@@ -473,6 +487,9 @@ function discardPending(row: PayrollRow) {
   row.paymentCommitment = undefined;
   row.ticket = undefined;
   row.txHash = undefined;
+  row.paymentSecret = undefined;
+  row.spendSecret = undefined;
+  row.spendAmount = undefined;
 }
 
 async function payRow(
@@ -552,6 +569,9 @@ async function payRow(
       row.changeNoteId = changeNoteId;
       row.paymentCommitment = fieldToBytes32(w.publicInputs.newCommitment0);
       row.ticket = ticket;
+      row.paymentSecret = w.paymentNote.secret;
+      row.spendSecret = note.secret;
+      row.spendAmount = note.amountWei;
       row.status = "sending";
       await emit();
 
@@ -622,4 +642,81 @@ async function notify(batch: PayrollBatch, row: PayrollRow, deps: PayrollEngineD
     // The money already landed; they can still claim with the payment code.
     row.memoPosted = false;
   }
+}
+
+// ------------------------------------------------------------------ total proof
+
+/** Why a run's total cannot be proven yet, in plain words. */
+const OLD_RUN =
+  "This run was paid with an older version of Gloam that did not keep what a total proof needs, so it cannot be proven. Runs paid from now on can.";
+
+/**
+ * Every paid payment of a run with what its total proof needs, in run order.
+ * New runs keep it on each row; older runs can still be proven when every
+ * payee was a claim link (the code holds the payee's secret) and the notes
+ * they spent are still on this device. Failed rows paid nothing and are left out.
+ */
+export async function payrollProofNotes(
+  batch: PayrollBatch
+): Promise<{ notes: PayrollNote[]; failed: number } | { blocker: string }> {
+  if (batch.status !== "done") return { blocker: "Finish the run first. A total can only be proven once every payment is settled." };
+  const paid = batch.rows.filter((r) => r.status === "paid");
+  if (!paid.length) return { blocker: "Nobody was paid in this run, so there is no total to prove." };
+  const local = typeof window === "undefined" ? [] : loadLocalNotes(batch.employer);
+  const notes: PayrollNote[] = [];
+  for (const r of paid) {
+    if (!r.paymentCommitment || !r.spendNullifier) return { blocker: OLD_RUN };
+    let secret = r.paymentSecret;
+    if (!secret && r.kind === "link" && r.ticket) {
+      try {
+        const pack = await decodeNotePackage(r.ticket);
+        if (pack.commitment.toLowerCase() === r.paymentCommitment.toLowerCase()) secret = pack.secret;
+      } catch {
+        /* not a plain claim code */
+      }
+    }
+    const spent = r.spendSecret ? null : local.find((n) => n.id === r.spendNoteId);
+    const spendSecret = r.spendSecret ?? spent?.secret;
+    const spendAmount = r.spendAmount ?? spent?.amountWei;
+    if (!secret || !spendSecret || !spendAmount) return { blocker: OLD_RUN };
+    notes.push({
+      secret,
+      amount: BigInt(r.amount),
+      commitment: r.paymentCommitment,
+      spendSecret,
+      spendAmount: BigInt(spendAmount),
+      nullifier: r.spendNullifier,
+      txHash: r.txHash ?? null,
+    });
+  }
+  return { notes, failed: batch.rows.filter((r) => r.status === "failed").length };
+}
+
+/**
+ * Recording demo: a simulated run makes no notes, so each paid row gets the
+ * records a real run keeps (made-up keys, real Poseidon openings). A total
+ * proof built from them is a demo proof, which only a demo tab on this device
+ * accepts (lib/demo/proof).
+ */
+export async function withDemoProofRecords(batch: PayrollBatch): Promise<PayrollBatch> {
+  const rows = await Promise.all(
+    batch.rows.map(async (r) => {
+      if (r.status !== "paid" || r.paymentSecret) return r;
+      const amount = BigInt(r.amount);
+      const secret = await randomSecretField();
+      const spendSecret = await randomSecretField();
+      const spendAmount = amount * 4n;
+      const commitment = await noteCommitmentPoseidon(secret, amount, batch.asset);
+      const spent = await noteCommitmentPoseidon(spendSecret, spendAmount, batch.asset);
+      return {
+        ...r,
+        paymentCommitment: fieldToHex(commitment),
+        spendNullifier: fieldToHex(await noteNullifierPoseidon(spendSecret, spent)),
+        paymentSecret: fieldToHex(secret),
+        spendSecret: fieldToHex(spendSecret),
+        spendAmount: spendAmount.toString(),
+      };
+    })
+  );
+  return { ...batch, rows };
 }

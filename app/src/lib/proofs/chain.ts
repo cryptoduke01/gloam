@@ -6,6 +6,8 @@
  */
 import { createPublicClient, http, parseEventLogs, type Address, type Hex, type PublicClient } from "viem";
 import { getNetwork, NETWORK_KEYS, type GloamNetwork } from "@/lib/networks";
+import { classifyPaymentLogs, type PaymentLookup, type PoolEventLog } from "./payrollCheck";
+import type { PayrollPayment } from "./types";
 
 const POOL_ABI = [
   {
@@ -187,6 +189,64 @@ export async function findNoteTx(
         return found(client, hit, hit.transactionHash, hit.blockNumber);
       }
     }
+  }
+  return { state: "not-found" };
+}
+
+/**
+ * One payroll payment on chain: the transaction must hold the pool's
+ * Transferred(nullifier, [commitment, change]). With a tx hash that receipt is
+ * read; without one, Transferred events are looked up by the spend marker (an
+ * indexed topic) over the same bounded range as findNoteTx. `blockTimes` lets a
+ * whole run share one block lookup per block.
+ */
+export async function findPayrollPayment(
+  client: PublicClient,
+  net: GloamNetwork,
+  pool: Address,
+  pay: PayrollPayment,
+  blockTimes: Map<bigint, Promise<number>> = new Map()
+): Promise<PaymentLookup> {
+  const timeOf = (blockNumber: bigint) => {
+    let t = blockTimes.get(blockNumber);
+    if (!t) {
+      t = client.getBlock({ blockNumber }).then((b) => Number(b.timestamp));
+      blockTimes.set(blockNumber, t);
+    }
+    return t;
+  };
+  const judge = async (logs: PoolEventLog[], txHash: Hex, blockNumber: bigint): Promise<PaymentLookup> => {
+    const v = classifyPaymentLogs(logs, pool, pay.commitment, pay.nullifier);
+    if (v === "found") return { state: "found", txHash, paidAt: await timeOf(blockNumber) };
+    if (v === "deposit" || v === "trade") return { state: "wrong-origin", origin: v };
+    return { state: v };
+  };
+
+  if (pay.txHash) {
+    const receipt = await client.getTransactionReceipt({ hash: pay.txHash }).catch(() => null);
+    if (!receipt) return { state: "not-found" };
+    if (receipt.status !== "success") return { state: "mismatch" };
+    const logs = parseEventLogs({ abi: NOTE_EVENTS, logs: receipt.logs }) as unknown as PoolEventLog[];
+    return judge(logs, pay.txHash, receipt.blockNumber);
+  }
+
+  const latest = await client.getBlockNumber();
+  const floor = net.deployBlock ?? 0n;
+  const range = net.logRange;
+  for (let end = latest, n = 0; end >= floor && n < MAX_SCAN_CHUNKS; end -= range, n++) {
+    const start = end - range + 1n > floor ? end - range + 1n : floor;
+    const logs = await client.getLogs({
+      address: pool,
+      event: NOTE_EVENTS[1],
+      args: { nullifier: pay.nullifier },
+      fromBlock: start,
+      toBlock: end,
+    });
+    const hit = logs[0];
+    if (hit?.transactionHash && hit.blockNumber != null) {
+      return judge(logs as unknown as PoolEventLog[], hit.transactionHash, hit.blockNumber);
+    }
+    if (start === floor) break;
   }
   return { state: "not-found" };
 }

@@ -3,7 +3,7 @@ import { demoFundTempo } from "./demo/chain";
 
 /**
  * Tempo Moderato testnet faucet. Tempo funds an address (native USD + the test
- * stablecoins PathUSD / AlphaUSD / BetaUSD / ThetaUSD) through a single RPC
+ * stablecoins OUSD / PathUSD / AlphaUSD / BetaUSD / ThetaUSD) through a single RPC
  * method, `tempo_fundAddress`, rather than a web faucet. This lets the app claim
  * funds for the connected wallet directly, so a fresh wallet actually holds the
  * stablecoins it needs to shield and pay with.

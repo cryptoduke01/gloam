@@ -48,6 +48,8 @@ import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { fieldToBytes32, proveUnshieldInBrowser } from "@/lib/proveClient";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
+import { screenWallets } from "@/lib/screeningClient";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
@@ -536,6 +538,11 @@ export function VaultTradePanel({
     // need gas in wallet for proofs + txs
     if (ethBal && ethBal.value < 50_000_000_000_000n) {
       setError("Keep a little ETH in your open wallet for gas.");
+      return;
+    }
+    // The trade cashes out to this wallet and deposits back from it.
+    if (!(await screenWallets([address])).allowed) {
+      setError(SCREEN_BLOCKED_MESSAGE);
       return;
     }
 

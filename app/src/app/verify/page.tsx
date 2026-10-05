@@ -24,6 +24,7 @@ import {
 import { ProofVerdict, amountOf, symbolOf } from "@/components/verify/ProofVerdict";
 import { clientFor, commitmentSeen, networkForChain } from "@/lib/proofs/chain";
 import { getNetwork, type GloamNetwork } from "@/lib/networks";
+import { track } from "@/lib/track";
 
 type Result =
   | { kind: "idle" }
@@ -238,7 +239,7 @@ export default function VerifyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per proof in the link
   }, [urlProof]);
 
-  /** Proof of funds and proof of payment: decode, then every check in lib/proofs. */
+  /** Proof of funds, payment and payroll total: decode, then every check in lib/proofs. */
   async function onVerifyProof(text: string) {
     setResult({ kind: "checking", step: "Reading the proof" });
     let p: AnyProof;
@@ -259,13 +260,15 @@ export default function VerifyPage() {
       setResult({ kind: "checking", step: "Checking it against the vault" });
       const r = await verifyProof(p);
       setResult({ kind: "proof", p, r, at: Math.floor(Date.now() / 1000) });
+      // Which kind and whether it held, never the proof or who it was for.
+      track("proof_verified", { kind: p.kind, ok: r.ok });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       setResult({
         kind: "bad",
         title: "Could not check this proof",
         reason: /not built yet/i.test(msg)
-          ? "This version of the verifier cannot check proofs of funds or payment yet. Try again after the next update."
+          ? "This version of the verifier cannot check this kind of proof yet. Try again after the next update."
           : msg || "Something went wrong while checking. Try again in a moment.",
       });
     }
@@ -287,6 +290,7 @@ export default function VerifyPage() {
       const proofOk = await verifyDisclosureProof(d);
       if (!proofOk) {
         setResult({ kind: "bad", reason: "The proof did not verify." });
+        track("proof_verified", { kind: "balance", ok: false });
         return;
       }
 
@@ -313,6 +317,7 @@ export default function VerifyPage() {
       } catch {
         onchain = null;
       }
+      track("proof_verified", { kind: "balance", ok: onchain === true });
       if (onchain !== true) {
         setResult({
           kind: "bad",
@@ -398,9 +403,9 @@ export default function VerifyPage() {
               <h2 className="t-display-l max-w-[12ch]">Verify a proof</h2>
               <p className="mt-5 max-w-[46ch] text-[16px] leading-relaxed text-mute">
                 Someone sent you a Gloam proof. Paste it here to check it: an
-                exact balance, a minimum they hold, or a payment they received.
-                You see only what they chose to prove, and nothing about who they
-                are or what else they hold.
+                exact balance, a minimum they hold, a payment they received, or
+                the total a payroll run paid. You see only what they chose to
+                prove, and nothing about who they are or what else they hold.
               </p>
               <ul className="mt-10 divide-y divide-line border-y border-line text-[15px]">
                 <li className="flex justify-between gap-6 py-4">
@@ -448,7 +453,7 @@ export default function VerifyPage() {
                 />
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[12.5px] text-faint">
-                    Starts with gloamfunds1:, gloampay1: or gloamdisc1:
+                    Starts with gloamfunds1:, gloampay1:, gloamroll1: or gloamdisc1:
                   </p>
                   <button
                     type="button"

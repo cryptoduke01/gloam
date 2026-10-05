@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useDisconnect } from "wagmi";
 import { walletParamsForChain } from "@/lib/chain";
 import { exitDemo, useAppAccount } from "@/lib/demo";
@@ -23,6 +23,17 @@ import {
   assertUnshieldArtifacts,
 } from "@/lib/circuitArtifacts";
 import { resetOnboarding } from "@/lib/onboarding";
+import { lockVault } from "@/lib/noteVault";
+import {
+  NO_PRF_MESSAGE,
+  PasskeyError,
+  confirmWithPasskey,
+  passkeySupport,
+  protectWithPasskey,
+  removePasskey,
+  useVaultStatus,
+  type PasskeySupport,
+} from "@/lib/passkey";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { ThemeSegmented } from "@/components/ThemeToggle";
 import { WalletMenu } from "./WalletMenu";
@@ -32,11 +43,13 @@ import { VaultHealth } from "./VaultHealth";
 /* ------------------------------------------------------------ primitives */
 
 function Card({
+  id,
   title,
   description,
   children,
   flush = false,
 }: {
+  id?: string;
   title: string;
   description?: ReactNode;
   children: ReactNode;
@@ -44,7 +57,7 @@ function Card({
   flush?: boolean;
 }) {
   return (
-    <section className="gl-card">
+    <section id={id} className="gl-card scroll-mt-24">
       <header className="max-sm:px-5 max-sm:pt-5 sm:px-6 sm:pt-6">
         <h2 className="text-[17px] text-foreground">{title}</h2>
         {description && (
@@ -169,6 +182,130 @@ function Status({ children }: { children: ReactNode }) {
   );
 }
 
+/* ------------------------------------------------------------ passkey */
+
+function passkeyMessage(e: unknown, fallback: string): string {
+  return e instanceof PasskeyError ? e.message : fallback;
+}
+
+/** Passkey lock: protect, lock now, remove. Off in the recording demo. */
+function PasskeyCard({ demo }: { demo: boolean }) {
+  const vault = useVaultStatus();
+  const [support, setSupport] = useState<PasskeySupport | null>(null);
+  const [busy, setBusy] = useState<"create" | "remove" | "lock" | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void passkeySupport().then((s) => {
+      if (live) setSupport(s);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function create() {
+    setBusy("create");
+    setMsg(null);
+    try {
+      await protectWithPasskey();
+      setMsg("Locked with your passkey. Gloam asks for it each time the app opens.");
+    } catch (e) {
+      setMsg(passkeyMessage(e, "Could not set up the passkey. Nothing changed."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    setBusy("remove");
+    setMsg(null);
+    try {
+      await removePasskey();
+      setMsg(
+        "Passkey lock removed. Your balance stays encrypted with this browser's device key. You can delete the passkey itself in your password manager."
+      );
+    } catch (e) {
+      setMsg(passkeyMessage(e, "Could not remove the passkey. Nothing changed."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card
+      title="Passkey lock"
+      description="Lock your private balance on this browser with Face ID, Touch ID, or a security key. Gloam asks for it each time the app opens."
+      flush
+    >
+      {demo ? (
+        <Row label="Passkey lock" hint="Off in the demo." />
+      ) : vault.protected ? (
+        <>
+          <Row
+            label={
+              <span className="inline-flex items-center gap-2">
+                Passkey lock
+                <StatusPill tone="lime" dot>
+                  On
+                </StatusPill>
+              </span>
+            }
+            hint="Unlocked in this tab. Lock it now when you step away."
+          >
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => {
+                setBusy("lock");
+                void lockVault();
+              }}
+              className="btn btn-ghost btn-sm h-10"
+            >
+              {busy === "lock" ? "Locking…" : "Lock now"}
+            </button>
+          </Row>
+          <Row
+            label="Remove passkey"
+            hint="Asks for your passkey, then goes back to this browser's device key."
+          >
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={remove}
+              className="btn btn-quiet btn-sm h-10 text-mute"
+            >
+              {busy === "remove" ? "Waiting for your passkey…" : "Remove passkey"}
+            </button>
+          </Row>
+        </>
+      ) : support === "no" ? (
+        <Row label="Passkey lock" hint={NO_PRF_MESSAGE} />
+      ) : (
+        <Row
+          label="Protect with a passkey"
+          hint="Save a backup first. If you lose the passkey, only a backup brings your balance back."
+        >
+          <button
+            type="button"
+            disabled={busy !== null || support === null}
+            onClick={create}
+            className="btn btn-ink btn-sm h-10"
+          >
+            {busy === "create" ? "Waiting for your passkey…" : "Protect with a passkey"}
+          </button>
+        </Row>
+      )}
+      {msg && (
+        <div className="py-4">
+          <Status>{msg}</Status>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ------------------------------------------------------------ view */
 
 export function SettingsView() {
@@ -184,6 +321,24 @@ export function SettingsView() {
   const [backupPass, setBackupPass] = useState("");
   const [integrityMsg, setIntegrityMsg] = useState<string | null>(null);
   const [integrityBusy, setIntegrityBusy] = useState(false);
+  const vault = useVaultStatus();
+  const exportOkUntil = useRef(0);
+
+  /**
+   * A backup holds spend keys: with a passkey lock on, exporting asks for it.
+   * One confirmation covers a minute of copy and download.
+   */
+  async function passkeyAllowsExport(): Promise<boolean> {
+    if (!vault.protected || Date.now() < exportOkUntil.current) return true;
+    try {
+      await confirmWithPasskey();
+      exportOkUntil.current = Date.now() + 60_000;
+      return true;
+    } catch (e) {
+      setBackupMsg(passkeyMessage(e, "Could not check your passkey. Nothing was exported."));
+      return false;
+    }
+  }
 
   useEffect(() => {
     if (!copied) return;
@@ -380,8 +535,11 @@ export function SettingsView() {
         </Row>
       </Card>
 
+      <PasskeyCard demo={demo} />
+
       {/* Vault note backup, secrets leave this browser only when you export */}
       <Card
+        id="backup"
         title="Backup"
         description="Your private balances live in this browser. Export a backup before you clear site data, and add a passphrase so a stolen file can't be spent."
       >
@@ -395,6 +553,12 @@ export function SettingsView() {
             recover it, including us.
           </span>
         </div>
+        <p className="mt-4 max-w-[62ch] text-[13px] leading-relaxed text-mute">
+          A backup holds your balances themselves, not this browser&apos;s key or
+          your passkey. To restore it on any browser you need only the backup,
+          plus its passphrase if you set one.
+          {vault.protected && " With the passkey lock on, exporting asks for your passkey."}
+        </p>
 
         <label htmlFor="backup-pass" className="mt-5 block text-[13px] text-mute">
           Backup passphrase <span className="text-faint">(recommended)</span>
@@ -420,11 +584,16 @@ export function SettingsView() {
                   setBackupMsg("No private balances to export.");
                   return;
                 }
+                if (!(await passkeyAllowsExport())) return;
                 const json = JSON.stringify(backup, null, 2);
                 const text = backupPass.trim()
                   ? await sealWithPassphrase(json, backupPass)
                   : json;
-                await navigator.clipboard.writeText(text);
+                await navigator.clipboard.writeText(text).catch((err) => {
+                  // Some browsers drop the click after a passkey prompt.
+                  if (vault.protected) throw new Error("Passkey confirmed. Press Copy backup again to copy it.");
+                  throw err;
+                });
                 setBackupMsg(
                   backupPass.trim()
                     ? `Copied a locked backup (${backup.notes.length} balance(s)).`
@@ -447,6 +616,7 @@ export function SettingsView() {
               setBackupMsg(null);
               try {
                 const backup = exportNotesBackup(address);
+                if (backup.notes.length && !(await passkeyAllowsExport())) return;
                 const json = JSON.stringify(backup, null, 2);
                 const text = backupPass.trim()
                   ? await sealWithPassphrase(json, backupPass)

@@ -12,7 +12,9 @@ import {
 import { Logo } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
 import { shortAddress } from "@/lib/chain";
-import { useNetwork } from "../app/NetworkProvider";
+import { getNetwork, isNetworkKey } from "@/lib/networks";
+import type { DayRow, NetworkMetrics, OnchainMetrics } from "@/lib/onchainMetrics";
+import type { DailyCounters, StoredEvent } from "@/lib/tractionStore";
 
 type MetricsPayload = {
   ok: boolean;
@@ -23,67 +25,88 @@ type MetricsPayload = {
     opensAt: string;
     opensAtMs: number;
   };
-  onchain?: {
-    error?: string;
-    pool?: string | null;
-    chainId?: number;
-    asOf?: string;
-    latestBlock?: string;
-    notes?: string;
-    shields?: number;
-    transfers?: number;
-    unshields?: number;
-    sealedSwaps?: number;
-    uniqueShielders?: number;
-    uniqueUnshieldTos?: number;
-    shieldVolumeEth?: string;
-    unshieldVolumeEth?: string;
-    shieldVolumeByAsset?: {
-      asset: string;
-      symbol: string;
-      amount: string;
-      count: number;
-    }[];
-    unshieldVolumeByAsset?: {
-      asset: string;
-      symbol: string;
-      amount: string;
-      count: number;
-    }[];
-    poolBalances?: { asset: string; symbol: string; deposited: string }[];
-    topShielders?: { address: string; shields: number; volumeEth: string }[];
-    recentTxs?: {
-      kind: string;
-      txHash: string;
-      blockNumber: string;
-      detail: string;
-      from?: string;
-    }[];
-  };
+  onchain?: OnchainMetrics | { error: string };
   product?: {
     backend: "redis" | "memory";
     totalEvents: number;
     counters: Record<string, number>;
-    recent: {
-      t: string;
-      path: string | null;
-      ref: string | null;
-      meta: Record<string, unknown> | null;
-      ts: number;
-    }[];
+    dims?: Record<string, number>;
+    daily?: DailyCounters[];
+    recent: StoredEvent[];
   };
   error?: string;
 };
 
+type Tab = "overview" | "users" | "events";
+
+/** Events added for proofs, the public ledger, requests and notes; shown first in the breakdowns. */
+const NEW_EVENTS = [
+  "proof_created",
+  "proof_create_failed",
+  "verify_page_view",
+  "transparency_view",
+  "transparency_tab",
+  "payment_request_created",
+  "payment_request_opened",
+  "payment_request_paid",
+  "private_note_added",
+];
+
+/** Payroll events come from the payroll flow; the first name present is the one counted. */
+const PAYROLL_KEYS = ["payroll_run_finished", "payroll_run_success", "payroll_run_paid", "payroll_run", "payroll_run_submit", "payroll_paid"];
+
+const KIND_LABEL: Record<string, string> = {
+  deposit: "Deposit",
+  transfer: "Private transfer",
+  cashout: "Cash-out",
+  trade: "Private trade",
+};
+
+const usdFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+function fmtUsd(n: number | null | undefined): string {
+  if (n == null) return "Not priced";
+  if (n > 0 && n < 0.01) return "<$0.01";
+  return usdFmt.format(n);
+}
+
+function fmtWhen(ts: number | null | undefined): string {
+  if (!ts) return "None yet";
+  return new Date(ts * 1000).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fmtDay(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function fmtAge(sec: number): string {
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+  return `${Math.round(sec / 3600)}h ago`;
+}
+
+function n(v: number | undefined): string {
+  return (v ?? 0).toLocaleString("en-US");
+}
+
 export function AdminDashboard() {
-  const { network } = useNetwork();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [code, setCode] = useState("");
   const [loginErr, setLoginErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [data, setData] = useState<MetricsPayload | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<"overview" | "users" | "events">("overview");
+  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>("overview");
 
   const checkSession = useCallback(async () => {
     try {
@@ -111,10 +134,11 @@ export function AdminDashboard() {
     }
   }, []);
 
-  const loadMetrics = useCallback(async () => {
+  const loadMetrics = useCallback(async (fresh = false) => {
     setLoadErr(null);
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/metrics", { credentials: "include" });
+      const res = await fetch(`/api/admin/metrics${fresh ? "?fresh=1" : ""}`, { credentials: "include" });
       if (res.status === 401) {
         setAuthed(false);
         setData(null);
@@ -135,6 +159,8 @@ export function AdminDashboard() {
       // Keep dashboard shell if session was already true
       setLoadErr(e instanceof Error ? e.message : "Network error loading metrics");
       setAuthed((prev) => (prev === null ? false : prev));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -189,45 +215,64 @@ export function AdminDashboard() {
   }
 
   // Hooks must run every render (before any early return), React #310
-  const oc =
-    data?.onchain && !("error" in data.onchain && data.onchain.error)
-      ? data.onchain
-      : null;
-  const ocError =
-    data?.onchain && "error" in data.onchain ? data.onchain.error : null;
+  const oc = data?.onchain && "networks" in data.onchain ? data.onchain : null;
+  const ocError = data?.onchain && !("networks" in data.onchain) ? data.onchain.error : null;
   const product = data?.product;
+  const counters = useMemo(() => product?.counters ?? {}, [product?.counters]);
 
-  const funnelBars = useMemo(() => {
-    const counters = product?.counters ?? {};
-    const keys = [
-      "testnet_gate_view",
-      "testnet_open",
-      "app_view",
-      "wallet_connect",
-      "shield_success",
-      "private_send_submit",
-      "private_pay_success",
-      "unshield_success",
-      "pageview",
+  const funnel = useMemo(() => {
+    const payrollKey = PAYROLL_KEYS.find((k) => counters[k] != null) ?? PAYROLL_KEYS[0];
+    const steps = [
+      { k: "App views", v: counters.app_view ?? 0, sub: "app_view" },
+      { k: "Wallet connects", v: counters.wallet_connect ?? 0, sub: "wallet_connect" },
+      {
+        k: "First deposits",
+        v: oc?.combined.depositors ?? 0,
+        sub: "unique depositor wallets, on-chain",
+      },
+      {
+        k: "Private sends and payments",
+        v: counters.private_send_submit ?? 0,
+        sub: `private_send_submit, ${n(oc?.combined.transfers)} landed on-chain`,
+      },
+      { k: "Proofs created", v: counters.proof_created ?? 0, sub: "proof_created" },
+      { k: "Payroll runs", v: counters[payrollKey] ?? 0, sub: payrollKey },
     ];
-    const rows = keys
-      .map((k) => ({ k, v: counters[k] ?? 0 }))
-      .filter((r) => r.v > 0 || counters[r.k] != null);
-    const max = Math.max(1, ...rows.map((r) => r.v));
-    return rows.map((r) => ({ ...r, pct: (r.v / max) * 100 }));
-  }, [product?.counters]);
+    const max = Math.max(1, ...steps.map((s) => s.v));
+    return steps.map((s) => ({ ...s, pct: (s.v / max) * 100 }));
+  }, [counters, oc]);
 
-  const activityBars = useMemo(() => {
-    if (!oc) return [];
-    const rows = [
-      { k: "Shields", v: oc.shields ?? 0 },
-      { k: "Transfers", v: oc.transfers ?? 0 },
-      { k: "Unshields", v: oc.unshields ?? 0 },
-      { k: "Sealed", v: oc.sealedSwaps ?? 0 },
-    ];
-    const max = Math.max(1, ...rows.map((r) => r.v));
-    return rows.map((r) => ({ ...r, pct: (r.v / max) * 100 }));
-  }, [oc]);
+  const days = useMemo(() => {
+    const eventsByDay = new Map((product?.daily ?? []).map((d) => [d.day, d.counters]));
+    const chain = oc?.combined.daily ?? [];
+    const allDays = chain.length ? chain.map((d) => d.day) : (product?.daily ?? []).map((d) => d.day);
+    const byDay = new Map<string, DayRow>(chain.map((d) => [d.day, d]));
+    return allDays
+      .map((day) => ({ day, chain: byDay.get(day) ?? null, ev: eventsByDay.get(day) ?? {} }))
+      .reverse();
+  }, [oc, product?.daily]);
+
+  const breakdowns = useMemo(() => {
+    const groups = new Map<string, { field: string; value: string; v: number }[]>();
+    for (const [key, v] of Object.entries(product?.dims ?? {})) {
+      const [event, pair] = key.split("|");
+      if (!event || !pair) continue;
+      const [field, value] = pair.split("=");
+      const list = groups.get(event) ?? [];
+      list.push({ field, value: value ?? "", v });
+      groups.set(event, list);
+    }
+    const rank = (e: string) => {
+      const i = NEW_EVENTS.indexOf(e);
+      return i === -1 ? NEW_EVENTS.length : i;
+    };
+    return [...groups.entries()]
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
+      .map(([event, list]) => ({
+        event,
+        list: list.sort((a, b) => a.field.localeCompare(b.field) || b.v - a.v),
+      }));
+  }, [product?.dims]);
 
   if (authed === null) {
     return (
@@ -308,6 +353,12 @@ export function AdminDashboard() {
     );
   }
 
+  const nets = oc?.networks ?? [];
+  const byNetwork = (f: (m: NetworkMetrics) => ReactNode, total: ReactNode): ReactNode[] => [
+    ...nets.map((m) => f(m)),
+    total,
+  ];
+
   return (
     <div className="gloam-app min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-20 border-b border-line bg-background/85 backdrop-blur-xl">
@@ -324,10 +375,11 @@ export function AdminDashboard() {
             </span>
             <button
               type="button"
-              onClick={() => void loadMetrics()}
+              onClick={() => void loadMetrics(true)}
+              disabled={loading}
               className="btn btn-ghost btn-sm"
             >
-              Refresh
+              {loading ? "Reading…" : "Refresh"}
             </button>
             <button
               type="button"
@@ -345,7 +397,7 @@ export function AdminDashboard() {
           <div>
             <h1 className="t-display-m">Traction</h1>
             <p className="mt-2 text-[14px] text-mute">
-              On-chain activity and the product funnel, in one place.
+              On-chain activity on Robinhood Chain and Tempo, and the product funnel, in one place.
             </p>
           </div>
           {/* Tabs */}
@@ -385,27 +437,59 @@ export function AdminDashboard() {
           </p>
         )}
 
+        {!data && !loadErr && (
+          <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
+            <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+            Reading both chains. The first read after a deploy can take half a minute.
+          </p>
+        )}
+
+        {ocError && (
+          <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
+            On-chain: {ocError}
+          </p>
+        )}
+
+        {nets
+          .filter((m) => m.error || m.catchingUp)
+          .map((m) => (
+            <p
+              key={m.key}
+              className={`rounded-xl px-4 py-3 text-[14px] ${
+                m.error ? "bg-danger-soft text-danger" : "bg-warn-soft text-warn"
+              }`}
+            >
+              {m.error
+                ? `${m.label}: the last read failed (${m.error}). Showing what was read before.`
+                : `${m.label}: still reading its history, up to block ${m.scannedTo} of ${m.latestBlock}. The next refresh continues.`}
+            </p>
+          ))}
+
         {tab === "overview" && (
           <>
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Kpi
-                label="Unique shielders"
-                value={String(oc?.uniqueShielders ?? 0)}
-                sub="on-chain"
+                label="Depositor wallets"
+                value={n(oc?.combined.depositors)}
+                sub="both networks, on-chain"
               />
               <Kpi
-                label="Shield volume"
-                value={`${oc?.shieldVolumeEth ?? "0"} ETH`}
-                sub="native only"
+                label="Held in the vaults"
+                value={fmtUsd(oc?.combined.heldUsd ?? 0)}
+                sub={
+                  oc?.combined.unpriced.length
+                    ? `plus ${oc.combined.unpriced.length} unpriced`
+                    : "priced holdings"
+                }
               />
               <Kpi
-                label="Private sends"
-                value={String(oc?.transfers ?? 0)}
-                sub="Transferred events"
+                label="Private transfers"
+                value={n(oc?.combined.transfers)}
+                sub="both networks, on-chain"
               />
               <Kpi
                 label="Product events"
-                value={String(product?.totalEvents ?? 0)}
+                value={n(product?.totalEvents)}
                 sub={product?.backend ?? "unknown"}
               />
             </section>
@@ -421,126 +505,185 @@ export function AdminDashboard() {
                 }
               />
               <Kpi
-                label="Note slots"
-                value={String(oc?.notes ?? 0)}
-                sub={`block ${oc?.latestBlock ?? "unknown"}`}
+                label="Last activity"
+                value={fmtWhen(oc?.combined.lastActivity)}
+                sub={`first ${fmtWhen(oc?.combined.firstActivity)}`}
               />
               <Kpi
-                label="Unshield vol"
-                value={`${oc?.unshieldVolumeEth ?? "0"} ETH`}
-                sub={`${oc?.unshields ?? 0} exits`}
+                label="Chain read"
+                value={oc ? fmtAge(oc.ageSec) : "Not yet"}
+                sub={oc ? `${oc.source === "fresh" ? "just read" : `cached in ${oc.source}`}` : "waiting"}
               />
             </section>
 
-            {ocError && (
-              <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
-                On-chain: {ocError}
+            <Panel title="By network">
+              <DataTable
+                headers={["", ...nets.map((m) => m.label), "Total"]}
+                rows={[
+                  ["Deposits", ...byNetwork((m) => n(m.deposits), n(oc?.combined.deposits))],
+                  ["Private transfers", ...byNetwork((m) => n(m.transfers), n(oc?.combined.transfers))],
+                  ["Cash-outs", ...byNetwork((m) => n(m.cashouts), n(oc?.combined.cashouts))],
+                  ["Private trades", ...byNetwork((m) => n(m.trades), n(oc?.combined.trades))],
+                  ["Payment messages", ...byNetwork((m) => n(m.memos), n(oc?.combined.memos))],
+                  ["Depositor wallets", ...byNetwork((m) => n(m.depositors), n(oc?.combined.depositors))],
+                  ["Active wallets", ...byNetwork((m) => n(m.activeWallets), n(oc?.combined.activeWallets))],
+                  ["Held (priced)", ...byNetwork((m) => fmtUsd(m.heldUsd), fmtUsd(oc?.combined.heldUsd ?? 0))],
+                  ["First activity", ...byNetwork((m) => fmtWhen(m.firstActivity), fmtWhen(oc?.combined.firstActivity))],
+                  ["Last activity", ...byNetwork((m) => fmtWhen(m.lastActivity), fmtWhen(oc?.combined.lastActivity))],
+                  ["Vault since", ...byNetwork((m) => fmtWhen(m.vaultSince), "")],
+                  [
+                    "Vault",
+                    ...byNetwork(
+                      (m) => (
+                        <a
+                          key="v"
+                          href={getNetwork(m.key).explorerAddress(m.pool)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-mute transition-colors hover:text-foreground"
+                        >
+                          {shortAddress(m.pool, 4)} <span aria-hidden>↗</span>
+                        </a>
+                      ),
+                      ""
+                    ),
+                  ],
+                  ["Read to block", ...byNetwork((m) => `#${m.scannedTo}`, "")],
+                ]}
+                empty="No on-chain figures yet"
+              />
+              <p className="mt-4 text-[13px] leading-relaxed text-mute">
+                Current vaults only. Active wallets deposited or received a cash-out;
+                transfers and trades carry no wallet. Totals count a wallet used on both
+                networks once.
               </p>
-            )}
+            </Panel>
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <Panel title="On-chain activity">
-                <BarChart rows={activityBars} />
+              <Panel title="Funnel">
+                <BarChart rows={funnel} />
+                <p className="mt-5 text-[13px] leading-relaxed text-mute">
+                  Event counts, not unique people, except first deposits, which are unique
+                  wallets read from the chain. Recording demo sessions are not counted.
+                </p>
               </Panel>
-              <Panel title="Product funnel">
-                {funnelBars.length === 0 ? (
-                  <p className="text-[14px] text-mute">No product events yet</p>
-                ) : (
-                  <BarChart rows={funnelBars.map((r) => ({ k: r.k, v: r.v, pct: r.pct }))} />
-                )}
+              <Panel title="Last 14 days">
+                <DataTable
+                  headers={["Day", "Active wallets", "Deposits", "Transfers", "Cash-outs", "App views", "Connects", "Proofs"]}
+                  rows={days.map((d) => [
+                    fmtDay(d.day),
+                    n(d.chain?.activeWallets),
+                    n(d.chain?.deposits),
+                    n(d.chain?.transfers),
+                    n(d.chain?.cashouts),
+                    n(d.ev.app_view),
+                    n(d.ev.wallet_connect),
+                    n(d.ev.proof_created),
+                  ])}
+                  empty="No days yet"
+                  minWidth={620}
+                />
+                <p className="mt-4 text-[13px] leading-relaxed text-mute">
+                  UTC days. Active wallets deposited or received a cash-out that day, on either
+                  network.
+                </p>
               </Panel>
             </div>
 
-            {(oc?.poolBalances?.length ?? 0) > 0 && (
-              <Panel title="Pool balances (deposited)">
-                <DataTable
-                  headers={["Asset", "Amount"]}
-                  rows={(oc?.poolBalances ?? []).map((r) => [
-                    r.symbol,
-                    r.deposited,
-                  ])}
-                />
-              </Panel>
-            )}
-
-            <Panel
-              title="Recent txs"
-              action={
-                oc?.pool ? (
-                  <a
-                    href={network.explorerAddress(oc.pool)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
-                  >
-                    Pool <span aria-hidden>↗</span>
-                  </a>
-                ) : null
-              }
-            >
+            <Panel title="Held by asset">
               <DataTable
-                headers={["Kind", "Detail", "Address", "Tx", "Block"]}
-                rows={(oc?.recentTxs ?? []).map((tx) => [
-                  tx.kind,
-                  tx.detail,
-                  tx.from ? (
+                headers={["Network", "Asset", "Held now", "USD", "Deposited", "Cashed out"]}
+                rows={nets.flatMap((m) =>
+                  m.assets.map((a) => [
+                    m.label,
+                    a.symbol,
+                    a.held ?? "Unknown",
+                    fmtUsd(a.heldUsd),
+                    `${a.deposited} (${a.depositCount})`,
+                    `${a.cashedOut} (${a.cashoutCount})`,
+                  ])
+                )}
+                empty="Nothing held or moved yet"
+              />
+              <p className="mt-4 text-[13px] leading-relaxed text-mute">
+                Stablecoins count as $1. ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "is not priced right now"};
+                stock tokens at live equity marks{oc?.prices.stocks === "live" ? "" : ", not available right now"}.
+                Counts in brackets.
+              </p>
+            </Panel>
+
+            <Panel title="Recent on-chain activity">
+              <DataTable
+                headers={["Network", "Kind", "Detail", "Wallet", "Tx", "When"]}
+                rows={(oc?.recent ?? []).map((tx) => {
+                  const net = getNetwork(isNetworkKey(tx.network) ? tx.network : "robinhood");
+                  return [
+                    net.label,
+                    KIND_LABEL[tx.kind] ?? tx.kind,
+                    tx.detail,
+                    tx.wallet ? (
+                      <a
+                        key="a"
+                        href={net.explorerAddress(tx.wallet)}
+                        className="text-mute transition-colors hover:text-foreground"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {shortAddress(tx.wallet, 4)}
+                      </a>
+                    ) : (
+                      <span key="a" className="text-faint">
+                        Private
+                      </span>
+                    ),
                     <a
-                      key="a"
-                      href={network.explorerAddress(tx.from)}
+                      key="t"
+                      href={net.explorerTx(tx.tx)}
                       className="text-mute transition-colors hover:text-foreground"
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {shortAddress(tx.from, 4)}
-                    </a>
-                  ) : (
-                    <span key="a" className="text-faint">
-                      Not shown
-                    </span>
-                  ),
-                  <a
-                    key="t"
-                    href={network.explorerTx(tx.txHash)}
-                    className="text-mute transition-colors hover:text-foreground"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {tx.txHash.slice(0, 10)}…
-                  </a>,
-                  `#${tx.blockNumber}`,
-                ])}
-                empty="No on-chain events yet"
+                      {tx.tx.slice(0, 10)}…
+                    </a>,
+                    tx.ts ? fmtWhen(tx.ts) : `#${tx.block}`,
+                  ];
+                })}
+                empty="No on-chain activity yet"
               />
             </Panel>
           </>
         )}
 
         {tab === "users" && (
-          <Panel title="Shielders (by activity)">
+          <Panel title="Depositors (by activity)">
             <p className="mb-4 text-[14px] text-mute">
-              Unique addresses that called shield. Volume ETH is native
-              deposits only (not stock tokens).
+              Unique wallets that deposited into a current vault, per network. A wallet used
+              on both networks shows twice.
             </p>
             <DataTable
-              headers={["#", "Address", "Shields", "ETH vol", "Explorer"]}
-              rows={(oc?.topShielders ?? []).map((u, i) => [
-                String(i + 1),
-                <span key="addr" className="text-[13px] text-foreground">
-                  {u.address}
-                </span>,
-                String(u.shields),
-                u.volumeEth,
-                <a
-                  key="ex"
-                  href={network.explorerAddress(u.address)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground"
-                >
-                  View
-                </a>,
-              ])}
-              empty="No shielders yet"
+              headers={["#", "Network", "Address", "Deposits", "Last deposit", "Explorer"]}
+              rows={nets
+                .flatMap((m) => m.topDepositors.map((u) => ({ ...u, key: m.key, label: m.label })))
+                .sort((a, b) => b.deposits - a.deposits || b.lastTs - a.lastTs)
+                .map((u, i) => [
+                  String(i + 1),
+                  u.label,
+                  <span key="addr" className="text-[13px] text-foreground">
+                    {u.address}
+                  </span>,
+                  n(u.deposits),
+                  fmtWhen(u.lastTs),
+                  <a
+                    key="ex"
+                    href={getNetwork(u.key).explorerAddress(u.address)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground"
+                  >
+                    View
+                  </a>,
+                ])}
+              empty="No depositors yet"
             />
           </Panel>
         )}
@@ -548,21 +691,42 @@ export function AdminDashboard() {
         {tab === "events" && (
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {Object.entries(product?.counters ?? {})
+              {Object.entries(counters)
                 .filter(([k]) => k !== "total")
                 .sort((a, b) => b[1] - a[1])
                 .map(([k, v]) => (
-                  <Kpi key={k} label={k} value={String(v)} sub="count" />
+                  <Kpi key={k} label={k} value={n(v)} sub={NEW_EVENTS.includes(k) ? "count, new" : "count"} />
                 ))}
             </div>
+            <Panel title="Breakdowns">
+              <p className="mb-4 text-[14px] text-mute">
+                Kinds, networks and yes or no fields only. Events never carry amounts, names,
+                addresses, labels, notes or proofs.
+              </p>
+              <DataTable
+                headers={["Event", "Field", "Value", "Count"]}
+                rows={breakdowns.flatMap((g) =>
+                  g.list.map((r) => [
+                    <span key="e" className="text-foreground">
+                      {g.event}
+                    </span>,
+                    r.field,
+                    dimValue(r.field, r.value),
+                    n(r.v),
+                  ])
+                )}
+                empty="No breakdowns yet. They fill in as new events arrive."
+              />
+            </Panel>
             <Panel title="Event stream">
               <DataTable
-                headers={["Event", "Path", "Time"]}
+                headers={["Event", "Path", "Details", "Time"]}
                 rows={(product?.recent ?? []).map((ev) => [
                   <span key="t" className="text-foreground">
                     {ev.t}
                   </span>,
                   ev.path ?? "None",
+                  metaText(ev.meta),
                   new Date(ev.ts).toLocaleString(),
                 ])}
                 empty="No product events, open /app to generate traffic"
@@ -592,6 +756,24 @@ export function AdminDashboard() {
       </main>
     </div>
   );
+}
+
+/** Chain ids read as network names in the breakdowns. */
+function dimValue(field: string, value: string): string {
+  if (field === "chainId") {
+    const net = [getNetwork("robinhood"), getNetwork("tempo")].find((x) => String(x.chainId) === value);
+    return net ? `${net.label} (${value})` : value;
+  }
+  if (field === "network" && isNetworkKey(value)) return getNetwork(value).label;
+  return value;
+}
+
+function metaText(meta: Record<string, unknown> | null): string {
+  if (!meta) return "None";
+  const parts = Object.entries(meta)
+    .filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => `${k} ${String(v)}`);
+  return parts.length ? parts.join(", ").slice(0, 80) : "None";
 }
 
 function Kpi({
@@ -637,7 +819,7 @@ function Panel({
 function BarChart({
   rows,
 }: {
-  rows: { k: string; v: number; pct: number }[];
+  rows: { k: string; v: number; pct: number; sub?: string }[];
 }) {
   if (rows.length === 0) {
     return <p className="text-[14px] text-mute">No data</p>;
@@ -647,8 +829,11 @@ function BarChart({
       {rows.map((r) => (
         <li key={r.k}>
           <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
-            <span className="truncate text-mute">{r.k}</span>
-            <span className="tnum shrink-0 text-foreground">{r.v}</span>
+            <span className="min-w-0 truncate text-mute">
+              {r.k}
+              {r.sub && <span className="ml-2 text-[12px] text-faint">{r.sub}</span>}
+            </span>
+            <span className="tnum shrink-0 text-foreground">{r.v.toLocaleString("en-US")}</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface">
             <div
@@ -666,21 +851,23 @@ function DataTable({
   headers,
   rows,
   empty,
+  minWidth = 480,
 }: {
   headers: string[];
   rows: ReactNode[][];
   empty?: string;
+  minWidth?: number;
 }) {
   if (rows.length === 0) {
     return <p className="text-[14px] text-mute">{empty ?? "No rows"}</p>;
   }
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
-      <table className="tnum w-full min-w-[480px] text-left text-[14px]">
+      <table className="tnum w-full text-left text-[14px]" style={{ minWidth }}>
         <thead className="border-b border-line bg-surface">
           <tr>
-            {headers.map((h) => (
-              <th key={h} className="t-label px-4 py-3 font-medium">
+            {headers.map((h, i) => (
+              <th key={`${h}-${i}`} className="t-label px-4 py-3 font-medium">
                 {h}
               </th>
             ))}

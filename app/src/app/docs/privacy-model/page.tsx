@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
+import { SCREEN_LIST_INFO } from "@/lib/screening";
 
 export const metadata: Metadata = {
   title: "What stays private",
@@ -127,6 +128,81 @@ export default function DocsPrivacyPage() {
         else does. Where a regulated asset needs oversight, compliance visibility
         is opt-in per payment through an issuer-scoped disclosure, never a
         standing view handed to an operator.
+      </p>
+
+      <h2 id="security">Security and compliance</h2>
+      <h3>Passkey lock (optional)</h3>
+      <p>
+        Your notes are encrypted at rest in this browser under a device key. In{" "}
+        <Link href="/app/settings">Settings</Link> you can protect that key with
+        a passkey: Face ID, Touch ID or a security key. Gloam asks
+        the passkey for a secret only it can produce (the WebAuthn PRF
+        extension), uses it to wrap the key, and stores only the wrapped copy.
+        Each time you open the app, the passkey unlocks it. There is no server
+        or account behind this, and removing the passkey asks for it first.
+      </p>
+      <p>
+        Backups are separate. A backup holds your balances themselves, so
+        restoring one needs only the backup, plus its passphrase if you set one,
+        on any browser. It never needs the passkey. If you lose the passkey, a
+        backup is the only way back. Browsers or passkeys without PRF support
+        keep the device key, unchanged.
+      </p>
+      <h3>Sanctions screening</h3>
+      <p>
+        Before a deposit, and before the relay submits a cash out, Gloam checks
+        the public addresses involved against the OFAC list of sanctioned digital
+        currency addresses: the wallet that deposits, and the address a cash out
+        pays. Nothing private is screened. Notes, receive tags, amounts and
+        private sends are never looked at.
+      </p>
+      <ul>
+        <li>
+          <strong>Against what:</strong> a snapshot of the EVM addresses in the{" "}
+          <a href={SCREEN_LIST_INFO.source} target="_blank" rel="noreferrer">
+            0xB10C OFAC list
+          </a>
+          , built from the OFAC SDN list. It ships with the app with its source
+          commit and date (snapshot of {SCREEN_LIST_INFO.snapshotDate},{" "}
+          {SCREEN_LIST_INFO.count} addresses) and is refreshed by a script, so it
+          can lag the official list until the next refresh.
+        </li>
+        <li>
+          <strong>When:</strong> in the app before your wallet signs a deposit,
+          on the server at <code>/api/screen</code>, and inside the relay before
+          it checks or sends anything.
+        </li>
+        <li>
+          <strong>What you see:</strong> a blocked wallet gets one neutral
+          message, &quot;This wallet can&apos;t use Gloam.&quot;, and nothing
+          more.
+        </li>
+        <li>
+          <strong>Optional:</strong> an operator can add the Chainalysis free
+          sanctions API by setting <code>CHAINALYSIS_API_KEY</code> on the server.
+        </li>
+      </ul>
+      <p>
+        Screening lives in the app and the relay, not in the vault contract, which
+        stays permissionless.
+      </p>
+      <h3>No admin withdraw</h3>
+      <p>
+        Nobody, including the Gloam team, can move pooled funds. The vault has no
+        withdraw function for its owner: money leaves only through a cash out
+        that carries a valid proof.
+      </p>
+      <h3>Timelock on rule changes</h3>
+      <p>
+        After setup, every change to how proofs, rates or prices are checked is
+        queued on-chain and can only take effect three days later, in public.
+      </p>
+      <h3>Relay limits</h3>
+      <p>
+        The relay submits only the vault&apos;s private send and cash out and the
+        payment message board. It dry-runs every payment first, cannot change a
+        cash out&apos;s recipient or amount (both are bound in the proof), and
+        rate limits each device and each network.
       </p>
 
       <h2>Before mainnet</h2>

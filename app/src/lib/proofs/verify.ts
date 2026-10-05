@@ -1,6 +1,6 @@
 /**
- * Checking a proof of funds or payment, the way the /verify page shows it: one
- * plain-language line per check, in order. Nothing here trusts the proof's plain
+ * Checking a proof of funds, payment or payroll total, the way the /verify page
+ * shows it: one plain-language line per check, in order. Nothing here trusts the proof's plain
  * fields on their own; each is matched against the proof's public signals, and
  * the signals against the snark, the context and the chain.
  *
@@ -12,8 +12,17 @@ import { FIELD_PRIME, fieldToHex, proofContext, readFundsSignals, readReceiptSig
 import type { Hex } from "viem";
 import { demoHolderChecks, isDemoProof } from "@/lib/demo/proof";
 import { verificationKey } from "./artifacts";
-import { clientFor, commitmentSeen, findNoteTx, isKnownRoot, isSpent, networkForChain } from "./chain";
-import type { AnyProof, CheckState, FundsProof, PaymentProof, VerifyResult } from "./types";
+import {
+  clientFor,
+  commitmentSeen,
+  findNoteTx,
+  findPayrollPayment,
+  isKnownRoot,
+  isSpent,
+  networkForChain,
+} from "./chain";
+import { checkPayrollProof, type PaymentLookup } from "./payrollCheck";
+import type { AnyProof, CheckState, FundsProof, PaymentProof, PayrollProof, VerifyResult } from "./types";
 
 const PAID_AT = "When the payment landed";
 
@@ -40,7 +49,49 @@ function fieldSignals(signals: unknown): string[] | null {
   return signals as string[];
 }
 
+/**
+ * A payroll total: the checks live in ./payrollCheck; this wires the snark key,
+ * the proof's own network and the demo stand-ins (a demo tab accepts only demo
+ * proofs this device made, like the other proofs).
+ */
+async function verifyPayroll(p: PayrollProof): Promise<VerifyResult> {
+  const parts = Array.isArray(p.parts) ? p.parts : [];
+  const demo = parts.length > 0 && parts.every((x) => isDemoProof(x?.proof));
+  const net = networkForChain(p.chainId);
+  const official = Boolean(net?.pool && typeof p.pool === "string" && net.pool.toLowerCase() === p.pool.toLowerCase());
+
+  let findPayment: (pay: PayrollProof["payments"][number]) => Promise<PaymentLookup>;
+  if (demo) {
+    // The run finished about two hours ago, a few seconds per person.
+    await demoHolderChecks();
+    const start = Math.floor(Date.now() / 1000) - 2 * 3600;
+    const index = new Map(p.payments.map((x, i) => [x.commitment, i]));
+    findPayment = async (x) => ({
+      state: "found",
+      txHash: (x.txHash ?? x.commitment) as Hex,
+      paidAt: start + (index.get(x.commitment) ?? 0) * 9,
+    });
+  } else {
+    const client = net ? clientFor(net) : null;
+    const blockTimes = new Map<bigint, Promise<number>>();
+    findPayment = (x) => findPayrollPayment(client!, net!, net!.pool!, x, blockTimes);
+  }
+
+  return checkPayrollProof(p, {
+    verifySnark: async (part) => {
+      if (demo) return true;
+      const snarkjs = await import("snarkjs");
+      return snarkjs.groth16.verify(await verificationKey("payroll"), part.publicSignals, part.proof);
+    },
+    vault: official && net ? { label: net.label } : null,
+    findPayment,
+    now: Math.floor(Date.now() / 1000),
+    when,
+  });
+}
+
 export async function verifyProof(p: AnyProof): Promise<VerifyResult> {
+  if (p.kind === "payroll") return verifyPayroll(p);
   const checks: Check[] = [];
   const add = (label: string, state: CheckState, detail?: string) => checks.push({ label, state, detail });
   const expired = !(Number.isSafeInteger(p.expiresAt) && Math.floor(Date.now() / 1000) <= p.expiresAt);

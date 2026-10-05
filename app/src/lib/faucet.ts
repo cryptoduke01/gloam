@@ -33,7 +33,7 @@ const FAUCETS: Record<NetworkKey, FaucetInfo> = {
       "Fund your address with test stablecoins (PathUSD and friends) from the Tempo faucet. Gas is paid in stablecoins here, no separate gas token.",
     url: "/docs/testnet",
     cta: "Faucet guide →",
-    assets: "PathUSD · AlphaUSD · BetaUSD · ThetaUSD",
+    assets: "OUSD · PathUSD · AlphaUSD · BetaUSD · ThetaUSD",
   },
 };
 

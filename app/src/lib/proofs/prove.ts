@@ -1,8 +1,9 @@
 /**
- * Browser provers for proof of funds and proof of payment. Witnesses come from
- * @gloamtrade/sdk (buildFundsWitness / buildReceiptWitness) with Merkle paths
- * from the synced vault tree; snarkjs proves against the hash-checked dev
- * artifacts in /circuits (./artifacts).
+ * Browser provers for proof of funds, proof of payment and the payroll total.
+ * Witnesses come from @gloamtrade/sdk (buildFundsWitness / buildReceiptWitness
+ * with Merkle paths from the synced vault tree; buildPayrollWitness from the
+ * run's own records, no tree needed); snarkjs proves against the hash-checked
+ * dev artifacts in /circuits (./artifacts).
  *
  * Context: each proof's `context` public signal is
  *   keccak256(abi.encode("gloam.proof.v1", kind, chainId, pool, expiresAt, verifier)) mod p
@@ -10,10 +11,12 @@
  */
 import {
   buildFundsWitness,
+  buildPayrollWitness,
   buildReceiptWitness,
   fieldToHex,
   hexToField,
   noteNullifierPoseidon,
+  payrollParts,
   proofContext,
   type PoseidonMerklePath,
 } from "@gloamtrade/sdk";
@@ -29,12 +32,16 @@ import {
   FUNDS_MAX_NOTES,
   type FundsProof,
   type PaymentProof,
+  type PayrollProof,
   type ProveFundsArgs,
   type ProvePaymentArgs,
+  type ProvePayrollArgs,
 } from "./types";
 
 const DEFAULT_TTL_S = 7 * 24 * 3600;
 const MAX_LABEL = 80;
+/** A payroll proof carries every payment; past this it stops being a thing to paste. */
+const PAYROLL_MAX_PAYMENTS_TOTAL = 256;
 
 /** The label exactly as it is sealed into the proof: trimmed, single spaced. */
 export function cleanVerifierLabel(label: string): string {
@@ -202,4 +209,74 @@ export async function provePayment(args: ProvePaymentArgs): Promise<PaymentProof
   const leaf = tree.leaves[index];
   const txHash = (leaf?.leafIndex === index ? leaf.txHash : undefined) ?? note.txHash ?? null;
   return { ...base, commitment: fieldToHex(w.publicInputs.commitment), txHash, proof, publicSignals };
+}
+
+/**
+ * Payroll total: one part per up to 32 payments (split evenly, payrollParts),
+ * each proving its payments' sum and count under the run's list hash. Needs no
+ * vault sync: the payments are pinned on chain by the verifier, through the
+ * transactions that made them.
+ */
+export async function provePayrollTotal(args: ProvePayrollArgs): Promise<PayrollProof> {
+  const verifier = cleanVerifierLabel(args.verifier);
+  const expiresAt = expiryOf(args.expiresAt);
+  const { chainId, pool, asset, payments } = args;
+  if (payments.length < 1) throw new Error("This run has no finished payments to prove.");
+  if (payments.length > PAYROLL_MAX_PAYMENTS_TOTAL) {
+    throw new Error(`A payroll proof covers up to ${PAYROLL_MAX_PAYMENTS_TOTAL} payments.`);
+  }
+  const seen = new Set<string>();
+  for (const pay of payments) {
+    for (const k of [`c${pay.commitment.toLowerCase()}`, `n${pay.nullifier.toLowerCase()}`]) {
+      if (seen.has(k)) throw new Error("The same payment is listed twice in this run.");
+      seen.add(k);
+    }
+  }
+  const context = proofContext({ kind: "payroll", chainId, pool, verifier, expiresAt });
+  // Recording demo: real witness and signals from the demo run's notes, a pretend proof per part.
+  const demo = readDemo();
+
+  const sizes = payrollParts(payments.length);
+  const parts: PayrollProof["parts"] = [];
+  const listed: PayrollProof["payments"] = [];
+  let offset = 0;
+  for (const size of sizes) {
+    const slice = payments.slice(offset, offset + size);
+    offset += size;
+    const w = await buildPayrollWitness({
+      asset,
+      context,
+      payments: slice.map((pay) => ({
+        secretHex: pay.secret,
+        amount: pay.amount,
+        spendSecretHex: pay.spendSecret,
+        spendAmount: pay.spendAmount,
+        commitment: pay.commitment,
+        nullifier: pay.nullifier,
+      })),
+    });
+    if (w.blocker) throw new Error(w.blocker);
+    const { proof, publicSignals } = demo
+      ? await demoHolderProof(w.publicSignals)
+      : await prove("payroll", w.circomInput, w.publicSignals);
+    parts.push({ proof, publicSignals });
+    w.payments.forEach((x, i) =>
+      listed.push({ commitment: fieldToHex(x.commitment), nullifier: fieldToHex(x.nullifier), txHash: slice[i]!.txHash })
+    );
+    args.onPart?.(parts.length, sizes.length);
+  }
+
+  return {
+    v: 1,
+    kind: "payroll",
+    chainId,
+    pool,
+    verifier,
+    expiresAt,
+    asset,
+    total: payments.reduce((s, pay) => s + pay.amount, 0n).toString(),
+    count: payments.length,
+    payments: listed,
+    parts,
+  };
 }

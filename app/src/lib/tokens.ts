@@ -61,10 +61,12 @@ export const TESTNET_STOCK_TOKENS: OnchainToken[] = [
 ];
 
 /**
- * Tempo Moderato faucet stablecoins (6 decimals), from tempo_fundAddress. These
+ * Tempo Moderato faucet stablecoins (6 decimals), from tempo_fundAddress, OUSD first. These
  * are what Gloam shields on Tempo, since Tempo blocks native msg.value.
  */
 export const TEMPO_STABLE_TOKENS: OnchainToken[] = [
+  // OpenUSD (Open Standard), Tempo's recommended stablecoin; same address on mainnet and Moderato.
+  { id: "ousd", symbol: "OUSD", name: "Open USD", address: "0x20c0000000000000000000006a37da5c996874be", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "pathusd", symbol: "PathUSD", name: "Path USD", address: "0x20c0000000000000000000000000000000000000", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "alphausd", symbol: "AlphaUSD", name: "Alpha USD", address: "0x20c0000000000000000000000000000000000001", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "betausd", symbol: "BetaUSD", name: "Beta USD", address: "0x20c0000000000000000000000000000000000002", decimals: 6, yahoo: "", kind: "stablecoin" },

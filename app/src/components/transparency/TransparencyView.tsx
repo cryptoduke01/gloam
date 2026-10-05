@@ -630,12 +630,22 @@ export function TransparencyView() {
   useEffect(() => {
     const t = window.setTimeout(() => {
       const q = new URLSearchParams(window.location.search).get("chain");
-      setActive(isNetworkKey(q) ? q : "robinhood");
+      const first = isNetworkKey(q) ? q : "robinhood";
+      setActive(first);
+      // A public page view: counted only with analytics consent, like pageviews.
+      void import("@/lib/track").then(({ track }) => {
+        track("transparency_view", { network: first }, { requireConsent: true });
+      });
     }, 0);
     return () => window.clearTimeout(t);
   }, []);
 
   function choose(k: NetworkKey) {
+    if (k !== active) {
+      void import("@/lib/track").then(({ track }) => {
+        track("transparency_tab", { network: k }, { requireConsent: true });
+      });
+    }
     setActive(k);
     try {
       const url = new URL(window.location.href);

@@ -11,19 +11,27 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET() {
+/**
+ * Admin metrics: on-chain figures for both networks (cached about a minute,
+ * see lib/onchainMetrics) plus the product event summary. `?fresh=1` skips the
+ * snapshot cache (still at most one chain read per 15s).
+ */
+export async function GET(req: Request) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const force = new URL(req.url).searchParams.get("fresh") === "1";
   const [onchain, product] = await Promise.all([
-    fetchOnchainMetrics().catch((e) => ({
+    fetchOnchainMetrics({ force }).catch((e) => ({
       error: e instanceof Error ? e.message : "onchain_failed",
     })),
     readTractionSummary().catch(() => ({
       backend: "memory" as const,
       totalEvents: 0,
       counters: {},
+      dims: {},
+      daily: [],
       recent: [],
     })),
   ]);

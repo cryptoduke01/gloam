@@ -105,31 +105,30 @@ const SEEDS: Record<NetworkKey, Seed> = {
     leaves: 1284,
   },
   tempo: {
-    // PathUSD 25,000, again sized so the sample payroll is covered.
+    // OUSD is the main stablecoin here: 25,000 over three notes, again sized so
+    // the sample payroll is covered. PathUSD is a smaller second balance.
     notes: [
-      ["PathUSD", "15000", 19],
-      ["AlphaUSD", "4200", 11],
-      ["PathUSD", "6500", 8],
-      ["BetaUSD", "1800", 4],
-      ["PathUSD", "3500", 2, true],
+      ["OUSD", "15000", 19],
+      ["PathUSD", "2400", 11],
+      ["OUSD", "6500", 8],
+      ["PathUSD", "1100", 4],
+      ["OUSD", "3500", 2, true],
     ],
     wallet: [
       ["USD", "1000"],
-      ["PathUSD", "3000"],
-      ["AlphaUSD", "1250"],
-      ["BetaUSD", "600"],
-      ["ThetaUSD", "400"],
+      ["OUSD", "4000"],
+      ["PathUSD", "1250"],
     ],
     activity: [
       ["vault", "0", 2],
       ["vault", "0", 4],
       ["vault", "0", 8],
       ["vault", "0", 11],
-      ["approve", "AlphaUSD", 11],
+      ["approve", "PathUSD", 11],
       ["vault", "0", 19],
-      ["approve", "PathUSD", 19],
+      ["approve", "OUSD", 19],
     ],
-    incoming: ["PathUSD", "800", "Invoice 017"],
+    incoming: ["OUSD", "800", "Invoice 017"],
     leaves: 312,
   },
 };

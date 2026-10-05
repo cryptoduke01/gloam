@@ -9,9 +9,10 @@ import { SealedField } from "@/components/ui/SealedField";
 import { formatUnits } from "viem";
 
 /**
- * The result of checking a proof of funds or a proof of payment: one verdict
- * line in plain words, who it was made for and until when, then every check the
- * verifier ran.
+ * The result of checking a proof of funds, a proof of payment or a payroll
+ * total: one verdict line in plain words, who it was made for and until when,
+ * then every check the verifier ran. A payroll total also says what it does not
+ * prove.
  */
 
 const TOKENS = [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS, ...TEMPO_STABLE_TOKENS];
@@ -117,10 +118,18 @@ function verdictOf(r: VerifyResult): Verdict {
   return "incomplete";
 }
 
-/** "Holds at least 10,000 USDG" / "Paid 1,250 USDG on Oct 3" / "Paid at least 1,000 USDG". */
+function people(n: number): string {
+  return `${n.toLocaleString("en-US")} ${n === 1 ? "person" : "people"}`;
+}
+
+/**
+ * "Holds at least 10,000 USDG" / "Paid 1,250 USDG on Oct 3" / "Paid at least
+ * 1,000 USDG" / "Paid 21,500 USDG to 5 people".
+ */
 function claimOf(p: AnyProof, r: VerifyResult): { lead: string; amount: string; sym: string; tail?: string } {
   const sym = symbolOf(p.asset, p.chainId);
   if (p.kind === "funds") return { lead: "Holds at least", amount: amountOf(p.threshold, p.asset), sym };
+  if (p.kind === "payroll") return { lead: "Paid", amount: amountOf(p.total, p.asset), sym, tail: `to ${people(p.count)}` };
   const tail = r.paidAt ? `on ${day(r.paidAt)}` : undefined;
   if (p.amount != null) return { lead: "Paid", amount: amountOf(p.amount, p.asset), sym, tail };
   return { lead: "Paid at least", amount: amountOf(p.minAmount, p.asset), sym, tail };
@@ -155,9 +164,13 @@ export function ProofVerdict({
     verdict === "verified"
       ? p.kind === "funds"
         ? `in Gloam's vault on ${net?.label ?? "this network"}. Their balance, wallet and history stay hidden.`
-        : `received in a private payment through Gloam's vault on ${net?.label ?? "this network"}.${
-            p.amount == null ? " The exact amount stays hidden." : ""
-          } The proof does not show who sent it.`
+        : p.kind === "payroll"
+          ? `in ${p.count === 1 ? "one private payment" : `${p.count} private payments`} through Gloam's vault on ${
+              net?.label ?? "this network"
+            }, all sent by whoever made this proof. What each person got stays hidden.`
+          : `received in a private payment through Gloam's vault on ${net?.label ?? "this network"}.${
+              p.amount == null ? " The exact amount stays hidden." : ""
+            } The proof does not show who sent it.`
       : verdict === "expired"
         ? `This proof checked out, but it expired on ${day(p.expiresAt)}. Ask them for a fresh one.`
         : verdict === "incomplete"
@@ -177,12 +190,13 @@ export function ProofVerdict({
               <p className="t-display-m mt-4">This proof did not check out</p>
               <p className="tnum mt-2 text-[14px] text-mute">
                 It claims: {claim.lead.toLowerCase()} {claim.amount} {claim.sym}
+                {p.kind === "payroll" && claim.tail ? ` ${claim.tail}` : ""}
               </p>
             </>
           ) : (
             <p className="t-display-m tnum mt-4">
               {claim.lead} {claim.amount} <span className="text-mute">{claim.sym}</span>
-              {claim.tail ? <span className="text-mute"> {claim.tail}</span> : null}
+              {claim.tail ? <span className={p.kind === "payroll" ? undefined : "text-mute"}> {claim.tail}</span> : null}
             </p>
           )}
           <p
@@ -220,6 +234,16 @@ export function ProofVerdict({
             <CopyButton value={p.pool} label="vault address" />
           </dd>
         </div>
+        {p.kind === "payroll" && r.paidBetween && (
+          <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
+            <dt className="shrink-0 text-mute">Paid</dt>
+            <dd className="text-foreground sm:text-right">
+              {r.paidBetween[1] - r.paidBetween[0] < 60
+                ? dateTime(r.paidBetween[0])
+                : `${dateTime(r.paidBetween[0])} to ${dateTime(r.paidBetween[1])}`}
+            </dd>
+          </div>
+        )}
         {p.kind === "payment" && p.txHash && net && (
           <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
             <dt className="shrink-0 text-mute">Transaction</dt>
@@ -239,6 +263,8 @@ export function ProofVerdict({
           </div>
         )}
       </dl>
+
+      {p.kind === "payroll" && verdict !== "failed" && <PayrollLimits count={p.count} />}
 
       <div className="border-t border-line bg-surface/50 px-5 py-5 sm:px-7">
         <p className="text-[13px] text-mute">What was checked, in your browser</p>
@@ -262,6 +288,31 @@ export function ProofVerdict({
           })}
         </ul>
       </div>
+    </div>
+  );
+}
+
+/** A payroll total proves a sum, not a staff list. Said plainly, every time. */
+function PayrollLimits({ count }: { count: number }) {
+  const who = count === 1 ? "the person" : `the ${count.toLocaleString("en-US")} people`;
+  const lines = [
+    `Who ${who} ${count === 1 ? "is" : "are"}, or that they work for the sender.`,
+    count === 1
+      ? "That the sender did not pay themselves."
+      : `That these are ${count.toLocaleString("en-US")} different people, or that none of them is the sender.`,
+    "Anything about other runs, or the sender's balance.",
+  ];
+  return (
+    <div className="border-t border-line px-5 py-5 sm:px-7">
+      <p className="text-[13px] text-mute">What this does not prove</p>
+      <ul className="mt-3 space-y-2">
+        {lines.map((l) => (
+          <li key={l} className="flex items-start gap-3 text-[14px] leading-snug text-soft">
+            <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current" />
+            <span className="min-w-0">{l}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

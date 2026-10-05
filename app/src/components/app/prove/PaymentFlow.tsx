@@ -23,6 +23,7 @@ import {
   friendlyProveError,
   isReceivedPayment,
   logoIdFor,
+  proveFailReason,
   longDate,
   networkFor,
   shortDate,
@@ -121,8 +122,14 @@ export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
         chainId: note.chainId,
         note: note.note,
       });
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_created", { kind: "payment", chainId: note.chainId });
+      });
     } catch (e) {
       setErr(friendlyProveError(e, "payment"));
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_create_failed", { kind: "payment", reason: proveFailReason(e) });
+      });
     } finally {
       setBusy(false);
     }

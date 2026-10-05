@@ -10,6 +10,7 @@ import { useNetwork } from "./NetworkProvider";
 import { PayrollInvoice } from "./PayrollInvoice";
 import { PaymentNoteLine } from "./PaymentNote";
 import { DueBanner } from "./payroll/DueBanner";
+import { ProveTotal } from "./payroll/ProveTotal";
 import { ScheduleEditor } from "./payroll/ScheduleEditor";
 import { ScheduleList } from "./payroll/ScheduleList";
 import { ScheduleIcon } from "./payroll/scheduleUi";
@@ -21,6 +22,7 @@ import { SealedField } from "@/components/ui/SealedField";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { track } from "@/lib/track";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import {
   NATIVE_ASSET,
@@ -51,6 +53,7 @@ import {
   parsePayrollCsv,
   runPayroll,
   saveBatch,
+  withDemoProofRecords,
   type PayrollBatch,
   type PayrollRow,
   type PayrollRowStatus,
@@ -465,6 +468,8 @@ export function PayrollView() {
   const [runError, setRunError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  /** The finished run whose total is being proven (the Prove the total dialog). */
+  const [proving, setProving] = useState<PayrollBatch | null>(null);
   const stopRef = useRef(false);
 
   const reloadBatches = useCallback(() => {
@@ -476,10 +481,13 @@ export function PayrollView() {
     if (!pool) return;
     let live = true;
     const first = assetOptions[0];
+    // A demo's past run carries made-up proof records, so its total can be proven too.
     const load =
       demo && first
-        ? Promise.resolve(
-            demoHistory({ chainId: network.chainId, pool, asset: first.address, decimals: assetDecimals(first.address) })
+        ? Promise.all(
+            demoHistory({ chainId: network.chainId, pool, asset: first.address, decimals: assetDecimals(first.address) }).map(
+              withDemoProofRecords
+            )
           )
         : loadBatches(network.chainId, pool);
     void load.then((b) => {
@@ -517,10 +525,12 @@ export function PayrollView() {
     const useRelay = batch.relay && relayAvailable;
     const memoOn = isPayMemoLive();
     if (demo) {
-      const done = await simulatePayroll(batch, {
+      const played = await simulatePayroll(batch, {
         onUpdate: (b) => setActive(b),
         shouldStop: () => stopRef.current,
       });
+      // The records a real run keeps, so the demo run's total can be proven.
+      const done = await withDemoProofRecords(played);
       setActive({ ...done });
       setBatches((prev) => [done, ...prev.filter((x) => x.id !== done.id)]);
       if (done.status === "done") {
@@ -564,6 +574,12 @@ export function PayrollView() {
       });
       setActive({ ...done });
       if (done.status === "done") {
+        // How many and where, never amounts or names.
+        track("payroll_run_finished", {
+          people: done.rows.filter((r) => r.status === "paid").length,
+          chainId: done.chainId,
+          relay: useRelay,
+        });
         // A finished run (failed rows included) settles its payday, so the same list is never offered twice.
         if (done.scheduleId && done.payday) await sched.markPaid(done.scheduleId, done.payday, done.id);
         clearDraft();
@@ -593,6 +609,8 @@ export function PayrollView() {
       schedule: loaded && fromSchedule ? fromSchedule : undefined,
     });
     if (!demo) await saveBatch(batch);
+    track("payroll_run_started", { people: batch.rows.length, chainId: batch.chainId, relay: batch.relay && relayAvailable });
+    if (batch.scheduleId) track("schedule_run", { people: batch.rows.length, chainId: batch.chainId });
     await execute(batch);
   }
 
@@ -664,7 +682,9 @@ export function PayrollView() {
   }
 
   async function onSaveSchedule(s: PayrollSchedule) {
+    const isNew = editor?.isNew ?? false;
     await sched.save(s);
+    if (isNew) track("schedule_created", { people: s.people.length, chainId: s.chainId, cadence: s.cadence.kind });
     setEditor(null);
     // An edit to the list that is loaded right now shows up in it.
     if (fromSchedule?.id === s.id) runSchedule(s);
@@ -701,6 +721,17 @@ export function PayrollView() {
         exit: { opacity: 0 },
         transition: { duration: 0.22, ease },
       };
+
+  const proveNode = proving ? (
+    <ProveTotal
+      key={proving.id}
+      batch={proving}
+      symbol={assetOptions.find((o) => o.address === proving.asset)?.symbol ?? token.symbol}
+      logoId={assetOptions.find((o) => o.address === proving.asset)?.logoId ?? token.logoId}
+      networkLabel={network.label}
+      onClose={() => setProving(null)}
+    />
+  ) : null;
 
   const editorNode = editor ? (
     <ScheduleEditor
@@ -904,6 +935,10 @@ export function PayrollView() {
                     <Icon name="file" />
                     View invoice
                   </button>
+                  <button type="button" onClick={() => setProving(b)} className="btn btn-ghost btn-block">
+                    <Icon name="shield" />
+                    Prove the total
+                  </button>
                   <button type="button" onClick={() => exportBatch(b)} className="btn btn-ghost btn-block">
                     <Icon name="download" />
                     Download results
@@ -957,6 +992,7 @@ export function PayrollView() {
           />
         )}
         {editorNode}
+        {proveNode}
       </div>
     );
   }
@@ -1534,10 +1570,15 @@ export function PayrollView() {
                       </button>
                       <span className="shrink-0 pr-2">
                         {b.status === "done" ? (
-                          <span className="inline-flex h-6 items-center gap-1 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
-                            <Icon name="check" className="h-3 w-3" />
-                            Paid
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setProving(b)}
+                            aria-label={`Prove the total of ${b.title}`}
+                            className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+                          >
+                            <Icon name="shield" className="h-3.5 w-3.5" />
+                            Prove
+                          </button>
                         ) : untouched ? (
                           <button
                             type="button"
@@ -1561,6 +1602,7 @@ export function PayrollView() {
         </aside>
       </div>
       {editorNode}
+      {proveNode}
     </div>
   );
 }

@@ -13,6 +13,9 @@
  *   - dry run (gas estimate against the pool) before anything is sent, so a bad
  *     proof, a spent note or a stale root costs the relay nothing
  *   - memos only for commitments the pool has actually inserted
+ *   - sanctions screening of every public recipient (a cash out's `to`) before
+ *     anything is checked or sent (lib/screeningServer.ts); private sends and
+ *     memos carry no public address, so there is nothing to screen
  *   - per-IP and per-network rate limits (best effort, in-memory)
  *
  * Testnet: submission is free. Mainnet needs a relay fee carved out inside the
@@ -39,6 +42,8 @@ import {
   isNetworkWritable,
   type GloamNetwork,
 } from "@/lib/networks";
+import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
+import { screenAddresses } from "@/lib/screeningServer";
 
 const POOL_ERRORS = [
   "ZeroCommitment",
@@ -282,12 +287,27 @@ function padGas(est: bigint) {
   return padded > GAS_CAP ? GAS_CAP : padded;
 }
 
-type Call =
+export type Call =
   | { kind: "transfer"; args: readonly [Hex, Hex, Hex, readonly [Hex, Hex]] }
   | { kind: "unshield"; args: readonly [Hex, Hex, Hex, Address, Address, bigint] }
   | { kind: "memo"; args: readonly [Hex, Hex] };
 
+/** Public addresses a call pays out to. Only a cash out has one. */
+function publicRecipients(call: Call): Address[] {
+  return call.kind === "unshield" ? [call.args[4]] : [];
+}
+
+/** Refuse a call that pays a sanctioned address. Says nothing more than that. */
+export async function screenCall(call: Call): Promise<void> {
+  const recipients = publicRecipients(call);
+  if (recipients.length === 0) return;
+  const { allowed } = await screenAddresses(recipients);
+  if (!allowed) throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
+}
+
 async function submit(net: GloamNetwork, call: Call): Promise<Hex> {
+  // Screen before anything else: a blocked call never reaches the chain.
+  await screenCall(call);
   const account = relayerAccount();
   if (!account) {
     throw new RelayError("The relay is off. Send from your wallet.", 503, "relay_off");
@@ -357,10 +377,12 @@ export async function relayUnshield(net: GloamNetwork, body: Record<string, unkn
   const asset = asAddress(body.asset, "asset");
   const to = asAddress(body.to, "recipient");
   const amount = asAmount(body.amount);
-  await precheckSpend(net, root, nullifier);
   // The recipient and amount are public inputs of the unshield proof, so the
   // relay cannot change where the money goes.
-  return submit(net, { kind: "unshield", args: [proof, root, nullifier, asset, to, amount] });
+  const call: Call = { kind: "unshield", args: [proof, root, nullifier, asset, to, amount] };
+  await screenCall(call);
+  await precheckSpend(net, root, nullifier);
+  return submit(net, call);
 }
 
 export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>) {

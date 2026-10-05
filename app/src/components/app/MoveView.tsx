@@ -22,6 +22,8 @@ import {
   proveTransferInBrowser,
   proveUnshieldInBrowser,
 } from "@/lib/proveClient";
+import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
+import { screenWallets } from "@/lib/screeningClient";
 import { noteNullifierPoseidon } from "@/lib/notePoseidon";
 import { fieldToHex, hexToField } from "@/lib/poseidon";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
@@ -55,7 +57,7 @@ import {
   type ScannedMemo,
 } from "@/lib/payMemo";
 import { useNetwork } from "./NetworkProvider";
-import { isNetworkKey } from "@/lib/networks";
+import { getNetwork, isNetworkKey } from "@/lib/networks";
 import {
   relayFor,
   relayMemo,
@@ -212,6 +214,21 @@ export function MoveView() {
     return () => window.removeEventListener("hashchange", onHash);
   }, [networkKey]);
 
+  // Analytics: a request link was opened. Its shape only, never who, how much or the note.
+  const trackedRequest = useRef<PaymentRequest | null>(null);
+  useEffect(() => {
+    if (!request || trackedRequest.current === request) return;
+    trackedRequest.current = request;
+    const chainId = getNetwork(request.network ?? networkKey).chainId;
+    void import("@/lib/track").then(({ track }) => {
+      track("payment_request_opened", {
+        hasAmount: Boolean(request.amount),
+        hasNote: Boolean(request.note),
+        chainId,
+      });
+    });
+  }, [request, networkKey]);
+
   // A request names its network: move there once so the right balance shows.
   // After that the banner offers the switch instead of forcing it again.
   const requestSwitched = useRef(false);
@@ -246,6 +263,8 @@ export function MoveView() {
   const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
     null
   );
+  /** Analytics for the payment in flight: sent on a request, carrying a note. */
+  const payTrack = useRef<{ chainId: number; request: boolean; note: boolean } | null>(null);
   /** After direct pay: post encrypted ticket on-chain (GloamPayMemo) */
   const pendingMemo = useRef<{
     paymentCommitment: Hex;
@@ -281,6 +300,15 @@ export function MoveView() {
         setBusy(false);
         setStatus(null);
         return;
+      }
+
+      if (pendingAction.current === "send" && payTrack.current) {
+        const t = payTrack.current;
+        payTrack.current = null;
+        void import("@/lib/track").then(({ track }) => {
+          if (t.request) track("payment_request_paid", { chainId: t.chainId });
+          if (t.note) track("private_note_added", { chainId: t.chainId });
+        });
       }
 
       if (spentNoteId.current) {
@@ -384,6 +412,7 @@ export function MoveView() {
     pendingShare.current = null;
     pendingMemo.current = null;
     spentNoteId.current = null;
+    payTrack.current = null;
     setShareBlob(null);
   }, [writeError]);
 
@@ -451,6 +480,11 @@ export function MoveView() {
       setError(
         `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, ${formatAssetLabel(selected.amountWei, selected.asset)} needed). It opens up once more of this asset is added.`
       );
+      return;
+    }
+    // The cash out goes to this public wallet, relay or not.
+    if (!(await screenWallets([address])).allowed) {
+      setError(SCREEN_BLOCKED_MESSAGE);
       return;
     }
 
@@ -588,6 +622,7 @@ export function MoveView() {
         note: payNote,
       });
       setSentNote(pack.note ?? null);
+      payTrack.current = { chainId: network.chainId, request: Boolean(request), note: Boolean(pack.note) };
       let share: string;
       let locked = false;
       if (payStyle === "direct") {
@@ -675,6 +710,7 @@ export function MoveView() {
       pendingChange.current = null;
       pendingShare.current = null;
       pendingMemo.current = null;
+      payTrack.current = null;
     }
   }
 

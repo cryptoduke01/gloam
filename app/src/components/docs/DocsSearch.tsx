@@ -174,7 +174,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/privacy-model": {
     description: "Exactly what an explorer can and cannot see when you use Gloam.",
-    keywords: ["privacy", "explorer", "public", "hidden", "anonymity", "operator", "threat", "what is public"],
+    keywords: ["privacy", "explorer", "public", "hidden", "anonymity", "operator", "threat", "what is public", "passkey", "sanctions", "screening", "ofac", "compliance"],
     headings: [
       "What an explorer actually shows",
       "What stays hidden",
@@ -183,6 +183,7 @@ const PAGE_META: Record<string, PageMeta> = {
       "What we will not promise",
       "Private from the public, not from an operator",
       "Before mainnet",
+      "Security and compliance",
     ],
   },
   "/docs/sealed-trade": {

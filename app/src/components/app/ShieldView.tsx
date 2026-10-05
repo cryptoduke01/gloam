@@ -28,6 +28,9 @@ import { formatUsd } from "@/lib/markets";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
+import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
+import { screenWallets } from "@/lib/screeningClient";
+import { useVaultStatus } from "@/lib/passkey";
 import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
 import { WalletMenu } from "./WalletMenu";
@@ -193,6 +196,23 @@ export function ShieldView() {
 
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const vault = useVaultStatus();
+  // Sanctions screening of the depositing wallet (public address only). Checked
+  // when the wallet connects so a blocked wallet never fills in the form, and
+  // again right before signing.
+  const [blockedAddr, setBlockedAddr] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const screenBlocked = Boolean(address) && blockedAddr === address;
+  useEffect(() => {
+    if (!address || demo) return;
+    let live = true;
+    void screenWallets([address]).then(({ allowed }) => {
+      if (live) setBlockedAddr(allowed ? null : address);
+    });
+    return () => {
+      live = false;
+    };
+  }, [address, demo]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successTitle, setSuccessTitle] = useState("Added privately");
   const [successBody, setSuccessBody] = useState<React.ReactNode>(null);
@@ -447,10 +467,23 @@ export function ShieldView() {
       return;
     }
     if (!network.pool || !address) return;
+    if (vault.locked) {
+      setFormError("Unlock your private balance with your passkey first.");
+      return;
+    }
 
     const value = parseAmount();
     if (value === null) {
       setFormError("Invalid amount.");
+      return;
+    }
+
+    // Screen the depositing wallet on the server before the wallet signs.
+    setChecking(true);
+    const { allowed } = await screenWallets([address]).finally(() => setChecking(false));
+    if (!allowed) {
+      setBlockedAddr(address);
+      setFormError(null);
       return;
     }
 
@@ -608,8 +641,9 @@ export function ShieldView() {
       }))
     : [];
 
-  const ctaLabel =
-    isPending && pendingKind === "approve"
+  const ctaLabel = checking
+    ? "Checking…"
+    : isPending && pendingKind === "approve"
       ? "Approve in your wallet…"
       : confirming && pendingKind === "approve"
         ? "Approving…"
@@ -757,13 +791,17 @@ export function ShieldView() {
                 </p>
                 <WalletMenu />
               </div>
+            ) : screenBlocked ? (
+              <p role="status" className="rounded-[16px] bg-surface px-4 py-3.5 text-center text-[14px] text-mute">
+                {SCREEN_BLOCKED_MESSAGE}
+              </p>
             ) : (
               <button
                 type="submit"
-                disabled={busy || proving}
+                disabled={busy || proving || checking}
                 className="btn btn-ink btn-lg btn-block"
               >
-                {(busy || proving) && <Spinner />}
+                {(busy || proving || checking) && <Spinner />}
                 {ctaLabel}
               </button>
             )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   analyticsAllowed,
   CONSENT_KEY,
@@ -8,11 +9,24 @@ import {
 } from "@/lib/consent";
 
 /**
- * Lightweight first-party analytics. Loads only after "Accept all".
- * Essential-only: nothing network-bound beyond the page itself.
+ * Lightweight first-party analytics. Marketing pageviews load only after
+ * "Accept all"; essential-only sends nothing for them.
+ *
+ * Also counts opens of the proof verifier (/verify) as a product event, like
+ * the in-app funnel events in lib/track: whether a proof came with the link,
+ * never the proof itself.
  */
 export function Analytics() {
   const [enabled, setEnabled] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (pathname !== "/verify") return;
+    const hasProof = /[?#&]proof=/.test(window.location.search + window.location.hash);
+    void import("@/lib/track").then(({ track }) => {
+      track("verify_page_view", { hasProof });
+    });
+  }, [pathname]);
 
   useEffect(() => {
     const sync = () => setEnabled(analyticsAllowed());

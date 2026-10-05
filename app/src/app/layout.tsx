@@ -3,6 +3,7 @@ import { Analytics } from "@/components/Analytics";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { VercelAnalytics } from "@/components/VercelAnalytics";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -105,6 +106,7 @@ export default function RootLayout({
           <CookieBanner />
           <Analytics />
         </ThemeProvider>
+        <VercelAnalytics />
       </body>
     </html>
   );

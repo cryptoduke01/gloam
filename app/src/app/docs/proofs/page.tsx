@@ -6,19 +6,19 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Proofs",
   description:
-    "Prove an exact balance, that you hold at least an amount, or that you were paid, to one person you choose. What each proof shows, what it hides, and how anyone can check it.",
+    "Prove an exact balance, that you hold at least an amount, that you were paid, or what a payroll run paid in total, to one person you choose. What each proof shows, what it hides, and how anyone can check it.",
 };
 
 export default function DocsProofsPage() {
   return (
     <DocsLayout
       title="Proofs"
-      lede="Your money in Gloam is private by default. A proof lets you show one fact about it to one person you choose: a balance, that you hold at least an amount, or that you were paid. They check it themselves, in their browser, against the live vault."
+      lede="Your money in Gloam is private by default. A proof lets you show one fact about it to one person you choose: a balance, that you hold at least an amount, that you were paid, or what a payroll run paid in total. They check it themselves, in their browser, against the live vault."
       glance={[
         { label: "Exact balance", value: "one balance, shown" },
         { label: "At least", value: "a minimum, balance hidden" },
         { label: "Payment", value: "the amount, or a minimum" },
-        { label: "Check it", value: "in the browser, no wallet" },
+        { label: "Payroll total", value: "a run's total, each pay hidden" },
       ]}
       quickLinks={[
         { href: "/app/disclose", label: "Make a proof" },
@@ -27,11 +27,13 @@ export default function DocsProofsPage() {
         { href: "/docs/sdk/disclosure", label: "Selective disclosure (SDK)" },
       ]}
     >
-      <h2>Three proofs</h2>
+      <h2>Four proofs</h2>
       <p>
-        All three are made on your device from balances only you can open, and
-        none of them can be used to move your money. Open{" "}
-        <Link href="/app/disclose">Prove</Link> in the app and pick one.
+        All four are made on your device from records only you hold, and none of
+        them can be used to move your money. Open{" "}
+        <Link href="/app/disclose">Prove</Link> in the app and pick one. A payroll
+        total is made from a finished run on the{" "}
+        <Link href="/app/payroll">Payroll</Link> page.
       </p>
 
       <h3>Exact balance</h3>
@@ -56,6 +58,21 @@ export default function DocsProofsPage() {
         exact amount, or only that it was at least a figure you pick. It works for
         payments sent to your Gloam address, claim links and payroll payouts, once
         you have claimed them.
+      </p>
+
+      <h3>Payroll total</h3>
+      <p>
+        Shows that a payroll run you sent paid <strong>exactly</strong> a total
+        to a number of people, such as 21,500 USDG to 5 people, without showing
+        what any one of them got. It is for your accountant, an auditor or a tax
+        office: the figure on the books, backed by the vault. On a finished run,
+        or under Past runs, choose Prove the total.
+      </p>
+      <p>
+        The checker confirms that every payment in it is a private payment inside
+        the vault that you sent from your own balance. A deposit, a trade, the
+        change from a payment, or a payment someone sent you cannot be counted,
+        and no payment can be counted twice.
       </p>
 
       <h2>What each one shows and hides</h2>
@@ -83,16 +100,22 @@ export default function DocsProofsPage() {
             <td>The asset, the amount or a minimum, and when it landed</td>
             <td>Your balance, your other payments, your wallet</td>
           </tr>
+          <tr>
+            <td>Payroll total</td>
+            <td>The asset, the run&apos;s total, how many people were paid, and when the payments landed</td>
+            <td>What each person got, their names and addresses, your balance</td>
+          </tr>
         </tbody>
       </table>
       <p>
-        Proofs of funds and payment also carry two things you set: who the proof
-        is for, and when it expires.
+        Proofs of funds, payments and payroll totals also carry two things you
+        set: who the proof is for, and when it expires.
       </p>
 
       <h2>Made for one person</h2>
       <p>
-        When you make an at least or payment proof, you say who it is for, like
+        When you make an at least, payment or payroll total proof, you say who it
+        is for, like
         &quot;Acme Bank&quot; or &quot;my landlord&quot;, and how long it is good
         for: 1, 7 or 30 days. Both are sealed into the proof. Anyone can still
         read a forwarded copy, but it will say who it was made for and when it
@@ -116,7 +139,7 @@ export default function DocsProofsPage() {
           {
             n: "3",
             title: "Checks the live vault",
-            body: "It reads the vault on Robinhood Chain or Tempo directly: the state the proof was made against, and for a payment, that the payment is there.",
+            body: "It reads the vault on Robinhood Chain or Tempo directly: the state the proof was made against, for a payment that the payment is there, and for a payroll total that every payment in it is a private payment the sender made.",
           },
           {
             n: "4",
@@ -164,6 +187,31 @@ export default function DocsProofsPage() {
           <strong>Up to four balances</strong> can back one proof of funds.
         </li>
         <li>
+          <strong>A payroll total proves a sum, not a staff list.</strong>{" "}
+          It does not show who the people were or that they work for you. It also cannot
+          tell whether two payments went to the same person, or whether one of
+          them went back to you. It counts payments, each one a real private
+          payment you sent.
+        </li>
+        <li>
+          <strong>Up to 32 people per proof.</strong>{" "}
+          A larger run is proven in even parts, sealed together in one proof. Each part shows its own
+          subtotal, over 16 to 32 people, so no part is one person&apos;s pay. A
+          run of one person proves that person&apos;s pay, so the app warns you.
+        </li>
+        <li>
+          <strong>A payroll total points at its payments.</strong>{" "}
+          The checker sees the transaction behind each payment and when it landed. Those
+          never show amounts or who received them. They show your wallet only if
+          you paid without Hide my wallet.
+        </li>
+        <li>
+          <strong>Made in the browser that ran the payroll.</strong>{" "}
+          Proving a total needs each payment&apos;s key, which the run keeps encrypted on
+          that device. Runs paid before Gloam kept those keys cannot be proven,
+          unless every payee was sent a claim link.
+        </li>
+        <li>
           <strong>Expired is not the same as false.</strong> An expired proof may
           have been true when it was made. Ask for a fresh one.
         </li>
@@ -177,7 +225,8 @@ export default function DocsProofsPage() {
         </li>
         <li>
           Paste the proof. It starts with <code>gloamfunds1:</code>,{" "}
-          <code>gloampay1:</code> or <code>gloamdisc1:</code>. If you were sent a
+          <code>gloampay1:</code>, <code>gloamroll1:</code> or{" "}
+          <code>gloamdisc1:</code>. If you were sent a
           link, opening it fills the proof in for you. The proof travels after the
           # in the link, so it never reaches a server.
         </li>

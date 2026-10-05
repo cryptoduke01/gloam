@@ -128,6 +128,22 @@ export function verifyLinkFor(token: string, origin: string): string | null {
   return url.length <= MAX_LINK_LENGTH ? url : null;
 }
 
+/**
+ * A coarse reason for a failed proof, for product analytics only: a fixed
+ * category, never the message (it can name a label or a network).
+ */
+export function proveFailReason(e: unknown): string {
+  const msg = e instanceof Error ? e.message : "";
+  if (/not built yet/i.test(msg)) return "not_enabled";
+  if (/reject|denied|cancel/i.test(msg)) return "cancelled";
+  if (/switch to|another network|older vault/i.test(msg)) return "wrong_network";
+  if (/no key|older balances/i.test(msg)) return "unprovable_note";
+  if (/already spent|not in the vault|read the vault/i.test(msg)) return "vault_sync";
+  if (/could not load/i.test(msg)) return "load_failed";
+  if (/say who|keep the name|expiry|amount|minimum|balances|same asset|add up/i.test(msg)) return "input";
+  return "other";
+}
+
 export type FriendlyError = { tone: "warn" | "danger"; text: string };
 
 /** Turns a prover error into plain words. */

@@ -6,6 +6,7 @@ import { assetLabel, formatAssetAmount, type LocalNote } from "@/lib/shield";
 import { buildDisclosure, encodeDisclosure } from "@/lib/disclosure";
 import { SealDots } from "@/components/ui/SealDots";
 import { LockIcon, Notice, SafeToShare, ShieldCheck, Spinner } from "./ProofParts";
+import { proveFailReason } from "./proofUtils";
 
 /** What each party sees, as a quiet two-column list. */
 const SEES: { who: string; sees: string; hidden?: boolean }[] = [
@@ -34,8 +35,14 @@ export function ExactBalance({ notes, empty }: { notes: LocalNote[]; empty: Reac
         asset: n.asset,
       });
       setTokens((t) => ({ ...t, [n.id]: encodeDisclosure(d) }));
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_created", { kind: "exact", chainId: n.chainId });
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not build the proof.");
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_create_failed", { kind: "exact", reason: proveFailReason(e) });
+      });
     } finally {
       setBusyId(null);
     }

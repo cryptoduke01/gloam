@@ -37,6 +37,21 @@ export const PROOF_ARTIFACTS = {
       sha256: "c3cb613d88398a55329dfd9f2e4c322ee6e5897689e970911f23890c78e2e63d",
     },
   },
+  // 32 payments per proof, 37,278 constraints; the proving key is about 24 MB.
+  payroll: {
+    wasm: {
+      path: "/circuits/payroll_total.wasm",
+      sha256: "0acee042752e3ae22d0e30f64084ba7638467a66bcee7d55d934041512db69f3",
+    },
+    zkey: {
+      path: "/circuits/payroll_total_final.zkey",
+      sha256: "f8cb1c8ea5ada2e09a07c47ab3d994860e1a71e021ea89ca96cf1c90c4c1c272",
+    },
+    vkey: {
+      path: "/circuits/payroll_total_vkey.json",
+      sha256: "52be3bb32335f3ec838cf02aa6eab2b30134d6df3f32ffbc5f39a49862b8d44a",
+    },
+  },
 } as const satisfies Record<string, Record<"wasm" | "zkey" | "vkey", Artifact>>;
 
 export type ProofCircuit = keyof typeof PROOF_ARTIFACTS;

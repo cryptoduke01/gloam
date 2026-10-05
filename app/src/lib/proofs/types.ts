@@ -8,14 +8,19 @@ import type { LocalNote } from "@/lib/shield";
  *   unspent notes. The balance itself stays hidden.
  * - "payment": I received a payment of `asset` (the amount shown, or only that
  *   it was at least `minAmount`), in a real Gloam transaction.
+ * - "payroll": a payroll run I sent paid exactly `total` of `asset` in `count`
+ *   private payments. No single payment's amount is shown.
  *
  * Every proof is made for one named verifier: the label is bound into the proof,
  * so forwarding it to someone else shows who it was really for.
  */
-export type ProofKind = "funds" | "payment";
+export type ProofKind = "funds" | "payment" | "payroll";
 
 /** Up to four notes can back one proof of funds (the circuit's fixed width). */
 export const FUNDS_MAX_NOTES = 4;
+
+/** Payments per payroll proof part (the payroll_total circuit's fixed width). */
+export const PAYROLL_MAX_PAYMENTS = 32;
 
 type ProofBase = {
   v: 1;
@@ -54,7 +59,37 @@ export type PaymentProof = ProofBase & {
   txHash: Hex | null;
 };
 
-export type AnyProof = FundsProof | PaymentProof;
+/** One payroll payment as the verifier sees it. Its amount never leaves the prover. */
+export type PayrollPayment = {
+  /** The payee's note, created by the payment (Transferred newCommitments[0]). */
+  commitment: Hex;
+  /** The spend marker of the payer's note that funded it (Transferred nullifier). */
+  nullifier: Hex;
+  /** The transaction that made the payment, when known. */
+  txHash: Hex | null;
+};
+
+/** One Groth16 proof over up to PAYROLL_MAX_PAYMENTS payments. */
+export type PayrollProofPart = {
+  proof: unknown;
+  /** [asset, total, count, paymentsHash, context] */
+  publicSignals: string[];
+};
+
+export type PayrollProof = Omit<ProofBase, "proof" | "publicSignals"> & {
+  kind: "payroll";
+  asset: Address;
+  /** Smallest-unit sum of every payment, across all parts. */
+  total: string;
+  /** Number of payments, across all parts. */
+  count: number;
+  /** Every payment in order; each part covers the next `count` of them (its signal). */
+  payments: PayrollPayment[];
+  /** Most runs fit one part; larger ones are split evenly (payrollParts in the SDK). */
+  parts: PayrollProofPart[];
+};
+
+export type AnyProof = FundsProof | PaymentProof | PayrollProof;
 
 export type ProveFundsArgs = {
   chainId: number;
@@ -80,6 +115,31 @@ export type ProvePaymentArgs = {
   expiresAt?: number;
 };
 
+/** A payroll payment the prover made, with what opening it needs. */
+export type PayrollNote = {
+  /** The payee note: its secret and amount (the payer created it). */
+  secret: Hex;
+  amount: bigint;
+  commitment: Hex;
+  /** The payer's note the payment spent: its secret and amount, and its spend marker. */
+  spendSecret: Hex;
+  spendAmount: bigint;
+  nullifier: Hex;
+  txHash: Hex | null;
+};
+
+export type ProvePayrollArgs = {
+  chainId: number;
+  pool: Address;
+  asset: Address;
+  /** Every paid payment of the run, in order. */
+  payments: PayrollNote[];
+  verifier: string;
+  expiresAt?: number;
+  /** Called as each part finishes, for runs that need more than one. */
+  onPart?: (done: number, of: number) => void;
+};
+
 export type CheckState = "pass" | "fail" | "unknown";
 
 export type VerifyResult = {
@@ -89,5 +149,7 @@ export type VerifyResult = {
   checks: { label: string; state: CheckState; detail?: string }[];
   /** For payment proofs: when the payment landed on chain, if found. */
   paidAt?: number;
+  /** For payroll proofs: when the first and last payment landed, if all were found. */
+  paidBetween?: [number, number];
   expired: boolean;
 };

@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { ThemeSegmented, ThemeToggle } from "@/components/ThemeToggle";
 import { WalletMenu } from "./WalletMenu";
 import { WelcomeModal } from "./WelcomeModal";
+import { PasskeyGate } from "./PasskeyGate";
 import { NetworkSelector } from "./NetworkSelector";
 import { useNetwork } from "./NetworkProvider";
 
@@ -181,6 +182,7 @@ export function AppShell({
   return (
     <div className="gloam-app relative flex min-h-full flex-col bg-background">
       <WelcomeModal />
+      <PasskeyGate />
 
       {/* desktop sidebar */}
       <aside

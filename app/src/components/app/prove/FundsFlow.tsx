@@ -29,6 +29,7 @@ import {
   friendlyProveError,
   isFundsNote,
   logoIdFor,
+  proveFailReason,
   longDate,
   networkFor,
   pickFundsNotes,
@@ -164,8 +165,14 @@ export function FundsFlow({ notes, empty }: { notes: LocalNote[]; empty: ReactNo
         expiresAt: p.expiresAt,
         chainId: first.chainId,
       });
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_created", { kind: "funds", chainId: first.chainId });
+      });
     } catch (e) {
       setErr(friendlyProveError(e, "funds"));
+      void import("@/lib/track").then(({ track }) => {
+        track("proof_create_failed", { kind: "funds", reason: proveFailReason(e) });
+      });
     } finally {
       setBusy(false);
     }
