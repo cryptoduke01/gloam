@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="July 14, 2026">
+    <LegalLayout title="Privacy Policy" updated="October 6, 2026">
       <p>
         This Privacy Policy describes how Gloam (“we,” “us”) handles information
         in connection with gloam.trade and related Services. Blockchain
@@ -60,42 +60,72 @@ export default function PrivacyPage() {
         required by law. Wallet addresses you use on-chain are shared with the
         network by design when you transact.
       </p>
-      <h2>6. Retention</h2>
+      <h2>6. Hosted MCP server (gloam.trade/mcp)</h2>
+      <p>
+        The hosted MCP server lets AI clients such as Claude, ChatGPT and Cursor
+        read information about Gloam and plan actions. It never holds funds,
+        never signs transactions, and refuses any tool call that looks like it
+        contains a private key, recovery phrase or note secret.
+      </p>
+      <p>
+        <strong>Tool inputs and outputs.</strong> What a tool call carries, such
+        as the details of a payment request or a proof you ask it to check, is
+        processed in memory to answer that one call and is not stored. We do not
+        receive your conversation with the AI client, only the tool calls it
+        sends.
+      </p>
+      <p>
+        <strong>Rate limiting.</strong> To prevent abuse we count requests per IP
+        address. The address is hashed before it is counted, and each count
+        expires within two minutes.
+      </p>
+      <p>
+        <strong>Request logs.</strong> Our hosting provider keeps standard request
+        logs (time, path, IP address and response status) for no more than 30
+        days. Request bodies are not logged.
+      </p>
+      <p>
+        <strong>The local server.</strong> The Gloam MCP server you run yourself
+        (npx @gloamtrade/mcp) runs on your own machine. Its keys, spending limits
+        and encrypted notes stay there, and we never receive them.
+      </p>
+      <h2>7. Retention</h2>
       <p>
         We retain information only as long as needed for the purposes above,
         unless a longer period is required by law. On-chain data persists for
         the life of the network.
       </p>
-      <h2>7. Security</h2>
+      <h2>8. Security</h2>
       <p>
         We use reasonable technical and organizational measures, but no method
         of transmission or storage is fully secure. You are responsible for
         securing your own devices and wallets.
       </p>
-      <h2>8. International transfers</h2>
+      <h2>9. International transfers</h2>
       <p>
         Services may be hosted in multiple regions. By using them, you
         understand information may be processed outside your country.
       </p>
-      <h2>9. Your choices</h2>
+      <h2>10. Your choices</h2>
       <p>
         You may disconnect your wallet, clear cookies, and adjust consent.
         Depending on your jurisdiction, you may have rights to access, correct,
         or delete certain personal data we hold off-chain. Contact us to
         exercise those rights.
       </p>
-      <h2>10. Children</h2>
+      <h2>11. Children</h2>
       <p>
         The Services are not directed to children under 18 (or the age of
         majority where you live). We do not knowingly collect their data.
       </p>
-      <h2>11. Changes</h2>
+      <h2>12. Changes</h2>
       <p>
         We may update this Policy by posting a new version with a revised date.
       </p>
-      <h2>12. Contact</h2>
+      <h2>13. Contact</h2>
       <p>
-        Privacy questions:{" "}
+        Privacy questions: <a href="mailto:gloamfinance@gmail.com">gloamfinance@gmail.com</a>{" "}
+        or{" "}
         <a href="https://x.com/gloamtrade">
           @gloamtrade
         </a>
