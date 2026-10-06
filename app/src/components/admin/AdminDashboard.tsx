@@ -37,7 +37,7 @@ type MetricsPayload = {
   error?: string;
 };
 
-type Tab = "overview" | "users" | "events";
+type Tab = "overview" | "users" | "events" | "partners";
 
 /** Events added for proofs, the public ledger, requests and notes; shown first in the breakdowns. */
 const NEW_EVENTS = [
@@ -411,6 +411,7 @@ export function AdminDashboard() {
                 ["overview", "Overview"],
                 ["users", "Wallets"],
                 ["events", "Product events"],
+                ["partners", "Partners"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -744,6 +745,8 @@ export function AdminDashboard() {
           </>
         )}
 
+        {tab === "partners" && <PartnersPanel />}
+
         <p className="tnum text-[12px] text-mute">
           Generated {data?.generatedAt ?? "not yet"} ·{" "}
           <Link
@@ -755,6 +758,126 @@ export function AdminDashboard() {
         </p>
       </main>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- partners */
+
+type AdminPartner = {
+  id: string;
+  owner: string;
+  name: string;
+  website: string | null;
+  fees: { privatePaymentCents: number; cashoutBps: number; depositBps: number };
+  createdAt: number;
+  activeKeys: number;
+  totals: {
+    privatePayments: number;
+    cashOuts: number;
+    deposits: number;
+    publicVolumeUsd: number;
+    commissionUsd: number;
+    unpriced: number;
+    lastActivity: number | null;
+  } | null;
+};
+
+type PartnersPayload = {
+  backend: "redis" | "memory" | "none";
+  partners: AdminPartner[];
+  totals: { privatePayments: number; cashOuts: number; deposits: number; publicVolumeUsd: number; commissionUsd: number } | null;
+};
+
+/** The partner program: every partner, their keys and the volume their keys brought in. */
+function PartnersPanel() {
+  const [data, setData] = useState<PartnersPayload | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/partners/admin", { credentials: "include", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: PartnersPayload; error?: { message?: string } } | null;
+        if (!live) return;
+        if (!res.ok || !json?.ok || !json.data) {
+          setErr(json?.error?.message ?? `Partners failed (${res.status})`);
+          return;
+        }
+        setErr(null);
+        setData(json.data);
+      } catch {
+        if (live) setErr("Network error loading partners");
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), 45_000);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
+        {err}
+      </p>
+    );
+  }
+  if (!data) {
+    return (
+      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
+        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+        Loading partners
+      </p>
+    );
+  }
+  const t = data.totals;
+  const pct = (bps: number) => `${(bps / 100).toFixed(2)}%`;
+  return (
+    <>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Partners" value={n(data.partners.length)} sub={`${n(data.partners.reduce((s, p) => s + p.activeKeys, 0))} active keys`} />
+        <Kpi label="Private payments" value={n(t?.privatePayments)} sub="relayed with a partner key" />
+        <Kpi label="Public volume" value={fmtUsd(t?.publicVolumeUsd ?? 0)} sub={`${n((t?.cashOuts ?? 0) + (t?.deposits ?? 0))} cash outs and deposits`} />
+        <Kpi label="Would-be fees" value={fmtUsd(t?.commissionUsd ?? 0)} sub="testnet, nothing charged" />
+      </section>
+      <Panel title="Partners">
+        <DataTable
+          headers={["Partner", "Owner", "Keys", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          rows={data.partners.map((p) => [
+            <span key="n" className="text-foreground">
+              {p.website ? (
+                <a href={p.website} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                  {p.name}
+                </a>
+              ) : (
+                p.name
+              )}
+            </span>,
+            <span key="o" title={p.owner}>
+              {shortAddress(p.owner, 4)}
+            </span>,
+            n(p.activeKeys),
+            n(p.totals?.privatePayments),
+            n(p.totals?.cashOuts),
+            n(p.totals?.deposits),
+            fmtUsd(p.totals?.publicVolumeUsd ?? 0),
+            fmtUsd(p.totals?.commissionUsd ?? 0),
+            `$${(p.fees.privatePaymentCents / 100).toFixed(2)} · ${pct(p.fees.cashoutBps)} · ${pct(p.fees.depositBps)}`,
+            p.totals?.lastActivity ? new Date(p.totals.lastActivity).toLocaleString() : "None yet",
+            new Date(p.createdAt).toLocaleDateString(),
+          ])}
+          empty={data.backend === "none" ? "Partner storage is not configured (set Upstash Redis)." : "No partners yet"}
+          minWidth={1100}
+        />
+        <p className="mt-4 text-[13px] leading-relaxed text-mute">
+          Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
+          deposits partners reported (checked on chain). Store: {data.backend}.
+        </p>
+      </Panel>
+    </>
   );
 }
 
