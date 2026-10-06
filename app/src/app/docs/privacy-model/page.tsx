@@ -186,6 +186,54 @@ export default function DocsPrivacyPage() {
         Screening lives in the app and the relay, not in the vault contract, which
         stays permissionless.
       </p>
+      <h3>Stablecoin issuer policies on Tempo (TIP-403)</h3>
+      <p>
+        Every stablecoin on Tempo points at a transfer policy in Tempo&apos;s
+        TIP-403 registry: open to all, closed to all, the issuer&apos;s allowlist
+        or blocklist, or separate lists for senders and recipients. The token
+        checks it on every transfer. Gloam respects it at the only two places
+        value moves: a deposit is a transfer from your wallet into the vault, and
+        a cash out is a transfer from the vault to a public address.
+      </p>
+      <ul>
+        <li>
+          <strong>Deposit:</strong> your wallet must be allowed to send the
+          stablecoin, and the vault must be allowed to receive it.
+        </li>
+        <li>
+          <strong>Cash out:</strong> the vault must be allowed to send it, and
+          the destination must be allowed to receive it. If the destination&apos;s
+          own Tempo receive policy would refuse the vault, Gloam says so instead
+          of letting the payment be held.
+        </li>
+        <li>
+          <strong>When:</strong> next to sanctions screening, in the app before
+          your wallet signs, at <code>/api/screen</code>, and inside the relay.
+          These are read-only calls to the chain. A wallet the issuer does not
+          allow sees the same neutral message.
+        </li>
+        <li>
+          <strong>Private sends</strong> move no tokens, so the policy never
+          sees them, and nothing private is read.
+        </li>
+      </ul>
+      <p>
+        The token enforces its policy on-chain whatever Gloam does. That makes
+        this compliant privacy with no operator: the issuer keeps its controls
+        at the public edges, nobody sees inside the vault, and there is no
+        Gloam operator in between. As of October 2026 on Tempo Moderato, OUSD
+        and PathUSD both use policy 1, open to all.
+      </p>
+      <p>
+        <strong>Issuer freeze risk.</strong> An issuer can also pause its
+        stablecoin, or set a policy that stops the vault itself from sending it.
+        Then no balance in that stablecoin can be cashed out until the issuer
+        lifts it, and nobody, the Gloam team included, can move it out another
+        way. The app reads the vault&apos;s standing for each stablecoin, shows
+        it as &quot;Issuer policy&quot; in the &quot;What the explorer
+        shows&quot; card, and warns before you deposit or cash out if the vault
+        is blocked.
+      </p>
       <h3>No admin withdraw</h3>
       <p>
         Nobody, including the Gloam team, can move pooled funds. The vault has no
