@@ -30,6 +30,7 @@ import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
+import { IssuerPolicyRow } from "./IssuerPolicyRow";
 import { useVaultStatus } from "@/lib/passkey";
 import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
@@ -483,9 +484,18 @@ export function ShieldView() {
       return;
     }
 
-    // Screen the depositing wallet on the server before the wallet signs.
+    // Screen the depositing wallet on the server before the wallet signs (on
+    // Tempo, also the asset's TIP-403 issuer policy for this deposit).
     setChecking(true);
-    const { allowed } = await screenWallets([address]).finally(() => setChecking(false));
+    const { allowed, scope, message } = await screenWallets([address], {
+      chainId: network.chainId,
+      asset: assetAddress,
+      flow: "deposit",
+    }).finally(() => setChecking(false));
+    if (!allowed && scope === "asset") {
+      setFormError(message ?? SCREEN_BLOCKED_MESSAGE);
+      return;
+    }
     if (!allowed) {
       setBlockedAddr(address);
       setFormError(null);
@@ -540,7 +550,9 @@ export function ShieldView() {
           address: selectedToken.address,
           abi: erc20Abi,
           functionName: "approve",
-          args: [network.pool, maxUint256],
+          // Exactly this deposit, never an open-ended allowance: a standing
+          // approval would let any key on this account move more than it meant to.
+          args: [network.pool, value],
           gas: APPROVE_GAS_LIMIT,
           chainId: network.chainId,
         });
@@ -873,6 +885,7 @@ export function ShieldView() {
                   {address ? shortAddress(address, 4) : "Your wallet"}
                 </dd>
               </div>
+              <IssuerPolicyRow chainId={network.chainId} asset={assetAddress} flow="deposit" />
               <div className="flex h-11 items-center justify-between gap-3">
                 <dt className="text-mute">Your private balance</dt>
                 <dd className="text-foreground/60">
