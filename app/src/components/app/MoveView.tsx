@@ -13,7 +13,7 @@ import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient } from "@/lib/rhClient";
-import { HASH_SCHEME, SHIELD_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
+import { HASH_SCHEME, gasFor, SHIELD_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote } from "@/lib/shield";
 import { syncShieldTree } from "@/lib/treeSync";
 import { buildPoseidonUnshieldWitness } from "@/lib/proverPoseidon";
 import { buildTransferWitness } from "@/lib/proverTransfer";
@@ -385,7 +385,7 @@ export function MoveView() {
           abi: payMemoAbi,
           functionName: "postMemo",
           args: [m.paymentCommitment, ticketToMemoBytes(m.ticket)],
-          gas: MEMO_GAS_LIMIT,
+          gas: gasFor(network.chainId, MEMO_GAS_LIMIT),
           chainId: network.chainId,
         });
         return;
@@ -546,7 +546,7 @@ export function MoveView() {
           address,
           BigInt(selected.amountWei),
         ],
-        gas: SHIELD_GAS_LIMIT,
+        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
         chainId: network.chainId,
       });
       setSuccessTitle("Cashed out");
@@ -699,7 +699,7 @@ export function MoveView() {
             fieldToBytes32(w.publicInputs.newCommitment1),
           ],
         ],
-        gas: SHIELD_GAS_LIMIT,
+        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
         chainId: network.chainId,
       });
       setSuccessTitle(

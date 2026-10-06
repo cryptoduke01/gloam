@@ -26,7 +26,7 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
-import { APPROVE_GAS_LIMIT, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
+import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
@@ -430,7 +430,7 @@ export function ShieldView() {
           functionName: "shieldBound",
           args: [asset, value, commitment, proofBytes],
           value: selectedToken ? undefined : value,
-          gas: SHIELD_BOUND_GAS_LIMIT,
+          gas: gasFor(network.chainId, SHIELD_BOUND_GAS_LIMIT),
           chainId: network.chainId,
         });
       } catch (err) {
@@ -449,7 +449,7 @@ export function ShieldView() {
         abi: shieldPoolAbi,
         functionName: "shield",
         args: [selectedToken.address, value, commitment],
-        gas: SHIELD_GAS_LIMIT,
+        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
         chainId: network.chainId,
       });
     } else {
@@ -459,7 +459,7 @@ export function ShieldView() {
         functionName: "shield",
         args: [NATIVE_ASSET, value, commitment],
         value,
-        gas: SHIELD_GAS_LIMIT,
+        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
         chainId: network.chainId,
       });
     }
@@ -553,7 +553,7 @@ export function ShieldView() {
           // Exactly this deposit, never an open-ended allowance: a standing
           // approval would let any key on this account move more than it meant to.
           args: [network.pool, value],
-          gas: APPROVE_GAS_LIMIT,
+          gas: gasFor(network.chainId, APPROVE_GAS_LIMIT),
           chainId: network.chainId,
         });
         return;

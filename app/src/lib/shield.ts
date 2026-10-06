@@ -235,6 +235,15 @@ export const SHIELD_BOUND_GAS_LIMIT = 1_900_000n;
 export const SEALED_SWAP_GAS_LIMIT = 2_500_000n;
 export const APPROVE_GAS_LIMIT = 120_000n;
 
+/**
+ * The fixed limits above are sized for Robinhood Chain. Tempo meters gas very
+ * differently (a fresh account's approve takes about 534k), and some wallets use
+ * the app's number as-is, so on Tempo the wallet estimates instead.
+ */
+export function gasFor(chainId: number, limit: bigint): bigint | undefined {
+  return chainId === 42431 ? undefined : limit;
+}
+
 export function isShieldDeployed(): boolean {
   return Boolean(SHIELD_POOL_ADDRESS);
 }
