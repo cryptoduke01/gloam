@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gloam pitch</title>
+<meta name="description" content="Gloam is the privacy layer for onchain money: private balances, payments and proofs for people, teams and AI agents.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+@font-face { font-family: "Aeonik"; font-weight: 300; src: url("../fonts/Aeonik-Light.woff2") format("woff2"); }
+@font-face { font-family: "Aeonik"; font-weight: 400; src: url("../fonts/Aeonik-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Aeonik"; font-weight: 500; src: url("../fonts/Aeonik-Medium.woff2") format("woff2"); }
+
+:root {
+  --ink: #0b0c0e; --paper: #fbfbfa; --white: #ffffff; --surface: #f3f4f5; --surface2: #eaebed;
+  --mute: #5f636a; --faint: #979ba2; --line: #e4e6e9;
+  --green: #2e7d53; --tint: #e6f2ea; --on-tint: #1d4f35;
+  --dk: #08090a; --dk-panel: #141518; --dk-line: #26282c; --dk-text: #f4f5f6; --dk-mute: #9b9fa6; --mint: #8fd3ad;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #050506; color: var(--ink); font-family: "Aeonik", system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+
+/* viewer chrome */
+.bar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: rgba(5, 5, 6, 0.85); backdrop-filter: blur(10px); color: #f4f5f6; font-size: 15px; }
+.bar .brand { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.bar nav { display: flex; gap: 8px; }
+.bar a, .bar button { color: #f4f5f6; background: #17181b; border: 0; border-radius: 999px; padding: 9px 14px; font: inherit; text-decoration: none; cursor: pointer; }
+.bar a:hover, .bar button:hover { background: #24262a; }
+.bar a:focus-visible, .bar button:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.deck { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 16px 64px; }
+.frame { position: relative; width: min(100%, calc((100vh - 120px) * 16 / 9)); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 14px; scroll-margin-top: 80px; }
+.s { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; transform: scale(var(--k, 0.5)); overflow: hidden; padding: 112px 128px; display: flex; flex-direction: column; }
+.notes { display: none; width: min(100%, calc((100vh - 120px) * 16 / 9)); color: #cdd0d4; background: #111214; border-radius: 12px; padding: 18px 22px; font-size: 16px; line-height: 1.55; margin-top: -12px; }
+.notes b { color: var(--mint); font-weight: 500; }
+body.show-notes .notes { display: block; }
+
+/* slide atoms */
+.light { background: var(--paper); color: var(--ink); }
+.grey { background: var(--surface); color: var(--ink); }
+.dark { background: var(--dk); color: var(--dk-text); }
+.glow::before { content: ""; position: absolute; inset: 0; background: radial-gradient(65% 85% at 100% 100%, var(--tint) 0%, transparent 70%); pointer-events: none; }
+.dark.glow::before { background: radial-gradient(65% 85% at 100% 100%, rgba(143, 211, 173, 0.14) 0%, transparent 70%); }
+.s > * { position: relative; }
+.top { display: flex; justify-content: space-between; align-items: center; font-size: 24px; }
+.lock { display: flex; align-items: center; gap: 14px; font-weight: 500; font-size: 30px; letter-spacing: -0.01em; }
+.mark .tile { fill: var(--ink); } .mark .win { fill: #fff; }
+.dark .mark .tile { fill: #f4f5f6; } .dark .mark .win { fill: var(--dk); }
+.eyebrow { font-weight: 500; font-size: 24px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--green); }
+.dark .eyebrow { color: var(--mint); }
+.h1 { font-weight: 300; font-size: 128px; line-height: 1.0; letter-spacing: -0.035em; }
+.h2 { font-weight: 300; font-size: 80px; line-height: 1.04; letter-spacing: -0.03em; }
+.lede { font-size: 34px; line-height: 1.4; color: var(--mute); max-width: 34ch; }
+.dark .lede { color: var(--dk-mute); }
+.mute { color: var(--mute); } .dark .mute { color: var(--dk-mute); }
+.foot { position: absolute; left: 128px; right: 128px; bottom: 56px; display: flex; justify-content: space-between; font-size: 22px; color: var(--faint); }
+.dark .foot { color: #6c7077; }
+.grow { flex: 1; }
+.cols { display: grid; gap: 28px; }
+.c3 { grid-template-columns: repeat(3, 1fr); } .c4 { grid-template-columns: repeat(4, 1fr); } .c2 { grid-template-columns: 1fr 1fr; }
+.rule { border-top: 1.5px solid var(--line); padding-top: 30px; display: flex; flex-direction: column; gap: 12px; }
+.dark .rule { border-top-color: var(--dk-line); }
+.rule h3, .card h3 { font-weight: 500; font-size: 34px; letter-spacing: -0.01em; }
+.rule p, .card p { font-size: 27px; line-height: 1.42; color: var(--mute); }
+.dark .rule p, .dark .card p { color: var(--dk-mute); }
+.card { background: var(--white); border-radius: 26px; padding: 40px; display: flex; flex-direction: column; gap: 14px; }
+.grey .card { background: var(--white); }
+.dark .card { background: var(--dk-panel); }
+.s .big { font-weight: 300; font-size: 112px; line-height: 1; letter-spacing: -0.035em; color: inherit; }
+.pill { display: inline-flex; align-items: center; gap: 12px; background: var(--white); border-radius: 999px; padding: 14px 24px; font-size: 24px; }
+.pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
+.check { display: flex; align-items: center; gap: 24px; font-size: 32px; padding: 26px 0; }
+.check + .check { border-top: 1.5px solid var(--dk-line); }
+.ic { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; flex: none; background: var(--tint); color: var(--green); }
+.dark .ic { background: rgba(143, 211, 173, 0.12); color: var(--mint); }
+.ic svg { width: 26px; height: 26px; }
+table { width: 100%; border-collapse: collapse; font-size: 27px; }
+th { text-align: left; font-weight: 500; font-size: 22px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); padding: 0 24px 20px 0; }
+td { padding: 24px 24px 24px 0; border-top: 1.5px solid var(--line); vertical-align: top; line-height: 1.35; }
+tr.us td { background: var(--tint); color: var(--on-tint); }
+tr.us td:first-child { padding-left: 20px; border-radius: 16px 0 0 16px; }
+tr.us td:last-child { border-radius: 0 16px 16px 0; }
+tr.us th:first-child { padding-left: 20px; }
+.steps { display: grid; grid-template-columns: 1fr 64px 1fr 64px 1fr; align-items: stretch; }
+.arrow { display: grid; place-items: center; color: var(--faint); }
+.arrow svg { width: 34px; height: 34px; }
+
+@media print {
+  @page { size: 1920px 1080px; margin: 0; }
+  html, body { background: none; }
+  .bar, .notes { display: none !important; }
+  .deck { display: block; padding: 0; }
+  .frame { width: 1920px; height: 1080px; border-radius: 0; break-after: page; }
+  .s { transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><svg class="mark" viewBox="0 0 32 32" width="22" height="22"><rect width="32" height="32" rx="9" fill="#f4f5f6"/><rect x="15" y="4" width="12" height="12" rx="3.5" fill="#050506"/></svg>Gloam pitch</div>
+  <nav><button type="button" id="notesBtn" aria-pressed="false">Speaker notes (N)</button><a href="/pitch/Gloam-Pitch-Deck.pdf" download>Download PDF</a><a href="/">gloam.trade</a></nav>
+</header>
+
+<main class="deck" id="deck">
+
+<!-- 1 cover -->
+<div class="frame"><section class="s light glow" aria-label="Gloam">
+  <div class="top"><div class="lock"><svg class="mark" viewBox="0 0 32 32" width="44" height="44"><rect class="tile" width="32" height="32" rx="9"/><rect class="win" x="15" y="4" width="12" height="12" rx="3.5"/></svg>Gloam</div><span class="mute">October 2026</span></div>
+  <div class="grow"></div>
+  <h1 class="h1">The privacy layer<br>for onchain money.</h1>
+  <p class="lede" style="margin-top:40px;max-width:40ch">Hold, pay and run payroll without showing the world every amount. Trade privately next.</p>
+  <div class="grow"></div>
+  <div class="foot"><span>Live on Tempo and Robinhood Chain testnets</span><span>gloam.trade</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Hi, I'm Duke, and I'm building Gloam. Gloam is the privacy layer for onchain money: hold, pay and run payroll without showing the world every amount, and next, trade privately too. It's live today on Tempo and Robinhood Chain testnet.</aside>
+
+<!-- 2 problem -->
+<div class="frame"><section class="s dark" aria-label="The problem">
+  <p class="eyebrow">The problem</p>
+  <h2 class="h1" style="margin-top:48px">Every wallet is a<br>public bank statement.</h2>
+  <div class="grow"></div>
+  <div class="cols c4">
+    <div class="rule"><h3>Payroll</h3><p>Pay a team onchain and every salary is public, forever.</p></div>
+    <div class="rule"><h3>Treasury</h3><p>Balances, suppliers and runway are readable by anyone.</p></div>
+    <div class="rule"><h3>Trading</h3><p>Every position and trade size is visible, so others copy or front-run you.</p></div>
+    <div class="rule"><h3>AI agents</h3><p>An agent's wallet shows every tool it pays for, and its strategy.</p></div>
+  </div>
+</section></div>
+<aside class="notes"><b>Say:</b> Paste any wallet into a block explorer and you see everything: the balance, every payment, every trade, who it paid and how much. That's fine for settlement, and terrible for real money. It's why companies keep payroll and treasury off chain, why traders get copied and front-run, and why agents that pay for tools leak what they're doing.</aside>
+
+<!-- 3 why now -->
+<div class="frame"><section class="s light" aria-label="Why now">
+  <p class="eyebrow">Why now</p>
+  <h2 class="h2" style="margin-top:40px">Real money is moving onchain, in public.</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="rule" style="gap:22px"><p class="big">$306B</p><p>in stablecoins in circulation</p></div>
+    <div class="rule" style="gap:22px"><p class="big">$33T</p><p>moved in stablecoins in 2025, more than the big card networks</p></div>
+    <div class="rule" style="gap:22px"><p class="big">$226B</p><p>a year in business payments, up 733% in a year</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">Stripe and Paradigm launched Tempo, a payments chain. Robinhood put stocks onchain. Agents now pay over HTTP. <span class="mute">All of it on public rails.</span></p>
+  <div class="foot"><span>Sources: DefiLlama via Rise Q3 2026 report; Morph stablecoin report 2025; Artemis and McKinsey via The Fintech Times</span><span>3</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Why now? Stablecoins are real money now: about 306 billion in circulation, 33 trillion moved last year, and businesses alone send over 200 billion a year, growing more than 7x. Tempo launched a payments chain, Robinhood put stocks onchain, and AI agents now pay for things over HTTP. Every one of those payments is public.</aside>
+
+<!-- 4 solution -->
+<div class="frame"><section class="s grey" aria-label="The solution">
+  <p class="eyebrow">The solution</p>
+  <h2 class="h2" style="margin-top:40px">One private balance you can<br>pay from and prove from.</h2>
+  <div class="grow"></div>
+  <div class="steps">
+    <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v13M8 12l5 5 5-5M5 21h16"/></svg></span><h3>Add money</h3><p>Stablecoins, crypto or tokenized stocks go into the vault. Your balance becomes private.</p></div>
+    <div class="arrow"><svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h18M20 11l6 6-6 6"/></svg></div>
+    <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="16" height="11" rx="3"/><path d="M8.5 11V8.5a4.5 4.5 0 0 1 9 0V11"/></svg></span><h3>Pay privately</h3><p>Send, run payroll or let an agent pay. Amounts and people stay hidden.</p></div>
+    <div class="arrow"><svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h18M20 11l6 6-6 6"/></svg></div>
+    <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><h3>Prove what's needed</h3><p>Show a bank, landlord or accountant one fact, and nothing else.</p></div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Gloam is a self-custodial vault. You put money in and get a private balance only you can see. From there you pay people, run payroll, or let an agent pay, without showing amounts or who got paid. And when someone needs to know something, like an accountant needing a payroll total, you prove exactly that and nothing more. You can cash out anytime.</aside>
+
+<!-- 5 product -->
+<div class="frame"><section class="s light" aria-label="Product">
+  <p class="eyebrow">Product</p>
+  <h2 class="h2" style="margin-top:40px">Live today at gloam.trade</h2>
+  <div class="grow"></div>
+  <div class="cols c3" style="row-gap:28px">
+    <div class="card" style="background:var(--surface)"><h3>Private balance</h3><p>OUSD and pathUSD on Tempo, USDG, ETH and stocks on Robinhood Chain.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Private payments</h3><p>Hidden amounts, a private note, a relay that hides your wallet.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Payroll</h3><p>Upload a CSV, pay the team, repeat it monthly with a cap.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Payment requests</h3><p>A link or QR code that asks to be paid. Nothing goes onchain.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Proofs</h3><p>Proof of funds, of payment, or of a payroll total.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>For builders</h3><p>SDK, partner API, MCP server and a private MPP payment method.</p></div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> All of this is live right now on testnet. A private balance in stablecoins, crypto and tokenized stocks. Private payments with notes. Payroll from a CSV with schedules. Payment request links. Proofs of funds, payments and payroll totals. And for builders: an SDK, a partner API, an MCP server for AI agents, and a private payment method for MPP.</aside>
+
+<!-- 6 compliance -->
+<div class="frame"><section class="s dark glow" aria-label="Compliance">
+  <div class="cols c2" style="align-items:center;gap:120px;height:100%">
+    <div>
+      <p class="eyebrow">Built to be trusted</p>
+      <h2 class="h1" style="margin-top:44px">Private,<br>not a mixer.</h2>
+    </div>
+    <div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Sanctions checks on every deposit and cash out</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Stablecoin issuer rules respected on Tempo</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Proofs for auditors, accountants and banks</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>No admin can move your money</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Three days of public notice for any rule change</div>
+    </div>
+  </div>
+</section></div>
+<aside class="notes"><b>Say:</b> The first question we always get: isn't this a mixer? No. Every deposit and cash out is screened against sanctions lists. On Tempo we respect the stablecoin issuer's own rules. Users can prove things to auditors and banks. And we removed ourselves: no admin can move anyone's money, and any rule change waits three days in public.</aside>
+
+<!-- 7 agents and distribution -->
+<div class="frame"><section class="s light" aria-label="Agents">
+  <div class="cols c2" style="gap:120px;height:100%;align-items:center">
+    <div>
+      <p class="eyebrow">AI agents</p>
+      <h2 class="h2" style="margin-top:40px">Agents pay privately, inside limits you set.</h2>
+      <p class="lede" style="margin-top:36px">Agents are the fastest growing payer onchain, and the most exposed.</p>
+    </div>
+    <div class="card" style="background:var(--surface);padding:12px 40px">
+      <div class="check" style="border-color:var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Pays for APIs over x402 and MPP</span></div>
+      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Spending caps per payment and per day</span></div>
+      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Private method proposed to the MPP spec</span></div>
+      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>One link adds Gloam to Claude or ChatGPT</span></div>
+    </div>
+  </div>
+</section></div>
+<aside class="notes"><b>Say:</b> Agents are where payments are going. With Gloam an agent pays for APIs privately, over x402 or MPP, inside spending limits its owner sets. We proposed a private payment method to MPP, the machine payments standard from Tempo and Stripe; the pull request is open. And anyone can add Gloam to Claude or ChatGPT by pasting one link.</aside>
+
+<!-- 8 market -->
+<div class="frame"><section class="s light glow" aria-label="Market">
+  <p class="eyebrow">Market</p>
+  <h2 class="h2" style="margin-top:40px">Every stablecoin payment is a customer.</h2>
+  <div class="grow"></div>
+  <div style="display:grid;grid-template-columns:500px 1fr;gap:110px;align-items:center">
+    <svg viewBox="0 0 560 560" width="500" height="500" aria-label="TAM, SAM and SOM as nested circles">
+      <circle cx="280" cy="280" r="276" fill="#f3f4f5"/>
+      <circle cx="280" cy="372" r="184" fill="#e6f2ea"/>
+      <circle cx="280" cy="460" r="96" fill="#2e7d53"/>
+      <text x="280" y="96" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#0b0c0e">TAM</text>
+      <text x="280" y="268" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#1d4f35">SAM</text>
+      <text x="280" y="472" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#ffffff">SOM</text>
+    </svg>
+    <div style="display:flex;flex-direction:column;gap:26px">
+      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">TAM</p><p class="big" style="font-size:72px">$33T a year</p><p>All stablecoin volume, public by default today.</p></div>
+      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">SAM</p><p class="big" style="font-size:72px">$226B a year</p><p>Business payments: salaries, suppliers, treasury.</p></div>
+      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">SOM</p><p class="big" style="font-size:72px;color:var(--green)">$2.3B a year</p><p>1% of business payments through Gloam, three years after mainnet.</p></div>
+    </div>
+  </div>
+  <div class="grow"></div>
+  <div class="foot"><span>Sources: Morph stablecoin report 2025; Artemis and McKinsey B2B data. SOM is our target, not a forecast.</span><span>8</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> The total market is every stablecoin payment, 33 trillion dollars a year, and all of it is public today. Our serviceable market is business payments, the 226 billion a year where privacy is not optional: salaries, suppliers, treasury. Our target is 1 percent of that, 2.3 billion a year of private volume, three years after mainnet.</aside>
+
+<!-- 9 business model -->
+<div class="frame"><section class="s grey" aria-label="Business model">
+  <p class="eyebrow">Business model</p>
+  <h2 class="h2" style="margin-top:40px">We earn when private money moves.</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">0.1%</p><h3>In and out</h3><p>On every deposit and cash out. Railgun charges 0.25%.</p></div>
+    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">API</p><h3>Partners</h3><p>Wallets and apps add private payments with an API key and set their own fee. Live now.</p></div>
+    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">$99</p><h3>Team plans</h3><p>A month for scheduled payroll, approvals and accountant proofs.</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">At 0.1% in and 0.1% out, $2.3B a year of volume is about <b style="font-weight:500">$4.6M in revenue</b>, before partners and plans.</p>
+  <div class="foot"><span>Planned pricing at mainnet. Testnet is free and nothing is charged.</span><span>9</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> We make money when private money moves. A 0.1 percent fee on deposits and cash outs, less than half of what Railgun charges. A partner program, which is live: wallets and apps plug in with an API key and set their own fee on top. And team plans for payroll, approvals and accountant proofs. At our target volume, the fee alone is about 4.6 million dollars a year.</aside>
+
+<!-- 10 traction -->
+<div class="frame"><section class="s light" aria-label="Traction">
+  <p class="eyebrow">Traction</p>
+  <h2 class="h2" style="margin-top:40px">Built and live in three weeks.</h2>
+  <div class="grow"></div>
+  <div class="cols c4">
+    <div class="rule" style="gap:16px"><p class="big" style="color:var(--green)">$405k</p><p>shielded on testnet so far</p></div>
+    <div class="rule" style="gap:16px"><p class="big">6</p><p>zero-knowledge circuits, proven in the browser</p></div>
+    <div class="rule" style="gap:16px"><p class="big">2</p><p>networks live: Tempo and Robinhood Chain</p></div>
+    <div class="rule" style="gap:16px"><p class="big">3</p><p>packages on npm for apps and agents</p></div>
+  </div>
+  <div class="grow"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <span class="pill" style="background:var(--surface)"><i></i>Private payment method proposed to MPP</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Partner API live</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Hosted connector for Claude and ChatGPT</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Two rounds of security review</span>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> We built all of this in three weeks. 405 thousand dollars of testnet money has been shielded so far, six zero-knowledge circuits run in the browser, it's live on two networks, and three packages are on npm. We've proposed our payment method to the MPP spec, the partner API is live, and the code has had two rounds of security review. <b>If asked who deposited:</b> mostly our own testing so far; the next goal is outside teams running real payroll.</aside>
+
+<!-- 11 competition -->
+<div class="frame"><section class="s light" aria-label="Competition">
+  <p class="eyebrow">Competition</p>
+  <h2 class="h2" style="margin-top:40px">Where Gloam fits</h2>
+  <div class="grow"></div>
+  <table>
+    <tr><th style="width:22%">Who</th><th style="width:40%">What they do</th><th>Who it's for</th></tr>
+    <tr><td>Railgun</td><td>Private DeFi on Ethereum and L2s</td><td class="mute">Crypto-native traders</td></tr>
+    <tr><td>Hinkal</td><td>A privacy API for apps</td><td class="mute">Developers on EVM chains</td></tr>
+    <tr><td>Tempo Zones</td><td>Private zones the operator can see into</td><td class="mute">Enterprises on Tempo</td></tr>
+    <tr><td>zkdesk</td><td>A private treasury desk</td><td class="mute">One team's treasury</td></tr>
+    <tr class="us"><td><b style="font-weight:500">Gloam</b></td><td>Self-custodial private money with proofs</td><td>People, teams and AI agents, on the new payment chains</td></tr>
+  </table>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Privacy is getting crowded, which tells you the need is real. Railgun is private DeFi for traders. Hinkal is a privacy API. Tempo Zones are private but the operator sees inside. zkdesk is a treasury desk. Gloam is self-custodial private money with built-in proofs, for people, teams and agents, on the chains where payments stablecoins and tokenized stocks are landing.</aside>
+
+<!-- 12 go to market -->
+<div class="frame"><section class="s grey" aria-label="Go to market">
+  <p class="eyebrow">Go to market</p>
+  <h2 class="h2" style="margin-top:40px">Three ways in</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="card"><h3>Teams that pay in stablecoins</h3><p>Start with crypto-native teams and contractors. One private payday shows the value in a minute.</p></div>
+    <div class="card"><h3>Agent builders</h3><p>Reach them inside the tools they use: MCP, MPP, Claude Code, Codex and Cursor plugins.</p></div>
+    <div class="card"><h3>Wallets and apps</h3><p>The partner API puts Gloam inside other products, and they earn their own fee.</p></div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> We go in three ways. First, teams that already pay in stablecoins: one private payday and they get it. Second, agent builders, reached inside the tools they already use, like Claude, Cursor and the MPP standard. Third, wallets and apps through the partner API, where they earn their own fee for bringing users.</aside>
+
+<!-- 13 roadmap -->
+<div class="frame"><section class="s light" aria-label="Roadmap">
+  <p class="eyebrow">Roadmap</p>
+  <h2 class="h2" style="margin-top:40px">From testnet to mainnet</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="card" style="background:var(--tint)"><p class="eyebrow" style="font-size:22px">Now</p><h3>Live on two testnets</h3><p style="color:var(--on-tint)">Payroll, proofs, agents, partner API, OUSD and USDG.</p></div>
+    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Next</p><h3>Private trading</h3><p>Trade stocks and crypto from a private balance. Built and tested, switched on once it's provably solvent.</p></div>
+    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Then</p><h3>Mainnet with caps</h3><p>Key ceremony, external audit, launch with deposit limits, then team accounts.</p></div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Today we're live on two testnets. Next is private trading: trading stocks and crypto straight from a private balance. It's built and tested, and we switch it on once the vault can prove it stays solvent. Then mainnet: a multi-party key ceremony, an external audit, a launch with deposit caps, and team accounts with approvals.</aside>
+
+<!-- 14 team -->
+<div class="frame"><section class="s light glow" aria-label="Team">
+  <p class="eyebrow">Team</p>
+  <h2 class="h2" style="margin-top:40px">Built by a security researcher</h2>
+  <div class="grow"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:end">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <p style="font-weight:500;font-size:48px;letter-spacing:-0.01em">Duke</p>
+      <p class="mute" style="font-size:30px">Founder · @dukedotsol</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;font-size:30px;line-height:1.4">
+      <p>Smart contract security researcher. Found and disclosed critical bugs in live DeFi protocols.</p>
+      <p class="mute">Wrote Kensho, an open audit playbook, and built Aumo, an autonomous yield agent on X Layer.</p>
+    </div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> I'm Duke. I'm a smart contract security researcher: I find and disclose bugs in live DeFi protocols. That's why Gloam is built the way it is, with no admin keys over user money. Before Gloam I built Aumo, an autonomous yield agent.</aside>
+
+<!-- 15 ask -->
+<div class="frame"><section class="s dark glow" aria-label="The ask">
+  <div class="top"><div class="lock"><svg class="mark" viewBox="0 0 32 32" width="44" height="44"><rect class="tile" width="32" height="32" rx="9"/><rect class="win" x="15" y="4" width="12" height="12" rx="3.5"/></svg>Gloam</div><span class="mute">gloam.trade · @gloamtrade</span></div>
+  <div class="grow"></div>
+  <h2 class="h1">Make onchain money<br>private by default.</h2>
+  <div class="grow"></div>
+  <p class="eyebrow" style="margin-bottom:28px">Raising our pre-seed to reach mainnet</p>
+  <div class="cols c3">
+    <div class="rule"><h3>Audit and ceremony</h3><p>An external audit and a multi-party key ceremony.</p></div>
+    <div class="rule"><h3>Mainnet launch</h3><p>Live on Tempo and Robinhood Chain with deposit caps.</p></div>
+    <div class="rule"><h3>First 50 customers</h3><p>Teams running payroll and agents paying privately.</p></div>
+  </div>
+</section></div>
+<aside class="notes"><b>Say:</b> We're raising our pre-seed to take Gloam to mainnet: an external audit and key ceremony, a capped launch on Tempo and Robinhood Chain, and our first 50 teams and agent builders. If you run a team or build agents, try it at gloam.trade. Thank you.</aside>
+
+</main>
+
+<script>
+(function () {
+  var frames = Array.prototype.slice.call(document.querySelectorAll(".frame"));
+  function fit() {
+    frames.forEach(function (f) { f.firstElementChild.style.setProperty("--k", String(f.clientWidth / 1920)); });
+  }
+  window.addEventListener("resize", fit);
+  fit();
+  var btn = document.getElementById("notesBtn");
+  function toggleNotes() {
+    var on = document.body.classList.toggle("show-notes");
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    fit();
+  }
+  btn.addEventListener("click", toggleNotes);
+  function current() {
+    var mid = window.innerHeight / 2, best = 0, dist = Infinity;
+    frames.forEach(function (f, i) {
+      var r = f.getBoundingClientRect(), d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < dist) { dist = d; best = i; }
+    });
+    return best;
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var k = e.key, i = current();
+    if (k === "n" || k === "N") { toggleNotes(); return; }
+    if (k === "ArrowDown" || k === "ArrowRight" || k === "PageDown" || k === " ") i = Math.min(frames.length - 1, i + 1);
+    else if (k === "ArrowUp" || k === "ArrowLeft" || k === "PageUp") i = Math.max(0, i - 1);
+    else return;
+    e.preventDefault();
+    frames[i].scrollIntoView({ block: "center" });
+  });
+})();
+</script>
+</body>
+</html>

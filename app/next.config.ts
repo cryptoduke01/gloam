@@ -13,6 +13,10 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  // The pitch deck is one static page in public/pitch.
+  async rewrites() {
+    return [{ source: "/pitch", destination: "/pitch/index.html" }];
+  },
   webpack: (config) => {
     // WalletConnect optional deps — silence missing optional modules
     config.externals.push("pino-pretty", "encoding");
