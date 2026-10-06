@@ -5,6 +5,7 @@
  * onto another challenge, wrong keys, amounts, assets, pools and events, a
  * payer who spends the payment back, lost sweep receipts, and concurrency.
  */
+import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Hex } from "viem";
@@ -40,7 +41,8 @@ import {
 } from "../src/core.js";
 import { CHAIN_ID, POOL, USD, fundedNote, mockPool, stubProve, type MockPool } from "./helpers.js";
 
-const SECRET = "server-secret-key-for-tests-0123456789";
+// Random per run: a fixed string here only trips secret scanners.
+const SECRET = randomBytes(24).toString("hex");
 const payee = await generateReceiveKey();
 const stranger = await generateReceiveKey();
 

@@ -3,6 +3,7 @@
  * credentials and receipts, header parsing edge cases, and byte compatibility
  * with mppx in both directions.
  */
+import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Challenge, Credential, Receipt } from "mppx";
@@ -128,7 +129,7 @@ test("receipts round trip; expiry is fail closed", () => {
 });
 
 test("byte compatible with mppx: challenges, credentials and receipts cross both ways", async () => {
-  const secretKey = "mppx-interop-secret-key-at-least-32b";
+  const secretKey = randomBytes(24).toString("hex"); // random per run, at least 32 chars
   const request = { amount: "1000", currency: "0x20c0000000000000000000000000000000000000", recipient: "gloamr1.abc", methodDetails: { chainId: 42431, pool: "0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb" } };
 
   // mppx mints, we parse and verify.

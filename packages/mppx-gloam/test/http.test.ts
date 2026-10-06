@@ -3,6 +3,7 @@
  * adapters (mppx/server + mppx/client), each paid end to end against an
  * in-memory pool, plus the refusals a server must answer with a fresh 402.
  */
+import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateReceiveKey, type NoteExport } from "@gloamtrade/sdk";
@@ -27,7 +28,8 @@ import { gloam as gloamServer } from "../src/mppx/server.js";
 import { gloam as gloamClient } from "../src/mppx/client.js";
 import { fundedNote, mockPool, stubProve, CHAIN_ID, POOL, USD, type MockPool } from "./helpers.js";
 
-const SECRET = "http-test-secret-key-0123456789-abcdef";
+// Random per run: a fixed string here only trips secret scanners.
+const SECRET = randomBytes(24).toString("hex");
 const payee = await generateReceiveKey();
 const URL_ = "https://api.example.com/answer";
 
