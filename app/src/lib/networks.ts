@@ -118,7 +118,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     chainId: robinhoodTestnet.id,
     pool: TESTNET_POSEIDON_POOL,
     deployBlock: TESTNET_POSEIDON_DEPLOY_BLOCK,
-    logRange: 200_000n,
+    // Robinhood's RPC rejects topic-filtered eth_getLogs over 100k blocks.
+    logRange: 100_000n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
     stableAssets: [],
