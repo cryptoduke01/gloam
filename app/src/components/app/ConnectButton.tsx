@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   useAccount,
   useConnect,
@@ -9,20 +9,22 @@ import {
   useChainId,
 } from "wagmi";
 import { ensureRhTestnetWallet, shortAddress } from "@/lib/chain";
+import { isTempoWallet } from "@/lib/tempoWallet";
 import { useNetwork } from "./NetworkProvider";
 
+const noSubscribe = () => () => {};
+
 export function ConnectButton({ className = "" }: { className?: string }) {
-  const { address, isConnected, isConnecting } = useAccount();
+  const { address, isConnected, isConnecting, connector: current } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
   const { network } = useNetwork();
   const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
-  const [mounted, setMounted] = useState(false);
+  // False on the server and first paint, true once hydrated.
+  const mounted = useSyncExternalStore(noSubscribe, () => true, () => false);
   const [netErr, setNetErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!isConnected || !address) return;
@@ -64,6 +66,19 @@ export function ConnectButton({ className = "" }: { className?: string }) {
 
   if (isConnected && address) {
     const wrong = chainId !== network.chainId;
+    // Passkey (Tempo Wallet) accounts live on Tempo only; switching cannot work.
+    if (wrong && isTempoWallet(current)) {
+      return (
+        <div className={className}>
+          <button type="button" onClick={() => disconnect()} className="btn btn-ink">
+            Disconnect passkey
+          </button>
+          <p className="mt-2 max-w-[16rem] text-[12px] leading-snug text-mute">
+            Passkey accounts are on Tempo. {network.label} needs a browser wallet.
+          </p>
+        </div>
+      );
+    }
     if (wrong) {
       return (
         <div className={className}>
@@ -100,10 +115,23 @@ export function ConnectButton({ className = "" }: { className?: string }) {
     );
   }
 
-  const connector = connectors[0];
+  const connector = connectors.find((c) => !isTempoWallet(c)) ?? connectors[0];
+  // On Tempo, passkey sign-in (Tempo Wallet, fees sponsored) is offered too.
+  const passkey =
+    network.key === "tempo" ? connectors.find((c) => isTempoWallet(c)) : undefined;
 
   return (
     <div className={className}>
+      {passkey && (
+        <button
+          type="button"
+          onClick={() => connect({ connector: passkey })}
+          disabled={isPending || isConnecting}
+          className="btn btn-ink mb-2"
+        >
+          Sign in with a passkey
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
@@ -113,9 +141,13 @@ export function ConnectButton({ className = "" }: { className?: string }) {
           if (connector) connect({ connector });
         }}
         disabled={!connector || isPending || isConnecting}
-        className="btn btn-ink"
+        className={passkey ? "btn btn-ghost" : "btn btn-ink"}
       >
-        {isPending || isConnecting ? "Connecting…" : "Connect wallet"}
+        {isPending || isConnecting
+          ? "Connecting…"
+          : passkey
+            ? "Use a browser wallet"
+            : "Connect wallet"}
       </button>
       {error && (
         <p className="mt-2 max-w-[14rem] text-[12px] leading-snug text-danger">

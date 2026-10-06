@@ -2,9 +2,26 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import type { Address } from "viem";
+import {
+  useConnect,
+  useDisconnect,
+  useReadContract,
+  useSwitchChain,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { exitDemo, useAppAccount } from "@/lib/demo";
 import { ensureRhTestnetWallet, shortAddress } from "@/lib/chain";
+import {
+  FEE_MANAGER,
+  OUSD,
+  TEMPO_CHAIN_ID,
+  TEMPO_SPONSORED,
+  feeManagerAbi,
+  tempoStableSymbol,
+} from "@/lib/feeSponsor";
+import { isTempoWallet, preloadTempoWallet } from "@/lib/tempoWallet";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { TurnkeyHeaderSignIn } from "./TurnkeyHeaderSignIn";
@@ -30,9 +47,10 @@ function detectVariant(el: HTMLElement | null): WalletMenuVariant {
 }
 
 export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
-  const { address, isConnected, isConnecting, chainId, demo } = useAppAccount();
-  const { connect, connectors, isPending, error } = useConnect();
-  const { disconnect: wagmiDisconnect } = useDisconnect();
+  const { address, isConnected, isConnecting, chainId, demo, connector } =
+    useAppAccount();
+  const { connect, connectors, isPending, error, variables } = useConnect();
+  const { disconnect: wagmiDisconnect, disconnectAsync } = useDisconnect();
   const disconnect = demo ? exitDemo : wagmiDisconnect;
   const { network } = useNetwork();
   const { switchChain, isPending: switching } = useSwitchChain();
@@ -67,6 +85,21 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
       window.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  // Injected wallet (MetaMask, etc.) is the fallback, not a passkey connector.
+  const walletConnector =
+    connectors.find((c) => c.id !== "gloam-turnkey" && !isTempoWallet(c)) ??
+    connectors[0];
+  // Passkey sign-in (Tempo Wallet) is offered on Tempo, where it lives.
+  const passkeyConnector =
+    network.key === "tempo" ? connectors.find((c) => isTempoWallet(c)) : undefined;
+  const offerPasskey = Boolean(passkeyConnector) && !isConnected && !demo;
+
+  // Load the wallet SDK while the button is visible, so a click can open the
+  // wallet popup inside the same user gesture.
+  useEffect(() => {
+    if (offerPasskey) preloadTempoWallet();
+  }, [offerPasskey]);
 
   async function onSwitch() {
     setBusy(true);
@@ -125,10 +158,69 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   }
 
   if (!isConnected || !address) {
-    // Injected wallet (MetaMask, etc.) is the fallback, not the Turnkey connector.
-    const walletConnector =
-      connectors.find((c) => c.id !== "gloam-turnkey") ?? connectors[0];
     const connecting = isPending || isConnecting;
+
+    if (passkeyConnector) {
+      const pendingConnector = variables?.connector;
+      const signingIn =
+        connecting &&
+        typeof pendingConnector === "object" &&
+        isTempoWallet(pendingConnector);
+      const walletPending = connecting && !signingIn;
+      return (
+        <div
+          ref={root}
+          className={
+            compact
+              ? "flex items-center gap-2"
+              : "flex flex-col items-stretch gap-1"
+          }
+        >
+          <button
+            type="button"
+            onClick={() => {
+              void import("@/lib/track").then(({ track }) => {
+                track("wallet_connect_click", { method: "passkey" });
+              });
+              connect({ connector: passkeyConnector });
+            }}
+            disabled={connecting}
+            className={primary}
+          >
+            {!compact && <PasskeyGlyph />}
+            {signingIn
+              ? "Waiting for passkey…"
+              : compact
+                ? "Sign in"
+                : "Sign in with a passkey"}
+          </button>
+          <button
+            type="button"
+            onClick={() => walletConnector && connect({ connector: walletConnector })}
+            disabled={!walletConnector || connecting}
+            className={`text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-60 ${
+              compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
+            }`}
+          >
+            {walletPending
+              ? "Connecting…"
+              : compact
+                ? "Use a wallet"
+                : "Use a browser wallet"}
+          </button>
+          {v === "inline" && TEMPO_SPONSORED && (
+            <p className="mt-1 text-center text-[12px] leading-snug text-mute">
+              With a passkey, network fees are covered.
+            </p>
+          )}
+          {error && !compact && (
+            <p className="mt-1 text-[12px] leading-snug text-danger">
+              {connectErrorText(error)}
+            </p>
+          )}
+        </div>
+      );
+    }
 
     if (TURNKEY_ENABLED) {
       return (
@@ -178,6 +270,44 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   }
 
   const wrong = chainId !== network.chainId;
+
+  // A passkey (Tempo Wallet) account cannot move to Robinhood Chain: offer a
+  // browser wallet there instead of a network switch that cannot succeed.
+  if (wrong && !demo && isTempoWallet(connector)) {
+    return (
+      <div
+        ref={root}
+        className={compact ? "inline-flex" : "flex flex-col items-stretch gap-1"}
+      >
+        <button
+          type="button"
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await disconnectAsync().catch(() => {});
+              if (walletConnector) connect({ connector: walletConnector });
+            } finally {
+              setBusy(false);
+            }
+          }}
+          disabled={!walletConnector || busy || isPending}
+          className={primary}
+        >
+          {!compact && <WalletGlyph />}
+          {busy || isPending
+            ? "Connecting…"
+            : compact
+              ? "Connect"
+              : "Connect a wallet"}
+        </button>
+        {!compact && (
+          <p className="mt-1 text-[12px] leading-snug text-mute">
+            Passkey accounts are on Tempo. {network.label} needs a browser wallet.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (wrong) {
     return (
@@ -271,6 +401,12 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
               {copied ? <CheckGlyph /> : <CopyGlyph />}
             </button>
           </div>
+          {network.chainId === TEMPO_CHAIN_ID && !demo && (
+            <TempoFeeRow
+              address={address as Address}
+              passkey={isTempoWallet(connector)}
+            />
+          )}
           <div className="mx-1 h-px bg-line" />
           <div className="py-1">
             <MenuLink href="/app" onClick={() => setOpen(false)} icon={<GridGlyph />}>
@@ -314,6 +450,83 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Friendly text for a failed connect (a closed passkey prompt is not an error). */
+function connectErrorText(error: Error): string {
+  if (error.name === "UserRejectedRequestError") return "Sign-in cancelled.";
+  const short = (error as Error & { shortMessage?: string }).shortMessage;
+  return (short ?? error.message).slice(0, 100);
+}
+
+/**
+ * How this account pays network fees on Tempo. Passkey accounts are
+ * sponsored. Browser wallets pay in their chosen fee token, else PathUSD, so
+ * one tap sets OUSD (that call pays its own fee in OUSD, no PathUSD needed).
+ */
+function TempoFeeRow({ address, passkey }: { address: Address; passkey: boolean }) {
+  const pref = useReadContract({
+    address: FEE_MANAGER,
+    abi: feeManagerAbi,
+    functionName: "userTokens",
+    args: [address],
+    chainId: TEMPO_CHAIN_ID,
+    query: { enabled: !passkey },
+  });
+  const { writeContract, data: hash, isPending, error, reset } = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({ hash, chainId: TEMPO_CHAIN_ID });
+  const { refetch } = pref;
+
+  useEffect(() => {
+    if (receipt.isSuccess) void refetch().then(() => reset());
+  }, [receipt.isSuccess, refetch, reset]);
+
+  const row = "flex min-h-10 items-center gap-3 px-2.5 pb-2 text-[13px] text-mute";
+
+  if (passkey) {
+    return (
+      <div className={row}>
+        <FeeGlyph />
+        <span className="min-w-0 flex-1">
+          {TEMPO_SPONSORED
+            ? "Network fees covered"
+            : "Fees paid from your stablecoins"}
+        </span>
+      </div>
+    );
+  }
+
+  if (pref.data === undefined) return null;
+  const set = !/^0x0{40}$/i.test(pref.data);
+  const symbol = set ? (tempoStableSymbol(pref.data) ?? "your chosen stablecoin") : "PathUSD";
+  const saving = isPending || receipt.isLoading;
+
+  return (
+    <div className={row}>
+      <FeeGlyph />
+      <span className="min-w-0 flex-1">
+        {error ? "Not changed. Try again." : `Fees paid in ${symbol}`}
+      </span>
+      {!set && (
+        <button
+          type="button"
+          onClick={() =>
+            writeContract({
+              address: FEE_MANAGER,
+              abi: feeManagerAbi,
+              functionName: "setUserToken",
+              args: [OUSD],
+              chainId: TEMPO_CHAIN_ID,
+            })
+          }
+          disabled={saving}
+          className="btn btn-ghost btn-sm shrink-0"
+        >
+          {saving ? "Saving…" : "Pay in OUSD"}
+        </button>
       )}
     </div>
   );
@@ -398,6 +611,44 @@ function WalletGlyph() {
         strokeLinejoin="round"
       />
       <circle cx="15.5" cy="13.5" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+function PasskeyGlyph() {
+  return (
+    <svg {...glyph}>
+      <circle cx="9" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M3.5 19c0-3 2.5-5.25 5.5-5.25 1.2 0 2.3.35 3.2.95"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <circle cx="17.5" cy="13.5" r="2.25" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M17.5 15.75V20.5M17.5 18.25h1.75"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function FeeGlyph() {
+  return (
+    <svg {...glyph} className="shrink-0">
+      <path
+        d="M5.5 6.5h13M5.5 6.5v11A1.5 1.5 0 0 0 7 19h10a1.5 1.5 0 0 0 1.5-1.5v-11M5.5 6.5 7 4.5h10l1.5 2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 9.75v6M13.75 11a1.75 1.25 0 0 0-1.75-1.25c-.97 0-1.75.56-1.75 1.25s.78 1.25 1.75 1.25 1.75.56 1.75 1.25-.78 1.25-1.75 1.25a1.75 1.25 0 0 1-1.75-1.25"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
