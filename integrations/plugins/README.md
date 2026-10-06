@@ -52,6 +52,23 @@ Or in any `mcpServers` config (Gemini CLI: `~/.gemini/settings.json`):
 The plugin pins the server to `@gloamtrade/mcp@0.2`, so a new server version reaches agents only
 through a plugin update. The plain commands above take the latest version.
 
+### Or connect by URL, nothing installed
+
+Gloam also runs a hosted MCP server at `https://www.gloam.trade/mcp`. Paste it into Claude
+(Settings, Connectors, Add custom connector), ChatGPT connectors, or any client that connects by URL:
+
+```sh
+claude mcp add --transport http gloam-hosted https://www.gloam.trade/mcp   # Claude Code
+```
+
+```json
+{ "mcpServers": { "gloam-hosted": { "url": "https://www.gloam.trade/mcp" } } }
+```
+
+It only reads and plans (networks, vault stats, payment request links, proof checks, MPP how-to)
+and refuses anything that looks like a key or note secret. Signing and paying stay with the local
+server above.
+
 ## After installing: let the agent spend
 
 Out of the box the server only reads and plans. Nothing is signed until it has a key, and no key or

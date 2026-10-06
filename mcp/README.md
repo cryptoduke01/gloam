@@ -22,6 +22,8 @@ Any other client (Claude Desktop, Cursor, Gemini CLI, Windsurf):
 
 As a plugin, with the skills that teach the agent to use it safely: `claude plugin marketplace add cryptoduke01/gloam-plugins`, then `claude plugin install gloam@gloam` (Codex and Cursor too, see [integrations/plugins](../integrations/plugins)).
 
+Nothing to install: paste `https://www.gloam.trade/mcp` into Claude (Settings, Connectors, Add custom connector), ChatGPT, Cursor or any client that connects by URL. That hosted server only reads and plans (networks, vault stats, payment request links, proof checks, MPP how-to) and never takes a key; to sign and pay, run this one.
+
 With no settings the server reads and plans and never signs. To let the agent spend, give it a key and limits in `~/.gloam/agent.env`. The safest way, on Tempo, is an access key the owner's wallet caps onchain:
 
 ```bash
