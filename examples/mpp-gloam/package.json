@@ -1,0 +1,23 @@
+{
+  "name": "gloam-mpp-example",
+  "private": true,
+  "type": "module",
+  "description": "A paid API over the Machine Payments Protocol, charged per request with the private \"gloam\" method, plus an agent client that pays it. Runs against a mock pool; nothing is broadcast.",
+  "scripts": {
+    "start": "tsx demo.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@gloamtrade/mppx-gloam": "workspace:*",
+    "@gloamtrade/sdk": "workspace:*",
+    "hono": "^4.12.25",
+    "mppx": "^0.13.1",
+    "snarkjs": "^0.7.5",
+    "viem": "^2.55.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
