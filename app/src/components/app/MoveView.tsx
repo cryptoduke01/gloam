@@ -24,6 +24,7 @@ import {
 } from "@/lib/proveClient";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
+import { IssuerPolicyRow } from "./IssuerPolicyRow";
 import { noteNullifierPoseidon } from "@/lib/notePoseidon";
 import { fieldToHex, hexToField } from "@/lib/poseidon";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
@@ -482,9 +483,15 @@ export function MoveView() {
       );
       return;
     }
-    // The cash out goes to this public wallet, relay or not.
-    if (!(await screenWallets([address])).allowed) {
-      setError(SCREEN_BLOCKED_MESSAGE);
+    // The cash out goes to this public wallet, relay or not (on Tempo, also
+    // checked against the asset's TIP-403 issuer policy).
+    const screen = await screenWallets([address], {
+      chainId: network.chainId,
+      asset: selected.asset,
+      flow: "cashout",
+    });
+    if (!screen.allowed) {
+      setError(screen.message ?? SCREEN_BLOCKED_MESSAGE);
       return;
     }
 
@@ -1799,6 +1806,7 @@ export function MoveView() {
                       )}
                     </dd>
                   </div>
+                  <IssuerPolicyRow chainId={network.chainId} asset={mode === "cashout" ? selected?.asset : null} flow="cashout" />
                 </dl>
                 <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
                   {mode === "send"

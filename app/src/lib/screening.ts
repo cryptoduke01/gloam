@@ -14,6 +14,30 @@ import snapshot from "./screeningList.json";
 /** The only thing a blocked user is told. No reason, no list, no address. */
 export const SCREEN_BLOCKED_MESSAGE = "This wallet can't use Gloam.";
 
+/**
+ * Optional context for a screen. On Tempo, with a TIP-20 `asset`, the issuer's
+ * TIP-403 transfer policy is checked alongside the sanctions list (lib/tip403.ts):
+ * on deposit the wallet must be allowed to send and the vault to receive, on
+ * cash out the vault to send and the address to receive. Elsewhere it is ignored.
+ */
+export type ScreenOptions = {
+  chainId?: number;
+  asset?: string | null;
+  flow?: "deposit" | "cashout";
+};
+
+/**
+ * `message` and `scope` come only with a block. scope "asset" means the block is
+ * about this stablecoin on this network (its issuer's policy), not the wallet
+ * everywhere; the message is then the line to show (the neutral one when the
+ * wallet itself is not allowed, a plain notice when the vault is not).
+ */
+export type ScreenResult = {
+  allowed: boolean;
+  message?: string;
+  scope?: "asset";
+};
+
 export type SanctionsSnapshot = {
   name: string;
   source: string;

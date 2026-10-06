@@ -14,7 +14,8 @@
  *     proof, a spent note or a stale root costs the relay nothing
  *   - memos only for commitments the pool has actually inserted
  *   - sanctions screening of every public recipient (a cash out's `to`) before
- *     anything is checked or sent (lib/screeningServer.ts); private sends and
+ *     anything is checked or sent (lib/screeningServer.ts), plus on Tempo the
+ *     asset's TIP-403 issuer policy for the vault and `to`; private sends and
  *     memos carry no public address, so there is nothing to screen
  *   - per-IP and per-network rate limits (best effort, in-memory)
  *
@@ -297,17 +298,32 @@ function publicRecipients(call: Call): Address[] {
   return call.kind === "unshield" ? [call.args[4]] : [];
 }
 
-/** Refuse a call that pays a sanctioned address. Says nothing more than that. */
-export async function screenCall(call: Call): Promise<void> {
+/**
+ * Refuse a call that pays a sanctioned address. Says nothing more than that.
+ * With `net` on Tempo, a cash out is also checked against the asset's TIP-403
+ * issuer policy: the vault must be allowed to send it and `to` to receive it.
+ */
+export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> {
   const recipients = publicRecipients(call);
   if (recipients.length === 0) return;
-  const { allowed } = await screenAddresses(recipients);
-  if (!allowed) throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
+  const context =
+    net && call.kind === "unshield"
+      ? { chainId: net.chainId, asset: call.args[3], flow: "cashout" as const }
+      : undefined;
+  const { allowed, message } = await screenAddresses(recipients, context);
+  if (!allowed) {
+    // A wallet block (sanctions or issuer) is neutral. A vault-level issuer
+    // block or pause is not about the wallet, so it is said plainly.
+    if (!message || message === SCREEN_BLOCKED_MESSAGE) {
+      throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
+    }
+    throw new RelayError(message, 403, "asset_policy");
+  }
 }
 
 async function submit(net: GloamNetwork, call: Call): Promise<Hex> {
   // Screen before anything else: a blocked call never reaches the chain.
-  await screenCall(call);
+  await screenCall(call, net);
   const account = relayerAccount();
   if (!account) {
     throw new RelayError("The relay is off. Send from your wallet.", 503, "relay_off");
@@ -380,7 +396,7 @@ export async function relayUnshield(net: GloamNetwork, body: Record<string, unkn
   // The recipient and amount are public inputs of the unshield proof, so the
   // relay cannot change where the money goes.
   const call: Call = { kind: "unshield", args: [proof, root, nullifier, asset, to, amount] };
-  await screenCall(call);
+  await screenCall(call, net);
   await precheckSpend(net, root, nullifier);
   return submit(net, call);
 }

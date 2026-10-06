@@ -6,9 +6,15 @@
  * server environment. If that API is slow or down, the snapshot result stands
  * (it never blocks a wallet the list does not, and never unblocks one it does).
  *
+ * On Tempo, when the caller names a TIP-20 asset: the issuer's TIP-403 transfer
+ * policy too (lib/tip403Server.ts), read from the chain. It fails open if the
+ * RPC is down, because the token enforces the same policy on-chain regardless.
+ *
  * Addresses are never logged, and the answer is only allowed or not.
  */
-import { anySanctioned, normalizeAddress } from "./screening";
+import type { Address } from "viem";
+import { anySanctioned, normalizeAddress, type ScreenOptions, type ScreenResult } from "./screening";
+import { screenTip403, tip403Applies } from "./tip403Server";
 
 const CHAINALYSIS_URL = "https://public.chainalysis.com/api/v1/address/";
 const CACHE_MS = 60 * 60_000;
@@ -42,11 +48,24 @@ async function chainalysisHit(address: string): Promise<boolean> {
   }
 }
 
-/** Screen public addresses. Values that are not 0x addresses are ignored. */
-export async function screenAddresses(addresses: readonly unknown[]): Promise<{ allowed: boolean }> {
+/**
+ * Screen public addresses. Values that are not 0x addresses are ignored.
+ * `opts` adds the TIP-403 check on Tempo (see ScreenOptions); without it, or on
+ * any other chain, this is the sanctions screen alone, exactly as before.
+ */
+export async function screenAddresses(
+  addresses: readonly unknown[],
+  opts?: ScreenOptions
+): Promise<ScreenResult> {
   const list = [...new Set(addresses.map(normalizeAddress).filter((a): a is string => a !== null))];
   if (anySanctioned(list)) return { allowed: false };
-  if (!chainalysisEnabled() || list.length === 0) return { allowed: true };
-  const hits = await Promise.all(list.map(chainalysisHit));
-  return { allowed: !hits.some(Boolean) };
+  if (list.length === 0) return { allowed: true };
+  const tip403 = opts && tip403Applies(opts.chainId, opts.asset);
+  const [hits, verdict] = await Promise.all([
+    chainalysisEnabled() ? Promise.all(list.map(chainalysisHit)) : Promise.resolve([] as boolean[]),
+    tip403 ? screenTip403(list as Address[], opts) : Promise.resolve({ allowed: true } as const),
+  ]);
+  if (hits.some(Boolean)) return { allowed: false };
+  if (!verdict.allowed) return { allowed: false, message: verdict.message, scope: "asset" };
+  return { allowed: true };
 }
