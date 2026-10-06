@@ -29,7 +29,7 @@
  * intent, but its on-chain path is disabled pending the H1 solvency work.
  */
 
-export const SDK_VERSION = "0.0.6";
+export const SDK_VERSION = "0.0.7";
 
 export * from "./intents.js";
 export * from "./rates.js";
