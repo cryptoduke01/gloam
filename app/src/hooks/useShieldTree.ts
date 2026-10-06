@@ -33,7 +33,8 @@ export function useShieldTree() {
       const tree = await syncShieldTree(publicClient);
       setSynced(tree);
       if (tree) {
-        const ok = await assertTreeMatchesChain(publicClient, tree);
+        // The sync already matched the root to the pool at the synced block.
+        const ok = tree.verified || (await assertTreeMatchesChain(publicClient, tree));
         setMatchesChain(ok);
         if (!ok) {
           setError("Rebuilt tree root does not match pool.currentRoot()");
@@ -49,7 +50,8 @@ export function useShieldTree() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // Start on the next microtask so the effect body itself sets no state.
+    void Promise.resolve().then(refresh);
   }, [refresh]);
 
   async function pathForLeaf(
