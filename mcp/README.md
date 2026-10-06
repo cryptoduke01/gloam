@@ -1,8 +1,48 @@
 # @gloamtrade/mcp
 
-Private execution tools for AI agents on Robinhood Chain, powered by [`@gloamtrade/sdk`](../packages/sdk).
+Private stablecoin payments for AI agents on Tempo, and private execution on Robinhood Chain, powered by [`@gloamtrade/sdk`](../packages/sdk). The agent pays x402 and MPP resources, holds a shielded balance and gets paid, within spending limits it cannot lift: off-chain limits this server checks, and on Tempo an access key whose cap the protocol enforces.
 
 Robinhood gives agents an MCP server for **public** trading. Gloam gives them one for **private** execution. An agent connects both: Robinhood for open trades, Gloam so its size and strategy stay off the public chain.
+
+## Install
+
+One command per client. The server speaks MCP over stdio and needs Node.js 20 or newer.
+
+```bash
+claude mcp add gloam -- npx -y @gloamtrade/mcp          # Claude Code
+codex mcp add gloam -- npx -y @gloamtrade/mcp           # Codex
+code --add-mcp '{"name":"gloam","command":"npx","args":["-y","@gloamtrade/mcp"]}'   # VS Code
+```
+
+Any other client (Claude Desktop, Cursor, Gemini CLI, Windsurf):
+
+```json
+{ "mcpServers": { "gloam": { "command": "npx", "args": ["-y", "@gloamtrade/mcp"] } } }
+```
+
+As a plugin, with the skills that teach the agent to use it safely: `claude plugin marketplace add cryptoduke01/gloam-plugins`, then `claude plugin install gloam@gloam` (Codex and Cursor too, see [integrations/plugins](../integrations/plugins)).
+
+With no settings the server reads and plans and never signs. To let the agent spend, give it a key and limits in `~/.gloam/agent.env`. The safest way, on Tempo, is an access key the owner's wallet caps onchain:
+
+```bash
+npx -y @gloamtrade/mcp authorize-access-key --owner 0xYOUR_TEMPO_ACCOUNT --generate --limit 10 --period 1d --expires 30d
+```
+
+That makes the agent's key, saves it with matching off-chain limits, and prints what the owner signs. See [Onchain limits with a Tempo access key](#onchain-limits-with-a-tempo-access-key).
+
+### Settings
+
+The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLOAM_ENV_FILE`). The environment wins, and only `GLOAM_*` lines are read from the file. Keep keys in that file (mode 600), not in an MCP client config. `npx -y @gloamtrade/mcp --help` lists the main settings.
+
+| Setting | Meaning |
+| --- | --- |
+| `GLOAM_AGENT_PRIVATE_KEY` | The agent's key. Without it the execute tools return plans |
+| `GLOAM_TEMPO_ACCOUNT` | The owner's Tempo account. With it, the key is a Tempo access key acting for that account |
+| `GLOAM_TEMPO_FEE_TOKEN` | Token to pay Tempo fees in, in access-key mode. Default: the protocol's choice |
+| `GLOAM_NOTE_KEY` | Note store key (see [Notes stay in the server](#notes-stay-in-the-server)) |
+| `GLOAM_LIMIT_*`, `GLOAM_LIMITS_FILE` | Off-chain spending limits (see [Spending limits](#spending-limits)) |
+| `GLOAM_ENV_FILE` | Where the settings file is. Default `~/.gloam/agent.env` |
+| `GLOAM_MPP_SECRET_KEY` (or `MPP_SECRET_KEY`) | Key that binds the MPP challenges this server issues (at least 32 characters; the same key an mppx server uses). Default: derived from the note store key |
 
 ## Tools
 
@@ -18,11 +58,11 @@ Robinhood gives agents an MCP server for **public** trading. Gloam gives them on
 | `gloam_execute_transfer` | execute | Public testnet transfer (funding). Amount and recipient are visible |
 | `gloam_list_notes` | read | This server's notes as handles (network, asset, amount, status, creating tx) and the private balance per asset. `refresh` checks pending notes on chain |
 | `gloam_receive_tag` | read | This server's receive tag (`gloamr1.…`), for others to pay it. Created on first use |
-| `gloam_payment_requirements` | server | Price an agent resource in a private x402 payment; returns the 402 requirements. `payTo` defaults to this server's receive tag |
-| `gloam_pay_x402` | agent | Plan the private payment that satisfies a 402 challenge |
-| `gloam_execute_private_pay` | execute | **Real private x402 payment** from a note handle: sync, prove, broadcast `transfer()`, keep the change. Returns the `X-PAYMENT` header |
-| `gloam_fetch_paid` | execute | Fetch a URL; on a Gloam 402, pay privately and retry with the header, all inside the server. Returns the response |
-| `gloam_verify_payment` | server | Open a presented payment with this server's receive key, verify it, sweep it into a fresh note, and say whether to grant access |
+| `gloam_payment_requirements` | server | Price an agent resource in a private payment; returns the x402 requirements and the MPP challenge (`mpp.wwwAuthenticate`). `payTo` defaults to this server's receive tag |
+| `gloam_pay_x402` | agent | Plan the private payment that satisfies a 402 challenge (x402 or MPP) |
+| `gloam_execute_private_pay` | execute | **Real private payment** from a note handle: sync, prove, broadcast `transfer()`, keep the change. Returns the `X-PAYMENT` header, or for an MPP challenge the `Authorization: Payment` credential |
+| `gloam_fetch_paid` | execute | Fetch a URL; on a Gloam 402 (MPP method `gloam`, or x402), pay privately and retry, all inside the server. Returns the response and, for MPP, the decoded `Payment-Receipt` |
+| `gloam_verify_payment` | server | Open a presented payment (x402 or MPP) with this server's receive key, verify it, sweep it into a fresh note, and say whether to grant access |
 | `gloam_get_limits` | read | This agent's spending limits: tools, assets, per payment, per day, recipients, expiry |
 | `gloam_get_spending_report` | read | Spent and left in the last 24 hours per asset, recent payments, refused attempts |
 
@@ -58,6 +98,13 @@ In x402 the payer builds the payment note, so the payer knows its secret too. If
 
 The sweep is signed by `GLOAM_AGENT_PRIVATE_KEY`, or sent through the Gloam relay with `GLOAM_USE_RELAY=1` (or `GLOAM_RELAY_URL`), so a payee needs no gas and its wallet never appears. With neither, the answer is `verified_not_final` and `grantAccess: false`. The sweep is not a spend under the limits: it can only move money this server just received into a note this server holds.
 
+## MPP (Machine Payments Protocol)
+
+The payment tools also speak [MPP](https://mpp.dev): `402` with `WWW-Authenticate: Payment …`, a retry with `Authorization: Payment …`, and a `Payment-Receipt`. Gloam is an MPP payment method, `gloam` with intent `charge` ([spec draft](../docs/mpp/draft-gloam-charge-00.md), library [`@gloamtrade/mppx-gloam`](../packages/mppx-gloam) for mppx servers and clients). The settlement is the same private send as x402, so spending limits, the note store and the sweep work exactly as above.
+
+- **Paying.** `gloam_fetch_paid` reads `WWW-Authenticate`; when it offers `method="gloam"` it pays that (it is preferred over x402 when both are offered), retries with the credential in the field the challenge selects, and returns the decoded receipt. `gloam_execute_private_pay` takes the challenge (the `WWW-Authenticate` value) as `requirements` and returns `authorization`. This server pays in push mode (it broadcasts its own transfer); a challenge that only accepts pull, or with less than 30 seconds left, is refused before anything is proved.
+- **Getting paid.** `gloam_payment_requirements` returns `mpp.wwwAuthenticate` next to the x402 requirements: an HMAC-bound challenge, valid for 10 minutes by default (`expiresInSeconds`). Pass the presented `Authorization` value to `gloam_verify_payment` as `payment`. It checks that this server issued the challenge, that it has not expired, that the credential is bound to that challenge, and that the payment note is the payment output of a `Transferred` event in Gloam's pool; then it sweeps as above. For a pull credential (the payer hands over its proven transfer instead of broadcasting it) it submits the transfer first. On `grantAccess: true`, serve with `paymentReceipt` as the `Payment-Receipt` header. Passing the challenge you issued as `requirements` also binds the credential to that exact price.
+
 ## Spending limits
 
 An agent that can sign can spend, so every tool that moves money checks the owner's limits first: `gloam_execute_private_pay` and `gloam_fetch_paid` (pay), `gloam_execute_transfer` (send) and `gloam_execute_shield` (shield). A spend that breaks a limit is refused before anything is proved or signed, with a plain reason the agent can act on, for example:
@@ -71,7 +118,12 @@ An agent that can sign can spend, so every tool that moves money checks the owne
 
 ### Where the limits are enforced
 
-By this MCP server, off-chain, before it signs. The vault contract does not know about them. They bind the agent as long as its key is held only by this server; anyone who has the key directly is not bound. For a hard boundary, keep the key on the server (or in a policy wallet such as a Turnkey server wallet) and never hand it to the agent.
+In two layers.
+
+1. **Off-chain, by this MCP server, before it signs.** These are the limits below. The vault contract does not know about them. They bind the agent as long as its key is held only by this server; anyone who has the key directly is not bound.
+2. **Onchain, by Tempo, with an access key.** When the key is a Tempo access key (`GLOAM_TEMPO_ACCOUNT`), the owner's AccountKeychain authorization caps what the key can move out of the owner's account each period, limits what it may call, and sets when it stops working. The protocol checks that on every transaction, so it holds even if this server, its host or the key itself is compromised. See [Onchain limits with a Tempo access key](#onchain-limits-with-a-tempo-access-key).
+
+Use both: the off-chain limits give the agent per-payment caps, recipient lists and readable refusals; the onchain cap is the boundary that does not depend on this server behaving.
 
 ### What is protected, and what is not
 
@@ -151,16 +203,78 @@ Every spend is written to a local JSON file before it is signed (`~/.gloam/spend
 
 `gloam_get_limits` shows the limits as the server sees them, and `gloam_get_spending_report` shows spent and remaining for the last 24 hours, the recent payments and the recent refusals. When there is no signer, the execute tools still return a plan, now with a `limits` preview saying whether it would be allowed.
 
+## Onchain limits with a Tempo access key
+
+Off-chain limits stop an agent that misbehaves through this server. They cannot stop someone who has the key. On Tempo an access key closes that gap. The owner's wallet authorizes the agent's key in Tempo's AccountKeychain precompile (`0xAAAAAAAA00000000000000000000000000000000`) with:
+
+- **an expiry**, after which the key cannot sign;
+- **a spending limit per stablecoin** that resets every period (or a one-time total);
+- **call scopes**: approve the Gloam pool, and only the pool, as spender of the capped stablecoins, and call `shieldBound` and `transfer` on the pool. Any other call is rejected, and an access key can never deploy a contract.
+
+The server then signs Tempo transactions for the owner's account with that key, and the protocol checks the restrictions on every one. So **the caps hold even if the MCP server is compromised**: whoever holds the key can move at most what is left of the current period's limit out of the owner's account, only into the Gloam pool, and only until the key expires or the owner revokes it. The owner's root key never touches the agent's machine. The off-chain limits stay on as the second layer.
+
+### Set it up
+
+1. Make the key and print what the owner signs. Nothing is signed or sent, and the key is never printed:
+
+   ```bash
+   npx -y @gloamtrade/mcp authorize-access-key --owner 0xOWNER --generate --limit 25 --period 1d --expires 30d
+   ```
+
+   `--generate` writes the new key, `GLOAM_TEMPO_ACCOUNT`, a note-store key and matching off-chain limits to `~/.gloam/agent.env` (mode 600), keeping anything already there. To authorize a key you already have, use `--key <address>` or leave both out to use `GLOAM_AGENT_PRIVATE_KEY`. Repeat `--limit AlphaUSD=10` for more stablecoins, use `--period once` for a total that never resets, and `--json` for machine-readable output. From a checkout: `pnpm --filter @gloamtrade/mcp authorize-access-key --owner ...`.
+
+2. The owner authorizes it from their own wallet, with one of the three printed options:
+   - Tempo Wallet or any Tempo Accounts SDK provider: the printed `wallet_authorizeAccessKey` request (passkey accounts).
+   - Foundry: the printed `cast send 0xAAAA... 'authorizeKey(...)' ... --interactive`, signed by the owner's root key.
+   - Any wallet that can send a raw call from the owner account: the printed `to` and `data`.
+
+3. **Reset any standing approval of the pool.** If the owner account ever approved the Gloam pool (the Gloam app approves it once, for an unlimited amount), the owner sets it back to 0 with the printed `approve(pool, 0)` command. See below for why.
+
+4. Check it. This only reads the chain:
+
+   ```bash
+   npx -y @gloamtrade/mcp authorize-access-key --check --owner 0xOWNER
+   ```
+
+   It reports whether the key is authorized, its expiry, what is left of each limit and when it resets, its call scopes, and any pool allowance the cap would not count. It exits 0 only when all of that is in order.
+
+5. Restart the agent's MCP server. It logs `Signer: Tempo access key 0x... for account 0x...` and, a moment later, the same check.
+
+To change a limit without a new key, the owner calls `updateSpendingLimit(key, token, newLimit)` on the precompile. To stop the agent, the owner revokes the key with the printed `revokeKey` command; a revoked key can never be authorized again.
+
+### What the cap covers, and what it does not
+
+Covers:
+
+- Every approval the key makes for a capped stablecoin (only increases count), and so every shield the agent funds from the owner's account.
+- Which contracts and functions the key may call.
+- When the key stops working. A revocation applies from the moment the owner's transaction lands.
+
+Does not cover:
+
+- **Allowances the owner already gave.** Tempo counts `transfer`, `transferWithMemo` and `approve` made by the key, not `transferFrom`. With a standing approval of the pool, `shieldBound` can pull up to that allowance without touching the limit. Keep the owner's approval of the pool at 0; `--check` and the startup check report it.
+- **Money already in the private balance.** Shielded notes are spent with the note secrets in this server's store, not with the key, so a compromised host can take what is already shielded. The cap bounds how fast money can enter the pool from the owner's account; keep the shielded balance small and the store and its key safe (see [Notes stay in the server](#notes-stay-in-the-server)).
+- **Network fees.** Fees for the key's transactions come from the owner account and are not counted against the limit.
+- **Robinhood Chain.** It has no keychain. In access-key mode the same key signs there as its own address, bound by the off-chain limits and whatever that address holds.
+
+### In the server
+
+`GLOAM_AGENT_PRIVATE_KEY` is the access key and `GLOAM_TEMPO_ACCOUNT` the owner's account. On Tempo the signer is a viem Tempo access-key account (`Account.fromSecp256k1(key, { access: owner })`): transactions are Tempo transactions from the owner's account carrying a keychain signature by the key. `GLOAM_TEMPO_FEE_TOKEN` picks the fee token. A malformed `GLOAM_TEMPO_ACCOUNT`, or one equal to the key's own address (that would be the account's root key, with no limits), stops the server at startup instead of letting it sign some other way.
+
 ## Setup
 
-The SDK ships TypeScript source, so the server runs through `tsx` (no build step).
+From npm, there is nothing to build: `npx -y @gloamtrade/mcp` (see [Install](#install)). From a checkout:
 
 ```bash
-pnpm install                          # from the repo root
-pnpm --filter @gloamtrade/mcp start   # runs tsx src/index.ts
+pnpm install                              # from the repo root
+pnpm --filter @gloamtrade/mcp start       # tsx src/index.ts, no build needed
+pnpm --filter @gloamtrade/mcp build       # dist/index.js, the published server
+pnpm --filter @gloamtrade/mcp smoke       # start dist/index.js over stdio and list its tools
 ```
 
-To let the agent actually execute, give it a funded testnet signer, a note-store key and its limits:
+The Gloam workspace packages (`@gloamtrade/sdk` and others) ship TypeScript source, so the build bundles them into `dist/index.js` with esbuild and leaves every other dependency to npm. It fails if the server imports a package missing from `dependencies`. Publish with pnpm so workspace versions are rewritten: `pnpm --filter @gloamtrade/mcp publish --access public`.
+
+To execute with a raw testnet key instead of an access key (only the off-chain limits bind it), give the server a funded testnet signer, a note-store key and its limits:
 
 ```bash
 GLOAM_AGENT_PRIVATE_KEY=0x<funded RH testnet key> \
@@ -169,9 +283,9 @@ GLOAM_LIMIT_ASSETS=ETH GLOAM_LIMIT_MAX_PER_PAYMENT=0.01 GLOAM_LIMIT_MAX_PER_DAY=
 pnpm --filter @gloamtrade/mcp start
 ```
 
-Keep the note key somewhere durable (not a fresh `openssl` each start): the store cannot be opened without it. Without the signer the server still runs and exposes every tool; execute tools just return plans. Without limits, execute tools refuse to spend (see above). For production, swap the raw key for a Turnkey server wallet with policy (spend caps, an allow-list of contracts, size privacy always on) so the agent never holds a key and the caps also hold below this server.
+The same lines can go in `~/.gloam/agent.env`. Keep the note key somewhere durable (not a fresh `openssl` each start): the store cannot be opened without it. Without the signer the server still runs and exposes every tool; execute tools just return plans. Without limits, execute tools refuse to spend (see above). For a hard boundary use a Tempo access key (above); on other chains a policy wallet such as a Turnkey server wallet plays that role.
 
-Tests (no chain needed): `pnpm --filter @gloamtrade/mcp test` runs the spending limits and the note custody tests (store encryption and locking, shield to pay to sweep over a mock pool, the fetch round trip, the legacy flag, and a scan that no tool result carries a secret).
+Tests (no chain needed): `pnpm --filter @gloamtrade/mcp test` runs the spending limits, the note custody tests (store encryption and locking, shield to pay to sweep over a mock pool, the fetch round trip, the legacy flag, and a scan that no tool result carries a secret) and the access key tests (the authorization encoding and scopes, keychain signing for the owner's account, fail-closed settings, the settings file and the CLI).
 
 ## Connect an agent
 
@@ -182,17 +296,13 @@ The server speaks MCP over stdio. Point any MCP client at it (Claude Desktop, Cu
   "mcpServers": {
     "gloam": {
       "command": "npx",
-      "args": ["-y", "tsx", "/absolute/path/to/gloam/mcp/src/index.ts"],
-      "env": {
-        "GLOAM_AGENT_PRIVATE_KEY": "0x<funded testnet key>",
-        "GLOAM_NOTE_KEY": "<64 hex characters, kept somewhere safe>",
-        "GLOAM_AGENT_ID": "research-bot",
-        "GLOAM_LIMITS_FILE": "/absolute/path/to/gloam-limits.json"
-      }
+      "args": ["-y", "@gloamtrade/mcp"]
     }
   }
 }
 ```
+
+Keys and limits come from `~/.gloam/agent.env`. For several agents on one machine, give each its own file with `"env": { "GLOAM_ENV_FILE": "/home/me/.gloam/research-bot.env" }`, or share a `GLOAM_LIMITS_FILE` and set `GLOAM_AGENT_ID` per agent. To run a checkout instead of the npm package, use `"command": "node", "args": ["/absolute/path/to/gloam/mcp/dist/index.js"]` after a build.
 
 Then the agent can read markets, quote and plan private trades, shield into a private balance, and pay for x402 resources privately, alongside its public Robinhood activity.
 

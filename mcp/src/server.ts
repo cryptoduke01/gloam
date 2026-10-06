@@ -16,6 +16,11 @@
  * expiry. No limits configured means no spending. The limits are enforced here,
  * off-chain, not by the vault contract.
  *
+ * The payment tools speak two 402 dialects with the same private settlement:
+ * x402 (scheme gloam-private, X-PAYMENT header) and MPP, the Machine Payments
+ * Protocol (WWW-Authenticate: Payment, method "gloam", intent "charge"; see
+ * src/mpp.ts and docs/mpp/draft-gloam-charge-00.md).
+ *
  * Note secrets never reach the agent. Notes live in an encrypted store inside
  * this server (src/noteStore.ts); tools hand out and take back short handles.
  * Payments are sealed to the payee's receive tag, and a payee settles a
@@ -67,13 +72,46 @@ import {
   type SweepChain,
 } from "@gloamtrade/sdk";
 import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
-import { getPublicClient, getSigner, type Signer } from "./signer.js";
+import { getPublicClient, getSigner, signerSetup, type Signer } from "./signer.js";
+import { checkAccessKey } from "./accessKey.js";
+import { packageVersion } from "./version.js";
 import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
 import { networkByKey, networkByChainId, MCP_NETWORKS, type McpNetwork } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
 import { balances, noteView, openNoteStore, type NoteStore, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
+import {
+  credentialField,
+  credentialFromPayment,
+  fromPaymentRequirements,
+  isExpired,
+  parseGloamChargePayload,
+  parseGloamChargeRequest,
+  parseReceipt,
+  payerTransferIntent,
+  serializeReceipt,
+  termsMismatch,
+  validateGloamCharge,
+  verifyChallengeId,
+  GloamChargeError,
+  type GloamChargeReceipt,
+  type GloamChargeRequest,
+  type PaymentChallenge,
+  type ValidatedGloamCharge,
+} from "@gloamtrade/mppx-gloam/core";
+import {
+  cannotPay,
+  gloamChallenges,
+  looksLikeMpp,
+  mppChain,
+  mppChallengeFor,
+  mppSecret,
+  parseMppChallenge,
+  parseMppCredential,
+  requirementsFromChallenge,
+  MPP_DEFAULT_EXPIRES_SECONDS,
+} from "./mpp.js";
 
 type Env = Record<string, string | undefined>;
 type ChainClient = Signer["publicClient"];
@@ -182,6 +220,26 @@ function parsePayment(input: string): GloamPaymentPayload | null {
   }
 }
 
+/**
+ * A price from either 402 dialect: x402 requirements (encoded or JSON) or an
+ * MPP gloam challenge (a WWW-Authenticate `Payment …` value). An MPP challenge
+ * comes back with its x402-equivalent requirements, so the spend gate and the
+ * payment builder treat both the same.
+ */
+function parsePriced(input: string): { req: GloamPaymentRequirements; mpp: PaymentChallenge | null } | { error: string } {
+  if (looksLikeMpp(input)) {
+    const ch = parseMppChallenge(input);
+    if (!ch) return { error: "That is a Payment challenge, but not a gloam/charge one this server can pay." };
+    try {
+      return { req: requirementsFromChallenge(ch).req, mpp: ch };
+    } catch (e) {
+      return { error: errMsg(e) };
+    }
+  }
+  const req = parseRequirements(input);
+  return req ? { req, mpp: null } : { error: "Could not parse requirements." };
+}
+
 function assetInfo(chainId: number, asset: Address, fallbackDecimals = 18) {
   const known = KNOWN_ASSETS.find((a) => a.chainId === chainId && a.address.toLowerCase() === asset.toLowerCase());
   return { symbol: known?.symbol ?? assetLabel(chainId, asset), decimals: known?.decimals ?? fallbackDecimals };
@@ -196,7 +254,7 @@ const AGENT_WALLET_NOTE =
   "This build does not sign or broadcast. Connect an agent wallet with signing (e.g. Turnkey embedded wallet + policy) to execute this intent. Returned as a plan an agent or human can approve.";
 
 const NO_SIGNER =
-  "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute, or wire a Turnkey server wallet with policy for production.";
+  "No signer configured. Set GLOAM_AGENT_PRIVATE_KEY (testnet) to execute. For limits the protocol enforces on Tempo, make the agent a Tempo access key: npx -y @gloamtrade/mcp authorize-access-key --owner <account> --generate";
 
 const LEGACY_WARNING =
   "GLOAM_EXPOSE_NOTE_SECRETS=1 is set: note secrets are passed to and from the agent. Anyone who reads a secret can spend that money, and spending limits cannot stop that. Turn it off unless you are migrating old notes.";
@@ -207,7 +265,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   const env = deps.env;
   /** Old behavior: secrets in tool results and arguments. Read once; restart to change. */
   const legacy = env.GLOAM_EXPOSE_NOTE_SECRETS?.trim() === "1";
-  const server = new McpServer({ name: "gloam", version: "0.1.0" });
+  const server = new McpServer({ name: "gloam", version: packageVersion() });
 
   const relayUrl = () =>
     env.GLOAM_RELAY_URL?.trim() || (env.GLOAM_USE_RELAY?.trim() === "1" ? GLOAM_RELAY_URL : "");
@@ -267,11 +325,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           "gloam_execute_transfer: sign and broadcast a public testnet transfer (execution; needs a signer)",
           "gloam_list_notes: this server's private notes as handles, and the private balance per asset (read)",
           "gloam_receive_tag: this server's receive tag, for others to pay it privately (read)",
-          "gloam_payment_requirements: price an agent resource in a private x402 payment (server side)",
-          "gloam_pay_x402: plan the private payment for a 402 challenge (agent side)",
-          "gloam_execute_private_pay: REAL private x402 settlement from a note handle: sync, prove, broadcast transfer; returns the X-PAYMENT header (execution; needs a signer)",
-          "gloam_fetch_paid: fetch a URL and, if it answers 402 with a Gloam price, pay privately and retry, all inside this server (execution; needs a signer)",
-          "gloam_verify_payment: open a presented x402 payment, verify it, and sweep it into a fresh note; grant access only when it says so (server side)",
+          "gloam_payment_requirements: price an agent resource in a private payment, as x402 requirements and an MPP challenge (server side)",
+          "gloam_pay_x402: plan the private payment for a 402 challenge, x402 or MPP (agent side)",
+          "gloam_execute_private_pay: REAL private settlement from a note handle: sync, prove, broadcast transfer; returns the X-PAYMENT header, or the Authorization credential for an MPP challenge (execution; needs a signer)",
+          "gloam_fetch_paid: fetch a URL and, if it answers 402 with a Gloam price (x402, or MPP method gloam), pay privately and retry, all inside this server (execution; needs a signer)",
+          "gloam_verify_payment: open a presented payment (x402 X-PAYMENT or MPP Authorization: Payment), verify it, and sweep it into a fresh note; grant access only when it says so (server side)",
           "gloam_get_limits: this agent's spending limits (read)",
           "gloam_get_spending_report: spent and remaining in the last 24 hours, recent payments and refusals (read)",
         ],
@@ -281,7 +339,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         spendingLimits:
           "Every execute tool that moves money checks the owner's limits first (tools, assets, recipients, per payment, per day, expiry) and logs the spend. The MCP server enforces them, off-chain; the vault contract does not.",
         privatePayments:
-          "x402 agent payments settle privately through the Gloam pool, sealed to the payee's receive tag. The payee sweeps each payment into a fresh note before serving, so a payer cannot take it back. Unlike a Tempo Zone, there is no operator that sees the transaction.",
+          "Agent payments over HTTP 402 (x402, or MPP with the gloam method) settle privately through the Gloam pool, sealed to the payee's receive tag. The payee sweeps each payment into a fresh note before serving, so a payer cannot take it back. Unlike a Tempo Zone, there is no operator that sees the transaction.",
       })
   );
 
@@ -684,9 +742,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   server.registerTool(
     "gloam_payment_requirements",
     {
-      title: "Price a resource in private payments (x402)",
+      title: "Price a resource in private payments (x402 and MPP)",
       description:
-        "SERVER side. Build the HTTP 402 payment requirements an agent-paid resource returns, priced in a private Gloam settlement. This is the MCPay pattern (x402 + stablecoins) but the settlement is private: the amount and parties never go public. payTo defaults to this server's own receive tag. Returns the requirements object and its encoded form to put in a 402 response.",
+        "SERVER side. Build the HTTP 402 price an agent-paid resource returns, settled privately through Gloam: the amount and parties never go public. Returns it in both dialects: x402 requirements (and their encoded form), and an MPP challenge (mpp.wwwAuthenticate, the WWW-Authenticate: Payment value for method gloam, intent charge). payTo defaults to this server's own receive tag. Check what the payer presents with gloam_verify_payment.",
       inputSchema: {
         amount: z.number().positive().describe("Price in the asset's display units, e.g. 0.25."),
         decimals: z.number().int().min(0).max(36).default(18).describe("Decimals of the settlement asset."),
@@ -701,9 +759,20 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .enum(["robinhood", "tempo"])
           .default("robinhood")
           .describe("Which Gloam network to settle on. Tempo is the stablecoin-payments chain (pay in PathUSD); Robinhood is the equities chain."),
+        realm: z
+          .string()
+          .optional()
+          .describe("MPP protection space for the challenge. Default: the resource URL's host."),
+        expiresInSeconds: z
+          .number()
+          .int()
+          .min(60)
+          .max(86_400)
+          .default(MPP_DEFAULT_EXPIRES_SECONDS)
+          .describe("How long the MPP challenge stays valid. Leave room to prove and confirm a payment."),
       },
     },
-    async ({ amount, decimals, assetSymbol, asset, payTo, resource, network }) => {
+    async ({ amount, decimals, assetSymbol, asset, payTo, resource, network, realm, expiresInSeconds }) => {
       if (asset !== undefined && !isAddress(asset)) {
         return text({ status: "error", error: `"${asset}" is not a valid token address.` });
       }
@@ -728,11 +797,28 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           network: net.chainId,
           poolAddress: net.pool,
         });
+        // The same price as an MPP challenge. It needs this server's challenge key (MPP_SECRET_KEY, or the note store key).
+        let mpp: Record<string, unknown>;
+        try {
+          const issued = await mppChallengeFor(req, { env, realm, decimals, expiresInSeconds });
+          mpp = {
+            wwwAuthenticate: issued.wwwAuthenticate,
+            challengeId: issued.challenge.id,
+            realm: issued.challenge.realm,
+            expires: issued.challenge.expires,
+            request: issued.challenge.request,
+            httpHint:
+              "Return HTTP 402 with the header WWW-Authenticate set to wwwAuthenticate and Cache-Control: no-store. The agent retries with Authorization: Payment <credential>; pass that value to gloam_verify_payment and serve only when it says grantAccess, with its paymentReceipt as the Payment-Receipt header.",
+          };
+        } catch (e) {
+          mpp = { error: `No MPP challenge: ${errMsg(e)}` };
+        }
         return text({
           requirements: req,
           encoded: encodeRequirements(req),
           httpHint:
             "Return HTTP 402 with this requirements object; the agent retries with an X-PAYMENT header. Check it with gloam_verify_payment and serve only when it says grantAccess.",
+          mpp,
           notVsZone: GLOAM_VS_ZONE.oneLine,
         });
       } catch (e) {
@@ -746,20 +832,25 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Plan a private payment for a 402 challenge",
       description:
-        "AGENT side. Given a Gloam 402 challenge, describe the private payment the agent would make: a self-custodial private send of the required amount to the payee, sealed to the payee's receive tag, broadcast by this server (no operator or facilitator holds its key). Plans only; to pay, call gloam_execute_private_pay, or gloam_fetch_paid to do the whole request.",
+        "AGENT side. Given a Gloam 402 price (x402 requirements, or an MPP WWW-Authenticate: Payment challenge with method gloam), describe the private payment the agent would make: a self-custodial private send of the required amount to the payee, sealed to the payee's receive tag, broadcast by this server (no operator or facilitator holds its key). Plans only; to pay, call gloam_execute_private_pay, or gloam_fetch_paid to do the whole request.",
       inputSchema: {
-        requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or the raw JSON)."),
+        requirements: z
+          .string()
+          .describe("Encoded requirements from gloam_payment_requirements (or the raw JSON), or an MPP challenge (the WWW-Authenticate value)."),
         note: z.string().optional().describe("Handle of the note to pay from (gloam_list_notes), if you want a specific one."),
       },
     },
     async ({ requirements, note }) => {
-      const req = parseRequirements(requirements);
-      if (!req) return text({ status: "error", error: "Could not parse requirements." });
+      const priced = parsePriced(requirements);
+      if ("error" in priced) return text({ status: "error", error: priced.error });
+      const { req, mpp } = priced;
       const netForReq = Object.values(GLOAM_NETWORKS).find((n) => n.chainId === Number(req.network));
       const tagOk = isReceiveTag(String(req.payTo ?? ""));
       return text({
         status: "plan",
         intent: "private_pay_x402",
+        protocol: mpp ? "mpp" : "x402",
+        ...(mpp ? { mpp: { method: mpp.method, intent: mpp.intent, realm: mpp.realm, expires: mpp.expires ?? null, payable: cannotPay(mpp, parseGloamChargeRequest(mpp.request)) ?? "yes" } } : {}),
         network: req.network,
         pay: {
           amountWei: req.maxAmountRequired,
@@ -776,8 +867,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         poolStatus: netForReq
           ? `Live: pool ${netForReq.pool} on ${netForReq.label} (chain ${netForReq.chainId}).`
           : `Unknown network ${req.network}.`,
-        execute:
-          "gloam_execute_private_pay({ requirements, note? }) pays and returns the X-PAYMENT header; gloam_fetch_paid({ url }) also makes the request and the retry.",
+        execute: mpp
+          ? "gloam_execute_private_pay({ requirements, note? }) pays and returns the Authorization: Payment credential; gloam_fetch_paid({ url }) also makes the request and the retry."
+          : "gloam_execute_private_pay({ requirements, note? }) pays and returns the X-PAYMENT header; gloam_fetch_paid({ url }) also makes the request and the retry.",
         settlement:
           "Self-custodial: this server signs and broadcasts the shielded transfer. Only the payee can open the payment note; the public sees only that a shielded transfer occurred.",
         notVsZone: GLOAM_VS_ZONE,
@@ -786,16 +878,32 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
   );
 
-  type PayResult = { ok: false; result: Record<string, unknown> } | { ok: true; result: Record<string, unknown>; header: string };
+  type PayResult =
+    | { ok: false; result: Record<string, unknown> }
+    | {
+        ok: true;
+        result: Record<string, unknown>;
+        /** The x402 X-PAYMENT header. */
+        header: string;
+        /** For an MPP challenge: the `Payment …` credential, to send in credentialField(challenge). */
+        authorization?: string;
+      };
 
   /**
    * Pay a 402 privately: pick or take a note by handle, pass the spend gate,
    * prove, broadcast, and keep the change. Secrets stay in this function and the
-   * note store; the result carries handles and the sealed X-PAYMENT header.
+   * note store; the result carries handles and the sealed X-PAYMENT header, plus
+   * the MPP credential when `mpp` is the challenge being paid (push mode: this
+   * server broadcasts, so limits and the note store work exactly as for x402).
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
-    opts: { handle?: string; issuerTag?: string; legacyNote?: { secret: string; amount: number; decimals?: number } }
+    opts: {
+      handle?: string;
+      issuerTag?: string;
+      legacyNote?: { secret: string; amount: number; decimals?: number };
+      mpp?: PaymentChallenge;
+    }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
     if (req.scheme !== GLOAM_X402_SCHEME) return fail({ status: "error", error: `Not a Gloam private payment (scheme "${req.scheme}").` });
@@ -975,12 +1083,26 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       }
       payment.payload.payload.txHash = hash;
       const header = encodePaymentHeader(payment.payload);
+      // The MPP credential: the same sealed note plus a binding to this one challenge. Never throws past here:
+      // the money already moved, so a failure must not be reported as a failed payment.
+      let authorization: string | undefined;
+      let mppWarning: string | undefined;
+      if (opts.mpp) {
+        try {
+          authorization = (await credentialFromPayment({ challenge: opts.mpp, payment, mode: "push", hash })).authorization;
+        } catch (e) {
+          mppWarning = `Paid, but the MPP credential could not be built (${errMsg(e)}). The x402 header still carries the payment.`;
+        }
+      }
       const noteWarning = storeWarnings.filter(Boolean).join(" ") || undefined;
       return {
         ok: true,
         header,
+        ...(authorization ? { authorization } : {}),
         result: {
           status: "paid",
+          ...(opts.mpp ? { protocol: "mpp" } : {}),
+          ...(mppWarning ? { mppWarning } : {}),
           ...(logWarning ? { logWarning } : {}),
           ...(noteWarning ? { noteWarning } : {}),
           network: net.key,
@@ -1019,7 +1141,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   }
 
   const PAY_SHAPE = {
-    requirements: z.string().describe("Encoded requirements from gloam_payment_requirements (or raw JSON)."),
+    requirements: z
+      .string()
+      .describe("Encoded requirements from gloam_payment_requirements (or raw JSON), or an MPP challenge (the WWW-Authenticate: Payment value)."),
     note: z
       .string()
       .optional()
@@ -1034,15 +1158,20 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   server.registerTool(
     "gloam_execute_private_pay",
     {
-      title: "Execute a private payment (x402)",
+      title: "Execute a private payment (x402 or MPP)",
       description:
-        "AGENT side, REAL execution. Settle an x402 payment privately from a note this server holds: syncs the pool tree, builds the private send to the payee, seals the payment note to the payee's receive tag, generates the Groth16 transfer proof, and broadcasts transfer(). Self-custodial (this server's key signs; no operator holds funds). Returns the X-PAYMENT header to retry the request with, and the change as a note handle. payTo must be a receive tag. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+        "AGENT side, REAL execution. Settle a 402 price privately from a note this server holds: syncs the pool tree, builds the private send to the payee, seals the payment note to the payee's receive tag, generates the Groth16 transfer proof, and broadcasts transfer(). Self-custodial (this server's key signs; no operator holds funds). Returns the X-PAYMENT header for x402 requirements, or for an MPP challenge (method gloam) the Authorization: Payment credential, and the change as a note handle. payTo must be a receive tag. Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
       // The legacy secret fields are only offered when GLOAM_EXPOSE_NOTE_SECRETS=1.
       inputSchema: (legacy ? PAY_SHAPE : SAFE_PAY_SHAPE) as typeof PAY_SHAPE,
     },
     async ({ requirements, note, issuerTag, noteSecret, noteAmount, decimals }) => {
-      const req = parseRequirements(requirements);
-      if (!req) return text({ status: "error", error: "Could not parse requirements." });
+      const priced = parsePriced(requirements);
+      if ("error" in priced) return text({ status: "error", error: priced.error });
+      const { req, mpp } = priced;
+      if (mpp) {
+        const why = cannotPay(mpp, parseGloamChargeRequest(mpp.request));
+        if (why) return text({ status: "refused", code: "mpp_unpayable", message: why });
+      }
       if (legacy && noteSecret && noteAmount === undefined) {
         return text({ status: "error", error: "noteSecret needs noteAmount (the note's full value)." });
       }
@@ -1050,8 +1179,18 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         handle: note,
         issuerTag,
         legacyNote: legacy && noteSecret && noteAmount !== undefined ? { secret: noteSecret, amount: noteAmount, decimals } : undefined,
+        mpp: mpp ?? undefined,
       });
       if (!paid.ok) return text(paid.result);
+      if (mpp && paid.authorization) {
+        const field = credentialField(mpp);
+        return text({
+          ...paid.result,
+          authorization: paid.authorization,
+          authorizationField: field,
+          next: `Retry the request with the header ${field} set to authorization. The payee sweeps the payment before serving and answers with a Payment-Receipt.`,
+        });
+      }
       return text({
         ...paid.result,
         paymentHeader: paid.header,
@@ -1094,12 +1233,37 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     };
   }
 
+  /** A Payment-Receipt header, decoded, or null. */
+  function receiptFrom(res: Response): Record<string, unknown> | null {
+    const h = res.headers.get("payment-receipt");
+    if (!h) return null;
+    try {
+      return parseReceipt(h);
+    } catch {
+      return { raw: h.slice(0, 500), error: "The Payment-Receipt header does not decode." };
+    }
+  }
+
+  /** The headers that present a payment: an MPP credential in the field its challenge selected, x402 in X-PAYMENT. */
+  function presentHeaders(payment: string): Record<string, string> {
+    if (looksLikeMpp(payment)) {
+      let field = "Authorization";
+      try {
+        field = credentialField(parseMppCredential(payment).challenge);
+      } catch {
+        // Not parseable here; the server will say so.
+      }
+      return { [field.toLowerCase()]: payment.trim() };
+    }
+    return { "x-payment": payment };
+  }
+
   server.registerTool(
     "gloam_fetch_paid",
     {
-      title: "Fetch a paid resource (x402, paid privately)",
+      title: "Fetch a paid resource (x402 or MPP, paid privately)",
       description:
-        "AGENT side, REAL execution. Request a URL; if it answers 402 with a Gloam private price, pay it privately from this server's notes (same limits as gloam_execute_private_pay), retry with the X-PAYMENT header, and return the response. The agent never handles a note secret or the payment header unless a retry is needed. Requires GLOAM_AGENT_PRIVATE_KEY to pay.",
+        "AGENT side, REAL execution. Request a URL; if it answers 402 with a Gloam private price, pay it privately from this server's notes (same limits as gloam_execute_private_pay), retry, and return the response. Understands both dialects: an MPP challenge (WWW-Authenticate: Payment with method gloam, answered with Authorization: Payment) is preferred when offered, else x402 (X-PAYMENT). The agent never handles a note secret or the payment header unless a retry is needed. Requires GLOAM_AGENT_PRIVATE_KEY to pay.",
       inputSchema: {
         url: z.string().url().describe("http(s) URL of the resource."),
         method: z.enum(["GET", "POST"]).default("GET"),
@@ -1110,29 +1274,30 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         paymentHeader: z
           .string()
           .optional()
-          .describe("Present a payment already made (paymentHeader from an earlier result) instead of paying again."),
+          .describe("Present a payment already made (paymentHeader from an earlier result: an X-PAYMENT value or an MPP Payment credential) instead of paying again."),
       },
     },
     async ({ url, method, body, contentType, note, maxAmount, paymentHeader }) => {
       if (!/^https?:\/\//i.test(url)) return text({ status: "error", error: "Only http and https URLs." });
-      const request = (xPayment?: string) =>
+      const request = (payHeaders: Record<string, string> = {}) =>
         deps.fetch(url, {
           method,
           headers: {
             ...(body !== undefined ? { "content-type": contentType ?? "application/json" } : {}),
-            ...(xPayment ? { "x-payment": xPayment } : {}),
+            ...payHeaders,
           },
           body: method === "POST" ? body : undefined,
           signal: AbortSignal.timeout(30_000),
         });
       let first: Response;
       try {
-        first = await request(paymentHeader);
+        first = await request(paymentHeader ? presentHeaders(paymentHeader) : {});
       } catch (e) {
         return text({ status: "error", error: `Request failed: ${errMsg(e)}` });
       }
       if (first.status !== 402) {
-        return text({ status: first.ok ? "ok" : "http_error", paid: false, ...(await readBody(first)) });
+        const receipt = paymentHeader ? receiptFrom(first) : null;
+        return text({ status: first.ok ? "ok" : "http_error", paid: false, ...(await readBody(first)), ...(receipt ? { paymentReceipt: receipt } : {}) });
       }
       const firstBody = await first.text();
       if (paymentHeader) {
@@ -1143,13 +1308,27 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           body: firstBody.slice(0, BODY_LIMIT),
         });
       }
+
+      // MPP first: a gloam/charge challenge in WWW-Authenticate. Otherwise x402.
       let req: GloamPaymentRequirements | string;
-      try {
-        req = requirementsFrom402(first.headers, firstBody);
-      } catch {
-        req = "The 402 response carries Gloam requirements that do not decode.";
+      const mpp = gloamChallenges(first.headers.get("www-authenticate"))[0] ?? null;
+      if (mpp) {
+        let request: GloamChargeRequest;
+        try {
+          ({ req, request } = requirementsFromChallenge(mpp));
+        } catch (e) {
+          return text({ status: "error", httpStatus: 402, error: `The server's gloam challenge is not valid: ${errMsg(e)}` });
+        }
+        const why = cannotPay(mpp, request);
+        if (why) return text({ status: "refused", code: "mpp_unpayable", httpStatus: 402, message: why });
+      } else {
+        try {
+          req = requirementsFrom402(first.headers, firstBody);
+        } catch {
+          req = "The 402 response carries Gloam requirements that do not decode.";
+        }
+        if (typeof req === "string") return text({ status: "error", httpStatus: 402, error: req, body: firstBody.slice(0, 2000) });
       }
-      if (typeof req === "string") return text({ status: "error", httpStatus: 402, error: req, body: firstBody.slice(0, 2000) });
       if (maxAmount !== undefined) {
         const { symbol, decimals } = assetInfo(Number(req.network), req.asset);
         let asked: bigint;
@@ -1166,17 +1345,32 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           });
         }
       }
-      const paid = await payPrivately(req, { handle: note });
+      const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}) });
       if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
+      // What to present: the MPP credential when paying an MPP challenge, else the x402 header.
+      const presented = mpp ? paid.authorization : paid.header;
+      const retryHeaders: Record<string, string> = mpp
+        ? paid.authorization
+          ? { [credentialField(mpp).toLowerCase()]: paid.authorization }
+          : {}
+        : { "x-payment": paid.header };
+      if (!presented) {
+        return text({
+          ...paid.result,
+          status: "paid_not_served",
+          message: "Paid, but the MPP credential could not be built, so the request was not retried. The payment is not lost: the payee can still open it.",
+          paymentHeader: paid.header,
+        });
+      }
       let second: Response;
       try {
-        second = await request(paid.header);
+        second = await request(retryHeaders);
       } catch (e) {
         return text({
           ...paid.result,
           status: "paid_not_served",
           message: `Paid, but the retry failed (${errMsg(e)}). Call gloam_fetch_paid again with paymentHeader to present this payment without paying twice.`,
-          paymentHeader: paid.header,
+          paymentHeader: presented,
         });
       }
       const served = await readBody(second);
@@ -1185,37 +1379,328 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           ...paid.result,
           status: "paid_not_served",
           message: "Paid, but the server did not serve the resource yet (it may still be confirming the payment). Retry with paymentHeader; do not pay again.",
-          paymentHeader: paid.header,
+          paymentHeader: presented,
           ...served,
         });
       }
+      const receipt = mpp ? receiptFrom(second) : null;
       return text({
         ...paid.result,
         status: "ok",
         ...served,
-        paymentResponse: second.headers.get("x-payment-response"),
+        ...(mpp ? { paymentReceipt: receipt } : { paymentResponse: second.headers.get("x-payment-response") }),
       });
     }
   );
 
+  type Reject = (message: string, extra?: Record<string, unknown>) => ReturnType<typeof text>;
+
+  /**
+   * The settle tail both dialects share, once a received note has passed its
+   * checks: refuse a payment this server already swept, then (pull) submit the
+   * payer's transfer, then sweep the note into a fresh one, storing it before the
+   * sweep is sent, and grant access only when the sweep confirms.
+   */
+  async function settleReceived(args: {
+    net: McpNetwork;
+    notes: NoteStore;
+    note: NoteExport;
+    paymentNullifier: Hex;
+    label: string;
+    sealed: boolean;
+    verifyView: Record<string, unknown>;
+    /** MPP pull mode: the payer's transfer, not yet in the pool, that this server submits first. */
+    pull?: ValidatedGloamCharge["transfer"];
+    /** MPP: what the receipt names. */
+    mpp?: { challengeId: string; externalId?: string };
+  }) {
+    const { net, notes, note, paymentNullifier, sealed, verifyView } = args;
+    const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
+    if (earlier) {
+      return text({
+        status: "already_settled",
+        grantAccess: false,
+        final: false,
+        message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
+      });
+    }
+
+    const signer = deps.signer(net);
+    const relay = relayUrl();
+    const { symbol, decimals } = assetInfo(net.chainId, note.asset);
+    if (!signer && !relay) {
+      return text({
+        status: "verified_not_final",
+        grantAccess: false,
+        final: false,
+        finality: GLOAM_NOT_FINAL,
+        message: "The payment checks out but this server cannot sweep it: set GLOAM_AGENT_PRIVATE_KEY, or GLOAM_USE_RELAY=1 to sweep through the Gloam relay. Until it is swept, do not grant access.",
+        verify: verifyView,
+      });
+    }
+    const client = signer?.publicClient ?? deps.publicClient(net);
+    const submit = (intent: GloamIntent) =>
+      relay
+        ? deps.relay(intent, { url: relay })
+        : signer!.walletClient.writeContract({
+            address: net.pool,
+            abi: POOL_TRANSFER_ABI,
+            functionName: "transfer",
+            args: transferCallArgs(intent as Parameters<typeof transferCallArgs>[0]),
+          });
+
+    // MPP pull: the payer handed over its proven transfer; it has to land before the note can be swept.
+    let paymentHash: Hex | null = null;
+    if (args.pull) {
+      let landed = false;
+      try {
+        paymentHash = await submit(payerTransferIntent(net.chainId, net.pool, args.pull));
+        landed = (await client.waitForTransactionReceipt({ hash: paymentHash })).status === "success";
+      } catch {
+        landed = false;
+      }
+      if (!landed) landed = await sweepChain(client, net).isCommitmentSeen(note.commitment).catch(() => false);
+      if (!landed) {
+        return text({
+          status: "rejected",
+          grantAccess: false,
+          final: false,
+          message: "The payer's transfer did not go through (its note may have been spent elsewhere). Nothing was paid.",
+          ...(paymentHash ? { hash: paymentHash } : {}),
+        });
+      }
+    }
+
+    let held: StoredNote | undefined;
+    try {
+      const sweep = await sweepReceivedNote({
+        note,
+        poolAddress: net.pool,
+        chainId: net.chainId,
+        prove: await deps.transferProver(),
+        chain: sweepChain(client, net),
+        submit,
+        // The fresh note's secret is the money: store it before the sweep is sent.
+        beforeSubmit: (fresh) => {
+          held = notes.add({
+            network: net.key,
+            chainId: net.chainId,
+            pool: net.pool,
+            asset: fresh.asset,
+            symbol,
+            decimals,
+            amountWei: fresh.amountWei,
+            secret: fresh.secret,
+            commitment: fresh.commitment,
+            nullifier: fresh.nullifier,
+            status: "pending",
+            pending: "create",
+            origin: "received",
+            createdTx: null,
+            sweptFrom: paymentNullifier,
+            label: args.label,
+          });
+        },
+      });
+      if (sweep.status === "swept") {
+        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweep.hash }) : null;
+        const noteWarning = held
+          ? tryStore(() => {
+              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweep.hash });
+              if (r) received = noteView(r);
+            })
+          : undefined;
+        let mppReceipt: Record<string, unknown> = {};
+        if (args.mpp && sweep.hash) {
+          const receipt: GloamChargeReceipt = {
+            status: "success",
+            method: "gloam",
+            timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            reference: sweep.hash,
+            challengeId: args.mpp.challengeId,
+            chainId: net.chainId,
+            ...(args.mpp.externalId !== undefined ? { externalId: args.mpp.externalId } : {}),
+          };
+          mppReceipt = {
+            receipt,
+            paymentReceipt: serializeReceipt(receipt),
+            httpHint: "Serve the resource with the header Payment-Receipt set to paymentReceipt and Cache-Control: private.",
+          };
+        }
+        return text({
+          status: "settled",
+          grantAccess: true,
+          final: true,
+          ...(noteWarning ? { noteWarning } : {}),
+          message: "Paid and final: the payment now sits in a note only this server knows. Serve the resource.",
+          received,
+          amount: formatUnits(BigInt(note.amountWei), decimals),
+          symbol,
+          sealed,
+          sweptBy: relay ? "gloam-relay" : "server wallet",
+          hash: sweep.hash,
+          explorer: sweep.hash ? `${net.explorer}/tx/${sweep.hash}` : null,
+          ...(paymentHash ? { paymentSubmittedBy: relay ? "gloam-relay" : "server wallet", paymentHash } : {}),
+          ...mppReceipt,
+        });
+      }
+      if (sweep.status === "unconfirmed") {
+        if (held && sweep.hash) tryStore(() => notes.update(held!.handle, { createdTx: sweep.hash }));
+        return text({
+          status: "unconfirmed",
+          grantAccess: false,
+          final: false,
+          message: `${sweep.reason} Check with gloam_list_notes (refresh), then verify again.`,
+          hash: sweep.hash,
+        });
+      }
+      if (held) tryStore(() => notes.remove(held!.handle));
+      return text({
+        status: sweep.status,
+        grantAccess: false,
+        final: false,
+        message: sweep.reason,
+        ...(sweep.hash ? { hash: sweep.hash } : {}),
+      });
+    } catch (e) {
+      if (held) tryStore(() => notes.remove(held!.handle));
+      return text({ status: "error", grantAccess: false, final: false, error: errMsg(e) });
+    }
+  }
+
+  /** gloam_verify_payment for an MPP credential (`Payment …`, method gloam, intent charge). */
+  async function verifyMpp(payment: string, requirements: string | undefined, reject: Reject) {
+    let cred;
+    try {
+      cred = parseMppCredential(payment);
+    } catch (e) {
+      return reject(`The credential does not parse: ${errMsg(e)}`, { problem: "malformed-credential" });
+    }
+    const ch = cred.challenge;
+    if (ch.method !== "gloam" || ch.intent !== "charge") {
+      return reject(`This server settles gloam/charge, not ${ch.method}/${ch.intent}.`, { problem: "invalid-challenge" });
+    }
+    let secret: Uint8Array;
+    try {
+      secret = mppSecret(env);
+    } catch (e) {
+      return text({ status: "error", grantAccess: false, final: false, error: errMsg(e) });
+    }
+    if (!(await verifyChallengeId(ch, secret))) {
+      return reject("The challenge in this credential was not issued by this server, or was changed.", { problem: "invalid-challenge" });
+    }
+    if (isExpired(ch)) return reject("The challenge has expired.", { problem: "payment-expired" });
+    let request: GloamChargeRequest;
+    try {
+      request = parseGloamChargeRequest(ch.request);
+    } catch (e) {
+      return reject(errMsg(e), { problem: "invalid-challenge" });
+    }
+    // Optionally bind to the price of the resource being served (the challenge alone proves only that this server issued it).
+    if (requirements?.trim()) {
+      const priced = parsePriced(requirements);
+      if ("error" in priced) return text({ status: "error", error: priced.error });
+      const expected = priced.mpp ? parseGloamChargeRequest(priced.mpp.request) : fromPaymentRequirements(priced.req);
+      const mismatch = termsMismatch(expected, request);
+      if (mismatch) return reject(`The credential was issued for a different ${mismatch} than these requirements.`, { problem: "invalid-challenge" });
+    }
+    const md = request.methodDetails;
+    const net = networkByChainId(md.chainId);
+    if (!net || md.pool.toLowerCase() !== net.pool.toLowerCase()) {
+      return reject(`This challenge names pool ${md.pool} on chain ${md.chainId}, which is not a Gloam pool. Not settling there.`);
+    }
+    const opened = openStore();
+    if (!opened.ok) return text({ status: "error", grantAccess: false, error: opened.error });
+    const notes = opened.store;
+    const receiveKey = notes.receiveKey();
+    if (!receiveKey) return reject("This server has no receive tag yet, so a sealed payment cannot be for it.");
+    if (request.recipient.trim() !== receiveKey.tag) {
+      return reject("The charge pays a receive tag that is not this server's, so this server cannot open the payment.");
+    }
+    // A challenge settles one payment: another payment for a challenge already used is refused before it is swept.
+    const challengeTag = `(mpp ${ch.id})`;
+    // Swept by this server already? Ask before the chain checks, which would only see a spent note.
+    try {
+      const early = await openGloamPaymentNote(parseGloamChargePayload(cred.payload).ticket, receiveKey);
+      const nf = fieldToHex(await noteNullifierPoseidon(hexToField(early.secret), hexToField(early.commitment)));
+      const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === nf.toLowerCase());
+      if (earlier) {
+        return text({
+          status: "already_settled",
+          grantAccess: false,
+          final: false,
+          message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
+        });
+      }
+    } catch {
+      // The full check below explains what is wrong with it.
+    }
+    const usedBy = notes.list().find((n) => n.origin === "received" && n.label?.endsWith(challengeTag));
+    if (usedBy) {
+      return reject(`This challenge was already paid and used (${usedBy.handle}). The payer should request the resource again for a fresh challenge.`, {
+        problem: "invalid-challenge",
+      });
+    }
+    const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
+    const notUsed = async (): Promise<never> => {
+      throw new Error("not used while validating");
+    };
+    let v: ValidatedGloamCharge;
+    try {
+      v = await validateGloamCharge({
+        challenge: ch,
+        payload: cred.payload,
+        config: {
+          receiveKey,
+          chain: mppChain(sweepChain(client, net), (a) => client.getTransactionReceipt(a)),
+          prove: notUsed,
+          submit: notUsed,
+          pools: { [net.chainId]: net.pool },
+        },
+      });
+    } catch (e) {
+      if (e instanceof GloamChargeError) {
+        return reject(e.message, { problem: e.code, ...(e.retryable ? { retryable: true } : {}) });
+      }
+      return text({ status: "error", grantAccess: false, final: false, error: errMsg(e) });
+    }
+    // Do not echo the commitment back: it names the leaf this server now owns.
+    const verifyView = { ok: true, reason: null, sealed: true, amountWei: v.note.amountWei, asset: v.note.asset, mode: v.mode };
+    return settleReceived({
+      net,
+      notes,
+      note: v.note,
+      paymentNullifier: v.paymentNullifier,
+      label: `${ch.description ?? ch.realm} ${challengeTag}`,
+      sealed: true,
+      verifyView,
+      ...(v.mode === "pull" && !v.landed ? { pull: v.transfer } : {}),
+      mpp: { challengeId: ch.id, ...(request.externalId !== undefined ? { externalId: request.externalId } : {}) },
+    });
+  }
+
   server.registerTool(
     "gloam_verify_payment",
     {
-      title: "Verify and settle a private payment (x402)",
+      title: "Verify and settle a private payment (x402 or MPP)",
       description:
-        "SERVER side. Check a presented X-PAYMENT against its requirements and make it final: opens the payment note with this server's receive key, checks it binds the required amount and asset in the right pool, then sweeps it into a fresh note only this server knows and waits for that to confirm. Grant access only when the result says grantAccess: true. A payer creates the payment note, so without the sweep it could spend the money back after being served. Needs GLOAM_AGENT_PRIVATE_KEY or the relay (GLOAM_USE_RELAY=1) to sweep.",
+        "SERVER side. Check a presented payment and make it final: an x402 X-PAYMENT value against its requirements, or an MPP credential (the Authorization: Payment value, method gloam) against the challenge it echoes, which must be one this server issued. Opens the payment note with this server's receive key, checks it binds the required amount and asset in the right pool (and, for MPP, that it is the payment output of a Transferred event and bound to that challenge), then sweeps it into a fresh note only this server knows and waits for that to confirm. Grant access only when the result says grantAccess: true; for MPP, serve with its paymentReceipt as the Payment-Receipt header. A payer creates the payment note, so without the sweep it could spend the money back after being served. Needs GLOAM_AGENT_PRIVATE_KEY or the relay (GLOAM_USE_RELAY=1) to sweep.",
       inputSchema: {
-        requirements: z.string().describe("The requirements you issued: encoded, or raw JSON."),
-        payment: z.string().describe("The X-PAYMENT header value presented by the payer (or the raw JSON payload)."),
+        requirements: z
+          .string()
+          .optional()
+          .describe("The price you issued: x402 requirements (encoded or raw JSON), or the MPP challenge (WWW-Authenticate value). Required for x402. For MPP it is optional, and binds the credential to that exact price."),
+        payment: z.string().describe("The X-PAYMENT header value (or raw JSON payload), or the MPP Authorization: Payment value presented by the payer."),
       },
     },
     async ({ requirements, payment }) => {
+      const reject: Reject = (message, extra = {}) => text({ status: "rejected", grantAccess: false, final: false, message, ...extra });
+      if (looksLikeMpp(payment)) return verifyMpp(payment, requirements, reject);
+      if (!requirements) return text({ status: "error", error: "requirements is required for an x402 payment: pass the requirements you issued." });
       const req = parseRequirements(requirements);
       if (!req) return text({ status: "error", error: "Could not parse requirements." });
       const pay = parsePayment(payment);
       if (!pay?.payload?.paymentNote) return text({ status: "error", error: "Could not parse payment." });
-      const reject = (message: string, extra: Record<string, unknown> = {}) =>
-        text({ status: "rejected", grantAccess: false, final: false, message, ...extra });
 
       const net = networkByChainId(Number(req.network));
       if (!net || String(req.poolAddress).toLowerCase() !== net.pool.toLowerCase()) {
@@ -1243,114 +1728,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // A structural pass alone would trust a lying payer; the amount must bind to the commitment.
       if (!(await verifyPaymentNoteBinding(note))) return reject("The payment note's amount does not bind to its commitment.");
       const paymentNullifier = fieldToHex(await noteNullifierPoseidon(hexToField(note.secret), hexToField(note.commitment)));
-      const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
-      if (earlier) {
-        return text({
-          status: "already_settled",
-          grantAccess: false,
-          final: false,
-          message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
-        });
-      }
-
-      const signer = deps.signer(net);
-      const relay = relayUrl();
-      const { symbol, decimals } = assetInfo(net.chainId, note.asset);
-      if (!signer && !relay) {
-        return text({
-          status: "verified_not_final",
-          grantAccess: false,
-          final: false,
-          finality: GLOAM_NOT_FINAL,
-          message: "The payment checks out but this server cannot sweep it: set GLOAM_AGENT_PRIVATE_KEY, or GLOAM_USE_RELAY=1 to sweep through the Gloam relay. Until it is swept, do not grant access.",
-          verify: verifyView,
-        });
-      }
-      const client = signer?.publicClient ?? deps.publicClient(net);
-      let held: StoredNote | undefined;
-      try {
-        const sweep = await sweepReceivedNote({
-          note,
-          poolAddress: net.pool,
-          chainId: net.chainId,
-          prove: await deps.transferProver(),
-          chain: sweepChain(client, net),
-          submit: (intent) =>
-            relay
-              ? deps.relay(intent, { url: relay })
-              : signer!.walletClient.writeContract({
-                  address: net.pool,
-                  abi: POOL_TRANSFER_ABI,
-                  functionName: "transfer",
-                  args: transferCallArgs(intent),
-                }),
-          // The fresh note's secret is the money: store it before the sweep is sent.
-          beforeSubmit: (fresh) => {
-            held = notes.add({
-              network: net.key,
-              chainId: net.chainId,
-              pool: net.pool,
-              asset: fresh.asset,
-              symbol,
-              decimals,
-              amountWei: fresh.amountWei,
-              secret: fresh.secret,
-              commitment: fresh.commitment,
-              nullifier: fresh.nullifier,
-              status: "pending",
-              pending: "create",
-              origin: "received",
-              createdTx: null,
-              sweptFrom: paymentNullifier,
-              label: req.resource,
-            });
-          },
-        });
-        if (sweep.status === "swept") {
-          let received = held ? noteView({ ...held, status: "unspent", createdTx: sweep.hash }) : null;
-          const noteWarning = held
-            ? tryStore(() => {
-                const r = notes.update(held!.handle, { status: "unspent", createdTx: sweep.hash });
-                if (r) received = noteView(r);
-              })
-            : undefined;
-          return text({
-            status: "settled",
-            grantAccess: true,
-            final: true,
-            ...(noteWarning ? { noteWarning } : {}),
-            message: "Paid and final: the payment now sits in a note only this server knows. Serve the resource.",
-            received,
-            amount: formatUnits(BigInt(note.amountWei), decimals),
-            symbol,
-            sealed,
-            sweptBy: relay ? "gloam-relay" : "server wallet",
-            hash: sweep.hash,
-            explorer: sweep.hash ? `${net.explorer}/tx/${sweep.hash}` : null,
-          });
-        }
-        if (sweep.status === "unconfirmed") {
-          if (held && sweep.hash) tryStore(() => notes.update(held!.handle, { createdTx: sweep.hash }));
-          return text({
-            status: "unconfirmed",
-            grantAccess: false,
-            final: false,
-            message: `${sweep.reason} Check with gloam_list_notes (refresh), then verify again.`,
-            hash: sweep.hash,
-          });
-        }
-        if (held) tryStore(() => notes.remove(held!.handle));
-        return text({
-          status: sweep.status,
-          grantAccess: false,
-          final: false,
-          message: sweep.reason,
-          ...(sweep.hash ? { hash: sweep.hash } : {}),
-        });
-      } catch (e) {
-        if (held) tryStore(() => notes.remove(held!.handle));
-        return text({ status: "error", grantAccess: false, final: false, error: errMsg(e) });
-      }
+      return settleReceived({ net, notes, note, paymentNullifier, label: req.resource, sealed, verifyView });
     }
   );
 
@@ -1361,9 +1739,24 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Spending limits",
       description:
-        "This agent's spending limits as the owner set them: which money tools it may use, which assets, the cap per payment and per rolling 24 hours, allowed recipients, and when its permission expires. Check this before planning a payment. Limits are enforced by this MCP server (off-chain), not by the vault contract.",
+        "This agent's spending limits as the owner set them: which money tools it may use, which assets, the cap per payment and per rolling 24 hours, allowed recipients, and when its permission expires. Check this before planning a payment. This MCP server enforces them before it signs (off-chain). When the agent's key is a Tempo access key, the result also has `onchain`: the owner's AccountKeychain authorization (expiry, the remaining periodic limit and call scopes), which the Tempo protocol enforces on every transaction whatever this server does. The vault contract itself does not know about limits.",
     },
-    async () => text(limitsReport(env))
+    async () => {
+      const report = limitsReport(env);
+      let setup: ReturnType<typeof signerSetup>;
+      try {
+        setup = signerSetup(env);
+      } catch (e) {
+        return text({ ...report, onchain: { error: errMsg(e) } });
+      }
+      if (setup.mode !== "access-key") return text(report);
+      try {
+        const onchain = await checkAccessKey({ owner: setup.owner, keyId: setup.keyAddress }, deps.publicClient(MCP_NETWORKS.tempo));
+        return text({ ...report, onchain });
+      } catch (e) {
+        return text({ ...report, onchain: { error: `Could not read the access key's onchain state: ${errMsg(e)}` } });
+      }
+    }
   );
 
   server.registerTool(
