@@ -77,6 +77,12 @@ import {
 import { PAYMENT_NOTE_MAX, cleanPaymentNote } from "@/lib/paymentNote";
 import { NoteGlyph, PaymentNoteLine } from "./PaymentNote";
 import { SuccessModal } from "./SuccessModal";
+import { PrivatePayShare } from "./PrivatePayShare";
+import {
+  markPrivatePaid,
+  readFirstPaySuggestion,
+  type FirstPaySuggestion,
+} from "@/lib/firstPayment";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { PaymentTicketShare } from "./PaymentTicketShare";
 import { WalletMenu } from "./WalletMenu";
@@ -123,8 +129,16 @@ export function MoveView() {
           network.key
         )
   );
+  // The first-payment nudge (FirstPaymentCard) opens Send with a small amount
+  // in one stablecoin (?suggest=5&suggestAsset=0x…). A request link wins over
+  // it. Read once; the URL is cleaned up below so a refresh starts blank.
+  const [suggestion] = useState<FirstPaySuggestion | null>(() =>
+    request ? null : readFirstPaySuggestion(searchParams, network.chainId)
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [sendAmount, setSendAmount] = useState(() => request?.amount ?? "");
+  const [sendAmount, setSendAmount] = useState(
+    () => request?.amount ?? suggestion?.amount ?? ""
+  );
   // Private note that travels inside the payment (lib/paymentNote). A request's
   // note comes along by default; the payer can change or remove it.
   const [payNote, setPayNote] = useState(() => request?.note ?? "");
@@ -158,6 +172,18 @@ export function MoveView() {
   const [relayAvailable, setRelayAvailable] = useState(false);
   const [relayOn, setRelayOn] = useState(false);
   const [relayHash, setRelayHash] = useState<Hex | undefined>(undefined);
+  /** The last confirmed action was a private payment, so success offers the share post. */
+  const [paidPrivately, setPaidPrivately] = useState(false);
+
+  // Drop the nudge's suggestion from the URL once read (it is already in the
+  // form), so a refresh or a tab switch does not fill it in again.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("suggest") && !url.searchParams.has("suggestAsset")) return;
+    url.searchParams.delete("suggest");
+    url.searchParams.delete("suggestAsset");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, []);
 
   const {
     writeContract,
@@ -301,6 +327,13 @@ export function MoveView() {
         setBusy(false);
         setStatus(null);
         return;
+      }
+
+      if (pendingAction.current === "send") {
+        // The payment itself has landed (a heads-up, if any, is a second
+        // step). Retires the first-payment nudge on this device.
+        markPrivatePaid(network.chainId);
+        setPaidPrivately(true);
       }
 
       if (pendingAction.current === "send" && payTrack.current) {
@@ -452,9 +485,26 @@ export function MoveView() {
     return (covering ?? bySize[bySize.length - 1]).id;
   }, [request, notes]);
 
+  // The nudge's suggestion picks a balance the same way: the smallest one in
+  // its token that covers the amount, else the largest.
+  const suggestNoteId = useMemo(() => {
+    if (!suggestion) return null;
+    const same = notes.filter(
+      (n) => n.asset.toLowerCase() === suggestion.asset.toLowerCase()
+    );
+    if (!same.length) return null;
+    const need = parseAssetAmount(suggestion.amount, suggestion.asset);
+    const bySize = [...same].sort((a, b) =>
+      BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1
+    );
+    const covering = need ? bySize.find((n) => BigInt(n.amountWei) >= need) : null;
+    return (covering ?? bySize[bySize.length - 1]).id;
+  }, [suggestion, notes]);
+
   const selected =
     notes.find((n) => n.id === selectedId) ??
     notes.find((n) => n.id === requestNoteId) ??
+    notes.find((n) => n.id === suggestNoteId) ??
     notes[0] ??
     null;
 
@@ -496,6 +546,7 @@ export function MoveView() {
     }
 
     setBusy(true);
+    setPaidPrivately(false);
     reset();
     setRelayHash(undefined);
     handledHash.current = null;
@@ -566,6 +617,7 @@ export function MoveView() {
     setError(null);
     setShareBlob(null);
     setBusy(true);
+    setPaidPrivately(false);
     reset();
     setRelayHash(undefined);
     handledHash.current = null;
@@ -1853,6 +1905,11 @@ export function MoveView() {
         primaryHref={txHash ? network.explorerTx(txHash) : undefined}
         primaryLabel="View on explorer"
         secondaryLabel="Done"
+        footer={
+          paidPrivately ? (
+            <PrivatePayShare chainId={network.chainId} networkLabel={network.label} />
+          ) : undefined
+        }
         onClose={() => {
           setShowSuccess(false);
           setStatus(null);

@@ -25,6 +25,7 @@ import {
 import { SealedField } from "@/components/ui/SealedField";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
+import { FirstPaymentCard } from "./FirstPaymentCard";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
 import { PaymentNoteLine } from "./PaymentNote";
 import { TokenLogo } from "./TokenLogo";
@@ -186,7 +187,7 @@ export function PortfolioView() {
   // chain's own symbol rather than a hardcoded "ETH".
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
-  const { open: shieldNotes, shieldedWei, byAsset, syncing } =
+  const { open: shieldNotes, merged: allNotes, shieldedWei, byAsset, syncing } =
     useLocalShieldNotes(address);
   const shieldLive = isShieldDeployed();
 
@@ -454,6 +455,12 @@ export function PortfolioView() {
           </div>
         )}
       </section>
+
+      {/* Holds a private balance here but has never paid privately from this
+          device: point at Pay with a small amount filled in. */}
+      {balancesVisible && hasShield && shieldLive && (
+        <FirstPaymentCard open={shieldNotes} all={allNotes} chainId={network.chainId} />
+      )}
 
       {/* Total + public accounts */}
       <div className="grid gap-4 sm:grid-cols-3">

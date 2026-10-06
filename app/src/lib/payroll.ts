@@ -36,6 +36,7 @@ import { encryptTicketForTag, isReceiveTag } from "@/lib/receiveTag";
 import { ticketToMemoBytes } from "@/lib/payMemo";
 import { cleanPaymentNote } from "@/lib/paymentNote";
 import { openJson, sealJson } from "@/lib/noteVault";
+import { markPrivatePaid } from "@/lib/firstPayment";
 import {
   activeSpendableNotes,
   assetDecimals,
@@ -618,6 +619,8 @@ async function payRow(
 }
 
 async function finalizeTransfer(batch: PayrollBatch, row: PayrollRow, client: PublicClient) {
+  // A payroll payment is a private payment too (retires the first-payment nudge).
+  markPrivatePaid(batch.chainId);
   if (row.spendNoteId) updateLocalNote(row.spendNoteId, { status: "recovered", txHash: row.txHash });
   if (row.changeNoteId) {
     const notes = loadLocalNotes(batch.employer);

@@ -20,6 +20,7 @@ export function SuccessModal({
   primaryHref,
   primaryLabel,
   secondaryLabel = "Done",
+  footer,
   onClose,
 }: {
   open: boolean;
@@ -28,6 +29,8 @@ export function SuccessModal({
   primaryHref?: string;
   primaryLabel?: string;
   secondaryLabel?: string;
+  /** Optional extra step under the actions (e.g. sharing a private payment). */
+  footer?: React.ReactNode;
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -138,6 +141,7 @@ export function SuccessModal({
               {secondaryLabel}
             </button>
           </div>
+          {footer && <div className="mt-6 border-t border-line pt-5">{footer}</div>}
         </div>
       </motion.div>
     </div>,
