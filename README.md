@@ -23,6 +23,7 @@ The vault app is the reference implementation, not the whole product.
 | **SDK** | Drop shielded balances, private sends, and selective disclosure into any onchain app or agent, on Robinhood Chain or Tempo. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
 | **Agents** | An MCP server + a reference wrapper so an AI agent can shield, move value, and pay for tools privately over x402, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
 | **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
+| **Partner API** | Apps add private payments with an API key, set their own fee (flat per private payment, a share of cash outs and deposits), and see attributed volume and would-be fees live in the partner portal. Testnet: nothing is charged; real fees need a fee output in the circuits, part of the mainnet ceremony. | [`/partners`](https://gloam.trade/partners) · [`/docs/partners`](https://gloam.trade/docs/partners) · `GloamApiClient` |
 
 All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle tree, circom witness builders, real Groth16 verification, and one canonical intent shape.
 

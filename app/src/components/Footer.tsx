@@ -23,6 +23,7 @@ const groups: {
       { href: "/sdk", label: "SDK" },
       { href: "/docs", label: "Docs" },
       { href: "/docs/agents", label: "Agents" },
+      { href: "/partners", label: "Partners" },
       { href: "/whitepaper", label: "Whitepaper" },
       { href: "/verify#contracts", label: "Verify contracts" },
     ],

@@ -32,6 +32,7 @@ export const DOCS_NAV: DocNavGroup[] = [
       { href: "/docs/sdk/reference", label: "API reference" },
       { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
       { href: "/docs/agents", label: "Agents" },
+      { href: "/docs/partners", label: "Partner API" },
     ],
   },
   {
@@ -84,7 +85,7 @@ export const DOCS_TABS: DocsTab[] = [
   {
     label: "SDK",
     href: "/docs/sdk",
-    match: ["/docs/sdk", "/docs/sdk/reference", "/docs/sdk/disclosure", "/docs/quickstart"],
+    match: ["/docs/sdk", "/docs/sdk/reference", "/docs/sdk/disclosure", "/docs/quickstart", "/docs/partners"],
   },
   { label: "Agents", href: "/docs/agents", match: ["/docs/agents"] },
   { label: "Whitepaper", href: "/whitepaper", match: ["/whitepaper"] },
