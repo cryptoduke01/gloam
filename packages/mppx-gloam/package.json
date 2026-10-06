@@ -79,6 +79,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "tsc --noEmit && tsx --test test/*.test.ts"
   },
