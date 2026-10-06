@@ -21,6 +21,7 @@
  *   x402      private agent payments over HTTP 402 (settle-then-prove)
  *   receive   receive tags: seal a payment so only its payee can open it
  *   sweep     payee side: move a received payment to a fresh note (final)
+ *   api       GloamApiClient: the partner API (relay with a key, proofs, links)
  *   constants pool + verifier addresses, chain ids, networks, field prime
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
@@ -48,3 +49,4 @@ export * from "./x402.js";
 export * from "./receiveTag.js";
 export * from "./sweep.js";
 export * from "./relay.js";
+export * from "./api.js";
