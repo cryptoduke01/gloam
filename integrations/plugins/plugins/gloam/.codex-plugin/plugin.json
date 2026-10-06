@@ -1,0 +1,37 @@
+{
+  "name": "gloam",
+  "version": "0.2.0",
+  "description": "Private stablecoin payments for agents on Tempo: pay x402 and MPP resources, shield, get paid, with onchain spending limits.",
+  "homepage": "https://gloam.trade/docs/agents",
+  "repository": "https://github.com/cryptoduke01/gloam",
+  "license": "MIT",
+  "keywords": ["gloam", "tempo", "payments", "privacy", "x402", "mpp", "mcp", "stablecoins", "access-keys"],
+  "author": {
+    "name": "Gloam",
+    "url": "https://gloam.trade"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/gloam-setup/SKILL.md"
+    }
+  },
+  "interface": {
+    "displayName": "Gloam",
+    "shortDescription": "Private stablecoin payments for agents on Tempo",
+    "longDescription": "Pay for x402 and MPP resources, hold a shielded balance and get paid, privately, on Tempo testnet. The owner's wallet authorizes a Tempo access key with a spending limit, an expiry and call scopes that the protocol enforces, so the caps hold even if the agent is tricked or its host is compromised.",
+    "developerName": "Gloam",
+    "category": "Finance",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://gloam.trade",
+    "defaultPrompt": [
+      "Set up Gloam with a 10 PathUSD a day limit on my Tempo account.",
+      "Fetch this paid URL and pay for it privately if it asks for a Gloam payment.",
+      "How much can the agent still spend today, and what has it paid?"
+    ],
+    "brandColor": "#0B0C0E",
+    "composerIcon": "./assets/gloam-mark.svg",
+    "logo": "./assets/gloam-mark.svg"
+  }
+}

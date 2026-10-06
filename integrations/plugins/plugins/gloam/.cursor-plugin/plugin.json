@@ -1,0 +1,16 @@
+{
+  "name": "gloam",
+  "displayName": "Gloam",
+  "version": "0.2.0",
+  "description": "Private stablecoin payments for agents on Tempo: pay x402 and MPP resources, shield, get paid, with onchain spending limits.",
+  "author": {
+    "name": "Gloam"
+  },
+  "homepage": "https://gloam.trade/docs/agents",
+  "repository": "https://github.com/cryptoduke01/gloam",
+  "license": "MIT",
+  "logo": "./assets/gloam-mark.svg",
+  "keywords": ["gloam", "tempo", "payments", "privacy", "x402", "mpp", "mcp", "stablecoins", "access-keys"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

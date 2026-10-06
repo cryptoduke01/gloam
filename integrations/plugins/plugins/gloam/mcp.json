@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "gloam": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@gloamtrade/mcp@0.2"]
+    }
+  }
+}

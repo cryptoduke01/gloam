@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gloam setup"
+  short_description: "Connect Gloam and give the agent capped spending"
+  default_prompt: "Use $gloam-setup to connect Gloam and set up a Tempo access key with a daily limit, without spending."

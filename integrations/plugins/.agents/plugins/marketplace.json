@@ -1,0 +1,20 @@
+{
+  "name": "gloam",
+  "interface": {
+    "displayName": "Gloam"
+  },
+  "plugins": [
+    {
+      "name": "gloam",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gloam"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Finance"
+    }
+  ]
+}

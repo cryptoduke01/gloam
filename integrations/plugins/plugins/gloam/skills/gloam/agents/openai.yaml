@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gloam"
+  short_description: "Private stablecoin payments within limits"
+  default_prompt: "Use $gloam to check my agent's limits and private balance without spending."

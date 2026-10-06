@@ -1,0 +1,18 @@
+{
+  "name": "gloam",
+  "owner": {
+    "name": "Gloam"
+  },
+  "metadata": {
+    "description": "Gloam plugins for private agent payments on Tempo."
+  },
+  "plugins": [
+    {
+      "name": "gloam",
+      "source": "plugins/gloam",
+      "description": "Private stablecoin payments for agents on Tempo: pay x402 and MPP resources, shield, get paid, with onchain spending limits.",
+      "category": "Finance",
+      "tags": ["gloam", "tempo", "payments", "privacy", "x402", "mpp", "mcp", "stablecoins"]
+    }
+  ]
+}
