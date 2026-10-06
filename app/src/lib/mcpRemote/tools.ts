@@ -227,7 +227,11 @@ export const TOOLS: Tool[] = [
 
 function info(ctx: ToolContext) {
   return {
-    what: "Gloam is a privacy layer for onchain money: shielded balances, private payments and proofs you choose to share, for people and AI agents. Private stablecoin payments on Tempo, and private balances on Robinhood Chain.",
+    what: "Gloam is the privacy layer for onchain finance: shielded balances, private payments and proofs you choose to share, for people and AI agents. Private stablecoin payments on Tempo, and private balances on Robinhood Chain.",
+    wantItDoneForYou: {
+      agent: `Add the local Gloam server (${LOCAL_SERVER}) to this AI client and give it a capped spending key. Then the agent can deposit, pay privately and check proofs end to end, inside limits you set. gloam_connect_full_agent has the one-line setup.`,
+      oneLink: "Or ask for a link per action: a payment request link opens Pay in the app already filled in, so you only check it and sign.",
+    },
     thisServer: {
       url: MCP_URL,
       does: "Reads and plans. No account, no install.",
@@ -454,7 +458,7 @@ function planDeposit(args: Args, ctx: ToolContext): CallToolResult {
       network === "tempo"
         ? "Before you sign, the app checks the depositing wallet against the OFAC sanctions list and the stablecoin's TIP-403 transfer policy."
         : "Before you sign, the app checks the depositing wallet against the OFAC sanctions list.",
-    forAgents: `An agent can deposit for itself with the local server's gloam_execute_shield (${LOCAL_SERVER}), under spending limits you set. See gloam_connect_full_agent.`,
+    fasterWay: `Rather not click through it? Add the local server (${LOCAL_SERVER}) with a capped key and the agent can make this deposit for you with gloam_execute_shield, inside limits you set. See gloam_connect_full_agent.`,
     status: STATUS,
   });
 }
