@@ -54,6 +54,107 @@ export default function DocsAgentsPage() {
         </li>
       </ul>
 
+      <h2 id="connect-by-url">Connect by URL</h2>
+      <p>
+        The quickest way to try Gloam from a chat. Gloam runs a hosted MCP
+        server, so you add it to your client by URL and install nothing.
+      </p>
+      <pre>
+        <code>https://www.gloam.trade/mcp</code>
+      </pre>
+      <ul>
+        <li>
+          <strong>Claude</strong> (claude.ai and Claude Desktop): Settings,
+          Connectors, Add custom connector, then paste the URL.
+        </li>
+        <li>
+          <strong>ChatGPT</strong>: Settings, Apps and connectors. Turn on
+          developer mode, then create a connector with the URL and no
+          authentication.
+        </li>
+        <li>
+          <strong>Claude Code</strong>:{" "}
+          <code>claude mcp add --transport http gloam-hosted https://www.gloam.trade/mcp</code>
+        </li>
+        <li>
+          <strong>Cursor, VS Code and other clients</strong>: add it as a remote
+          server, for example{" "}
+          <code>{`{ "mcpServers": { "gloam-hosted": { "url": "https://www.gloam.trade/mcp" } } }`}</code>
+        </li>
+      </ul>
+      <p>The hosted server reads and plans. It has these tools:</p>
+      <div className="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>gloam_info</code> / <code>gloam_networks</code>
+              </td>
+              <td>
+                What Gloam is; each network&apos;s vault, assets (OUSD on Tempo, USDG
+                on Robinhood Chain), explorers and faucets
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_vault_stats</code>
+              </td>
+              <td>Public vault totals, as on the transparency page. No wallets</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_create_payment_request</code>
+              </td>
+              <td>A link that asks someone to pay your Gloam address privately</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_verify_proof</code>
+              </td>
+              <td>
+                Check a proof of funds, proof of payment, payroll total or balance
+                disclosure, with the same checks as <Link href="/verify">/verify</Link>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_plan_deposit</code>
+              </td>
+              <td>The steps and app link for a private deposit, and what is public</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_mpp_how_to</code>
+              </td>
+              <td>
+                Pay or charge privately over MPP with{" "}
+                <code>@gloamtrade/mppx-gloam</code>, with code
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_connect_full_agent</code>
+              </td>
+              <td>Commands to install the local server that signs and pays</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        It never signs, never holds funds, and never needs a private key, a
+        recovery phrase or a note secret. A tool call that looks like it carries
+        one is refused with a warning not to share it, and nothing is kept. When
+        something has to be signed, it sends you to the app, or to the local{" "}
+        <a href="#the-mcp-server">MCP server</a>, which keeps keys on your own
+        machine.
+      </p>
+
       <h2>Reference agent (the SDK path)</h2>
       <p>
         <code>examples/agent-shield</code> is the smallest complete agent: it
