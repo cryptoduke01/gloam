@@ -7,7 +7,7 @@ Code, Codex and Cursor.
 
 | Plugin | What it adds |
 | --- | --- |
-| [`gloam`](./plugins/gloam) | The Gloam MCP server (`npx -y @gloamtrade/mcp@0.2`, stdio) and two skills: `gloam` (pay, get paid and check limits safely) and `gloam-setup` (connect, and give the agent a capped Tempo access key) |
+| [`gloam`](./plugins/gloam) | The Gloam MCP server (`npx -y @gloamtrade/mcp@0.2.0`, stdio) and two skills: `gloam` (pay, get paid and check limits safely) and `gloam-setup` (connect, and give the agent a capped Tempo access key) |
 
 ## Install
 
@@ -49,7 +49,7 @@ Or in any `mcpServers` config (Gemini CLI: `~/.gemini/settings.json`):
 { "mcpServers": { "gloam": { "command": "npx", "args": ["-y", "@gloamtrade/mcp"] } } }
 ```
 
-The plugin pins the server to `@gloamtrade/mcp@0.2`, so a new server version reaches agents only
+The plugin pins the server to `@gloamtrade/mcp@0.2.0`, so a new server version reaches agents only
 through a plugin update. The plain commands above take the latest version.
 
 ### Or connect by URL, nothing installed
@@ -122,14 +122,15 @@ registry/gloam/server.json          Official MCP Registry entry (npm package, st
    repository `cryptoduke01/gloam-plugins` as `main`. Repeat the split and push to update it.
 3. Validate: `claude plugin validate .` in the new repository.
 4. Optional listings:
-   - Claude Code directory: submit at `https://platform.claude.com/plugins/submit`.
+   - Claude directory: submit the plugin folder (`plugins/gloam`) as a plugin bundle, and the hosted
+     server (`https://www.gloam.trade/mcp`) as an MCP connector, at `https://claude.ai/directory/manage`.
    - Cursor: submit the repository URL at `https://cursor.com/marketplace/publish`. Disclose that the
      plugin can sign transactions and move testnet funds once a key is configured.
    - MCP Registry: `registry/gloam/server.json` matches `mcpName` in the npm package. Authenticate the
      `io.github.cryptoduke01` namespace with GitHub and run `mcp-publisher publish` from `registry/gloam`.
 
 Bump `version` in the three `plugin.json` manifests, `plugin.json`, `registry/gloam/server.json`
-and the pinned `@gloamtrade/mcp@0.2` in `.mcp.json` and `mcp.json` together when the server's minor
+and the pinned `@gloamtrade/mcp@0.2.0` in `.mcp.json` and `mcp.json` together when the server's minor
 version changes.
 
 ## License

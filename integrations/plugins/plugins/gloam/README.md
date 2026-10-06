@@ -1,0 +1,38 @@
+# Gloam
+
+Private stablecoin payments for AI agents. With this plugin an agent can pay for x402 and MPP
+resources from a private (shielded) balance, get paid, check payments and proofs, and report what
+it has spent, while amounts and counterparties stay off the public block explorer. Gloam runs on
+Tempo testnet (Moderato) and Robinhood Chain testnet. Testnet funds only.
+
+## What it adds
+
+- The Gloam MCP server, run locally over stdio with `npx -y @gloamtrade/mcp@0.2.0`.
+- Two skills: `gloam` (pay, get paid, check limits and spending safely) and `gloam-setup`
+  (connect, and give the agent a capped Tempo access key).
+
+## What it runs, reads and contacts
+
+- **Runs:** the `@gloamtrade/mcp` package from npm, pinned to 0.2.0. Source:
+  https://github.com/cryptoduke01/gloam/tree/main/mcp
+- **Reads:** settings from `~/.gloam/agent.env` on your machine (agent key, Tempo account,
+  spending limits, note store key). Nothing secret is stored in the plugin's files.
+- **Contacts:** the public Tempo and Robinhood Chain testnet RPC nodes, Gloam's zero-knowledge
+  circuit files at `https://www.gloam.trade/circuits`, Gloam's relay only if you turn it on, and
+  the paid URLs you ask the agent to fetch. Private and local network addresses are refused by
+  default.
+
+## Spending and safety
+
+Out of the box the server only reads and plans: it signs nothing until you give it a key. When you
+do, every payment is checked against limits you set (per payment, per day, allowed payees, expiry)
+before it is proved or signed, and every spend is logged. On Tempo the recommended key is an access
+key that your own wallet caps onchain, so the agent cannot spend past the limit even if the server
+is misconfigured. Note secrets stay in an encrypted store on your machine; the agent only sees note
+handles.
+
+Docs: https://gloam.trade/docs/agents
+
+## License
+
+MIT

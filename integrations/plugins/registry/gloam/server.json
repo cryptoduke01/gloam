@@ -2,14 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cryptoduke01/gloam",
   "title": "Gloam",
-  "description": "Private stablecoin payments for AI agents on Tempo, with onchain spending limits.",
-  "version": "0.2.0",
+  "description": "Private stablecoin payments for people and AI agents, hosted or local with spending limits.",
+  "version": "1.1.0",
   "websiteUrl": "https://gloam.trade/docs/agents",
   "repository": {
     "url": "https://github.com/cryptoduke01/gloam",
-    "source": "github",
-    "subfolder": "mcp"
+    "source": "github"
   },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.gloam.trade/mcp"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",

@@ -2,8 +2,10 @@
   "mcpServers": {
     "gloam": {
       "command": "npx",
-      "args": ["-y", "@gloamtrade/mcp@0.2"],
-      "note": "Gloam MCP server over stdio. Keys and limits are read from ~/.gloam/agent.env, never from this file."
+      "args": [
+        "-y",
+        "@gloamtrade/mcp@0.2.0"
+      ]
     }
   }
 }
