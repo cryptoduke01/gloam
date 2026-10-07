@@ -67,6 +67,7 @@ body.show-notes .notes { display: block; }
 .grey .card { background: var(--white); }
 .dark .card { background: var(--dk-panel); }
 .s .big { font-weight: 300; font-size: 112px; line-height: 1; letter-spacing: -0.035em; color: inherit; }
+.s .rule p.big { color: inherit; }
 .pill { display: inline-flex; align-items: center; gap: 12px; background: var(--white); border-radius: 999px; padding: 14px 24px; font-size: 24px; }
 .pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
 .check { display: flex; align-items: center; gap: 24px; font-size: 32px; padding: 26px 0; }
@@ -129,6 +130,23 @@ tr.us th:first-child { padding-left: 20px; }
 </section></div>
 <aside class="notes"><b>Say:</b> Paste any wallet into a block explorer and you see everything: the balance, every payment, every trade, who it paid and how much. That's fine for settlement, and terrible for real money. It's why companies keep payroll and treasury off chain, why traders get copied and front-run, and why agents that pay for tools leak what they're doing.</aside>
 
+<!-- 2b cost of public money -->
+<div class="frame"><section class="s dark" aria-label="What public money costs">
+  <p class="eyebrow">What public money costs</p>
+  <h2 class="h1" style="margin-top:48px">Public wallets are<br>a target list.</h2>
+  <div class="grow"></div>
+  <div class="cols c4">
+    <div class="rule" style="gap:18px"><p class="big">72</p><p>physical attacks on crypto holders in 2025, a record. Kidnapping was the most common.</p></div>
+    <div class="rule" style="gap:18px"><p class="big">$713M</p><p>stolen from 80,000 people's personal wallets in 2025.</p></div>
+    <div class="rule" style="gap:18px"><p class="big">270M</p><p>address-poisoning attacks in two years, built from public payment history.</p></div>
+    <div class="rule" style="gap:18px"><p class="big">$60M</p><p>taken from traders by bots that see their trades coming, in one year.</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">Every one starts the same way: <span class="mute">your balance and your history are public.</span></p>
+  <div class="foot"><span>Sources: CertiK via Decrypt (2025 wrench attacks); Chainalysis 2025; address-poisoning study, 2025; EigenPhi via Cointelegraph (Nov 2024 to Oct 2025)</span><span>3</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> And it costs people. Last year there were 72 physical attacks on crypto holders, a record, and kidnapping was the most common. 713 million dollars was stolen from 80,000 people's personal wallets. Scammers ran 270 million address-poisoning attacks, copying the people you pay from your public history. Trading bots took 60 million dollars from traders by seeing their trades coming. Every one of these starts the same way: your balance and your history are public.</aside>
+
 <!-- 3 why now -->
 <div class="frame"><section class="s light" aria-label="Why now">
   <p class="eyebrow">Why now</p>
@@ -141,7 +159,7 @@ tr.us th:first-child { padding-left: 20px; }
   </div>
   <div class="grow"></div>
   <p style="font-size:30px">Stripe and Paradigm launched Tempo, a payments chain. Robinhood put stocks onchain. Agents now pay over HTTP. <span class="mute">All of it on public rails.</span></p>
-  <div class="foot"><span>Sources: DefiLlama via Rise Q3 2026 report; Morph stablecoin report 2025; Artemis and McKinsey via The Fintech Times</span><span>3</span></div>
+  <div class="foot"><span>Sources: DefiLlama via Rise Q3 2026 report; Morph stablecoin report 2025; Artemis and McKinsey via The Fintech Times</span><span>4</span></div>
 </section></div>
 <aside class="notes"><b>Say:</b> Why now? Stablecoins are real money now: about 306 billion in circulation, 33 trillion moved last year, and businesses alone send over 200 billion a year, growing more than 7x. Tempo launched a payments chain, Robinhood put stocks onchain, and AI agents now pay for things over HTTP. Every one of those payments is public.</aside>
 
@@ -235,7 +253,7 @@ tr.us th:first-child { padding-left: 20px; }
     </div>
   </div>
   <div class="grow"></div>
-  <div class="foot"><span>Sources: Morph stablecoin report 2025; Artemis and McKinsey B2B data. SOM is our target, not a forecast.</span><span>8</span></div>
+  <div class="foot"><span>Sources: Morph stablecoin report 2025; Artemis and McKinsey B2B data. SOM is our target, not a forecast.</span><span>9</span></div>
 </section></div>
 <aside class="notes"><b>Say:</b> The total market is every stablecoin payment, 33 trillion dollars a year, and all of it is public today. Our serviceable market is business payments, the 226 billion a year where privacy is not optional: salaries, suppliers, treasury. Our target is 1 percent of that, 2.3 billion a year of private volume, three years after mainnet.</aside>
 
@@ -251,7 +269,7 @@ tr.us th:first-child { padding-left: 20px; }
   </div>
   <div class="grow"></div>
   <p style="font-size:30px">At 0.1% in and 0.1% out, $2.3B a year of volume is about <b style="font-weight:500">$4.6M in revenue</b>, before partners and plans.</p>
-  <div class="foot"><span>Planned pricing at mainnet. Testnet is free and nothing is charged.</span><span>9</span></div>
+  <div class="foot"><span>Planned pricing at mainnet. Testnet is free and nothing is charged.</span><span>10</span></div>
 </section></div>
 <aside class="notes"><b>Say:</b> We make money when private money moves. A 0.1 percent fee on deposits and cash outs, less than half of what Railgun charges. A partner program, which is live: wallets and apps plug in with an API key and set their own fee on top. And team plans for payroll, approvals and accountant proofs. At our target volume, the fee alone is about 4.6 million dollars a year.</aside>
 
