@@ -15,6 +15,7 @@ const groups: {
       { href: "/app/vault", label: "Private balance" },
       { href: "/app/disclose", label: "Prove" },
       { href: "/docs/testnet", label: "Testnet guide" },
+      { href: "/testers", label: "Become a tester" },
     ],
   },
   {

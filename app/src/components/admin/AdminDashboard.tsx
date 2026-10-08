@@ -37,7 +37,7 @@ type MetricsPayload = {
   error?: string;
 };
 
-type Tab = "overview" | "users" | "events" | "partners";
+type Tab = "overview" | "users" | "events" | "partners" | "testers";
 
 /** Events added for proofs, the public ledger, requests and notes; shown first in the breakdowns. */
 const NEW_EVENTS = [
@@ -412,6 +412,7 @@ export function AdminDashboard() {
                 ["users", "Wallets"],
                 ["events", "Product events"],
                 ["partners", "Partners"],
+                ["testers", "Testers"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -746,6 +747,7 @@ export function AdminDashboard() {
         )}
 
         {tab === "partners" && <PartnersPanel />}
+        {tab === "testers" && <TestersPanel />}
 
         <p className="tnum text-[12px] text-mute">
           Generated {data?.generatedAt ?? "not yet"} ·{" "}
@@ -875,6 +877,123 @@ function PartnersPanel() {
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
           deposits partners reported (checked on chain). Store: {data.backend}.
+        </p>
+      </Panel>
+    </>
+  );
+}
+
+type TesterRow = {
+  id: string;
+  name: string;
+  telegram: string;
+  x: string | null;
+  address: string;
+  network: "both" | "tempo" | "robinhood";
+  setup: string | null;
+  note: string | null;
+  createdAt: number;
+};
+
+const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Both", tempo: "Tempo", robinhood: "Robinhood Chain" };
+
+function TestersPanel() {
+  const [data, setData] = useState<{ backend: string; applications: TesterRow[]; loadedAt: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/testers", { credentials: "include", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as
+          | { ok?: boolean; data?: { backend: string; applications: TesterRow[] }; error?: { message?: string } }
+          | null;
+        if (!live) return;
+        if (!res.ok || !json?.ok || !json.data) {
+          setErr(json?.error?.message ?? `Testers failed (${res.status})`);
+          return;
+        }
+        setErr(null);
+        setData({ ...json.data, loadedAt: Date.now() });
+      } catch {
+        if (live) setErr("Network error loading testers");
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), 45_000);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
+        {err}
+      </p>
+    );
+  }
+  if (!data) {
+    return (
+      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
+        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+        Loading testers
+      </p>
+    );
+  }
+  const apps = data.applications;
+  const count = (k: TesterRow["network"]) => apps.filter((a) => a.network === k).length;
+  const dayAgo = data.loadedAt - 86_400_000;
+  return (
+    <>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Applications" value={n(apps.length)} sub={`${n(apps.filter((a) => a.createdAt > dayAgo).length)} in the last 24h`} />
+        <Kpi label="Both networks" value={n(count("both"))} sub="want to test everything" />
+        <Kpi label="Tempo" value={n(count("tempo"))} sub="Tempo only" />
+        <Kpi label="Robinhood Chain" value={n(count("robinhood"))} sub="Robinhood Chain only" />
+      </section>
+      <Panel
+        title="Tester applications"
+        action={
+          <a href="/api/testers?format=csv" className="btn btn-ghost btn-sm">
+            Download CSV
+          </a>
+        }
+      >
+        <DataTable
+          headers={["Name", "Telegram", "X", "EVM address", "Network", "Device and wallet", "Note", "Applied"]}
+          rows={apps.map((a) => [
+            <span key="n" className="text-foreground">
+              {a.name}
+            </span>,
+            <a key="t" href={`https://t.me/${a.telegram}`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+              @{a.telegram}
+            </a>,
+            a.x ? (
+              <a key="x" href={`https://x.com/${a.x}`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                @{a.x}
+              </a>
+            ) : (
+              "None"
+            ),
+            <span key="a" title={a.address}>
+              {shortAddress(a.address, 4)}
+            </span>,
+            TESTER_NETWORK[a.network] ?? a.network,
+            a.setup ?? "None",
+            <span key="note" title={a.note ?? undefined} className="block max-w-[260px] truncate">
+              {a.note ?? "None"}
+            </span>,
+            new Date(a.createdAt).toLocaleString(),
+          ])}
+          empty={data.backend === "none" ? "Tester storage is not configured (set Upstash Redis)." : "No applications yet"}
+          minWidth={1100}
+        />
+        <p className="mt-4 text-[13px] leading-relaxed text-mute">
+          Approve Telegram join requests that match an application. The CSV has full addresses for paying rewards. Store:{" "}
+          {data.backend}.
         </p>
       </Panel>
     </>
