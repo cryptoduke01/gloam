@@ -166,11 +166,18 @@ export async function saveTesterApplication(
 }
 
 /** Applications, newest first. */
+/**
+ * Applications, newest first. Who is paid comes from the order people applied
+ * in: the oldest `testersCap()` are the paid spots, everyone after is a
+ * volunteer. That also covers applications saved before the paid flag existed.
+ */
 export async function listTesterApplications(limit = MAX_APPLICATIONS): Promise<TesterApplication[]> {
   const [ids] = await kv([["LRANGE", LIST, 0, limit - 1]]);
   if (!Array.isArray(ids) || ids.length === 0) return [];
   const raws = await kv(ids.map((id) => ["GET", recordKey(String(id))]));
-  return raws.map((r) => jsonOf<TesterApplication>(r)).filter((a): a is TesterApplication => a !== null);
+  const apps = raws.map((r) => jsonOf<TesterApplication>(r)).filter((a): a is TesterApplication => a !== null);
+  const cap = testersCap();
+  return apps.map((a, i) => ({ ...a, paid: apps.length - 1 - i < cap }));
 }
 
 /** The testers group invite, shown only after someone applies. Unset until the group exists. */
