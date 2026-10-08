@@ -12,17 +12,29 @@ export function TempoFaucetButton({
 }: {
   className?: string;
 }) {
-  const { claim, status, ready } = useTempoFaucet();
+  const { claim, status, ready, heldUsd } = useTempoFaucet();
+
+  const held =
+    heldUsd == null
+      ? null
+      : new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          notation: "compact",
+          maximumFractionDigits: 1,
+        }).format(heldUsd);
 
   const label =
     status === "pending"
-      ? "Funding…"
+      ? "Getting test funds…"
       : status === "done"
-        ? "Funded. Balances updating…"
+        ? "Test funds added"
         : status === "error"
-          ? "Faucet failed, try again"
+          ? "Faucet is busy, try again"
           : status === "enough"
-            ? "You already have plenty of test funds"
+            ? held
+              ? `You already hold ${held} in test funds`
+              : "You already have plenty of test funds"
             : "Get testnet funds →";
 
   return (
@@ -38,6 +50,17 @@ export function TempoFaucetButton({
           : "Connect a wallet to claim test stablecoins"
       }
     >
+      {status === "pending" && (
+        <span
+          aria-hidden
+          className="mr-2 inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none"
+        />
+      )}
+      {status === "done" && (
+        <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" className="mr-1.5 text-sealed">
+          <path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
       {label}
     </button>
   );

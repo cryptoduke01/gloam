@@ -43,6 +43,8 @@ export function useTempoFaucet() {
   const { network } = useNetwork();
   const qc = useQueryClient();
   const [status, setStatus] = useState<FaucetStatus>("idle");
+  /** Test stablecoins the wallet already holds, in USD, when the claim is skipped. */
+  const [heldUsd, setHeldUsd] = useState<number | null>(null);
 
   const rpc = network.chain.rpcUrls.default.http[0];
   const ready = Boolean(address);
@@ -51,20 +53,24 @@ export function useTempoFaucet() {
     if (!address || status === "pending") return;
     setStatus("pending");
     try {
-      if (!readDemo() && (await testStablesUsd(address)) >= ENOUGH_USD) {
+      const held = readDemo() ? 0 : await testStablesUsd(address);
+      if (held >= ENOUGH_USD) {
+        setHeldUsd(held);
         setStatus("enough");
-        window.setTimeout(() => setStatus("idle"), 4000);
+        window.setTimeout(() => setStatus("idle"), 6000);
         return;
       }
       await fundTempoAddress(rpc, address);
       setStatus("done");
+      // the faucet's transfers land a moment after it answers; refetch twice
       window.setTimeout(() => void qc.invalidateQueries(), 1600);
-      window.setTimeout(() => setStatus("idle"), 4000);
+      window.setTimeout(() => void qc.invalidateQueries(), 5000);
+      window.setTimeout(() => setStatus("idle"), 6000);
     } catch {
       setStatus("error");
-      window.setTimeout(() => setStatus("idle"), 4000);
+      window.setTimeout(() => setStatus("idle"), 6000);
     }
   }
 
-  return { claim, status, ready };
+  return { claim, status, ready, heldUsd };
 }

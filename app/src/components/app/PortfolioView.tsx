@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
@@ -187,8 +188,17 @@ export function PortfolioView() {
   // chain's own symbol rather than a hardcoded "ETH".
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
-  const { open: shieldNotes, merged: allNotes, shieldedWei, byAsset, syncing } =
+  const { open: shieldNotes, merged: allNotes, shieldedWei, byAsset, syncing, refresh: refreshVault } =
     useLocalShieldNotes(address);
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshAll = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    refreshVault();
+    await queryClient.invalidateQueries().catch(() => {});
+    window.setTimeout(() => setRefreshing(false), 600);
+  };
   const shieldLive = isShieldDeployed();
 
   const { data: bal, isLoading } = useAppBalance({
@@ -409,6 +419,31 @@ export function PortfolioView() {
               )}
               <button type="button" onClick={openOnboarding} className={quietLink}>
                 Getting started
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshAll()}
+                disabled={refreshing || !isConnected}
+                aria-label="Refresh balances"
+                title="Refresh balances"
+                className="grid h-9 w-9 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
+              >
+                <svg
+                  aria-hidden
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className={refreshing || syncing ? "animate-spin motion-reduce:animate-none" : undefined}
+                >
+                  <path
+                    d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4.5h-4.5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
           </div>
