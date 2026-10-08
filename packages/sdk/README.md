@@ -450,6 +450,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 - App: [gloam.trade](https://gloam.trade)
 - Source: [github.com/cryptoduke01/gloam](https://github.com/cryptoduke01/gloam)
 - X: [@gloamtrade](https://x.com/gloamtrade)
+- Email: [hello@gloam.trade](mailto:hello@gloam.trade)
 
 ## License
 

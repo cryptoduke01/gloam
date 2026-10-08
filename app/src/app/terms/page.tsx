@@ -97,7 +97,7 @@ export default function TermsPage() {
       </p>
       <h2>13. Contact</h2>
       <p>
-        Questions: contact via the channels listed on gloam.trade or{" "}
+        Questions: <a href="mailto:hello@gloam.trade">hello@gloam.trade</a> or{" "}
         <a href="https://x.com/gloamtrade">
           @gloamtrade
         </a>

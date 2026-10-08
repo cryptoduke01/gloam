@@ -29,6 +29,7 @@ const DEFAULT_QUICK_LINKS = [
   { href: "/docs/privacy-model", label: "What stays private" },
   { href: "/whitepaper", label: "Whitepaper" },
   { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
+  { href: "mailto:hello@gloam.trade", label: "hello@gloam.trade" },
 ];
 
 /** Section ids scroll to just under the sticky header (100px mobile, 112px desktop). */
@@ -135,6 +136,13 @@ function useRailHeight(railRef: RefObject<HTMLDivElement | null>) {
 function QuickLink({ href, label }: { href: string; label: string }) {
   const cls =
     "inline-flex h-10 items-center gap-1.5 rounded-full border border-line px-3.5 text-[13px] text-soft transition-colors hover:border-line-strong hover:bg-surface/60 hover:text-foreground lg:h-8 lg:px-3";
+  if (href.startsWith("mailto:")) {
+    return (
+      <a href={href} className={cls}>
+        {label}
+      </a>
+    );
+  }
   if (href.startsWith("http")) {
     return (
       <a href={href} target="_blank" rel="noreferrer" className={cls}>

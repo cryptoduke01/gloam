@@ -250,7 +250,7 @@ function info(ctx: ToolContext) {
     ],
     status: STATUS,
     whatIsPublic: WHAT_IS_PUBLIC,
-    links: { ...appLinks(ctx.origin), github: "https://github.com/cryptoduke01/gloam" },
+    links: { ...appLinks(ctx.origin), github: "https://github.com/cryptoduke01/gloam", email: "hello@gloam.trade" },
   };
 }
 

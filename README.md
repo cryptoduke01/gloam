@@ -148,3 +148,5 @@ Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https:
 ---
 
 No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Circuit zkeys are dev-ceremony artifacts. See [`SECURITY.md`](./SECURITY.md).
+
+Contact: [hello@gloam.trade](mailto:hello@gloam.trade) · [@gloamtrade](https://x.com/gloamtrade)

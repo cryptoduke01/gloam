@@ -124,7 +124,7 @@ export default function PrivacyPage() {
       </p>
       <h2>13. Contact</h2>
       <p>
-        Privacy questions: <a href="mailto:gloamfinance@gmail.com">gloamfinance@gmail.com</a>{" "}
+        Privacy questions: <a href="mailto:hello@gloam.trade">hello@gloam.trade</a>{" "}
         or{" "}
         <a href="https://x.com/gloamtrade">
           @gloamtrade

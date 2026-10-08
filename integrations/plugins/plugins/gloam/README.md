@@ -32,6 +32,7 @@ is misconfigured. Note secrets stay in an encrypted store on your machine; the a
 handles.
 
 Docs: https://gloam.trade/docs/agents
+Questions: hello@gloam.trade
 
 ## License
 

@@ -381,7 +381,7 @@ export default function WhitepaperPage() {
         shield, move, and eventually trade without printing every private
         calculation to the street.
       </p>
-      <div className="t-label pt-4">gloam.trade · testnet · @gloamtrade</div>
+      <div className="t-label pt-4">gloam.trade · testnet · hello@gloam.trade · @gloamtrade</div>
     </DocsLayout>
   );
 }

@@ -29,4 +29,4 @@ If a scanner still flags a **public** tx hash or zkey, mark as false positive. I
 
 ## Report
 
-Operational security issues for the product: open a private channel with the maintainers / `@gloamtrade`. Testnet funds only until production ceremony + audit.
+Operational security issues for the product: email [hello@gloam.trade](mailto:hello@gloam.trade) or open a private channel with `@gloamtrade`. Testnet funds only until production ceremony + audit.

@@ -82,6 +82,12 @@ export function Footer() {
               <p className="mt-6 max-w-[17ch] text-[26px] font-light leading-[1.15] tracking-[-0.02em] text-soft">
                 Private money on public chains.
               </p>
+              <a
+                href="mailto:hello@gloam.trade"
+                className="mt-4 inline-block text-[15px] text-mute transition-colors hover:text-foreground"
+              >
+                hello@gloam.trade
+              </a>
               <div className="mt-8 flex items-center gap-2">
                 <a
                   href="https://x.com/gloamtrade"

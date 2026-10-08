@@ -30,6 +30,7 @@ export default function DocsTestnetPage() {
         { href: "/docs/sealed-trade", label: "Sealed trade docs" },
         { href: "/docs/privacy-model", label: "Privacy model" },
         { href: "https://x.com/gloamtrade", label: "@gloamtrade" },
+        { href: "mailto:hello@gloam.trade", label: "hello@gloam.trade" },
       ]}
     >
       <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
@@ -376,7 +377,7 @@ export default function DocsTestnetPage() {
         <li>Optional: cash out dust once (public amount, intentional)</li>
         <li>Export note backup (Settings)</li>
         <li>
-          Report bugs via{" "}
+          Report bugs to <a href="mailto:hello@gloam.trade">hello@gloam.trade</a> or{" "}
           <a
             href="https://x.com/gloamtrade"
             target="_blank"
