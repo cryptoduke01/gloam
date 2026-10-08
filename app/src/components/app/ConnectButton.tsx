@@ -116,7 +116,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
   }
 
   const connector = connectors.find((c) => !isTempoWallet(c)) ?? connectors[0];
-  // On Tempo, passkey sign-in (Tempo Wallet, fees sponsored) is offered too.
+  // On Tempo, Tempo Wallet sign-in comes first (account or passkey, fees sponsored).
   const passkey =
     network.key === "tempo" ? connectors.find((c) => isTempoWallet(c)) : undefined;
 
@@ -129,7 +129,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
           disabled={isPending || isConnecting}
           className="btn btn-ink mb-2"
         >
-          Sign in with a passkey
+          Sign in
         </button>
       )}
       <button

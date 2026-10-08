@@ -187,12 +187,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
             disabled={connecting}
             className={primary}
           >
-            {!compact && <PasskeyGlyph />}
-            {signingIn
-              ? "Waiting for passkey…"
-              : compact
-                ? "Sign in"
-                : "Sign in with a passkey"}
+            {signingIn ? "Finish signing in…" : "Sign in"}
           </button>
           <button
             type="button"
@@ -210,7 +205,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
           </button>
           {v === "inline" && TEMPO_SPONSORED && (
             <p className="mt-1 text-center text-[12px] leading-snug text-mute">
-              With a passkey, network fees are covered.
+              Create an account or use your passkey. Network fees are covered.
             </p>
           )}
           {error && !compact && (
@@ -611,26 +606,6 @@ function WalletGlyph() {
         strokeLinejoin="round"
       />
       <circle cx="15.5" cy="13.5" r="1.2" fill="currentColor" />
-    </svg>
-  );
-}
-function PasskeyGlyph() {
-  return (
-    <svg {...glyph}>
-      <circle cx="9" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M3.5 19c0-3 2.5-5.25 5.5-5.25 1.2 0 2.3.35 3.2.95"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <circle cx="17.5" cy="13.5" r="2.25" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M17.5 15.75V20.5M17.5 18.25h1.75"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
     </svg>
   );
 }
