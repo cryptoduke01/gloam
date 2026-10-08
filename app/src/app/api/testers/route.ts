@@ -5,7 +5,7 @@ import { KvUnavailableError, kvBackend } from "@/lib/partnersKv";
 import { recordTractionEvent } from "@/lib/tractionStore";
 import {
   TesterInputError,
-  TestersClosedError,
+  isPaidTester,
   listTesterApplications,
   parseTesterInput,
   saveTesterApplication,
@@ -46,12 +46,12 @@ export async function POST(req: Request) {
   // a field people never see: bots fill it, so pretend it worked and keep nothing
   const trap = (body as { hp?: unknown } | null)?.hp;
   if (typeof trap === "string" && trap.trim()) {
-    return NextResponse.json({ ok: true, data: { duplicate: false, group: null } });
+    return NextResponse.json({ ok: true, data: { duplicate: false, paid: false, group: null } });
   }
 
   try {
     const input = parseTesterInput(body);
-    const { duplicate } = await saveTesterApplication(input);
+    const { application, duplicate } = await saveTesterApplication(input);
     if (!duplicate) {
       await recordTractionEvent({
         t: "tester_applied",
@@ -62,12 +62,12 @@ export async function POST(req: Request) {
         ua: null,
       }).catch(() => {});
     }
-    return NextResponse.json({ ok: true, data: { duplicate, group: testersGroupUrl() } });
+    return NextResponse.json({
+      ok: true,
+      data: { duplicate, paid: isPaidTester(application), group: testersGroupUrl() },
+    });
   } catch (e) {
     if (e instanceof TesterInputError) return fail(400, e.message, e.field);
-    if (e instanceof TestersClosedError) {
-      return fail(409, "Applications are closed. Our first testers are in. Follow @gloamtrade for the next round.");
-    }
     if (e instanceof KvUnavailableError) {
       return fail(503, "Applications are paused for a moment. Try again shortly, or email hello@gloam.trade.");
     }

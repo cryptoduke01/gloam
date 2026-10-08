@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { testersOpen } from "@/lib/testers";
+import { paidSpotsLeft, testersCap } from "@/lib/testers";
 import { TestersForm } from "./TestersForm";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,12 @@ export const metadata: Metadata = {
 const PERKS = [
   "A private Telegram group with the team",
   "New features before anyone else",
-  "Rewards lined up for testers, paid privately through Gloam",
+  "A direct say in what we fix before mainnet",
 ];
 
 export default async function TestersPage() {
-  // if storage can't be read, show the form; the API still enforces the cap
-  const open = await testersOpen().catch(() => true);
+  // if storage can't be read, assume paid spots are full so nobody is promised a reward by mistake
+  const paidFull = (await paidSpotsLeft().catch(() => 0)) === 0;
   return (
     <div className="relative min-h-screen bg-panel text-foreground">
       <Header />
@@ -47,20 +47,7 @@ export default async function TestersPage() {
           </div>
 
           <div className="gl-card p-6 sm:p-8">
-            {open ? (
-              <TestersForm />
-            ) : (
-              <div role="status">
-                <h2 className="text-[24px] font-light tracking-[-0.02em] text-foreground">Applications are closed.</h2>
-                <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-soft">
-                  Our first testers are in. Follow{" "}
-                  <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
-                    @gloamtrade
-                  </a>{" "}
-                  for the next round.
-                </p>
-              </div>
-            )}
+            <TestersForm paidFull={paidFull} paidSpots={testersCap()} />
           </div>
         </div>
       </main>

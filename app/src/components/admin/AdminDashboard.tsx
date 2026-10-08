@@ -892,6 +892,7 @@ type TesterRow = {
   network: "both" | "tempo" | "robinhood";
   setup: string | null;
   note: string | null;
+  paid?: boolean;
   createdAt: number;
 };
 
@@ -944,19 +945,19 @@ function TestersPanel() {
     );
   }
   const apps = data.applications;
-  const count = (k: TesterRow["network"]) => apps.filter((a) => a.network === k).length;
   const dayAgo = data.loadedAt - 86_400_000;
+  const paid = apps.filter((a) => a.paid !== false).length;
   return (
     <>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Applications" value={n(apps.length)} sub={`${n(apps.filter((a) => a.createdAt > dayAgo).length)} in the last 24h`} />
         <Kpi
-          label="Applications"
-          value={`${n(apps.length)} / ${n(data.cap)}`}
-          sub={apps.length >= data.cap ? "Closed, cap reached" : `${n(data.cap - apps.length)} spots left · ${n(apps.filter((a) => a.createdAt > dayAgo).length)} in 24h`}
+          label="Paid spots"
+          value={`${n(paid)} / ${n(data.cap)}`}
+          sub={paid >= data.cap ? "Full, new testers are volunteers" : `${n(data.cap - paid)} left`}
         />
-        <Kpi label="Both networks" value={n(count("both"))} sub="want to test everything" />
-        <Kpi label="Tempo" value={n(count("tempo"))} sub="Tempo only" />
-        <Kpi label="Robinhood Chain" value={n(count("robinhood"))} sub="Robinhood Chain only" />
+        <Kpi label="Volunteers" value={n(apps.length - paid)} sub="joined after paid spots filled" />
+        <Kpi label="Rewards owed" value={fmtUsd(paid * 10)} sub="$10 per paid tester" />
       </section>
       <Panel
         title="Tester applications"
@@ -967,11 +968,12 @@ function TestersPanel() {
         }
       >
         <DataTable
-          headers={["Name", "Telegram", "X", "EVM address", "Network", "Device and wallet", "Note", "Applied"]}
+          headers={["Name", "Spot", "Telegram", "X", "EVM address", "Network", "Device and wallet", "Note", "Applied"]}
           rows={apps.map((a) => [
             <span key="n" className="text-foreground">
               {a.name}
             </span>,
+            a.paid !== false ? "Paid" : "Volunteer",
             <a key="t" href={`https://t.me/${a.telegram}`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
               @{a.telegram}
             </a>,
@@ -993,7 +995,7 @@ function TestersPanel() {
             new Date(a.createdAt).toLocaleString(),
           ])}
           empty={data.backend === "none" ? "Tester storage is not configured (set Upstash Redis)." : "No applications yet"}
-          minWidth={1100}
+          minWidth={1180}
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Approve Telegram join requests that match an application. The CSV has full addresses for paying rewards. Store:{" "}

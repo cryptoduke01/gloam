@@ -18,7 +18,7 @@ import { jsonOf, kv } from "./partnersKv";
 const PREFIX = "gloam:testers:v1:";
 const LIST = `${PREFIX}list`;
 const MAX_APPLICATIONS = 5_000;
-/** Applications taken before the form closes, unless GLOAM_TESTERS_CAP says otherwise. */
+/** Paid tester spots, unless GLOAM_TESTERS_CAP says otherwise. Later applicants join as volunteers. */
 const DEFAULT_CAP = 31;
 
 const recordKey = (id: string) => `${PREFIX}app:${id}`;
@@ -36,17 +36,16 @@ export type TesterApplication = {
   network: TesterNetwork;
   setup: string | null;
   note: string | null;
+  /** One of the paid spots. Applications saved before this field existed were all paid. */
+  paid?: boolean;
   createdAt: number;
 };
 
-export type TesterInput = Omit<TesterApplication, "id" | "createdAt">;
+export type TesterInput = Omit<TesterApplication, "id" | "createdAt" | "paid">;
 
-/** The program has all the testers it is taking. */
-export class TestersClosedError extends Error {
-  constructor() {
-    super("Applications are closed.");
-    this.name = "TestersClosedError";
-  }
+/** Paid unless it was saved as a volunteer. */
+export function isPaidTester(a: TesterApplication): boolean {
+  return a.paid !== false;
 }
 
 /** A field the applicant needs to fix, with a message they can act on. */
@@ -123,30 +122,29 @@ async function applicationFor(address: string): Promise<TesterApplication | null
   return typeof id === "string" ? readApplication(id) : null;
 }
 
-/** How many applications the program takes. */
+/** How many paid tester spots there are. */
 export function testersCap(): number {
   const n = Number(process.env.GLOAM_TESTERS_CAP);
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_CAP;
 }
 
-/** True while the program still takes applications. */
-export async function testersOpen(): Promise<boolean> {
+/** Paid spots still open. */
+export async function paidSpotsLeft(): Promise<number> {
   const cap = testersCap();
   const [ids] = await kv([["LRANGE", LIST, 0, cap - 1]]);
-  return !Array.isArray(ids) || ids.length < cap;
+  return Math.max(0, cap - (Array.isArray(ids) ? ids.length : 0));
 }
 
 /**
  * Saves an application. When the address already applied, nothing is
  * overwritten and the first application comes back with `duplicate: true`.
- * Once the cap is reached, new addresses get TestersClosedError.
+ * The first `testersCap()` applications are paid spots; later ones are volunteers.
  */
 export async function saveTesterApplication(
   input: TesterInput,
 ): Promise<{ application: TesterApplication; duplicate: boolean }> {
   const earlier = await applicationFor(input.address);
   if (earlier) return { application: earlier, duplicate: true };
-  if (!(await testersOpen())) throw new TestersClosedError();
 
   const application: TesterApplication = { id: randomUUID(), ...input, createdAt: Date.now() };
   const [claimed] = await kv([["SET", addressKey(input.address), application.id, "NX"]]);
@@ -157,9 +155,11 @@ export async function saveTesterApplication(
     await kv([["SET", addressKey(input.address), application.id]]);
   }
 
+  // the list length right after the push is this application's place in line
+  const [place] = await kv([["LPUSH", LIST, application.id]]);
+  application.paid = Number(place) <= testersCap();
   await kv([
     ["SET", recordKey(application.id), JSON.stringify(application)],
-    ["LPUSH", LIST, application.id],
     ["LTRIM", LIST, 0, MAX_APPLICATIONS - 1],
   ]);
   return { application, duplicate: false };
@@ -196,10 +196,11 @@ export function testersCsv(apps: TesterApplication[]): string {
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return `"${s.replace(/"/g, '""')}"`;
   };
-  const header = ["Applied (UTC)", "Name", "Telegram username", "X handle", "EVM address", "Network", "Device and wallet", "Note"];
+  const header = ["Applied (UTC)", "Spot", "Name", "Telegram username", "X handle", "EVM address", "Network", "Device and wallet", "Note"];
   const rows = apps.map((a) =>
     [
       new Date(a.createdAt).toISOString().replace("T", " ").slice(0, 16),
+      isPaidTester(a) ? "Paid" : "Volunteer",
       a.name,
       a.telegram,
       a.x,

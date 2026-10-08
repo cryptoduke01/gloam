@@ -12,9 +12,9 @@ const NETWORKS: { k: Network; label: string }[] = [
   { k: "robinhood", label: "Robinhood Chain" },
 ];
 
-type Done = { duplicate: boolean; group: string | null };
+type Done = { duplicate: boolean; paid: boolean; group: string | null };
 
-export function TestersForm() {
+export function TestersForm({ paidFull, paidSpots }: { paidFull: boolean; paidSpots: number }) {
   const [network, setNetwork] = useState<Network>("both");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ field: Field | null; message: string } | null>(null);
@@ -66,6 +66,16 @@ export function TestersForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
+      {paidFull && (
+        <div className="rounded-xl bg-sealed-soft px-4 py-3.5 text-[14px] leading-relaxed text-foreground">
+          <p className="font-medium">Paid testing is full.</p>
+          <p className="mt-1 text-soft">
+            Our first {paidSpots} testers are recorded and will be rewarded. If you apply now, you join as a volunteer tester:
+            same group and early access, without the reward.
+          </p>
+        </div>
+      )}
+
       <Row label="Name" htmlFor="t-name" error={fieldError("name")}>
         <input
           id="t-name"
@@ -114,7 +124,7 @@ export function TestersForm() {
       <Row
         label="EVM address"
         htmlFor="t-address"
-        hint="Tester rewards are paid here, privately, through Gloam."
+        hint={paidFull ? "We use it to match you to your testing on chain." : "Tester rewards are paid to this address."}
         error={fieldError("address")}
       >
         <input
@@ -180,7 +190,7 @@ export function TestersForm() {
 
       <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
         <button type="submit" disabled={sending} className="btn btn-ink btn-lg">
-          {sending ? "Sending…" : "Apply to test"}
+          {sending ? "Sending…" : paidFull ? "Join as a volunteer" : "Apply to test"}
         </button>
         <p className="text-[12.5px] leading-relaxed text-mute sm:max-w-[30ch] sm:text-right">
           We never ask for a recovery phrase or private key.
@@ -234,8 +244,13 @@ function Success({ done }: { done: Done }) {
         </svg>
       </span>
       <h2 className="mt-5 text-[24px] font-light tracking-[-0.02em] text-foreground">
-        {done.duplicate ? "You've already applied." : "You're on the list."}
+        {done.duplicate ? "You've already applied." : done.paid ? "You're on the list." : "You're in as a volunteer tester."}
       </h2>
+      {!done.duplicate && (
+        <p className="mt-1 text-[14px] text-mute">
+          {done.paid ? "You have one of the paid tester spots." : "Paid spots were full, so this round is unpaid for you."}
+        </p>
+      )}
       {done.group ? (
         <>
           <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-soft">
