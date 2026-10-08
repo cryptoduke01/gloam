@@ -10,6 +10,10 @@
  */
 
 const ID_KEY = "gloam.receive.identity.v1";
+/** Earlier receive keys, kept so payments sent to an older Gloam address still open. */
+const PREV_KEY = "gloam.receive.identity.prev.v1";
+/** Fired on window whenever the receive key changes (recovery backs it up). */
+export const RECEIVE_IDENTITY_EVENT = "gloam:receive-identity";
 export const RECEIVE_TAG_PREFIX = "gloamr1.";
 export const PAY_TO_TAG_PREFIX = "gloam2t.";
 
@@ -40,7 +44,7 @@ export type ReceiveIdentity = {
   createdAt: number;
 };
 
-type StoredIdentity = {
+export type StoredIdentity = {
   v: 1;
   createdAt: number;
   privateJwk: JsonWebKey;
@@ -81,6 +85,62 @@ function loadStored(): StoredIdentity | null {
 function saveStored(s: StoredIdentity) {
   if (typeof window === "undefined") return;
   localStorage.setItem(ID_KEY, JSON.stringify(s));
+  window.dispatchEvent(new Event(RECEIVE_IDENTITY_EVENT));
+}
+
+function validStored(s: unknown): s is StoredIdentity {
+  const x = s as StoredIdentity | null;
+  return Boolean(x && x.v === 1 && x.privateJwk && typeof x.publicSpkiB64 === "string");
+}
+
+function loadPrevious(): StoredIdentity[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const list = JSON.parse(localStorage.getItem(PREV_KEY) ?? "[]") as unknown;
+    return Array.isArray(list) ? list.filter(validStored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePrevious(list: StoredIdentity[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PREV_KEY, JSON.stringify(list));
+}
+
+/** Keep `s` among the earlier keys, unless it is already there or is the current key. */
+function archive(s: StoredIdentity) {
+  const prev = loadPrevious();
+  if (prev.some((p) => p.publicSpkiB64 === s.publicSpkiB64)) return;
+  savePrevious([s, ...prev]);
+}
+
+/** Every receive key on this browser, for the recovery backup. */
+export function exportReceiveKeys(): { current: StoredIdentity | null; previous: StoredIdentity[] } {
+  return { current: loadStored(), previous: loadPrevious() };
+}
+
+/**
+ * Bring back receive keys from a recovery backup. The backup's current key
+ * becomes this browser's current key (it is the Gloam address people were
+ * given); a different local key is kept among the earlier ones, so nothing
+ * stops opening.
+ */
+export function importReceiveKeys(data: { current?: unknown; previous?: unknown } | null | undefined) {
+  if (!data || typeof window === "undefined") return;
+  const restored = validStored(data.current) ? data.current : null;
+  const local = loadStored();
+  const prev = loadPrevious();
+  const incoming = Array.isArray(data.previous) ? data.previous.filter(validStored) : [];
+  for (const p of incoming) {
+    if (!prev.some((x) => x.publicSpkiB64 === p.publicSpkiB64)) prev.push(p);
+  }
+  if (restored && local && local.publicSpkiB64 !== restored.publicSpkiB64) {
+    if (!prev.some((x) => x.publicSpkiB64 === local.publicSpkiB64)) prev.unshift(local);
+  }
+  const current = restored ?? local;
+  savePrevious(prev.filter((p) => p.publicSpkiB64 !== current?.publicSpkiB64));
+  if (restored && local?.publicSpkiB64 !== restored.publicSpkiB64) saveStored(restored);
 }
 
 /** Load or create sticky receive identity for this browser. */
@@ -96,8 +156,10 @@ export async function getOrCreateReceiveIdentity(): Promise<ReceiveIdentity> {
   };
 }
 
-/** Force new tag (old tag stops receiving encrypted pays). */
+/** New tag. Payments to the old tag still open: its key is kept among the earlier ones. */
 export async function rotateReceiveIdentity(): Promise<ReceiveIdentity> {
+  const old = loadStored();
+  if (old) archive(old);
   const s = await generateIdentity();
   saveStored(s);
   return {
@@ -221,8 +283,9 @@ export async function decryptTicketWithLocalTag(
   if (!s.startsWith(PAY_TO_TAG_PREFIX)) {
     throw new Error("Not a pay-to-tag package (gloam2t…).");
   }
-  const stored = loadStored();
-  if (!stored) {
+  const current = loadStored();
+  const keys = [...(current ? [current] : []), ...loadPrevious()];
+  if (!keys.length) {
     throw new Error("No receive tag in this browser, generate one under Claim.");
   }
   const raw = b64urlDecode(s.slice(PAY_TO_TAG_PREFIX.length));
@@ -233,23 +296,27 @@ export async function decryptTicketWithLocalTag(
   const iv = raw.slice(2 + ephemLen, 2 + ephemLen + 12);
   const cipher = raw.slice(2 + ephemLen + 12);
 
-  const ourPriv = await importOurPrivate(stored.privateJwk);
   const ephemPub = await importRecipientPublic(ephemSpki);
-  const aes = await ecdhAesKey(ourPriv, ephemPub);
-  try {
-    const plain = new Uint8Array(
-      await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: buf(iv) },
-        aes,
-        buf(cipher)
-      )
-    );
-    return new TextDecoder().decode(plain);
-  } catch {
-    throw new Error(
-      "Could not open this ticket with your tag, it was encrypted for someone else."
-    );
+  // The current key first, then earlier ones (payments sent to an older address).
+  for (const key of keys) {
+    try {
+      const ourPriv = await importOurPrivate(key.privateJwk);
+      const aes = await ecdhAesKey(ourPriv, ephemPub);
+      const plain = new Uint8Array(
+        await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: buf(iv) },
+          aes,
+          buf(cipher)
+        )
+      );
+      return new TextDecoder().decode(plain);
+    } catch {
+      /* not for this key */
+    }
   }
+  throw new Error(
+    "Could not open this ticket with your tag, it was encrypted for someone else."
+  );
 }
 
 export function shortTag(tag: string, head = 14, tail = 8): string {

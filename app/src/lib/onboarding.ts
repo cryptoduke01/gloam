@@ -79,7 +79,7 @@ export const ONBOARDING_STEPS = [
   {
     id: "backup",
     title: "Back up your account",
-    body: "Save a backup so clearing your browser never loses your private balance.",
-    href: "/app/settings",
+    body: "Turn on recovery so clearing your browser or changing device never loses your private balance.",
+    href: "/app/settings#recovery",
   },
 ] as const;

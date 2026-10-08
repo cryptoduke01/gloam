@@ -64,6 +64,17 @@ function emit() {
   for (const fn of listeners) fn();
 }
 
+/** Run after the notes are written to disk (never in the demo). */
+const savedListeners = new Set<() => void>();
+
+/** Subscribe to note saves. Recovery uses it to keep the encrypted backup current. */
+export function onNotesSaved(fn: () => void): () => void {
+  savedListeners.add(fn);
+  return () => {
+    savedListeners.delete(fn);
+  };
+}
+
 function unb64(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s);
   const out = new Uint8Array(bin.length);
@@ -329,6 +340,7 @@ export function setAllNotes(next: LocalNote[]): void {
   void enqueue(async () => {
     await unlockNoteVault();
     await writeBlob();
+    for (const fn of savedListeners) fn();
   });
 }
 

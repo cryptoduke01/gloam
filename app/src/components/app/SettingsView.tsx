@@ -39,6 +39,7 @@ import { ThemeSegmented } from "@/components/ThemeToggle";
 import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { VaultHealth } from "./VaultHealth";
+import { RecoverySettingsCard } from "./RecoveryPanel";
 
 /* ------------------------------------------------------------ primitives */
 
@@ -534,6 +535,8 @@ export function SettingsView() {
           </a>
         </Row>
       </Card>
+
+      <RecoverySettingsCard />
 
       <PasskeyCard demo={demo} />
 

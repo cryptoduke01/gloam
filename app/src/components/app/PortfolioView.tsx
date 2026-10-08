@@ -27,6 +27,7 @@ import { SealedField } from "@/components/ui/SealedField";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { FirstPaymentCard } from "./FirstPaymentCard";
+import { RecoveryNudge } from "./RecoveryPanel";
 import { OnboardingCard, openOnboarding } from "./OnboardingCard";
 import { PaymentNoteLine } from "./PaymentNote";
 import { TokenLogo } from "./TokenLogo";
@@ -490,6 +491,14 @@ export function PortfolioView() {
           </div>
         )}
       </section>
+
+      {/* Recovery: back the private balance up, or bring it back on a new device. */}
+      {onProduct && shieldLive && (
+        <RecoveryNudge
+          hasBalance={shieldNotes.some((n) => Boolean(n.secret) && n.secret !== "0x")}
+          hasDeposits={allNotes.some((n) => n.source === "chain")}
+        />
+      )}
 
       {/* Holds a private balance here but has never paid privately from this
           device: point at Pay with a small amount filled in. */}
