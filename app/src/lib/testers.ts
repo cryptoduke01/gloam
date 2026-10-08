@@ -18,6 +18,8 @@ import { jsonOf, kv } from "./partnersKv";
 const PREFIX = "gloam:testers:v1:";
 const LIST = `${PREFIX}list`;
 const MAX_APPLICATIONS = 5_000;
+/** Applications taken before the form closes, unless GLOAM_TESTERS_CAP says otherwise. */
+const DEFAULT_CAP = 31;
 
 const recordKey = (id: string) => `${PREFIX}app:${id}`;
 const addressKey = (address: string) => `${PREFIX}addr:${address.toLowerCase()}`;
@@ -38,6 +40,14 @@ export type TesterApplication = {
 };
 
 export type TesterInput = Omit<TesterApplication, "id" | "createdAt">;
+
+/** The program has all the testers it is taking. */
+export class TestersClosedError extends Error {
+  constructor() {
+    super("Applications are closed.");
+    this.name = "TestersClosedError";
+  }
+}
 
 /** A field the applicant needs to fix, with a message they can act on. */
 export class TesterInputError extends Error {
@@ -108,19 +118,40 @@ async function readApplication(id: string): Promise<TesterApplication | null> {
   return jsonOf<TesterApplication>(raw);
 }
 
+async function applicationFor(address: string): Promise<TesterApplication | null> {
+  const [id] = await kv([["GET", addressKey(address)]]);
+  return typeof id === "string" ? readApplication(id) : null;
+}
+
+/** How many applications the program takes. */
+export function testersCap(): number {
+  const n = Number(process.env.GLOAM_TESTERS_CAP);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_CAP;
+}
+
+/** True while the program still takes applications. */
+export async function testersOpen(): Promise<boolean> {
+  const cap = testersCap();
+  const [ids] = await kv([["LRANGE", LIST, 0, cap - 1]]);
+  return !Array.isArray(ids) || ids.length < cap;
+}
+
 /**
  * Saves an application. When the address already applied, nothing is
  * overwritten and the first application comes back with `duplicate: true`.
+ * Once the cap is reached, new addresses get TestersClosedError.
  */
 export async function saveTesterApplication(
   input: TesterInput,
 ): Promise<{ application: TesterApplication; duplicate: boolean }> {
-  const application: TesterApplication = { id: randomUUID(), ...input, createdAt: Date.now() };
+  const earlier = await applicationFor(input.address);
+  if (earlier) return { application: earlier, duplicate: true };
+  if (!(await testersOpen())) throw new TestersClosedError();
 
+  const application: TesterApplication = { id: randomUUID(), ...input, createdAt: Date.now() };
   const [claimed] = await kv([["SET", addressKey(input.address), application.id, "NX"]]);
   if (claimed === null) {
-    const [existingId] = await kv([["GET", addressKey(input.address)]]);
-    const existing = typeof existingId === "string" ? await readApplication(existingId) : null;
+    const existing = await applicationFor(input.address);
     if (existing) return { application: existing, duplicate: true };
     // the address was claimed but its record never landed: take it over
     await kv([["SET", addressKey(input.address), application.id]]);

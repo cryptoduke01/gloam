@@ -898,7 +898,7 @@ type TesterRow = {
 const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Both", tempo: "Tempo", robinhood: "Robinhood Chain" };
 
 function TestersPanel() {
-  const [data, setData] = useState<{ backend: string; applications: TesterRow[]; loadedAt: number } | null>(null);
+  const [data, setData] = useState<{ backend: string; cap: number; applications: TesterRow[]; loadedAt: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -907,7 +907,7 @@ function TestersPanel() {
       try {
         const res = await fetch("/api/testers", { credentials: "include", cache: "no-store" });
         const json = (await res.json().catch(() => null)) as
-          | { ok?: boolean; data?: { backend: string; applications: TesterRow[] }; error?: { message?: string } }
+          | { ok?: boolean; data?: { backend: string; cap: number; applications: TesterRow[] }; error?: { message?: string } }
           | null;
         if (!live) return;
         if (!res.ok || !json?.ok || !json.data) {
@@ -949,7 +949,11 @@ function TestersPanel() {
   return (
     <>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Applications" value={n(apps.length)} sub={`${n(apps.filter((a) => a.createdAt > dayAgo).length)} in the last 24h`} />
+        <Kpi
+          label="Applications"
+          value={`${n(apps.length)} / ${n(data.cap)}`}
+          sub={apps.length >= data.cap ? "Closed, cap reached" : `${n(data.cap - apps.length)} spots left · ${n(apps.filter((a) => a.createdAt > dayAgo).length)} in 24h`}
+        />
         <Kpi label="Both networks" value={n(count("both"))} sub="want to test everything" />
         <Kpi label="Tempo" value={n(count("tempo"))} sub="Tempo only" />
         <Kpi label="Robinhood Chain" value={n(count("robinhood"))} sub="Robinhood Chain only" />

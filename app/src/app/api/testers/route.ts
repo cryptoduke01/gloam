@@ -5,9 +5,11 @@ import { KvUnavailableError, kvBackend } from "@/lib/partnersKv";
 import { recordTractionEvent } from "@/lib/tractionStore";
 import {
   TesterInputError,
+  TestersClosedError,
   listTesterApplications,
   parseTesterInput,
   saveTesterApplication,
+  testersCap,
   testersCsv,
   testersGroupUrl,
 } from "@/lib/testers";
@@ -63,6 +65,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, data: { duplicate, group: testersGroupUrl() } });
   } catch (e) {
     if (e instanceof TesterInputError) return fail(400, e.message, e.field);
+    if (e instanceof TestersClosedError) {
+      return fail(409, "Applications are closed. Our first testers are in. Follow @gloamtrade for the next round.");
+    }
     if (e instanceof KvUnavailableError) {
       return fail(503, "Applications are paused for a moment. Try again shortly, or email hello@gloam.trade.");
     }
@@ -85,5 +90,5 @@ export async function GET(req: Request) {
       },
     });
   }
-  return NextResponse.json({ ok: true, data: { backend, applications } });
+  return NextResponse.json({ ok: true, data: { backend, cap: testersCap(), applications } });
 }
