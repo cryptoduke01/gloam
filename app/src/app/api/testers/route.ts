@@ -16,8 +16,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY = 4_000;
-/** Applications per IP per minute. */
-const RATE_LIMIT = 5;
+/** Tries per IP per minute. Generous because mobile carriers put many people behind one IP. */
+const RATE_LIMIT = 30;
 
 function fail(status: number, message: string, field: string | null = null, headers?: HeadersInit) {
   return NextResponse.json({ ok: false, error: { field, message } }, { status, headers });
