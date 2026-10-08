@@ -4,9 +4,9 @@
 
 Add shielded balances, private payments, and selective disclosure to any Robinhood Chain app or agent. Real zero-knowledge proofs, no proving stack to build from scratch.
 
-[![npm version](https://img.shields.io/npm/v/@gloamtrade/sdk?color=3B3766&label=npm)](https://www.npmjs.com/package/@gloamtrade/sdk)
-[![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=3B3766)](https://github.com/cryptoduke01/gloam/blob/main/LICENSE)
-[![types](https://img.shields.io/npm/types/@gloamtrade/sdk?color=3B3766)](https://www.npmjs.com/package/@gloamtrade/sdk)
+[![npm version](https://img.shields.io/npm/v/@gloamtrade/sdk?color=0B0C0E&label=npm)](https://www.npmjs.com/package/@gloamtrade/sdk)
+[![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=0B0C0E)](https://github.com/cryptoduke01/gloam/blob/main/LICENSE)
+[![types](https://img.shields.io/npm/types/@gloamtrade/sdk?color=0B0C0E)](https://www.npmjs.com/package/@gloamtrade/sdk)
 [![Robinhood Chain](https://img.shields.io/badge/chain-Robinhood%20testnet%2046630-2E7D53)](https://gloam.trade/docs/testnet)
 
 ![The Gloam SDK](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-hero.jpg)
@@ -422,7 +422,7 @@ Four runnable references, one for each shape a builder starts from:
 | [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay sealed to the payee, sweep, serve. |
 | [web-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
 
-![Shield a private balance in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
+![Add money privately in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
 
 ## Pinned public inputs
 

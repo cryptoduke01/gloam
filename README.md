@@ -10,6 +10,8 @@
 
 </div>
 
+![Gloam: private money on public chains](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-home.jpg)
+
 ---
 
 Public chains put finance on public rails: every holding, every size, every move is visible. Robinhood Chain does it for tokenized stocks and crypto; Tempo does it for stablecoin payments. Gloam is the sealed chamber on top. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other onchain apps and AI agents build on — live today on Robinhood Chain (flagship) and Tempo.
@@ -24,6 +26,8 @@ The vault app is the reference implementation, not the whole product.
 | **Agents** | An MCP server + a reference wrapper so an AI agent can shield, move value, and pay for tools privately over x402, under policy. | [`@gloamtrade/mcp`](./mcp) · [`examples/agent-shield`](./examples/agent-shield) |
 | **Vault** | The live testnet app that proves the whole path works. | [`app/`](./app) |
 | **Partner API** | Apps add private payments with an API key, set their own fee (flat per private payment, a share of cash outs and deposits), and see attributed volume and would-be fees live in the partner portal. Testnet: nothing is charged; real fees need a fee output in the circuits, part of the mainnet ceremony. | [`/partners`](https://gloam.trade/partners) · [`/docs/partners`](https://gloam.trade/docs/partners) · `GloamApiClient` |
+
+![The Gloam app: a private balance only you can see](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-app.jpg)
 
 All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle tree, circom witness builders, real Groth16 verification, and one canonical intent shape.
 
@@ -143,7 +147,7 @@ Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https:
 - Testnet only until a production ceremony + external audit. Mainnet `4663` blocked in-product.
 - Real privacy only. Never fake or mock a private success.
 - Selective disclosure over opacity. Verifiable, not just hidden.
-- Brand: Twilight, paper `#F4F3EF`, ink `#121316`, indigo `#3B3766`. Light, spacious, plain-language.
+- Brand: monochrome with a green tint (`#2e7d53` light, `#8fd3ad` dark), Aeonik, light and dark. Calm, spacious, plain-language.
 
 ---
 
