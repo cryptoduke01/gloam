@@ -42,6 +42,7 @@ export type TgMessage = {
   reply_to_message?: TgMessage;
   forum_topic_created?: unknown;
   new_chat_members?: TgUser[];
+  left_chat_member?: TgUser;
   via_bot?: TgUser;
 };
 
@@ -124,4 +125,10 @@ export async function getMe(): Promise<TgUser | null> {
   const r = await call<TgUser>("getMe", {});
   if (r.ok && r.result?.id) g.__gloamTgMe = r.result;
   return g.__gloamTgMe ?? null;
+}
+
+/** How many people are in a chat right now, or null. */
+export async function getChatMemberCount(chatId: number): Promise<number | null> {
+  const r = await call<number>("getChatMemberCount", { chat_id: chatId });
+  return r.ok && typeof r.result === "number" ? r.result : null;
 }

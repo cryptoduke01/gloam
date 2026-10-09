@@ -13,11 +13,20 @@ import type { TgUpdate } from "@/lib/telegramBot/telegram";
  *  2. Add the bot to the group as an admin with only Delete messages on.
  *  3. Set on Vercel: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET (any long
  *     random string), ANTHROPIC_API_KEY, and optionally TELEGRAM_GROUP_ID,
- *     TELEGRAM_ADMIN_HANDLES, TELEGRAM_BOT_MODEL, TELEGRAM_BOT_PERSONA,
- *     GLOAM_TESTING_OPEN. Memory, welcomes and bug reports use the Upstash
- *     Redis already set for the partner program. Redeploy.
+ *     TELEGRAM_ADMIN_HANDLES, TELEGRAM_OWNER_HANDLES (default dukedotsol),
+ *     TELEGRAM_OWNER_IDS (wins over handles), TELEGRAM_BOT_MODEL,
+ *     TELEGRAM_BOT_PERSONA, GLOAM_TESTING_OPEN, and for the daily report
+ *     TELEGRAM_DAILY_REPORT=true plus CRON_SECRET. Memory, counters, welcomes
+ *     and bug reports use the Upstash Redis already set for the partner
+ *     program. Redeploy.
  *  4. Point Telegram here, with the same token and secret in your shell:
  *       node app/scripts/telegram-webhook.mjs
+ *  5. Owner: open a private chat with the bot and send /start. That lists the
+ *     commands and lets the daily report find you. /report sends the last 24
+ *     hours on demand.
+ *
+ * The bot talks only in the group. Private messages from anyone but the owner
+ * get no reply at all, and the owner's chat is reports only.
  *
  * Telegram sends the secret in X-Telegram-Bot-Api-Secret-Token; anything
  * without it gets a 401. A real update gets a 200 straight away and is

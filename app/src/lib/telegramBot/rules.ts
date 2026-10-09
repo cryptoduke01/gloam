@@ -108,6 +108,16 @@ export function parseCommand(text: string, botUsername?: string): Command | null
   };
 }
 
+/** The owner asking for the report in plain words: "report", "daily report", "stats", "how was today". */
+export function wantsReport(text: string): boolean {
+  return /\b(?:report|stats|statistics|summary)\b|\bhow\s+(?:was|is|did)\s+(?:today|the\s+day|the\s+group|it\s+go)\b/i.test(norm(text));
+}
+
+/** A reply that hands the person to an admin ("an admin will follow up"). */
+export function handsToAdmin(text: string): boolean {
+  return /\badmins?\s+will\s+(?:follow\s+up|take\s+a\s+look|look\s+into|get\s+back|check)\b/i.test(text);
+}
+
 // ---------------------------------------------------------------- triggers
 
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
