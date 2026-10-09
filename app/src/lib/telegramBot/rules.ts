@@ -115,7 +115,10 @@ export function wantsReport(text: string): boolean {
 
 /** A reply that hands the person to an admin ("an admin will follow up"). */
 export function handsToAdmin(text: string): boolean {
-  return /\badmins?\s+will\s+(?:follow\s+up|take\s+a\s+look|look\s+into|get\s+back|check)\b/i.test(text);
+  return (
+    /\badmins?\s+will\s+(?:follow\s+up|take\s+a\s+look|look\s+into|get\s+back|check)\b/i.test(text) ||
+    /\b(?:i'll|i\s+will|let\s+me)\s+(?:talk\s+to|ping|tell|take\s+(?:this|it)\s+to|flag\s+(?:this|it)\s+(?:to|for)|run\s+(?:this|it)\s+by)\s+(?:boss\s+duke|duke|the\s+team|an?\s+admin|the\s+admins)\b/i.test(text)
+  );
 }
 
 // ---------------------------------------------------------------- triggers

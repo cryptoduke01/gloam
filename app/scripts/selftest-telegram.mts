@@ -218,6 +218,9 @@ await test("report words and admin hand-offs", () => {
   for (const t of ["report", "/report", "Daily report pls", "stats?", "how was today", "How did it go"]) assert.ok(wantsReport(t), t);
   for (const t of ["hello", "thanks", "I reported a bug yesterday"]) assert.ok(!wantsReport(t), t);
   assert.ok(handsToAdmin("I don't want to guess. An admin will follow up here."));
+  assert.ok(handsToAdmin("Ha, classic testnet. I'll take this to Boss Duke."));
+  assert.ok(handsToAdmin("Let me run it by the admins."));
+  assert.ok(!handsToAdmin("Boss Duke says dusk is the best time of day."));
   assert.ok(handsToAdmin("Good catch, admins will take a look."));
   assert.ok(!handsToAdmin("Admins never DM first."));
 });
@@ -551,7 +554,7 @@ await test("/bug saves a report and /help gives the guide in the group", async (
   const max = user(34, "Max");
   await handleUpdate(upd(inTopic(TOPIC.general, "/bug@glim_gloam_bot payroll resume skipped a person", max)));
   assert.equal((await listBugReports())[0]!.text, "payroll resume skipped a person");
-  assert.ok(String(sends()[0]!.body.text).startsWith("Thanks Max, I saved that"));
+  assert.ok(String(sends()[0]!.body.text).startsWith("Thanks Max, saved for the team"));
   await handleUpdate(upd(inTopic(TOPIC.help, "/help", max)));
   assert.ok(String(sends()[1]!.body.text).includes("Testing directions land in the Testers topic soon."));
   assert.equal(modelCalls().length, 0);
@@ -578,7 +581,7 @@ await test("a reply that breaks the rules is never posted", async () => {
   await handleUpdate(upd(inTopic(TOPIC.help, "@glim_gloam_bot when is mainnet?", ola)));
   const text = String(sends()[0]!.body.text);
   assert.ok(!text.includes("GloamSupportDesk"));
-  assert.ok(text.includes("An admin will follow up here"));
+  assert.ok(text.includes("an admin will follow up here"));
   assert.ok(text.includes("@duke_admin @yomi_ops"));
 });
 

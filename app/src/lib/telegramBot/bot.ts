@@ -142,7 +142,7 @@ function ownerHelp(c: BotConfig): string {
 const OWNER_HINT = "Send /report for the last 24 hours in the group.";
 
 function bugThanks(name: string): string {
-  return `Thanks ${name}, I saved that for the team and an admin will take a look. If you have the steps, a screenshot or a transaction link, add them here.`;
+  return `Thanks ${name}, saved for the team, and I'll make sure Boss Duke sees it. An admin will take a look. Steps, a screenshot or a transaction link make you everyone's favourite tester.`;
 }
 
 function bugNotSaved(name: string): string {
@@ -151,8 +151,8 @@ function bugNotSaved(name: string): string {
 
 function cantAnswer(c: BotConfig, name: string, topic: number): string {
   const cc = c.admins.length ? ` (${c.admins.map((h) => `@${h}`).join(" ")})` : "";
-  if (topic === TOPIC.help) return `I don't want to guess on that one, ${name}. An admin will follow up here${cc}.`;
-  return `I don't want to guess on that one, ${name}. Ask in the Help topic or email hello@gloam.trade, and an admin will follow up${cc}.`;
+  if (topic === TOPIC.help) return `Not going to guess on that one, ${name}. I'll take it to Boss Duke, and an admin will follow up here${cc}.`;
+  return `Not going to guess on that one, ${name}. I'll take it to Boss Duke. Drop it in the Help topic or email hello@gloam.trade, and an admin will follow up${cc}.`;
 }
 
 function leakWarning(name: string, removed: boolean): string {
