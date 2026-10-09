@@ -182,6 +182,9 @@ await test("questions: a ?, or a few opening words", () => {
     "Hey guys, how do I turn on recovery",
     "anyone know if the faucet is down?",
     "@glim_gloam_bot where is the testnet guide",
+    "will there be rewards for testers",
+    "wen mainnet",
+    "anyone tried payroll yet",
   ]) {
     assert.ok(looksLikeQuestion(q), q);
   }
@@ -456,13 +459,32 @@ await test("follow-ups carry the topic's recent messages", async () => {
   assert.ok(second.includes("Glim (you):"));
 });
 
-await test("General stays quiet unless tagged or replied to", async () => {
+await test("questions get answered in every topic but Announcements", async () => {
+  reset();
+  const dee = user(27, "Dee");
+  await handleUpdate(upd(inTopic(TOPIC.general, "Will there be a reward for this ?", dee)));
+  assert.equal(sends().length, 1, "General");
+  await handleUpdate(upd(inTopic(TOPIC.feedback, "Can the faucet give more PathUSD?", dee)));
+  assert.equal(sends().length, 2, "Feedback");
+  await handleUpdate(upd(inTopic(TOPIC.announcements, "When is the next update?", dee)));
+  assert.equal(sends().length, 2, "never in Announcements");
+  const other: TgMessage = { message_id: 9, chat, from: user(28, "Eve"), date: 0, text: "I tested it" };
+  await handleUpdate(upd(inTopic(TOPIC.general, "nice, which wallet did you use?", dee, { reply_to_message: other })));
+  assert.equal(sends().length, 3, "every question gets an answer, even one to another member");
+});
+
+await test("names: wallet names and separators", () => {
+  assert.equal(cleanName("duke.sol | Gloam"), "duke");
+  assert.equal(cleanName("vitalik.eth"), "vitalik");
+  assert.equal(cleanName("Ada / Gloam"), "Ada");
+  assert.equal(cleanName("Tochy Exchange"), "Tochy Exchange");
+});
+
+await test("General: chatter stays quiet, a tag or Glim's name gets a reply", async () => {
   reset();
   const dee = user(24, "Dee");
-  await handleUpdate(upd(inTopic(TOPIC.general, "How does this work?", dee)));
-  assert.equal(sends().length, 0);
-  await handleUpdate(upd(inTopic(TOPIC.general, "hey glim how are you", dee)));
-  assert.equal(sends().length, 0, "the name alone is not a tag in General");
+  await handleUpdate(upd(inTopic(TOPIC.general, "lfg", dee)));
+  assert.equal(sends().length, 0, "chatter that is not a question");
   await handleUpdate(upd(inTopic(TOPIC.general, "@glim_gloam_bot how are you", dee)));
   assert.equal(sends().length, 1);
   assert.equal(sends()[0]!.body.message_thread_id, undefined, "General has no thread id");
@@ -471,10 +493,10 @@ await test("General stays quiet unless tagged or replied to", async () => {
   assert.equal(sends().length, 2);
 });
 
-await test("Feedback stays quiet for chat, answers a tag or the persona's name", async () => {
+await test("Feedback stays quiet for statements, answers questions and its name", async () => {
   reset();
   const eve = user(25, "Eve");
-  await handleUpdate(upd(inTopic(TOPIC.feedback, "What if the portfolio had a dark chart?", eve)));
+  await handleUpdate(upd(inTopic(TOPIC.feedback, "The portfolio could use a dark chart", eve)));
   assert.equal(sends().length, 0);
   await handleUpdate(upd(inTopic(TOPIC.feedback, "Glim, what do you think of that idea?", eve)));
   assert.equal(sends().length, 1);
@@ -500,7 +522,7 @@ await test("a repeated update is handled once", async () => {
   assert.equal(sends().length, 1);
 });
 
-await test("a question to someone else in Help is left to them", async () => {
+await test("a question to someone else in Help still gets an answer", async () => {
   reset();
   const hal = user(28, "Hal");
   const other: TgMessage = { message_id: 900, chat, from: user(29, "Ivy"), date: 0, text: "it worked for me" };
@@ -508,7 +530,7 @@ await test("a question to someone else in Help is left to them", async () => {
   await handleUpdate(
     upd(inTopic(TOPIC.help, "@ivy_x how did you fix it?", hal, { entities: [{ type: "mention", offset: 0, length: 6 }] })),
   );
-  assert.equal(sends().length, 0);
+  assert.equal(sends().length, 2);
 });
 
 await test("a scam is deleted and warned about; an admin's warning is not", async () => {

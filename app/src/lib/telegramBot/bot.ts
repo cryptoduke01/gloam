@@ -31,7 +31,6 @@ import {
   looksLikeQuestion,
   memoryText,
   mentionsBot,
-  mentionsOthers,
   messageText,
   namesPersona,
   parseCommand,
@@ -180,7 +179,8 @@ function count(counter: Counter): Promise<void> {
   return bump(counter).catch(() => {});
 }
 
-function firstName(u: TgUser): string {
+function firstName(u: TgUser, c?: BotConfig): string {
+  if (c && isOwner(u, c)) return "Boss Duke";
   return cleanName(u.first_name, u.username ? cleanName(u.username) : "friend");
 }
 
@@ -290,7 +290,7 @@ function left(u: TgChatMemberUpdated): boolean {
 async function onCommand(cmd: Command, msg: TgMessage, from: TgUser, c: BotConfig, topic: number): Promise<void> {
   const chatId = msg.chat.id;
   const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
-  const name = firstName(from);
+  const name = firstName(from, c);
   if (cmd.name !== "help" && cmd.name !== "start" && cmd.name !== "bug") return;
   if (!(await withinLimits(from.id))) return;
   if (cmd.name === "bug") {
@@ -316,7 +316,7 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig): Promise<void> {
   const text = messageText(msg);
   if (!text) return;
   const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
-  const name = firstName(from);
+  const name = firstName(from, c);
   const trusted = isOwner(from, c) || Boolean(from.username && c.admins.includes(from.username.toLowerCase()));
 
   if (secretLeak(text)) {
@@ -349,15 +349,11 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig): Promise<void> {
   if (kept) await logQuestion(kept).catch(() => {});
   const replied = explicitReply(msg);
   const toBot = replied?.from?.id === me.id;
-  // General needs a real tag or reply; elsewhere saying the persona's name counts too
-  const tagged = mentionsBot(msg, me) || toBot || (topic !== TOPIC.general && namesPersona(text, c.persona));
+  // a tag, a reply to Glim, or saying its name; questions get answered in every topic (not Announcements)
+  const tagged = mentionsBot(msg, me) || toBot || namesPersona(text, c.persona);
   const bug = (topic === TOPIC.testers || topic === TOPIC.feedback) && looksLikeBugReport(text);
-  const unprompted =
-    (topic === TOPIC.help || topic === TOPIC.testers) &&
-    asked &&
-    !mentionsOthers(msg, me) &&
-    !(replied && !toBot && replied.from?.id !== from.id);
-  if (!tagged && !bug && !unprompted) return;
+  // the owner wants every question answered, members' questions to each other included
+  if (!tagged && !bug && !asked) return;
 
   const saved = bug ? await saveBug(msg, from, text, topicName(topic)) : false;
   if (!(await withinLimits(from.id))) return;

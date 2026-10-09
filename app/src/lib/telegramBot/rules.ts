@@ -77,17 +77,6 @@ export function mentionsBot(msg: TgMessage, me: Pick<TgUser, "id" | "username">)
   return handle ? new RegExp(`(^|[^\\w])${escapeRe(handle)}(?![\\w])`, "i").test(text) : false;
 }
 
-/** The message tags someone other than the bot, so it is meant for them. */
-export function mentionsOthers(msg: TgMessage, me: Pick<TgUser, "id" | "username">): boolean {
-  const text = messageText(msg);
-  const handle = me.username ? `@${me.username}`.toLowerCase() : null;
-  return entitiesOf(msg).some(
-    (e) =>
-      (e.type === "text_mention" && e.user?.id !== me.id) ||
-      (e.type === "mention" && text.slice(e.offset, e.offset + e.length).toLowerCase() !== handle),
-  );
-}
-
 /** The persona's name used as a word ("hey Glim", "thanks glim!"). */
 export function namesPersona(text: string, name: string): boolean {
   if (!name) return false;
@@ -126,11 +115,11 @@ export function handsToAdmin(text: string): boolean {
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
 const GREETING = /^(?:(?:hi|hey|hello|yo|gm|hiya|guys|all|everyone|team|folks|pls|please)\b[\s,!.:-]*)+/i;
 const QUESTION_START =
-  /^(?:how|what|why|where|when|can|does|is|my|i can't|i cant|i cannot|i can not|not working|error)(?![\p{L}\p{N}_])/iu;
+  /^(?:how|what|why|where|when|wen|who|which|whats|can|could|would|will|should|does|do|did|is|are|has|have|any|anyone|anybody|my|i can't|i cant|i cannot|i can not|not working|error|pls|please explain)(?![\p{L}\p{N}_])/iu;
 
 /**
- * Reads like a question, for the topics where the helper answers unprompted
- * (Help, Testers). Conservative: a "?" or one of a few opening words.
+ * Reads like a question, which the helper answers unprompted in every topic
+ * except Announcements. Conservative: a "?" or one of a few opening words.
  */
 export function looksLikeQuestion(text: string): boolean {
   const t = norm(text)
@@ -380,6 +369,9 @@ const NAME_LURE = /\b(?:admin|support|airdrop|giveaway|claim|official|helpdesk|m
 /** A display name safe to repeat: no links, handles or control characters, and never "Support" or "Admin". */
 export function cleanName(raw: string | undefined, fallback = "friend"): string {
   const name = norm(raw ?? "")
+    // "duke.sol | Gloam": keep the person's part, and a wallet name (.sol, .eth) is a name, not a link
+    .split(/\s+[|/\u00b7\u2022]\s+/)[0]!
+    .replace(/\b([\p{L}\p{N}_-]+)\.(?:sol|eth|base|ton|bnb|arb|sui|apt|lens)\b/giu, "$1")
     .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(LINK_RE, "")
     .replace(/@\w+/g, "")

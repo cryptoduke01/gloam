@@ -68,6 +68,14 @@ GETTING STARTED (testing has NOT started yet)
 - Anyone who wants to be a tester can apply at gloam.trade/testers.
 `;
 
+const REWARDS = `
+TESTER REWARDS
+- Yes, there are rewards for testers. The first group who applied at gloam.trade/testers hold the paid tester spots, and those filled up fast. Everyone who applied after that tests as a volunteer, and the team values that just as much.
+- Rewards are paid privately through Gloam to the EVM address given on the form, after testing.
+- Do not promise amounts, dates or who got a paid spot. Say Boss Duke and the admins will share the details in Announcements, and that people can check their own application with an admin.
+- Tester rewards are not a token or an airdrop. Gloam has no token.
+`;
+
 const ISSUES = `
 COMMON ISSUES (from the app)
 - Tempo faucet says "You already hold ... in test funds": the app skips the faucet once a wallet holds about $50,000 in test stablecoins. That is plenty to test with.
@@ -94,6 +102,7 @@ export function knowledgeBlock(testingOpen: boolean): string {
   return [
     ABOUT.trim(),
     (testingOpen ? START_OPEN : START_CLOSED).trim(),
+    REWARDS.trim(),
     ISSUES.trim(),
     `OFFICIAL LINKS (the only ones you may share)\n${OFFICIAL_LINKS.map((l) => `- ${l}`).join("\n")}`,
   ].join("\n\n");
