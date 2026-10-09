@@ -1,0 +1,55 @@
+import { NextResponse, after } from "next/server";
+import { handleUpdate } from "@/lib/telegramBot/bot";
+import { webhookSecretOk } from "@/lib/telegramBot/rules";
+import type { TgUpdate } from "@/lib/telegramBot/telegram";
+
+/**
+ * Telegram webhook for Glim, the helper bot in the Gloam group (t.me/gloamhq).
+ * What it does with each update lives in lib/telegramBot/bot.ts.
+ *
+ * Setup, once:
+ *  1. BotFather: /newbot, then /setprivacy, pick the bot, Disable (so it reads
+ *     group messages, not only commands).
+ *  2. Add the bot to the group as an admin with only Delete messages on.
+ *  3. Set on Vercel: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET (any long
+ *     random string), ANTHROPIC_API_KEY, and optionally TELEGRAM_GROUP_ID,
+ *     TELEGRAM_ADMIN_HANDLES, TELEGRAM_BOT_MODEL, TELEGRAM_BOT_PERSONA,
+ *     GLOAM_TESTING_OPEN. Memory, welcomes and bug reports use the Upstash
+ *     Redis already set for the partner program. Redeploy.
+ *  4. Point Telegram here, with the same token and secret in your shell:
+ *       node app/scripts/telegram-webhook.mjs
+ *
+ * Telegram sends the secret in X-Telegram-Bot-Api-Secret-Token; anything
+ * without it gets a 401. A real update gets a 200 straight away and is
+ * handled after the response, so Telegram never waits on the model.
+ */
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const MAX_BODY = 200_000;
+
+export async function POST(req: Request) {
+  if (!webhookSecretOk(req.headers.get("x-telegram-bot-api-secret-token"), process.env.TELEGRAM_WEBHOOK_SECRET)) {
+    return NextResponse.json({ ok: false }, { status: 401 });
+  }
+  const raw = await req.text();
+  let update: TgUpdate | null = null;
+  if (raw.length <= MAX_BODY) {
+    try {
+      update = JSON.parse(raw) as TgUpdate;
+    } catch {
+      update = null;
+    }
+  }
+  if (update && typeof update.update_id === "number") {
+    const u = update;
+    after(() =>
+      handleUpdate(u).catch((e) => {
+        console.error("telegram: update failed", e instanceof Error ? e.message : "unknown");
+      }),
+    );
+  }
+  return NextResponse.json({ ok: true });
+}

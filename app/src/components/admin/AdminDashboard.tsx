@@ -37,7 +37,7 @@ type MetricsPayload = {
   error?: string;
 };
 
-type Tab = "overview" | "users" | "events" | "partners" | "testers";
+type Tab = "overview" | "users" | "events" | "partners" | "testers" | "bugs";
 
 /** Events added for proofs, the public ledger, requests and notes; shown first in the breakdowns. */
 const NEW_EVENTS = [
@@ -413,6 +413,7 @@ export function AdminDashboard() {
                 ["events", "Product events"],
                 ["partners", "Partners"],
                 ["testers", "Testers"],
+                ["bugs", "Bug reports"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -748,6 +749,7 @@ export function AdminDashboard() {
 
         {tab === "partners" && <PartnersPanel />}
         {tab === "testers" && <TestersPanel />}
+        {tab === "bugs" && <BugsPanel />}
 
         <p className="tnum text-[12px] text-mute">
           Generated {data?.generatedAt ?? "not yet"} ·{" "}
@@ -1000,6 +1002,110 @@ function TestersPanel() {
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Approve Telegram join requests that match an application. The CSV has full addresses for paying rewards. Store:{" "}
           {data.backend}.
+        </p>
+      </Panel>
+    </>
+  );
+}
+
+type BugRow = {
+  id: string;
+  userId: number;
+  username: string | null;
+  firstName: string;
+  thread: string;
+  text: string;
+  link: string | null;
+  createdAt: number;
+};
+
+/** Bug reports the Telegram helper saved from Testers, Feedback and /bug. Read only. */
+function BugsPanel() {
+  const [data, setData] = useState<{ backend: string; reports: BugRow[]; loadedAt: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/admin/bugs", { credentials: "include", cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as
+          | { ok?: boolean; data?: { backend: string; reports: BugRow[] }; error?: { message?: string } }
+          | null;
+        if (!live) return;
+        if (!res.ok || !json?.ok || !json.data) {
+          setErr(json?.error?.message ?? `Bug reports failed (${res.status})`);
+          return;
+        }
+        setErr(null);
+        setData({ ...json.data, loadedAt: Date.now() });
+      } catch {
+        if (live) setErr("Network error loading bug reports");
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), 45_000);
+    return () => {
+      live = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
+        {err}
+      </p>
+    );
+  }
+  if (!data) {
+    return (
+      <p className="flex items-center gap-2.5 rounded-xl bg-surface px-4 py-3 text-[14px] text-mute" role="status">
+        <span className="livedot h-2 w-2 rounded-full bg-foreground/60" />
+        Loading bug reports
+      </p>
+    );
+  }
+  const reports = data.reports;
+  const dayAgo = data.loadedAt - 86_400_000;
+  const people = new Set(reports.map((r) => r.userId)).size;
+  return (
+    <>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Reports" value={n(reports.length)} sub={`${n(reports.filter((r) => r.createdAt > dayAgo).length)} in the last 24h`} />
+        <Kpi label="Reporters" value={n(people)} sub="people on Telegram" />
+      </section>
+      <Panel title="Bug reports">
+        <DataTable
+          headers={["From", "Where", "Report", "Message", "Reported"]}
+          rows={reports.map((r) => [
+            r.username ? (
+              <a key="u" href={`https://t.me/${r.username}`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                {r.firstName || r.username} (@{r.username})
+              </a>
+            ) : (
+              <span key="u" className="text-foreground">
+                {r.firstName || `User ${r.userId}`}
+              </span>
+            ),
+            r.thread,
+            <span key="t" title={r.text} className="block max-w-[420px] truncate">
+              {r.text}
+            </span>,
+            r.link ? (
+              <a key="l" href={r.link} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                Open
+              </a>
+            ) : (
+              "None"
+            ),
+            new Date(r.createdAt).toLocaleString(),
+          ])}
+          empty={data.backend === "none" ? "Bug storage is not configured (set Upstash Redis)." : "No bug reports yet"}
+          minWidth={980}
+        />
+        <p className="mt-4 text-[13px] leading-relaxed text-mute">
+          Saved by the Telegram helper from Testers, Feedback and /bug. Hover a report for the full text. Store: {data.backend}.
         </p>
       </Panel>
     </>
