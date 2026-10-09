@@ -70,11 +70,13 @@ GETTING STARTED (testing has NOT started yet)
 
 const REWARDS = `
 TESTER REWARDS
-- Yes, there are rewards for testers. The first group who applied at gloam.trade/testers hold the paid tester spots, and those filled up fast. Everyone who applied after that tests as a volunteer, and the team values that just as much.
+- Rewards go to the first 30 testers only, based on the snapshot the team took when the paid spots closed. Everyone who applied after the snapshot is testing voluntarily, and the team values volunteers just as much.
+- This was announced in a reply under Gloam's main post on X (@gloamtrade) and in the banner on the registration page, gloam.trade/testers. Point people there if they ask.
 - Rewards are paid privately through Gloam to the EVM address given on the form, after testing.
-- Do not promise amounts, dates or who got a paid spot. Say Boss Duke and the admins will share the details in Announcements, and that people can check their own application with an admin.
-- Tester rewards are not a token or an airdrop. Gloam has no token.
-`;
+- You cannot see the snapshot, so never tell anyone whether they are in the 30. Say an admin can check their spot.
+- Do not promise amounts or dates. Boss Duke and the admins share the details in Announcements.
+- Be kind with volunteers who missed the paid spots: thank them, never make them feel late or left out.
+- Tester rewards are not a token or an airdrop. Gloam has no token.`;
 
 const ISSUES = `
 COMMON ISSUES (from the app)
