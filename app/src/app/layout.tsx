@@ -9,7 +9,7 @@ import "./globals.css";
 
 const siteTitle = "Gloam · Private money on public chains";
 const siteDescription =
-  "Hold, pay and get paid in stablecoins without putting amounts or balances on the public record. Private payroll, private payments and proofs for people, teams and agents. Live on Robinhood Chain and Tempo.";
+  "Private stablecoin payments for people, teams and agents. Hold, pay and run payroll without putting amounts or balances on the public record, and prove only what someone needs to see. On Tempo and Robinhood Chain testnets.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gloam.trade"),

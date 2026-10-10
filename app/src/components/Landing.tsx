@@ -119,6 +119,27 @@ const WHAT = [
   },
 ];
 
+const NEW = [
+  {
+    title: "Payroll total proof",
+    body: "Prove a run of up to 32 payments paid exactly a total, without showing who got what.",
+    href: "/docs/proofs#payroll-total",
+    cta: "How it works",
+  },
+  {
+    title: "Proofs for one reader",
+    body: "Each proof names who it is for and when it expires. Change either and it fails.",
+    href: "/docs/proofs#made-for-one-person",
+    cta: "How proofs work",
+  },
+  {
+    title: "Private payments for agents",
+    body: "Private x402 payments, a private method proposed for MPP, and an MCP server with spending limits.",
+    href: "/docs/agents",
+    cta: "Agents guide",
+  },
+];
+
 const SNIPPET = `import { buildGloamPayment, relayIntent } from "@gloamtrade/sdk";
 
 const payment = await buildGloamPayment({ to, amount, asset });
@@ -139,8 +160,9 @@ export function Landing() {
             <div className="relative z-10 max-w-[720px]">
               <h1 className="t-display-xl">Private money on public chains</h1>
               <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft sm:text-[18px]">
-                Hold, pay and get paid in stablecoins without putting amounts or
-                balances on the public record. For people, teams and agents.
+                For people and teams paid in stablecoins, and the agents that
+                work for them. Hold, pay and get paid without putting amounts or
+                balances on the public record.
               </p>
               <div className="mt-8 flex flex-wrap gap-2">
                 <Link href="/app" className="btn btn-ink btn-lg">
@@ -217,6 +239,52 @@ export function Landing() {
           </div>
         </section>
 
+        {/* why gloam: a payment has one owner, so nobody else holds a key */}
+        <section aria-labelledby="why-gloam" className="mx-auto max-w-[1400px] px-4 pt-20 sm:px-7 sm:pt-32">
+          <div className="max-w-[760px]">
+            <p className="t-label">Why Gloam</p>
+            <h2 id="why-gloam" className="t-display-l mt-4">
+              A payment has one owner. Nobody else should hold the key.
+            </h2>
+            <p className="mt-5 max-w-[56ch] text-[17px] leading-[1.6] text-mute sm:text-[19px]">
+              Auctions and lending pools compute on many people&apos;s hidden
+              data, so someone has to hold a key for all of them. A payment does
+              not. You prove it on your own device.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-3 md:grid-cols-2">
+            <div className="gl-tile flex flex-col p-6 sm:p-10">
+              <p className="t-label">Committee model</p>
+              <p className="mt-1.5 text-[14px] text-mute">Zama, Arcium, Tempo Zones</p>
+              <p className="mt-8 text-[22px] leading-snug tracking-[-0.01em] sm:text-[24px]">
+                A committee or an operator holds the key.
+              </p>
+              <p className="mt-3 max-w-[44ch] text-[15px] leading-relaxed text-mute">
+                If it is breached, everyone who used it can be exposed, past
+                payments included.
+              </p>
+            </div>
+            <div className="gl-tile flex flex-col bg-sealed-soft p-6 sm:p-10">
+              <p className="t-label text-sealed">Gloam</p>
+              <p className="mt-1.5 text-[14px] text-mute">Owner-only proofs</p>
+              <p className="mt-8 text-[22px] leading-snug tracking-[-0.01em] sm:text-[24px]">
+                Your device makes the proof. Nobody else holds a key.
+              </p>
+              <p className="mt-3 max-w-[44ch] text-[15px] leading-relaxed text-mute">
+                If one device is breached, one person is exposed. Not everyone.
+              </p>
+            </div>
+          </div>
+          <p className="mt-6 max-w-[72ch] text-[15px] leading-relaxed text-mute">
+            Some private payment services, like Helius Privacy, make your proof
+            on their server, so the server sees your amounts. Gloam proofs are
+            made on your device, never on our servers.{" "}
+            <Link href="/docs/compare" className="text-foreground underline-offset-4 hover:underline">
+              How Gloam compares <span aria-hidden>→</span>
+            </Link>
+          </p>
+        </section>
+
         {/* who it's for */}
         <section className="mx-auto max-w-[1400px] px-4 py-20 sm:px-7 sm:py-32">
           <div className="max-w-[720px]">
@@ -243,6 +311,14 @@ export function Landing() {
               </Link>
             ))}
           </div>
+          <p className="mt-8 max-w-[68ch] text-[15px] leading-relaxed text-mute">
+            <span className="text-foreground">Coming next.</span> Stock tokens on
+            Robinhood Chain can be held and sent privately today. Private trading
+            is underway, with a new engine built for it.{" "}
+            <Link href="/docs/sealed-trade" className="text-foreground underline-offset-4 hover:underline">
+              About private trade <span aria-hidden>→</span>
+            </Link>
+          </p>
         </section>
 
         {/* payroll spotlight */}
@@ -326,6 +402,36 @@ export function Landing() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* what's new: the building block, not new cryptography */}
+        <section aria-labelledby="whats-new" className="mx-auto max-w-[1400px] px-4 pb-20 sm:px-7 sm:pb-32">
+          <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <p className="t-label">What&apos;s new</p>
+              <h2 id="whats-new" className="t-display-l mt-4 max-w-[13ch]">
+                Private payments you can prove
+              </h2>
+              <p className="mt-5 max-w-[38ch] text-[15px] leading-relaxed text-mute">
+                Gloam is not new cryptography. It is a new building block for
+                finance.
+              </p>
+            </div>
+            <div className="grid gap-10 sm:grid-cols-3">
+              {NEW.map((n) => (
+                <div key={n.title} className="flex flex-col border-t border-foreground pt-5">
+                  <p className="text-[18px] leading-snug tracking-[-0.01em]">{n.title}</p>
+                  <p className="mt-3 text-[14px] leading-relaxed text-mute">{n.body}</p>
+                  <Link
+                    href={n.href}
+                    className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  >
+                    {n.cta} <span aria-hidden>→</span>
+                  </Link>
+                </div>
+              ))}
             </div>
           </div>
         </section>
