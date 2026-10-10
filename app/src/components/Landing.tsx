@@ -226,7 +226,7 @@ export function Landing() {
 
         {/* live product */}
         <section id="payments" className="mx-auto max-w-[1400px] scroll-mt-20 px-4 pb-10 pt-20 sm:px-7 sm:pb-16 sm:pt-32">
-          <div className="gl-panel bg-surface px-5 py-12 sm:px-10 sm:py-16">
+          <div className="gl-panel overflow-clip bg-surface px-5 py-12 sm:px-10 sm:py-16">
             <SealedField tone="soft" />
             <div className="relative mx-auto max-w-[720px] text-center">
               <h2 className="t-display-l">Private money is live</h2>

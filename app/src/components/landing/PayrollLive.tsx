@@ -7,8 +7,9 @@ import { SealDots } from "@/components/ui/SealDots";
 /**
  * A live payroll run, rendered with the same rows, chips and step ticks as the
  * real Payroll screen. It pays five people one after another, shows the
- * receipt, flips to what the public sees, then starts over. Pauses off screen;
- * holds the finished state under reduced motion.
+ * receipt, flips to what the public sees, then starts over. Visitors can pick
+ * the view themselves, switch "Hide my wallet" to see what it changes, and run
+ * it again. Pauses off screen; holds the finished state under reduced motion.
  */
 
 type Status = "queued" | "preparing" | "sending" | "confirming" | "paid";
@@ -73,6 +74,9 @@ export function PayrollLive() {
   const [t, setT] = useState(RUN_END + 600);
   const root = useRef<HTMLDivElement>(null);
   const [still, setStill] = useState(false);
+  const [picked, setPicked] = useState<"you" | "public" | null>(null);
+  const [hideWallet, setHideWallet] = useState(true);
+  const restart = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -91,6 +95,11 @@ export function PayrollLive() {
       { threshold: 0.2 },
     );
     if (root.current) io.observe(root.current);
+    restart.current = () => {
+      base = performance.now();
+      last = 0;
+      setT(0);
+    };
     const tick = (now: number) => {
       if (visible) {
         last = (now - base) % LOOP;
@@ -108,7 +117,8 @@ export function PayrollLive() {
 
   const statuses = PEOPLE.map((_, i) => statusAt(i, t));
   const paidCount = statuses.filter((s) => s === "paid").length;
-  const isPublic = !still && t >= DONE_END && t < PUBLIC_END;
+  const autoPublic = !still && t >= DONE_END && t < PUBLIC_END;
+  const isPublic = picked ? picked === "public" : autoPublic;
   const done = paidCount === PEOPLE.length;
   const progress = Math.min(1, Math.max(0, (t - START) / (RUN_END - START)));
   const paidSoFar = PEOPLE.reduce((a, p, i) => a + (statuses[i] === "paid" ? p.amt : 0), 0);
@@ -123,8 +133,22 @@ export function PayrollLive() {
             <p className="mt-0.5 text-[15px] text-foreground">5 people, USDG</p>
           </div>
           {done ? (
-            <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-sealed-soft px-3 text-[12.5px] font-medium text-sealed">
-              <Lock /> All paid
+            <span className="flex items-center gap-1.5">
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-sealed-soft px-3 text-[12.5px] font-medium text-sealed">
+                <Lock /> All paid
+              </span>
+              {!still && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPicked(null);
+                    restart.current();
+                  }}
+                  className="inline-flex h-7 items-center rounded-full bg-surface px-3 text-[12.5px] text-foreground transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sealed"
+                >
+                  Run again
+                </button>
+              )}
             </span>
           ) : (
             <span className="tnum inline-flex h-7 items-center gap-1.5 rounded-full bg-surface px-3 text-[12.5px] text-foreground">
@@ -142,18 +166,21 @@ export function PayrollLive() {
         </div>
 
         {/* view switch */}
-        <div className="mx-5 mt-4 flex rounded-full bg-surface p-1 text-[12px]" aria-hidden>
-          {["You see", "The public sees"].map((label, i) => {
-            const active = (i === 1) === isPublic;
+        <div role="group" aria-label="Switch the view" className="mx-5 mt-4 flex rounded-full bg-surface p-1 text-[12px]">
+          {(["you", "public"] as const).map((key) => {
+            const active = (key === "public") === isPublic;
             return (
-              <span
-                key={label}
-                className={`flex h-7 flex-1 items-center justify-center rounded-full transition-colors duration-300 ${
-                  active ? "bg-panel text-foreground shadow-card" : "text-mute"
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setPicked(key)}
+                className={`flex h-8 flex-1 items-center justify-center rounded-full transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sealed ${
+                  active ? "bg-panel text-foreground shadow-card" : "text-mute hover:text-foreground"
                 }`}
               >
-                {label}
-              </span>
+                {key === "you" ? "You see" : "The public sees"}
+              </button>
             );
           })}
         </div>
@@ -191,7 +218,13 @@ export function PayrollLive() {
                     {isPublic ? "Private transfer" : p.name}
                   </p>
                   <p className="truncate text-[12px] text-mute">
-                    {isPublic ? "Sent by Gloam" : p.kind === "gloam" ? "Gloam address" : "Claim link"}
+                    {isPublic
+                      ? hideWallet
+                        ? "Sent by Gloam"
+                        : "Sent by 0x7a3…f21"
+                      : p.kind === "gloam"
+                        ? "Gloam address"
+                        : "Claim link"}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -239,12 +272,26 @@ export function PayrollLive() {
 
         {/* footer */}
         <div className="flex items-center justify-between gap-3 border-t border-line bg-surface px-5 py-3 text-[13px]">
-          <span className="inline-flex items-center gap-2 text-mute">
-            <span className="relative inline-flex h-4 w-7 items-center rounded-full bg-foreground" aria-hidden>
-              <span className="absolute right-0.5 h-3 w-3 rounded-full bg-panel" />
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hideWallet}
+            onClick={() => {
+              setHideWallet((h) => !h);
+              setPicked("public");
+            }}
+            className="-my-1 inline-flex items-center gap-2 rounded-full py-1 pr-2 text-mute transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sealed"
+          >
+            <span
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${hideWallet ? "bg-foreground" : "bg-surface-2"}`}
+              aria-hidden
+            >
+              <span
+                className={`absolute h-3 w-3 rounded-full bg-panel shadow-card transition-[left] ${hideWallet ? "left-[14px]" : "left-0.5"}`}
+              />
             </span>
             Hide my wallet
-          </span>
+          </button>
           <span className="tnum text-foreground">
             {isPublic ? (
               <SealDots n={7} className="text-foreground/60" />
