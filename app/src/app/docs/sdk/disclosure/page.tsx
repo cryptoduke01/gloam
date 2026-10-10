@@ -5,16 +5,16 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "Selective disclosure",
   description:
-    "Prove you hold a specific shielded balance to a party you choose, revealing nothing else. Private by default, proven by choice.",
+    "Prove the amount and asset of one shielded note, revealing nothing else. The newer proofs of funds, payment and payroll add a label and an expiry.",
 };
 
 export default function DocsDisclosurePage() {
   return (
     <DocsLayout
       title="Selective disclosure"
-      lede="Private by default, proven by choice. A holder proves one shielded balance to a party they choose, such as an auditor or a counterparty, and reveals nothing else."
+      lede="Private by default, provable on demand. A holder proves one note's amount and asset to whoever they send the proof to, such as an auditor or a counterparty, and reveals nothing else."
       glance={[
-        { label: "Reveals", value: "one note, to one party" },
+        { label: "Reveals", value: "one note's amount and asset" },
         { label: "Hides", value: "identity, secret, other notes" },
         { label: "Circuit", value: "reuses shield (no new setup)" },
         { label: "Verify", value: "in-browser, no wallet" },
@@ -31,7 +31,7 @@ export default function DocsDisclosurePage() {
         A shielded pool that can only hide is a dark pool, and a regulated-chain
         sponsor cannot build on that. Gloam is private by default and{" "}
         <strong>provable on demand</strong>: the holder, and only the holder,
-        chooses to prove a specific fact to a specific party. That is the
+        chooses what to prove and who to send it to. That is the
         difference between privacy and opacity, and the answer to the dark-pool
         objection.
       </p>
@@ -44,14 +44,15 @@ export default function DocsDisclosurePage() {
           to a specific <code>amount</code> and <code>asset</code>, and
         </li>
         <li>
-          that commitment is a <strong>live note in the pool</strong>.
+          that commitment was <strong>added to the pool</strong>.
         </li>
       </ul>
       <p>
-        Together: <em>this holder owns this balance in the Gloam vault.</em> It
-        reveals nothing about who they are, does not expose the note secret (so
-        it can never be used to spend), and says nothing about any of their other
-        notes.
+        Together: <em>this holder controls, or controlled, this balance in the
+        Gloam vault.</em> It reveals nothing about who they are, does not expose
+        the note secret (so it can never be used to spend), and says nothing
+        about any of their other notes. It does not show the note is still
+        unspent.
       </p>
 
       <h2>How it works</h2>
@@ -102,7 +103,7 @@ const disclosure = { v: 1, chainId, pool, commitment: publicSignals[0],
 const vkey = await (await fetch("/circuits/shield_vkey.json")).json();
 const proofOk = await groth16.verify(vkey, [d.commitment, d.amount, d.asset], d.proof);
 
-// 2) membership: the commitment is a live note in the pool
+// 2) membership: the commitment was added to the pool
 const live = await pool.read.commitmentSeen([toBytes32(d.commitment)]);
 
 const verified = proofOk && live;`}</code>
@@ -119,14 +120,27 @@ const verified = proofOk && live;`}</code>
           the wallet, and the history stay private.
         </li>
         <li>
+          <strong>Not bound to a reader or a time.</strong> This original format
+          has no recipient label and no expiry, and stays valid after the note
+          is spent. Anyone holding it can check it, so send it only to the party
+          you mean to.
+        </li>
+        <li>
           <strong>Trustless to verify.</strong> The recipient checks the math and
           the chain themselves; they do not trust the holder or Gloam.
         </li>
       </ul>
       <p>
-        Roadmap: viewing keys for continuous read access to a designated auditor,
-        and range disclosures (&quot;I hold at least X&quot;) without revealing
-        the exact amount.
+        Newer proofs cover what this format cannot. A proof of funds shows you
+        hold at least X across up to four unspent notes, a proof of payment
+        shows a payment arrived, and a payroll total shows a run added up. Each
+        carries a label naming who it is for and an expiry, and is checked at{" "}
+        <Link href="/verify">/verify</Link>. See{" "}
+        <Link href="/docs/proofs">proofs</Link>.
+      </p>
+      <p>
+        Roadmap: viewing keys for continuous read access to a designated
+        auditor.
       </p>
     </DocsLayout>
   );

@@ -19,7 +19,7 @@ Full addresses: [deployments/poseidon-testnet.json](./deployments/poseidon-testn
 | Feature | Status |
 | --- | --- |
 | Shield / unshield / transfer | Live (dev keys) |
-| Sealed private trade | Live (dev keys) |
+| Sealed private trade | Built, switched off on-chain pending audit |
 | Pay memos | Live |
 | Production keys | Not yet |
 

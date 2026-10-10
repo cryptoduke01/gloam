@@ -2,7 +2,7 @@
 
 **Thesis: Trade Everything on Robinhood Privately.**
 
-Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood Chain.
+Stocks. Memes. Shielded balances and private transfers on Robinhood Chain and Tempo. Private trade is built and switched off on-chain pending audit.
 
 ## Canonical
 
@@ -17,7 +17,8 @@ Stocks. Memes. Shielded balances, private transfers, private trade on Robinhood 
 
 ## Live on testnet (dev keys)
 
-- Shield / private send / cash out / **private trade** (sealedSwap, size privacy default on)
+- Shield / private send / cash out
+- Private trade (sealedSwap) is built but switched off on-chain pending audit
 - App root: `app/` · never revive `docs.gloam.trade`
 
 ## Audits

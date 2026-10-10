@@ -20,7 +20,7 @@ export default function DocsTestnetPage() {
         { label: "App", value: "/app" },
         { label: "Chain ID", value: "46630" },
         { label: "Network", value: "RH testnet" },
-        { label: "Vault", value: "Sealed live" },
+        { label: "Vault", value: "Live, dev keys" },
         { label: "Keys", value: "Dev ceremony" },
         { label: "Value", value: "Play money only" },
       ]}
@@ -309,10 +309,9 @@ export default function DocsTestnetPage() {
       <h2 id="trade">7. Trade paths</h2>
       <ul>
         <li>
-          <strong>Private trade (preferred)</strong>, {" "}
-          <Link href="/app/trade?path=sealed">Trade → Private</Link>. Vault ETH
-          → vault stock. Size privacy on by default (min-out floor). No DEX
-          pool required. See{" "}
+          <strong>Private trade (switched off)</strong>. Built, and switched
+          off on-chain pending audit. Vault ETH → vault stock with no DEX pool
+          required once it is back on. See{" "}
           <Link href="/docs/sealed-trade">sealed trade</Link>.
         </li>
         <li>
@@ -321,8 +320,7 @@ export default function DocsTestnetPage() {
         </li>
         <li>
           <strong>Via market</strong>, cash out → public swap → re-shield. Size
-          is public on the swap edge. Many faucet pairs have empty pools; use
-          Private instead.
+          is public on the swap edge. Many faucet pairs have empty pools.
         </li>
       </ul>
 
@@ -372,7 +370,6 @@ export default function DocsTestnetPage() {
         <li>Wallet on chain ID 46630</li>
         <li>Faucet ETH (+ stocks if needed)</li>
         <li>Shield a small amount of ETH</li>
-        <li>Private trade (size privacy on) → explorer sealedSwap</li>
         <li>Private send to yourself or a friend + import package</li>
         <li>Optional: cash out dust once (public amount, intentional)</li>
         <li>Export note backup (Settings)</li>
