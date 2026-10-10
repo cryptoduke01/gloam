@@ -6,20 +6,20 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Whitepaper",
   description:
-    "Gloam whitepaper: private money and trading infrastructure on Robinhood Chain, thesis, architecture, cryptography, threat model, and roadmap.",
+    "Gloam whitepaper: private stablecoin payments on Tempo and Robinhood Chain. Thesis, architecture, cryptography, what is new, how it compares, threat model and roadmap.",
 };
 
 export default function WhitepaperPage() {
   return (
     <DocsLayout
       title="Whitepaper"
-      lede="Private money on public chains. The technical and product thesis for Gloam: application-layer privacy on Robinhood Chain, with the same core now live on Tempo testnet."
+      lede="Private money on public chains. The technical and product thesis for Gloam: private stablecoin payments for people, teams and AI agents, private by default and provable on demand, on Tempo and Robinhood Chain testnets."
       glance={[
-        { label: "Version", value: "0.4" },
+        { label: "Version", value: "0.5" },
         { label: "Status", value: "Public draft" },
         { label: "Networks", value: "RH 46630 · Tempo 42431 (testnet)" },
-        { label: "Live", value: "Shield · send · cash out · proofs" },
-        { label: "Private trade", value: "Built, off pending audit" },
+        { label: "Live", value: "Shield · pay · payroll · proofs" },
+        { label: "Private trade", value: "Built, off; new engine underway" },
         { label: "Mainnet", value: "Not yet" },
       ]}
       quickLinks={[
@@ -43,14 +43,22 @@ export default function WhitepaperPage() {
         counterparties, and anyone with an explorer.
       </p>
       <p>
-        Gloam is private money infrastructure for Robinhood Chain: an
-        application-layer vault in which assets can be held and transferred with
-        reduced public visibility, and a path toward private trading of stocks
-        and memes on the same rails. The product thesis is a single sentence:{" "}
-        <strong>private money on public chains.</strong>
+        Stablecoins are becoming how businesses and AI agents pay each other,
+        and every one of those payments is public. Gloam makes them private,
+        and lets the payer prove exactly what someone needs to see. It is a
+        self-custodial vault on Tempo and Robinhood Chain in which stablecoins,
+        and on Robinhood Chain stock tokens, can be held, paid and proven with
+        reduced public visibility. The thesis is one line:{" "}
+        <strong>private by default, provable on demand.</strong>
       </p>
       <p>
-        Privacy on a transparent L2 is not the absence of transactions from
+        Gloam is not new cryptography. A payment has one owner, so the owner
+        proves it on their own device with zero-knowledge proofs from the Zcash
+        lineage, and nobody else ever holds a key. What is new is the building
+        block on top: private payments you can prove (section 7).
+      </p>
+      <p>
+        Privacy on a transparent chain is not the absence of transactions from
         explorers. It is the separation of <em>settlement visibility</em> from{" "}
         <em>strategy visibility</em>. Shield and unshield remain deliberate public
         edges. While assets remain inside the shielded set, amounts and internal
@@ -61,36 +69,60 @@ export default function WhitepaperPage() {
       <h2 id="problem">2. Problem</h2>
       <h3>2.1 Transparent finance as confession</h3>
       <p>
-        Open ledgers encode desire. A large swap is a signal of urgency. A
-        repeated pattern of buys is a dossier. Address clustering tools turn a
-        portfolio into a public narrative. For funds, market makers, and
-        sophisticated retail, this is not a feature, it is adverse selection
-        priced into every interaction.
+        Open ledgers encode intent. A salary paid onchain is readable by every
+        coworker. A supplier payment shows your margins. A treasury balance
+        shows your runway. A large swap signals urgency. Address clustering
+        tools turn a wallet into a public narrative. For teams, funds and
+        agents this is not a feature. It is a cost priced into every
+        interaction.
       </p>
-      <h3>2.2 Tokenized equities inherit the same exposure</h3>
+      <h3>2.2 Stablecoin payments are public by default</h3>
+      <p>
+        Real stablecoin payments came to about $390B in 2025, double 2024, and
+        58% of that ($226B) was business to business. Every one of those
+        payments, and the balance behind it, can be read by anyone with an
+        explorer. AI agents that pay for tools over HTTP add a new payer with
+        the same exposure: an agent&apos;s wallet shows what it buys and how
+        it works.
+      </p>
+      <h3>2.3 Tokenized equities inherit the same exposure</h3>
       <p>
         Robinhood Chain positions itself as infrastructure for financial
-        services and real-world assets. Tokenized stocks and high-velocity meme
-        markets already coexist there. Without application-layer privacy, both
-        inherit the same open-book problem: modern assets on medieval privacy
-        assumptions.
+        services and real-world assets, and tokenized stocks already trade
+        there. Without application-layer privacy, a stock position is as
+        public as a payment.
       </p>
-      <h3>2.3 Venue gap</h3>
-      <p>
-        Retail and institutional venues will list stock tokens and chase
-        cultural liquidity. Few will treat private balances and private flow as
-        core product. Gloam targets that gap: one private venue for everything
-        that settles on Robinhood Chain, equities for size and legitimacy, memes
-        for volume and urgency, same cryptographic rails.
-      </p>
+      <h3>2.4 Why now</h3>
+      <ul>
+        <li>
+          New payment chains launched in 2026: Tempo mainnet on 18 March,
+          Robinhood Chain on 1 July and Arc on 16 September. All are public by
+          default.
+        </li>
+        <li>
+          Stablecoins held privately in Railgun on Ethereum grew from $2.1M in
+          January 2024 to $51M in October 2026. That is still under 0.1% of a
+          $311B supply.
+        </li>
+        <li>
+          FinCEN withdrew its proposed mixer rule on 5 October 2026. The GENIUS
+          Act requires stablecoin issuers to be able to freeze, and
+          Gloam&apos;s design never stops them.
+        </li>
+      </ul>
 
       <h2 id="thesis">3. Thesis and principles</h2>
       <p>
-        Gloam asserts that private hold, private move, and private trade are
-        first-class product requirements for serious on-chain markets, not
-        optional skins on a public DEX.
+        Gloam asserts that private holding, private payment and selective proof
+        are first-class requirements for onchain money, not optional skins on a
+        public wallet.
       </p>
       <ul>
+        <li>
+          <strong>One owner, no key holder.</strong> A payment has one owner,
+          so the owner proves it on their own device. No committee, operator or
+          server holds a key or sees the secret inputs.
+        </li>
         <li>
           <strong>Honesty over theater.</strong> No mock private success. Claims
           expand only as contracts, circuits, and audits support them.
@@ -312,8 +344,9 @@ export default function WhitepaperPage() {
         assets, a public min-out floor, and rate numerators. Its circuit,
         verifier, and oracle-bound rate checks are built and tested, but it is
         switched off: neither live pool has a sealed-swap verifier set, so
-        every swap call reverts. It stays off until its solvency accounting is
-        redesigned and audited, and any re-enable goes through the 3-day
+        every swap call reverts. Its first design could leave the pool owing
+        an asset it does not hold (audit H1). It stays off while we build a new
+        engine for private trading, and any re-enable goes through the 3-day
         timelock.
       </p>
       <p>
@@ -337,8 +370,130 @@ export default function WhitepaperPage() {
         and carries no recipient label or expiry.
       </p>
 
-      <h2 id="threat">7. Threat model</h2>
-      <h3>7.1 In scope (design goals)</h3>
+      <h2 id="whats-new">7. What is new in Gloam</h2>
+      <p>
+        Gloam is not new cryptography. It is a new building block for finance:
+        private payments you can prove. This section draws the line exactly.
+      </p>
+      <h3>7.1 Not new</h3>
+      <ul>
+        <li>
+          The private pool design: notes, nullifiers and a Merkle tree, from
+          the Zcash lineage starting in 2016, and used by Tornado, Railgun and
+          Cloak.
+        </li>
+        <li>
+          Selective disclosure as an idea: Zcash and Railgun viewing keys,
+          Privacy Pools, and Zama decryption rights.
+        </li>
+      </ul>
+      <h3>7.2 New, as far as our research found</h3>
+      <ol>
+        <li>
+          <strong>Payroll total proof.</strong> The <code>payroll_total</code>{" "}
+          circuit proves that a run of up to 32 payments adds up to exactly a
+          total, across a count of people, all funded by the prover, without
+          showing who got what. Its public inputs are{" "}
+          <code>[asset, total, count, paymentsHash, context]</code>. Each slot
+          opens both the payment note and the note it spent, so a payment the
+          prover only received cannot be counted as one they made. We found
+          nothing like it.
+        </li>
+        <li>
+          <strong>Proofs scoped to one reader.</strong> Who the proof is for (a
+          label), its expiry, the chain and the pool are hashed into one public{" "}
+          <code>context</code> input:{" "}
+          <code>keccak256(abi.encode(&quot;gloam.proof.v1&quot;, kind, chainId, pool, expiresAt, label)) mod p</code>.
+          The <code>solvency</code>, <code>receipt</code> and{" "}
+          <code>payroll_total</code> circuits bind it into the proof, so
+          changing the label breaks it. Anyone can check a proof in a browser
+          with no wallet at <Link href="/verify">/verify</Link>. Viewing keys,
+          by contrast, show a holder&apos;s whole history and cannot be taken
+          back.
+        </li>
+        <li>
+          <strong>Private payments for AI agents.</strong> A private payment
+          method proposed for the Machine Payments Protocol from Tempo and
+          Stripe (tempoxyz/mpp-specs#376; MPP had no private method), private
+          x402 payments, and an MCP server that gives agents handles instead of
+          secrets, with spending limits.
+        </li>
+      </ol>
+      <p>
+        One honest limit: a reader can still forward a proof. It will say who
+        it was made for and when it expires, but nothing stops the forwarding.
+        A designated-verifier mode is next.
+      </p>
+
+      <h2 id="compare">8. How Gloam compares</h2>
+      <p>
+        Privacy splits into two jobs. Shared secrets, such as sealed auctions,
+        order books and lending pools, need someone to compute on many
+        people&apos;s hidden data, so FHE and MPC networks (Zama, Arcium) use a
+        committee that holds keys. A payment has one owner, so the owner proves
+        it on their own device and nobody else ever holds a key.
+      </p>
+      <p>
+        The difference shows up in a breach. If a committee or an operator is
+        breached, everyone who used it can be exposed, including past
+        payments. If one owner&apos;s device is breached, one person is
+        exposed. Gloam builds the payments product on proven zero-knowledge
+        maths, the way Stripe built on card networks.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="min-w-[640px]">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Who can see payments</th>
+              <th>Where they win</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>Gloam</strong>
+              </td>
+              <td>Only the owner, and whoever they prove one fact to</td>
+              <td>Owner-only privacy, proofs for one reader, payroll and agent rails on Tempo and Robinhood Chain</td>
+            </tr>
+            <tr>
+              <td>Zama (FHE)</td>
+              <td>A 13-node committee shares one global key</td>
+              <td>Computing on shared data, like auctions and lending</td>
+            </tr>
+            <tr>
+              <td>Arcium (MPC, Solana)</td>
+              <td>A node cluster, private while one node stays honest</td>
+              <td>Private shared state on Solana</td>
+            </tr>
+            <tr>
+              <td>Tempo Zones</td>
+              <td>The zone operator sees everything in the zone</td>
+              <td>Enterprises that want an operator in the loop</td>
+            </tr>
+            <tr>
+              <td>Helius Privacy</td>
+              <td>Helius&apos;s server receives the full secret inputs, amounts included</td>
+              <td>Speed on weak phones, and Solana reach</td>
+            </tr>
+            <tr>
+              <td>Railgun</td>
+              <td>Only the owner; viewing keys show the whole history</td>
+              <td>Years live, a public multi-party ceremony, external audits</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        We found no other product on Tempo or Robinhood Chain that combines
+        owner-only privacy, proofs for one reader, and payroll and agent rails.
+        The full comparison, with what a breach exposes and where each one
+        wins, is at <Link href="/docs/compare">/docs/compare</Link>.
+      </p>
+
+      <h2 id="threat">9. Threat model</h2>
+      <h3>9.1 In scope (design goals)</h3>
       <ul>
         <li>Observer reading a single address balance while assets are shielded</li>
         <li>
@@ -347,7 +502,7 @@ export default function WhitepaperPage() {
         </li>
         <li>Double-spend of the same note (nullifiers)</li>
       </ul>
-      <h3>7.2 Edges and residual leakage</h3>
+      <h3>9.2 Edges and residual leakage</h3>
       <ul>
         <li>Shield and unshield amounts and timing on the public chain</li>
         <li>RPC and network metadata if clients are careless</li>
@@ -361,7 +516,7 @@ export default function WhitepaperPage() {
           Correlation attacks when few users participate or amounts are unique
         </li>
       </ul>
-      <h3>7.3 Out of scope as “solved by crypto alone”</h3>
+      <h3>9.3 Out of scope as “solved by crypto alone”</h3>
       <ul>
         <li>Device malware, phishing, and coerced key disclosure</li>
         <li>Legal process and off-chain identity linkage</li>
@@ -369,7 +524,7 @@ export default function WhitepaperPage() {
         <li>Absolute anonymity against nation-state adversaries</li>
       </ul>
 
-      <h2 id="product">8. Product surface</h2>
+      <h2 id="product">10. Product surface</h2>
       <p>
         The testnet application at{" "}
         <Link href="/app">gloam.trade/app</Link> provides:
@@ -380,6 +535,10 @@ export default function WhitepaperPage() {
           Moderato testnet
         </li>
         <li>Portfolio with wallet balances, shielded balances, and faucet stocks</li>
+        <li>
+          Stock tokens on Robinhood Chain held and sent privately, like any
+          other asset in the vault
+        </li>
         <li>Public send and stock token transfer paths</li>
         <li>Shield deposits into the privacy vault</li>
         <li>
@@ -394,8 +553,8 @@ export default function WhitepaperPage() {
         <li>Private payroll, scheduled payroll, and payment requests</li>
         <li>Proofs of funds, payment, and payroll totals, checked at /verify</li>
         <li>
-          Private trade (sealedSwap): built, switched off pending audit. A
-          via-market path (cash out, public swap, re-shield) is available where
+          Private trade (sealedSwap): built, switched off while we build a new
+          engine for private trading. A via-market path (cash out, public swap, re-shield) is available where
           a public pool exists, with the swap size public on that edge
         </li>
       </ul>
@@ -407,28 +566,32 @@ export default function WhitepaperPage() {
         ). Marketing site and product share one brand: ink, paper, and a single green tint that marks what is private.
       </p>
 
-      <h2 id="roadmap">9. Roadmap</h2>
+      <h2 id="roadmap">11. Roadmap</h2>
       <ol>
         <li>
           <strong>Live (testnet):</strong> public path, proof-bound shield,
           unshield, private send with encrypted memos, the Gloam relay,
-          payroll, proofs of funds, payment, and payroll totals, the Tempo
+          payroll, proofs of funds, payment, and payroll totals, private agent
+          payments, stock tokens held and sent privately, the Tempo
           deployment, and pools with no admin withdraw and timelocked rule
           changes.
         </li>
         <li>
-          <strong>Built, switched off:</strong> sealed private trade. The
-          circuit, verifier, and oracle-bound rates are built and tested; it
-          stays off until its solvency accounting is redesigned and audited.
+          <strong>Underway:</strong> a new engine for private trading. The
+          first sealed-swap path (circuit, verifier, oracle-bound rates) is
+          built and tested but switched off. Trading mixes many people&apos;s
+          orders, so it needs its own design rather than the payment one.
         </li>
         <li>
-          <strong>Near term:</strong> stronger public-input privacy; anonymity
-          set growth; operational monitoring; encrypting the receive key at
-          rest.
+          <strong>Near term:</strong> closing the window in which a payer can
+          reclaim a direct payment; a designated-verifier mode for proofs;
+          encrypting the receive key at rest; anonymity set growth;
+          operational monitoring.
         </li>
         <li>
-          <strong>Mid term:</strong> deeper liquidity for stocks and memes;
-          issuer-scoped disclosure for regulated stablecoins on Tempo.
+          <strong>Mid term:</strong> issuer-scoped disclosure for regulated
+          stablecoins on Tempo; private trading of stock tokens on the new
+          engine.
         </li>
         <li>
           <strong>Production gate:</strong> external review (audits so far are
@@ -437,18 +600,7 @@ export default function WhitepaperPage() {
         </li>
       </ol>
 
-      <h2 id="competition">10. Positioning</h2>
-      <p>
-        Broad privacy protocols target multi-chain or multi-asset general
-        privacy. Gloam is intentionally narrow: Robinhood Chain for stocks and
-        memes, Tempo for stablecoin payments, product-led vault UX, and an SDK
-        and MCP server so other apps and agents can use the same vault.
-        Differentiation is venue and distribution
-        thesis, not a claim of novel cryptography relative to the broader
-        privacy literature.
-      </p>
-
-      <h2 id="risks">11. Risks and limitations</h2>
+      <h2 id="risks">12. Risks and limitations</h2>
       <ul>
         <li>
           Smart contract and circuit bugs: audits so far are internal, with no
@@ -460,12 +612,22 @@ export default function WhitepaperPage() {
           limited by a public 3-day delay
         </li>
         <li>Browser-local note storage and user operational error</li>
+        <li>
+          A payer can reclaim a direct payment until the payee moves it,
+          because the payer created the note and knows its key; a fix is in
+          progress
+        </li>
+        <li>
+          A stablecoin issuer can freeze the vault contract; the answer is to
+          screen deposits so flagged funds never enter
+        </li>
+        <li>A reader can forward a proof meant for them</li>
         <li>Regulatory and compliance uncertainty around privacy tools</li>
         <li>Thin anonymity sets in early usage</li>
         <li>L2 and bridge operational risk of the underlying chain</li>
       </ul>
 
-      <h2 id="non-claims">12. Explicit non-claims</h2>
+      <h2 id="non-claims">13. Explicit non-claims</h2>
       <p>
         Gloam does not claim mainnet readiness, an external audit, insurance of
         funds, legal immunity, or invisibility from investigation. Testnet
@@ -473,12 +635,13 @@ export default function WhitepaperPage() {
         real-world value. Nothing in this paper is investment advice.
       </p>
 
-      <h2 id="closing">13. Closing</h2>
+      <h2 id="closing">14. Closing</h2>
       <p>
-        Settlement will remain public. Strategy need not. Gloam builds the
-        sealed chamber beside the open book on Robinhood Chain, so holders can
-        shield, move, and eventually trade without printing every private
-        calculation to the street.
+        Settlement will remain public. Salaries, suppliers and strategies need
+        not. Gloam builds the sealed chamber beside the open book on Tempo and
+        Robinhood Chain, so people, teams and agents can hold, pay and prove
+        exactly what is needed, without printing every private calculation to
+        the street.
       </p>
       <div className="t-label pt-4">gloam.trade · testnet · hello@gloam.trade · @gloamtrade</div>
     </DocsLayout>
