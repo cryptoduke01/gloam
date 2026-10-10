@@ -28,7 +28,7 @@
  * an hour; past a limit it stays quiet. It solves what it can and hands a
  * person to an admin only when it has to, at most once per conversation.
  */
-import { askModel, systemPrompt, userPrompt, type AskInput, type ModelImage } from "./answer";
+import { askModel, systemPrompt, userPrompt, wantsHelper, type AskInput, type ModelImage } from "./answer";
 import { personaName } from "./persona";
 import { buildReport } from "./report";
 import {
@@ -44,6 +44,7 @@ import {
   isVague,
   looksLikeBugReport,
   looksLikeQuestion,
+  mayNeedHelp,
   memoryText,
   mentionsBot,
   messageText,
@@ -108,6 +109,8 @@ const GLOAM_GROUP_ID = -1004464028206;
 /** Answers per person per minute, and for everyone together. */
 const USER_PER_MIN = 4;
 const GLOBAL_PER_MIN = 40;
+/** Quick "should I answer this?" checks on messages that are not phrased as questions. */
+const CLASSIFY_PER_MIN = 12;
 /** Scam warnings per topic per minute, so a raid does not turn into a wall of warnings. */
 const WARN_PER_MIN = 2;
 /** Bug reports saved per person per minute. */
@@ -473,7 +476,18 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig): Promise<void> {
   // tagged on another member's message: that message is the question, and the answer goes to its author
   const target = tagged && !toBot && replied && otherMembers(replied, from, me) ? replied : null;
   const targetText = target ? scanCodes(messageText(target)).masked : "";
-  const asked = looksLikeQuestion(text);
+  let asked = looksLikeQuestion(text);
+  // no question mark, but asking for help, reporting a problem or getting Gloam wrong: a quick check decides
+  if (
+    !asked &&
+    !tagged &&
+    !ownPicture &&
+    mayNeedHelp(text) &&
+    (await hitRateLimit("tg:classify", "tg-classify", CLASSIFY_PER_MIN)).allowed &&
+    (await wantsHelper(text))
+  ) {
+    asked = true;
+  }
   const bug = (topic === TOPIC.testers || topic === TOPIC.feedback) && looksLikeBugReport(text);
   // a screenshot in Help, Testers or Feedback with no caption, or only a few words, gets a look
   const bareShot = Boolean(ownPicture) && !tagged && !asked && SCREENSHOT_TOPICS.has(topic) && wordCount(text) <= SHORT_CAPTION_WORDS;

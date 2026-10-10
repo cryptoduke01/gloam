@@ -126,6 +126,8 @@ const calls: Call[] = [];
 /** Every message sent in the whole run, never reset. */
 const everySend: Call[] = [];
 let modelReply = "Sure, Add privately is on Portfolio. Proofs take about 10 to 30 seconds.";
+/** What the "should I answer this?" check says. */
+let classifierReply = "NO";
 /** Files Telegram would serve, by file_id. */
 const files = new Map<string, Uint8Array>();
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
@@ -157,6 +159,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     return reply({ ok: false });
   }
   if (url.host === "api.anthropic.com") {
+    const system = Array.isArray(body.system) ? String((body.system[0] as { text?: string })?.text ?? "") : "";
+    if (system.startsWith("You decide whether Glim")) {
+      calls.push({ host: url.host, method: "classify", body, headers });
+      return reply({ content: [{ type: "text", text: classifierReply }], stop_reason: "end_turn" });
+    }
     calls.push({ host: url.host, method: "messages", body, headers });
     return reply({ content: [{ type: "text", text: modelReply }], stop_reason: "end_turn" });
   }
@@ -165,10 +172,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 
 const sends = () => calls.filter((c) => c.method === "sendMessage");
 const deletes = () => calls.filter((c) => c.method === "deleteMessage");
-const modelCalls = () => calls.filter((c) => c.host === "api.anthropic.com");
+const modelCalls = () => calls.filter((c) => c.method === "messages");
+const classifyCalls = () => calls.filter((c) => c.method === "classify");
 function reset() {
   calls.length = 0;
   modelReply = "Sure, Add privately is on Portfolio. Proofs take about 10 to 30 seconds.";
+  classifierReply = "NO";
   // each test starts with fresh answer limits (they live in process memory here)
   (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
 }
@@ -667,6 +676,22 @@ await test("names: wallet names and separators", () => {
   assert.equal(cleanName("vitalik.eth"), "vitalik");
   assert.equal(cleanName("Ada / Gloam"), "Ada");
   assert.equal(cleanName("Tochy Exchange"), "Tochy Exchange");
+});
+
+await test("implied questions and wrong claims get a quick check, banter does not", async () => {
+  reset();
+  const hev = user(61, "Heverie");
+  classifierReply = "YES";
+  await handleUpdate(upd(inTopic(TOPIC.general, "Okay so on gloam itself you can't add network", hev)));
+  assert.equal(classifyCalls().length, 1, "checked");
+  assert.equal(sends().length, 1, "answered");
+  classifierReply = "NO";
+  await handleUpdate(upd(inTopic(TOPIC.general, "i can't wait for the testing to start fr", hev)));
+  assert.equal(sends().length, 1, "hype is left alone");
+  await handleUpdate(upd(inTopic(TOPIC.general, "lfg this is going to be huge", hev)));
+  assert.equal(classifyCalls().length, 2, "no check for off-topic chatter");
+  assert.equal(sends().length, 1);
+  assert.ok(looksLikeQuestion("ok so how do i add the network"));
 });
 
 await test("General: chatter stays quiet, a tag or Glim's name gets a reply", async () => {

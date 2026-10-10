@@ -151,14 +151,24 @@ export function isVague(text: string, persona: string): boolean {
 // ---------------------------------------------------------------- triggers
 
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
-const GREETING = /^(?:(?:hi|hey|hello|yo|gm|hiya|guys|all|everyone|team|folks|pls|please)\b[\s,!.:-]*)+/i;
+const GREETING = /^(?:(?:hi|hey|hello|yo|gm|hiya|guys|all|everyone|team|folks|pls|please|ok|okay|okk|so|hmm|wait|but|then|also|alright|bro|boss)\b[\s,!.:-]*)+/i;
 const QUESTION_START =
-  /^(?:how|what|why|where|when|wen|who|which|whats|can|could|would|will|should|does|do|did|is|are|has|have|any|anyone|anybody|my|i can't|i cant|i cannot|i can not|not working|error|pls|please explain)(?![\p{L}\p{N}_])/iu;
+  /^(?:how|what|why|where|when|wen|who|which|whats|can|could|would|will|should|does|do|did|is|are|has|have|any|anyone|anybody|my|i can't(?! wait)|i cant(?! wait)|i cannot|i can not|not working|error|pls|please explain)(?![\p{L}\p{N}_])/iu;
 
 /**
  * Reads like a question, which the helper answers unprompted in every topic
  * except Announcements. Conservative: a "?" or one of a few opening words.
  */
+/** Words that hint a message is about Gloam or a problem, worth a quick check when it isn't phrased as a question. */
+const HELP_HINT =
+  /\b(?:gloam|glim|wallet|network|chain|faucet|tempo|robinhood|testnet|tokens?|deposit|add(?:ed|ing)?|privately|claim|code|phrase|error|can'?t|cannot|not working|stuck|fail\w*|issue|bug|testers?|rewards?|app|site|website|recovery|passkey|proofs?|payments?|send|receive|balance|eth|usdg|stocks?)\b/i;
+
+/** Long enough and on topic: worth asking the model whether the helper should reply. */
+export function mayNeedHelp(text: string): boolean {
+  const t = norm(text).replace(URL_RE, " ").trim();
+  return t.split(/\s+/).length >= 5 && HELP_HINT.test(t);
+}
+
 export function looksLikeQuestion(text: string): boolean {
   const t = norm(text)
     .replace(URL_RE, " ")

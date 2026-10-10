@@ -155,6 +155,17 @@ export type ModelImage = { mediaType: "image/jpeg" | "image/png" | "image/webp";
  * The model's reply text, or null when there is no key, the call fails or the
  * model declines. A picture goes in the same user turn, before the text.
  */
+const CLASSIFIER_MODEL = "claude-haiku-5-5";
+const CLASSIFIER_SYSTEM = `You decide whether Glim, the helper bot in Gloam's Telegram group, should reply to a member's message. Gloam is private stablecoin payments on testnet. Answer with exactly YES or NO.
+YES when the message asks for help (even without a question mark), describes a problem or an error, states something about how Gloam works that may be wrong, or gives product feedback the helper can usefully respond to.
+NO for greetings, hype, jokes, thanks, chat between members that needs no help, or anything not about Gloam or wallets.`;
+
+/** For a message not phrased as a question: should the helper answer it anyway? */
+export async function wantsHelper(text: string): Promise<boolean> {
+  const out = await askModel(CLASSIFIER_SYSTEM, `Message: ${text.slice(0, 600)}`, null, CLASSIFIER_MODEL);
+  return /^\s*yes\b/i.test(out ?? "");
+}
+
 export async function askModel(system: string, user: string, image: ModelImage | null = null, model = botModel()): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) return null;
