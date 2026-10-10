@@ -14,7 +14,7 @@
 
 ---
 
-Public chains put finance on public rails: every holding, every size, every move is visible. Robinhood Chain does it for tokenized stocks and crypto; Tempo does it for stablecoin payments. Gloam is the sealed chamber on top. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other onchain apps and AI agents build on — live today on Robinhood Chain (flagship) and Tempo.
+Public chains put finance on public rails: every holding, every size, every move is visible. Robinhood Chain does it for tokenized stocks and crypto; Tempo does it for stablecoin payments. Gloam is the sealed chamber on top. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other onchain apps and AI agents build on, live on testnet today on Robinhood Chain (flagship) and Tempo.
 
 ## Three surfaces, one private core
 
@@ -36,7 +36,7 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 | Path | Status | What you can do |
 | --- | --- | --- |
 | **Shield** | Live, proof-gated | Deposit ETH, USDG (Paxos Global Dollar) + faucet stock tokens on Robinhood Chain, PathUSD and other stablecoins on Tempo; the hardened pool enforces `shieldBound()` so a deposit proves `commitment == Poseidon(secret, amount, asset)` (audit C1) |
-| **Private send** | Live | Send inside the vault to a receive tag; an on-chain encrypted memo inbox (`GloamPayMemo`) for discovery, with the sender no longer revealed |
+| **Private send** | Live | Send inside the vault to a receive tag; an on-chain encrypted memo inbox (`GloamPayMemo`) lets the recipient find it. Tempo's memo board does not record who posted. The Robinhood Chain board still indexes the poster, so there the sender stays off the memo record only when the Gloam relay posts it. Without the relay, your wallet is the visible submitter on either chain |
 | **Private payroll** | Live | Upload a CSV and pay a whole team at once in USDG (Robinhood Chain) or PathUSD (Tempo). Gloam-address payees are paid directly and notified on-chain; everyone else gets a claim link. Crash-safe resume, results export. [Docs](https://gloam.trade/docs/payroll) |
 | **Scheduled payroll** | Live | Save a pay list as a schedule (monthly, every two weeks, weekly or one time) with a cap per run and an end date. A "Payroll due" reminder runs it in one click. Runs happen in your browser because only you hold the keys; schedules are encrypted at rest |
 | **Payment requests** | Live | Share a link or QR that opens Pay with your Gloam address, amount, asset and reference filled in. The details sit after the `#`, so they never reach a server and nothing about the request goes on-chain |
@@ -45,20 +45,23 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 | **Sanctions screening** | Live | Checked against a vendored snapshot of the OFAC sanctioned-address list (EVM): the depositing wallet in the app before signing and at `/api/screen`, and every cash-out address inside the relay before it submits. Public addresses only; a blocked wallet sees one neutral message. Refresh with `node app/scripts/refresh-ofac-list.mjs`; optional Chainalysis check via `CHAINALYSIS_API_KEY` |
 | **Issuer policies (Tempo)** | Live | Deposits and cash outs on Tempo also respect the stablecoin's TIP-403 transfer policy: the wallet must be allowed to send and the vault to receive on deposit, the vault to send and the recipient to receive on cash out. Read-only checks in the app, at `/api/screen` and in the relay, next to sanctions screening, with a warning when an issuer policy or pause would block the vault itself. Compliant privacy with no operator |
 | **Cash out** | Live, proof-gated | Unshield to a public balance with a real browser-generated Groth16 proof |
-| **Selective disclosure** | Live | Prove you hold a specific shielded balance to a party you choose, revealing nothing else. Anyone verifies it at [`/verify`](https://gloam.trade/verify), no wallet |
-| **Proof of funds** | Live, new circuit | Prove you hold *at least* an amount across up to four private balances, without showing the balance. The proof names who it is for and when it expires; the verifier checks it in the browser against the live vault, including that the backing balances are still unspent. [Docs](https://gloam.trade/docs/proofs) |
-| **Proof of payment** | Live, new circuit | A receipt for a payment you received: show the amount, or only that it was at least some amount, anchored to the real payment in the vault |
+| **Selective disclosure** | Live | Prove you hold a specific shielded balance, revealing nothing else. This older `gloamdisc1` disclosure names no recipient and has no expiry, so whoever holds it can check it at [`/verify`](https://gloam.trade/verify), no wallet. The newer `gloamfunds1`, `gloampay1` and `gloamroll1` proofs below carry a label and an expiry |
+| **Proof of funds** | Live, new circuit | Prove you hold *at least* an amount across up to four private balances, without showing the balance. A `gloamfunds1` proof carries a label (who it is for) and an expiry, both bound into the proof; it is verified off-chain at [`/verify`](https://gloam.trade/verify), in the browser against the live vault, including that the backing balances are still unspent. [Docs](https://gloam.trade/docs/proofs) |
+| **Proof of payment** | Live, new circuit | A `gloampay1` receipt for a payment you received: show the amount, or only that it was at least some amount, anchored to the real payment in the vault. Same label and expiry, verified off-chain at `/verify` |
+| **Payroll total proof** | Live, new circuit | A `gloamroll1` proof that a payroll run paid exactly a total in a given number of private payments, without showing any single amount. Same label and expiry, verified off-chain at `/verify` |
 | **Private agent payments (x402)** | SDK + MCP live | Agents pay for tools over HTTP 402 with a private send. The payment note is sealed to the payee's receive tag, and the payee sweeps it into a fresh note before serving, so the payer cannot spend it back. `settleGloamPayment` in the SDK, `gloam_fetch_paid` / `gloam_verify_payment` in the MCP server |
 | **Agent spending limits** | Live (MCP) | The owner sets each agent's assets, per-payment and per-day caps, allowed recipients, tools and expiry. Every spend is checked and logged before it is proved or signed; no limits means no spending. Note secrets stay in an encrypted store inside the server and the agent only sees handles. Enforced by the MCP server, off-chain. `gloam_get_limits`, `gloam_get_spending_report`. [Config](./mcp/README.md#spending-limits) |
 | **Hosted MCP server** | Live | Paste `https://www.gloam.trade/mcp` into Claude (Settings, Connectors, Add custom connector), ChatGPT, Cursor or any MCP client; nothing to install. Read and plan only: networks and assets, vault stats, payment request links, proof checks, deposit plans and MPP how-to. It never signs and refuses anything that looks like a key or note secret; for signing, the local server (`npx -y @gloamtrade/mcp`). [Docs](https://gloam.trade/docs/agents#connect-by-url) |
 | **Transparency page** | Live | [`/transparency`](https://gloam.trade/transparency) shows what anyone can see about the vault on each network: what it holds, counts of deposits, private transfers, cash-outs and payment messages, and recent public activity, read straight from public nodes |
-| **Private trade** | Disabled, by design | `sealedSwap` is off until the H1 solvency accounting lands. Oracle-bound rates are built and tested; see below |
+| **Private trade** | Built, switched off | `sealedSwap` is built and tested but off on both chains (`sealedSwapVerifier` is `0x0`) until the H1 solvency accounting is redesigned and audited. Oracle-bound rates are built and tested too; see below |
 
 Every private action is proof-gated on-chain. No mock fills, no theatrical privacy. If a path cannot be both private and solvent yet, it waits. See [`contracts/audit/H1-SWAP-SOLVENCY.md`](./contracts/audit/H1-SWAP-SOLVENCY.md).
 
 ## Selective disclosure: private by default, proven by choice
 
-The answer to the "dark pool" objection. A holder mints a disclosure for one note; the recipient verifies, entirely in the browser, that the holder owns that exact balance in the vault, without learning their identity, their note secret, or any other holding. It reuses the shield circuit (no new trusted setup): the proof binds the commitment to (amount, asset), and the verifier confirms the commitment is a live note via `pool.commitmentSeen`. Generate at `/app/disclose`, verify at `/verify`.
+The answer to the "dark pool" objection. A holder mints a disclosure for one note; the recipient verifies, entirely in the browser, that the holder owns that exact balance in the vault, without learning their identity, their note secret, or any other holding. It reuses the shield circuit (no new trusted setup): the proof binds the commitment to (amount, asset), and the verifier confirms the commitment is a live note via `pool.commitmentSeen`. Generate at `/app/disclose`, verify at `/verify`. This original `gloamdisc1` format is not bound to a recipient and does not expire.
+
+The newer proofs, `gloamfunds1` (proof of funds), `gloampay1` (proof of payment) and `gloamroll1` (payroll total), each carry a label naming who the proof is for and an expiry, both bound into the proof. They are verified off-chain at [`/verify`](https://gloam.trade/verify) against the live vault.
 
 ## Robinhood Chain native
 
@@ -69,19 +72,19 @@ Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026
 - **Groth16 runs native.** bn254 pairing precompiles are present and the 96 KB code-size cap fits large verifier contracts, so shield / unshield / transfer proofs verify with no special infra.
 - **First-class ERC-4337** opens the door to gasless private transactions.
 
-## Live on Tempo
+## Live on Tempo testnet
 
-The same private core now runs on [Tempo](https://tempo.xyz), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with issuer-compatible selective disclosure. The sealed pool and verifiers are deployed on Tempo Moderato (`42431`), and the app's runtime network toggle switches the whole product between chains — shield PathUSD, send, and cash out, proof-gated end to end. Because Tempo blocks native `msg.value` and pays gas in stablecoins, Gloam shields ERC-20 stablecoins there instead of a native asset. Design and constraints: [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
+The same private core now runs on [Tempo](https://tempo.xyz) testnet, the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with selective disclosure a user can hand an issuer or auditor. The pool and verifiers are deployed on Tempo Moderato (`42431`), and the app's runtime network toggle switches the whole product between chains: shield PathUSD, send, and cash out, proof-gated end to end. Because Tempo blocks native `msg.value` and pays gas in stablecoins, Gloam shields ERC-20 stablecoins there instead of a native asset. Design and constraints: [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
 
 ## Trust, verified
 
 Privacy earns the mainnet gate only when it is auditable and correct.
 
-- **Self-audited, then re-verified.** A Kensho pass found a critical funded drain, two highs, and a set of mediums in the sealed pool and client. Every critical and high is fixed and **verified on-chain and in code** (independent re-audit): the drainable pool drained and de-published, value-binding enforced at deposit (C1), the swap path disabled (H1), the re-open path closed (one-way verifier + two-step ownership). Full status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
-- **No middlemen.** Redeployed 2026-09-29 on both networks with no admin withdraw: nobody, including the team, can move pooled funds, and after setup every verifier, rate or oracle change must be queued on-chain 3 days ahead (`endSetup()`, `queueChange`, 93/93 tests). Verify `setupMode() == false` on the pools listed below.
+- **Self-audited, then re-verified.** A Kensho pass found a critical funded drain, two highs, and a set of mediums in the sealed pool and client. Every critical and high is fixed or, for H1, switched off, and **verified on-chain and in code** (internal re-audit): the drainable pool drained and de-published, value-binding enforced at deposit (C1), the swap path disabled (H1), the re-open path closed (one-way verifier + two-step ownership). Audits so far are internal; an external audit is part of the mainnet gate. Full status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
+- **No admin withdraw, timelocked rule changes.** Redeployed 2026-09-29 on both networks without an admin withdraw: there is no function the team can call to take pooled funds, and notes leave only through an unshield proof. The owner wallet can still swap verifiers or change rates and oracles, but setup has ended, so every such change must be queued on-chain and waits a public 3-day delay before it can run (`endSetup()`, `queueChange`, 93/93 tests). Verify `setupMode() == false` on the pools listed below.
 - **Selective disclosure, not a mixer.** Prove balance or a payment to a counterparty or auditor without revealing everything. The right posture for a regulated-sponsor chain.
 - **Fast vault sync, same privacy.** The app loads the vault's public leaf list (every commitment, in order) from `/api/vault-leaves` in one request instead of walking the chain, rebuilds the Merkle tree in the browser, and uses it only if the root matches the pool's on-chain root; otherwise it reads the chain itself. The request names only the network and is the same for everyone, so the server never learns which notes are yours.
-- **Honest gates.** The trusted setup is a dev ceremony and mainnet needs a multi-party one; note secrets are encrypted at rest (AES-GCM under a device key, audit M-1), though the key is device-bound. These are disclosed, not hidden. Mainnet `4663` is blocked in-product.
+- **Honest gates.** The trusted setup is a single-contributor dev ceremony and mainnet needs a multi-party one. Note secrets are encrypted at rest (AES-GCM under a non-extractable device key, or wrapped by a passkey PRF), which partly fixes audit M-1; encrypting the receive key at rest is a separate fix in progress. These are disclosed, not hidden. Mainnet `4663` is blocked in-product.
 
 ## Using the SDK
 
@@ -114,29 +117,30 @@ gloam/
   contracts/             Foundry · ShieldPoolPoseidon vault, verifiers, circuits, audit
 ```
 
-**Contracts — Robinhood Chain testnet `46630`**
+**Contracts: Robinhood Chain testnet `46630`**
 
 | Role | Address |
 | --- | --- |
-| Sealed vault `ShieldPoolPoseidon` (no admin access to funds, 3-day timelock on rule changes) | [`0x7240…d740`](https://explorer.testnet.chain.robinhood.com/address/0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740) |
-| Pay memo `GloamPayMemo` | [`0x689e…5DCE`](https://explorer.testnet.chain.robinhood.com/address/0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE) |
+| Sealed vault `ShieldPoolPoseidon` (no admin withdraw, 3-day timelock on rule changes) | [`0x7240…d740`](https://explorer.testnet.chain.robinhood.com/address/0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740) |
+| Dual-proof verifier `DualProofVerifier` | [`0xB077…f7eF`](https://explorer.testnet.chain.robinhood.com/address/0xB077c620384813bB31Bb82Cd55b63608Ac20f7eF) |
+| Pay memo `GloamPayMemo` (first deploy, indexes the poster) | [`0x689e…5DCE`](https://explorer.testnet.chain.robinhood.com/address/0x689ebd9d30E0235c73fd8f10236F850CDB3c5DCE) |
 
-**Contracts — Tempo Moderato testnet `42431`**
+**Contracts: Tempo Moderato testnet `42431`**
 
 | Role | Address |
 | --- | --- |
-| Sealed vault `ShieldPoolPoseidon` (no admin access to funds, 3-day timelock on rule changes) | [`0x841D…d5eb`](https://explore.testnet.tempo.xyz/address/0x841dc046ea3cc842ba3a855731472c6eb0f2d5eb) |
+| Sealed vault `ShieldPoolPoseidon` (no admin withdraw, 3-day timelock on rule changes) | [`0x841D…d5eb`](https://explore.testnet.tempo.xyz/address/0x841dc046ea3cc842ba3a855731472c6eb0f2d5eb) |
 | Dual-proof verifier `DualProofVerifier` | [`0x82F4…03A2`](https://explore.testnet.tempo.xyz/address/0x82f4ece6533e48574914bedeb55a8242bc1a03a2) |
-| Pay memo `GloamPayMemo` | [`0x3ca8…b4E3`](https://explore.testnet.tempo.xyz/address/0x3ca88712e9219b5ee4c82d31cafeab64c9e9b4e3) |
+| Pay memo `GloamPayMemo` (no poster in the event) | [`0x3ca8…b4E3`](https://explore.testnet.tempo.xyz/address/0x3ca88712e9219b5ee4c82d31cafeab64c9e9b4e3) |
 
-The pre-C1 RH pool `0x4F38…` is drained and retired, never use it. Circuits (Groth16 + Poseidon + depth-20 Merkle membership): `shield`, `transfer`, `unshield`, `sealedSwap`. Details in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md).
+Earlier pools on both networks are superseded and listed in [`contracts/ARCHITECTURE.md`](./contracts/ARCHITECTURE.md); the pre-C1 RH pool `0x4F38…` is drained and retired, never use it. Circuits (Groth16 on BN254, Circom 2.1.6, Poseidon, depth-20 Merkle membership): `shield`, `transfer`, `unshield` and `sealedSwap` (disabled) for the pool, plus `solvency`, `receipt` and `payroll_total` for the off-chain proofs. Constraint counts and the dev-ceremony note are in [`contracts/circuits/README.md`](./contracts/circuits/README.md).
 
 ## Local
 
 ```bash
 pnpm install
 pnpm --filter @gloamtrade/sdk build        # build the SDK
-cd contracts && forge test            # contracts (67 tests)
+cd contracts && forge test            # contracts (93 tests)
 pnpm --filter @gloamtrade/sdk test         # SDK core self-tests
 ```
 

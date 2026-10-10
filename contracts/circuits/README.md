@@ -1,121 +1,124 @@
-# Gloam circuits (Phase 2)
+# Gloam circuits
 
-Proof system TBD (Groth16 / Plonk). **Do not deploy a mock verifier that always returns true on a funded pool.**
+**Proof system:** Groth16 on BN254. Circuits are written in Circom 2.1.6 (`pragma circom 2.1.6` in every file) with circomlib 2.0.5, and proved and verified with snarkjs 0.7.5, in the browser and in Node. Pool circuits are checked on-chain by snarkjs-exported Solidity verifiers; the proofs a holder shares with others are checked off-chain.
 
-## Note scheme (must match `NoteLib.sol` + `app/src/lib/note.ts`)
+**Trusted setup: dev ceremony only.** Every proving key comes from a 2^16 Powers of Tau file and a single-contributor phase-2 contribution with throwaway entropy. That is fine for testnet and not for real money: whoever held that entropy could forge proofs. A multi-party ceremony, with published transcripts and repinned artifact hashes, is required before mainnet (see [`../PRODUCTION.md`](../PRODUCTION.md), audit M-2).
+
+**Do not deploy a mock verifier that always returns true on a funded pool.**
+
+## Circuits
+
+| Circuit | Source | Constraints | Public inputs | Checked by | Status (testnet) |
+| --- | --- | --- | --- | --- | --- |
+| shield | `shield/shield.circom` | 390 | `commitment, amount, asset` | On-chain, `ShieldIVerifier` via `shieldBound()` | Live |
+| transfer (1 in, 2 out) | `transfer/transfer.circom` | 6,270 | `root, nullifier, newCommitment0, newCommitment1` | On-chain, `DualProofVerifier` (4 inputs) | Live |
+| unshield | `unshield/unshield.circom` | 5,491 | `root, nullifier, asset, amount, recipient` | On-chain, `DualProofVerifier` (5 inputs) | Live |
+| sealedSwap | `sealedSwap/sealedSwap.circom` | 6,649 | `root, nullifier, newCommitmentOut, newCommitmentChange, assetIn, assetOut, amountOutMin, rateIn, rateOut` | On-chain verifier built, not wired (`sealedSwapVerifier = 0`) | **Disabled** |
+| solvency (proof of funds) | `solvency/solvency.circom` | 22,244 | `root, asset, threshold, context, nullifier[0..3]` | Off-chain, gloam.trade/verify | Live |
+| receipt (proof of payment) | `receipt/receipt.circom` | 5,510 | `root, commitment, asset, minAmount, reveal, shownAmount, context` | Off-chain, gloam.trade/verify | Live |
+| payroll_total | `payroll_total/payroll_total.circom` | 37,278 | `asset, total, count, paymentsHash, context` | Off-chain, gloam.trade/verify | Live |
+
+All Merkle membership uses `common/merkle_poseidon.circom` at depth 20. Browser artifacts live in `app/public/circuits/` (`shield`, `transfer`, `unshield`, `sealed_swap`, `funds` for solvency, `receipt`, `payroll_total`).
+
+**`context`** (solvency, receipt, payroll_total) is `keccak256(abi.encode("gloam.proof.v1", kind, chainId, pool, expiresAt, verifier)) mod p`. It binds the label naming who the proof is for and its expiry into the proof, so a `gloamfunds1`, `gloampay1` or `gloamroll1` proof forwarded to someone else still shows who it was made for. The older `gloamdisc1` balance disclosure reuses the shield circuit and has no `context`, so it carries no recipient or expiry.
+
+## Note scheme (Poseidon)
+
+Must match `src/lib/NoteLibPoseidon.sol` and `app/src/lib/notePoseidon.ts`.
 
 ```
-secret        ← 32 random bytes (wallet / browser only)
+secret        ← random field element (wallet / browser only)
 amount        ← uint256
-asset         ← address (0 = ETH)
+asset         ← address (0 = native)
 
-commitment = keccak256(secret || amount || asset)   // abi.encodePacked
-nullifier  = keccak256(secret || commitment)
+commitment = Poseidon(secret, amount, asset)
+nullifier  = Poseidon(secret, commitment)
+root       = PoseidonMerkle(commitment, path…)   // depth 20
 ```
 
-Phase-1 deposits that used a random unbound commitment cannot open under this scheme — only notes created after the app bound commitments.
+## Pool circuits
 
-## Unshield circuit (goal)
+### Shield (deposit)
 
-**Private inputs:** `secret`, Merkle path to `commitment`, `leafIndex`  
-**Public inputs (order fixed, `PROOF_LAYOUT_VERSION = 2`):**
+Proves the inserted leaf opens to the public `(amount, asset)` under some secret, so a deposit cannot embed more value than it sends (audit C1). **Private:** `secret`.
+
+### Unshield
+
+**Private:** `secret`, Merkle path to `commitment`.  
+**Public (order fixed, `PROOF_LAYOUT_VERSION = 2`):**
 
 | Index | Name | Notes |
 | --- | --- | --- |
-| 0 | `root` | Must be a known ShieldPool root |
+| 0 | `root` | Must be a known pool root |
 | 1 | `nullifier` | Marks note spent |
 | 2 | `asset` | `uint160` cast |
 | 3 | `amount` | Exact exit amount |
-| 4 | `to` | Recipient `uint160` |
+| 4 | `recipient` | `uint160`, bound so a relayer cannot redirect the payout |
 
-**Constraints:**
+**Constraints:** `commitment = H(secret, amount, asset)`; Merkle path proves `commitment` is in the tree at `root`; `nullifier = H(secret, commitment)`; range checks.
 
-1. `commitment = H(secret, amount, asset)`
-2. Merkle path proves `commitment` ∈ tree at `root`
-3. `nullifier = H(secret, commitment)`
-4. Range / field checks as required by the snark backend
+### Transfer
 
-## Transfer circuit (goal)
-
-Spend one note → two new commitments (change + send).
-
-**Public inputs:**
+Spend one note into two new commitments (payment + change), same asset.
 
 | Index | Name |
 | --- | --- |
 | 0 | `root` |
 | 1 | `nullifier` |
-| 2 | `newCommitment0` |
-| 3 | `newCommitment1` |
+| 2 | `newCommitment0` (payment) |
+| 3 | `newCommitment1` (change) |
 
 **Private:** secret, amount/asset of spent note, split amounts, new secrets, Merkle path.  
-Value conservation: `amount_in = amount_out0 + amount_out1` (same asset).
+Value conservation: `amount_in = amount_out0 + amount_out1`.
 
-## Repo layout (next)
+### Sealed swap (disabled)
 
-```
-circuits/
-  README.md          ← you are here
-  unshield/          ← circom or noir source (TBD)
-  transfer/
-  keys/              ← never commit toxic waste; only verifying keys
-```
+Built and compiled, but private trade is switched off pending audit of its solvency accounting. See [`../SEALED_TRADE.md`](../SEALED_TRADE.md).
 
-## Offchain stack (app)
+## Verifiers (`src/verifiers/`)
+
+| Contract | Role | On a live pool? |
+| --- | --- | --- |
+| `ShieldVerifier` + `ShieldIVerifier` | Groth16 shield proof | Yes, as `shieldVerifier` |
+| `UnshieldVerifier` + `UnshieldIVerifier` | Groth16 unshield proof | Yes, behind `DualProofVerifier` |
+| `TransferVerifier` + `TransferIVerifier` | Groth16 transfer proof | Yes, behind `DualProofVerifier` |
+| `DualProofVerifier` | Routes 5 inputs to unshield, 4 to transfer | Yes, as `verifier` |
+| `SealedSwapVerifier` + `SealedSwapIVerifier` | Groth16 sealed swap proof | **No** (`sealedSwapVerifier = 0`) |
+| `ScaffoldUnshieldVerifier` / `ScaffoldIVerifier` | Old placeholder | **Never** on a funded pool |
+| `RejectVerifier` | Always false (locks a path) | Tests / emergency lock only |
+
+Live addresses: [`../ARCHITECTURE.md`](../ARCHITECTURE.md). Current pools: Robinhood Chain `46630` `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740`, Tempo `42431` `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb`. Earlier pools (including the Phase-1 keccak pool `0x2BD9…`) are superseded.
+
+## App helpers
 
 | Module | Role |
 | --- | --- |
-| `app/src/lib/merkle.ts` | Keccak tree = Solidity |
-| `app/src/lib/treeSync.ts` | Rebuild leaves from `Shielded` events |
-| `app/src/lib/prover.ts` | Pack unshield witness (no snark yet) |
-| `app/.../MoveView` | Resync tree + “Build unshield witness” |
-
-## Ship order
-
-1. ~~NoteLib + pool public-input layout~~ (contracts)
-2. ~~TS note helpers matching NoteLib~~ (app)
-3. ~~Merkle path + tree sync + witness pack~~ (app)
-4. Circom/Noir unshield → trusted setup → `Groth16Verifier.sol`
-5. Deploy verifier, `setVerifier` only after verification tests
-6. Wire Move / Unshield UI to real proofs only
+| `app/src/lib/notePoseidon.ts` | Note commitments and nullifiers |
+| `app/src/lib/merklePoseidon.ts` | Poseidon tree = Solidity |
+| `app/src/lib/treeSync.ts` | Rebuild leaves from pool events |
+| `app/src/lib/proverPoseidon.ts`, `proverTransfer.ts` | Witness builders |
+| `app/src/lib/proveClient.ts` | Browser snarkjs |
+| `app/src/lib/proofs/` | Proof of funds, payment and payroll total (prove + verify) |
 
 ## Tools
 
 ```bash
 # one-time
-cargo install --git https://github.com/iden3/circom.git --tag v2.1.9 circom
+cargo install --git https://github.com/iden3/circom.git --tag v2.1.9 circom   # any compiler >= 2.1.6
 cd contracts/circuits
-npm i snarkjs@0.7.5
+npm i
 npm run check-tools
 
-# compile scaffold circuit
+# compile one pool circuit
 mkdir -p build/unshield
-circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield
+circom unshield/unshield.circom --r1cs --wasm --sym -o build/unshield -l node_modules
 
-# full groth16 pipeline (dev ceremony — NOT production)
-# see scripts in package history / snarkjs docs; keys land in build/
+# proof-of-funds / payment / payroll circuits: compile, dev setup, copy artifacts to the app
+node scripts/build-proof-circuits.mjs
+node scripts/test-proof-circuits.mjs
 ```
 
-### Verifiers
-
-| Contract | Circuit | Safe on live keccak pool? |
-| --- | --- | --- |
-| `ScaffoldUnshieldVerifier` | old placeholder | **No** |
-| `UnshieldVerifier` | **real** Poseidon note+Merkle (5363 constraints) | **No** — needs Poseidon tree pool |
-| `RejectVerifier` | always false | Yes (locks exits) |
-
-### Real circuit (current `unshield/unshield.circom`)
-
-```
-commitment = Poseidon(secret, amount, asset)
-nullifier  = Poseidon(secret, commitment)
-root       = PoseidonMerkle(commitment, path…)
-```
-
-Proven end-to-end with snarkjs (`OK!` on real-input.json).  
-App helpers: `app/src/lib/notePoseidon.ts`, `merklePoseidon.ts`, `proverPoseidon.ts`.
-
-### Deploy Phase-2 stack (one command)
+### Deploy the pool stack (testnet)
 
 ```bash
 cd contracts && forge build
@@ -135,9 +138,8 @@ NEXT_PUBLIC_HASH_SCHEME=poseidon
 NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=<deploy block>
 ```
 
-App `/app/move` → **Prove & unshield** uses browser snarkjs + `/public/circuits/*` (dev keys).
-
 ## Safety
 
-- Live RH testnet pool (`0x2BD9…`) is **Phase-1** (verifier = 0). Redeploy or carefully migrate for layout v2.
+- Dev-ceremony keys only. Never present them as production.
 - Unit tests may use `MockVerifier`; production never does.
+- Every regeneration of a proving key invalidates proofs made with the previous key; for the pool circuits the on-chain verifier must also be redeployed and switched through the 3-day timelock.

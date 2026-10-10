@@ -1,8 +1,13 @@
 # Tempo expansion: design and positioning
 
-Status: design. No Tempo contracts deployed yet. This is the plan that guides
-Phase 1. Colosseum permits building up to two months before the Sep 14 start, so
-this can be built now; judging weighs progress shown during the window.
+Status: **live on Tempo Moderato testnet.** Current pool
+`0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` (redeployed 2026-09-29, block
+37411195, no admin withdraw, timelocked rule changes) and memo board
+`0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3`. Shield PathUSD and other test
+stablecoins, private send, cash out, payroll, proofs and the relay all run there.
+Private trade is off, as on Robinhood Chain. Mainnet is not live. The sections
+below are the original design, annotated with what shipped (re-checked
+2026-10-10).
 
 Gloam runs one product on two chains: the flagship on Robinhood Chain
 (tokenized-equity privacy) and an expansion on Tempo (private stablecoin
@@ -61,17 +66,22 @@ This is a real design constraint and it gates asset choice.
 Resolution, which is also the differentiator (the "compliant privacy" frame that
 won for Encifher and Mercantill):
 
-- **Selective disclosure (live today).** A user can prove one balance or one
-  payment to one party. Extend the disclosure target set to include an issuer or
-  auditor scope.
-- **Issuer viewing key (new, Tempo-specific).** An optional issuer-scoped view
+- **Selective disclosure (live on testnet).** The older `gloamdisc1` disclosure
+  proves one balance and names no party. The newer proof of funds, proof of
+  payment and payroll total proofs (`gloamfunds1`, `gloampay1`, `gloamroll1`)
+  carry a label naming who they are for and an expiry, bound into the proof and
+  verified off-chain at gloam.trade/verify. Next: extend the target set to an
+  issuer or auditor scope.
+- **Issuer viewing key (new, Tempo-specific; design stub in the SDK, not
+  built).** An optional issuer-scoped view
   capability so a regulated stablecoin issuer can satisfy oversight without the
   public seeing anything. This is the bridge between Zones (operator sees all)
   and pure anonymity (no compliance at all): private from the public, self-
   custodial, still issuer-compliant.
 - **Freeze compatibility.** A design path where an issuer freeze on Mainnet can
   be honored against shielded notes (e.g., a freeze list checked in-circuit or
-  at unshield). Open design item; see section 7.
+  at unshield). Edge checks shipped (TIP-403 policy checked before deposits and
+  cash outs); in-circuit freeze lists remain an open design item. See section 7.
 
 Asset strategy given the constraint:
 
@@ -83,37 +93,27 @@ Asset strategy given the constraint:
 3. Never silently shield a compliance-enforcing token in a way that breaks its
    issuer controls and hide that from the user. Honesty rule applies.
 
-## 4. What deploys on Tempo (Phase 1)
+Shipped: step 1 with PathUSD (6 decimals) and other test stablecoins, plus
+TIP-403 edge checks. Step 2 is not built.
 
-- **Contracts.** Redeploy the shielded pool + DualProofVerifier (unshield +
-  transfer) and shieldVerifier on Tempo (Solidity + Groth16 port directly; Reth
-  is EVM). Keep sealed swaps disabled (H1), same as Robinhood. Live surface:
-  shield, private send, cash out, selective disclosure.
-- **Asset registration.** Register the chosen stable asset(s) per section 3.
-  Amount handling must respect the native-USD decimals (confirm on chain; docs
-  do not state, 18 assumed in `networks.ts` and flagged there).
-- **Deploy block.** Record it for `syncTree` / `getLogs` tree rebuild; wire into
-  the `tempo` entry in `networks.ts` and flip status from `planned` to `live`.
-- **Consumer migration.** The runtime accessor is already in place:
-  `getActiveNetwork()` in `app/src/lib/networks.ts` (non-React, reads the
-  selector's localStorage key, resolves to Robinhood until Tempo is live) plus
-  the `useNetwork()` hook for components. The remaining app surface is ~15 files
-  (the components in `app/src/components/app` using `PRODUCT_CHAIN_ID` /
-  `EXPLORER_TX`, and the pool/deploy-block resolvers in `config.ts` / `shield.ts`
-  / `payMemo.ts`), not the 72 the raw grep suggested (the rest are static docs).
-  Notes are already keyed by chainId, so per-chain vaults fall out for free.
+## 4. What deployed on Tempo (Phase 1, done)
 
-  Do this as one coordinated cutover on deploy day, not before: it is
-  behavior-preserving today (the active network is always Robinhood), so it adds
-  no interim value and only risks the live write path. Recipe: components read
-  `useNetwork().network` for `chainId` / `explorerTx` / `chain`; lib resolvers
-  read `getActiveNetwork()`. Gotcha found in a trial: wagmi hook options
-  (`useBalance`, `useSendTransaction`, `useWaitForTransactionReceipt`,
-  `switchChain`) type `chainId` as the configured-chain literal, so add Tempo to
-  the wagmi config (`wagmi.ts`) first and type `GloamNetwork.chainId` as the
-  configured-id union (`46630 | 42431`), or the wagmi call sites will not
-  typecheck. The module-level `SHIELD_POOL_ADDRESS` const also becomes a function
-  call at use time so a runtime switch takes effect.
+- **Contracts.** Deployed on Tempo Moderato: the shielded pool,
+  DualProofVerifier (unshield + transfer, `0x82F4…03A2`) and the shield verifier
+  (`0x7836…6Eb3`), with sealed swaps disabled (H1), same as Robinhood. The
+  current pool `0x841D…d5eb` was redeployed 2026-09-29 with no admin withdraw and
+  timelocked rule changes; it supersedes `0xeD0b…2276` (2026-09-16) and
+  `0x3eeE…D30b`. The memo board `0x3ca8…b4E3` is deployed from the fixed source,
+  so its event does not record the poster. Live surface: shield, private send,
+  cash out, selective disclosure and proofs, payroll, payment requests, relay.
+- **Asset registration.** Tempo blocks native `msg.value`, so the pool shields
+  ERC-20 stablecoins only, PathUSD (6 decimals) first. Native USD decimals do not
+  affect shields.
+- **Deploy block.** Recorded (37411195) and wired into the `tempo` entry in
+  `networks.ts`, whose status is `live`.
+- **Consumer migration.** Done: components read `useNetwork()`, lib resolvers
+  read `getActiveNetwork()`, Tempo is in the wagmi config, and notes are keyed
+  by chainId, so each network has its own vault.
 
 ## 5. Agent payments: the winning combo, plus privacy
 
@@ -124,28 +124,38 @@ lost. Gloam takes MCPay's winning surface and adds the private settlement and
 selective disclosure it lacks:
 
 - Add x402 to the MCP server: an agent hits a 402, pays in stablecoins, Gloam
-  settles the payment privately through the pool on Tempo.
-- Carry Gloam's encrypted note reference in Tempo's native memo field.
+  settles the payment privately through the pool on Tempo. **Shipped** (SDK
+  `settleGloamPayment`, MCP `gloam_fetch_paid` / `gloam_verify_payment`).
+- Carry Gloam's encrypted note reference in Tempo's native memo field. **Shipped
+  differently:** the sealed payment note travels in the x402 payment header (or
+  the MPP credential), not in Tempo's memo field.
 - `gloam_execute_private_pay` MCP tool: build a private stablecoin send,
   broadcast, return a disclosure proof the agent can hand an auditor.
+  **Shipped** for the send: it broadcasts and returns the payment header and the
+  change note; an auditor proof comes from the separate proof tools.
 
 ## 6. Positioning lines (honest, no mainnet claim)
 
 - Protocol: the privacy layer for onchain finance, for people and the agents
   acting for them.
 - Tempo: private, self-custodial stablecoin payments. The permissionless
-  complement to Zones, with issuer-compatible selective disclosure.
-- Do not claim "Live on Tempo" until the pool is deployed and mainnet is real.
-  Testnet only until the production gate is met.
+  complement to Zones, with selective disclosure a user can hand an issuer or
+  auditor.
+- Say "live on Tempo testnet"; never imply mainnet. Testnet only until the
+  production gate is met.
 
 ## 7. Open questions and risks
 
-- **Freeze / blocklist enforcement against shielded notes.** Designed: enforce
-  issuer controls at the public shield / unshield edges (where tokens actually
-  move), keep privacy in the middle. See
-  `contracts/audit/TEMPO-COMPLIANCE-DESIGN.md`. Until it ships, only non-freezing
-  assets are safe to shield.
-- **Native USD decimals on Tempo.** Unconfirmed upstream; verify before writes.
+- **Freeze / blocklist enforcement against shielded notes.** Enforce issuer
+  controls at the public shield / unshield edges (where tokens actually move),
+  keep privacy in the middle. See `contracts/audit/TEMPO-COMPLIANCE-DESIGN.md`.
+  Shipped as read-only TIP-403 checks before deposits and cash outs (app,
+  `/api/screen`, relay); the token enforces the same policy on-chain regardless.
+  An issuer freeze of the pool's own balance would still freeze every note of
+  that asset (audit F-2), so a non-freezing asset remains the safe mainnet
+  choice.
+- **Native USD decimals on Tempo.** Resolved: native `msg.value` is blocked, so
+  the pool shields ERC-20 stablecoins only (PathUSD is 6 decimals).
 - **World's Fair timing (Sep 14 to Oct 12).** Colosseum explicitly permits
   building up to two months before the start, so building and deploying Tempo
   before Sep 14 is allowed and is not a disqualification risk. Judging weighs
@@ -158,12 +168,11 @@ selective disclosure it lacks:
 
 ## 8. Sequence
 
-1. Phase 0 (done): runtime network registry, provider, header selector; Tempo
-   listed as planned.
+1. Phase 0 (done): runtime network registry, provider, header selector.
 2. Design sign-off on section 3 (compliance reconciliation) and section 7
-   (freeze path). This is the gate before writing contracts.
-3. Phase 1 (build now, keep demoable progress for the window): deploy pool + verifiers on Tempo
-   Moderato, register asset, flip `tempo` to live, migrate consumers to
-   `useNetwork()`.
-4. Phase 2: x402 + MCP private-pay surface.
-5. Phase 3: issuer-viewing-key selective disclosure as a headline feature.
+   (freeze path): edge checks done; issuer viewing key still open.
+3. Phase 1 (done): pool + verifiers on Tempo Moderato, PathUSD, `tempo` live,
+   consumers on `useNetwork()`. Redeployed 2026-09-16 (hardening) and
+   2026-09-29 (no admin withdraw, timelocked rule changes).
+4. Phase 2 (done on testnet): x402 + MCP private-pay surface.
+5. Phase 3 (open): issuer-viewing-key selective disclosure as a headline feature.
