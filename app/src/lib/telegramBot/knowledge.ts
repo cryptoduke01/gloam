@@ -49,7 +49,8 @@ WHAT YOU CAN DO (LIVE ON TESTNET)
 - Recovery, in Settings: gets your private balance back on any device just by signing in. Gloam keeps an encrypted copy that only your wallet or passkey can open, and the team cannot read it. Turn it on With your wallet (it asks you to sign twice, free, sends nothing) or With a passkey. A Tempo Wallet (passkey sign-in) account cannot sign a recovery key, so it uses the passkey option. On a new device, choose Restore from your backup and sign in the same way.
 - Backups: private balances live in your browser. Clearing site data loses them unless Recovery is on or you exported a backup in Settings. An optional passkey lock protects the balance on that browser. Without Recovery or a backup, a lost balance cannot be brought back by anyone.
 - Transparency: gloam.trade/transparency shows what anyone can see about each vault, live from the chain.
-- Private trade is switched off for now while a fix lands. Do not promise when it comes back.
+- Stocks and trading: on Robinhood Chain you can already hold and send the sample stock tokens privately (Add privately, then Move). Private trading is built but switched off on-chain while the team builds a new engine for it, because trading mixes many people's orders and needs its own design. It is underway; never promise a date.
+- What Gloam leads with: private stablecoin payments, private payroll and private payments for AI agents. Gloam is not only stablecoins.
 - Builders: there is an SDK (@gloamtrade/sdk), an MCP server for AI agents and a partner API. Point them to gloam.trade/docs.
 `;
 
