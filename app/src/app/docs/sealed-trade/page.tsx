@@ -4,36 +4,51 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
-  title: "Sealed-size private trade",
+  title: "Private trade",
   description:
-    "What sealed private trade means on Gloam, why it is paused on-chain pending the H1 solvency fix, and the design that turns it back on.",
+    "What private trade means on Gloam, why it is switched off on-chain while we build a new engine for it, and how stock tokens can already be held and sent privately today.",
 };
 
 export default function DocsSealedTradePage() {
   return (
     <DocsLayout
-      title="Sealed-size private trade"
-      lede="Convert one vault asset to another with your size sealed. This is currently paused on-chain: the sealed-swap verifier is disabled pending the H1 solvency fix. The path is built, and the design to re-enable it with full privacy and solvency is set. Here is how it works, why it is paused, and the way back on."
+      title="Private trade"
+      lede="Trade one asset for another from your private balance, with your size kept private. It is built, and switched off on-chain while we build a new engine for private trading. Stock tokens can already be held and sent privately today."
       glance={[
-        { label: "Status", value: "Paused (H1)" },
-        { label: "Goal", value: "Size sealed" },
-        { label: "Live instead", value: "shield / send / cash out" },
+        { label: "Status", value: "Built, switched off" },
+        { label: "Next", value: "New engine underway" },
+        { label: "Live today", value: "hold + send stock tokens" },
         { label: "Fake fills", value: "Never" },
       ]}
     >
-      <h2>Why it is paused</h2>
+      <h2>Why it is switched off</h2>
       <p>
-        A sealed swap spends an <code>assetIn</code> note and mints an{" "}
-        <code>assetOut</code> note with both amounts private, but no tokens move,
-        so the pool ends up owing <code>assetOut</code> it does not physically
-        hold (audit H1). Rather than ship an insolvent swap or reveal your size to
-        fix the accounting, the on-chain verifier is set to zero and the swap is
-        off. Shield, private send, and cash out are live and solvent in the
-        meantime. The re-enable design is below and in{" "}
-        <code>contracts/audit/H1-CONFIDENTIAL-SWAP-DESIGN.md</code>.
+        A payment has one owner, so the owner can prove it alone. A trade is
+        different: it mixes many people&apos;s orders against shared
+        liquidity. That needs its own design, so we are building a new engine
+        for private trading instead of stretching the payment one.
+      </p>
+      <p>
+        The first version showed why. A sealed swap spends an{" "}
+        <code>assetIn</code> note and mints an <code>assetOut</code> note with
+        both amounts private, but no tokens move, so the pool ends up owing{" "}
+        <code>assetOut</code> it does not physically hold (audit H1). Rather
+        than ship an insolvent swap or reveal your size to fix the accounting,
+        the on-chain verifier is set to zero and the swap is off. Turning it on
+        again goes through the 3-day timelock. Shield, private send and cash out
+        are live and solvent in the meantime.
       </p>
 
-      <h2>How the sealed path works (when enabled)</h2>
+      <h2 id="stock-tokens">Stock tokens today</h2>
+      <p>
+        On Robinhood Chain you can already{" "}
+        <Link href="/app/shield">shield</Link> stock tokens (TSLA, AMZN, PLTR,
+        NFLX and AMD on testnet), hold them privately, and{" "}
+        <Link href="/app/move">send them privately</Link>. Trading them
+        privately is the part that waits for the new engine.
+      </p>
+
+      <h2>How the built version works (switched off)</h2>
       <FlowDiagram
         title="Private trade (sealed path)"
         steps={[
@@ -111,10 +126,9 @@ export default function DocsSealedTradePage() {
       <h2>What ships next</h2>
       <ol>
         <li>
-          <strong>H1 confidential-reserve solvency (the re-enable gate)</strong>,
-          the swap draws the out asset from a protocol reserve tracked as Pedersen
-          commitments, with an in-circuit reserve range proof, so size stays
-          sealed and the pool stays solvent. Design in{" "}
+          <strong>A new engine for private trading</strong>, built for many
+          people&apos;s orders, that keeps size private and the pool solvent.
+          It is underway. Notes on the solvency side are in{" "}
           <code>contracts/audit/H1-CONFIDENTIAL-SWAP-DESIGN.md</code>.
         </li>
         <li>
@@ -171,8 +185,8 @@ export default function DocsSealedTradePage() {
       </ul>
 
       <p>
-        The sealed path is paused on-chain, so the trade panel shows it as
-        disabled until the H1 work lands. Available today: the{" "}
+        Private trade is switched off on-chain, so the trade panel shows it as
+        disabled until the new engine is ready. Available today: the{" "}
         <Link href="/app/trade?path=vault">from-vault adapter</Link> (honest,
         not sealed), and <Link href="/app/move">Move</Link> to hold and send
         privately.

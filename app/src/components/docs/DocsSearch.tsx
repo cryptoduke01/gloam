@@ -25,8 +25,8 @@ type PageMeta = { description: string; keywords: string[]; headings: string[] };
 const PAGE_META: Record<string, PageMeta> = {
   "/docs": {
     description: "What Gloam is, what works today, and where to start.",
-    keywords: ["intro", "introduction", "getting started", "what is gloam", "token", "gloam token"],
-    headings: ["What is Gloam?", "Try it (2 minutes)", "What works today", "What does not work yet", "$GLOAM", "Read next"],
+    keywords: ["intro", "introduction", "getting started", "what is gloam", "stablecoin", "payments"],
+    headings: ["What is Gloam?", "Try it (2 minutes)", "What works today", "What does not work yet", "Read next"],
   },
   "/docs/quickstart": {
     description: "From an empty project to a private balance on testnet in about ten minutes.",
@@ -195,7 +195,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/privacy-model": {
     description: "Exactly what an explorer can and cannot see when you use Gloam.",
-    keywords: ["privacy", "explorer", "public", "hidden", "anonymity", "operator", "threat", "what is public", "passkey", "sanctions", "screening", "ofac", "compliance"],
+    keywords: ["privacy", "explorer", "public", "hidden", "anonymity", "operator", "threat", "what is public", "passkey", "sanctions", "screening", "ofac", "compliance", "new", "novel", "viewing key", "context"],
     headings: [
       "What an explorer actually shows",
       "What stays hidden",
@@ -203,16 +203,31 @@ const PAGE_META: Record<string, PageMeta> = {
       "The anonymity set is the whole game",
       "What we will not promise",
       "Private from the public, not from an operator",
-      "Before mainnet",
+      "What is new and what is not",
       "Security and compliance",
+      "Before mainnet",
+    ],
+  },
+  "/docs/compare": {
+    description: "Why a payment needs no key holder, and how Gloam compares with Zama, Arcium, Tempo Zones, Helius and Railgun.",
+    keywords: ["compare", "comparison", "competitors", "alternatives", "zama", "fhe", "arcium", "mpc", "tempo zones", "zones", "helius", "railgun", "payy", "cloak", "committee", "operator", "vs"],
+    headings: [
+      "Two jobs, two kinds of privacy",
+      "What a breach exposes",
+      "Not new cryptography",
+      "Side by side",
+      "Gloam and each of them",
+      "The short version",
+      "Where Gloam is behind",
     ],
   },
   "/docs/sealed-trade": {
-    description: "Swap one asset for another with the size kept private. Paused for now.",
-    keywords: ["swap", "trade", "exchange", "stocks", "paused", "dex"],
+    description: "Trade from a private balance with the size kept private. Switched off while we build a new engine.",
+    keywords: ["swap", "trade", "exchange", "stocks", "stock tokens", "switched off", "engine", "dex"],
     headings: [
-      "Why it is paused",
-      "How the sealed path works (when enabled)",
+      "Why it is switched off",
+      "Stock tokens today",
+      "How the built version works (switched off)",
       "Vault trade adapter (fallback)",
       "What sealed means",
       "What ships next",
@@ -255,7 +270,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/whitepaper": {
     description: "The technical and product thesis behind Gloam.",
-    keywords: ["paper", "thesis", "architecture", "threat model", "token", "$gloam", "research"],
+    keywords: ["paper", "thesis", "architecture", "threat model", "research", "novel", "compare", "one owner"],
     headings: [
       "1. Abstract",
       "2. Problem",
@@ -263,11 +278,11 @@ const PAGE_META: Record<string, PageMeta> = {
       "4. What privacy means here",
       "5. System architecture",
       "6. Cryptography and verification",
-      "7. Threat model",
-      "8. Product surface",
-      "9. $GLOAM (protocol asset)",
-      "10. Roadmap",
-      "11. Positioning",
+      "7. What is new in Gloam",
+      "8. How Gloam compares",
+      "9. Threat model",
+      "10. Product surface",
+      "11. Roadmap",
       "12. Risks and limitations",
       "13. Explicit non-claims",
       "14. Closing",

@@ -19,7 +19,7 @@ export default function DocsPrivacyPage() {
         { label: "Hidden", value: "the link, the bag" },
         { label: "Public", value: "deposits + exits" },
         { label: "Anon set", value: "more users = stronger" },
-        { label: "Sealed swaps", value: "paused (H1)" },
+        { label: "Private trade", value: "off, new engine underway" },
       ]}
     >
       <FlowDiagram
@@ -47,8 +47,8 @@ export default function DocsPrivacyPage() {
           },
           {
             n: "✕",
-            title: "Sealed swaps (paused)",
-            body: "Private trade is disabled pending the H1 solvency work. Do not rely on it yet.",
+            title: "Private trade (switched off)",
+            body: "Built, and switched off on-chain while we build a new engine for private trading. Do not rely on it yet.",
           },
           {
             n: "!",
@@ -127,7 +127,64 @@ export default function DocsPrivacyPage() {
         payment over x402, the payer and the payee learn the amount and no one
         else does. Where a regulated asset needs oversight, compliance visibility
         is opt-in per payment through an issuer-scoped disclosure, never a
-        standing view handed to an operator.
+        standing view handed to an operator. For how this compares with Zama,
+        Arcium, Tempo Zones and others, see{" "}
+        <Link href="/docs/compare">how Gloam compares</Link>.
+      </p>
+
+      <h2 id="whats-new">What is new and what is not</h2>
+      <p>
+        Gloam is not new cryptography. It is a new building block for finance:
+        private payments you can prove. Here is exactly where the line sits.
+      </p>
+      <h3>Not new</h3>
+      <ul>
+        <li>
+          <strong>The private pool design.</strong> Notes, nullifiers and a
+          Merkle tree come from the Zcash lineage, starting in 2016. Tornado,
+          Railgun and Cloak use the same pattern.
+        </li>
+        <li>
+          <strong>Selective disclosure as an idea.</strong> Zcash and Railgun
+          viewing keys, Privacy Pools, and Zama decryption rights all let a
+          holder show something to someone.
+        </li>
+      </ul>
+      <h3>New, as far as our research found</h3>
+      <ol>
+        <li>
+          <strong>Payroll total proof.</strong> It proves a run of up to 32
+          payments adds up to exactly a total, across a count of people, all
+          funded by the prover, without showing who got what. We found nothing
+          like it. See <Link href="/docs/proofs#payroll-total">payroll total</Link>.
+        </li>
+        <li>
+          <strong>Proofs scoped to one reader.</strong> Who the proof is for (a
+          label), when it expires, the chain and the pool are hashed into one
+          public <code>context</code> input that is bound into the proof, in the{" "}
+          <code>solvency</code>, <code>receipt</code> and{" "}
+          <code>payroll_total</code> circuits. Change the label and the proof
+          fails. Anyone can check it in a browser, with no wallet, at{" "}
+          <Link href="/verify">/verify</Link>. Viewing keys, the usual
+          alternative, show your whole history and cannot be taken back.
+        </li>
+        <li>
+          <strong>Private payments for AI agents.</strong> A private payment
+          method proposed for the Machine Payments Protocol from Tempo and
+          Stripe (
+          <a href="https://github.com/tempoxyz/mpp-specs/pull/376" target="_blank" rel="noreferrer">
+            tempoxyz/mpp-specs#376
+          </a>
+          ; MPP had no private method), private x402 payments, and an MCP server
+          that gives agents handles instead of secrets, with spending limits.
+          See <Link href="/docs/agents">agents</Link>.
+        </li>
+      </ol>
+      <p>
+        <strong>Honest limit.</strong> A reader can still forward a proof. It
+        will say who it was made for and when it expires, but nothing stops the
+        forwarding itself. A designated-verifier mode, where only the named
+        reader can be convinced, is next.
       </p>
 
       <h2 id="security">Security and compliance</h2>
@@ -260,11 +317,30 @@ export default function DocsPrivacyPage() {
       </p>
       <ul>
         <li>
-          <strong>Dev-ceremony proving keys.</strong> Mainnet needs a real
-          multi-party trusted setup and an external audit.
+          <strong>Dev-ceremony proving keys.</strong> The testnet setup had a
+          single contributor. Mainnet needs a multi-party trusted setup.
         </li>
         <li>
-          <strong>Sealed swaps are disabled</strong> pending the H1 solvency fix.
+          <strong>Internal audits only.</strong> Two rounds, with fixes
+          deployed. An external audit comes before mainnet.
+        </li>
+        <li>
+          <strong>A payer can take back a direct payment until it moves.</strong>{" "}
+          The payer creates the payment, so until the payee moves it, the payer
+          knows its key too and could reclaim it. A fix is in progress.
+        </li>
+        <li>
+          <strong>Small anonymity set.</strong> Few people use the testnet
+          pools, so unlinkability is weak for now.
+        </li>
+        <li>
+          <strong>Issuer freeze.</strong> A stablecoin issuer can freeze the
+          vault contract. Our answer is to screen deposits so flagged funds
+          never enter.
+        </li>
+        <li>
+          <strong>Private trade is switched off</strong> while we build a new
+          engine for private trading.
         </li>
       </ul>
       <p>

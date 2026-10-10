@@ -310,8 +310,8 @@ export default function DocsTestnetPage() {
       <ul>
         <li>
           <strong>Private trade (switched off)</strong>. Built, and switched
-          off on-chain pending audit. Vault ETH → vault stock with no DEX pool
-          required once it is back on. See{" "}
+          off on-chain while we build a new engine for private trading. Stock
+          tokens can already be held and sent privately. See{" "}
           <Link href="/docs/sealed-trade">sealed trade</Link>.
         </li>
         <li>
@@ -326,9 +326,9 @@ export default function DocsTestnetPage() {
 
       <h2 id="private-trade">7b. Private trade walkthrough</h2>
       <p>
-        Private trade is paused on-chain until the H1 solvency fix lands (see{" "}
-        <Link href="/docs/sealed-trade">sealed trade</Link>). These steps
-        describe the flow once it is switched back on.
+        Private trade is switched off on-chain while we build a new engine for
+        it (see <Link href="/docs/sealed-trade">private trade</Link>). These
+        steps describe the built version, which is not usable today.
       </p>
       <ol>
         <li>

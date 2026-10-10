@@ -17,12 +17,17 @@ export default function DocsOverviewPage() {
     >
       <h2 id="what">What is Gloam?</h2>
       <p>
-        Gloam is the privacy layer for onchain finance, live on{" "}
-        <strong>Robinhood Chain</strong> and <strong>Tempo</strong>. You put
-        assets into a shared vault (“shield”), pay privately inside the vault,
-        and cash out with a real proof. Goal: what you hold and how much you
-        move stays private, instead of sitting in the open like a normal public
-        wallet.
+        Stablecoins are becoming how businesses and AI agents pay each other,
+        and every one of those payments is public. Gloam makes them private,
+        and lets the payer prove exactly what someone needs to see. Private by
+        default, provable on demand.
+      </p>
+      <p>
+        It runs on <strong>Tempo</strong> and <strong>Robinhood Chain</strong>{" "}
+        testnets. You put money into a shared vault (“shield”), pay privately
+        inside it, and cash out with a real proof. Proofs are made on your
+        device, and nobody else holds a key. See{" "}
+        <Link href="/docs/compare">how Gloam compares</Link>.
       </p>
       <p>
         Right now everything is <strong>testnet</strong>, play money,{" "}
@@ -113,8 +118,9 @@ export default function DocsOverviewPage() {
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
         <li>
-          <Link href="/docs/sealed-trade">Private trade</Link> (sealed swap),
-          paused until the H1 solvency accounting lands
+          <Link href="/docs/sealed-trade">Private trade</Link>: built, and
+          switched off on-chain while we build a new engine for it. Stock
+          tokens can already be held and sent privately
         </li>
         <li>
           <Link href="/docs/data">On-chain price oracles</Link> (no Chainlink /
@@ -141,10 +147,13 @@ export default function DocsOverviewPage() {
           <Link href="/docs/privacy-model">What stays private vs public</Link>
         </li>
         <li>
+          <Link href="/docs/compare">How Gloam compares</Link>
+        </li>
+        <li>
           <Link href="/docs/production">Production gate</Link>
         </li>
         <li>
-          <Link href="/docs/sealed-trade">Sealed-size private trade</Link>
+          <Link href="/docs/sealed-trade">Private trade</Link>
         </li>
         <li>
           <Link href="/docs/data">Prices, data &amp; oracles</Link>

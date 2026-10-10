@@ -58,7 +58,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Shield",
-            body: "Deposit ETH and faucet stocks into the live privacy vault.",
+            body: "Deposit stablecoins (USDG on Robinhood Chain, OUSD and PathUSD on Tempo), ETH or Robinhood Chain stock tokens into the vault.",
           },
           {
             n: "●",
@@ -69,6 +69,11 @@ export default function DocsProductPage() {
             n: "●",
             title: "Cash out",
             body: "Withdraw to your open wallet with a real browser proof.",
+          },
+          {
+            n: "●",
+            title: "Stock tokens, privately",
+            body: "Hold and send Robinhood Chain stock tokens (TSLA, AMZN, PLTR, NFLX, AMD on testnet) from your private balance today.",
           },
           {
             n: "●",
@@ -97,13 +102,13 @@ export default function DocsProductPage() {
           },
           {
             n: "!",
-            title: "Private trade (paused)",
-            body: "Vault-settled sealedSwap is built, with max size privacy on by default. Paused on-chain until the H1 solvency fix lands.",
+            title: "Private trade (switched off)",
+            body: "Built, and switched off on-chain while we build a new engine for private trading. Trading mixes many people's orders, so it needs its own design.",
           },
           {
             n: "○",
-            title: "Real rates + production keys",
-            body: "Oracle-bound pricing, multi-party ceremony, audit. Blocked until the production gate is green.",
+            title: "Mainnet path",
+            body: "A multi-party key ceremony and an external audit. Mainnet waits until the production gate is green.",
           },
           {
             n: "○",
@@ -123,7 +128,8 @@ export default function DocsProductPage() {
       <p>
         Open the app: <Link href="/app">/app</Link> ·{" "}
         <Link href="/docs/production">Production gate</Link> ·{" "}
-        <Link href="/docs/sealed-trade">Sealed trade</Link>. Follow{" "}
+        <Link href="/docs/sealed-trade">Private trade</Link> ·{" "}
+        <Link href="/docs/compare">How Gloam compares</Link>. Follow{" "}
         <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer">
           @gloamtrade
         </a>{" "}
