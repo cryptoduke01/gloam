@@ -2,7 +2,7 @@
 
 # Gloam
 
-### The privacy layer for onchain finance. Shielded balances, private payments, and verifiable disclosure that any app or agent can plug into.
+### Private money on public chains. Private stablecoin payments for people, teams and AI agents: private by default, provable on demand.
 
 [gloam.trade](https://gloam.trade) · [Testnet app](https://gloam.trade/app) · [Verify a disclosure](https://gloam.trade/verify) · [Docs](https://gloam.trade/docs) · [Whitepaper](https://gloam.trade/whitepaper) · [@gloamtrade](https://x.com/gloamtrade)
 
@@ -14,7 +14,19 @@
 
 ---
 
-Public chains put finance on public rails: every holding, every size, every move is visible. Robinhood Chain does it for tokenized stocks and crypto; Tempo does it for stablecoin payments. Gloam is the sealed chamber on top. Shield a balance, pay privately, and later prove exactly what you choose to a counterparty or auditor, and nothing else. It is not a dark theme on a public DEX; it is a private-execution primitive that other onchain apps and AI agents build on, live on testnet today on Robinhood Chain (flagship) and Tempo.
+Stablecoins are becoming how businesses and AI agents pay each other, and every one of those payments is public. Gloam makes them private, and lets the payer prove exactly what someone needs to see: a balance above a figure, a payment received, or a payroll total, to one named reader, with an expiry. It runs on Tempo and Robinhood Chain testnets today. Robinhood Chain stock tokens can be held and sent privately too, and private trading is underway with a new engine.
+
+**Why one owner matters.** Privacy splits into two jobs. Shared secrets (sealed auctions, order books, lending pools) need someone to compute on many people's hidden data, so FHE and MPC networks such as Zama and Arcium use a committee that holds keys. A payment has one owner, so the owner proves it on their own device with zero-knowledge proofs, and nobody else ever holds a key. If a committee or operator is breached, everyone can be exposed, past payments included. If one owner's device is breached, one person is. Gloam does not invent new cryptography: it uses the proven ZK maths of the Zcash lineage and builds the payments product on top. Full comparison with Zama, Arcium, Tempo Zones, Helius Privacy and Railgun: [gloam.trade/docs/compare](https://gloam.trade/docs/compare).
+
+## What is new
+
+Gloam is not new cryptography. It is a new building block for finance: private payments you can prove. As far as our research found, three parts are new:
+
+1. **Payroll total proof.** `payroll_total` proves a run of up to 32 payments adds up to exactly a total, across a count of people, all funded by the prover, without showing who got what. We found nothing like it.
+2. **Proofs scoped to one reader.** The label (who the proof is for), expiry, chain and pool are hashed into a public `context` input bound into the `solvency`, `receipt` and `payroll_total` proofs. Change the label and the proof fails. Anyone can check one in a browser, with no wallet, at [`/verify`](https://gloam.trade/verify). Viewing keys, the usual alternative, show a whole history and cannot be taken back.
+3. **Private payments for AI agents.** A private payment method proposed for the Machine Payments Protocol from Tempo and Stripe ([tempoxyz/mpp-specs#376](https://github.com/tempoxyz/mpp-specs/pull/376); MPP had no private method), private x402 payments, and an MCP server that gives agents handles instead of secrets, with spending limits.
+
+Not new: the private pool design (Zcash lineage from 2016, Tornado, Railgun, Cloak) and selective disclosure as an idea (Zcash and Railgun viewing keys, Privacy Pools, Zama decryption rights). One honest limit: a reader can still forward a proof. It says who it was for and when it expires, and a designated-verifier mode is next.
 
 ## Three surfaces, one private core
 
@@ -53,7 +65,8 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 | **Agent spending limits** | Live (MCP) | The owner sets each agent's assets, per-payment and per-day caps, allowed recipients, tools and expiry. Every spend is checked and logged before it is proved or signed; no limits means no spending. Note secrets stay in an encrypted store inside the server and the agent only sees handles. Enforced by the MCP server, off-chain. `gloam_get_limits`, `gloam_get_spending_report`. [Config](./mcp/README.md#spending-limits) |
 | **Hosted MCP server** | Live | Paste `https://www.gloam.trade/mcp` into Claude (Settings, Connectors, Add custom connector), ChatGPT, Cursor or any MCP client; nothing to install. Read and plan only: networks and assets, vault stats, payment request links, proof checks, deposit plans and MPP how-to. It never signs and refuses anything that looks like a key or note secret; for signing, the local server (`npx -y @gloamtrade/mcp`). [Docs](https://gloam.trade/docs/agents#connect-by-url) |
 | **Transparency page** | Live | [`/transparency`](https://gloam.trade/transparency) shows what anyone can see about the vault on each network: what it holds, counts of deposits, private transfers, cash-outs and payment messages, and recent public activity, read straight from public nodes |
-| **Private trade** | Built, switched off | `sealedSwap` is built and tested but off on both chains (`sealedSwapVerifier` is `0x0`) until the H1 solvency accounting is redesigned and audited. Oracle-bound rates are built and tested too; see below |
+| **Stock tokens** | Live (Robinhood Chain) | Shield testnet stock tokens (TSLA, AMZN, PLTR, NFLX, AMD), hold them privately and send them privately, like any other asset in the vault |
+| **Private trade** | Built, switched off | `sealedSwap` is built and tested but off on both chains (`sealedSwapVerifier` is `0x0`) while we build a new engine for private trading. Trading mixes many people's orders, so it needs its own design (the first version hit audit H1, solvency). Oracle-bound rates are built and tested too; see below |
 
 Every private action is proof-gated on-chain. No mock fills, no theatrical privacy. If a path cannot be both private and solvent yet, it waits. See [`contracts/audit/H1-SWAP-SOLVENCY.md`](./contracts/audit/H1-SWAP-SOLVENCY.md).
 
