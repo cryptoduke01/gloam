@@ -27,6 +27,24 @@ export type TgEntity = {
   user?: TgUser;
 };
 
+/** One size of a photo. Telegram sends several, smallest first. */
+export type TgPhotoSize = {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+};
+
+/** A file sent as a document, which is how uncompressed screenshots arrive. */
+export type TgDocument = {
+  file_id: string;
+  file_unique_id: string;
+  file_name?: string;
+  mime_type?: string;
+  file_size?: number;
+};
+
 export type TgMessage = {
   message_id: number;
   message_thread_id?: number;
@@ -39,6 +57,10 @@ export type TgMessage = {
   caption?: string;
   entities?: TgEntity[];
   caption_entities?: TgEntity[];
+  photo?: TgPhotoSize[];
+  document?: TgDocument;
+  /** Shared by the messages of one album. */
+  media_group_id?: string;
   reply_to_message?: TgMessage;
   forum_topic_created?: unknown;
   new_chat_members?: TgUser[];
@@ -125,6 +147,57 @@ export async function getMe(): Promise<TgUser | null> {
   const r = await call<TgUser>("getMe", {});
   if (r.ok && r.result?.id) g.__gloamTgMe = r.result;
   return g.__gloamTgMe ?? null;
+}
+
+type TgFile = { file_id: string; file_size?: number; file_path?: string };
+
+/** Where Telegram keeps a file, and its size when known. Null when it will not say. */
+export async function getFile(fileId: string): Promise<{ path: string; size: number | null } | null> {
+  const r = await call<TgFile>("getFile", { file_id: fileId });
+  const path = r.ok ? r.result?.file_path : undefined;
+  if (!path || !/^[\w./-]{1,200}$/.test(path) || path.includes("..")) return null;
+  return { path, size: typeof r.result?.file_size === "number" ? r.result.file_size : null };
+}
+
+/**
+ * Downloads a file from Telegram's file server, at most `maxBytes`. Null when
+ * it is bigger, the download fails or there is no token. The URL carries the
+ * token, so it is never logged.
+ */
+export async function downloadFile(path: string, maxBytes: number): Promise<Uint8Array | null> {
+  const t = token();
+  if (!t) return null;
+  try {
+    const res = await fetch(`${API}/file/bot${t}/${path}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+    if (!res.ok || !res.body) return null;
+    const declared = Number(res.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      await res.body.cancel().catch(() => {});
+      return null;
+    }
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.byteLength;
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** How many people are in a chat right now, or null. */

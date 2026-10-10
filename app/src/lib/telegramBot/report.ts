@@ -30,6 +30,8 @@ export type ReportData = {
   /** Messages per topic id. */
   topics: Record<number, number>;
   answered: number;
+  /** Pictures the helper read. */
+  images: number;
   welcomes: number;
   scams: number;
   scamsMissed: number;
@@ -97,7 +99,7 @@ export function formatReport(d: ReportData): string {
   lines.push("");
 
   lines.push(d.persona);
-  lines.push(`${plural(d.answered, "question")} answered, ${plural(d.welcomes, "welcome")} sent.`);
+  lines.push(`${plural(d.answered, "question")} answered, ${plural(d.images, "image")} read, ${plural(d.welcomes, "welcome")} sent.`);
   lines.push(`${plural(d.scams, "scam message")} deleted, ${plural(d.secrets, "leaked secret")} deleted.`);
   const missed = d.scamsMissed + d.secretsMissed;
   if (missed > 0) lines.push(`${plural(missed, "more message")} flagged but not deleted. Check the bot can delete messages.`);
@@ -152,6 +154,7 @@ export async function gatherReport(groupId: number, persona: string, now = Date.
     active: stats?.active ?? 0,
     topics,
     answered: counts.answered ?? 0,
+    images: counts.images ?? 0,
     welcomes: counts.welcomes ?? 0,
     scams: counts.scams ?? 0,
     scamsMissed: counts.scamsMissed ?? 0,

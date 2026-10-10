@@ -6,7 +6,7 @@
  */
 import { createHash, timingSafeEqual } from "crypto";
 import { english } from "viem/accounts";
-import type { TgMessage, TgUser } from "./telegram";
+import type { TgMessage, TgPhotoSize, TgUser } from "./telegram";
 
 /** Forum topics in t.me/gloamhq, by message_thread_id. General messages carry no thread id. */
 export const TOPIC = { general: 1, testers: 2, announcements: 3, help: 4, feedback: 5 } as const;
@@ -77,6 +77,12 @@ export function mentionsBot(msg: TgMessage, me: Pick<TgUser, "id" | "username">)
   return handle ? new RegExp(`(^|[^\\w])${escapeRe(handle)}(?![\\w])`, "i").test(text) : false;
 }
 
+/** The words someone added when tagging the bot: the text without its @handle. */
+export function withoutTag(text: string, username?: string): string {
+  const t = username ? text.replace(new RegExp(`(^|[^\\w])@${escapeRe(username)}(?![\\w])`, "gi"), "$1") : text;
+  return t.replace(/\s+/g, " ").trim();
+}
+
 /** The persona's name used as a word ("hey Glim", "thanks glim!"). */
 export function namesPersona(text: string, name: string): boolean {
   if (!name) return false;
@@ -102,12 +108,44 @@ export function wantsReport(text: string): boolean {
   return /\b(?:report|stats|statistics|summary)\b|\bhow\s+(?:was|is|did)\s+(?:today|the\s+day|the\s+group|it\s+go)\b/i.test(norm(text));
 }
 
-/** A reply that hands the person to an admin ("an admin will follow up"). */
+const PEOPLE = String.raw`(?:boss\s+duke|duke|the\s+team|an?\s+admin|the\s+admins)`;
+const HAND_OFF = [
+  /\badmins?\s+will\s+(?:follow\s+up|take\s+a\s+look|look\s+into|get\s+back|check)\b/i,
+  new RegExp(
+    String.raw`\b(?:i'll|i\s+will|let\s+me|i'm|i\s+am)\s+(?:talk(?:ing)?\s+to|ping(?:ing)?|tell(?:ing)?|tak(?:e|ing)\s+(?:this|it)\s+to|flag(?:ging)?\s+(?:this|it)\s+(?:to|for)|run(?:ning)?\s+(?:this|it)\s+by|pass(?:ing)?\s+(?:this|it)\s+(?:on\s+)?to|hand(?:ing)?\s+(?:this|it)\s+(?:over\s+)?to)\s+` + PEOPLE + String.raw`\b`,
+    "i",
+  ),
+  new RegExp(String.raw`\b(?:flagging|passing|handing)\s+(?:this|it)\s+(?:on\s+|over\s+)?(?:to|for)\s+` + PEOPLE + String.raw`\b`, "i"),
+  /\bi(?:'ve|\s+have)\s+(?:flagged|passed|handed|escalated)\s+(?:this|it)\b/i,
+];
+
+/** A reply that hands the person to an admin ("an admin will follow up", "flagging this for Boss Duke"). */
 export function handsToAdmin(text: string): boolean {
-  return (
-    /\badmins?\s+will\s+(?:follow\s+up|take\s+a\s+look|look\s+into|get\s+back|check)\b/i.test(text) ||
-    /\b(?:i'll|i\s+will|let\s+me)\s+(?:talk\s+to|ping|tell|take\s+(?:this|it)\s+to|flag\s+(?:this|it)\s+(?:to|for)|run\s+(?:this|it)\s+by)\s+(?:boss\s+duke|duke|the\s+team|an?\s+admin|the\s+admins)\b/i.test(text)
-  );
+  const t = norm(text);
+  return HAND_OFF.some((re) => re.test(t));
+}
+
+/** The message tags one of these handles (lower case, no "@"), or mentions one of these accounts. */
+export function tagsSomeone(msg: TgMessage, handles: string[], ids: number[] = []): boolean {
+  for (const e of entitiesOf(msg)) if (e.type === "text_mention" && e.user && ids.includes(e.user.id)) return true;
+  const text = messageText(msg).toLowerCase();
+  return handles.some((h) => new RegExp(`(^|[^\\w@])@${escapeRe(h.toLowerCase())}(?![\\w])`).test(text));
+}
+
+const TOPIC_WORD =
+  /\b(?:gloam|faucets?|proofs?|prove|payroll|recovery|backups?|wallets?|passkeys?|tempo|robinhood|networks?|chains?|deposits?|add(?:ed|ing)?|shield(?:ed|ing)?|cash(?:ing)?\s*out|withdraw\w*|claim\w*|codes?|links?|address(?:es)?|phrase|passphrase|balances?|vaults?|mainnet|testnet|tokens?|stocks?|usdg|pathusd|ousd|eth|gas|rewards?|testers?|testing|snapshot|airdrop|fees?|relay|send|sent|pay(?:ment)?s?|receiv\w*|move|portfolio|settings|transactions?|tx|docs|metamask|rabby|tsla|amzn|pltr|nflx|amd)\b/i;
+
+/**
+ * Too little to go on ("help", "it's not working", a bare tag): no Gloam word
+ * and only a few words. The fallback then asks what happened instead of
+ * handing it to an admin.
+ */
+export function isVague(text: string, persona: string): boolean {
+  let t = norm(text).replace(/(?<![\w@])@\w+/g, " ");
+  if (persona) t = t.replace(new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRe(persona)}(?=$|[^\\p{L}\\p{N}_])`, "giu"), "$1 ");
+  t = t.replace(/[^\p{L}\p{N}'\s]/gu, " ");
+  const words = t.split(/\s+/).filter(Boolean);
+  return words.length === 0 || (words.length < 8 && !TOPIC_WORD.test(t));
 }
 
 // ---------------------------------------------------------------- triggers
@@ -285,6 +323,202 @@ export function secretLeak(text: string): Leak | null {
   return null;
 }
 
+// ---------------------------------------------------------------- payment codes and addresses
+
+/**
+ * The Gloam strings people paste, by prefix (lib/notePackage, lib/receiveTag,
+ * lib/payroll, lib/paymentRequest):
+ *  - address: gloamr1.<key>, a Gloam address. Made to be shared.
+ *  - sealed: gloam2t.<...>, a payment sealed to one Gloam address. Only that
+ *    address's owner can open it, so it is safe to share.
+ *  - plain: gloam1.<...>, a plain payment code. A bearer secret: whoever has
+ *    it can claim the money.
+ *  - locked: gloam1e.<...>, a code locked with a phrase. The code plus the
+ *    phrase claims it.
+ *  - claim_link: ...#claim=<code>, as bearer as the plain code inside it.
+ *  - request_link: ...#to=gloamr1...&amount=..., only says where to pay.
+ * A "Scan to pay privately" QR holds an address or a request, so it is safe too.
+ */
+export type CodeKind = "address" | "sealed" | "plain" | "locked" | "claim_link" | "request_link";
+
+const CODE_LABEL: Record<CodeKind, string> = {
+  address: "[Gloam address]",
+  sealed: "[sealed payment]",
+  plain: "[plain payment code]",
+  locked: "[locked payment code]",
+  claim_link: "[claim link]",
+  request_link: "[payment request link]",
+};
+
+const NOT_URL = String.raw`[^\s<>"'()\[\]]`;
+/** A link with #claim=<code> (or the encoded %23claim%3D), all of it. */
+const CLAIM_LINK_RE = new RegExp(`${NOT_URL}*?(?:#|%23)claim(?:=|%3D)([A-Za-z0-9_.%-]{20,})${NOT_URL}*`, "gi");
+/** A payment request link: to=gloamr1... in the fragment or the query. */
+const REQUEST_LINK_RE = new RegExp(`${NOT_URL}*?[#?&]to(?:=|%3D)gloamr1\\.[A-Za-z0-9_-]{20,}${NOT_URL}*`, "gi");
+/** A bare code. Real ones run to dozens or hundreds of characters; "gloamr1." in a sentence is not one. */
+const RAW_CODE_RE = /(?<![A-Za-z0-9])gloam(r1|2t|1e|1)\.[A-Za-z0-9_-]{20,}/g;
+const RAW_KIND: Record<string, CodeKind> = { r1: "address", "2t": "sealed", "1e": "locked", "1": "plain" };
+
+/** What a claim link carries: a locked or sealed code keeps its own rules. */
+function claimLinkKind(inner: string): { kind: CodeKind; label: string } {
+  let code = inner;
+  try {
+    code = decodeURIComponent(inner);
+  } catch {
+    // keep it as written
+  }
+  if (code.startsWith("gloam1e.")) return { kind: "locked", label: "[claim link with a locked code]" };
+  if (code.startsWith("gloam2t.")) return { kind: "sealed", label: "[claim link to a sealed payment]" };
+  return { kind: "claim_link", label: CODE_LABEL.claim_link };
+}
+
+function sweepCodes(text: string, kinds: Set<CodeKind>, labels: boolean): string {
+  let t = text;
+  // cheap checks first, so a long message without codes never runs the link patterns
+  if (/claim(?:=|%3D)/i.test(t)) {
+    t = t.replace(CLAIM_LINK_RE, (_m, inner: string) => {
+      const k = claimLinkKind(inner);
+      kinds.add(k.kind);
+      return labels ? k.label : " ";
+    });
+  }
+  if (/to(?:=|%3D)gloamr1\./i.test(t)) {
+    t = t.replace(REQUEST_LINK_RE, () => {
+      kinds.add("request_link");
+      return labels ? CODE_LABEL.request_link : " ";
+    });
+  }
+  return t.replace(RAW_CODE_RE, (_m, p: string) => {
+    const kind = RAW_KIND[p]!;
+    kinds.add(kind);
+    return labels ? CODE_LABEL[kind] : " ";
+  });
+}
+
+export type CodeScan = {
+  /** The text with each code or link swapped for a label such as [Gloam address]. */
+  masked: string;
+  /** The text with codes and links taken out, for reading the words around them. */
+  rest: string;
+  kinds: Set<CodeKind>;
+};
+
+/**
+ * Finds Gloam codes, addresses and links in a message. The masked text is
+ * what the rest of the bot reads: the scam and secret checks (a random code
+ * body can look like a link or a key), memory, and the model, which then
+ * never sees a bearer code and cannot mix an address up with a claim link.
+ */
+export function scanCodes(text: string): CodeScan {
+  const kinds = new Set<CodeKind>();
+  const masked = sweepCodes(text, kinds, true);
+  return { masked, rest: sweepCodes(text, new Set(), false), kinds };
+}
+
+/** Codes that work like cash in the wrong hands (on mainnet): a plain code or a claim link. */
+export function hasBearerCode(kinds: Set<CodeKind>): boolean {
+  return kinds.has("plain") || kinds.has("claim_link");
+}
+
+const PHRASE_GIVEN =
+  /\b(?:pass\s*phrase|phrase|pass\s*word|passcode|pwd?|pass|code\s*word)\s*(?:is|was|=|:|-)\s*\S|\b(?:pass\s*phrase|phrase|pass\s*word|pass)\s+["'\u201c\u2018]|\b(?:lock(?:ed)?|unlock)\s+(?:it\s+)?with\s+\S/i;
+const PRIVATE_HINT = /\b(?:dm(?:ed|ing)?|pm|privately|in private|private message|inbox)\b/i;
+const CHATTER = new Set(
+  (
+    "ok okay k kk thanks thank thx ty tysm lol lmao haha hahaha gm gn yes yeah yep yup no nope done sent nice cool great wow " +
+    "hi hello hey sure wait claimed received got here this that code enjoy go test testing check please pls what why how who when where"
+  ).split(" "),
+);
+
+/**
+ * The words with a locked code (or a message right after one from the same
+ * person) seem to give its phrase away: "phrase is Gloam", "pw: dusk", or just
+ * the word on its own line. Not when they say they will send it privately, or
+ * when it is a question.
+ */
+export function sharesPhrase(rest: string): boolean {
+  const t = norm(rest).replace(/\s+/g, " ").trim();
+  if (!t || t.includes("?") || PRIVATE_HINT.test(t)) return false;
+  if (PHRASE_GIVEN.test(t)) return true;
+  const word = t.replace(/^["'`\u201c\u2018]+|["'`\u201d\u2019.!]+$/g, "");
+  return /^\S{2,40}$/.test(word) && !CHATTER.has(word.toLowerCase()) && !/^(?:https?:|www\.|@|\/)/i.test(word);
+}
+
+// ---------------------------------------------------------------- pictures
+
+/** The largest photo side the helper reads; Telegram keeps several sizes of each photo. */
+export const PHOTO_LONG_SIDE = 1600;
+/** Image files (screenshots sent as documents) it reads, at most this big. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_DOC_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+export type ImageRef = { fileId: string; size: number | null };
+export type ImageType = "image/jpeg" | "image/png" | "image/webp";
+
+const longSide = (p: TgPhotoSize) => Math.max(p.width, p.height);
+const area = (p: TgPhotoSize) => p.width * p.height;
+
+/** The largest size with its long side at most PHOTO_LONG_SIDE, else the smallest bigger one. */
+export function pickPhoto(sizes: TgPhotoSize[]): TgPhotoSize | null {
+  const fits = sizes.filter((p) => longSide(p) <= PHOTO_LONG_SIDE).sort((a, b) => area(b) - area(a));
+  if (fits[0]) return fits[0];
+  return [...sizes].sort((a, b) => area(a) - area(b))[0] ?? null;
+}
+
+/** The picture in a message: a photo, or a PNG, JPEG or WebP file up to MAX_IMAGE_BYTES. One per message. */
+export function imageRef(msg: TgMessage | null | undefined): ImageRef | null {
+  if (!msg) return null;
+  if (msg.photo?.length) {
+    const p = pickPhoto(msg.photo);
+    return p ? { fileId: p.file_id, size: p.file_size ?? null } : null;
+  }
+  const d = msg.document;
+  if (!d || !IMAGE_DOC_TYPES.has((d.mime_type ?? "").toLowerCase())) return null;
+  if (typeof d.file_size === "number" && d.file_size > MAX_IMAGE_BYTES) return null;
+  return { fileId: d.file_id, size: d.file_size ?? null };
+}
+
+/** The image type from the file's first bytes, so a renamed file is never sent as an image. */
+export function sniffImage(b: Uint8Array): ImageType | null {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((v, i) => b[i] === v)) return "image/png";
+  const ascii = (from: number, to: number) => String.fromCharCode(...b.subarray(from, to));
+  if (b.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  return null;
+}
+
+/** Captions this short next to a screenshot in Help, Testers or Feedback still get a look. */
+export const SHORT_CAPTION_WORDS = 5;
+
+export function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+// ---------------------------------------------------------------- sentinels
+
+const SENTINEL = /\[\[\s*(SKIP|SECRET)\s*\]\]/gi;
+
+export type Sentinel = "skip" | "secret" | null;
+
+/**
+ * The model's two signals: [[SKIP]] (a picture that needs no reply) and
+ * [[SECRET]] (a picture showing a seed phrase or private key). SECRET wins.
+ * Both are taken out of the text either way.
+ */
+export function readSentinel(raw: string): { sentinel: Sentinel; text: string } {
+  let skip = false;
+  let secret = false;
+  const text = raw
+    .replace(SENTINEL, (_m, w: string) => {
+      if (w.toUpperCase() === "SECRET") secret = true;
+      else skip = true;
+      return " ";
+    })
+    .replace(/[ \t]+/g, " ")
+    .trim();
+  return { sentinel: secret ? "secret" : skip ? "skip" : null, text };
+}
+
 // ---------------------------------------------------------------- replies
 
 const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu;
@@ -326,6 +560,7 @@ function clip(text: string, max: number): string {
 /** Strips formatting the group should not see: headings, bold, emoji, em dashes, "As an AI". */
 export function tidyReply(raw: string): string {
   return norm(raw)
+    .replace(SENTINEL, " ")
     .replace(AS_AN_AI, " ")
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
     .replace(/\*\*(.+?)\*\*/g, "$1")
@@ -345,8 +580,8 @@ export function tidyReply(raw: string): string {
 /**
  * The model's reply, made safe to post, or null when it breaks a rule that
  * tidying cannot fix: a link, email or handle that is not official, anything
- * shaped like a seed phrase or key, a claim that mainnet is live or a date for
- * it, or claiming to be a person.
+ * shaped like a seed phrase or key, a payment code or claim link, a claim
+ * that mainnet is live or a date for it, or claiming to be a person.
  */
 export function cleanReply(raw: string, policy: ReplyPolicy): string | null {
   const text = clip(tidyReply(raw), MAX_REPLY);
@@ -356,6 +591,8 @@ export function cleanReply(raw: string, policy: ReplyPolicy): string | null {
   const okHandles = new Set(["gloamtrade", "gloamhq", ...policy.handles.map((h) => h.toLowerCase())]);
   for (const m of text.matchAll(HANDLE_RE)) if (!okHandles.has(m[1]!.toLowerCase())) return null;
   if (secretLeak(text)) return null;
+  // a code or claim link read off a screenshot is never repeated; an address is fine
+  if ([...scanCodes(text).kinds].some((k) => k !== "address" && k !== "request_link")) return null;
   for (const m of text.matchAll(MAINNET_LIVE)) if (!negated(text, m.index ?? 0, m[0])) return null;
   if (MAINNET_DATE.test(text)) return null;
   if (HUMAN_CLAIM.test(text)) return null;
@@ -391,7 +628,13 @@ export function escapeHtml(s: string): string {
 export type Joiner = { id: number; first: string; username?: string };
 
 /** How many new members a welcome tags by name. */
-export const WELCOME_TAGS = 10;
+export const WELCOME_TAGS = 30;
+/**
+ * Room for the tags, as HTML. Telegram caps a message at 4096 characters; 30
+ * escaped mention links can run past that, so anyone who does not fit is
+ * counted in "and N others" instead.
+ */
+const WELCOME_TAG_CHARS = 3_500;
 
 /**
  * One welcome for a batch of new members, as Telegram HTML. People with a
@@ -399,11 +642,17 @@ export const WELCOME_TAGS = 10;
  * account, so the tag works without a username.
  */
 export function welcomeHtml(joiners: Joiner[], testingOpen: boolean): string {
-  const tags = joiners.slice(0, WELCOME_TAGS).map((j) =>
-    j.username && /^[A-Za-z0-9_]{5,32}$/.test(j.username)
-      ? `@${j.username}`
-      : `<a href="tg://user?id=${Math.trunc(j.id)}">${escapeHtml(cleanName(j.first))}</a>`,
-  );
+  const tags: string[] = [];
+  let used = 0;
+  for (const j of joiners.slice(0, WELCOME_TAGS)) {
+    const tag =
+      j.username && /^[A-Za-z0-9_]{5,32}$/.test(j.username)
+        ? `@${j.username}`
+        : `<a href="tg://user?id=${Math.trunc(j.id)}">${escapeHtml(cleanName(j.first))}</a>`;
+    if (used + tag.length + 2 > WELCOME_TAG_CHARS) break;
+    tags.push(tag);
+    used += tag.length + 2;
+  }
   const others = joiners.length - tags.length;
   if (others > 0) tags.push(`${others} ${others === 1 ? "other" : "others"}`);
   const list = tags.length > 1 ? `${tags.slice(0, -1).join(", ")} and ${tags[tags.length - 1]}` : (tags[0] ?? "friends");
@@ -422,8 +671,12 @@ export function welcomeHtml(joiners: Joiner[], testingOpen: boolean): string {
 /** One line of a thread's recent history, as kept in the store. */
 export type ChatLine = { n: string; t: string; b?: 1 };
 
-/** Text fit to keep in thread memory, or null for anything that looks like a secret or a scam. */
-export function memoryText(text: string): string | null {
+/**
+ * Text fit to keep in thread memory, or null for anything that looks like a
+ * secret or a scam. Codes and links are kept as their labels, never in full.
+ */
+export function memoryText(raw: string): string | null {
+  const text = scanCodes(raw).masked;
   if (secretLeak(text) || scamReason(text)) return null;
   const t = text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   return t ? t.slice(0, 400) : null;

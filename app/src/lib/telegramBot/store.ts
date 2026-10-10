@@ -12,6 +12,9 @@
  *    people active, joining and leaving each hour, escalations, and the
  *    question texts (48 hours, about 100 a day, never anything secret-shaped)
  *  - the owner's private chat, so a scheduled report knows where to go
+ *  - small flags with short lives: pictures read this hour (the cap), albums
+ *    already looked at, who got today's code heads-up, a locked code waiting
+ *    to see if its phrase follows, and who was handed to an admin lately
  */
 import { randomUUID } from "crypto";
 import { hashNumbers, jsonOf, kv } from "@/lib/partnersKv";
@@ -151,7 +154,7 @@ const peopleKey = (kind: "active" | "joins" | "leaves", hour: number) => `${PREF
 const questionsKey = (day: number) => `${PREFIX}questions:${day}`;
 
 /** Things the helper does, counted per hour. */
-export type Counter = "answered" | "welcomes" | "scams" | "scamsMissed" | "secrets" | "secretsMissed";
+export type Counter = "answered" | "images" | "welcomes" | "scams" | "scamsMissed" | "secrets" | "secretsMissed";
 
 export async function bump(counter: Counter, now = Date.now()): Promise<void> {
   const key = statsKey(hourOf(now));
@@ -267,4 +270,71 @@ export async function ownerChats(): Promise<{ chatId: number; username: string }
     if (Number.isSafeInteger(chatId) && chatId > 0) out.push({ chatId, username: String(raw[i + 1] ?? "") });
   }
   return out;
+}
+
+// ---------------------------------------------------------------- short-lived flags
+
+/** Pictures read per clock hour, for everyone together. */
+export const IMAGES_PER_HOUR = 20;
+/** A phrase counts as shared with its locked code within this many messages of the chat, and this long. */
+export const PHRASE_WITHIN_MSGS = 10;
+const LOCKED_TTL_SEC = 30 * 60;
+const CODE_TIP_TTL_SEC = 24 * 60 * 60;
+const ALBUM_TTL_SEC = 10 * 60;
+
+const lockedKey = (chatId: number, userId: number) => `${PREFIX}locked:${chatId}:${userId}`;
+const handOffKey = (chatId: number, userId: number) => `${PREFIX}handoff:${chatId}:${userId}`;
+
+/** Takes one of this hour's picture reads. False once the cap is reached, or when the store is down. */
+export async function takeImageSlot(now = Date.now()): Promise<boolean> {
+  const key = `${PREFIX}images:${hourOf(now)}`;
+  try {
+    const [n] = await kv([
+      ["INCR", key],
+      ["EXPIRE", key, 2 * 60 * 60],
+    ]);
+    return Number(n) <= IMAGES_PER_HOUR;
+  } catch {
+    return false;
+  }
+}
+
+/** True for the first picture of an album, so an album of screenshots gets one look, not one each. */
+export async function firstOfAlbum(mediaGroupId: string): Promise<boolean> {
+  const [r] = await kv([["SET", `${PREFIX}album:${mediaGroupId}`, "1", "EX", ALBUM_TTL_SEC, "NX"]]);
+  return r !== null;
+}
+
+/** One payment-code heads-up per person per day: true (and noted) when this one is due. */
+export async function codeTipDue(userId: number): Promise<boolean> {
+  const [r] = await kv([["SET", `${PREFIX}codetip:${userId}`, "1", "EX", CODE_TIP_TTL_SEC, "NX"]]);
+  return r !== null;
+}
+
+/** Someone posted a locked code without its phrase: watch their next messages for the phrase. */
+export async function watchLockedCode(chatId: number, userId: number, messageId: number): Promise<void> {
+  await kv([["SET", lockedKey(chatId, userId), String(messageId), "EX", LOCKED_TTL_SEC]]);
+}
+
+/**
+ * Whether this person posted a locked code within the last PHRASE_WITHIN_MSGS
+ * messages of the chat. A hit ends the watch, so one code gets one heads-up.
+ */
+export async function lockedCodeNear(chatId: number, userId: number, messageId: number): Promise<boolean> {
+  const key = lockedKey(chatId, userId);
+  const [raw] = await kv([["GET", key]]);
+  const at = Number(raw);
+  if (!raw || !Number.isSafeInteger(at) || messageId - at > PHRASE_WITHIN_MSGS || messageId <= at) return false;
+  await kv([["DEL", key]]);
+  return true;
+}
+
+/** Whether the helper handed this person to an admin in this conversation (the thread memory's six hours). */
+export async function handedOffLately(chatId: number, userId: number): Promise<boolean> {
+  const [n] = await kv([["EXISTS", handOffKey(chatId, userId)]]);
+  return Number(n) > 0;
+}
+
+export async function markHandOff(chatId: number, userId: number): Promise<void> {
+  await kv([["SET", handOffKey(chatId, userId), "1", "EX", THREAD_TTL_SEC]]);
 }

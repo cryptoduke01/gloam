@@ -10,23 +10,38 @@
  *  - a seed phrase or private key gets deleted (when the bot is admin) and a
  *    warning to move funds now; an obvious scam gets deleted and a short "admins
  *    never DM first" note
- *  - it answers when tagged or replied to in any topic but Announcements, and
- *    unprompted only to questions in Help and Testers and to bug reports in
- *    Testers and Feedback, which it also saves for the admin dashboard
+ *  - it answers when tagged or replied to, and every question, in any topic
+ *    but Announcements, plus bug reports in Testers and Feedback, which it
+ *    also saves for the admin dashboard
+ *  - tagged on someone else's message, it answers that message, as a reply to
+ *    its author
+ *  - it reads pictures: a screenshot with a question, one it is tagged on,
+ *    and bare screenshots in Help, Testers and Feedback (staying quiet when
+ *    one needs no reply). One that shows a secret is deleted like a pasted one
+ *  - payment codes and claim links are fine on testnet, so they stay; the
+ *    person gets one friendly heads-up a day about sending them privately on
+ *    mainnet. Gloam addresses and payment requests never get one
  *  - new members get one batched welcome at most every ten minutes
  *  - /help and /start give a short guide, /bug saves a report
  *  - it counts messages, joins, leaves and its own work for the report
- * Answers are rate limited per person and overall; past the limit it stays quiet.
+ * Answers are rate limited per person and overall, and pictures to about 20
+ * an hour; past a limit it stays quiet. It solves what it can and hands a
+ * person to an admin only when it has to, at most once per conversation.
  */
-import { askModel, systemPrompt, userPrompt } from "./answer";
+import { askModel, systemPrompt, userPrompt, type AskInput, type ModelImage } from "./answer";
 import { personaName } from "./persona";
 import { buildReport } from "./report";
 import {
+  MAX_IMAGE_BYTES,
+  SHORT_CAPTION_WORDS,
   TOPIC,
   cleanName,
   cleanReply,
   explicitReply,
   handsToAdmin,
+  hasBearerCode,
+  imageRef,
+  isVague,
   looksLikeBugReport,
   looksLikeQuestion,
   memoryText,
@@ -34,31 +49,58 @@ import {
   messageText,
   namesPersona,
   parseCommand,
+  readSentinel,
   scamReason,
+  scanCodes,
   secretLeak,
+  sharesPhrase,
+  sniffImage,
+  tagsSomeone,
   topicName,
   topicOf,
   wantsReport,
   welcomeHtml,
+  withoutTag,
+  wordCount,
+  type CodeScan,
   type Command,
+  type ImageRef,
   type Joiner,
+  type Sentinel,
 } from "./rules";
 import {
   bump,
+  codeTipDue,
   countMembers,
   countMessage,
+  firstOfAlbum,
+  handedOffLately,
+  lockedCodeNear,
   logEscalation,
   logQuestion,
+  markHandOff,
   markSeen,
   queueJoiners,
   remember,
   rememberOwnerChat,
   saveBugReport,
+  takeImageSlot,
   takeWelcomeBatch,
   threadThenRemember,
+  watchLockedCode,
   type Counter,
 } from "./store";
-import { deleteMessage, getMe, sendMessage, type TgChatMemberUpdated, type TgMessage, type TgUpdate, type TgUser } from "./telegram";
+import {
+  deleteMessage,
+  downloadFile,
+  getFile,
+  getMe,
+  sendMessage,
+  type TgChatMemberUpdated,
+  type TgMessage,
+  type TgUpdate,
+  type TgUser,
+} from "./telegram";
 import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 
 /** t.me/gloamhq. TELEGRAM_GROUP_ID overrides it. */
@@ -70,6 +112,10 @@ const GLOBAL_PER_MIN = 40;
 const WARN_PER_MIN = 2;
 /** Bug reports saved per person per minute. */
 const BUGS_PER_MIN = 6;
+/** Topics where a screenshot with no caption (or a few words) still gets a look. */
+const SCREENSHOT_TOPICS = new Set<number>([TOPIC.help, TOPIC.testers, TOPIC.feedback]);
+/** Phrase-looking messages longer than this are not checked against a locked code. */
+const PHRASE_MAX_CHARS = 120;
 
 export type BotConfig = {
   groupId: number;
@@ -115,6 +161,11 @@ export function isOwner(u: { id: number; username?: string }, c: BotConfig): boo
   return Boolean(u.username && c.owners.handles.includes(u.username.toLowerCase()));
 }
 
+/** The owner or an admin: their warnings are not scams, and they never get code heads-ups or hand-offs. */
+function isTrusted(u: TgUser, c: BotConfig): boolean {
+  return isOwner(u, c) || Boolean(u.username && c.admins.includes(u.username.toLowerCase()));
+}
+
 // ---------------------------------------------------------------- copy
 
 function groupGuide(c: BotConfig): string {
@@ -148,10 +199,44 @@ function bugNotSaved(name: string): string {
   return `Thanks ${name}. I couldn't save that just now, so please post it in the Feedback topic or email hello@gloam.trade, and an admin will take a look.`;
 }
 
-function cantAnswer(c: BotConfig, name: string, topic: number): string {
+/** What the fallback does when there is no answer: ask for more, or hand off (once). */
+type Fallback = "clarify" | "unsure" | "admins_here" | "already" | "handoff";
+
+function fallbackKind(o: { vague: boolean; askerIsAdmin: boolean; adminInvolved: boolean; handedOff: boolean }): Fallback {
+  if (o.vague) return "clarify";
+  if (o.askerIsAdmin) return "unsure";
+  if (o.adminInvolved) return "admins_here";
+  return o.handedOff ? "already" : "handoff";
+}
+
+function cantAnswer(c: BotConfig, name: string, topic: number, kind: Fallback): string {
+  if (kind === "clarify") {
+    return `Give me a bit more to go on, ${name}. What were you trying to do, and what did the screen say? The exact error text or a screenshot works best.`;
+  }
+  if (kind === "unsure") return `Not going to guess on that one, ${name}. The facts I have don't cover it.`;
+  if (kind === "admins_here") {
+    return `The admins are already on this thread, ${name}, so they'll see it. If it's a problem, the exact error text or a screenshot helps whoever picks it up.`;
+  }
+  if (kind === "already") {
+    return `This one's already with the team from earlier, ${name}. If anything changed, send the exact error text or a screenshot and I'll take another look.`;
+  }
   const cc = c.admins.length ? ` (${c.admins.map((h) => `@${h}`).join(" ")})` : "";
   if (topic === TOPIC.help) return `Not going to guess on that one, ${name}. I'll take it to Boss Duke, and an admin will follow up here${cc}.`;
   return `Not going to guess on that one, ${name}. I'll take it to Boss Duke. Drop it in the Help topic or email hello@gloam.trade, and an admin will follow up${cc}.`;
+}
+
+function codeTip(name: string): string {
+  return (
+    `Quick heads-up, ${name}: fine here, it's testnet play money. On mainnet a plain payment code or claim link works like cash, ` +
+    `so whoever sees it can claim it. Send those privately, or pay the person's Gloam address instead so the payment is sealed to them.`
+  );
+}
+
+function phraseTip(name: string): string {
+  return (
+    `Quick heads-up, ${name}: fine here, it's testnet play money. On mainnet, share the phrase for a locked code privately, ` +
+    `never next to the code, because the code plus its phrase lets anyone claim it.`
+  );
 }
 
 function leakWarning(name: string, removed: boolean): string {
@@ -215,40 +300,72 @@ async function historyFor(chatId: number, topic: number, name: string, text: str
   return threadThenRemember(chatId, topic, t ? { n: name, t } : null).catch(() => []);
 }
 
+/** A member's message other than the asker's own, the bot's, a channel's or another bot's. */
+function otherMembers(r: TgMessage, from: TgUser, me: TgUser): boolean {
+  const a = r.from;
+  return Boolean(a && !a.is_bot && a.id !== from.id && a.id !== me.id && !r.sender_chat);
+}
+
+/**
+ * The picture as the model takes it, or null: past the hourly cap, too big,
+ * not really an image, or Telegram would not hand it over.
+ */
+async function loadPicture(ref: ImageRef): Promise<ModelImage | null> {
+  if (ref.size !== null && ref.size > MAX_IMAGE_BYTES) return null;
+  if (!(await takeImageSlot())) return null;
+  const file = await getFile(ref.fileId);
+  if (!file || (file.size !== null && file.size > MAX_IMAGE_BYTES)) return null;
+  const bytes = await downloadFile(file.path, MAX_IMAGE_BYTES);
+  const mediaType = bytes ? sniffImage(bytes) : null;
+  if (!bytes || !mediaType) return null;
+  return { mediaType, data: Buffer.from(bytes).toString("base64") };
+}
+
+/**
+ * One friendly heads-up a day per person who posts a bearer code or claim
+ * link, or a locked code with its phrase nearby. Testnet play money, so
+ * nothing is deleted. Admins test with codes all the time and get none.
+ */
+async function codeHeadsUp(msg: TgMessage, from: TgUser, codes: CodeScan, name: string, threadId: number | undefined): Promise<void> {
+  const chatId = msg.chat.id;
+  let tip: string | null = null;
+  if (hasBearerCode(codes.kinds)) {
+    tip = codeTip(name);
+  } else if (codes.kinds.has("locked")) {
+    if (sharesPhrase(codes.rest)) tip = phraseTip(name);
+    else await watchLockedCode(chatId, from.id, msg.message_id).catch(() => {});
+  } else if (codes.rest.length <= PHRASE_MAX_CHARS && sharesPhrase(codes.rest)) {
+    // the phrase on its own, a few messages after the same person's locked code
+    if (await lockedCodeNear(chatId, from.id, msg.message_id).catch(() => false)) tip = phraseTip(name);
+  }
+  if (!tip || !(await codeTipDue(from.id).catch(() => false))) return;
+  await sendMessage(chatId, tip, { threadId, replyTo: msg.message_id });
+}
+
 type Compose = {
   c: BotConfig;
   me: TgUser;
   from: TgUser;
-  name: string;
-  text: string;
-  topic: number;
-  replied: TgMessage | null;
-  history: { n: string; t: string; b?: 1 }[];
-  bug: boolean;
+  input: Omit<AskInput, "persona">;
+  image: ModelImage | null;
 };
 
-/** The model's answer after the reply rules, or null. */
-async function compose(x: Compose): Promise<string | null> {
-  const repliedText = x.replied ? messageText(x.replied) : "";
-  const inHistory = x.history.some((l) => l.t === repliedText);
+/** The model's answer after the reply rules (or null), and its signal about a picture. */
+async function compose(x: Compose): Promise<{ reply: string | null; sentinel: Sentinel }> {
   const raw = await askModel(
     systemPrompt({ persona: x.c.persona, testingOpen: x.c.testingOpen, admins: x.c.admins }),
-    userPrompt({
-      persona: x.c.persona,
-      asker: x.name,
-      text: x.text,
-      topic: topicName(x.topic),
-      repliedTo:
-        repliedText && !inHistory && memoryText(repliedText)
-          ? { name: x.replied?.from?.id === x.me.id ? `${x.c.persona} (you)` : cleanName(x.replied?.from?.first_name), text: repliedText }
-          : null,
-      history: x.history,
-      bug: x.bug,
-    }),
+    userPrompt({ persona: x.c.persona, ...x.input }),
+    x.image,
   );
-  if (!raw) return null;
+  if (!raw) return { reply: null, sentinel: null };
+  if (x.image) await count("images");
+  const { sentinel, text } = readSentinel(raw);
+  // the signals only mean something for a picture; [[SKIP]] wins when nobody asked, or when it is all there is
+  if (x.image && sentinel === "secret") return { reply: null, sentinel };
+  if (x.image && sentinel === "skip" && (x.input.picture?.mayIgnore || !text)) return { reply: null, sentinel };
+  if (!text) return { reply: null, sentinel: null };
   const handles = [...x.c.admins, x.from.username, x.me.username].filter((h): h is string => Boolean(h));
-  return cleanReply(raw, { handles });
+  return { reply: cleanReply(text, { handles }), sentinel: null };
 }
 
 // ---------------------------------------------------------------- welcomes
@@ -313,11 +430,15 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig): Promise<void> {
   const chatId = msg.chat.id;
   const topic = topicOf(msg);
   await countMessage(topic, from.id).catch(() => {});
-  const text = messageText(msg);
-  if (!text) return;
+  const ownPicture = imageRef(msg);
+  const raw = messageText(msg);
+  if (!raw && !ownPicture) return;
+  // codes and links become labels ([Gloam address], [claim link]) for everything that reads the text
+  const codes = scanCodes(raw);
+  const text = codes.masked;
   const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
   const name = firstName(from, c);
-  const trusted = isOwner(from, c) || Boolean(from.username && c.admins.includes(from.username.toLowerCase()));
+  const trusted = isTrusted(from, c);
 
   if (secretLeak(text)) {
     const removed = await deleteMessage(chatId, msg.message_id);
@@ -342,37 +463,99 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig): Promise<void> {
     if (!cmd.forOther) await onCommand(cmd, msg, from, c, topic);
     return;
   }
+  if (!trusted) await codeHeadsUp(msg, from, codes, name, threadId);
 
-  const history = await historyFor(chatId, topic, name, text);
-  const asked = looksLikeQuestion(text);
-  const kept = asked ? memoryText(text) : null;
-  if (kept) await logQuestion(kept).catch(() => {});
+  const history = await historyFor(chatId, topic, name, ownPicture ? `[picture]${text ? ` ${text}` : ""}` : text);
   const replied = explicitReply(msg);
   const toBot = replied?.from?.id === me.id;
   // a tag, a reply to Glim, or saying its name; questions get answered in every topic (not Announcements)
   const tagged = mentionsBot(msg, me) || toBot || namesPersona(text, c.persona);
+  // tagged on another member's message: that message is the question, and the answer goes to its author
+  const target = tagged && !toBot && replied && otherMembers(replied, from, me) ? replied : null;
+  const targetText = target ? scanCodes(messageText(target)).masked : "";
+  const asked = looksLikeQuestion(text);
   const bug = (topic === TOPIC.testers || topic === TOPIC.feedback) && looksLikeBugReport(text);
-  // the owner wants every question answered, members' questions to each other included
-  if (!tagged && !bug && !asked) return;
+  // a screenshot in Help, Testers or Feedback with no caption, or only a few words, gets a look
+  const bareShot = Boolean(ownPicture) && !tagged && !asked && SCREENSHOT_TOPICS.has(topic) && wordCount(text) <= SHORT_CAPTION_WORDS;
+
+  // the question being answered is logged once: the original when tagged on it, else this one
+  const question = target ? (looksLikeQuestion(targetText) ? null : targetText) : asked ? text : null;
+  const kept = question ? memoryText(question) : null;
+  if (kept) await logQuestion(kept).catch(() => {});
+  if (!tagged && !bug && !asked && !bareShot) return;
+  if (bareShot && !bug && msg.media_group_id && !(await firstOfAlbum(msg.media_group_id).catch(() => false))) return;
 
   const saved = bug ? await saveBug(msg, from, text, topicName(topic)) : false;
   if (!(await withinLimits(from.id))) return;
 
-  const answer = await compose({ c, me, from, name, text, topic, replied, history, bug: saved });
-  const reply = answer ?? (saved ? bugThanks(name) : tagged ? cantAnswer(c, name, topic) : null);
+  // the picture: this message's own, else the one on the message it was tagged on
+  const pictureMsg = ownPicture ? msg : tagged && !toBot && replied && imageRef(replied) ? replied : null;
+  const pictureRef = ownPicture ?? (pictureMsg ? imageRef(pictureMsg) : null);
+  const image = pictureRef ? await loadPicture(pictureRef) : null;
+  // a bare screenshot it could not read gets no reply
+  if (bareShot && !image && !saved) return;
+
+  const asker = target?.from ?? from;
+  const askerName = target ? firstName(asker, c) : name;
+  const adminHandles = [...c.admins, ...c.owners.handles];
+  const adminInvolved =
+    trusted || tagsSomeone(msg, adminHandles, c.owners.ids) || Boolean(target && tagsSomeone(target, adminHandles, c.owners.ids));
+  const handedOff = await handedOffLately(chatId, asker.id).catch(() => false);
+  const repliedText = !target && replied ? scanCodes(messageText(replied)).masked : "";
+  const inHistory = history.some((l) => l.t === repliedText);
+
+  const { reply: answer, sentinel } = await compose({
+    c,
+    me,
+    from,
+    image,
+    input: {
+      asker: askerName,
+      text: target ? targetText : text,
+      topic: topicName(topic),
+      repliedTo:
+        repliedText && !inHistory && memoryText(repliedText)
+          ? { name: toBot ? `${c.persona} (you)` : cleanName(replied?.from?.first_name), text: repliedText }
+          : null,
+      history,
+      bug: saved,
+      taggedBy: target ? { name, text: withoutTag(text, me.username) } : null,
+      picture: pictureMsg ? { seen: Boolean(image), mayIgnore: bareShot, fromReply: pictureMsg !== msg && pictureMsg !== target } : null,
+      adminInvolved,
+      handedOff,
+    },
+  });
+
+  if (sentinel === "secret" && pictureMsg) {
+    // a seed phrase or key in a screenshot: the same as one pasted as text
+    const owner = pictureMsg.from ?? from;
+    const removed = await deleteMessage(chatId, pictureMsg.message_id);
+    await count(removed ? "secrets" : "secretsMissed");
+    await sendMessage(chatId, leakWarning(firstName(owner, c), removed), { threadId, replyTo: removed ? undefined : pictureMsg.message_id });
+    return;
+  }
+  if (sentinel === "skip") return;
+
+  const vague = !image && isVague(target ? `${targetText} ${text}` : text, c.persona);
+  const fallback = fallbackKind({ vague, askerIsAdmin: isTrusted(asker, c), adminInvolved, handedOff });
+  const reply = answer ?? (saved ? bugThanks(name) : tagged ? cantAnswer(c, askerName, topic, fallback) : null);
   if (!reply) return;
-  const sent = await sendMessage(chatId, reply, { threadId, replyTo: msg.message_id });
+  const replyTo = target ? target.message_id : msg.message_id;
+  const sent = await sendMessage(chatId, reply, { threadId, replyTo });
   if (!sent) return;
   await remember(chatId, topic, { n: c.persona, t: reply.slice(0, 400), b: 1 }).catch(() => {});
   if (answer) await count("answered");
-  // handed to a person: the fallback, or an answer that says an admin will follow up (bug thanks aside)
-  if (!saved && (!answer || handsToAdmin(answer))) {
+  // handed to a person: the hand-off fallback, or an answer that says an admin will follow up (bug thanks aside).
+  // Once per person per conversation, and never when an admin asked or is already on it.
+  const handsOff = !saved && (answer ? handsToAdmin(answer) : fallback === "handoff");
+  if (handsOff && !handedOff && !adminInvolved) {
+    await markHandOff(chatId, asker.id).catch(() => {});
     await logEscalation({
       at: Date.now(),
-      name,
+      name: askerName,
       topic: topicName(topic),
-      text: (memoryText(text) ?? "").slice(0, 200),
-      link: messageLink(msg),
+      text: (memoryText(target ? targetText || text : text) ?? "").slice(0, 200),
+      link: messageLink(target ?? msg),
     }).catch(() => {});
   }
 }
@@ -391,7 +574,7 @@ async function onPrivate(msg: TgMessage, c: BotConfig): Promise<void> {
   await rememberOwnerChat(chatId, from.username).catch(() => {});
   const text = messageText(msg);
   if (!text) return;
-  if (secretLeak(text)) {
+  if (secretLeak(scanCodes(text).masked)) {
     const removed = await deleteMessage(chatId, msg.message_id);
     await sendMessage(chatId, leakWarning(firstName(from), removed));
     return;
