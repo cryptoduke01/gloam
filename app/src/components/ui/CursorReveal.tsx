@@ -6,11 +6,15 @@ import { useEffect, useRef } from "react";
  * Money under the seal. A hidden layer of engraved dollar bills (line art in
  * the spirit of the courier etching) sits behind the hero. Only on hover, the
  * cursor reveals them through a soft lens with a faint green tint at its centre;
- * they seal back when the cursor leaves. Drawn once to an offscreen layer and
- * masked per frame. Off for touch and reduced motion.
+ * they seal back when the cursor leaves. On load the lens sweeps across once, so
+ * visitors on touch screens, or who never hover, still see what is under the
+ * seal. Drawn once to an offscreen layer and masked per frame. Off under
+ * reduced motion.
  */
 
 const RADIUS = 230;
+const INTRO_MS = 3200;
+const INTRO_DELAY_MS = 700;
 
 // Deterministic hash (stable layout, no Math.random).
 function hash(x: number, y: number) {
@@ -193,7 +197,7 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     const host = canvas?.parentElement;
     if (!canvas || !host) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    const fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -219,6 +223,10 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     let inside = false;
     let raf = 0;
     let running = false;
+    // One sweep across the hero on load; the cursor takes over if it arrives.
+    let intro = false;
+    let introStart = 0;
+    let introTimer = 0;
 
     const paintLayer = () => {
       const dark = document.documentElement.dataset.theme === "dark";
@@ -299,12 +307,29 @@ export function CursorReveal({ className = "" }: { className?: string }) {
       ctx.globalCompositeOperation = "source-over";
     };
 
-    const loop = () => {
+    const loop = (now: number) => {
+      let showing = inside;
+      if (intro && !inside) {
+        if (!introStart) introStart = now;
+        const t = (now - introStart) / INTRO_MS;
+        if (t >= 1) {
+          intro = false;
+        } else {
+          const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          target.x = w * (0.18 + 0.66 * e);
+          target.y = h * (0.42 - 0.14 * Math.sin(Math.PI * t));
+          if (pos.x < -999) {
+            pos.x = target.x;
+            pos.y = target.y;
+          }
+          showing = t < 0.8;
+        }
+      }
       pos.x += (target.x - pos.x) * 0.14;
       pos.y += (target.y - pos.y) * 0.14;
-      strength += ((inside ? 1 : 0) - strength) * 0.08;
+      strength += ((showing ? 1 : 0) - strength) * 0.08;
       draw();
-      if (inside || strength > 0.01) {
+      if (inside || intro || strength > 0.01) {
         raf = requestAnimationFrame(loop);
       } else {
         running = false;
@@ -319,6 +344,7 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     };
 
     const onMove = (e: PointerEvent) => {
+      intro = false;
       const r = host.getBoundingClientRect();
       target.x = e.clientX - r.left;
       target.y = e.clientY - r.top;
@@ -344,10 +370,18 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     ro.observe(host);
     const mo = new MutationObserver(paintLayer);
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    host.addEventListener("pointermove", onMove);
-    host.addEventListener("pointerleave", onLeave);
+    if (fine) {
+      host.addEventListener("pointermove", onMove);
+      host.addEventListener("pointerleave", onLeave);
+    }
+    introTimer = window.setTimeout(() => {
+      if (inside) return;
+      intro = true;
+      start();
+    }, INTRO_DELAY_MS);
 
     return () => {
+      window.clearTimeout(introTimer);
       cancelAnimationFrame(raf);
       ro.disconnect();
       mo.disconnect();

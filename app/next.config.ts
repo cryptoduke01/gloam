@@ -15,7 +15,10 @@ const nextConfig: NextConfig = {
   },
   // The pitch deck is one static page in public/pitch.
   async rewrites() {
-    return [{ source: "/pitch", destination: "/pitch/index.html" }];
+    return [
+      { source: "/pitch", destination: "/pitch/index.html" },
+      { source: "/pitch/report", destination: "/pitch/report.html" },
+    ];
   },
   webpack: (config) => {
     // WalletConnect optional deps — silence missing optional modules
