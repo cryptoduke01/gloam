@@ -1,13 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
 import { CursorReveal } from "@/components/ui/CursorReveal";
-import { SealDots } from "@/components/ui/SealDots";
 import { SealStream } from "@/components/landing/SealStream";
 import { PayrollLive } from "@/components/landing/PayrollLive";
+import { LiveProduct } from "@/components/landing/LiveProduct";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 
 /**
@@ -15,104 +14,6 @@ import { CodeBlock } from "@/components/ui/CodeBlock";
  * luminous green field, and live product UI in place of illustration.
  * Signature: the seal stream, payments go in readable and come out sealed.
  */
-
-function Token({ src, alt }: { src: string; alt: string }) {
-  return (
-    <Image
-      src={src}
-      alt={alt}
-      width={20}
-      height={20}
-      className="h-5 w-5 shrink-0 rounded-full"
-    />
-  );
-}
-
-/* ---------- live mini product cards ---------- */
-
-function AddCard() {
-  return (
-    <div className="flex h-full flex-col rounded-[16px] bg-panel p-4 shadow-card">
-      <div className="rounded-[12px] bg-surface p-3.5">
-        <div className="flex items-center justify-between text-[12px] text-mute">
-          <span>You add</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-panel px-2 py-0.5 text-foreground">
-            <Token src="/brand/logos/usdg.png" alt="" /> USDG
-          </span>
-        </div>
-        <p className="tnum mt-2 text-[26px] font-light leading-none tracking-[-0.02em]">1,000</p>
-      </div>
-      <div className="relative z-10 -my-2 mx-auto grid h-7 w-7 place-items-center rounded-full border-4 border-panel bg-sealed-soft text-sealed">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M12 5v14m0 0l-5-5m5 5l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <div className="rounded-[12px] bg-surface p-3.5">
-        <div className="flex items-center justify-between text-[12px] text-mute">
-          <span>Private balance</span>
-          <span className="inline-flex items-center gap-1.5 font-medium text-sealed">
-            <span className="h-1.5 w-1.5 rounded-full bg-sealed" /> Only you
-          </span>
-        </div>
-        <p className="tnum mt-2 text-[26px] font-light leading-none tracking-[-0.02em]">1,000</p>
-      </div>
-      <span className="btn btn-ink btn-sm btn-block mt-auto" aria-hidden>
-        Add privately
-      </span>
-    </div>
-  );
-}
-
-function SendCard() {
-  return (
-    <div className="flex h-full flex-col rounded-[16px] bg-panel p-4 shadow-card">
-      <div className="rounded-[12px] bg-surface p-3.5">
-        <p className="text-[12px] text-mute">Send to</p>
-        <p className="mt-1.5 truncate text-[15px] text-foreground">gloamr1.7fQk…x9Wd</p>
-      </div>
-      <div className="mt-2 rounded-[12px] bg-surface p-3.5">
-        <div className="flex items-center justify-between text-[12px] text-mute">
-          <span>Amount</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-panel px-2 py-0.5 text-foreground">
-            <Token src="/brand/logos/pathusd.svg" alt="" /> PathUSD
-          </span>
-        </div>
-        <p className="tnum mt-2 text-[26px] font-light leading-none tracking-[-0.02em]">250</p>
-      </div>
-      <div className="mt-2 flex items-center justify-between px-1 py-2 text-[12px]">
-        <span className="text-mute">The explorer shows</span>
-        <span className="text-foreground">
-          Private transfer <SealDots n={4} className="ml-1 text-foreground/60" />
-        </span>
-      </div>
-      <span className="btn btn-ink btn-sm btn-block mt-auto" aria-hidden>
-        Send privately
-      </span>
-    </div>
-  );
-}
-
-function ProveCard() {
-  return (
-    <div className="flex h-full flex-col rounded-[16px] bg-panel p-4 shadow-card">
-      <div className="flex flex-1 flex-col items-center justify-center rounded-[12px] bg-surface px-4 py-5 text-center">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-sealed-soft text-sealed">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-        <p className="mt-3 text-[16px] text-foreground">Holds at least $10,000</p>
-        <p className="mt-1 text-[12px] text-mute">Verified. Exact balance not shared.</p>
-        <p className="mt-3 text-foreground/60">
-          <SealDots n={8} />
-        </p>
-      </div>
-      <span className="btn btn-ink btn-sm btn-block mt-3" aria-hidden>
-        Share proof
-      </span>
-    </div>
-  );
-}
 
 /* ---------- line icons ---------- */
 
@@ -194,6 +95,30 @@ const TRUST = [
   },
 ];
 
+const WHAT = [
+  {
+    label: "The app",
+    title: "Use it today",
+    body: "Hold, pay and run payroll privately from your own wallet. Gloam never holds your keys, and nobody on the team can move your money.",
+    href: "/app",
+    cta: "Open app",
+  },
+  {
+    label: "The protocol",
+    title: "Open vault contracts",
+    body: "Private balances on Tempo and Robinhood Chain testnet. Settlement stays public, the amounts and the people stay private.",
+    href: "/verify#contracts",
+    cta: "Verify the contracts",
+  },
+  {
+    label: "The SDK",
+    title: "Build on it",
+    body: "Add private payments, payroll and proofs to your own app or agent with one package.",
+    href: "/sdk",
+    cta: "Explore the SDK",
+  },
+];
+
 const SNIPPET = `import { buildGloamPayment, relayIntent } from "@gloamtrade/sdk";
 
 const payment = await buildGloamPayment({ to, amount, asset });
@@ -235,6 +160,26 @@ export function Landing() {
           </div>
         </section>
 
+        {/* what Gloam is: one product you use, build on and can check */}
+        <section aria-labelledby="what-gloam-is" className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-7 sm:pt-24">
+          <h2 id="what-gloam-is" className="sr-only">What Gloam is</h2>
+          <div className="grid gap-10 sm:grid-cols-3">
+            {WHAT.map((w) => (
+              <div key={w.label} className="border-t border-foreground pt-5">
+                <p className="t-label text-mute">{w.label}</p>
+                <p className="mt-3 text-[19px] leading-snug tracking-[-0.01em]">{w.title}</p>
+                <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-mute">{w.body}</p>
+                <Link
+                  href={w.href}
+                  className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                >
+                  {w.cta} <span aria-hidden>→</span>
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* thesis + signature */}
         <section id="how" className="scroll-mt-20 pb-6 pt-24 sm:pt-36">
           <div className="mx-auto max-w-[900px] px-6 text-center">
@@ -268,39 +213,7 @@ export function Landing() {
                 showing the number. On testnet today, with real contracts.
               </p>
             </div>
-            <div className="relative mx-auto mt-10 grid max-w-[1080px] gap-4 md:grid-cols-3">
-              {[
-                {
-                  card: <AddCard />,
-                  label: "Private balance",
-                  body: "Move USDG, PathUSD or ETH into a balance only you can see.",
-                  href: "/docs/product",
-                },
-                {
-                  card: <SendCard />,
-                  label: "Private pay",
-                  body: "Send to a Gloam address or a claim link. The explorer never sees how much.",
-                  href: "/docs/private-pay",
-                },
-                {
-                  card: <ProveCard />,
-                  label: "Prove",
-                  body: "Show a lender, an auditor or a counterparty exactly what they need. Nothing more.",
-                  href: "/docs/sdk/disclosure",
-                },
-              ].map((c) => (
-                <div key={c.label} className="flex flex-col">
-                  <div className="gl-glass h-[320px] p-2">{c.card}</div>
-                  <Link
-                    href={c.href}
-                    className="t-label mt-5 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
-                  >
-                    {c.label} <span aria-hidden>→</span>
-                  </Link>
-                  <p className="mt-2 text-[14px] leading-relaxed text-mute">{c.body}</p>
-                </div>
-              ))}
-            </div>
+            <LiveProduct />
           </div>
         </section>
 
