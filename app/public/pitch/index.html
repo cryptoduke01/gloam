@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gloam pitch</title>
-<meta name="description" content="Gloam is the privacy layer for onchain finance: private balances, payments and proofs for people, teams and AI agents.">
+<meta name="description" content="Gloam: private stablecoin payments for people, teams and AI agents. Private by default, provable on demand.">
 <meta name="robots" content="noindex">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <style>
@@ -82,9 +82,21 @@ tr.us td { background: var(--tint); color: var(--on-tint); }
 tr.us td:first-child { padding-left: 20px; border-radius: 16px 0 0 16px; }
 tr.us td:last-child { border-radius: 0 16px 16px 0; }
 tr.us th:first-child { padding-left: 20px; }
+table.matrix { font-size: 25px; }
+table.matrix th { font-size: 19px; }
+table.matrix td { padding: 18px 24px 18px 0; }
 .steps { display: grid; grid-template-columns: 1fr 64px 1fr 64px 1fr; align-items: stretch; }
 .arrow { display: grid; place-items: center; color: var(--faint); }
 .arrow svg { width: 34px; height: 34px; }
+.tag { font-weight: 500; font-size: 22px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.dark .tag { color: var(--dk-mute); }
+.rows { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: 80px 300px 1fr; gap: 32px; align-items: baseline; padding: 26px 0; border-top: 1.5px solid var(--line); font-size: 30px; line-height: 1.38; }
+.row:last-child { border-bottom: 1.5px solid var(--line); }
+.row .n { font-size: 24px; color: var(--green); font-weight: 500; }
+.row h3 { font-weight: 500; font-size: 34px; letter-spacing: -0.01em; }
+.row p { color: var(--mute); }
+.quote { font-weight: 300; font-size: 96px; line-height: 1.06; letter-spacing: -0.03em; max-width: 20ch; }
 
 @media print {
   @page { size: 1920px 1080px; margin: 0; }
@@ -109,28 +121,28 @@ tr.us th:first-child { padding-left: 20px; }
 <div class="frame"><section class="s light glow" aria-label="Gloam">
   <div class="top"><div class="lock"><svg class="mark" viewBox="0 0 32 32" width="44" height="44"><rect class="tile" width="32" height="32" rx="9"/><rect class="win" x="15" y="4" width="12" height="12" rx="3.5"/></svg>Gloam</div><span class="mute">October 2026</span></div>
   <div class="grow"></div>
-  <h1 class="h1">The privacy layer<br>for onchain finance.</h1>
-  <p class="lede" style="margin-top:40px;max-width:40ch">Hold, pay and run payroll without showing the world every amount. Trade privately next.</p>
+  <h1 class="h1">Private money<br>on public chains.</h1>
+  <p class="lede" style="margin-top:40px;max-width:40ch">Private stablecoin payments for people, teams and AI agents. Private by default, provable on demand.</p>
   <div class="grow"></div>
   <div class="foot"><span>Live on Tempo and Robinhood Chain testnets</span><span>gloam.trade</span></div>
 </section></div>
-<aside class="notes"><b>Say:</b> Hi, I'm Duke, and I'm building Gloam. Gloam is the privacy layer for onchain finance: hold, pay and run payroll without showing the world every amount, and next, trade privately too. It's live today on Tempo and Robinhood Chain testnet.</aside>
+<aside class="notes"><b>Say:</b> Hi, I'm Duke, and I'm building Gloam. Stablecoins are becoming how businesses and AI agents pay each other, and every one of those payments is public. Gloam makes them private, and lets the payer prove exactly what someone needs to see. It's live today on Tempo and Robinhood Chain testnets.</aside>
 
 <!-- 2 problem -->
 <div class="frame"><section class="s dark" aria-label="The problem">
   <p class="eyebrow">The problem</p>
-  <h2 class="h1" style="margin-top:48px">Every wallet is a<br>public bank statement.</h2>
+  <h2 class="h1" style="margin-top:48px">Every stablecoin payment<br>is public.</h2>
   <div class="grow"></div>
   <div class="cols c4">
-    <div class="rule"><h3>Payroll</h3><p>Pay a team onchain and every salary is public, forever.</p></div>
-    <div class="rule"><h3>Treasury</h3><p>Balances, suppliers and runway are readable by anyone.</p></div>
-    <div class="rule"><h3>Trading</h3><p>Every position and trade size is visible, so others copy or front-run you.</p></div>
+    <div class="rule"><h3>Payroll</h3><p>Pay a team in stablecoins and every salary is public, forever.</p></div>
+    <div class="rule"><h3>Suppliers and treasury</h3><p>Who you pay, how much, and your runway are readable by anyone.</p></div>
     <div class="rule"><h3>AI agents</h3><p>An agent's wallet shows every tool it pays for, and its strategy.</p></div>
+    <div class="rule"><h3>Holdings</h3><p>Every balance and stock position, with its size, is on the record.</p></div>
   </div>
 </section></div>
-<aside class="notes"><b>Say:</b> Paste any wallet into a block explorer and you see everything: the balance, every payment, every trade, who it paid and how much. That's fine for settlement, and terrible for real money. It's why companies keep payroll and treasury off chain, why traders get copied and front-run, and why agents that pay for tools leak what they're doing.</aside>
+<aside class="notes"><b>Say:</b> Paste any wallet into a block explorer and you see everything: the balance, every payment, who it paid and how much. That's fine for settlement and terrible for real money. It's why companies keep payroll and treasury off chain, and why agents that pay for tools leak what they're doing.</aside>
 
-<!-- 2b cost of public money -->
+<!-- 3 cost of public money -->
 <div class="frame"><section class="s dark" aria-label="What public money costs">
   <p class="eyebrow">What public money costs</p>
   <h2 class="h1" style="margin-top:48px">Public wallets are<br>a target list.</h2>
@@ -147,57 +159,69 @@ tr.us th:first-child { padding-left: 20px; }
 </section></div>
 <aside class="notes"><b>Say:</b> And it costs people. Last year there were 72 physical attacks on crypto holders, a record, and kidnapping was the most common. 713 million dollars was stolen from 80,000 people's personal wallets. Scammers ran 270 million address-poisoning attacks, copying the people you pay from your public history. Trading bots took 60 million dollars from traders by seeing their trades coming. Every one of these starts the same way: your balance and your history are public.</aside>
 
-<!-- 3 why now -->
+<!-- 4 why now: the money -->
 <div class="frame"><section class="s light" aria-label="Why now">
   <p class="eyebrow">Why now</p>
-  <h2 class="h2" style="margin-top:40px">Real money is moving onchain, in public.</h2>
+  <h2 class="h2" style="margin-top:40px">Businesses and agents now<br>pay in stablecoins.</h2>
   <div class="grow"></div>
   <div class="cols c3">
-    <div class="rule" style="gap:22px"><p class="big">$306B</p><p>in stablecoins in circulation</p></div>
-    <div class="rule" style="gap:22px"><p class="big">$33T</p><p>moved in stablecoins in 2025, more than the big card networks</p></div>
-    <div class="rule" style="gap:22px"><p class="big">$226B</p><p>a year in business payments, up 733% in a year</p></div>
+    <div class="rule" style="gap:22px"><p class="big">$390B</p><p>in real stablecoin payments in 2025</p></div>
+    <div class="rule" style="gap:22px"><p class="big">2×</p><p>the year before</p></div>
+    <div class="rule" style="gap:22px"><p class="big">$226B</p><p>of it business to business, 58% of the total</p></div>
   </div>
   <div class="grow"></div>
-  <p style="font-size:30px">Stripe and Paradigm launched Tempo, a payments chain. Robinhood put stocks onchain. Agents now pay over HTTP. <span class="mute">All of it on public rails.</span></p>
-  <div class="foot"><span>Sources: DefiLlama via Rise Q3 2026 report; Morph stablecoin report 2025; Artemis and McKinsey via The Fintech Times</span><span>4</span></div>
+  <p style="font-size:30px">Tempo went live on 18 March 2026, Robinhood Chain on 1 July, Arc on 16 September. <span class="mute">All public by default.</span></p>
+  <div class="foot"><span></span><span>4</span></div>
 </section></div>
-<aside class="notes"><b>Say:</b> Why now? Stablecoins are real money now: about 306 billion in circulation, 33 trillion moved last year, and businesses alone send over 200 billion a year, growing more than 7x. Tempo launched a payments chain, Robinhood put stocks onchain, and AI agents now pay for things over HTTP. Every one of those payments is public.</aside>
+<aside class="notes"><b>Say:</b> Why now? Real stablecoin payments came to about 390 billion dollars last year, double the year before, and 58 percent of that, 226 billion, was business to business. And the chains built for payments just launched: Tempo in March, Robinhood Chain in July, Arc in September. Every payment on them is public by default.</aside>
 
-<!-- 4 solution -->
-<div class="frame"><section class="s grey" aria-label="The solution">
-  <p class="eyebrow">The solution</p>
+<!-- 5 why now: private demand -->
+<div class="frame"><section class="s grey" aria-label="Private stablecoins are early">
+  <p class="eyebrow">Why now</p>
+  <h2 class="h2" style="margin-top:40px">Private stablecoins are<br>growing, and still early.</h2>
+  <div class="grow"></div>
+  <div class="cols c2" style="gap:56px">
+    <div class="rule" style="gap:22px"><p class="big">$2.1M → $51M</p><p>stablecoins held privately in Railgun on Ethereum, January 2024 to October 2026</p></div>
+    <div class="rule" style="gap:22px"><p class="big">&lt;0.1%</p><p>of the $311B stablecoin supply</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">FinCEN withdrew its proposed mixer rule on 5 October 2026. GENIUS requires issuers to be able to freeze, <span class="mute">and Gloam's design never stops them.</span></p>
+</section></div>
+<aside class="notes"><b>Say:</b> People already want this. Stablecoins held privately in Railgun on Ethereum went from 2.1 million dollars in January 2024 to 51 million now. That's still under a tenth of a percent of the 311 billion dollar supply. The rules are getting clearer too: FinCEN withdrew its proposed mixer rule on 5 October, and GENIUS requires issuers to be able to freeze, which our design never gets in the way of.</aside>
+
+<!-- 6 the idea -->
+<div class="frame"><section class="s dark glow" aria-label="The idea">
+  <p class="eyebrow">The idea</p>
+  <h2 class="h2" style="margin-top:40px">A payment has one owner.<br>So nobody else needs a key.</h2>
+  <div class="grow"></div>
+  <div class="cols c2">
+    <div class="card"><p class="tag">Shared secrets</p><h3>Auctions, order books, lending</h3><p>Someone must compute on many people's hidden data. FHE and MPC networks like Zama and Arcium use a committee that holds the keys.</p></div>
+    <div class="card"><p class="tag" style="color:var(--mint)">Payments</p><h3>One owner</h3><p>The owner proves the payment on their own device with zero-knowledge proofs. Nobody else ever holds a key.</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">Breach a committee and everyone is exposed, past payments too. <span class="mute">Breach one device and one person is.</span></p>
+</section></div>
+<aside class="notes"><b>Say:</b> Here's the idea. Privacy splits into two jobs. Things like sealed auctions and lending pools need someone to compute on lots of people's hidden data, so FHE and MPC networks like Zama and Arcium use a committee that holds the keys. A payment is different: it has one owner. The owner can prove it on their own device, and nobody else ever needs a key. That matters when something gets hacked. Breach a committee and everyone is exposed, including past payments. Breach one phone and it's one person. We don't invent new cryptography. We use the proven maths from the Zcash lineage and build the payments product on top, like Stripe built on card networks.</aside>
+
+<!-- 7 how it works -->
+<div class="frame"><section class="s grey" aria-label="How it works">
+  <p class="eyebrow">How it works</p>
   <h2 class="h2" style="margin-top:40px">One private balance you can<br>pay from and prove from.</h2>
   <div class="grow"></div>
   <div class="steps">
-    <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v13M8 12l5 5 5-5M5 21h16"/></svg></span><h3>Add money</h3><p>Stablecoins, crypto or tokenized stocks go into the vault. Your balance becomes private.</p></div>
+    <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v13M8 12l5 5 5-5M5 21h16"/></svg></span><h3>Add money</h3><p>Stablecoins, ETH or Robinhood Chain stock tokens go into the vault. Your balance becomes private.</p></div>
     <div class="arrow"><svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h18M20 11l6 6-6 6"/></svg></div>
     <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="16" height="11" rx="3"/><path d="M8.5 11V8.5a4.5 4.5 0 0 1 9 0V11"/></svg></span><h3>Pay privately</h3><p>Send, run payroll or let an agent pay. Amounts and people stay hidden.</p></div>
     <div class="arrow"><svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17h18M20 11l6 6-6 6"/></svg></div>
     <div class="card"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><h3>Prove what's needed</h3><p>Show a bank, landlord or accountant one fact, and nothing else.</p></div>
   </div>
   <div class="grow"></div>
+  <p style="font-size:30px">Proofs are made on your device, <span class="mute">never on our servers.</span></p>
 </section></div>
-<aside class="notes"><b>Say:</b> Gloam is a self-custodial vault. You put money in and get a private balance only you can see. From there you pay people, run payroll, or let an agent pay, without showing amounts or who got paid. And when someone needs to know something, like an accountant needing a payroll total, you prove exactly that and nothing more. You can cash out anytime.</aside>
+<aside class="notes"><b>Say:</b> Gloam is a self-custodial vault. You put money in and get a private balance only you can see. From there you pay people, run payroll, or let an agent pay, without showing amounts or who got paid. When someone needs to know something, like an accountant needing a payroll total, you prove exactly that and nothing more. Every proof is made on your device, never on our servers. You can cash out anytime.</aside>
 
-<!-- 5 product -->
-<div class="frame"><section class="s light" aria-label="Product">
-  <p class="eyebrow">Product</p>
-  <h2 class="h2" style="margin-top:40px">Live today at gloam.trade</h2>
-  <div class="grow"></div>
-  <div class="cols c3" style="row-gap:28px">
-    <div class="card" style="background:var(--surface)"><h3>Private balance</h3><p>OUSD and pathUSD on Tempo, USDG, ETH and stocks on Robinhood Chain.</p></div>
-    <div class="card" style="background:var(--surface)"><h3>Private payments</h3><p>Hidden amounts, a private note, a relay that hides your wallet.</p></div>
-    <div class="card" style="background:var(--surface)"><h3>Payroll</h3><p>Upload a CSV, pay the team, repeat it monthly with a cap.</p></div>
-    <div class="card" style="background:var(--surface)"><h3>Payment requests</h3><p>A link or QR code that asks to be paid. Nothing goes onchain.</p></div>
-    <div class="card" style="background:var(--surface)"><h3>Proofs</h3><p>Proof of funds, of payment, or of a payroll total.</p></div>
-    <div class="card" style="background:var(--surface)"><h3>For builders</h3><p>SDK, partner API, MCP server and a private MPP payment method.</p></div>
-  </div>
-  <div class="grow"></div>
-</section></div>
-<aside class="notes"><b>Say:</b> All of this is live right now on testnet. A private balance in stablecoins, crypto and tokenized stocks. Private payments with notes. Payroll from a CSV with schedules. Payment request links. Proofs of funds, payments and payroll totals. And for builders: an SDK, a partner API, an MCP server for AI agents, and a private payment method for MPP.</aside>
-
-<!-- 6 compliance -->
-<div class="frame"><section class="s dark glow" aria-label="Compliance">
+<!-- 8 trust -->
+<div class="frame"><section class="s dark glow" aria-label="Built to be trusted">
   <div class="cols c2" style="align-items:center;gap:120px;height:100%">
     <div>
       <p class="eyebrow">Built to be trusted</p>
@@ -207,140 +231,168 @@ tr.us th:first-child { padding-left: 20px; }
       <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Sanctions checks on every deposit and cash out</div>
       <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Stablecoin issuer rules respected on Tempo</div>
       <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Proofs for auditors, accountants and banks</div>
-      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>No admin can move your money</div>
-      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Three days of public notice for any rule change</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>No admin withdraw: nobody can move your money</div>
+      <div class="check"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span>Rule changes wait three days in public</div>
     </div>
   </div>
 </section></div>
-<aside class="notes"><b>Say:</b> The first question we always get: isn't this a mixer? No. Every deposit and cash out is screened against sanctions lists. On Tempo we respect the stablecoin issuer's own rules. Users can prove things to auditors and banks. And we removed ourselves: no admin can move anyone's money, and any rule change waits three days in public.</aside>
+<aside class="notes"><b>Say:</b> The first question we always get: isn't this a mixer? No. Every deposit and cash out is screened against sanctions lists. On Tempo we respect the stablecoin issuer's own rules. Users can prove things to auditors and banks. There is no admin withdraw, so nobody, us included, can move anyone's money, and any rule change waits three days in public.</aside>
 
-<!-- 7 agents and distribution -->
-<div class="frame"><section class="s light" aria-label="Agents">
-  <div class="cols c2" style="gap:120px;height:100%;align-items:center">
-    <div>
-      <p class="eyebrow">AI agents</p>
-      <h2 class="h2" style="margin-top:40px">Agents pay privately, inside limits you set.</h2>
-      <p class="lede" style="margin-top:36px">Agents are the fastest growing payer onchain, and the most exposed.</p>
-    </div>
-    <div class="card" style="background:var(--surface);padding:12px 40px">
-      <div class="check" style="border-color:var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Pays for APIs over x402 and MPP</span></div>
-      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Spending caps per payment and per day</span></div>
-      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>Private method proposed to the MPP spec</span></div>
-      <div class="check" style="border-top:1.5px solid var(--line)"><span class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 13.5 4.5 4.5L20 8"/></svg></span><span>One link adds Gloam to Claude or ChatGPT</span></div>
-    </div>
-  </div>
-</section></div>
-<aside class="notes"><b>Say:</b> Agents are where payments are going. With Gloam an agent pays for APIs privately, over x402 or MPP, inside spending limits its owner sets. We proposed a private payment method to MPP, the machine payments standard from Tempo and Stripe; the pull request is open. And anyone can add Gloam to Claude or ChatGPT by pasting one link.</aside>
-
-<!-- 8 market -->
-<div class="frame"><section class="s light glow" aria-label="Market">
-  <p class="eyebrow">Market</p>
-  <h2 class="h2" style="margin-top:40px">Every stablecoin payment is a customer.</h2>
+<!-- 9 competition matrix -->
+<div class="frame"><section class="s light" aria-label="Competition">
+  <p class="eyebrow">Competition</p>
+  <h2 class="h2" style="margin-top:40px">Who can see your payments</h2>
   <div class="grow"></div>
-  <div style="display:grid;grid-template-columns:500px 1fr;gap:110px;align-items:center">
-    <svg viewBox="0 0 560 560" width="500" height="500" aria-label="TAM, SAM and SOM as nested circles">
-      <circle cx="280" cy="280" r="276" fill="#f3f4f5"/>
-      <circle cx="280" cy="372" r="184" fill="#e6f2ea"/>
-      <circle cx="280" cy="460" r="96" fill="#2e7d53"/>
-      <text x="280" y="96" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#0b0c0e">TAM</text>
-      <text x="280" y="268" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#1d4f35">SAM</text>
-      <text x="280" y="472" text-anchor="middle" font-family="Aeonik" font-size="34" font-weight="500" fill="#ffffff">SOM</text>
-    </svg>
-    <div style="display:flex;flex-direction:column;gap:26px">
-      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">TAM</p><p class="big" style="font-size:72px">$33T a year</p><p>All stablecoin volume, public by default today.</p></div>
-      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">SAM</p><p class="big" style="font-size:72px">$226B a year</p><p>Business payments: salaries, suppliers, treasury.</p></div>
-      <div class="rule" style="gap:6px;padding-top:22px"><p style="font-size:24px;letter-spacing:0.08em;text-transform:uppercase;color:var(--faint)">SOM</p><p class="big" style="font-size:72px;color:var(--green)">$2.3B a year</p><p>1% of business payments through Gloam, three years after mainnet.</p></div>
-    </div>
+  <table class="matrix">
+    <tr><th style="width:17%">Who</th><th style="width:27%">Who holds the key</th><th style="width:20%">On Tempo or Robinhood Chain</th><th style="width:20%">Proof for one reader</th><th>Payroll and agents</th></tr>
+    <tr><td>Zama (FHE)</td><td>A 13-node committee, one global key</td><td class="mute">Not found</td><td>Decryption rights</td><td class="mute">Not found</td></tr>
+    <tr><td>Arcium (MPC)</td><td>A node cluster</td><td class="mute">Not found (Solana)</td><td class="mute">Not found</td><td class="mute">Not found</td></tr>
+    <tr><td>Tempo Zones</td><td>The zone operator sees all</td><td>Tempo, limited preview</td><td class="mute">Not found</td><td class="mute">Not found</td></tr>
+    <tr><td>Helius Privacy</td><td>Its server sees your inputs</td><td class="mute">Not found (Solana)</td><td class="mute">Not found</td><td class="mute">Not found</td></tr>
+    <tr><td>Railgun</td><td>Only you</td><td class="mute">Not found (Ethereum)</td><td>Viewing keys, whole history</td><td class="mute">Not found</td></tr>
+    <tr class="us"><td><b style="font-weight:500">Gloam</b></td><td>Only you</td><td>Both, on testnet</td><td>Yes, with an expiry</td><td>Yes</td></tr>
+  </table>
+  <div class="grow"></div>
+  <div class="foot"><span>"Not found" means not found in their public docs, October 2026.</span><span>9</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Here's the field. Zama uses one global key shared by a 13-node committee. Arcium uses node clusters. Tempo Zones have an operator who sees everything in the zone. Helius Privacy makes proofs on its own server, so the server sees your amounts. Railgun is the closest to us: only you hold the key, but its viewing keys show your whole history. Gloam keeps the key with you, lets you prove one fact to one reader with an expiry, and has payroll and agent payments, on Tempo and Robinhood Chain.</aside>
+
+<!-- 10 where they win -->
+<div class="frame"><section class="s light" aria-label="Where they win">
+  <p class="eyebrow">Competition</p>
+  <h2 class="h2" style="margin-top:40px">Where each one wins</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="card" style="background:var(--surface)"><h3>Zama</h3><p>Computing on shared data, like auctions and lending. Over $170M raised.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Arcium</h3><p>Private shared state on Solana.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Tempo Zones</h3><p>Enterprises that want an operator in the loop.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Helius Privacy</h3><p>Speed on weak phones, and reach on Solana.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Railgun</h3><p>Years live, a public ceremony, external audits. About $113M held.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Payy</h3><p>Consumer users and a Visa card today. $6M seed.</p></div>
   </div>
   <div class="grow"></div>
-  <div class="foot"><span>Sources: Morph stablecoin report 2025; Artemis and McKinsey B2B data. SOM is our target, not a forecast.</span><span>9</span></div>
+  <p style="font-size:30px;max-width:56ch">We found no other product on Tempo or Robinhood Chain that combines owner-only privacy, proofs for one reader, and payroll and agent rails.</p>
 </section></div>
-<aside class="notes"><b>Say:</b> The total market is every stablecoin payment, 33 trillion dollars a year, and all of it is public today. Our serviceable market is business payments, the 226 billion a year where privacy is not optional: salaries, suppliers, treasury. Our target is 1 percent of that, 2.3 billion a year of private volume, three years after mainnet.</aside>
+<aside class="notes"><b>Say:</b> Each of these wins somewhere. Zama is right for computing on shared data, like auctions and lending. Arcium for shared state on Solana. Tempo Zones for enterprises that want an operator. Helius for speed on weak phones. Railgun has years live, a public ceremony and external audits. Payy has consumers and a card. But we found no other product on Tempo or Robinhood Chain that combines owner-only privacy, proofs for one reader, and payroll and agent rails.</aside>
 
-<!-- 9 business model -->
+<!-- 11 what's new -->
+<div class="frame"><section class="s light glow" aria-label="What's new">
+  <p class="eyebrow">What's new</p>
+  <h2 class="h2" style="margin-top:40px">Not new cryptography.<br>A new building block.</h2>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="rule"><h3>Payroll total proof</h3><p>Proves a run of up to 32 payments paid exactly a total, without showing who got what.</p></div>
+    <div class="rule"><h3>Proofs for one reader</h3><p>Who it is for and when it expires are sealed into the proof. Anyone checks it in a browser, no wallet.</p></div>
+    <div class="rule"><h3>Private agent payments</h3><p>A private method proposed for MPP, private x402, and an MCP server with spending limits.</p></div>
+  </div>
+  <div class="grow"></div>
+  <p style="font-size:30px">Private payments you can prove. <span class="mute">As far as our research found, these three are new.</span></p>
+  <div class="foot"><span>Not new: the Zcash-lineage private pool and viewing keys. We build on them.</span><span>11</span></div>
+</section></div>
+<aside class="notes"><b>Say:</b> So what's actually new? Not the cryptography. Three things on top of it. First, a payroll total proof: it proves a run of up to 32 payments added up to exactly a total, without showing who got what. We found nothing like it. Second, proofs for one reader: who it's for and when it expires are sealed into the proof, change either and it fails, and anyone can check it in a browser with no wallet. Viewing keys elsewhere show your whole history forever. Third, private payments for agents: we proposed a private payment method for MPP, the machine payments standard from Tempo and Stripe, which had none, plus private x402 and an MCP server with spending limits.</aside>
+
+<!-- 12 product -->
+<div class="frame"><section class="s light" aria-label="Product">
+  <p class="eyebrow">Product</p>
+  <h2 class="h2" style="margin-top:40px">Live on testnet at gloam.trade</h2>
+  <div class="grow"></div>
+  <div class="cols c3" style="row-gap:28px">
+    <div class="card" style="background:var(--surface)"><h3>Private balance</h3><p>OUSD and PathUSD on Tempo. USDG, ETH and stock tokens on Robinhood Chain.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Private payments</h3><p>Hidden amounts, request links, and a relay that hides your wallet.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Payroll</h3><p>Upload a CSV, pay the team, repeat it monthly with a cap.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Proofs</h3><p>Proof of funds, of payment, or of a payroll total. Checked at /verify.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>Agents</h3><p>Pay over x402 and MPP, with caps per payment and per day.</p></div>
+    <div class="card" style="background:var(--surface)"><h3>For builders</h3><p>SDK, partner API and an MCP server in the official registry.</p></div>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> All of this is live right now on testnet. A private balance in stablecoins, ETH and tokenized stocks. Private payments with request links and a relay that keeps your wallet off the record. Payroll from a CSV with schedules. Proofs of funds, payments and payroll totals. Agents that pay over x402 and MPP inside caps. And for builders: an SDK, a partner API and an MCP server.</aside>
+
+<!-- 13 traction -->
+<div class="frame"><section class="s light" aria-label="Traction">
+  <p class="eyebrow">Traction</p>
+  <h2 class="h2" style="margin-top:40px">First commit on 14 July 2026.</h2>
+  <div class="grow"></div>
+  <div class="cols c4">
+    <div class="rule" style="gap:16px"><p class="big" style="color:var(--green)">100+</p><p>tester applications in about three days</p></div>
+    <div class="rule" style="gap:16px"><p class="big">88+</p><p>Telegram members in two days, with Glim, our AI helper</p></div>
+    <div class="rule" style="gap:16px"><p class="big">4</p><p>npm packages: SDK, MCP server, MPP method, app starter</p></div>
+    <div class="rule" style="gap:16px"><p class="big">93</p><p>contract tests, two internal audits, fixes deployed</p></div>
+  </div>
+  <div class="grow"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <span class="pill" style="background:var(--surface)"><i></i>Live on Tempo and Robinhood Chain testnets</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Live in the official MCP Registry</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Submitted to the Claude directory</span>
+    <span class="pill" style="background:var(--surface)"><i></i>Applied to Cursor's marketplace</span>
+    <span class="pill" style="background:var(--surface)"><i></i>First hire: Community and Operations Lead</span>
+  </div>
+  <div class="grow"></div>
+</section></div>
+<aside class="notes"><b>Say:</b> Our first commit was on 14 July. Since then: we're live on Tempo and Robinhood Chain testnets, over 100 people applied to test it in about three days, and our Telegram passed 88 members in two days with Glim, our AI helper. Four packages are on npm, the contracts have 93 tests and two internal audits with fixes deployed. We're in the official MCP Registry, submitted to the Claude directory, applied to Cursor's marketplace, and we made our first hire.</aside>
+
+<!-- 14 recognition -->
+<div class="frame"><section class="s grey glow" aria-label="Recognition">
+  <p class="eyebrow">Recognition</p>
+  <div class="grow"></div>
+  <p class="quote">“a product niche that will expand a lot”</p>
+  <p style="font-size:30px;margin-top:36px" class="mute">Gui Bibeau, Solana Foundation, in a public review</p>
+  <div class="grow"></div>
+  <div class="cols c3">
+    <div class="rule"><h3>Startup Village</h3><p>Pitched</p></div>
+    <div class="rule"><h3>Arbitrum Open House</h3><p>Submitted</p></div>
+    <div class="rule"><h3>Colosseum Crypto World's Fair</h3><p>Competing</p></div>
+  </div>
+</section></div>
+<aside class="notes"><b>Say:</b> Gui Bibeau from the Solana Foundation reviewed Gloam in public and called it a product niche that will expand a lot. We pitched at Startup Village, submitted to Arbitrum Open House, and we're competing in Colosseum's Crypto World's Fair.</aside>
+
+<!-- 15 business model -->
 <div class="frame"><section class="s grey" aria-label="Business model">
   <p class="eyebrow">Business model</p>
   <h2 class="h2" style="margin-top:40px">We earn when private money moves.</h2>
   <div class="grow"></div>
   <div class="cols c3">
-    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">0.1%</p><h3>In and out</h3><p>On every deposit and cash out. Railgun charges 0.25%.</p></div>
-    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">API</p><h3>Partners</h3><p>Wallets and apps add private payments with an API key and set their own fee. Live now.</p></div>
-    <div class="card" style="gap:20px"><p class="big" style="font-size:96px">$99</p><h3>Team plans</h3><p>A month for scheduled payroll, approvals and accountant proofs.</p></div>
+    <div class="card" style="gap:20px"><p class="tag">Payments</p><h3>A fee on private transactions</h3><p>Every private payment that moves through the vault.</p></div>
+    <div class="card" style="gap:20px"><p class="tag">Payroll</p><h3>A fee per payroll run</h3><p>Charged each time a team runs payroll.</p></div>
+    <div class="card" style="gap:20px"><p class="tag">Builders</p><h3>Partner API and SDK usage</h3><p>Wallets, apps and agents build on Gloam and set their own fee on top.</p></div>
   </div>
   <div class="grow"></div>
-  <p style="font-size:30px">At 0.1% in and 0.1% out, $2.3B a year of volume is about <b style="font-weight:500">$4.6M in revenue</b>, before partners and plans.</p>
-  <div class="foot"><span>Planned pricing at mainnet. Testnet is free and nothing is charged.</span><span>10</span></div>
+  <p style="font-size:30px">Benchmark: Railgun charges 0.25% in and out <span class="mute">and earned about $4.3M in fees in the last 12 months.</span></p>
+  <div class="foot"><span>Testnet is free and nothing is charged. Rates are set before mainnet.</span><span>15</span></div>
 </section></div>
-<aside class="notes"><b>Say:</b> We make money when private money moves. A 0.1 percent fee on deposits and cash outs, less than half of what Railgun charges. A partner program, which is live: wallets and apps plug in with an API key and set their own fee on top. And team plans for payroll, approvals and accountant proofs. At our target volume, the fee alone is about 4.6 million dollars a year.</aside>
+<aside class="notes"><b>Say:</b> We make money when private money moves, three ways: a fee on private transactions, a fee per payroll run, and usage of the partner API and SDK, where partners can add their own fee on top. For scale, Railgun charges 0.25 percent in and out and earned about 4.3 million dollars in fees in the last year. Testnet is free; we set our rates before mainnet.</aside>
 
-<!-- 10 traction -->
-<div class="frame"><section class="s light" aria-label="Traction">
-  <p class="eyebrow">Traction</p>
-  <h2 class="h2" style="margin-top:40px">Built and live in three weeks.</h2>
-  <div class="grow"></div>
-  <div class="cols c4">
-    <div class="rule" style="gap:16px"><p class="big" style="color:var(--green)">$405k</p><p>shielded on testnet so far</p></div>
-    <div class="rule" style="gap:16px"><p class="big">6</p><p>zero-knowledge circuits, proven in the browser</p></div>
-    <div class="rule" style="gap:16px"><p class="big">2</p><p>networks live: Tempo and Robinhood Chain</p></div>
-    <div class="rule" style="gap:16px"><p class="big">3</p><p>packages on npm for apps and agents</p></div>
-  </div>
-  <div class="grow"></div>
-  <div style="display:flex;flex-wrap:wrap;gap:16px">
-    <span class="pill" style="background:var(--surface)"><i></i>Private payment method proposed to MPP</span>
-    <span class="pill" style="background:var(--surface)"><i></i>Partner API live</span>
-    <span class="pill" style="background:var(--surface)"><i></i>Hosted connector for Claude and ChatGPT</span>
-    <span class="pill" style="background:var(--surface)"><i></i>Two rounds of security review</span>
-  </div>
-  <div class="grow"></div>
-</section></div>
-<aside class="notes"><b>Say:</b> We built all of this in three weeks. 405 thousand dollars of testnet money has been shielded so far, six zero-knowledge circuits run in the browser, it's live on two networks, and three packages are on npm. We've proposed our payment method to the MPP spec, the partner API is live, and the code has had two rounds of security review. <b>If asked who deposited:</b> mostly our own testing so far; the next goal is outside teams running real payroll.</aside>
-
-<!-- 11 competition -->
-<div class="frame"><section class="s light" aria-label="Competition">
-  <p class="eyebrow">Competition</p>
-  <h2 class="h2" style="margin-top:40px">Where Gloam fits</h2>
-  <div class="grow"></div>
-  <table>
-    <tr><th style="width:22%">Who</th><th style="width:40%">What they do</th><th>Who it's for</th></tr>
-    <tr><td>Railgun</td><td>Private DeFi on Ethereum and L2s</td><td class="mute">Crypto-native traders</td></tr>
-    <tr><td>Hinkal</td><td>A privacy API for apps</td><td class="mute">Developers on EVM chains</td></tr>
-    <tr><td>Tempo Zones</td><td>Private zones the operator can see into</td><td class="mute">Enterprises on Tempo</td></tr>
-    <tr><td>zkdesk</td><td>A private treasury desk</td><td class="mute">One team's treasury</td></tr>
-    <tr class="us"><td><b style="font-weight:500">Gloam</b></td><td>Self-custodial private money with proofs</td><td>People, teams and AI agents, on the new payment chains</td></tr>
-  </table>
-  <div class="grow"></div>
-</section></div>
-<aside class="notes"><b>Say:</b> Privacy is getting crowded, which tells you the need is real. Railgun is private DeFi for traders. Hinkal is a privacy API. Tempo Zones are private but the operator sees inside. zkdesk is a treasury desk. Gloam is self-custodial private money with built-in proofs, for people, teams and agents, on the chains where payments stablecoins and tokenized stocks are landing.</aside>
-
-<!-- 12 go to market -->
-<div class="frame"><section class="s grey" aria-label="Go to market">
+<!-- 16 go to market -->
+<div class="frame"><section class="s light" aria-label="Go to market">
   <p class="eyebrow">Go to market</p>
-  <h2 class="h2" style="margin-top:40px">Three ways in</h2>
+  <h2 class="h2" style="margin-top:40px">Land with payroll. Grow from there.</h2>
   <div class="grow"></div>
-  <div class="cols c3">
-    <div class="card"><h3>Teams that pay in stablecoins</h3><p>Start with crypto-native teams and contractors. One private payday shows the value in a minute.</p></div>
-    <div class="card"><h3>Agent builders</h3><p>Reach them inside the tools they use: MCP, MPP, Claude Code, Codex and Cursor plugins.</p></div>
-    <div class="card"><h3>Wallets and apps</h3><p>The partner API puts Gloam inside other products, and they earn their own fee.</p></div>
+  <div class="rows">
+    <div class="row"><span class="n">01</span><h3>Land</h3><p>Private payroll for crypto teams, DAOs and startups paying in stablecoins on Tempo and Robinhood Chain.</p></div>
+    <div class="row"><span class="n">02</span><h3>Expand</h3><p>All of their business payments, not just salaries.</p></div>
+    <div class="row"><span class="n">03</span><h3>Distribute</h3><p>Through builders and agents: SDK, MCP, x402 and MPP.</p></div>
+    <div class="row"><span class="n">04</span><h3>Partner</h3><p>With the chains: self-custody privacy for everyone Zones do not serve.</p></div>
+    <div class="row"><span class="n">05</span><h3>Community</h3><p>Testers become users. Over 100 applied in three days.</p></div>
   </div>
   <div class="grow"></div>
 </section></div>
-<aside class="notes"><b>Say:</b> We go in three ways. First, teams that already pay in stablecoins: one private payday and they get it. Second, agent builders, reached inside the tools they already use, like Claude, Cursor and the MPP standard. Third, wallets and apps through the partner API, where they earn their own fee for bringing users.</aside>
+<aside class="notes"><b>Say:</b> We land with private payroll for crypto teams, DAOs and startups that already pay in stablecoins on Tempo and Robinhood Chain. One private payday and they get it. Then we expand to all their business payments. We distribute through builders and agents, with the SDK, MCP, x402 and MPP. We partner with the chains, offering self-custody privacy to everyone Zones don't serve. And our community of testers becomes our first users.</aside>
 
-<!-- 13 roadmap -->
+<!-- 17 roadmap -->
 <div class="frame"><section class="s light" aria-label="Roadmap">
   <p class="eyebrow">Roadmap</p>
   <h2 class="h2" style="margin-top:40px">From testnet to mainnet</h2>
   <div class="grow"></div>
   <div class="cols c3">
-    <div class="card" style="background:var(--tint)"><p class="eyebrow" style="font-size:22px">Now</p><h3>Live on two testnets</h3><p style="color:var(--on-tint)">Payroll, proofs, agents, partner API, OUSD and USDG.</p></div>
-    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Next</p><h3>Private trading</h3><p>Trade stocks and crypto from a private balance. Built and tested, switched on once it's provably solvent.</p></div>
-    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Then</p><h3>Mainnet with caps</h3><p>Key ceremony, external audit, launch with deposit limits, then team accounts.</p></div>
+    <div class="card" style="background:var(--tint)"><p class="eyebrow" style="font-size:22px">Now</p><h3>Live on two testnets</h3><p style="color:var(--on-tint)">Stablecoin payments, payroll, proofs and agent payments. Stock tokens held and sent privately.</p></div>
+    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Underway</p><h3>Private trading</h3><p>A new engine for private trading, built for many people's orders at once.</p></div>
+    <div class="card" style="background:var(--surface)"><p class="eyebrow" style="font-size:22px;color:var(--mute)">Mainnet path</p><h3>Ceremony and audit</h3><p>A multi-party key ceremony and an external audit, then launch.</p></div>
   </div>
   <div class="grow"></div>
 </section></div>
-<aside class="notes"><b>Say:</b> Today we're live on two testnets. Next is private trading: trading stocks and crypto straight from a private balance. It's built and tested, and we switch it on once the vault can prove it stays solvent. Then mainnet: a multi-party key ceremony, an external audit, a launch with deposit caps, and team accounts with approvals.</aside>
+<aside class="notes"><b>Say:</b> Today we're live on two testnets: stablecoin payments, payroll, proofs and agent payments, and you can already hold and send stock tokens privately. Private trading is underway. Trading mixes many people's orders, so we're building a new engine for it rather than stretching the payment design. The path to mainnet is a multi-party key ceremony and an external audit.</aside>
 
-<!-- 14 team -->
+<!-- 18 founder -->
 <div class="frame"><section class="s light glow" aria-label="Founder">
   <p class="eyebrow">Founder</p>
   <h2 class="h2" style="margin-top:40px">Ships products, audits protocols.</h2>
@@ -361,20 +413,20 @@ tr.us th:first-child { padding-left: 20px; }
 </section></div>
 <aside class="notes"><b>Say:</b> I'm Duke. I've been building in web3 since 2023: over fifteen products on Solana, Arc and now Robinhood Chain and Tempo, including Keryx, a pay-per-call payment layer for AI agents. I also lead audits at SMC Audits, and my independent audit of Percolator was quoted by Toly. Gloam is where those meet: payments, agents, and money that has to be safe.</aside>
 
-<!-- 15 ask -->
+<!-- 19 ask -->
 <div class="frame"><section class="s dark glow" aria-label="The ask">
   <div class="top"><div class="lock"><svg class="mark" viewBox="0 0 32 32" width="44" height="44"><rect class="tile" width="32" height="32" rx="9"/><rect class="win" x="15" y="4" width="12" height="12" rx="3.5"/></svg>Gloam</div><span class="mute">gloam.trade · hello@gloam.trade · @gloamtrade</span></div>
   <div class="grow"></div>
-  <h2 class="h1">Make onchain finance<br>private by default.</h2>
+  <h2 class="h1">Private by default.<br>Provable on demand.</h2>
   <div class="grow"></div>
   <p class="eyebrow" style="margin-bottom:28px">Raising our pre-seed to reach mainnet</p>
   <div class="cols c3">
     <div class="rule"><h3>Audit and ceremony</h3><p>An external audit and a multi-party key ceremony.</p></div>
-    <div class="rule"><h3>Mainnet launch</h3><p>Live on Tempo and Robinhood Chain with deposit caps.</p></div>
+    <div class="rule"><h3>Mainnet launch</h3><p>Tempo and Robinhood Chain, with deposit caps.</p></div>
     <div class="rule"><h3>First 50 customers</h3><p>Teams running payroll and agents paying privately.</p></div>
   </div>
 </section></div>
-<aside class="notes"><b>Say:</b> We're raising our pre-seed to take Gloam to mainnet: an external audit and key ceremony, a capped launch on Tempo and Robinhood Chain, and our first 50 teams and agent builders. If you run a team or build agents, try it at gloam.trade. Thank you.</aside>
+<aside class="notes"><b>Say:</b> We're raising our pre-seed to take Gloam to mainnet: an external audit and a multi-party key ceremony, a capped launch on Tempo and Robinhood Chain, and our first 50 teams and agent builders. Private by default, provable on demand. If you run a team or build agents, try it at gloam.trade. Thank you.</aside>
 
 </main>
 
