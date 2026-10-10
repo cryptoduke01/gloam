@@ -83,7 +83,7 @@ const USES = [
 const TRUST = [
   {
     title: "No admin withdraw",
-    body: "Nobody, including the Gloam team, can move money out of the vault. That function does not exist.",
+    body: "There is no function that lets anyone, including the Gloam team, take money out of the vault.",
   },
   {
     title: "Three days of public notice",
