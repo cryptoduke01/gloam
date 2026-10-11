@@ -39,7 +39,8 @@ export async function GET(req: Request) {
           assets: n.assets.map((a) => ({ asset: a.asset, symbol: a.symbol, stable: a.stable, held: a.held, heldUsd: a.heldUsd })),
           firstActivity: n.firstActivity,
           lastActivity: n.lastActivity,
-          error: n.error,
+          // the chain read's own error stays in the server logs, never in the response
+          error: n.error ? "read_failed" : null,
         })),
         combined: {
           deposits: m.combined.deposits,

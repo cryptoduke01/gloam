@@ -329,7 +329,7 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
       firstActivity: n.firstActivity ? new Date(n.firstActivity * 1000).toISOString() : null,
       lastActivity: n.lastActivity ? new Date(n.lastActivity * 1000).toISOString() : null,
       stillCatchingUp: n.catchingUp,
-      readError: n.error,
+      readError: n.error ? "The last read of this network failed; these figures are from the read before it." : null,
     })),
     ...(only
       ? {}

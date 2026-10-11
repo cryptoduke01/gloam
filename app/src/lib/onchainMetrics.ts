@@ -693,6 +693,7 @@ async function readNetwork(n: GloamNetwork, days: string[]) {
   } catch (e) {
     const state = prev ?? emptyState(n);
     const msg = errText(e).split("\n")[0].slice(0, 160);
+    console.warn("gloam_onchain_read", n.key, msg);
     const readMs = Date.now() - started;
     const extra = { blocksRead: 0n, latest: null, readMs, error: msg };
     return { state, holdings: null, metrics: (p: Prices) => figures(n, state, null, p, days, extra) };
