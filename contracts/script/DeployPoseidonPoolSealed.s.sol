@@ -1,21 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
 import {ShieldPoolPoseidon} from "../src/ShieldPoolPoseidon.sol";
+import {SealedSwapGuard} from "./SealedSwapGuard.sol";
 
 /**
- * Redeploy Poseidon vault WITH sealedSwap(), then attach sealed-swap verifier.
- * Reuses existing Poseidon2 + DualProofVerifier on RH testnet.
+ * Deploy a Poseidon vault WITH the sealed swap verifier wired.
+ *
+ * GUARDED (audit L-2 / ZK-1, 2026-10-11). Sealed swap must stay off until H1 and
+ * ZK-1 are fixed and a new circuit + ceremony is done; see SealedSwapGuard.sol.
+ * The script reverts unless GLOAM_ACK_SEALED_SWAP_H1_ZK1=1. To deploy a pool with
+ * sealed swap off, use DeployTempoPool.s.sol (works on any chain).
+ *
+ * There are no hardcoded addresses. The old defaults (DualProofVerifier
+ * 0x4B0D…949C, Poseidon2 0xcc2d…0947, the old sealed swap adapter) are superseded
+ * and must not be wired again, so every address comes from env.
  *
  * Ends with endSetup(), after which every verifier/rate/oracle change needs the
  * 3-day timelock. So the shield verifier (C1 fix) is wired here too: ending setup
  * without it would leave the unbound shield() path open for at least 3 days.
  * Swap rates are NOT set here; add setSwapRate(...) calls before endSetup() if the
- * pool should launch with a pair enabled (audit H1 still applies to sealedSwap).
+ * pool should launch with a pair enabled.
  *
+ *   export GLOAM_ACK_SEALED_SWAP_H1_ZK1=1   # only once H1 + ZK-1 are fixed
  *   export DEPLOYER_PK=0x...
- *   export SHIELD_IVERIFIER=0x...   # ShieldIVerifier on the same chain
+ *   export POSEIDON2=0x...               # Poseidon2 on the same chain
+ *   export DUAL_VERIFIER=0x...           # current DualProofVerifier
+ *   export SEALED_SWAP_IVERIFIER=0x...   # adapter for the NEW sealedSwap circuit
+ *   export SHIELD_IVERIFIER=0x...        # ShieldIVerifier on the same chain
  *   export RPC_URL=https://rpc.testnet.chain.robinhood.com
  *   forge script script/DeployPoseidonPoolSealed.s.sol:DeployPoseidonPoolSealed \
  *     --rpc-url $RPC_URL --broadcast
@@ -25,20 +38,20 @@ import {ShieldPoolPoseidon} from "../src/ShieldPoolPoseidon.sol";
  *   NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=<block>
  * Or update app/src/lib/config.ts TESTNET_POSEIDON_POOL defaults.
  */
-contract DeployPoseidonPoolSealed is Script {
-    // Live RH testnet addresses (see deployments/poseidon-testnet.json)
-    address constant POSEIDON2 = 0xcc2d2D0f12324DcC32f781198664C92BB5200947;
-    address constant DUAL_VERIFIER = 0x4B0D0BD35C88F06A552439D5eBbB71A2FeF0949C;
-    address constant SEALED_SWAP_I = 0x68C28ECD40320038bF8DE34Bb02064e12f602371;
-
+contract DeployPoseidonPoolSealed is SealedSwapGuard {
     function run() external {
+        _requireSealedSwapAck();
+
         uint256 pk = vm.envUint("DEPLOYER_PK");
+        address poseidon2 = vm.envAddress("POSEIDON2");
+        address dual = vm.envAddress("DUAL_VERIFIER");
+        address sealedSwapI = vm.envAddress("SEALED_SWAP_IVERIFIER");
         address shieldI = vm.envAddress("SHIELD_IVERIFIER");
         vm.startBroadcast(pk);
 
         // Constructor: (poseidon2, unshield/transfer dual verifier)
-        ShieldPoolPoseidon pool = new ShieldPoolPoseidon(POSEIDON2, DUAL_VERIFIER);
-        pool.setSealedSwapVerifier(SEALED_SWAP_I);
+        ShieldPoolPoseidon pool = new ShieldPoolPoseidon(poseidon2, dual);
+        pool.setSealedSwapVerifier(sealedSwapI);
         pool.setShieldVerifier(shieldI);
 
         // FINAL STEP: end setup mode. Irreversible. From here on the owner has no

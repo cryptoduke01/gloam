@@ -1,27 +1,37 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
 import {SealedSwapVerifier} from "../src/verifiers/SealedSwapVerifier.sol";
 import {SealedSwapIVerifier} from "../src/verifiers/SealedSwapIVerifier.sol";
 import {ShieldPoolPoseidon} from "../src/ShieldPoolPoseidon.sol";
+import {SealedSwapGuard} from "./SealedSwapGuard.sol";
 
 /**
  * Deploy sealed-swap verifiers. Optionally set on an existing pool that already
  * has sealedSwap() + setSealedSwapVerifier (new pool bytecode).
  *
+ * GUARDED (audit L-2 / ZK-1, 2026-10-11). Both paths (deploy only, and set or
+ * queue on POOL) revert unless GLOAM_ACK_SEALED_SWAP_H1_ZK1=1. Sealed swap must
+ * stay off until H1 and ZK-1 are fixed and a new circuit + ceremony is done; see
+ * SealedSwapGuard.sol. The SealedSwapVerifier in src is stale vs the circuit
+ * (ZK review I-1): regenerate it from the new zkey before setting the flag.
+ *
+ *   export GLOAM_ACK_SEALED_SWAP_H1_ZK1=1   # only once H1 + ZK-1 are fixed
  *   export DEPLOYER_PK=0x...
  *   export RPC_URL=https://rpc.testnet.chain.robinhood.com
  *   # optional: export POOL=0x...  (must support setSealedSwapVerifier)
  *   forge script script/DeploySealedSwapStack.s.sol:DeploySealedSwapStack \
  *     --rpc-url $RPC_URL --broadcast
  *
- * Full new vault (keeps old pool for history):
- *   forge create needs Poseidon2 + DualProofVerifier — use deploy-phase2.mjs
- *   then cast send $NEW_POOL "setSealedSwapVerifier(address)" $SEALED_I
+ * Full new vault (keeps old pool for history): use DeployPoseidonPoolSealed.s.sol
+ * or circuits/scripts/deploy-phase2.mjs. Both refuse to wire sealed swap without
+ * the same flag.
  */
-contract DeploySealedSwapStack is Script {
+contract DeploySealedSwapStack is SealedSwapGuard {
     function run() external {
+        _requireSealedSwapAck();
+
         uint256 pk = vm.envUint("DEPLOYER_PK");
         vm.startBroadcast(pk);
 

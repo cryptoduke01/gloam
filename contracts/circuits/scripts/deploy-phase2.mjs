@@ -11,6 +11,14 @@
  *
  * Writes ../../deployments/poseidon-testnet.json
  *
+ * Sealed swap is SKIPPED by default (audit L-2 / ZK-1, 2026-10-11): the sealed
+ * swap verifier is neither deployed nor wired, so the pool keeps
+ * sealedSwapVerifier = 0. It must stay off until H1 (solvency accounting) and
+ * ZK-1 (rate product wraps the field: amount bits + rate bits must be <= 252,
+ * e.g. 96-bit rates in circuit and contract, and one side of the oracle rate
+ * fixed to a constant scale) are fixed and a new circuit + ceremony is done.
+ * Only then set GLOAM_ACK_SEALED_SWAP_H1_ZK1=1. See script/SealedSwapGuard.sol.
+ *
  * NEVER commit DEPLOYER_PK. If you pasted a key in chat, rotate it.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
@@ -43,6 +51,9 @@ if (pkHex.length !== 64) {
   process.exit(1);
 }
 const pk = `0x${pkHex}`;
+
+// Audit L-2 / ZK-1 guard. Same flag as script/SealedSwapGuard.sol.
+const SEALED_SWAP_ACK = process.env.GLOAM_ACK_SEALED_SWAP_H1_ZK1 === "1";
 
 function loadEthers() {
   // Prefer CJS require — works for both v5 and v6 package layouts
@@ -170,10 +181,16 @@ async function main() {
     unshieldIVerifier,
     transferIVerifier,
   ]);
-  const sealedSwapVerifier = await deployArtifact("SealedSwapVerifier");
-  const sealedSwapIVerifier = await deployArtifact("SealedSwapIVerifier", [
-    sealedSwapVerifier,
-  ]);
+  // Sealed swap only with the explicit ack (see header). The SealedSwapVerifier
+  // in src is stale vs the circuit (ZK review I-1); regenerate it first.
+  let sealedSwapVerifier = null;
+  let sealedSwapIVerifier = null;
+  if (SEALED_SWAP_ACK) {
+    sealedSwapVerifier = await deployArtifact("SealedSwapVerifier");
+    sealedSwapIVerifier = await deployArtifact("SealedSwapIVerifier", [
+      sealedSwapVerifier,
+    ]);
+  }
   // Shield verifier (C1 fix): binds commitment <-> (amount, asset) at deposit.
   const shieldVerifier = await deployArtifact("ShieldVerifier");
   const shieldIVerifier = await deployArtifact("ShieldIVerifier", [
@@ -196,11 +213,18 @@ async function main() {
     await tx.wait();
   }
 
-  console.log("wiring sealed-swap verifier...");
-  await sendTx(
-    poolContract.setSealedSwapVerifier(sealedSwapIVerifier, ov),
-    "setSealedSwapVerifier"
-  );
+  if (SEALED_SWAP_ACK) {
+    console.log("wiring sealed-swap verifier (GLOAM_ACK_SEALED_SWAP_H1_ZK1=1)...");
+    await sendTx(
+      poolContract.setSealedSwapVerifier(sealedSwapIVerifier, ov),
+      "setSealedSwapVerifier"
+    );
+  } else {
+    console.log(
+      "sealed swap NOT deployed or wired (sealedSwapVerifier stays 0).\n" +
+        "  It stays off until H1 and ZK-1 are fixed and a new circuit + ceremony is done."
+    );
+  }
 
   // HARDEN_SHIELD gates C1 enforcement. Once set, plain shield() reverts and the
   // app MUST call shieldBound() with a proof. Only flip this on once the app's
@@ -296,13 +320,15 @@ async function main() {
   }
   console.log("\nNext: copy new circuit artifacts into app/public/circuits/,");
   console.log("update app/src/lib/config.ts pool address, then verify shield→prove→unshield.");
-  console.log(
-    setupEnded
-      ? "Sealed-swap needs at least one rate. Setup is over, so queue it:\n" +
-          "  pool.queueChange(abi.encodeCall(setSwapRate,(assetIn, assetOut, rateIn, rateOut, true)))\n" +
-          "  then pool.executeChange(<same bytes>) after 3 days."
-      : "Sealed-swap needs at least one rate: pool.setSwapRate(assetIn, assetOut, rateIn, rateOut, true) (setup mode only)."
-  );
+  if (SEALED_SWAP_ACK) {
+    console.log(
+      setupEnded
+        ? "Sealed-swap needs at least one rate. Setup is over, so queue it:\n" +
+            "  pool.queueChange(abi.encodeCall(setSwapRate,(assetIn, assetOut, rateIn, rateOut, true)))\n" +
+            "  then pool.executeChange(<same bytes>) after 3 days."
+        : "Sealed-swap needs at least one rate: pool.setSwapRate(assetIn, assetOut, rateIn, rateOut, true) (setup mode only)."
+    );
+  }
 }
 
 main().catch((e) => {
