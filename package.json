@@ -2,7 +2,7 @@
   "name": "gloam",
   "private": true,
   "version": "0.1.0",
-  "description": "The private-execution layer for Robinhood Chain: shielded balances, private transfers, and private trades that apps and agents plug into.",
+  "description": "Private stablecoin payments for people, teams and AI agents on Tempo and Robinhood Chain. Private by default, provable on demand.",
   "scripts": {
     "dev": "pnpm --filter @gloam/app dev",
     "dev:app": "pnpm --filter @gloam/app dev",
