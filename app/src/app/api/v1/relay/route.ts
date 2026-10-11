@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     requireKeyEnv(key, keyEnvForNetwork(net), net.label);
     // The relay's own per-sender and per-network caps, with the key as the sender.
-    checkRateLimit(`key:${key.id}`, net.chainId);
+    await checkRateLimit(`key:${key.id}`, net.chainId);
 
     let hash: `0x${string}`;
     let kind: ActivityKind | null = null;

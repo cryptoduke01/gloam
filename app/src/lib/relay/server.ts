@@ -17,7 +17,8 @@
  *     anything is checked or sent (lib/screeningServer.ts), plus on Tempo the
  *     asset's TIP-403 issuer policy for the vault and `to`; private sends and
  *     memos carry no public address, so there is nothing to screen
- *   - per-IP and per-network rate limits (best effort, in-memory)
+ *   - per-IP and per-network rate limits, shared across instances, and at
+ *     most a few relayed payment messages per payment
  *
  * Testnet: submission is free. Mainnet needs a relay fee carved out inside the
  * circuit (an extra public output), otherwise the relay pays everyone's gas.
@@ -43,6 +44,7 @@ import {
   isNetworkWritable,
   type GloamNetwork,
 } from "@/lib/networks";
+import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 
@@ -198,27 +200,21 @@ function walletFor(net: GloamNetwork, account: PrivateKeyAccount) {
 
 // ---------------------------------------------------------------- limits
 
-const WINDOW_MS = 10 * 60_000;
+// Shared across server instances (lib/mcpRemote/rateLimit: Upstash Redis, or
+// process memory when it is not set or does not answer).
+const WINDOW_SEC = 10 * 60;
 // A payroll run is up to 200 payments plus 200 notifications.
 const PER_IP = 400;
 const PER_NETWORK_HOURLY = 5_000;
-const ipHits = new Map<string, number[]>();
-const netHits = new Map<number, number[]>();
+/** Relayed payment messages per payment per day. A payment needs one; the rest covers retries. */
+const MEMOS_PER_PAYMENT = 3;
 
-function hit(map: Map<string | number, number[]>, key: string | number, limit: number, windowMs: number) {
+export async function checkRateLimit(ip: string, chainId: number): Promise<void> {
   const now = Date.now();
-  const list = (map.get(key) ?? []).filter((t) => now - t < windowMs);
-  if (list.length >= limit) return false;
-  list.push(now);
-  map.set(key, list);
-  return true;
-}
-
-export function checkRateLimit(ip: string, chainId: number) {
-  if (!hit(ipHits as Map<string | number, number[]>, ip, PER_IP, WINDOW_MS)) {
+  if (!(await hitRateLimit(ip, "relay-ip", PER_IP, now, WINDOW_SEC)).allowed) {
     throw new RelayError("Too many requests from this device. Wait a few minutes.", 429, "rate_limit");
   }
-  if (!hit(netHits as Map<string | number, number[]>, chainId, PER_NETWORK_HOURLY, 60 * 60_000)) {
+  if (!(await hitRateLimit(`chain:${chainId}`, "relay-net", PER_NETWORK_HOURLY, now, 3600)).allowed) {
     throw new RelayError("The relay is busy. Try again shortly or send from your wallet.", 429, "rate_limit");
   }
 }
@@ -413,6 +409,12 @@ export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>
     args: [commitment],
   })) as boolean;
   if (!seen) throw new RelayError("That payment is not in the vault yet. Wait for it to confirm.", 409, "not_seen");
+  // The memo board takes any number of messages per payment, and each relayed
+  // one is gas the relay pays: one message per payment, plus a few retries.
+  const perPayment = await hitRateLimit(`memo:${net.chainId}:${commitment.toLowerCase()}`, "relay-memo", MEMOS_PER_PAYMENT, Date.now(), 86_400);
+  if (!perPayment.allowed) {
+    throw new RelayError("A message for this payment was already sent.", 409, "memo_sent");
+  }
   return submit(net, { kind: "memo", args: [commitment, memo] });
 }
 
@@ -437,19 +439,28 @@ export type RelayNetworkStatus = {
   lowBalance: boolean;
 };
 
+/** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
+const BALANCE_TTL_MS = 30_000;
+const balances = new Map<number, { at: number; empty: boolean }>();
+
+async function relayEmpty(net: GloamNetwork, account: PrivateKeyAccount): Promise<boolean> {
+  const hit = balances.get(net.chainId);
+  if (hit && Date.now() - hit.at < BALANCE_TTL_MS) return hit.empty;
+  try {
+    const empty = (await relayPublicClient(net).getBalance({ address: account.address })) === 0n;
+    balances.set(net.chainId, { at: Date.now(), empty });
+    return empty;
+  } catch {
+    /* status is best effort */
+    return false;
+  }
+}
+
 export async function relayStatus(): Promise<RelayNetworkStatus[]> {
   const account = relayerAccount();
   return Promise.all(
     relayNetworks().map(async (net) => {
-      let lowBalance = false;
-      if (account) {
-        try {
-          const bal = await relayPublicClient(net).getBalance({ address: account.address });
-          lowBalance = bal === 0n;
-        } catch {
-          /* status is best effort */
-        }
-      }
+      const lowBalance = account ? await relayEmpty(net, account) : false;
       return {
         chainId: net.chainId,
         key: net.key,

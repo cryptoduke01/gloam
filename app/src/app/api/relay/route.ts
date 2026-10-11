@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import {
   RelayError,
   checkRateLimit,
@@ -29,11 +30,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const net = networkForChain(body.chainId);
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      req.headers.get("x-real-ip") ||
-      "local";
-    checkRateLimit(ip, net.chainId);
+    await checkRateLimit(clientIp(req), net.chainId);
 
     let hash: `0x${string}`;
     switch (body.action) {
