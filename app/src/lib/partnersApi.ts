@@ -118,6 +118,12 @@ export type KeyContext = {
   rate: RateState;
 };
 
+/**
+ * Requests per IP per minute before any key is looked up, so unknown or junk
+ * keys cannot hammer the key store. Well above one partner's own key limits.
+ */
+const API_PER_IP_PER_MIN = 900;
+
 function rateHeaders(rate: RateState): Record<string, string> {
   return {
     "X-RateLimit-Limit": String(rate.limit),
@@ -143,6 +149,11 @@ export async function withApiKey(
       throw new ApiError(401, "missing_key", "Send your API key as Authorization: Bearer gloam_test_...");
     }
     if (!parseApiKey(secret)) throw new ApiError(401, "invalid_key", "That is not a Gloam API key.");
+    const perIp = await hitRateLimit(clientIp(req), "api-ip", API_PER_IP_PER_MIN);
+    if (!perIp.allowed) {
+      headers = { "Retry-After": String(perIp.retryAfterSec) };
+      throw new ApiError(429, "rate_limited", "Too many requests from this address. Slow down and retry.");
+    }
     const key = await lookupApiKey(secret, pepperFor(req));
     if (!key) throw new ApiError(401, "invalid_key", "This API key is not valid. It may have been revoked or rotated.");
     const rate = await meterApiKey(key.id);
