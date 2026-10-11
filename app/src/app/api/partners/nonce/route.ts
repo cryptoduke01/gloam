@@ -1,4 +1,4 @@
-import { ApiError, apiFail, apiOk, newRequestId } from "@/lib/partnersApi";
+import { ApiError, apiFail, apiOk, limitSignIn, newRequestId } from "@/lib/partnersApi";
 import { issueNonce, MESSAGE_MAX_LIFETIME_SEC, nonceAllowed, requestHost, sessionsConfigured, SIWE_STATEMENT } from "@/lib/partnersAuth";
 
 export const runtime = "nodejs";
@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     if (!nonceAllowed(client)) {
       throw new ApiError(429, "rate_limited", "Too many sign-in attempts from here. Wait a few minutes.");
     }
+    await limitSignIn(req);
     const { nonce, expiresAt } = await issueNonce();
     return apiOk(
       { nonce, expiresAt, statement: SIWE_STATEMENT, maxLifetimeSec: MESSAGE_MAX_LIFETIME_SEC },

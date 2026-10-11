@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ApiError, jsonBody, portal, sessionWallet } from "@/lib/partnersApi";
+import { ApiError, jsonBody, limitPortalWrite, portal, sessionWallet } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
 import { renameApiKey, revokeApiKey } from "@/lib/apiKeys";
 import { getPartnerByOwner } from "@/lib/partners";
@@ -8,7 +8,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function ownPartnerId(req: NextRequest) {
-  const partner = await getPartnerByOwner(sessionWallet(req));
+  const wallet = sessionWallet(req);
+  await limitPortalWrite(wallet);
+  const partner = await getPartnerByOwner(wallet);
   if (!partner) throw new ApiError(404, "no_account", "Create your partner account first.");
   return partner.id;
 }

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ApiError, jsonBody, portal, sessionWallet } from "@/lib/partnersApi";
+import { ApiError, jsonBody, limitPortalWrite, portal, sessionWallet } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
 import { FEE_LIMITS, getPartnerByOwner, partnerView, upsertPartner } from "@/lib/partners";
 
@@ -23,6 +23,7 @@ export async function PUT(req: NextRequest) {
   return portal(async () => {
     if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Save from the Gloam site.");
     const wallet = sessionWallet(req);
+    await limitPortalWrite(wallet);
     const body = await jsonBody(req);
     const partner = await upsertPartner(wallet, {
       name: body.name,

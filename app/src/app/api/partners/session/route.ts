@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ApiError, apiFail, apiOk, jsonBody, newRequestId, sessionWallet } from "@/lib/partnersApi";
+import { ApiError, apiFail, apiOk, jsonBody, limitSignIn, newRequestId, sessionWallet } from "@/lib/partnersApi";
 import {
   createSession,
   originAllowed,
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   const requestId = newRequestId();
   try {
     if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Sign in from the Gloam site.");
+    await limitSignIn(req);
     const body = await jsonBody(req);
     const host = requestHost(req);
     const wallet = await verifySignIn({ message: body.message, signature: body.signature, host });

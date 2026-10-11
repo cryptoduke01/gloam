@@ -24,6 +24,7 @@ import {
 import { getPartner, PartnerError, type Partner } from "./partners";
 import { readSession, requestHost, SESSION_COOKIE, SignInError } from "./partnersAuth";
 import { KvUnavailableError } from "./partnersKv";
+import { clientIp, hitRateLimit } from "./mcpRemote/rateLimit";
 import { RelayError } from "./relay/server";
 
 export const API_VERSION = 1;
@@ -173,6 +174,23 @@ export function requireKeyEnv(key: { env: KeyEnv }, want: KeyEnv, networkLabel: 
 }
 
 // ---------------------------------------------------------------- portal
+
+/** Portal sign-ins and nonces per IP per minute (a sign-in can mean a chain read). */
+const SIGN_IN_PER_MIN = 20;
+/** Portal changes (account, keys) per wallet per minute. */
+const PORTAL_WRITES_PER_MIN = 30;
+
+/** A 429 when this IP has asked for too many sign-ins or nonces lately. */
+export async function limitSignIn(req: Request): Promise<void> {
+  const rate = await hitRateLimit(clientIp(req), "partner-signin", SIGN_IN_PER_MIN);
+  if (!rate.allowed) throw new ApiError(429, "rate_limited", "Too many sign-in attempts from here. Wait a minute.");
+}
+
+/** A 429 when this wallet has changed its account or keys too often in the last minute. */
+export async function limitPortalWrite(wallet: string): Promise<void> {
+  const rate = await hitRateLimit(`wallet:${wallet.toLowerCase()}`, "partner-write", PORTAL_WRITES_PER_MIN);
+  if (!rate.allowed) throw new ApiError(429, "rate_limited", "Too many changes in a minute. Wait a moment and try again.");
+}
 
 /** The signed-in wallet for a portal request, or a 401. */
 export function sessionWallet(req: Request & { cookies?: { get(name: string): { value: string } | undefined } }) {

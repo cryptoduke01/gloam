@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE, SCREEN_LIST_INFO, normalizeAddress, type ScreenOptions } from "@/lib/screening";
 import { chainalysisEnabled, screenAddresses } from "@/lib/screeningServer";
 
@@ -15,20 +16,10 @@ export async function GET() {
   );
 }
 
-// Best effort, in memory: the list is public, this only stops casual hammering.
-const WINDOW_MS = 10 * 60_000;
+// Shared across instances (lib/mcpRemote/rateLimit). The list is public; this
+// keeps the route from being a free proxy for the chain or the Chainalysis key.
+const WINDOW_SEC = 10 * 60;
 const PER_IP = 120;
-const hits = new Map<string, number[]>();
-
-function allow(ip: string): boolean {
-  const now = Date.now();
-  const list = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (list.length >= PER_IP) return false;
-  list.push(now);
-  if (hits.size > 10_000) hits.clear();
-  hits.set(ip, list);
-  return true;
-}
 
 /** The optional TIP-403 context, or null if it is malformed. Absent fields are fine. */
 function readOptions(body: Record<string, unknown>): ScreenOptions | null {
@@ -66,11 +57,7 @@ export async function POST(req: Request) {
   ) {
     return NextResponse.json({ ok: false, error: "Invalid request." }, { status: 400, headers: NO_STORE });
   }
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "local";
-  if (!allow(ip)) {
+  if (!(await hitRateLimit(clientIp(req), "screen", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
     return NextResponse.json({ ok: false, error: "Too many requests. Wait a few minutes." }, { status: 429, headers: NO_STORE });
   }
   const { allowed, message, scope } = await screenAddresses(addresses, opts);

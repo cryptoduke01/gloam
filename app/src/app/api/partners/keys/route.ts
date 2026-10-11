@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ApiError, jsonBody, portal, portalPepper, sessionWallet } from "@/lib/partnersApi";
+import { ApiError, jsonBody, limitPortalWrite, portal, portalPepper, sessionWallet } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
 import { createApiKey, listApiKeys, MAX_ACTIVE_KEYS } from "@/lib/apiKeys";
 import { getPartnerByOwner } from "@/lib/partners";
@@ -8,8 +8,9 @@ import { NETWORK_KEYS, getNetwork } from "@/lib/networks";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function ownPartner(req: NextRequest) {
+async function ownPartner(req: NextRequest, write = false) {
   const wallet = sessionWallet(req);
+  if (write) await limitPortalWrite(wallet);
   const partner = await getPartnerByOwner(wallet);
   if (!partner) throw new ApiError(404, "no_account", "Create your partner account first.");
   return partner;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   return portal(async () => {
     if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Make keys from the Gloam site.");
-    const partner = await ownPartner(req);
+    const partner = await ownPartner(req, true);
     const body = await jsonBody(req);
     const env = body.env === undefined ? "test" : body.env;
     if (env !== "test" && env !== "live") throw new ApiError(400, "bad_env", 'env must be "test" or "live".');

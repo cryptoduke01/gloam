@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { poolNotice } from "@/lib/tip403";
 import { tip403Applies, tip403AssetStatus } from "@/lib/tip403Server";
 
@@ -7,21 +8,10 @@ export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-// Best effort, in memory: answers are cached per asset, this only stops a
-// caller from using the route as a free RPC proxy.
-const WINDOW_MS = 10 * 60_000;
+// Shared across instances (lib/mcpRemote/rateLimit). Answers are cached per
+// asset; this keeps the route from being a free RPC proxy.
+const WINDOW_SEC = 10 * 60;
 const PER_IP = 120;
-const hits = new Map<string, number[]>();
-
-function allow(ip: string): boolean {
-  const now = Date.now();
-  const list = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (list.length >= PER_IP) return false;
-  list.push(now);
-  if (hits.size > 10_000) hits.clear();
-  hits.set(ip, list);
-  return true;
-}
 
 /**
  * The TIP-403 issuer policy of a Tempo stablecoin and what it means for the
@@ -40,11 +30,7 @@ export async function GET(req: Request) {
   if (!tip403Applies(chainId, asset)) {
     return NextResponse.json({ ok: true, applies: false }, { headers: NO_STORE });
   }
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "local";
-  if (!allow(ip)) {
+  if (!(await hitRateLimit(clientIp(req), "screen-policy", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
     return NextResponse.json({ ok: false, error: "Too many requests. Wait a few minutes." }, { status: 429, headers: NO_STORE });
   }
   try {
