@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { KvUnavailableError } from "@/lib/partnersKv";
-import { RecoveryError, deleteBackup, isHex64, readBackup, writeBackup } from "@/lib/recoveryStore";
+import { RecoveryError, backupExists, deleteBackup, isHex64, readBackup, writeBackup } from "@/lib/recoveryStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Requests per IP per minute. */
 const RATE_LIMIT = 60;
+/**
+ * New backups per IP per day. A person makes one per sign-in method; each can
+ * hold about 500 KB, so this keeps the store from being filled with junk.
+ */
+const NEW_BACKUPS_PER_DAY = 10;
 const MAX_BODY = 600_000;
 
 function fail(status: number, message: string, headers?: HeadersInit) {
@@ -64,6 +69,14 @@ export async function PUT(req: Request) {
   const { id, write, c, n } = body;
   if (!isHex64(id) || !isHex64(write)) return fail(400, "Bad backup id.");
   try {
+    if (!(await backupExists(id))) {
+      const daily = await hitRateLimit(clientIp(req), "recovery-new", NEW_BACKUPS_PER_DAY, Date.now(), 86_400);
+      if (!daily.allowed) {
+        return fail(429, "Too many new backups from this connection today. Try again tomorrow.", {
+          "Retry-After": String(daily.retryAfterSec),
+        });
+      }
+    }
     return ok(await writeBackup({ id, write, c: c as string, n: Number(n) }));
   } catch (e) {
     return handle(e);

@@ -11,6 +11,7 @@
  * Stored in the partner program's store (lib/partnersKv: Upstash Redis in
  * production, in-process locally) under its own prefix.
  */
+import "server-only";
 import { createHash, timingSafeEqual } from "crypto";
 import { jsonOf, kv } from "./partnersKv";
 
@@ -45,6 +46,12 @@ function sameHash(a: string, b: string): boolean {
 
 export function isHex64(v: unknown): v is string {
   return typeof v === "string" && HEX64.test(v);
+}
+
+/** Whether a backup is filed under this id, without reading it. */
+export async function backupExists(id: string): Promise<boolean> {
+  const [n] = await kv([["EXISTS", keyFor(id)]]);
+  return Number(n) > 0;
 }
 
 export async function readBackup(id: string): Promise<BackupView | null> {
