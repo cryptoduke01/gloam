@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isLowEndDevice } from "@/lib/device";
 
 /**
  * Money under the seal. A hidden layer of engraved dollar bills (line art in
@@ -9,7 +10,7 @@ import { useEffect, useRef } from "react";
  * they seal back when the cursor leaves. On load the lens sweeps across once, so
  * visitors on touch screens, or who never hover, still see what is under the
  * seal. Drawn once to an offscreen layer and masked per frame. Off under
- * reduced motion.
+ * reduced motion and on low-end phones.
  */
 
 const RADIUS = 230;
@@ -196,7 +197,7 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     const canvas = ref.current;
     const host = canvas?.parentElement;
     if (!canvas || !host) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || isLowEndDevice()) return;
     const fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -362,13 +363,37 @@ export function CursorReveal({ className = "" }: { className?: string }) {
       start();
     };
 
+    // The engraving is the expensive part: font, logos, size and theme changes
+    // all ask for a repaint, so batch them into one per frame.
+    let repaint = 0;
+    let needsResize = false;
+    const queuePaint = (withResize = false) => {
+      needsResize ||= withResize;
+      if (repaint) return;
+      repaint = requestAnimationFrame(() => {
+        repaint = 0;
+        if (needsResize) resize();
+        else paintLayer();
+        needsResize = false;
+        if (running) draw();
+      });
+    };
+
     resize();
     // Repaint once the brand font is ready so the numerals use Aeonik.
-    void document.fonts?.ready.then(paintLayer);
-    logos.forEach((img) => img.addEventListener("load", paintLayer, { once: true }));
-    const ro = new ResizeObserver(resize);
+    void document.fonts?.ready.then(() => queuePaint());
+    logos.forEach((img) => img.addEventListener("load", () => queuePaint(), { once: true }));
+    let firstObserve = true;
+    const ro = new ResizeObserver(() => {
+      // The observer reports once on start; the layer was just painted for that size.
+      if (firstObserve) {
+        firstObserve = false;
+        return;
+      }
+      queuePaint(true);
+    });
     ro.observe(host);
-    const mo = new MutationObserver(paintLayer);
+    const mo = new MutationObserver(() => queuePaint());
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     if (fine) {
       host.addEventListener("pointermove", onMove);
@@ -383,6 +408,7 @@ export function CursorReveal({ className = "" }: { className?: string }) {
     return () => {
       window.clearTimeout(introTimer);
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(repaint);
       ro.disconnect();
       mo.disconnect();
       host.removeEventListener("pointermove", onMove);

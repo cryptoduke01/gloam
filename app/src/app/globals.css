@@ -458,6 +458,17 @@ body {
   }
 }
 
+/* Low-end phones (html.gl-lite, set in the head by lib/device): no backdrop
+   blur and no drifting field, the two effects that cost a weak GPU the most. */
+html.gl-lite .gl-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+html.gl-lite .gl-field.gl-drift {
+  animation: none;
+}
+
 /* Sealed amount: a row of small dots, the privacy motif. */
 .seal-dots {
   display: inline-flex;

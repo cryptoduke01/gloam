@@ -73,6 +73,9 @@
   .move {
     animation: stream 38s linear infinite;
   }
+  .stream[data-paused] .move {
+    animation-play-state: paused;
+  }
   @keyframes stream {
     from {
       transform: translateX(-50%);
@@ -89,4 +92,16 @@
   .card {
     width: 200px;
   }
+}
+
+/* Low-end phones (html.gl-lite): a live backdrop blur over moving cards is the
+   most expensive thing on the page, so the slab goes nearly opaque instead. */
+:global(html.gl-lite) .slab {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel) 94%, transparent),
+    color-mix(in srgb, var(--field-base) 94%, transparent)
+  );
 }

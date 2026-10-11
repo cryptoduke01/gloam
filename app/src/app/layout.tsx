@@ -4,6 +4,7 @@ import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CookieBanner } from "@/components/CookieBanner";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { VercelAnalytics } from "@/components/VercelAnalytics";
+import { DEVICE_BOOT_SCRIPT } from "@/lib/device";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -96,6 +97,7 @@ export default function RootLayout({
           crossOrigin=""
         />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DEVICE_BOOT_SCRIPT }} />
       </head>
       <body
         className="flex min-h-full flex-col bg-background text-foreground"

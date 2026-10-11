@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isLowEndDevice } from "@/lib/device";
 
 /**
  * The flowing field: a slow, domain-warped noise gradient drawn in WebGL, the
  * Gloam take on a mesh gradient. Silver and white swirls with one green wash
  * low on the right. Colours come from theme tokens (--f-*), so it follows light
  * and dark. Renders at low resolution (it is all soft gradients), animates only
- * while on screen, holds still under reduced motion, and falls back to the CSS
- * field underneath if WebGL is unavailable.
+ * while on screen and at 30 frames a second (the drift is slow), holds still
+ * under reduced motion and on low-end phones, and falls back to the CSS field
+ * underneath if WebGL is unavailable.
  */
 
 const VERT = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
@@ -107,39 +109,58 @@ export function FlowField({ className = "" }: { className?: string }) {
       gl.uniform2f(uRes, w, h);
     };
 
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches || isLowEndDevice();
     const seed = 40; // start mid-flow so the first frame is already blended
+    const FRAME_MS = 1000 / 30;
     let raf = 0;
     let visible = true;
-    const t0 = performance.now();
+    let last = 0;
+    // Time only advances while the field is drawing, so it resumes where it stopped.
+    let clock = 0;
 
-    const draw = (now: number) => {
-      gl.uniform1f(uTime, seed + (reduce ? 0 : (now - t0) / 1000));
+    const draw = () => {
+      gl.uniform1f(uTime, seed + clock / 1000);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
     const loop = (now: number) => {
-      if (visible && !document.hidden) draw(now);
+      raf = 0;
+      if (!visible || document.hidden) return;
+      const dt = now - last;
+      if (dt >= FRAME_MS) {
+        clock += Math.min(dt, 100);
+        last = now;
+        draw();
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    const play = () => {
+      if (still || raf || !visible || document.hidden) return;
+      last = performance.now();
       raf = requestAnimationFrame(loop);
     };
 
     readColors();
     resize();
-    draw(t0);
+    draw();
     canvas.style.opacity = "1";
-    if (!reduce) raf = requestAnimationFrame(loop);
+    play();
 
     const ro = new ResizeObserver(() => {
       resize();
-      draw(performance.now());
+      draw();
     });
     ro.observe(canvas);
     const io = new IntersectionObserver(([e]) => {
       visible = !!e?.isIntersecting;
+      play();
     });
     io.observe(canvas);
+    const onVisibility = () => play();
+    document.addEventListener("visibilitychange", onVisibility);
     const mo = new MutationObserver(() => {
       readColors();
-      draw(performance.now());
+      draw();
     });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
@@ -148,6 +169,7 @@ export function FlowField({ className = "" }: { className?: string }) {
       ro.disconnect();
       io.disconnect();
       mo.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

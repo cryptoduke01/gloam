@@ -1,3 +1,4 @@
+import { PauseOffscreen } from "@/components/ui/PauseOffscreen";
 import { SealDots } from "@/components/ui/SealDots";
 import styles from "./landing.module.css";
 
@@ -54,7 +55,11 @@ function Sealed() {
 export function SealStream() {
   const loop = [...PAYMENTS, ...PAYMENTS];
   return (
-    <div className={styles.stream} aria-label="Payments going in readable and coming out sealed">
+    <PauseOffscreen
+      className={styles.stream}
+      role="img"
+      aria-label="Payments going in readable and coming out sealed"
+    >
       <div className={`${styles.half} ${styles.readable}`} aria-hidden>
         <div className={`${styles.track} ${styles.move}`}>
           {loop.map((p, i) => (
@@ -72,6 +77,6 @@ export function SealStream() {
       <div className={styles.slab} aria-hidden>
         <div className={styles.slabGlow} />
       </div>
-    </div>
+    </PauseOffscreen>
   );
 }

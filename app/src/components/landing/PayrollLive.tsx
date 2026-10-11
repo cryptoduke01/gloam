@@ -9,7 +9,8 @@ import { SealDots } from "@/components/ui/SealDots";
  * real Payroll screen. It pays five people one after another, shows the
  * receipt, flips to what the public sees, then starts over. Visitors can pick
  * the view themselves, switch "Hide my wallet" to see what it changes, and run
- * it again. Pauses off screen; holds the finished state under reduced motion.
+ * it again. Pauses off screen, redraws ten times a second rather than every
+ * frame, and holds the finished state under reduced motion.
  */
 
 type Status = "queued" | "preparing" | "sending" | "confirming" | "paid";
@@ -83,14 +84,31 @@ export function PayrollLive() {
       setStill(true);
       return;
     }
+    // Statuses change every half second or so and the progress bar eases with
+    // CSS, so ten renders a second look identical to sixty and cost a phone far less.
+    const STEP_MS = 100;
     let raf = 0;
     let visible = false;
     let base = performance.now();
     let last = 0;
+    let shown = -STEP_MS;
+    const tick = (now: number) => {
+      raf = 0;
+      if (!visible) return;
+      last = (now - base) % LOOP;
+      if (Math.abs(last - shown) >= STEP_MS) {
+        shown = last;
+        setT(last);
+      }
+      raf = requestAnimationFrame(tick);
+    };
     const io = new IntersectionObserver(
       ([e]) => {
         visible = !!e?.isIntersecting;
-        if (visible) base = performance.now() - last;
+        if (visible && !raf) {
+          base = performance.now() - last;
+          raf = requestAnimationFrame(tick);
+        }
       },
       { threshold: 0.2 },
     );
@@ -98,17 +116,10 @@ export function PayrollLive() {
     restart.current = () => {
       base = performance.now();
       last = 0;
+      shown = 0;
       setT(0);
     };
-    const tick = (now: number) => {
-      if (visible) {
-        last = (now - base) % LOOP;
-        setT(last);
-      }
-      raf = requestAnimationFrame(tick);
-    };
     setT(0);
-    raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
       io.disconnect();
