@@ -54,8 +54,9 @@ export default function DocsOverviewPage() {
           <AppLink href="/app/vault?tab=shield">Shield</AppLink> a tiny amount of testnet funds.
         </li>
         <li>
-          <AppLink href="/app/vault?tab=move">Move</AppLink> to pay a tag or cash out. A browser
-          proof settles, never the amount.
+          <AppLink href="/app/vault?tab=move">Move</AppLink> to pay a Gloam address or cash
+          out. A proof made in your browser settles it, and the amount never
+          shows.
         </li>
       </ol>
 
@@ -70,12 +71,12 @@ export default function DocsOverviewPage() {
           {
             n: "2",
             title: "Private send",
-            body: "Send inside the vault to a receive tag. The sender and amount stay sealed.",
+            body: "Send inside the vault to a Gloam address. The sender and amount stay sealed.",
           },
           {
             n: "3",
             title: "Cash out",
-            body: "Unshield to a public balance with a real browser proof. Proofs run in your browser.",
+            body: "Move money back to a public balance with a real proof, made in your browser.",
           },
         ]}
       />
@@ -84,15 +85,22 @@ export default function DocsOverviewPage() {
       <ul>
         <li>Connect wallet, portfolio, markets</li>
         <li>
-          Send public balances (ETH + stock tokens on Robinhood, stablecoins on
-          Tempo)
+          Send public balances (ETH and stock tokens on Robinhood Chain,
+          stablecoins on Tempo)
         </li>
         <li>
-          Shield into the vault (ETH/stocks on Robinhood, PathUSD on Tempo)
+          Shield into the vault (ETH and stock tokens on Robinhood Chain, PathUSD
+          on Tempo)
         </li>
-        <li>Private send + receive tags (optional passphrase tickets)</li>
-        <li>Cash out (unshield) with a real zero-knowledge proof</li>
-        <li>Selective disclosure, verified in the browser</li>
+        <li>
+          Private send to a Gloam address, or by claim link with an optional
+          passphrase
+        </li>
+        <li>Cash out with a real zero-knowledge proof</li>
+        <li>
+          Proofs anyone can check at <Link href="/verify">/verify</Link>, in
+          their own browser
+        </li>
         <li>
           <Link href="/docs/proofs">Proof of funds and proof of payment</Link>:
           show you hold at least an amount, or that you were paid, without
@@ -113,7 +121,7 @@ export default function DocsOverviewPage() {
           server: caps per payment and per day, allowed payees, expiry
         </li>
         <li>The Gloam relay, which keeps your wallet off the record</li>
-        <li>Note backup (optional lock) in Settings</li>
+        <li>A backup of your private balance (with an optional passphrase) in Settings</li>
       </ul>
 
       <h2 id="not-yet">What does not work yet</h2>
@@ -128,7 +136,7 @@ export default function DocsOverviewPage() {
           Pyth / RedStone wired)
         </li>
         <li>
-          <Link href="/docs/production">Production ceremony keys / mainnet</Link>
+          <Link href="/docs/production">Production proving keys and mainnet</Link>
         </li>
         <li>Ethereum expansion (roadmap)</li>
       </ul>

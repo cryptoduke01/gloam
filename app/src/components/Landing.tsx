@@ -262,7 +262,7 @@ export function Landing() {
           <div className="gl-panel overflow-clip bg-surface px-5 py-12 sm:px-10 sm:py-16">
             <SealedField tone="soft" />
             <div className="relative mx-auto max-w-[720px] text-center">
-              <h2 className="t-display-l">Private money is live</h2>
+              <h2 className="t-display-l">Private money, live on testnet</h2>
               <p className="mx-auto mt-4 max-w-[52ch] text-[17px] leading-[1.6] text-mute sm:text-[19px]">
                 Add money privately, pay anyone, and prove what you hold without
                 showing the number. On testnet today, with real contracts.
