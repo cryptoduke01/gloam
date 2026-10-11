@@ -37,7 +37,7 @@ export function AnnouncementBanner() {
   };
 
   return (
-    <div className="relative z-[60] w-full border-b border-transparent bg-[#0b0d12] text-white dark:border-line dark:bg-[#0e1015]">
+    <div className="relative z-[60] w-full border-b border-transparent bg-[#0b0c0e] text-white dark:border-line dark:bg-[#111214]">
       <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-3 px-4 py-2 sm:px-7">
         <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#8fd3ad]" />
         <p className="min-w-0 truncate text-[13px] leading-tight">

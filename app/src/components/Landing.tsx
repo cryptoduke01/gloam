@@ -9,6 +9,7 @@ import { SealStream } from "@/components/landing/SealStream";
 import { PayrollLive } from "@/components/landing/PayrollLive";
 import { LiveProduct } from "@/components/landing/LiveProduct";
 import { CodeBlock } from "@/components/ui/CodeBlock";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 /**
  * Gloam landing, the "Sealed" system. White ground, light display type, one
@@ -170,6 +171,12 @@ const NEW = [
   },
 ];
 
+const DEV_LINKS = [
+  { label: "SDK on npm", href: "https://www.npmjs.com/package/@gloamtrade/sdk" },
+  { label: "MCP server", href: "/docs/agents#the-mcp-server" },
+  { label: "x402 payments", href: "/docs/agents" },
+];
+
 const SNIPPET = `import { buildGloamPayment, relayIntent } from "@gloamtrade/sdk";
 
 const payment = await buildGloamPayment({ to, amount, asset });
@@ -219,13 +226,13 @@ export function Landing() {
             {WHAT.map((w) => {
               const To = w.href.startsWith("/app") ? AppLink : Link;
               return (
-                <div key={w.label} className="border-t border-foreground pt-5">
+                <div key={w.label} className="flex flex-col border-t border-foreground pt-5">
                   <p className="t-label text-mute">{w.label}</p>
                   <p className="mt-3 text-[19px] leading-snug tracking-[-0.01em]">{w.title}</p>
                   <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-mute">{w.body}</p>
                   <To
                     href={w.href}
-                    className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[14px] text-foreground transition-colors hover:text-sealed"
                   >
                     {w.cta} <span aria-hidden>→</span>
                   </To>
@@ -275,8 +282,7 @@ export function Landing() {
         {/* why gloam: a payment has one owner, so nobody else holds a key */}
         <section aria-labelledby="why-gloam" className="mx-auto max-w-[1400px] px-4 pt-20 sm:px-7 sm:pt-32">
           <div className="max-w-[760px]">
-            <p className="t-label">Why Gloam</p>
-            <h2 id="why-gloam" className="t-display-l mt-4">
+            <h2 id="why-gloam" className="t-display-l">
               A payment has one owner. Nobody else should hold the key.
             </h2>
             <p className="mt-5 max-w-[56ch] text-[17px] leading-[1.6] text-mute sm:text-[19px]">
@@ -363,8 +369,7 @@ export function Landing() {
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="gl-tile flex flex-col justify-between rounded-[24px] p-7 sm:p-10">
               <div>
-                <p className="t-label">Private payroll</p>
-                <h2 className="t-display-l mt-4 max-w-[13ch]">Run payroll in one upload</h2>
+                <h2 className="t-display-l max-w-[13ch]">Run payroll in one upload</h2>
                 <p className="mt-5 max-w-[46ch] text-[17px] leading-[1.6] text-mute sm:text-[18px]">
                   Drop in a list of names and amounts. Gloam pays everyone from
                   your private balance and sends each payment for you, so your
@@ -406,11 +411,6 @@ export function Landing() {
         {/* developers */}
         <section className="mx-auto max-w-[1400px] px-4 pb-20 pt-20 sm:px-7 sm:pb-32 sm:pt-32">
           <div className="theme-dark gl-panel grid gap-10 border border-transparent bg-[#0b0c0e] px-6 py-12 text-foreground dark:border-line dark:bg-panel sm:px-12 sm:py-16 lg:grid-cols-[1fr_1.1fr] lg:items-center">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -bottom-1/2 -left-1/4 h-[120%] w-[80%] rounded-full opacity-25 blur-[90px]"
-              style={{ background: "radial-gradient(closest-side, #8e939b, transparent)" }}
-            />
             <div className="relative min-w-0">
               <p className="t-label text-mute">For developers and agents</p>
               <h2 className="t-display-l mt-4 max-w-[15ch] text-foreground">
@@ -432,12 +432,28 @@ export function Landing() {
             </div>
             <div className="relative min-w-0">
               <CodeBlock code={SNIPPET} lang="ts" title="npm i @gloamtrade/sdk" meta="TypeScript" className="bg-surface" />
-              <div className="mt-3 grid grid-cols-1 gap-2 text-[12.5px] sm:grid-cols-3">
-                {["SDK on npm", "MCP server", "x402 payments"].map((t) => (
-                  <div key={t} className="rounded-[12px] border border-line px-3 py-2.5 text-soft">
-                    {t}
-                  </div>
-                ))}
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13.5px]">
+                {DEV_LINKS.map((l) =>
+                  l.href.startsWith("http") ? (
+                    <a
+                      key={l.label}
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-soft transition-colors hover:text-foreground"
+                    >
+                      {l.label} <ArrowUpRight />
+                    </a>
+                  ) : (
+                    <Link
+                      key={l.label}
+                      href={l.href}
+                      className="text-soft transition-colors hover:text-foreground"
+                    >
+                      {l.label}
+                    </Link>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -447,8 +463,7 @@ export function Landing() {
         <section aria-labelledby="whats-new" className="mx-auto max-w-[1400px] px-4 pb-20 sm:px-7 sm:pb-32">
           <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
             <div>
-              <p className="t-label">What&apos;s new</p>
-              <h2 id="whats-new" className="t-display-l mt-4 max-w-[13ch]">
+              <h2 id="whats-new" className="t-display-l max-w-[13ch]">
                 Private payments you can prove
               </h2>
               <p className="mt-5 max-w-[38ch] text-[15px] leading-relaxed text-mute">
@@ -463,7 +478,7 @@ export function Landing() {
                   <p className="mt-3 text-[14px] leading-relaxed text-mute">{n.body}</p>
                   <Link
                     href={n.href}
-                    className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[14px] text-foreground transition-colors hover:text-sealed"
                   >
                     {n.cta} <span aria-hidden>→</span>
                   </Link>
@@ -480,7 +495,7 @@ export function Landing() {
               <h2 className="t-display-l max-w-[10ch]">No middlemen</h2>
               <Link
                 href="/verify#contracts"
-                className="t-label mt-6 inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
+                className="mt-6 inline-flex items-center gap-1.5 text-[14px] text-foreground transition-colors hover:text-sealed"
               >
                 Verify the contracts <span aria-hidden>→</span>
               </Link>

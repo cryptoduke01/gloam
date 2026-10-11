@@ -97,13 +97,13 @@ export function Footer() {
               >
                 hello@gloam.trade
               </a>
-              <div className="mt-8 flex items-center gap-2">
+              <div className="-ml-3 mt-8 flex items-center gap-1">
                 <a
                   href="https://x.com/gloamtrade"
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Gloam on X"
-                  className="grid h-10 w-10 place-items-center rounded-full border border-line text-soft transition-colors hover:border-foreground hover:text-foreground"
+                  className="grid h-10 w-10 place-items-center rounded-full text-soft transition-colors hover:bg-white/10 hover:text-foreground"
                 >
                   <XIcon />
                 </a>
@@ -112,7 +112,7 @@ export function Footer() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Gloam on Telegram"
-                  className="grid h-10 w-10 place-items-center rounded-full border border-line text-soft transition-colors hover:border-foreground hover:text-foreground"
+                  className="grid h-10 w-10 place-items-center rounded-full text-soft transition-colors hover:bg-white/10 hover:text-foreground"
                 >
                   <TelegramIcon />
                 </a>
@@ -121,7 +121,7 @@ export function Footer() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Gloam on GitHub"
-                  className="grid h-10 w-10 place-items-center rounded-full border border-line text-soft transition-colors hover:border-foreground hover:text-foreground"
+                  className="grid h-10 w-10 place-items-center rounded-full text-soft transition-colors hover:bg-white/10 hover:text-foreground"
                 >
                   <GitHubIcon />
                 </a>
@@ -137,7 +137,6 @@ export function Footer() {
                   <p className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-foreground">
                     {g.title}
                   </p>
-                  <span aria-hidden className="mt-3 block h-px w-7 bg-foreground/50" />
                   <ul className="mt-5 space-y-3">
                     {g.links.map((l) => (
                       <li key={l.href}>

@@ -385,8 +385,8 @@ export default function VerifyPage() {
                         <span className="text-mute">{k}</span>
                         <span className="inline-flex items-center gap-2 text-right text-foreground">
                           {v}
-                          <span className="grid h-5 w-5 place-items-center rounded-full bg-sealed-soft text-sealed">
-                            <CheckMark size={11} />
+                          <span className="text-sealed">
+                            <CheckMark size={15} />
                           </span>
                         </span>
                       </li>
@@ -583,8 +583,8 @@ export default function VerifyPage() {
               {FACTS.map((f) => (
                 <div key={f.title} className="border-t border-foreground pt-5">
                   <p className="flex items-center gap-2.5 text-[18px] leading-snug tracking-[-0.01em]">
-                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
-                      <CheckMark size={11} />
+                    <span className="shrink-0 text-sealed">
+                      <CheckMark size={17} />
                     </span>
                     {f.title}
                   </p>
