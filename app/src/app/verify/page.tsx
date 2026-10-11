@@ -451,8 +451,10 @@ export default function VerifyPage() {
                 <div role="alert" className="mt-4 rounded-[18px] bg-warn-soft p-5 sm:p-6">
                   <p className="text-[13px] font-medium text-warn">Can&apos;t confirm who holds this</p>
                   <p className="tnum mt-1.5 text-[15px] text-foreground">
-                    It claims {amountOf(result.d.amount, assetAddress(result.d.asset))}{" "}
-                    {symbolOf(assetAddress(result.d.asset), Number(result.d.chainId))} in Gloam&apos;s vault.
+                    {`It claims ${amountOf(result.d.amount, assetAddress(result.d.asset))} ${symbolOf(
+                      assetAddress(result.d.asset),
+                      Number(result.d.chainId)
+                    )} in Gloam's vault.`}
                   </p>
                   <p className="mt-1.5 text-[14px] leading-relaxed text-soft">{LEGACY_DISCLOSURE}</p>
                 </div>
