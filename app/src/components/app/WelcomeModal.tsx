@@ -1,29 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { Mark } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
 import { readDemo } from "@/lib/demoFlag";
 
 const STORAGE_KEY = "gloam_testnet_welcome_v1";
 
+/**
+ * Shown once, before the app's JavaScript arrives: the modal is in the server
+ * HTML with `hidden`, and the tiny script after it unhides it when this browser
+ * has not dismissed it yet. On a slow phone the welcome appears with the first
+ * paint instead of seconds later, after the wallet code loads. Once React takes
+ * over, state drives it as before (and recording demos keep it shut).
+ */
+const REVEAL_SCRIPT = `(function(){try{if(localStorage.getItem('${STORAGE_KEY}')==='1')return;if(/[?&]demo=1/.test(location.search)||sessionStorage.getItem('gloam_demo')==='1')return;var el=document.getElementById('gl-welcome');if(el)el.hidden=false}catch(e){}})()`;
+
 export function WelcomeModal() {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
+    let show = true;
     try {
-      if (localStorage.getItem(STORAGE_KEY) === "1" || readDemo()) return;
-      setOpen(true);
+      if (localStorage.getItem(STORAGE_KEY) === "1" || readDemo()) show = false;
     } catch {
-      setOpen(true);
+      /* storage unavailable: show it */
     }
+    // The head start may have unhidden it; React's own state takes over here.
+    if (show) setOpen(true);
+    else if (ref.current) ref.current.hidden = true;
   }, []);
 
   function dismiss() {
@@ -35,10 +42,13 @@ export function WelcomeModal() {
     setOpen(false);
   }
 
-  if (!open || !mounted) return null;
-
-  return createPortal(
+  return (
+    <>
     <div
+      ref={ref}
+      id="gl-welcome"
+      hidden={!open}
+      suppressHydrationWarning
       className="fixed inset-0 z-[200] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
@@ -138,7 +148,8 @@ export function WelcomeModal() {
           </Link>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    <script dangerouslySetInnerHTML={{ __html: REVEAL_SCRIPT }} />
+    </>
   );
 }
