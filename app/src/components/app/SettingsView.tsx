@@ -790,6 +790,24 @@ export function SettingsView() {
         </div>
         {integrityMsg && <Status>{integrityMsg}</Status>}
       </Card>
+
+      <Card id="help" title="Help" flush>
+        <Row label="Telegram" hint="Ask the team and other testers.">
+          <a href="https://t.me/gloamhq" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm h-10">
+            Open group
+          </a>
+        </Row>
+        <Row label="Email" hint="hello@gloam.trade, for bugs, questions and partners.">
+          <a href="mailto:hello@gloam.trade" className="btn btn-ghost btn-sm h-10">
+            Write to us
+          </a>
+        </Row>
+        <Row label="X" hint="Updates and releases from @gloamtrade.">
+          <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm h-10">
+            Follow
+          </a>
+        </Row>
+      </Card>
     </div>
   );
 }

@@ -56,6 +56,13 @@ function XIcon() {
     </svg>
   );
 }
+function TelegramIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M21.94 4.3l-3.33 15.68c-.25 1.1-.9 1.37-1.83.85l-5.06-3.73-2.44 2.35c-.27.27-.5.5-1.02.5l.36-5.14 9.36-8.46c.41-.36-.09-.56-.63-.2L5.77 13.43.79 11.87c-1.08-.34-1.1-1.08.23-1.6L20.5 2.76c.9-.33 1.69.21 1.44 1.54z" />
+    </svg>
+  );
+}
 function GitHubIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -99,6 +106,15 @@ export function Footer() {
                   className="grid h-10 w-10 place-items-center rounded-full border border-line text-soft transition-colors hover:border-foreground hover:text-foreground"
                 >
                   <XIcon />
+                </a>
+                <a
+                  href="https://t.me/gloamhq"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Gloam on Telegram"
+                  className="grid h-10 w-10 place-items-center rounded-full border border-line text-soft transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  <TelegramIcon />
                 </a>
                 <a
                   href="https://github.com/cryptoduke01/gloam"

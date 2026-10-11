@@ -302,9 +302,12 @@ export function AppShell({
                 ? "Gloam on Tempo testnet. Private stablecoin payments for people and agents. Play money only."
                 : "Gloam on Robinhood Chain testnet. Play money only. Not investment, legal or tax advice."}
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link href="/docs/testnet" className="hover:text-foreground">
                 Testnet guide
+              </Link>
+              <Link href="/app/settings#help" className="hover:text-foreground">
+                Help
               </Link>
               <Link href="/privacy" className="hover:text-foreground">
                 Privacy
@@ -312,6 +315,9 @@ export function AppShell({
               <Link href="/terms" className="hover:text-foreground">
                 Terms
               </Link>
+              <a href="https://t.me/gloamhq" target="_blank" rel="noreferrer" className="hover:text-foreground">
+                Telegram
+              </a>
               <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer" className="hover:text-foreground">
                 X
               </a>
