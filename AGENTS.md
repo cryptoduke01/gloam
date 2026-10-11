@@ -34,7 +34,6 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 
 ## Audits
 
-- Claude grand audit prompt: [`AUDITS/CLAUDE_GRAND_AUDIT_PROMPT.md`](./AUDITS/CLAUDE_GRAND_AUDIT_PROMPT.md)
 - Audits so far are internal (two rounds, fixes deployed). An external audit and a multi-party ceremony come before mainnet.
 
 ## Rules

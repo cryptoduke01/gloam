@@ -43,3 +43,9 @@ next-env.d.ts
 
 # local editor/agent config
 /.claude/
+
+# Local agent instruction files stay on the machine
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md
+AUDITS/CLAUDE_GRAND_AUDIT_PROMPT.md
