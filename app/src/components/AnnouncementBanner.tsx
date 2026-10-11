@@ -41,7 +41,7 @@ export function AnnouncementBanner() {
       <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-3 px-4 py-2 sm:px-7">
         <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#8fd3ad]" />
         <p className="min-w-0 truncate text-[13px] leading-tight">
-          <span className="font-medium">Private payroll is live.</span>{" "}
+          <span className="font-medium">Private payroll is live on testnet.</span>{" "}
           <span className="hidden text-white/60 sm:inline">
             Pay a whole team on Robinhood Chain or Tempo without showing who got
             what.
