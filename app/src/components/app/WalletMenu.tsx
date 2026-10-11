@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Address } from "viem";
@@ -24,8 +25,12 @@ import {
 import { isTempoWallet, preloadTempoWallet } from "@/lib/tempoWallet";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
-import { TurnkeyHeaderSignIn } from "./TurnkeyHeaderSignIn";
 import { ClientOnly } from "./ClientOnly";
+
+// Passkey sign-in ships only when Turnkey is switched on.
+const TurnkeyHeaderSignIn = dynamic(() =>
+  import("./TurnkeyHeaderSignIn").then((m) => m.TurnkeyHeaderSignIn),
+);
 
 /**
  * Where the wallet control sits, which sets its shape:
