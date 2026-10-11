@@ -1,11 +1,14 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { isNetworkKey } from "@/lib/networks";
 import { getLeafSnapshot } from "@/lib/leafIndexServer";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
+/** Requests per IP per minute that reach the function (the CDN answers most). */
+const PER_IP_PER_MIN = 120;
 
 /**
  * GET /api/vault-leaves?network=robinhood|tempo
@@ -21,6 +24,13 @@ export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("network");
   if (!isNetworkKey(key)) {
     return NextResponse.json({ error: "unknown_network" }, { status: 400, headers: NO_STORE });
+  }
+  const rate = await hitRateLimit(clientIp(req), "vault-leaves", PER_IP_PER_MIN);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "rate_limited" },
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(rate.retryAfterSec) } },
+    );
   }
   try {
     // A refresh of the kept copy runs after the response is sent.

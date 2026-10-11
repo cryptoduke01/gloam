@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAddress } from "viem";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 
 const EXPLORER_API = "https://explorer.testnet.chain.robinhood.com/api";
 
 export const dynamic = "force-dynamic";
+
+/** Lookups per IP per minute. The app polls every 30 seconds per open tab. */
+const PER_IP_PER_MIN = 30;
 
 type TxRow = {
   hash: string;
@@ -19,6 +23,13 @@ export async function GET(req: NextRequest) {
   if (!isAddress(address)) {
     return NextResponse.json({ error: "invalid_address" }, { status: 400 });
   }
+  const rate = await hitRateLimit(clientIp(req), "activity", PER_IP_PER_MIN);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { txs: [], error: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } },
+    );
+  }
 
   try {
     // Cap server fetch; UI paginates client-side (PAGE_SIZE=5)
@@ -26,6 +37,7 @@ export async function GET(req: NextRequest) {
     const res = await fetch(url, {
       cache: "no-store",
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       return NextResponse.json(

@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { recordTractionEvent } from "@/lib/tractionStore";
+
+/** Events per IP per minute. A busy session sends a handful; the rest is noise. */
+const PER_IP_PER_MIN = 60;
+const MAX_BODY = 4_000;
+/** Client clocks are trusted to within a day, else the server's time is used. */
+const MAX_SKEW_MS = 24 * 60 * 60 * 1000;
 
 type Body = {
   t?: unknown;
@@ -9,8 +16,8 @@ type Body = {
   ts?: unknown;
 };
 
-/** snake_case event names only, so junk never lands in the counters. */
-const EVENT_NAME = /^[a-z][a-z0-9_]{0,47}$/;
+/** snake_case event names only, so junk never lands in the counters. "total" is the store's own counter. */
+const EVENT_NAME = /^(?!total$)[a-z][a-z0-9_]{0,47}$/;
 
 /** Keys whose text or number values could carry what someone paid, who, or a secret. */
 const SENSITIVE_KEY =
@@ -70,8 +77,19 @@ function cleanRef(raw: unknown): string | null {
  * Optional TRACTION_WEBHOOK_URL for Discord/Slack.
  */
 export async function POST(req: Request) {
+  const rate = await hitRateLimit(clientIp(req), "collect", PER_IP_PER_MIN);
+  if (!rate.allowed) {
+    return NextResponse.json({ ok: false }, { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } });
+  }
   try {
-    const data = (await req.json().catch(() => null)) as Body | null;
+    const raw = await req.text();
+    if (raw.length > MAX_BODY) return NextResponse.json({ ok: false }, { status: 413 });
+    let data: Body | null = null;
+    try {
+      data = JSON.parse(raw) as Body | null;
+    } catch {
+      data = null;
+    }
     if (!data || typeof data !== "object" || typeof data.t !== "string" || !EVENT_NAME.test(data.t)) {
       return NextResponse.json({ ok: false }, { status: 400 });
     }
@@ -88,7 +106,10 @@ export async function POST(req: Request) {
       path: typeof data.path === "string" ? data.path.slice(0, 200) : null,
       ref: cleanRef(data.ref),
       meta,
-      ts: typeof data.ts === "number" ? data.ts : Date.now(),
+      ts:
+        typeof data.ts === "number" && Number.isSafeInteger(data.ts) && Math.abs(data.ts - Date.now()) <= MAX_SKEW_MS
+          ? data.ts
+          : Date.now(),
       ua: req.headers.get("user-agent")?.slice(0, 160) ?? null,
     };
 
