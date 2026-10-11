@@ -1,5 +1,6 @@
 /**
- * Per-IP rate limit for the hosted MCP server. Fixed one-minute windows.
+ * Per-IP rate limits, shared by the hosted MCP server and the API routes.
+ * Fixed windows: one minute unless the caller asks for longer (an hour, a day).
  *
  * Counts live in Upstash Redis (UPSTASH_REDIS_REST_URL + _TOKEN, the same REST
  * pipeline as lib/tractionStore) so every serverless instance shares them, and
@@ -30,7 +31,7 @@ function memCounts(): Map<string, { n: number; exp: number }> {
   return g.__gloamMcpRate;
 }
 
-function memIncr(key: string, now: number): number {
+function memIncr(key: string, now: number, windowSec: number): number {
   const m = memCounts();
   if (m.size > MEM_MAX_KEYS) {
     for (const [k, v] of m) if (v.exp <= now) m.delete(k);
@@ -38,14 +39,14 @@ function memIncr(key: string, now: number): number {
   }
   const cur = m.get(key);
   if (!cur || cur.exp <= now) {
-    m.set(key, { n: 1, exp: now + WINDOW_SEC * 1000 });
+    m.set(key, { n: 1, exp: now + windowSec * 1000 });
     return 1;
   }
   cur.n++;
   return cur.n;
 }
 
-async function redisIncr(key: string): Promise<number> {
+async function redisIncr(key: string, windowSec: number): Promise<number> {
   const url = process.env.UPSTASH_REDIS_REST_URL!.trim().replace(/\/$/, "");
   const token = process.env.UPSTASH_REDIS_REST_TOKEN!.trim();
   const res = await fetch(`${url}/pipeline`, {
@@ -53,7 +54,7 @@ async function redisIncr(key: string): Promise<number> {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify([
       ["INCR", key],
-      ["EXPIRE", key, WINDOW_SEC * 2],
+      ["EXPIRE", key, windowSec * 2],
     ]),
     cache: "no-store",
     signal: AbortSignal.timeout(2_000),
@@ -67,21 +68,32 @@ async function redisIncr(key: string): Promise<number> {
 
 /**
  * Counts one hit for `bucket` from this IP and says whether it is allowed.
- * Never throws: when Redis fails, the in-memory count decides.
+ * `windowSec` is the window length (default one minute; 3600 for an hour,
+ * 86400 for a UTC day). Never throws: when Redis fails, the in-memory count
+ * decides.
  */
-export async function hitRateLimit(ip: string, bucket: string, limit: number, now = Date.now()): Promise<RateResult> {
-  const window = Math.floor(now / 1000 / WINDOW_SEC);
-  const key = `${PREFIX}${bucket}:${ipKey(ip)}:${window}`;
+export async function hitRateLimit(
+  ip: string,
+  bucket: string,
+  limit: number,
+  now = Date.now(),
+  windowSec = WINDOW_SEC,
+): Promise<RateResult> {
+  const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
+  const window = Math.floor(now / 1000 / span);
+  // one-minute keys keep their old shape; longer windows name their length
+  const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
+  const key = `${PREFIX}${bucket}:${ipKey(ip)}:${slot}`;
   let n: number;
   if (redisConfigured()) {
     try {
-      n = await redisIncr(key);
+      n = await redisIncr(key, span);
     } catch {
-      n = memIncr(key, now);
+      n = memIncr(key, now, span);
     }
   } else {
-    n = memIncr(key, now);
+    n = memIncr(key, now, span);
   }
-  const retryAfterSec = Math.max(1, (window + 1) * WINDOW_SEC - Math.floor(now / 1000));
+  const retryAfterSec = Math.max(1, (window + 1) * span - Math.floor(now / 1000));
   return { allowed: n <= limit, limit, remaining: Math.max(0, limit - n), retryAfterSec };
 }
