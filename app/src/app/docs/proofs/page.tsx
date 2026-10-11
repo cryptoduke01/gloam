@@ -41,7 +41,10 @@ export default function DocsProofsPage() {
       <p>
         Shows one of your private balances exactly: the asset and the amount. Use
         it when the number itself is the point, for example a lender asking what
-        is in one account. It covers one balance, never your total.
+        is in one account. It covers one balance, never your total. Like the
+        other proofs it carries a label and an expiry, is made on your device and
+        never goes on chain. It shows the balance existed, not that it is still
+        unspent; ask for a proof of funds for that.
       </p>
 
       <h3>At least (proof of funds)</h3>
@@ -229,7 +232,9 @@ export default function DocsProofsPage() {
         <li>
           Paste the proof. It starts with <code>gloamfunds1:</code>,{" "}
           <code>gloampay1:</code>, <code>gloamroll1:</code> or{" "}
-          <code>gloamdisc1:</code>. If you were sent a
+          <code>gloambal1:</code>. The older <code>gloamdisc1:</code> format is
+          no longer accepted, because anyone can copy one from a public deposit;
+          ask for a new proof instead. If you were sent a
           link, opening it fills the proof in for you. The proof travels after the
           # in the link, so it never reaches a server.
         </li>

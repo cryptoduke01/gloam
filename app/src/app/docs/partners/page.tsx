@@ -14,7 +14,7 @@ const ERRORS: [string, number | string, string][] = [
   ["key_env_mismatch", 403, "A live key on a testnet, or a test key on a mainnet."],
   ["rate_limited", 429, "Over 300 requests in a minute for this key. Retry-After says when to retry."],
   ["invalid_json", 400, "The body is not a JSON object."],
-  ["bad_request", 400, "A relay field is malformed (proof, root, nullifier, commitments, asset, to, amount, memo)."],
+  ["bad_request", 400, "A relay field is malformed (proof, root, nullifier, commitments, asset, to, amount, memo). Relayed memos are capped at 2,048 bytes."],
   ["network", 400, "chainId is not a network the relay serves (46630 or 42431)."],
   ["bad_action", 400, "action is not transfer, unshield or memo."],
   ["screened", 403, "A cash out to a sanctioned address. The relay says nothing more."],
@@ -22,6 +22,8 @@ const ERRORS: [string, number | string, string][] = [
   ["AlreadySpent", 409, "The note was already spent."],
   ["UnknownRoot", 409, "The proof was made against a vault state the pool no longer knows. Resync and prove again."],
   ["not_seen", 409, "A payment message for a payment that is not in the vault yet."],
+  ["in_flight", 409, "The same proof is already being relayed. Wait for that send to finish instead of retrying."],
+  ["vault_recipient", 400, "A cash out to the vault or the memo board itself. Pick a wallet address instead."],
   ["InvalidProof, InsufficientPoolBalance, ...", 422, "The dry run against the pool reverted, with the pool's own reason. Nothing was sent."],
   ["relay_off, relay_empty", 503, "The relay is not set up, or out of gas, on this network."],
   ["rpc", 502, "The network did not answer. Try again."],
@@ -296,7 +298,8 @@ curl https://gloam.trade/api/v1/relay \\
         <code>GET /api/v1/vaults</code> (or <code>/vaults/robinhood</code>,{" "}
         <code>/vaults/tempo</code>) gives each network&apos;s vault address, the
         tokens it takes, whether the relay is up, and a fresh read of the tree size
-        and root.
+        and root, plus <code>leafCapacity</code> and <code>leavesLeft</code> for
+        how much room the note tree has.
       </p>
       <p>
         <code>GET /api/v1/vaults/&#123;network&#125;/leaves</code> is the vault&apos;s

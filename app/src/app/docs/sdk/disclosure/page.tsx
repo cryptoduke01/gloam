@@ -13,7 +13,7 @@ export default function DocsDisclosurePage() {
   return (
     <DocsLayout
       title="Selective disclosure"
-      lede="Private by default, provable on demand. A holder proves one note's amount and asset to whoever they send the proof to, such as an auditor or a counterparty, and reveals nothing else."
+      lede="The original note disclosure format, gloamdisc1, is retired: the verifier no longer accepts it, because anyone can copy a deposit's proof from public transaction data. Use the Exact balance proof (gloambal1) or a proof of funds instead. This page stays for reference."
       glance={[
         { label: "Reveals", value: "one note's amount and asset" },
         { label: "Hides", value: "identity, secret, other notes" },
@@ -27,6 +27,16 @@ export default function DocsDisclosurePage() {
         { href: "/docs/privacy-model", label: "Privacy model" },
       ]}
     >
+      <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
+        Retired format. A <code>gloamdisc1</code> proof reuses the deposit
+        statement, and every deposit publishes that proof on chain, so it cannot
+        show who holds a balance. The verifier now answers &quot;can&apos;t
+        confirm&quot; for it. Make an Exact balance proof in{" "}
+        <Link href="/app/disclose">Prove</Link> instead; it carries a label and
+        an expiry and never goes on chain. See{" "}
+        <Link href="/docs/proofs">proofs</Link>.
+      </div>
+
       <h2>Why it matters</h2>
       <p>
         A shielded pool that can only hide is a dark pool, and a regulated-chain
