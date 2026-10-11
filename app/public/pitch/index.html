@@ -129,7 +129,7 @@ body.welcoming { overflow: hidden; }
 .w-actions .w-primary:hover { background: #ffffff; }
 .w-actions a:focus-visible, .w-actions button:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 .w-foot { color: var(--dk-mute); font-size: 13px; }
-@media print { .welcome { display: none !important; } }
+@media print { .welcome { display: none !important; } body.welcoming { overflow: visible; } }
 </style>
 </head>
 <body class="welcoming">
@@ -399,15 +399,15 @@ body.welcoming { overflow: hidden; }
   <h2 class="h2" style="margin-top:40px">We earn when private money moves.</h2>
   <div class="grow"></div>
   <div class="cols c3">
-    <div class="card" style="gap:20px"><p class="tag">Payments</p><h3>A fee on private transactions</h3><p>Every private payment that moves through the vault.</p></div>
-    <div class="card" style="gap:20px"><p class="tag">Payroll</p><h3>A fee per payroll run</h3><p>Charged each time a team runs payroll.</p></div>
+    <div class="card" style="gap:20px"><p class="tag">Payments</p><h3>0.1% in, 0.1% out</h3><p>A fee on deposits and cash outs, from mainnet. Railgun charges 0.25% each way.</p></div>
+    <div class="card" style="gap:20px"><p class="tag">Payroll</p><h3>A fee per payroll run</h3><p>Then team plans for scheduled payroll, approvals and accountant proofs.</p></div>
     <div class="card" style="gap:20px"><p class="tag">Builders</p><h3>Partner API and SDK usage</h3><p>Wallets, apps and agents build on Gloam and set their own fee on top.</p></div>
   </div>
   <div class="grow"></div>
-  <p style="font-size:30px">Benchmark: Railgun charges 0.25% in and out <span class="mute">and earned about $4.3M in fees in the last 12 months.</span></p>
-  <div class="foot"><span>Testnet is free and nothing is charged. Rates are set before mainnet.</span><span>15</span></div>
+  <p style="font-size:30px">If 1% of business stablecoin payments moved through Gloam, that is about $2.3B a year <span class="mute">and roughly $4.6M in fees. Railgun earned about $4.3M in the last 12 months at 0.25%.</span></p>
+  <div class="foot"><span>Testnet is free. Fees start at mainnet.</span><span>15</span></div>
 </section></div>
-<aside class="notes"><b>Say:</b> We make money when private money moves, three ways: a fee on private transactions, a fee per payroll run, and usage of the partner API and SDK, where partners can add their own fee on top. For scale, Railgun charges 0.25 percent in and out and earned about 4.3 million dollars in fees in the last year. Testnet is free; we set our rates before mainnet.</aside>
+<aside class="notes"><b>Say:</b> We make money when private money moves. At mainnet, 0.1 percent on deposits and 0.1 percent on cash outs, less than Railgun's 0.25 percent each way. Then a fee per payroll run and team plans, and partner API and SDK usage, where partners can add their own fee on top. Business stablecoin payments were 226 billion dollars last year. If 1 percent moved through Gloam, that is about 2.3 billion a year and roughly 4.6 million dollars in fees. Testnet is free.</aside>
 
 <!-- 16 go to market -->
 <div class="frame"><section class="s light" aria-label="Go to market">
