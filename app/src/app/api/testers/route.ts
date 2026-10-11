@@ -20,6 +20,11 @@ export const dynamic = "force-dynamic";
 const MAX_BODY = 4_000;
 /** Tries per IP per minute. Generous because mobile carriers put many people behind one IP. */
 const RATE_LIMIT = 30;
+/**
+ * Complete applications per IP per hour. A person applies once; this keeps one
+ * sender from filling the paid spots with made-up applicants.
+ */
+const APPLICATIONS_PER_HOUR = 10;
 
 function fail(status: number, message: string, field: string | null = null, headers?: HeadersInit) {
   return NextResponse.json({ ok: false, error: { field, message } }, { status, headers });
@@ -51,6 +56,12 @@ export async function POST(req: Request) {
 
   try {
     const input = parseTesterInput(body);
+    const hourly = await hitRateLimit(clientIp(req), "testers-apply", APPLICATIONS_PER_HOUR, Date.now(), 3600);
+    if (!hourly.allowed) {
+      return fail(429, "Too many applications from this connection. Try again later, or email hello@gloam.trade.", null, {
+        "Retry-After": String(hourly.retryAfterSec),
+      });
+    }
     const { application, duplicate } = await saveTesterApplication(input);
     if (!duplicate) {
       await recordTractionEvent({
