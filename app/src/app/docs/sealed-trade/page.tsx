@@ -42,9 +42,9 @@ export default function DocsSealedTradePage() {
       <h2 id="stock-tokens">Stock tokens today</h2>
       <p>
         On Robinhood Chain you can already{" "}
-        <Link href="/app/shield">shield</Link> stock tokens (TSLA, AMZN, PLTR,
+        <Link href="/app/vault?tab=shield">shield</Link> stock tokens (TSLA, AMZN, PLTR,
         NFLX and AMD on testnet), hold them privately, and{" "}
-        <Link href="/app/move">send them privately</Link>. Trading them
+        <Link href="/app/vault?tab=move">send them privately</Link>. Trading them
         privately is the part that waits for the new engine.
       </p>
 
@@ -187,8 +187,8 @@ export default function DocsSealedTradePage() {
       <p>
         Private trade is switched off on-chain, so the trade panel shows it as
         disabled until the new engine is ready. Available today: the{" "}
-        <Link href="/app/trade?path=vault">from-vault adapter</Link> (honest,
-        not sealed), and <Link href="/app/move">Move</Link> to hold and send
+        <Link href="/app/vault?tab=trade&path=vault">from-vault adapter</Link> (honest,
+        not sealed), and <Link href="/app/vault?tab=move">Move</Link> to hold and send
         privately.
       </p>
     </DocsLayout>

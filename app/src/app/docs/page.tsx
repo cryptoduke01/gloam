@@ -50,10 +50,10 @@ export default function DocsOverviewPage() {
           network (Robinhood Chain or Tempo).
         </li>
         <li>
-          <Link href="/app/shield">Shield</Link> a tiny amount of testnet funds.
+          <Link href="/app/vault?tab=shield">Shield</Link> a tiny amount of testnet funds.
         </li>
         <li>
-          <Link href="/app/move">Move</Link> to pay a tag or cash out. A browser
+          <Link href="/app/vault?tab=move">Move</Link> to pay a tag or cash out. A browser
           proof settles, never the amount.
         </li>
       </ol>

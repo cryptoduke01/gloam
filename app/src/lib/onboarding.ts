@@ -62,13 +62,13 @@ export const ONBOARDING_STEPS = [
     id: "shield",
     title: "Add money privately",
     body: "Move some into your private vault. The amount stops showing on your public wallet.",
-    href: "/app/shield",
+    href: "/app/vault?tab=shield",
   },
   {
     id: "move",
     title: "Send a private payment",
     body: "Pay someone privately, or share a link they can claim. Amounts stay hidden.",
-    href: "/app/move",
+    href: "/app/vault?tab=move",
   },
   {
     id: "disclose",

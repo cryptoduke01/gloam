@@ -88,9 +88,9 @@ export default function DocsEncryptionPage() {
       </p>
 
       <p>
-        Try it: <Link href="/app/shield">Shield</Link> →{" "}
-        <Link href="/app/move">Move</Link> (private send) or{" "}
-        <Link href="/app/trade?path=sealed">Private trade</Link> → cash out only
+        Try it: <Link href="/app/vault?tab=shield">Shield</Link> →{" "}
+        <Link href="/app/vault?tab=move">Move</Link> (private send) or{" "}
+        <Link href="/app/vault?tab=trade&path=sealed">Private trade</Link> → cash out only
         when you need the open wallet.
       </p>
     </DocsLayout>

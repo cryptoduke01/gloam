@@ -94,8 +94,8 @@ export default function DocsPrivatePayPage() {
 
       <h2>Try it</h2>
       <p>
-        <Link href="/app/move">Move</Link>, private pay ·{" "}
-        <Link href="/app/trade?path=sealed">Private trade</Link>, size
+        <Link href="/app/vault?tab=move">Move</Link>, private pay ·{" "}
+        <Link href="/app/vault?tab=trade&path=sealed">Private trade</Link>, size
         privacy on ·{" "}
         <Link href="/docs/privacy-model">Privacy model</Link>.
       </p>

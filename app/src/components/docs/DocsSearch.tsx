@@ -121,7 +121,7 @@ const PAGE_META: Record<string, PageMeta> = {
     description: "Prove you hold at least an amount, or that you were paid, without showing your balance.",
     keywords: ["proof of funds", "proof of payment", "receipt", "at least", "solvency", "bank", "landlord", "verify", "threshold"],
     headings: [
-      "Three proofs",
+      "Four proofs",
       "What each one shows and hides",
       "Made for one person",
       "How checking works",

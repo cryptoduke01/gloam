@@ -246,7 +246,7 @@ export default function DocsTestnetPage() {
       <h2 id="shield">4. Shield (deposit into the vault)</h2>
       <ol>
         <li>
-          Go to <Link href="/app/shield">Shield</Link>.
+          Go to <Link href="/app/vault?tab=shield">Shield</Link>.
         </li>
         <li>Pick ETH or a faucet stock token and a small amount.</li>
         <li>
@@ -266,7 +266,7 @@ export default function DocsTestnetPage() {
       <h2 id="private-pay">5. Private pay (send inside the vault)</h2>
       <ol>
         <li>
-          Open <Link href="/app/move">Move</Link> → private send.
+          Open <Link href="/app/vault?tab=move">Move</Link> → private send.
         </li>
         <li>
           Choose a vault note and amount. Prefer leaving a small change note
@@ -296,7 +296,7 @@ export default function DocsTestnetPage() {
       <h2 id="cash-out">6. Cash out (unshield)</h2>
       <ol>
         <li>
-          <Link href="/app/move">Move</Link> → cash out / unshield.
+          <Link href="/app/vault?tab=move">Move</Link> → cash out / unshield.
         </li>
         <li>Select a note and confirm.</li>
         <li>Wait for the browser proof, then confirm the wallet tx.</li>
@@ -332,11 +332,11 @@ export default function DocsTestnetPage() {
       </p>
       <ol>
         <li>
-          <Link href="/app/shield">Shield ETH</Link> (not only stock tokens).
+          <Link href="/app/vault?tab=shield">Shield ETH</Link> (not only stock tokens).
         </li>
         <li>
           Open{" "}
-          <Link href="/app/trade?path=sealed">Trade → Private</Link> and pick
+          <Link href="/app/vault?tab=trade&path=sealed">Trade → Private</Link> and pick
           TSLA / AMZN / etc.
         </li>
         <li>
