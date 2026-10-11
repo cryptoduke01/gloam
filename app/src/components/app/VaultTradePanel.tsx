@@ -50,6 +50,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { getRhPublicClient } from "@/lib/rhClient";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
+import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { StatusPill } from "./StatusPill";
 import { SuccessModal } from "./SuccessModal";
 import { WalletMenu } from "./WalletMenu";
@@ -541,6 +542,11 @@ export function VaultTradePanel({
       return;
     }
     // The trade cashes out to this wallet and deposits back from it.
+    const targetProblem = cashOutTargetProblem(address, { pool: SHIELD_POOL_ADDRESS, payMemo: network.payMemo });
+    if (targetProblem) {
+      setError(targetProblem);
+      return;
+    }
     if (!(await screenWallets([address])).allowed) {
       setError(SCREEN_BLOCKED_MESSAGE);
       return;

@@ -49,9 +49,11 @@ export function isPayMemoLive(): boolean {
 
 /**
  * GloamPayMemo.MAX_MEMO: the board rejects a memo longer than this. A sealed
- * ticket (gloam2t) is about 0.8 KB, and the longest private note (80 characters,
- * lib/paymentNote) adds under 0.6 KB, so every ticket fits with room to spare,
- * and well inside MEMO_GAS_LIMIT (about 80k gas at the largest, on Tempo).
+ * ticket (gloam2t) is about 0.85 KB, and the longest private note (80 characters,
+ * lib/paymentNote) takes it to 1714 bytes at most, so every ticket fits with
+ * room to spare, and well inside MEMO_GAS_LIMIT (about 80k gas at the largest,
+ * on Tempo). The Gloam relay posts no more than 2048 bytes
+ * (RELAY_MEMO_MAX_BYTES in lib/relay/server, with the arithmetic).
  */
 export const PAY_MEMO_MAX_BYTES = 8192;
 

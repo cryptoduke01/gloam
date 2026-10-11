@@ -24,6 +24,7 @@ import {
 } from "@/lib/proveClient";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
+import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { IssuerPolicyRow } from "./IssuerPolicyRow";
 import { noteNullifierPoseidon } from "@/lib/notePoseidon";
 import { fieldToHex, hexToField } from "@/lib/poseidon";
@@ -531,6 +532,12 @@ export function MoveView() {
       setError(
         `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, ${formatAssetLabel(selected.amountWei, selected.asset)} needed). It opens up once more of this asset is added.`
       );
+      return;
+    }
+    // Never to the vault or the memo board: the money would be stuck there.
+    const targetProblem = cashOutTargetProblem(address, network);
+    if (targetProblem) {
+      setError(targetProblem);
       return;
     }
     // The cash out goes to this public wallet, relay or not (on Tempo, also

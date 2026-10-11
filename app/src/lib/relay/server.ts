@@ -10,9 +10,20 @@
  *
  * Guard rails:
  *   - only the active pool's transfer/unshield and the memo board's postMemo
+ *   - one request per spend at a time: a send or cash out takes a lock on its
+ *     nullifier, shared across instances (lib/relay/inflight), before anything
+ *     is read from the chain, so copies of one proof sent together cannot each
+ *     pass the dry run and then revert at the relay's expense; the lock is
+ *     dropped if nothing went out, and kept until it expires once a
+ *     transaction did
+ *   - spent and root check on every send and cash out, before the dry run, so
+ *     a spent note never reaches the gas estimate
  *   - dry run (gas estimate against the pool) before anything is sent, so a bad
  *     proof, a spent note or a stale root costs the relay nothing
- *   - memos only for commitments the pool has actually inserted
+ *   - no cash out to the vault itself or the memo board (lib/cashOutTarget),
+ *     which would strand the money
+ *   - memos only for commitments the pool has actually inserted, and no larger
+ *     than a real sealed ticket needs (RELAY_MEMO_MAX_BYTES)
  *   - sanctions screening of every public recipient (a cash out's `to`) before
  *     anything is checked or sent (lib/screeningServer.ts), plus on Tempo the
  *     asset's TIP-403 issuer policy for the vault and `to`; private sends and
@@ -31,6 +42,8 @@
 import {
   BaseError,
   ContractFunctionRevertedError,
+  HttpRequestError,
+  TimeoutError,
   createPublicClient,
   createWalletClient,
   http,
@@ -48,6 +61,8 @@ import {
 import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
+import { cashOutTargetProblem } from "@/lib/cashOutTarget";
+import { inflightKey, takeInflight } from "@/lib/relay/inflight";
 
 const POOL_ERRORS = [
   "ZeroCommitment",
@@ -260,11 +275,37 @@ export function asAmount(v: unknown): bigint {
   return n;
 }
 
+/**
+ * Largest payment message the relay posts, in bytes. The memo board itself
+ * takes up to 8192 (GloamPayMemo.MAX_MEMO), but a real message is always a
+ * sealed ticket, and the largest one is 1714 bytes:
+ *
+ *   note JSON   376 bytes with no note (pool and asset addresses, a 78-digit
+ *               amount, the secret and the commitment), plus `,"n":""` (7)
+ *               and the note: 80 characters at 6 bytes each at worst once
+ *               JSON escapes them (a lone surrogate becomes \uXXXX; emoji are
+ *               4), so 480. Total 863.
+ *   gloam1.     7 + base64url(863) = 7 + 1151 = 1158
+ *   sealed      2 + 91 (P-256 key) + 12 (IV) + 1158 + 16 (GCM tag) = 1279
+ *   gloam2t.    8 + base64url(1279) = 8 + 1706 = 1714
+ *
+ * 2048 leaves 334 bytes over that worst case (over 600 for a note of real
+ * characters), and a junk message costs the relay a quarter of what the board
+ * would take.
+ */
+export const RELAY_MEMO_MAX_BYTES = 2048;
+
 export function asMemo(v: unknown): Hex {
-  if (typeof v !== "string" || !/^0x([0-9a-fA-F]{2}){1,8192}$/.test(v)) {
-    throw new RelayError("Invalid payment message.");
-  }
+  if (typeof v !== "string") throw new RelayError("Invalid payment message.");
+  if (v.length > 2 + 2 * RELAY_MEMO_MAX_BYTES) throw new RelayError(REVERT_MESSAGES.BadMemo);
+  if (!/^0x(?:[0-9a-fA-F]{2})+$/.test(v)) throw new RelayError("Invalid payment message.");
   return v as Hex;
+}
+
+/** Refuses a cash out that would strand the money in the vault or the memo board. */
+export function assertCashOutTarget(net: Pick<GloamNetwork, "pool" | "payMemo">, to: Address): void {
+  const problem = cashOutTargetProblem(to, net);
+  if (problem) throw new RelayError(problem, 400, "vault_recipient");
 }
 
 // ---------------------------------------------------------------- submit
@@ -328,7 +369,16 @@ export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> 
   }
 }
 
-async function submit(net: GloamNetwork, call: Call): Promise<Hex> {
+/** A timeout or a dropped connection on the send can come after the node took the transaction. */
+function mayHaveSent(err: unknown): boolean {
+  if (err instanceof BaseError && err.walk((e) => e instanceof TimeoutError || e instanceof HttpRequestError)) {
+    return true;
+  }
+  return /already known|timed? ?out/i.test(err instanceof Error ? err.message : String(err));
+}
+
+/** `onMaybeSent` runs when the send failed in a way that may still have put the transaction out. */
+async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): Promise<Hex> {
   // Screen before anything else: a blocked call never reaches the chain.
   await screenCall(call, net);
   const account = relayerAccount();
@@ -376,10 +426,37 @@ async function submit(net: GloamNetwork, call: Call): Promise<Hex> {
       const msg = e instanceof Error ? e.message : "";
       // Two relays racing the same nonce: refetch and retry once.
       if (attempt === 0 && /nonce|replacement|underpriced|already known/i.test(msg)) continue;
+      if (mayHaveSent(e)) onMaybeSent?.();
       throw explain(e, "The relay could not submit this payment. Try again or send from your wallet.");
     }
   }
   throw new RelayError("The relay could not submit this payment.", 502, "rpc");
+}
+
+export const IN_FLIGHT_MESSAGE = "This payment is already being sent. Wait a moment and refresh.";
+
+/**
+ * A send or cash out, one at a time per nullifier: take the lock, check the
+ * note is unspent and the root known, then dry run and send. The lock is
+ * dropped when nothing went out (a failed check, dry run or send), so the user
+ * can retry at once; once a transaction is out it stays until it expires.
+ */
+async function submitSpend(net: GloamNetwork, call: Extract<Call, { kind: "transfer" | "unshield" }>): Promise<Hex> {
+  const root = call.args[1];
+  const nullifier = call.args[2];
+  const lock = await takeInflight(inflightKey(net.chainId, nullifier));
+  if (!lock) throw new RelayError(IN_FLIGHT_MESSAGE, 409, "in_flight");
+  let keep = false;
+  try {
+    await precheckSpend(net, root, nullifier);
+    const hash = await submit(net, call, () => {
+      keep = true;
+    });
+    keep = true;
+    return hash;
+  } finally {
+    if (!keep) await lock.release();
+  }
 }
 
 export async function relayTransfer(net: GloamNetwork, body: Record<string, unknown>) {
@@ -390,8 +467,7 @@ export async function relayTransfer(net: GloamNetwork, body: Record<string, unkn
   if (!Array.isArray(commitments) || commitments.length !== 2) throw new RelayError("Invalid commitments.");
   const c0 = asBytes32(commitments[0], "commitment");
   const c1 = asBytes32(commitments[1], "commitment");
-  await precheckSpend(net, root, nullifier);
-  return submit(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] });
+  return submitSpend(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] });
 }
 
 export async function relayUnshield(net: GloamNetwork, body: Record<string, unknown>) {
@@ -401,12 +477,12 @@ export async function relayUnshield(net: GloamNetwork, body: Record<string, unkn
   const asset = asAddress(body.asset, "asset");
   const to = asAddress(body.to, "recipient");
   const amount = asAmount(body.amount);
+  assertCashOutTarget(net, to);
   // The recipient and amount are public inputs of the unshield proof, so the
   // relay cannot change where the money goes.
-  const call: Call = { kind: "unshield", args: [proof, root, nullifier, asset, to, amount] };
+  const call = { kind: "unshield", args: [proof, root, nullifier, asset, to, amount] } as const;
   await screenCall(call, net);
-  await precheckSpend(net, root, nullifier);
-  return submit(net, call);
+  return submitSpend(net, call);
 }
 
 /** `requester` is who asks (an IP, or `key:<id>` for the API), for the per-sender message limit. */
@@ -435,6 +511,11 @@ export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>
   return submit(net, { kind: "memo", args: [commitment, memo] });
 }
 
+/**
+ * Two cheap reads before the dry run, on every send and cash out, so a spent
+ * note or a stale root is refused without running the proof check (the pool
+ * verifies the proof before it reads `spent`).
+ */
 async function precheckSpend(net: GloamNetwork, root: Hex, nullifier: Hex) {
   const pub = relayPublicClient(net);
   const [spent, known] = await Promise.all([

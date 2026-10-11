@@ -152,6 +152,10 @@ export async function buildUnshieldIntent(
   params: UnshieldIntentParams
 ): Promise<GloamIntent<"unshield"> & { exec: IntentExec }> {
   const asset = params.asset ?? NATIVE_ASSET;
+  // A cash out to the vault itself strands the money there.
+  if (params.to.toLowerCase() === (params.poolAddress ?? SEALED_VAULT).toLowerCase()) {
+    throw new Error("That address is the vault itself. Cash out to a wallet you control.");
+  }
   const w = await buildPoseidonUnshieldWitness({
     secretHex: params.secretHex,
     amount: params.amountWei,
