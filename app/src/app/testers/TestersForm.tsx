@@ -2,6 +2,7 @@
 
 import { AppLink } from "@/components/AppLink";
 import { useState, type FormEvent, type ReactNode } from "react";
+import { track } from "@/lib/track";
 
 type Network = "both" | "tempo" | "robinhood";
 type Field = "name" | "telegram" | "x" | "address" | "network" | "setup" | "note";
@@ -47,6 +48,7 @@ export function TestersForm({ paidFull, paidSpots }: { paidFull: boolean; paidSp
         | { ok: false; error: { field: Field | null; message: string } }
         | null;
       if (json?.ok) {
+        track("testers_submit", { network, paid: json.data.paid, duplicate: json.data.duplicate });
         setDone(json.data);
       } else {
         const err = json?.error ?? { field: null, message: "We couldn't send that. Try again in a moment." };
