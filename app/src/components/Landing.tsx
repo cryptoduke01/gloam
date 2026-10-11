@@ -27,6 +27,23 @@ function IconPayroll() {
     </svg>
   );
 }
+function IconWallet() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3.5" y="6.5" width="17" height="12" rx="3" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M3.5 10h17" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M15.5 14.25h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconInvoice() {
+  return (
+    <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M6.5 3.5h8l3 3v14h-11z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M9 10h6M9 13.5h6M9 17h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
 function IconAgent() {
   return (
     <svg className={icon} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -55,6 +72,18 @@ function IconStocks() {
 
 const USES = [
   {
+    icon: <IconWallet />,
+    title: "Your own money",
+    body: "Get paid, save and send to friends and family without strangers looking up your balance.",
+    href: "/app",
+  },
+  {
+    icon: <IconInvoice />,
+    title: "Freelancers and contractors",
+    body: "Get paid in stablecoins by every client, without each one seeing what the others pay you.",
+    href: "/docs/private-pay",
+  },
+  {
     icon: <IconPayroll />,
     title: "Payroll",
     body: "Pay your team in USDG or PathUSD. Nobody can look up who earns what.",
@@ -68,8 +97,8 @@ const USES = [
   },
   {
     icon: <IconTreasury />,
-    title: "Treasury",
-    body: "Move company money between wallets without broadcasting your runway.",
+    title: "Suppliers and treasury",
+    body: "Pay suppliers and move company money without broadcasting your costs or your runway.",
     href: "/docs/private-pay",
   },
   {
@@ -99,7 +128,7 @@ const WHAT = [
   {
     label: "The app",
     title: "Use it today",
-    body: "Hold, pay and run payroll privately from your own wallet. Gloam never holds your keys, and nobody on the team can move your money.",
+    body: "Hold, pay and run payroll privately from your own wallet. Gloam never holds your keys, and there is no admin withdraw.",
     href: "/app",
     cta: "Open app",
   },
@@ -291,10 +320,11 @@ export function Landing() {
             <h2 className="t-display-l">Built for money that should not be public</h2>
             <p className="mt-5 max-w-[56ch] text-[17px] leading-[1.6] text-mute sm:text-[19px]">
               Stablecoins made onchain money fast and cheap. Gloam makes it
-              discreet enough for the people who actually move it.
+              discreet enough for the people who actually move it: you, your
+              team, your business and your agents.
             </p>
           </div>
-          <div className="-mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4 [&::-webkit-scrollbar]:hidden">
+          <div className="-mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 [&::-webkit-scrollbar]:hidden">
             {USES.map((u) => (
               <Link
                 key={u.title}
