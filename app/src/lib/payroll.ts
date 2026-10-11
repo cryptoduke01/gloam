@@ -20,7 +20,7 @@
  *
  * Proving the total: each row also keeps the payee note's secret and the
  * opening of the note it spent (sealed at rest with the batch, like claim
- * links), so a finished run can later prove "paid exactly T to N people"
+ * links), so a finished run can later prove "N payments adding up to exactly T"
  * (lib/proofs, payroll_total). Runs paid before that was kept cannot, unless
  * every payee was a claim link and the spent notes are still on this device.
  */
