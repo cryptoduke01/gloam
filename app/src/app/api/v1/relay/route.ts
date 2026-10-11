@@ -38,8 +38,8 @@ export async function POST(req: Request) {
     const body = await jsonBody(req);
     const net = networkForChain(body.chainId);
     requireKeyEnv(key, keyEnvForNetwork(net), net.label);
-    // The relay's own per-sender and per-network caps, with the key as the sender.
-    await checkRateLimit(`key:${key.id}`, net.chainId);
+    // The relay's own per-sender cap, with the key as the sender (the network cap applies when it sends).
+    await checkRateLimit(`key:${key.id}`);
 
     let hash: `0x${string}`;
     let kind: ActivityKind | null = null;
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
         edge = { asset: asAddress(body.asset, "asset"), amount: asAmount(body.amount) };
         break;
       case "memo":
-        hash = await relayMemo(net, body);
+        hash = await relayMemo(net, body, `key:${key.id}`);
         break;
       default:
         throw new ApiError(400, "bad_action", 'action must be "transfer", "unshield" or "memo".');

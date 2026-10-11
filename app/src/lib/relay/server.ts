@@ -17,8 +17,9 @@
  *     anything is checked or sent (lib/screeningServer.ts), plus on Tempo the
  *     asset's TIP-403 issuer policy for the vault and `to`; private sends and
  *     memos carry no public address, so there is nothing to screen
- *   - per-IP and per-network rate limits, shared across instances, and at
- *     most a few relayed payment messages per payment
+ *   - per-sender and per-network rate limits, shared across instances (the
+ *     network cap counts only transactions actually sent), and a few relayed
+ *     payment messages per payment
  *
  * Testnet: submission is free. Mainnet needs a relay fee carved out inside the
  * circuit (an extra public output), otherwise the relay pays everyone's gas.
@@ -205,16 +206,26 @@ function walletFor(net: GloamNetwork, account: PrivateKeyAccount) {
 const WINDOW_SEC = 10 * 60;
 // A payroll run is up to 200 payments plus 200 notifications.
 const PER_IP = 400;
+/** Transactions the relay actually sends per network per hour. Refused requests never count. */
 const PER_NETWORK_HOURLY = 5_000;
-/** Relayed payment messages per payment per day. A payment needs one; the rest covers retries. */
+/**
+ * Relayed payment messages per payment per day: from one sender (one is
+ * needed, the rest covers retries), and from everyone together, so nobody can
+ * spend the relay's gas posting junk for payments that are already in the vault.
+ */
 const MEMOS_PER_PAYMENT = 3;
+const MEMOS_PER_PAYMENT_ALL = 10;
 
-export async function checkRateLimit(ip: string, chainId: number): Promise<void> {
-  const now = Date.now();
-  if (!(await hitRateLimit(ip, "relay-ip", PER_IP, now, WINDOW_SEC)).allowed) {
+/** Per-sender limit (an IP, or an API key), checked before anything else. */
+export async function checkRateLimit(requester: string): Promise<void> {
+  if (!(await hitRateLimit(requester, "relay-ip", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
     throw new RelayError("Too many requests from this device. Wait a few minutes.", 429, "rate_limit");
   }
-  if (!(await hitRateLimit(`chain:${chainId}`, "relay-net", PER_NETWORK_HOURLY, now, 3600)).allowed) {
+}
+
+/** One relay transaction on this network, counted only once it passed every check and the dry run. */
+async function takeNetworkSlot(net: GloamNetwork): Promise<void> {
+  if (!(await hitRateLimit(`chain:${net.chainId}`, "relay-net", PER_NETWORK_HOURLY, Date.now(), 3600)).allowed) {
     throw new RelayError("The relay is busy. Try again shortly or send from your wallet.", 429, "rate_limit");
   }
 }
@@ -356,6 +367,7 @@ async function submit(net: GloamNetwork, call: Call): Promise<Hex> {
   } catch (e) {
     throw explain(e, "Could not check this payment. Try again.");
   }
+  await takeNetworkSlot(net);
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -397,7 +409,8 @@ export async function relayUnshield(net: GloamNetwork, body: Record<string, unkn
   return submit(net, call);
 }
 
-export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>) {
+/** `requester` is who asks (an IP, or `key:<id>` for the API), for the per-sender message limit. */
+export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>, requester = "unknown") {
   if (!net.payMemo) throw new RelayError("Payment messages are not live on this network yet.", 400, "no_memo");
   const commitment = asBytes32(body.paymentCommitment, "payment");
   const memo = asMemo(body.memo);
@@ -410,9 +423,13 @@ export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>
   })) as boolean;
   if (!seen) throw new RelayError("That payment is not in the vault yet. Wait for it to confirm.", 409, "not_seen");
   // The memo board takes any number of messages per payment, and each relayed
-  // one is gas the relay pays: one message per payment, plus a few retries.
-  const perPayment = await hitRateLimit(`memo:${net.chainId}:${commitment.toLowerCase()}`, "relay-memo", MEMOS_PER_PAYMENT, Date.now(), 86_400);
-  if (!perPayment.allowed) {
+  // one is gas the relay pays: a few per payment from one sender, and a ceiling
+  // for everyone, so a payment's message can't be crowded out by one other sender.
+  const payment = `memo:${net.chainId}:${commitment.toLowerCase()}`;
+  const now = Date.now();
+  const mine = await hitRateLimit(`${payment}:${requester}`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400);
+  const all = mine.allowed ? await hitRateLimit(payment, "relay-memo-all", MEMOS_PER_PAYMENT_ALL, now, 86_400) : mine;
+  if (!mine.allowed || !all.allowed) {
     throw new RelayError("A message for this payment was already sent.", 409, "memo_sent");
   }
   return submit(net, { kind: "memo", args: [commitment, memo] });

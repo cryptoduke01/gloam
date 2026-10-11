@@ -30,7 +30,8 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const net = networkForChain(body.chainId);
-    await checkRateLimit(clientIp(req), net.chainId);
+    const ip = clientIp(req);
+    await checkRateLimit(ip);
 
     let hash: `0x${string}`;
     switch (body.action) {
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
         hash = await relayUnshield(net, body);
         break;
       case "memo":
-        hash = await relayMemo(net, body);
+        hash = await relayMemo(net, body, ip);
         break;
       default:
         throw new RelayError("Unknown action.");
