@@ -6,6 +6,7 @@
 <title>Gloam research report</title>
 <meta name="description" content="The Gloam thesis: why stablecoin payments need privacy, how Gloam compares with Zama, Arcium and others, and what is new.">
 <meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://www.gloam.trade/pitch/report">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Gloam">
@@ -22,7 +23,6 @@
 <meta name="twitter:description" content="The Gloam thesis: why stablecoin payments need privacy, how Gloam compares with Zama, Arcium and others, and what is new.">
 <meta name="twitter:image" content="https://www.gloam.trade/opengraph-image">
 <meta name="twitter:image:alt" content="Gloam: private money on public chains">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 
 <style>
 @font-face{font-family:"Aeonik";font-weight:300;font-style:normal;font-display:swap;src:url("/fonts/Aeonik-Light.woff2") format("woff2")}
@@ -548,7 +548,7 @@ footer{padding-block:40px 0;font-size:13px;color:var(--mute);display:flex;justif
       <div>
         <p class="label" style="color:var(--on-field)">New, as far as we found</p>
         <ul class="clean">
-          <li><strong>Payroll total proof.</strong> A company proves a run of up to 32 payments adds up to exactly the total, across a set number of people, paid from its own money, without showing who got what. We found nothing like it.</li>
+          <li><strong>Payroll total proof.</strong> A company proves a run of up to 32 payments adds up to exactly the total, all paid from its own money, without showing who got what. We found nothing like it.</li>
           <li><strong>Proofs sealed to one reader and a date.</strong> Who the proof is for, when it expires, and which chain and pool it covers are sealed into the proof. Change the label and the proof fails. Anyone checks it in a browser with no wallet.</li>
           <li><strong>Private payments for AI agents.</strong> Tempo and Stripe's machine payments spec had no private method; ours is the one proposed. Gloam also seals x402 payments and gives agents handles to money instead of secrets.</li>
         </ul>
@@ -556,7 +556,7 @@ footer{padding-block:40px 0;font-size:13px;color:var(--mute);display:flex;justif
     </div>
     <div class="col">
       <p>In crypto, a primitive is a building block other people build on. That is how Gloam ships these pieces: the payroll total proof and sealed proofs are open to any wallet, payroll tool or agent through the SDK, the API and the MCP server, so nobody has to build their own.</p>
-      <p class="small mute">Honest limit: whoever receives a proof can still pass it on. Locking a proof so only one named reader can check it is the next step.</p>
+      <p class="small mute">Honest limits: whoever receives a proof can still pass it on, and a proof of payment shows a payment was made, not yet which side of it you were on. Locking a proof to one named reader, and giving payees a key only they hold, are the next steps.</p>
     </div>
     <p class="bottom">Gloam is not a new cipher. It is a new building block for finance: private payments you can prove.</p>
   </section>
@@ -574,8 +574,8 @@ footer{padding-block:40px 0;font-size:13px;color:var(--mute);display:flex;justif
         <thead><tr><th>Proof</th><th>What it shows</th><th>What stays private</th></tr></thead>
         <tbody>
           <tr><td><strong>Proof of funds</strong></td><td>You hold at least X</td><td>Your exact balance and wallet</td></tr>
-          <tr><td><strong>Proof of payment</strong></td><td>A payment arrived, at least a minimum</td><td>Who paid, and the rest of your money</td></tr>
-          <tr><td><strong>Payroll total</strong></td><td>A run of up to 32 payments adds up to the total, across a set number of people</td><td>Who got what</td></tr>
+          <tr><td><strong>Proof of payment</strong></td><td>A private payment of at least X was made</td><td>Who paid, who received, and the rest of your money</td></tr>
+          <tr><td><strong>Payroll total</strong></td><td>A run of up to 32 payments adds up to exactly the total, all funded by the prover</td><td>Who got what</td></tr>
         </tbody>
       </table>
     </div>
