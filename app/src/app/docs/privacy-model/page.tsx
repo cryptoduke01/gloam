@@ -155,8 +155,7 @@ export default function DocsPrivacyPage() {
       <ol>
         <li>
           <strong>Payroll total proof.</strong> It proves a run of up to 32
-          payments adds up to exactly a total, across a count of people, all
-          funded by the prover, without showing who got what. We found nothing
+          payments adds up to exactly a total, all funded by the prover, without showing who got what. We found nothing
           like it. See <Link href="/docs/proofs#payroll-total">payroll total</Link>.
         </li>
         <li>

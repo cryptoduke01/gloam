@@ -55,8 +55,10 @@ export default function DocsProofsPage() {
 
       <h3>Payment (proof of payment)</h3>
       <p>
-        Shows that you received a private payment. You choose whether it shows the
-        exact amount, or only that it was at least a figure you pick. It works for
+        Shows that a private payment was made. You choose whether it shows the
+        exact amount, or only that it was at least a figure you pick. Either side
+        of a payment can make this proof: it shows the payment happened, not
+        which side of it you were on. It works for
         payments sent to your Gloam address, claim links and payroll payouts, once
         you have claimed them.
       </p>
@@ -64,8 +66,8 @@ export default function DocsProofsPage() {
       <h3>Payroll total</h3>
       <p>
         Shows that a payroll run you sent paid <strong>exactly</strong> a total
-        to a number of people, such as 21,500 USDG to 5 people, without showing
-        what any one of them got. It is for your accountant, an auditor or a tax
+        across a number of payments, such as 21,500 USDG in 5 payments, without
+        showing what any one of them got. It is for your accountant, an auditor or a tax
         office: the figure on the books, backed by the vault. On a finished run,
         or under Past runs, choose Prove the total.
       </p>
@@ -195,10 +197,10 @@ export default function DocsProofsPage() {
           payment you sent.
         </li>
         <li>
-          <strong>Up to 32 people per proof.</strong>{" "}
+          <strong>Up to 32 payments per proof.</strong>{" "}
           A larger run is proven in even parts, sealed together in one proof. Each part shows its own
-          subtotal, over 16 to 32 people, so no part is one person&apos;s pay. A
-          run of one person proves that person&apos;s pay, so the app warns you.
+          subtotal, over 16 to 32 payments, so no part is one person&apos;s pay. A
+          run of one payment proves that payment, so the app warns you.
         </li>
         <li>
           <strong>A payroll total points at its payments.</strong>{" "}

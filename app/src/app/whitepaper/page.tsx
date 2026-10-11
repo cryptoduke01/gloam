@@ -394,7 +394,7 @@ export default function WhitepaperPage() {
         <li>
           <strong>Payroll total proof.</strong> The <code>payroll_total</code>{" "}
           circuit proves that a run of up to 32 payments adds up to exactly a
-          total, across a count of people, all funded by the prover, without
+          total, all funded by the prover, without
           showing who got what. Its public inputs are{" "}
           <code>[asset, total, count, paymentsHash, context]</code>. Each slot
           opens both the payment note and the note it spent, so a payment the

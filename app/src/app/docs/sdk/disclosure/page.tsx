@@ -134,7 +134,7 @@ const verified = proofOk && live;`}</code>
       <p>
         Newer proofs cover what this format cannot. A proof of funds shows you
         hold at least X across up to four unspent notes, a proof of payment
-        shows a payment arrived, and a payroll total shows a run added up. Each
+        shows a private payment was made, and a payroll total shows a run added up. Each
         carries a label naming who it is for and an expiry, and is checked at{" "}
         <Link href="/verify">/verify</Link>. See{" "}
         <Link href="/docs/proofs">proofs</Link>.
