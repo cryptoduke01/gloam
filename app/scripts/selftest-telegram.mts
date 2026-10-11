@@ -828,6 +828,25 @@ await test("answers are limited per person; past the limit it stays quiet", asyn
   assert.equal(sends().length, 4);
 });
 
+await test("model calls stop at the daily caps; 0 turns a kind off", async () => {
+  reset();
+  process.env.TELEGRAM_BOT_DAILY_ANSWERS = "2";
+  for (let i = 0; i < 3; i++) await handleUpdate(upd(inTopic(TOPIC.help, `How do I check thing ${i}?`, user(160 + i, "Quinn"))));
+  assert.equal(modelCalls().length, 2, "the third question makes no model call");
+  assert.equal(sends().length, 2, "and gets no reply");
+  process.env.TELEGRAM_BOT_DAILY_ANSWERS = "0";
+  await handleUpdate(upd(inTopic(TOPIC.help, "How do I check the last thing?", user(170, "Rae"))));
+  assert.equal(modelCalls().length, 2, "0 turns answers off");
+  delete process.env.TELEGRAM_BOT_DAILY_ANSWERS;
+
+  process.env.TELEGRAM_BOT_DAILY_CHECKS = "0";
+  classifierReply = "YES";
+  await handleUpdate(upd(inTopic(TOPIC.general, "Okay so on gloam itself you can't add network", user(171, "Sol"))));
+  assert.equal(classifyCalls().length, 0, "no quick check past its cap");
+  assert.equal(sends().length, 2);
+  delete process.env.TELEGRAM_BOT_DAILY_CHECKS;
+});
+
 await test("welcomes: one per ten minutes, tagged, the rest wait for the next", async () => {
   reset();
   await handleUpdate(

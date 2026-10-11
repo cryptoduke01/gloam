@@ -9,6 +9,7 @@
  * block; the model answers [[SKIP]] for one that needs no reply and starts with
  * [[SECRET]] when it shows a seed phrase or private key (rules.readSentinel).
  */
+import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { knowledgeBlock } from "./knowledge";
 import { PERSONALITY, TONE_RULES, honestyRule } from "./persona";
 import { secretLeak, tidyReply, type ChatLine } from "./rules";
@@ -16,6 +17,35 @@ import { secretLeak, tidyReply, type ChatLine } from "./rules";
 const API = "https://api.anthropic.com/v1/messages";
 export const DEFAULT_MODEL = "claude-sonnet-5-5";
 const MAX_TOKENS = 350;
+
+/**
+ * Model calls per UTC day, for everyone together, on top of the per-minute
+ * limits in bot.ts. Past a cap the helper falls back to its fixed replies until
+ * the day turns. TELEGRAM_BOT_DAILY_ANSWERS covers answers and the owner's
+ * report summary, TELEGRAM_BOT_DAILY_CHECKS the quick "should I answer?" checks;
+ * 0 turns that kind of call off.
+ */
+export const DEFAULT_DAILY_ANSWERS = 800;
+export const DEFAULT_DAILY_CHECKS = 1500;
+
+/** What a model call is for: an answer (or summary), or the quick check. */
+export type ModelPurpose = "answer" | "check";
+
+function dailyCap(purpose: ModelPurpose): number {
+  const raw = (purpose === "check" ? process.env.TELEGRAM_BOT_DAILY_CHECKS : process.env.TELEGRAM_BOT_DAILY_ANSWERS)?.trim();
+  const n = raw ? Number(raw) : NaN;
+  if (Number.isSafeInteger(n) && n >= 0) return n;
+  return purpose === "check" ? DEFAULT_DAILY_CHECKS : DEFAULT_DAILY_ANSWERS;
+}
+
+/** Takes one of today's model calls of this kind. False once the day's cap is spent. */
+async function takeDailyCall(purpose: ModelPurpose): Promise<boolean> {
+  const cap = dailyCap(purpose);
+  if (cap === 0) return false;
+  const r = await hitRateLimit("tg:model", `tg-day-${purpose}`, cap, Date.now(), 86_400);
+  if (!r.allowed) console.warn("telegram: daily model cap reached", purpose, cap);
+  return r.allowed;
+}
 
 export type PromptSettings = {
   persona: string;
@@ -162,13 +192,20 @@ NO for greetings, hype, jokes, thanks, chat between members that needs no help, 
 
 /** For a message not phrased as a question: should the helper answer it anyway? */
 export async function wantsHelper(text: string): Promise<boolean> {
-  const out = await askModel(CLASSIFIER_SYSTEM, `Message: ${text.slice(0, 600)}`, null, CLASSIFIER_MODEL);
+  const out = await askModel(CLASSIFIER_SYSTEM, `Message: ${text.slice(0, 600)}`, null, CLASSIFIER_MODEL, "check");
   return /^\s*yes\b/i.test(out ?? "");
 }
 
-export async function askModel(system: string, user: string, image: ModelImage | null = null, model = botModel()): Promise<string | null> {
+export async function askModel(
+  system: string,
+  user: string,
+  image: ModelImage | null = null,
+  model = botModel(),
+  purpose: ModelPurpose = "answer",
+): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY?.trim();
   if (!key) return null;
+  if (!(await takeDailyCall(purpose))) return null;
   const { body, betas } = modelParams(model);
   const headers: Record<string, string> = {
     "x-api-key": key,
