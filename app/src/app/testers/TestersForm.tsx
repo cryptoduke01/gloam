@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { useState, type FormEvent, type ReactNode } from "react";
 
 type Network = "both" | "tempo" | "robinhood";
@@ -265,9 +265,9 @@ function Success({ done }: { done: Done }) {
           We&rsquo;ll send your invite to the private testers group on Telegram soon.
         </p>
       )}
-      <Link href="/app" className="mt-5 text-[14px] text-mute underline decoration-line-strong underline-offset-4 hover:text-foreground">
+      <AppLink href="/app" className="mt-5 text-[14px] text-mute underline decoration-line-strong underline-offset-4 hover:text-foreground">
         Open the app while you wait
-      </Link>
+      </AppLink>
     </div>
   );
 }

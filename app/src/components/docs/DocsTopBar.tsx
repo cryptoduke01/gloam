@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/Logo";
@@ -165,9 +166,9 @@ function MobileSheet({
               <GitHubIcon />
               GitHub
             </a>
-            <Link href="/app" onClick={onClose} className="btn btn-ink flex-1">
+            <AppLink href="/app" onClick={onClose} className="btn btn-ink flex-1">
               Open app
-            </Link>
+            </AppLink>
           </div>
         </div>
       </div>
@@ -230,9 +231,9 @@ export function DocsTopBar() {
               <span className="hidden sm:block">
                 <ThemeToggle />
               </span>
-              <Link href="/app" className="btn btn-ink btn-sm ml-1 hidden sm:inline-flex">
+              <AppLink href="/app" className="btn btn-ink btn-sm ml-1 hidden sm:inline-flex">
                 Open app
-              </Link>
+              </AppLink>
             </div>
           </div>
           <Tabs pathname={pathname} />

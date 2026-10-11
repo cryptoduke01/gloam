@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
   title: "Whitepaper",
-  description:
   alternates: { canonical: "/whitepaper" },
+  description:
     "Gloam whitepaper: private stablecoin payments on Tempo and Robinhood Chain. Thesis, architecture, cryptography, what is new, how it compares, threat model and roadmap.",
 };
 
@@ -528,7 +529,7 @@ export default function WhitepaperPage() {
       <h2 id="product">10. Product surface</h2>
       <p>
         The testnet application at{" "}
-        <Link href="/app">gloam.trade/app</Link> provides:
+        <AppLink href="/app">gloam.trade/app</AppLink> provides:
       </p>
       <ul>
         <li>

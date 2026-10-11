@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 import { EncryptFlow } from "@/components/EncryptFlow";
@@ -88,9 +88,9 @@ export default function DocsEncryptionPage() {
       </p>
 
       <p>
-        Try it: <Link href="/app/vault?tab=shield">Shield</Link> →{" "}
-        <Link href="/app/vault?tab=move">Move</Link> (private send) or{" "}
-        <Link href="/app/vault?tab=trade&path=sealed">Private trade</Link> → cash out only
+        Try it: <AppLink href="/app/vault?tab=shield">Shield</AppLink> →{" "}
+        <AppLink href="/app/vault?tab=move">Move</AppLink> (private send) or{" "}
+        <AppLink href="/app/vault?tab=trade&path=sealed">Private trade</AppLink> → cash out only
         when you need the open wallet.
       </p>
     </DocsLayout>

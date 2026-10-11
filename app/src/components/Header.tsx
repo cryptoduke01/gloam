@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AppLink } from "./AppLink";
 import { Logo } from "./Logo";
 import { ArrowUpRight } from "./ui/ArrowUpRight";
 import { ThemeSegmented, ThemeToggle } from "./ThemeToggle";
@@ -78,9 +79,9 @@ export function Header() {
           <Link href="/docs" className="btn btn-ink btn-sm hidden sm:inline-flex">
             Read the docs
           </Link>
-          <Link href="/app" className="btn btn-accent btn-sm">
+          <AppLink href="/app" className="btn btn-accent btn-sm">
             Open app <ArrowUpRight />
-          </Link>
+          </AppLink>
           <button
             type="button"
             className="grid h-10 w-10 place-items-center rounded-full text-foreground transition-colors hover:bg-surface lg:hidden"
@@ -115,13 +116,13 @@ export function Header() {
               <ThemeSegmented />
             </div>
             <div className="mt-6 flex flex-col gap-2">
-              <Link
+              <AppLink
                 href="/app"
                 className="btn btn-ink btn-lg btn-block"
                 onClick={() => setOpen(false)}
               >
                 Open app
-              </Link>
+              </AppLink>
               <Link
                 href="/docs"
                 className="btn btn-ghost btn-lg btn-block"

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { Header } from "@/components/Header";
 import { FlowField } from "@/components/ui/FlowField";
 import { SealDots } from "@/components/ui/SealDots";
@@ -27,9 +28,9 @@ export default function NotFound() {
               <Link href="/" className="btn btn-ink btn-lg">
                 Back to home
               </Link>
-              <Link href="/app" className="btn btn-ghost btn-lg">
+              <AppLink href="/app" className="btn btn-ghost btn-lg">
                 Open app
-              </Link>
+              </AppLink>
               <Link href="/docs" className="btn btn-quiet btn-lg">
                 Read the docs
               </Link>

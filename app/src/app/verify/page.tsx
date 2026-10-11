@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { toHex } from "viem";
 import { Header } from "@/components/Header";
@@ -423,12 +424,12 @@ export default function VerifyPage() {
                 </li>
               </ul>
               <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3">
-                <Link
+                <AppLink
                   href="/app/disclose"
                   className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
                 >
                   Make a proof of your own <span aria-hidden>→</span>
-                </Link>
+                </AppLink>
                 <Link
                   href="/docs/proofs"
                   className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"

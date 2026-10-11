@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -152,10 +153,11 @@ function QuickLink({ href, label }: { href: string; label: string }) {
       </a>
     );
   }
+  const To = href.startsWith("/app") ? AppLink : Link;
   return (
-    <Link href={href} className={cls}>
+    <To href={href} className={cls}>
       {label}
-    </Link>
+    </To>
   );
 }
 

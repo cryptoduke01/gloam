@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
@@ -126,7 +127,7 @@ export default function DocsProductPage() {
       </ul>
 
       <p>
-        Open the app: <Link href="/app">/app</Link> ·{" "}
+        Open the app: <AppLink href="/app">/app</AppLink> ·{" "}
         <Link href="/docs/production">Production gate</Link> ·{" "}
         <Link href="/docs/sealed-trade">Private trade</Link> ·{" "}
         <Link href="/docs/compare">How Gloam compares</Link>. Follow{" "}

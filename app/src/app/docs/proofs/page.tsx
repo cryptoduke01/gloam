@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
@@ -31,9 +32,9 @@ export default function DocsProofsPage() {
       <p>
         All four are made on your device from records only you hold, and none of
         them can be used to move your money. Open{" "}
-        <Link href="/app/disclose">Prove</Link> in the app and pick one. A payroll
+        <AppLink href="/app/disclose">Prove</AppLink> in the app and pick one. A payroll
         total is made from a finished run on the{" "}
-        <Link href="/app/payroll">Payroll</Link> page.
+        <AppLink href="/app/payroll">Payroll</AppLink> page.
       </p>
 
       <h3>Exact balance</h3>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
@@ -74,13 +75,13 @@ export default function DocsPayrollPage() {
         </li>
         <li>
           <strong>Add it privately.</strong> In{" "}
-          <Link href="/app/vault?tab=shield">Vault, Shield</Link>, move the
+          <AppLink href="/app/vault?tab=shield">Vault, Shield</AppLink>, move the
           total you want to pay into your private balance. One deposit that
           covers the whole run is simplest.
         </li>
         <li>
           <strong>Upload your list.</strong> In{" "}
-          <Link href="/app/payroll">Payroll</Link>, pick the currency and drop
+          <AppLink href="/app/payroll">Payroll</AppLink>, pick the currency and drop
           in your CSV. Lines with problems are flagged and skipped until you
           fix them.
         </li>

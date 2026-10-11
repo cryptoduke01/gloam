@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 
 export const metadata: Metadata = {
@@ -69,7 +70,7 @@ export default function DocsDisclosurePage() {
 
       <h2>Create a disclosure</h2>
       <p>
-        In the app, open <Link href="/app/disclose">/app/disclose</Link>, pick a
+        In the app, open <AppLink href="/app/disclose">/app/disclose</AppLink>, pick a
         note, and copy the token. Programmatically, generate the shield proof for
         the note you want to reveal and package it:
       </p>

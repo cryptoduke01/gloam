@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { AppLink } from "./AppLink";
 import { Mark } from "./Logo";
 import { ThemeSegmented } from "./ThemeToggle";
 
@@ -108,9 +109,9 @@ export function Footer() {
                 >
                   <GitHubIcon />
                 </a>
-                <Link href="/app" className="btn btn-ink btn-sm ml-2">
+                <AppLink href="/app" className="btn btn-ink btn-sm ml-2">
                   Open app
-                </Link>
+                </AppLink>
               </div>
             </div>
 
@@ -133,6 +134,13 @@ export function Footer() {
                           >
                             {l.label}
                           </a>
+                        ) : l.href.startsWith("/app") ? (
+                          <AppLink
+                            href={l.href}
+                            className="text-[14.5px] text-soft transition-colors hover:text-foreground"
+                          >
+                            {l.label}
+                          </AppLink>
                         ) : (
                           <Link
                             href={l.href}

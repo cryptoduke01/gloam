@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { useState, type ReactNode } from "react";
 import { SealDots } from "@/components/ui/SealDots";
 
@@ -114,9 +115,9 @@ function AddCard({ view }: { view: View }) {
           ? "The deposit is public. Where it goes next is not."
           : "Pick an amount, then flip the view to see what the public gets."}
       </p>
-      <Link href="/app/vault?tab=shield" className="btn btn-ink btn-sm btn-block mt-auto">
+      <AppLink href="/app/vault?tab=shield" className="btn btn-ink btn-sm btn-block mt-auto">
         Add privately
-      </Link>
+      </AppLink>
     </Card>
   );
 }
@@ -179,9 +180,9 @@ function SendCard({ view }: { view: View }) {
           Private transfer <SealDots n={4} className="ml-1 text-foreground/60" />
         </span>
       </div>
-      <Link href="/app/vault?tab=move&mode=pay" className="btn btn-ink btn-sm btn-block mt-auto">
+      <AppLink href="/app/vault?tab=move&mode=pay" className="btn btn-ink btn-sm btn-block mt-auto">
         Send privately
-      </Link>
+      </AppLink>
     </Card>
   );
 }
@@ -237,9 +238,9 @@ function ProveCard({ view }: { view: View }) {
           />
         </div>
       </div>
-      <Link href="/app/disclose" className="btn btn-ink btn-sm btn-block mt-3">
+      <AppLink href="/app/disclose" className="btn btn-ink btn-sm btn-block mt-3">
         Share proof
-      </Link>
+      </AppLink>
     </Card>
   );
 }

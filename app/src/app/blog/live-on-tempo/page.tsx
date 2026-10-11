@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
@@ -186,9 +187,9 @@ export default function LiveOnTempoPost() {
 
               <p>
                 Come break it. Open{" "}
-                <Link href="/app" className={link}>
+                <AppLink href="/app" className={link}>
                   the app
-                </Link>
+                </AppLink>
                 , read the{" "}
                 <Link href="/docs" className={link}>
                   docs
@@ -202,9 +203,9 @@ export default function LiveOnTempoPost() {
             </div>
 
             <div className="mt-14 flex flex-wrap items-center gap-2 border-t border-line pt-8">
-              <Link href="/app" className="btn btn-ink">
+              <AppLink href="/app" className="btn btn-ink">
                 Open the app
-              </Link>
+              </AppLink>
               <a
                 href="https://x.com/gloamtrade"
                 target="_blank"

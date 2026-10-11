@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
@@ -94,8 +95,8 @@ export default function DocsPrivatePayPage() {
 
       <h2>Try it</h2>
       <p>
-        <Link href="/app/vault?tab=move">Move</Link>, private pay ·{" "}
-        <Link href="/app/vault?tab=trade&path=sealed">Private trade</Link>, size
+        <AppLink href="/app/vault?tab=move">Move</AppLink>, private pay ·{" "}
+        <AppLink href="/app/vault?tab=trade&path=sealed">Private trade</AppLink>, size
         privacy on ·{" "}
         <Link href="/docs/privacy-model">Privacy model</Link>.
       </p>

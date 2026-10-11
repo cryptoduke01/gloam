@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 
@@ -46,14 +47,14 @@ export default function DocsOverviewPage() {
       </p>
       <ol>
         <li>
-          Open <Link href="/app">/app</Link>, connect a wallet, and pick a
+          Open <AppLink href="/app">/app</AppLink>, connect a wallet, and pick a
           network (Robinhood Chain or Tempo).
         </li>
         <li>
-          <Link href="/app/vault?tab=shield">Shield</Link> a tiny amount of testnet funds.
+          <AppLink href="/app/vault?tab=shield">Shield</AppLink> a tiny amount of testnet funds.
         </li>
         <li>
-          <Link href="/app/vault?tab=move">Move</Link> to pay a tag or cash out. A browser
+          <AppLink href="/app/vault?tab=move">Move</AppLink> to pay a tag or cash out. A browser
           proof settles, never the amount.
         </li>
       </ol>

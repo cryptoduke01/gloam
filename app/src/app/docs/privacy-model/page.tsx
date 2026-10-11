@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { SCREEN_LIST_INFO } from "@/lib/screening";
@@ -191,7 +192,7 @@ export default function DocsPrivacyPage() {
       <h3>Passkey lock (optional)</h3>
       <p>
         Your notes are encrypted at rest in this browser under a device key. In{" "}
-        <Link href="/app/settings">Settings</Link> you can protect that key with
+        <AppLink href="/app/settings">Settings</AppLink> you can protect that key with
         a passkey: Face ID, Touch ID or a security key. Gloam asks
         the passkey for a secret only it can produce (the WebAuthn PRF
         extension), uses it to wrap the key, and stores only the wrapped copy.

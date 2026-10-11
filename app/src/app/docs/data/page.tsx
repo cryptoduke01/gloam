@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 
 export const metadata: Metadata = {
@@ -104,7 +105,7 @@ export default function DocsDataPage() {
         >
           faucet.testnet.chain.robinhood.com
         </a>
-        . Also linked from <Link href="/app/settings">Settings</Link>.
+        . Also linked from <AppLink href="/app/settings">Settings</AppLink>.
       </p>
 
       <p>

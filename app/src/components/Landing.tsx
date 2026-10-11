@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
@@ -194,9 +195,9 @@ export function Landing() {
                 balances on the public record.
               </p>
               <div className="mt-8 flex flex-wrap gap-2">
-                <Link href="/app" className="btn btn-ink btn-lg">
+                <AppLink href="/app" className="btn btn-ink btn-lg">
                   Open app
-                </Link>
+                </AppLink>
                 <Link href="/docs" className="btn btn-quiet btn-lg">
                   Read the docs <span aria-hidden>→</span>
                 </Link>
@@ -215,19 +216,22 @@ export function Landing() {
         <section aria-labelledby="what-gloam-is" className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-7 sm:pt-24">
           <h2 id="what-gloam-is" className="sr-only">What Gloam is</h2>
           <div className="grid gap-10 sm:grid-cols-3">
-            {WHAT.map((w) => (
-              <div key={w.label} className="border-t border-foreground pt-5">
-                <p className="t-label text-mute">{w.label}</p>
-                <p className="mt-3 text-[19px] leading-snug tracking-[-0.01em]">{w.title}</p>
-                <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-mute">{w.body}</p>
-                <Link
-                  href={w.href}
-                  className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
-                >
-                  {w.cta} <span aria-hidden>→</span>
-                </Link>
-              </div>
-            ))}
+            {WHAT.map((w) => {
+              const To = w.href.startsWith("/app") ? AppLink : Link;
+              return (
+                <div key={w.label} className="border-t border-foreground pt-5">
+                  <p className="t-label text-mute">{w.label}</p>
+                  <p className="mt-3 text-[19px] leading-snug tracking-[-0.01em]">{w.title}</p>
+                  <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-mute">{w.body}</p>
+                  <To
+                    href={w.href}
+                    className="t-label mt-4 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  >
+                    {w.cta} <span aria-hidden>→</span>
+                  </To>
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -325,21 +329,24 @@ export function Landing() {
             </p>
           </div>
           <div className="-mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 [&::-webkit-scrollbar]:hidden">
-            {USES.map((u) => (
-              <Link
-                key={u.title}
-                href={u.href}
-                className="gl-tile group flex min-h-[220px] w-[78%] shrink-0 snap-start flex-col p-6 transition-colors hover:bg-surface-2 sm:w-auto"
-              >
-                {u.icon}
-                <div className="mt-auto">
-                  <p className="text-[19px] leading-snug tracking-[-0.01em] text-foreground">
-                    {u.title}
-                  </p>
-                  <p className="mt-2 text-[14px] leading-relaxed text-mute">{u.body}</p>
-                </div>
-              </Link>
-            ))}
+            {USES.map((u) => {
+              const To = u.href.startsWith("/app") ? AppLink : Link;
+              return (
+                <To
+                  key={u.title}
+                  href={u.href}
+                  className="gl-tile group flex min-h-[220px] w-[78%] shrink-0 snap-start flex-col p-6 transition-colors hover:bg-surface-2 sm:w-auto"
+                >
+                  {u.icon}
+                  <div className="mt-auto">
+                    <p className="text-[19px] leading-snug tracking-[-0.01em] text-foreground">
+                      {u.title}
+                    </p>
+                    <p className="mt-2 text-[14px] leading-relaxed text-mute">{u.body}</p>
+                  </div>
+                </To>
+              );
+            })}
           </div>
           <p className="mt-8 max-w-[68ch] text-[15px] leading-relaxed text-mute">
             <span className="text-foreground">Coming next.</span> Stock tokens on
@@ -380,9 +387,9 @@ export function Landing() {
                   </li>
                 </ul>
                 <div className="mt-8 flex flex-wrap gap-2">
-                  <Link href="/app/payroll" className="btn btn-ink">
+                  <AppLink href="/app/payroll" className="btn btn-ink">
                     Run a test payroll
-                  </Link>
+                  </AppLink>
                   <Link href="/docs/payroll" className="btn btn-quiet">
                     How payroll works
                   </Link>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
@@ -138,9 +139,9 @@ export default function DocsTestnetPage() {
       <h2 id="network">1. Add Robinhood Chain testnet</h2>
       <p>
         Open{" "}
-        <Link href="/app">
+        <AppLink href="/app">
           <strong>/app</strong>
-        </Link>
+        </AppLink>
        , click <strong>Connect wallet</strong>, then use{" "}
         <strong>Add / switch RH testnet</strong> if the wallet is on the wrong
         chain. Gloam targets:
@@ -218,13 +219,13 @@ export default function DocsTestnetPage() {
         </li>
       </ul>
       <p>
-        After claiming, open <Link href="/app">Portfolio</Link> and confirm ETH
+        After claiming, open <AppLink href="/app">Portfolio</AppLink> and confirm ETH
         + stock balances appear.
       </p>
 
       <h2 id="portfolio">3. Portfolio at a glance</h2>
       <p>
-        <Link href="/app">/app</Link> shows:
+        <AppLink href="/app">/app</AppLink> shows:
       </p>
       <ul>
         <li>
@@ -247,7 +248,7 @@ export default function DocsTestnetPage() {
       <h2 id="shield">4. Shield (deposit into the vault)</h2>
       <ol>
         <li>
-          Go to <Link href="/app/vault?tab=shield">Shield</Link>.
+          Go to <AppLink href="/app/vault?tab=shield">Shield</AppLink>.
         </li>
         <li>Pick ETH or a faucet stock token and a small amount.</li>
         <li>
@@ -267,7 +268,7 @@ export default function DocsTestnetPage() {
       <h2 id="private-pay">5. Private pay (send inside the vault)</h2>
       <ol>
         <li>
-          Open <Link href="/app/vault?tab=move">Move</Link> → private send.
+          Open <AppLink href="/app/vault?tab=move">Move</AppLink> → private send.
         </li>
         <li>
           Choose a vault note and amount. Prefer leaving a small change note
@@ -297,7 +298,7 @@ export default function DocsTestnetPage() {
       <h2 id="cash-out">6. Cash out (unshield)</h2>
       <ol>
         <li>
-          <Link href="/app/vault?tab=move">Move</Link> → cash out / unshield.
+          <AppLink href="/app/vault?tab=move">Move</AppLink> → cash out / unshield.
         </li>
         <li>Select a note and confirm.</li>
         <li>Wait for the browser proof, then confirm the wallet tx.</li>
@@ -333,11 +334,11 @@ export default function DocsTestnetPage() {
       </p>
       <ol>
         <li>
-          <Link href="/app/vault?tab=shield">Shield ETH</Link> (not only stock tokens).
+          <AppLink href="/app/vault?tab=shield">Shield ETH</AppLink> (not only stock tokens).
         </li>
         <li>
           Open{" "}
-          <Link href="/app/vault?tab=trade&path=sealed">Trade → Private</Link> and pick
+          <AppLink href="/app/vault?tab=trade&path=sealed">Trade → Private</AppLink> and pick
           TSLA / AMZN / etc.
         </li>
         <li>
@@ -353,7 +354,7 @@ export default function DocsTestnetPage() {
       <h2 id="settings">8. Settings & backups</h2>
       <ul>
         <li>
-          <Link href="/app/settings">Settings</Link>, note backup (optional
+          <AppLink href="/app/settings">Settings</AppLink>, note backup (optional
           lock), trading prefs, diagnostics.
         </li>
         <li>
@@ -441,7 +442,7 @@ export default function DocsTestnetPage() {
       <h2 id="next">Read next</h2>
       <ul>
         <li>
-          <Link href="/app">Open the testnet app</Link>
+          <AppLink href="/app">Open the testnet app</AppLink>
         </li>
         <li>
           <Link href="/docs/encryption">How shield works</Link>
