@@ -46,8 +46,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       /* storage unavailable */
     }
+    const r = resolve(saved);
+    // The head script normally stamps this before paint. When Next serves a
+    // client-rendered error shell that script never runs, so stamp it here too.
+    apply(r);
     setChoice(saved);
-    setResolved(resolve(saved));
+    setResolved(r);
   }, []);
 
   useEffect(() => {
