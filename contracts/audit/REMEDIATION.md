@@ -27,6 +27,11 @@ owner. M-3 and M-1 are partly closed, M-2 is an open mainnet-gate item. Do not s
 "all findings fixed"; say "all critical/high fixed or switched off and verified;
 M-1 and M-3 partial; M-2 and the multi-party ceremony tracked for mainnet."
 
+**2026-10-11:** two more internal passes (Kensho + a ZK review). See
+"2026-10-11 audits" at the bottom. One of them (ZK-1) shows that the 128-bit
+rate checks claimed below do not close the sealed swap product wrap, so sealed
+swap now needs the ZK-1 fix as well as H1 before it can come back on.
+
 ## Current pools (verified on-chain 2026-10-10)
 
 Redeployed 2026-09-29 with no admin withdraw. Read back on both:
@@ -147,7 +152,7 @@ Tempo native path inert/untrickable; `insert` is constant-gas (no 30M brick).
 | F-1 | High (latent, live only if oracle-swaps re-enabled) | **FIXED in code + tested**, on-chain since 2026-09-16 |
 | F-2 | Medium (issuer-triggered, unrecoverable) | **DOCUMENTED + mitigations specified** |
 | INFO-1/2/3 | Hardening | **FIXED in code + tested**, on-chain since 2026-09-16 |
-| SS-circom | Low (latent) | **FIXED in circuit source** (needs recompile+ceremony+redeploy) |
+| SS-circom | Low (latent) | **FIXED in circuit source** (needs recompile+ceremony+redeploy). *Superseded 2026-10-11 for the product wrap: see ZK-1* |
 
 - **F-1: `OracleRates.requireRatio` dropped decimal normalization.** With an oracle-
   bound swap across mismatched-decimal assets (exactly the Tempo 6-dec ↔ RH 18-dec
@@ -172,8 +177,13 @@ Tempo native path inert/untrickable; `insert` is constant-gas (no 30M brick).
   ETH sent via `receive()` above `deposited[address(0)]` (otherwise stuck).
 - **sealedSwap.circom** (not deployed; `sealedSwapVerifier==0`): added `secret != 0` on
   all three notes (closes the known L1) and 128-bit range checks on `rateIn/rateOut/
-  amountOutMin` (product-wrap + `amountOutMin ≥ 2^252` slippage-floor bypass). Compiles
+  amountOutMin` (~~product-wrap +~~ `amountOutMin ≥ 2^252` slippage-floor bypass). Compiles
   clean; **inert until the H1 re-enable recompiles + reruns the ceremony + redeploys.**
+  **Superseded 2026-10-11: the 128-bit rate checks do NOT close the product wrap.**
+  Two 128-bit numbers multiply past the ~2^254 field, and on an oracle pair the
+  caller picks the absolute rates. See ZK-1 below. The `amountOutMin` part still
+  holds. The same wrong claim sits in the circuit comment (`sealedSwap.circom`
+  step 3c); it gets corrected with the ZK-1 circuit change.
 
 **Headline (2026-09-10):** no new permissionless critical/high on current code. The
 disabled swap path neutralizes the highest-severity surface, and the shielded core
@@ -182,3 +192,253 @@ is fixed and tested; the Tempo issuer-freeze Medium is documented with mitigatio
 hardening landed. All tests green at the time (66/66). These landed on-chain at the
 2026-09-16 redeploy and carry into the current 2026-09-29 pools (93/93 tests after
 the no-admin-withdraw change).
+
+---
+
+## 2026-10-11 audits (Kensho + ZK review)
+
+Two internal passes, both on `origin/main` `0ec4026`, both read-only on chain
+(`eth_call` and `eth_getLogs` only, no transactions, no keys):
+
+- **Kensho** (`AUDITS/kensho-2026-10-11.md`): contracts, deploy scripts, the
+  relay, payroll, the proof checkers and the memo board.
+- **ZK review** (`gloam-audit-zk-report-2026-10-11.md`): circuits, verifying
+  keys, public-input binding and the off-chain proof checkers.
+
+Both live pools read back byte-identical to `src/ShieldPoolPoseidon.sol`,
+solvent per asset, with `sealedSwapVerifier = 0` and nothing queued. No
+permissionless way to steal, inflate, lock or double-spend pooled funds was
+found on the live paths (shield, transfer, unshield). Verifying keys and input
+order match the circuits on both chains.
+
+| ID | Severity | Status |
+|----|----------|--------|
+| ZK-1 | High (latent), Critical on re-enable | **OPEN, sealed swap stays OFF**: scripts guarded, regression test added, circuits unchanged |
+| N-1 | Medium | **FIXED in app (checker + wording)**; recipient binding needs a note-format change |
+| ZK-2 | Medium | **FIXED in app**: gloamdisc1 never verifies; Exact balance rebuilt as gloambal1 |
+| ZK-3 | Medium | **FIXED in app (checker + wording)**; payer can still prove the payee note (bearer notes) |
+| R-1 | Low | **Contract part DEFERRED to next redeploy**; relay side mitigated in app |
+| L-2 | Low | **FIXED on branch**: every script that deploys or wires a sealed swap verifier refuses without an explicit ack |
+| L-3 | Low | **DOCUMENTED + monitored**; tree rollover before mainnet |
+| ZK-4 | Low | **FIXED in app**: size, snark, label and fields first; no chain read for a failed proof |
+| Kensho I-1, I-2 | Info | **DOCUMENTED** |
+| Kensho I-3 | Info | **FIXED in app, relay and SDK**: cash out to the vault or memo board refused |
+| ZK I-1 | Info | **DOCUMENTED** |
+| ZK I-3, I-6 | Info | **FIXED in app**: labels stripped of hidden characters; gloamdisc1 key hash-pinned |
+| ZK I-2, I-4, I-5 | Info | **OPEN, tracked** (note-format change and fee design before the production ceremony) |
+
+Contract tests: 97/97 green (`forge test`, 2026-10-11), including
+`KenshoOct11.t.sol` and the ZK-1 regression.
+
+### Contracts and scripts
+
+- **ZK-1 (High, latent; Critical on re-enable): the sealed swap rate product
+  wraps the field.** `sealedSwap.circom` checks
+  `amountOut * rateOut === amountSwap * rateIn`. Amounts and rates are each
+  capped at 128 bits, so the product can reach 2^256 while the field is about
+  2^254, and the equality can hold mod p while the real integers differ by p.
+  On an oracle-bound pair the contract only checks the ratio `rateIn/rateOut`
+  against the feeds (`OracleRates.requireRatio`), so the caller picks the
+  magnitude. With `rateOut` near 2^126.3 and `rateIn = 2*rateOut - (p mod rateOut)`,
+  1 wei of assetIn proves into about 2.57e38 units of assetOut, at a ratio
+  inside a 1% band. That note then drains real assetOut deposits through a
+  normal transfer and unshield. Owner-pinned rates only bite above about
+  2^125.7, which no sane price scale reaches; oracle pairs are the real path.
+  The old and the current circuit are both affected.
+  - Proof: `test/auditzk/SealedSwapRateWrap.t.sol` runs it end to end on a real
+    `ShieldPoolPoseidon` with the repo's real unshield and transfer verifiers and
+    a dev verifier for the current circuit (`test/auditzk/SealedSwapVerifierCurrent.sol`,
+    test only). The attacker shields 1 wei of A, swaps, and unshields the
+    victim's 1000 B; `deposited[B]` ends at 0. The test passes today on purpose.
+    Flip it to expect a revert before anything re-enables swaps.
+  - Live impact: none. `sealedSwapVerifier` is `0x0` on both pools.
+  - Unwired verifier: the dev-key pair on Robinhood Chain testnet,
+    `SealedSwapIVerifier` `0x9D866ca3b981585D5E6B138E4411C804c4d6C198`
+    (Groth16 `0xa06461Ec…2B89`), returns `true` for the ZK-1 proof on `eth_call`.
+    It is not wired to any pool and must never be.
+  - Required fix, both parts, before any re-enable:
+    1. amount bits + rate bits <= 252, for example `Num2Bits(96)` on
+       `rateIn`/`rateOut` in the circuit and `rateIn, rateOut <= type(uint96).max`
+       in `sealedSwap`;
+    2. take the magnitude away from the caller on oracle pairs: fix one side to
+       a constant scale (for example `rateOut == 1e18`), or reduce by gcd and cap.
+
+    Then a new circuit build, a new ceremony and a regenerated verifier.
+  - Status: **open, sealed swap stays off.** Deploy scripts guarded (L-2).
+    Circuits and `src/ShieldPoolPoseidon.sol` are unchanged on purpose: the live
+    pools are verified byte-identical to this source, and the fix lands with the
+    H1 redesign as one circuit change, one ceremony and one redeploy.
+
+- **R-1 (Low, contract part): a losing duplicate spend pays for full proof
+  verification.** `transfer`, `unshield` and `sealedSwap` verify the Groth16
+  proof before they read `spent[nullifier]` (`src/ShieldPoolPoseidon.sol:472-473`,
+  `:579-580`, `:534-546`). When two copies of the same relayed spend race, the
+  losing copy burns about 296k gas on the pairing check before it reverts
+  `AlreadySpent`. Measured in
+  `test/KenshoOct11.t.sol::test_R2_duplicate_spend_pays_full_verification_before_AlreadySpent`:
+  first copy 333,996 gas, duplicate 296,543 gas, a spent-first read 3,051 gas.
+  No funds at risk; the cost lands on whoever submits, which is the relay.
+  - Fix at the next redeploy: check `spent[nullifier]` before verifying, and
+    keep the `spent[nullifier] = true` write after the proof passes. Safe: the
+    proof check is a view call inside `nonReentrant`, so nothing changes between
+    the read and the write.
+  - Not applied now: the live pools are byte-identical to the current source,
+    and the reorder only ships with a new pool.
+  - App side (branch `proofix`, `app/src/lib/relay/server.ts`, `inflight.ts`):
+    every relayed send and cash out takes a lock on `chainId + nullifier`
+    (Upstash `SET NX EX 180`, process memory when Redis is not set or does not
+    answer) before anything is read from the chain, so a second copy of the same
+    proof gets 409 `in_flight` instead of a dry run and a losing send. The lock
+    is dropped when nothing went out and kept until it expires once a
+    transaction may have. The relay reads `spent` and `isKnownRoot` before the
+    gas estimate on both paths, so a spent nullifier never reaches the
+    simulation. Relayed memos are capped at 2048 bytes (the largest real sealed
+    ticket is 1714; the board itself still takes 8192), on top of the existing
+    per-sender, per-payment, per-IP and per-network caps. Covered by
+    `app/scripts/selftest-relay.mts`.
+  - Still open: dust self-sends cost the relay about 1.8M gas each and look
+    like real use. The real fix is the in-circuit relay fee before mainnet
+    (see ZK I-5).
+  - Status: **contract part deferred to the next redeploy (documented); relay
+    side mitigated in app.**
+
+- **L-2 (Low): deploy scripts could turn sealed swap back on with no guard.**
+  `DeployPoseidonPoolSealed.s.sol` wired an old sealed swap adapter, the
+  superseded `DualProofVerifier 0x4B0D…949C` and Poseidon2 `0xcc2d…0947`, then
+  ended setup. `DeploySealedSwapStack.s.sol` set or queued
+  `setSealedSwapVerifier` on any `POOL`. `circuits/scripts/deploy-phase2.mjs`
+  wired one on every run.
+  - Fix: new `script/SealedSwapGuard.sol`. Every Solidity script that deploys,
+    sets, queues or wires a sealed swap verifier calls `_requireSealedSwapAck()`
+    first, which reverts unless `GLOAM_ACK_SEALED_SWAP_H1_ZK1=1`. The revert says
+    sealed swap must stay off until H1 and ZK-1 are fixed and a new circuit and
+    ceremony are done. Guarded: `DeployPoseidonPoolSealed`,
+    `DeploySealedSwapStack` (deploy-only and set/queue paths) and
+    `DeploySealedSwapVerifier`. `deploy-phase2.mjs` now skips the sealed swap
+    verifier entirely (no deploy, no wiring, `sealedSwapVerifier` stays 0)
+    unless the same flag is `1`.
+  - `DeployPoseidonPoolSealed` no longer hardcodes any address. `POSEIDON2`,
+    `DUAL_VERIFIER`, `SEALED_SWAP_IVERIFIER` and `SHIELD_IVERIFIER` come from env,
+    so it cannot silently wire stale contracts. For a pool with sealed swap off,
+    use `DeployTempoPool.s.sol` (it works on any chain).
+  - Checked: each guarded script reverts with that message when run without the
+    flag (local simulation, no broadcast). Same idea as the `shieldVerifier`
+    check in `SeedVaultInventory.s.sol`: refuse by default.
+  - Status: **fixed on branch.**
+
+- **L-3 (Low): the depth-20 tree can be filled.**
+  `IncrementalMerkleTreePoseidon` has `DEPTH = 20` (1,048,576 leaves) and
+  reverts `TreeFull` after that. Measured: one leaf insert about 874k gas
+  (`test_info_tree_insert_cost`), one private send about 1.8M gas for two leaves
+  (`test_info_relayed_transfer_cost`). Filling the rest with self-sends is about
+  524k sends, roughly 9.4e11 gas, all paid by the attacker, for no gain. Live at
+  audit time: Robinhood Chain `nextIndex` 63, Tempo 18.
+  - If filled: no new deposits, sends or swaps. Exits still work: `unshield`
+    does not insert, so every existing note can still cash out. Recovery is a
+    new pool and a migration.
+  - Plan: monitor `nextIndex` on both pools. `GET /api/v1/vaults` now returns
+    `chain.leafCount`, `chain.leafCapacity` (1,048,576) and `chain.leavesLeft`
+    for each network. The transparency page does not show it yet (it never
+    reads `nextIndex`; adding it is a new read and a new UI row). Before mainnet,
+    add a tree rollover (a new tree epoch, with old roots still accepted for
+    spends).
+  - Status: **documented + monitored.**
+
+### Info
+
+- **Kensho I-1: Tempo native balance is a placeholder.** `eth_getBalance`
+  returns the same `4242…42` value for every address and Tempo rejects value
+  transfers, so the pool's native path and `sweepStrayNative` are inert there.
+  Code must never trust `address(this).balance` on Tempo. Status: **documented.**
+- **Kensho I-2: no event for the initial verifier.** The constructor sets
+  `verifier` without emitting `VerifierSet`, so an event-only watcher never sees
+  it. Watchers read `verifier()` at `SetupEnded`. Status: **documented.**
+- **ZK I-1: stale sealed swap artifacts.** `app/public/circuits/sealed_swap_final.zkey`,
+  `src/verifiers/SealedSwapVerifier.sol` and the unwired RH verifier above match
+  the old circuit build (6,649 constraints), not the current source (7,036).
+  `snarkjs zkey verify` fails against the current circuit. Wiring them would
+  ship none of the source hardening, and ZK-1 hits both builds. Status:
+  **documented** (`SEALED_TRADE.md`); replaced by the ZK-1 circuit change.
+
+### App side
+
+All on branch `proofix`. Regressions: `app/src/lib/proofs/verify.selftest.mjs`
+(64 assertions, real Groth16 proofs, in-memory chain),
+`payrollCheck.selftest.mjs` (50), `app/scripts/selftest-partners.mts` (server
+path) and the Kensho PoC `kensho-oct11.poc.mjs`, which now asserts the bad
+cases fail.
+
+- **N-1 (Medium): proof of payment and payroll total do not bind the
+  recipient.** Fixed in the checker, worded honestly for the rest:
+  - A receipt note counts only when it is output 0 of a private send
+    (`newCommitments[0]`), the way the app, the SDK and the payroll runner all
+    build a send (`buildTransferWitness`). Change (output 1), deposits and trade
+    outputs fail (`app/src/lib/proofs/chain.ts` `noteOriginIn`, `findNoteTx`).
+  - Fail closed: a named transaction that is not on the chain fails; a
+    payment with no tx hash that is older than the bounded scan, or a network
+    that does not answer, is "can't confirm", and no check may stay unknown in
+    a verified result (`verify.ts` `allPassed`, `paidCheck`). The server and the
+    hosted MCP use the same checks (`lib/proofsServer.ts`); the old exception
+    that let "when the payment landed" stay unknown is gone everywhere.
+  - Payroll: change was already rejected; a named transaction missing from
+    the chain now fails too.
+  - The prover refuses to make a proof of payment for its own change, a
+    deposit or a trade output (`prove.ts` `provePayment`).
+  - Wording: a proof of payment reads "a private payment of at least X",
+    made into a note whose key the prover holds, which the payer also knows;
+    the payroll total reads "N payments adding up to X", funded by the prover.
+    Both list what they do not prove on `/verify`.
+  - Still true, documented: a send to yourself still produces a valid
+    receipt, and a payroll payment back to the employer still counts as a
+    payment. Nothing on chain tells them apart without a payee key in the note.
+  - Status: **fixed in app**. Binding the recipient needs a note-format and
+    circuit change (a payee public key in the commitment, a nullifier from the
+    payee's private key) plus a new ceremony.
+- **ZK-2 (Medium): "Exact balance" (`gloamdisc1`) can be forged from public
+  `shieldBound` calldata.** `gloamdisc1` is never verified any more: the page,
+  `POST /api/v1/proofs/verify` and the hosted MCP tool answer "can't confirm
+  who holds this" whatever its math (`lib/disclosure.ts` `LEGACY_DISCLOSURE`,
+  `lib/proofsServer.ts` `verifyDisclosureServer`), with no chain lookup. Exact
+  balance in the app is rebuilt as `gloambal1`: the receipt circuit with the
+  amount shown, sealed for the `balance` kind, a label and an expiry, made on
+  the device and never published (`prove.ts` `proveBalance`). The kind in the
+  context keeps a balance proof and a payment proof from passing as each
+  other. It does not show the note is still unspent; the page says so. Status:
+  **fixed in app.**
+- **ZK-3 (Medium): proof of payment does not prove a payment was received.**
+  Change and own deposits now fail, and a made-up tx hash fails instead of
+  reading as unknown (see N-1). The payer chooses the payee note's key, so the
+  payer can still make the payee's receipt: the claim now reads "a private
+  payment was made", never "you received". Status: **fixed in app (checker
+  and wording)**; true receiver binding is the same owner-key change as N-1.
+- **ZK-4 (Low): the checkers do chain work before the proof is known to be
+  valid.** Size and format checks, the snark, the label and the fields all
+  run first, and nothing is read from the chain for a proof that already
+  failed (`verify.ts`, `payrollCheck.ts`). Payroll proofs are capped at 8
+  parts and 256 payments in `decodeProof` and in the checker; proof text at
+  160,000 characters (the largest real one is about 95 KB); the API body is
+  capped before it is parsed (`jsonBody(req, maxBytes)`). Route rate limits are
+  unchanged. Status: **fixed in app.**
+- **Kensho I-3 (Info): cash-out to the pool itself.** Refused in the app
+  before proving (`MoveView`, `VaultTradePanel`), in the relay before any lock
+  or chain call (400 `vault_recipient`), and in the SDK's `buildUnshieldIntent`.
+  The memo board address is refused too (`app/src/lib/cashOutTarget.ts`).
+  Status: **fixed** (app, relay, SDK). The contract still accepts it; a
+  contract-side `to != address(this)` check can ship with the next redeploy.
+- **ZK I-3 (Info): verifier labels are not normalized for Unicode.** Format
+  and control characters (zero width, bidi marks and overrides, BOM) are
+  stripped when a label is sealed (`cleanVerifierLabel`) and when one is shown
+  (`app/src/lib/proofs/label.ts`); labels over 80 characters are cut on the
+  page, and the check notes when hidden characters were removed. Status:
+  **fixed in app.**
+- **ZK I-6 (Info): the client-side `gloamdisc1` check fetches
+  `shield_vkey.json` without the sha256 pin.** Pinned in
+  `circuitArtifacts.ts` and checked before use. Status: **fixed in app.**
+
+Open and tracked: ZK I-2 (payroll edge case: Alice can count Bob's payment
+back to her if Bob paid from the note she sent him; same owner-key note fix as
+N-1 and ZK-3, or auto-sweep on receive), ZK I-4 (a funds proof's root shows the
+tree size and the page shows how many notes back it; accepted for testnet),
+ZK I-5 (a mainnet relay fee and the pitch's in/out fee need a new public output
+in the circuits; design it before the production ceremony so there is one
+ceremony, not two). Status: **open.**
