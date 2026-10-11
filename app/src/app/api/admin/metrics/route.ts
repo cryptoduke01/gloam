@@ -23,9 +23,10 @@ export async function GET(req: Request) {
 
   const force = new URL(req.url).searchParams.get("fresh") === "1";
   const [onchain, product] = await Promise.all([
-    fetchOnchainMetrics({ force }).catch((e) => ({
-      error: e instanceof Error ? e.message : "onchain_failed",
-    })),
+    fetchOnchainMetrics({ force }).catch((e) => {
+      console.error("gloam_admin_metrics", e instanceof Error ? e.message : "unknown");
+      return { error: "Could not read the chains. The details are in the server logs." };
+    }),
     readTractionSummary().catch(() => ({
       backend: "memory" as const,
       totalEvents: 0,
