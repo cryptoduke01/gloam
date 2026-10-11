@@ -3,15 +3,22 @@
  * Uses circomlibjs (same constants as the circom circuits).
  */
 
-import { buildPoseidon, type Poseidon } from "circomlibjs";
+import type { Poseidon } from "circomlibjs";
 import { FIELD_PRIME } from "./constants.js";
 
-let _poseidon: Poseidon | null = null;
+let _poseidon: Promise<Poseidon> | null = null;
 
+/**
+ * circomlibjs carries a few megabytes of round constants, so it is imported on
+ * first use. A web app that only shows balances never downloads it.
+ */
 export async function getPoseidon(): Promise<Poseidon> {
-  if (!_poseidon) {
-    _poseidon = await buildPoseidon();
-  }
+  _poseidon ??= import("circomlibjs")
+    .then((m) => m.buildPoseidon())
+    .catch((e: unknown) => {
+      _poseidon = null;
+      throw e;
+    });
   return _poseidon;
 }
 
