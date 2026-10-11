@@ -6,16 +6,34 @@ import {
   verifyAdminCode,
   adminCodeConfigured,
 } from "@/lib/adminAuth";
+import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/** Code tries per IP: a few a minute, and a ceiling per hour, so the code can't be guessed. */
+const TRIES_PER_MIN = 5;
+const TRIES_PER_HOUR = 20;
 
 export async function POST(req: Request) {
   if (!adminCodeConfigured()) {
     return NextResponse.json(
-      { ok: false, error: "ADMIN_ACCESS_CODE not set" },
+      { ok: false, error: "Admin sign-in is not configured." },
       { status: 503 },
     );
   }
-  const body = (await req.json().catch(() => null)) as { code?: string } | null;
-  const code = body?.code?.trim() ?? "";
+  const ip = clientIp(req);
+  const minute = await hitRateLimit(ip, "admin-login", TRIES_PER_MIN);
+  const hour = minute.allowed ? await hitRateLimit(ip, "admin-login-h", TRIES_PER_HOUR, Date.now(), 3600) : minute;
+  if (!minute.allowed || !hour.allowed) {
+    const wait = Math.max(minute.retryAfterSec, hour.allowed ? 0 : hour.retryAfterSec);
+    return NextResponse.json(
+      { ok: false, error: "Too many tries. Wait and try again." },
+      { status: 429, headers: { "Retry-After": String(wait) } },
+    );
+  }
+  const body = (await req.json().catch(() => null)) as { code?: unknown } | null;
+  const code = typeof body?.code === "string" ? body.code.trim().slice(0, 512) : "";
   if (!verifyAdminCode(code)) {
     return NextResponse.json({ ok: false, error: "Invalid code" }, { status: 401 });
   }
