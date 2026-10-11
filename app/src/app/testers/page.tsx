@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "Become a tester",
   description:
     "Join the private Gloam testers group. Use private payments on Tempo and Robinhood Chain testnet, tell us what breaks, and get rewarded.",
-  alternates: { canonical: "https://gloam.trade/testers" },
+  alternates: { canonical: "/testers" },
 };
 
 const PERKS = [

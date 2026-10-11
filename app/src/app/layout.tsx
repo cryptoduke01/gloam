@@ -11,8 +11,15 @@ const siteTitle = "Gloam · Private money on public chains";
 const siteDescription =
   "Private stablecoin payments for people, teams and agents. Hold, pay and run payroll without putting amounts or balances on the public record, and prove only what someone needs to see. On Tempo and Robinhood Chain testnets.";
 
+/**
+ * The live host is www (the apex redirects there), so absolute URLs in link
+ * previews point straight at it. Open Graph and Twitter carry no title or
+ * description here on purpose: Next fills them from each page's own title and
+ * description, and the share image comes from opengraph-image.tsx. Pages set
+ * their own canonical; one here would point every page at the home page.
+ */
 export const metadata: Metadata = {
-  metadataBase: new URL("https://gloam.trade"),
+  metadataBase: new URL("https://www.gloam.trade"),
   title: {
     default: siteTitle,
     template: "%s · Gloam",
@@ -41,9 +48,6 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    title: siteTitle,
-    description: siteDescription,
-    url: "https://gloam.trade",
     siteName: "Gloam",
     locale: "en_US",
     type: "website",
@@ -52,11 +56,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     site: "@gloamtrade",
     creator: "@gloamtrade",
-    title: siteTitle,
-    description: siteDescription,
   },
   robots: { index: true, follow: true },
-  alternates: { canonical: "https://gloam.trade" },
 };
 
 export const viewport: Viewport = {

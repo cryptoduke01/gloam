@@ -13,14 +13,23 @@ const description =
 export const metadata: Metadata = {
   title,
   description,
-  alternates: { canonical: "https://gloam.trade/blog/live-on-tempo" },
+  alternates: { canonical: "/blog/live-on-tempo" },
+  // Setting openGraph here replaces the root one, so the share image is named again.
   openGraph: {
     title,
     description,
-    url: "https://gloam.trade/blog/live-on-tempo",
+    url: "/blog/live-on-tempo",
+    siteName: "Gloam",
     type: "article",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Gloam: private money on public chains",
+      },
+    ],
   },
-  twitter: { card: "summary_large_image", title, description },
 };
 
 const link =

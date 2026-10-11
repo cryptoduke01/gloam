@@ -5,7 +5,7 @@ export const metadata: Metadata = {
   title: "Transparency",
   description:
     "What anyone can see about Gloam, read live from Robinhood Chain and Tempo: the money held in the vault, how many private deposits, transfers and cash-outs there have been, and what stays private.",
-  alternates: { canonical: "https://gloam.trade/transparency" },
+  alternates: { canonical: "/transparency" },
 };
 
 export default function TransparencyPage() {

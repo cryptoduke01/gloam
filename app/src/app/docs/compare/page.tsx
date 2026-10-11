@@ -5,6 +5,7 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata: Metadata = {
   title: "How Gloam compares",
+  alternates: { canonical: "/docs/compare" },
   description:
     "Why a payment needs no key holder, and how Gloam compares with Zama, Arcium, Tempo Zones, Helius Privacy and Railgun: who can see your payments, what a breach exposes, and where each one wins.",
 };

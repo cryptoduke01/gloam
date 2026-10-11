@@ -6,6 +6,7 @@ import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Whitepaper",
   description:
+  alternates: { canonical: "/whitepaper" },
     "Gloam whitepaper: private stablecoin payments on Tempo and Robinhood Chain. Thesis, architecture, cryptography, what is new, how it compares, threat model and roadmap.",
 };
 

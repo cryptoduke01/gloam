@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   title: "Partners",
   description:
     "Add private payments to your app with one API key. Set your own fee and see every payment your app brings in. On testnet nothing is charged.",
-  alternates: { canonical: "https://gloam.trade/partners" },
+  alternates: { canonical: "/partners" },
 };
 
 /* ---------- the statement: what a partner sees ---------- */
