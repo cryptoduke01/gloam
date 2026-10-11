@@ -31,6 +31,8 @@ const REDIS_DIMS = "gloam:traction:dims";
 const REDIS_DAY_PREFIX = "gloam:traction:day:";
 const REDIS_MAX = 5_000;
 const DAY_TTL_SEC = 120 * 86_400;
+/** Events and caches are best effort: a slow store is skipped, not waited on. */
+const REDIS_TIMEOUT_MS = 4_000;
 /** Days of per-day counters the summary returns (today included). */
 export const DAILY_DAYS = 14;
 
@@ -67,6 +69,7 @@ async function redisCommand(args: (string | number)[]): Promise<unknown> {
     },
     body: JSON.stringify(args),
     cache: "no-store",
+    signal: AbortSignal.timeout(REDIS_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`redis ${res.status}`);
   const json = (await res.json()) as { result?: unknown };
@@ -85,6 +88,7 @@ async function redisPipeline(cmds: (string | number)[][]): Promise<unknown[]> {
     },
     body: JSON.stringify(cmds),
     cache: "no-store",
+    signal: AbortSignal.timeout(REDIS_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`redis ${res.status}`);
   const json = (await res.json()) as { result?: unknown; error?: string }[];

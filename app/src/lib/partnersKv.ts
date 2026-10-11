@@ -45,15 +45,24 @@ export function k(...parts: (string | number)[]): string {
 
 // ---------------------------------------------------------------- redis
 
+/** A slow store fails the request instead of holding the function open. */
+const KV_TIMEOUT_MS = 8_000;
+
 async function redisPipeline(cmds: KvCommand[]): Promise<unknown[]> {
   const url = process.env.UPSTASH_REDIS_REST_URL!.trim().replace(/\/$/, "");
   const token = process.env.UPSTASH_REDIS_REST_TOKEN!.trim();
-  const res = await fetch(`${url}/pipeline`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(cmds),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${url}/pipeline`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(cmds),
+      cache: "no-store",
+      signal: AbortSignal.timeout(KV_TIMEOUT_MS),
+    });
+  } catch {
+    throw new KvUnavailableError("Partner storage did not answer.");
+  }
   if (!res.ok) throw new KvUnavailableError(`Partner storage answered ${res.status}.`);
   const json = (await res.json()) as { result?: unknown; error?: string }[];
   if (!Array.isArray(json) || json.length !== cmds.length) throw new KvUnavailableError("Partner storage gave a bad answer.");
