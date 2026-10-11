@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ThemeSegmented } from "./ThemeToggle";
@@ -147,9 +148,7 @@ function QuickLink({ href, label }: { href: string; label: string }) {
     return (
       <a href={href} target="_blank" rel="noreferrer" className={cls}>
         {label}
-        <span aria-hidden className="text-faint">
-          ↗
-        </span>
+        <ArrowUpRight className="text-faint" />
       </a>
     );
   }

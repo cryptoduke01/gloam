@@ -18,6 +18,7 @@ import {
   type PublicEvent,
   type VaultHolding,
 } from "./ledger";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 const NETS: { key: NetworkKey; logo: string; testnet: string }[] = [
   { key: "robinhood", logo: "/brand/logos/robinhood.png", testnet: "Robinhood Chain testnet" },
@@ -507,7 +508,7 @@ function ActivityCard({ ledger }: { ledger: Ledger }) {
                     aria-label={`View this ${KIND_LABEL[e.kind].toLowerCase()} on the explorer`}
                     className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
                   >
-                    <span aria-hidden>↗</span>
+                    <ArrowUpRight />
                   </a>
                 )}
               </li>
@@ -554,7 +555,7 @@ function ContractsCard({ ledger }: { ledger: Ledger }) {
                 aria-label={`${n.label} ${r.name.toLowerCase()} on the explorer`}
                 className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
               >
-                Explorer <span aria-hidden>↗</span>
+                Explorer <ArrowUpRight />
               </a>
             </div>
           </li>

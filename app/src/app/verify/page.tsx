@@ -25,6 +25,7 @@ import { ProofVerdict, amountOf, symbolOf } from "@/components/verify/ProofVerdi
 import { clientFor, commitmentSeen, networkForChain } from "@/lib/proofs/chain";
 import { getNetwork, type GloamNetwork } from "@/lib/networks";
 import { track } from "@/lib/track";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 type Result =
   | { kind: "idle" }
@@ -122,7 +123,7 @@ function ExplorerLink({ href }: { href: string }) {
       rel="noreferrer"
       className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
     >
-      Explorer <span aria-hidden>↗</span>
+      Explorer <ArrowUpRight />
     </a>
   );
 }
@@ -554,7 +555,7 @@ export default function VerifyPage() {
                   rel="noreferrer"
                   className="btn btn-ghost self-start lg:self-auto"
                 >
-                  Read the source <span aria-hidden>↗</span>
+                  Read the source <ArrowUpRight />
                 </a>
               </div>
               <div className="mt-12 grid grid-cols-1 gap-4">

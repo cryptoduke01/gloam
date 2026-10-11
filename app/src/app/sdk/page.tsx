@@ -8,6 +8,7 @@ import { SealDots } from "@/components/ui/SealDots";
 import { CopyCommand } from "@/components/CopyCommand";
 import { CodeTabs, type CodeTab } from "./SdkClient";
 import { CodeBlock } from "@/components/ui/CodeBlock";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 export const metadata: Metadata = {
   title: "SDK",
@@ -464,7 +465,7 @@ export default function SdkPage() {
                   rel="noreferrer"
                   className="btn btn-quiet"
                 >
-                  MCP server on GitHub <span aria-hidden>↗</span>
+                  MCP server on GitHub <ArrowUpRight />
                 </a>
               </div>
             </div>
@@ -507,12 +508,7 @@ export default function SdkPage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="rounded-full bg-panel px-2.5 py-1 text-[12px] text-mute">{ex.env}</span>
-                    <span
-                      aria-hidden
-                      className="text-mute transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground"
-                    >
-                      ↗
-                    </span>
+                    <ArrowUpRight className="text-mute transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground" />
                   </div>
                   <div className="mt-auto pt-8">
                     <p className="text-[18px] leading-snug tracking-[-0.01em] text-foreground">{ex.name}</p>
@@ -536,7 +532,7 @@ export default function SdkPage() {
                   rel="noreferrer"
                   className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
                 >
-                  Source on GitHub <span aria-hidden>↗</span>
+                  Source on GitHub <ArrowUpRight />
                 </a>
                 <a
                   href="https://www.npmjs.com/package/@gloamtrade/sdk"
@@ -544,7 +540,7 @@ export default function SdkPage() {
                   rel="noreferrer"
                   className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
                 >
-                  npm <span aria-hidden>↗</span>
+                  npm <ArrowUpRight />
                 </a>
               </div>
             </div>

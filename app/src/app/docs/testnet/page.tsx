@@ -4,6 +4,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { PAXOS_FAUCET_URL } from "@/lib/tokens";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 export const metadata: Metadata = {
   title: "Testnet guide",
@@ -61,7 +62,7 @@ export default function DocsTestnetPage() {
           rel="noreferrer"
           className="btn btn-ghost btn-sm shrink-0 !border-line-strong hover:!border-foreground"
         >
-          Watch the demo <span aria-hidden>↗</span>
+          Watch the demo <ArrowUpRight />
         </a>
       </figure>
       <p>

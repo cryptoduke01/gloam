@@ -5,6 +5,7 @@ import { SealDots } from "@/components/ui/SealDots";
 import { getNetwork } from "@/lib/networks";
 import type { Activity, FeeSetting, Stats } from "./client";
 import { ago, ArrowIcon, Card, fmtInt, fmtUnits, fmtUsd, fullDate, Kpi, LockIcon } from "./ui";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 const KIND_LABEL: Record<Activity["kind"], string> = {
   private_payment: "Private payment",
@@ -154,7 +155,7 @@ function ActivityList({ items }: { items: Activity[] }) {
               aria-label={`View this ${KIND_LABEL[a.kind].toLowerCase()} on the explorer`}
               className="-mr-2 grid h-10 w-8 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground sm:w-10"
             >
-              <span aria-hidden>↗</span>
+              <ArrowUpRight />
             </a>
           </li>
         );

@@ -15,6 +15,7 @@ import { shortAddress } from "@/lib/chain";
 import { getNetwork, isNetworkKey } from "@/lib/networks";
 import type { DayRow, NetworkMetrics, OnchainMetrics } from "@/lib/onchainMetrics";
 import type { DailyCounters, StoredEvent } from "@/lib/tractionStore";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 type MetricsPayload = {
   ok: boolean;
@@ -545,7 +546,7 @@ export function AdminDashboard() {
                           rel="noreferrer"
                           className="text-mute transition-colors hover:text-foreground"
                         >
-                          {shortAddress(m.pool, 4)} <span aria-hidden>↗</span>
+                          {shortAddress(m.pool, 4)} <ArrowUpRight />
                         </a>
                       ),
                       ""

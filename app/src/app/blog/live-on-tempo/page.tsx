@@ -5,6 +5,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 const title = "Gloam is live on Tempo";
 const description =
@@ -210,7 +211,7 @@ export default function LiveOnTempoPost() {
                 rel="noreferrer"
                 className="btn btn-quiet"
               >
-                Follow @gloamtrade <span aria-hidden>↗</span>
+                Follow @gloamtrade <ArrowUpRight />
               </a>
             </div>
           </div>

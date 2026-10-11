@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
+import { ArrowUpRight } from "./ui/ArrowUpRight";
 import { ThemeSegmented, ThemeToggle } from "./ThemeToggle";
 
 export const MARKETING_LINKS = [
@@ -78,7 +79,7 @@ export function Header() {
             Read the docs
           </Link>
           <Link href="/app" className="btn btn-accent btn-sm">
-            Open app <span aria-hidden>↗</span>
+            Open app <ArrowUpRight />
           </Link>
           <button
             type="button"

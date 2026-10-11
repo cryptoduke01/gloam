@@ -7,6 +7,7 @@ import { assetDecimals, isNativeAsset } from "@/lib/shield";
 import { RH_STABLE_TOKENS, TEMPO_STABLE_TOKENS, TESTNET_STOCK_TOKENS } from "@/lib/tokens";
 import { SealedField } from "@/components/ui/SealedField";
 import { formatUnits } from "viem";
+import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 /**
  * The result of checking a proof of funds, a proof of payment or a payroll
@@ -257,7 +258,7 @@ export function ProofVerdict({
                 rel="noreferrer"
                 className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
               >
-                Explorer <span aria-hidden>↗</span>
+                Explorer <ArrowUpRight />
               </a>
             </dd>
           </div>
