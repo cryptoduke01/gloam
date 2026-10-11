@@ -14,6 +14,13 @@ const POOL_VIEW_ABI = parseAbi([
 
 const READ_TIMEOUT_MS = 8_000;
 
+/**
+ * Leaves the pool's tree can ever hold: 2^20 = 1,048,576 at depth 20
+ * (IncrementalMerkleTreePoseidon.DEPTH, MERKLE_DEPTH in the SDK). When it is
+ * full, deposits and private sends stop; cash outs still work.
+ */
+const TREE_CAPACITY = 2 ** 20;
+
 function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
 }
@@ -32,8 +39,11 @@ export type VaultStatus = {
   explorer: string | null;
   assets: VaultAsset[];
   relay: { enabled: boolean; memo: boolean; lowBalance: boolean };
-  /** Read from the chain just now; null when the read failed or timed out. */
-  chain: { block: string; leafCount: number; root: Hex } | null;
+  /**
+   * Read from the chain just now; null when the read failed or timed out.
+   * `leafCapacity` and `leavesLeft` are there to watch the tree fill up.
+   */
+  chain: { block: string; leafCount: number; leafCapacity: number; leavesLeft: number; root: Hex } | null;
 };
 
 export function vaultAssets(net: GloamNetwork): VaultAsset[] {
@@ -62,7 +72,8 @@ async function chainRead(net: GloamNetwork): Promise<VaultStatus["chain"]> {
       ]),
       READ_TIMEOUT_MS
     );
-    return { block: block.toString(), leafCount: Number(leafCount), root };
+    const leaves = Number(leafCount);
+    return { block: block.toString(), leafCount: leaves, leafCapacity: TREE_CAPACITY, leavesLeft: Math.max(0, TREE_CAPACITY - leaves), root };
   } catch {
     return null;
   }
