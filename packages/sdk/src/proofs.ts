@@ -58,7 +58,11 @@ const AMOUNT_LIMIT = 1n << 128n;
 const CONTEXT_DOMAIN = "gloam.proof.v1";
 
 export type ProofContextArgs = {
-  kind: "funds" | "payment" | "payroll";
+  /**
+   * What the proof claims. "payment" and "balance" share the receipt circuit,
+   * so the kind in the context is what keeps one from passing as the other.
+   */
+  kind: "funds" | "payment" | "payroll" | "balance";
   chainId: number;
   pool: Address;
   /** Who the proof is for, exactly as shown to them. */

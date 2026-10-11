@@ -49,6 +49,12 @@ export const CIRCUIT_ARTIFACTS = {
     sha256:
       "e4d42271b99faa218faebb38a06f69b5ccf01e328d3dea4381ab567e9fbd2481",
   },
+  /** Only for checking an older balance disclosure (lib/disclosure). */
+  shieldVkey: {
+    path: "/circuits/shield_vkey.json",
+    sha256:
+      "f4c3de52c35689296b6d2253d0368fdec47648744c28a97fa013a1bb25445986",
+  },
 } as const;
 
 function hexSha256(buf: ArrayBuffer): string {

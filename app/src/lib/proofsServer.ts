@@ -4,30 +4,27 @@
  * (lib/mcpRemote). Server only.
  *
  * Formats: gloamfunds1 (proof of funds), gloampay1 (proof of payment),
- * gloamroll1 (payroll total) and gloamdisc1 (the older balance disclosure).
+ * gloamroll1 (payroll total), gloambal1 (exact balance) and gloamdisc1 (the
+ * older balance disclosure).
  *
- * This reuses the checks the /verify page runs (lib/proofs), with one swap.
- * The page's snark step loads its checking key with a relative fetch, which
- * only works in a browser. So here:
- *  - payroll totals go through checkPayrollProof, whose snark step is
- *    injected, with the server's own key;
- *  - funds and payment proofs go through verifyProof unchanged; its snark step
- *    fails on the server, and its first check is replaced by the server's own
- *    Groth16 check. Every other check (sealed label and expiry, Gloam's own
- *    vault, fields match the signals, root known, notes unspent, payment
- *    landed, not expired) is the page's own. If the page's checks ever change
- *    shape, this fails closed;
- *  - balance disclosures follow the /verify page: snark, Gloam's vault, and
- *    the balance is in the vault.
+ * This runs the checks the /verify page runs (lib/proofs), with the snark step
+ * swapped for the server's own bundled keys (the page loads its keys with a
+ * relative fetch, which only works in a browser):
+ *  - funds, payment and exact balance proofs go through checkHolderProof;
+ *  - payroll totals go through checkPayrollProof;
+ *  - balance disclosures (gloamdisc1) are never ok. They reuse the deposit
+ *    statement, and every deposit publishes a valid proof of it on chain, so
+ *    anyone can make one for anyone's deposit. The result says so plainly.
+ * Size and format checks and the snark come before any chain read.
  *
  * Checking keys are the same files as /public/circuits, bundled at build time
  * (scripts/selftest-partners.mts checks them against the pinned hashes).
  */
-import { toHex } from "viem";
-import { decodeDisclosure } from "@/lib/disclosure";
-import { decodeProof, isGloamProof, verifyProof, type AnyProof, type VerifyResult } from "@/lib/proofs";
-import { clientFor, commitmentSeen, findPayrollPayment, networkForChain } from "@/lib/proofs/chain";
+import { LEGACY_DISCLOSURE, decodeDisclosure } from "@/lib/disclosure";
+import { decodeProof, isGloamProof, type AnyProof, type VerifyResult } from "@/lib/proofs";
+import { clientFor, findPayrollPayment, networkForChain } from "@/lib/proofs/chain";
 import { checkPayrollProof } from "@/lib/proofs/payrollCheck";
+import { checkHolderProof } from "@/lib/proofs/verify";
 import fundsVkey from "../../public/circuits/funds_vkey.json";
 import receiptVkey from "../../public/circuits/receipt_vkey.json";
 import payrollVkey from "../../public/circuits/payroll_total_vkey.json";
@@ -50,10 +47,15 @@ export class ProofInputError extends Error {
 }
 
 export const SNARK_CHECK = "The proof checks out";
-/** The one check verifyProof lets stay "unknown" (lib/proofs/verify). */
-const PAID_AT = "When the payment landed";
 
-export type ProofFormat = "gloamfunds1" | "gloampay1" | "gloamroll1" | "gloamdisc1";
+/**
+ * Longest proof text taken. The largest real proof, a payroll total of 256
+ * payments in 8 parts, is about 95 KB as text.
+ */
+export const MAX_PROOF_TEXT = 160_000;
+
+
+export type ProofFormat = "gloamfunds1" | "gloampay1" | "gloamroll1" | "gloambal1" | "gloamdisc1";
 
 export type ApiVerifyResult = {
   format: ProofFormat;
@@ -105,6 +107,7 @@ function claimsOf(p: AnyProof): Record<string, unknown> {
   const base = { chainId: p.chainId, pool: p.pool, verifier: p.verifier, expiresAt: p.expiresAt, asset: p.asset };
   if (p.kind === "funds") return { ...base, threshold: p.threshold };
   if (p.kind === "payment") return { ...base, amount: p.amount, minAmount: p.minAmount, commitment: p.commitment, txHash: p.txHash };
+  if (p.kind === "balance") return { ...base, amount: p.amount, commitment: p.commitment };
   return { ...base, total: p.total, count: p.count };
 }
 
@@ -112,6 +115,7 @@ const FORMAT: Record<AnyProof["kind"], ProofFormat> = {
   funds: "gloamfunds1",
   payment: "gloampay1",
   payroll: "gloamroll1",
+  balance: "gloambal1",
 };
 
 async function verifyPayrollServer(p: Extract<AnyProof, { kind: "payroll" }>): Promise<VerifyResult> {
@@ -128,34 +132,19 @@ async function verifyPayrollServer(p: Extract<AnyProof, { kind: "payroll" }>): P
   });
 }
 
-async function verifyHolderServer(p: Extract<AnyProof, { kind: "funds" | "payment" }>): Promise<VerifyResult> {
-  const page = await verifyProof(p);
-  const first = page.checks[0];
-  // The page bails out before its snark step when the signals are damaged:
-  // that verdict stands as it is.
-  if (page.checks.length === 1) return { ...page, ok: false };
-  if (!first || first.label !== SNARK_CHECK) {
-    return {
-      ...page,
-      ok: false,
-      checks: [{ label: SNARK_CHECK, state: "fail", detail: "This proof could not be checked here." }, ...page.checks],
-    };
-  }
-  const valid = await groth16Verify(p.kind === "funds" ? fundsVkey : receiptVkey, p.publicSignals, p.proof);
-  const checks = [
-    {
-      label: SNARK_CHECK,
-      state: valid ? ("pass" as const) : ("fail" as const),
-      detail: valid
-        ? "Verified with Gloam's zero-knowledge checking key."
-        : "The math does not hold. It was edited or made for a different circuit.",
-    },
-    ...page.checks.slice(1),
-  ];
-  const ok = !page.expired && checks.every((c) => c.state === "pass" || (c.label === PAID_AT && c.state === "unknown"));
-  return { ...page, checks, ok };
+async function verifyHolderServer(p: Extract<AnyProof, { kind: "funds" | "payment" | "balance" }>): Promise<VerifyResult> {
+  return checkHolderProof(p, {
+    verifySnark: (circuit, signals, proof) => groth16Verify(circuit === "funds" ? fundsVkey : receiptVkey, signals, proof),
+    when,
+  });
 }
 
+/**
+ * gloamdisc1: the shield statement [commitment, amount, asset]. Every deposit
+ * puts a valid proof of exactly that in public calldata, so a copy proves
+ * nothing about who holds the note. The snark and the vault are still checked
+ * so a broken one reads as broken, then the verdict is "can't confirm".
+ */
 async function verifyDisclosureServer(text: string): Promise<ApiVerifyResult> {
   let d: ReturnType<typeof decodeDisclosure>;
   try {
@@ -177,23 +166,11 @@ async function verifyDisclosureServer(text: string): Promise<ApiVerifyResult> {
     state: official ? "pass" : "fail",
     detail: official ? undefined : "The vault address is not Gloam's current vault, so its balance cannot be trusted.",
   });
-  if (official && net?.pool) {
-    let seen: boolean | null = null;
-    try {
-      seen = await commitmentSeen(clientFor(net), net.pool, toHex(BigInt(d.commitment), { size: 32 }));
-    } catch {
-      seen = null;
-    }
-    checks.push({
-      label: "Balance is in the vault",
-      state: seen == null ? "unknown" : seen ? "pass" : "fail",
-      detail: seen == null ? `Could not reach ${net.label}. Try again.` : seen ? undefined : "The vault has no record of this balance.",
-    });
-  }
+  checks.push({ label: "Shows who holds it", state: "fail", detail: LEGACY_DISCLOSURE });
   return {
     format: "gloamdisc1",
     kind: "balance",
-    ok: checks.every((c) => c.state === "pass"),
+    ok: false,
     expired: false,
     checks,
     paidAt: null,
@@ -207,7 +184,7 @@ export async function verifyProofText(raw: unknown): Promise<ApiVerifyResult> {
   if (typeof raw !== "string" || !raw.trim()) {
     throw new ProofInputError(400, "invalid_proof", 'Send the proof text as { "proof": "gloamfunds1:..." }.');
   }
-  if (raw.length > 400_000) throw new ProofInputError(413, "too_large", "That proof is too large.");
+  if (raw.length > MAX_PROOF_TEXT) throw new ProofInputError(413, "too_large", "That proof is too large.");
   const text = raw.trim();
   if (!isGloamProof(text)) return verifyDisclosureServer(text);
 

@@ -21,7 +21,7 @@ export async function GET() {
         { method: "GET", path: "/api/v1/vaults", what: "Vault status on every network" },
         { method: "GET", path: "/api/v1/vaults/{network}", what: "Vault status on one network" },
         { method: "GET", path: "/api/v1/vaults/{network}/leaves", what: "The vault's public leaf list, to rebuild the tree" },
-        { method: "POST", path: "/api/v1/proofs/verify", what: "Check a gloamfunds1, gloampay1, gloamroll1 or gloamdisc1 proof" },
+        { method: "POST", path: "/api/v1/proofs/verify", what: "Check a gloamfunds1, gloampay1, gloamroll1 or gloambal1 proof (gloamdisc1 is never ok)" },
         { method: "POST", path: "/api/v1/payment-requests", what: "Make a payment request link" },
         { method: "GET", path: "/api/v1/stats", what: "Public vault figures, as on /transparency" },
       ],

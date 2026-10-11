@@ -31,13 +31,15 @@ const {
   proofContext,
 } = sdk;
 
-// ── load the checker ──
-const src = readFileSync(join(here, "payrollCheck.ts"), "utf8");
-const js = ts
-  .transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } })
-  .outputText.replace(/from "@gloamtrade\/sdk"/g, `from ${JSON.stringify(pathToFileURL(sdkDist).href)}`);
+// ── load the checker (and the sibling modules it imports) ──
 const tmp = mkdtempSync(join(tmpdir(), "gloam-payroll-check-"));
-writeFileSync(join(tmp, "payrollCheck.mjs"), js);
+for (const file of ["label.ts", "types.ts", "payrollCheck.ts"]) {
+  const js = ts
+    .transpileModule(readFileSync(join(here, file), "utf8"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } })
+    .outputText.replace(/from "@gloamtrade\/sdk"/g, `from ${JSON.stringify(pathToFileURL(sdkDist).href)}`)
+    .replace(/from "\.\/([^"]+)"/g, (_, name) => `from ${JSON.stringify(pathToFileURL(join(tmp, name + ".mjs")).href)}`);
+  writeFileSync(join(tmp, file.replace(/\.ts$/, ".mjs")), js);
+}
 const { checkPayrollProof, classifyPaymentLogs } = await import(pathToFileURL(join(tmp, "payrollCheck.mjs")).href);
 
 let checks = 0;
@@ -169,7 +171,7 @@ const good = await makeProof([run]);
   assert(r.ok, `valid proof passes: ${JSON.stringify(r.checks.filter((c) => c.state !== "pass"))}`);
   assert(r.kind === "payroll" && !r.expired, "kind and not expired");
   assert(r.checks.every((c) => c.state === "pass"), "every check passes");
-  assert(good.total === "21500000000" && good.count === 5, "21,500 USDG to 5 people");
+  assert(good.total === "21500000000" && good.count === 5, "21,500 USDG in 5 payments");
   assert(r.paidBetween?.[0] === NOW - 7200 && r.paidBetween?.[1] === NOW - 7200 + 36, "time span of the run");
   assert(r.checks.some((c) => c.label === 'Made for "My accountant"'), "names who it is for");
 }
@@ -179,7 +181,7 @@ const good = await makeProof([run]);
   const p = clone(good);
   p.total = (BigInt(p.total) + 1_000_000n).toString();
   const r = await checkPayrollProof(p, deps());
-  assert(!r.ok && stateOf(r, "Total and people") === "fail", "tampered plain total fails");
+  assert(!r.ok && stateOf(r, "Total and count") === "fail", "tampered plain total fails");
 }
 {
   const p = clone(good);
@@ -192,7 +194,7 @@ const good = await makeProof([run]);
   const p = clone(good);
   p.count = 6;
   const r = await checkPayrollProof(p, deps());
-  assert(!r.ok && stateOf(r, "Total and people") === "fail", "tampered count fails");
+  assert(!r.ok && stateOf(r, "Total and count") === "fail", "tampered count fails");
 }
 
 // ── swapped commitment / reordered list / dropped payment ──
@@ -201,20 +203,20 @@ const good = await makeProof([run]);
   const p = clone(good);
   p.payments[2] = { commitment: outsider.commitment, nullifier: outsider.nullifier, txHash: outsider.txHash };
   const r = await checkPayrollProof(p, deps());
-  assert(!r.ok && stateOf(r, "Total and people") === "fail", "swapped commitment fails the list hash");
+  assert(!r.ok && stateOf(r, "Total and count") === "fail", "swapped commitment fails the list hash");
 }
 {
   const p = clone(good);
   [p.payments[0], p.payments[1]] = [p.payments[1], p.payments[0]];
   const r = await checkPayrollProof(p, deps());
-  assert(!r.ok && stateOf(r, "Total and people") === "fail", "reordered payments fail the list hash");
+  assert(!r.ok && stateOf(r, "Total and count") === "fail", "reordered payments fail the list hash");
 }
 {
   const p = clone(good);
   p.payments.pop();
   p.count = 4;
   const r = await checkPayrollProof(p, deps());
-  assert(!r.ok && stateOf(r, "Total and people") === "fail", "dropped payment fails");
+  assert(!r.ok && stateOf(r, "Total and count") === "fail", "dropped payment fails");
 }
 
 // ── a deposit passed off as a payment ──
@@ -248,7 +250,7 @@ const good = await makeProof([run]);
   const p = await makeProof([run.slice(0, 3), run.slice(2)]);
   assert(p.parts.length === 2 && p.count === 6, "two parts, payment 3 in both");
   const r = await checkPayrollProof(p, deps());
-  assert(stateOf(r, "The proof checks out") === "pass" && stateOf(r, "Total and people") === "pass", "each part holds on its own");
+  assert(stateOf(r, "The proof checks out") === "pass" && stateOf(r, "Total and count") === "pass", "each part holds on its own");
   assert(!r.ok && stateOf(r, "No payment counted twice") === "fail", "a payment in two parts is caught");
 }
 {
@@ -288,6 +290,31 @@ const good = await makeProof([run]);
   p.payments[4].txHash = fieldToHex(999_999n);
   const r = await checkPayrollProof(p, deps());
   assert(!r.ok && stateOf(r, "Each one is a private payment") === "unknown", "a payment not found is not a pass");
+}
+{
+  const r = await checkPayrollProof(good, deps({ findPayment: async () => ({ state: "no-tx" }) }));
+  assert(!r.ok && /not on this network/.test(detailOf(r, "Each one is a private payment")), "a named transaction missing from the chain fails");
+}
+{
+  // Size caps come before any math or lookup.
+  let looked = 0;
+  const counting = deps({ findPayment: async () => { looked++; return { state: "not-found" }; }, verifySnark: async () => { looked++; return true; } });
+  const p = clone(good);
+  p.parts = Array.from({ length: 9 }, () => clone(good.parts[0]));
+  const r = await checkPayrollProof(p, counting);
+  assert(!r.ok && r.checks.length === 1 && looked === 0, "nine parts are refused before anything runs");
+  const q = clone(good);
+  q.payments = Array.from({ length: 257 }, () => clone(good.payments[0]));
+  const r2 = await checkPayrollProof(q, counting);
+  assert(!r2.ok && r2.checks.length === 1 && looked === 0, "257 payments are refused before anything runs");
+}
+{
+  // Nothing is looked up for a proof that already failed.
+  let looked = 0;
+  const p = clone(good);
+  p.parts[0].proof.pi_a[0] = "1";
+  const r = await checkPayrollProof(p, deps({ findPayment: async () => { looked++; return { state: "not-found" }; } }));
+  assert(!r.ok && looked === 0, "a broken proof triggers no lookups");
 }
 {
   const p = clone(good);

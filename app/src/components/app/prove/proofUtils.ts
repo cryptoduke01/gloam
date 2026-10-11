@@ -46,7 +46,8 @@ export function isFundsNote(n: LocalNote): boolean {
 /**
  * A payment someone sent this wallet. Claimed payments (a Gloam address
  * payment, a claim link, a payroll payout) are saved with an `imp-` id; change,
- * deposits and trades are not. Spent ones still count: the receipt stays true.
+ * deposits and trades are not. Spent ones still count: the payment still
+ * happened. The prover checks the note on chain before proving.
  */
 export function isReceivedPayment(n: LocalNote): boolean {
   return n.id.startsWith("imp-") && isCircuitNote(n);
@@ -137,7 +138,7 @@ export function proveFailReason(e: unknown): string {
   if (/not built yet/i.test(msg)) return "not_enabled";
   if (/reject|denied|cancel/i.test(msg)) return "cancelled";
   if (/switch to|another network|older vault/i.test(msg)) return "wrong_network";
-  if (/no key|older balances/i.test(msg)) return "unprovable_note";
+  if (/no key|older balances|not a payment/i.test(msg)) return "unprovable_note";
   if (/already spent|not in the vault|read the vault/i.test(msg)) return "vault_sync";
   if (/could not load/i.test(msg)) return "load_failed";
   if (/say who|keep the name|expiry|amount|minimum|balances|same asset|add up/i.test(msg)) return "input";
@@ -147,17 +148,13 @@ export function proveFailReason(e: unknown): string {
 export type FriendlyError = { tone: "warn" | "danger"; text: string };
 
 /** Turns a prover error into plain words. */
-export function friendlyProveError(e: unknown, what: "funds" | "payment"): FriendlyError {
+export function friendlyProveError(e: unknown, what: "funds" | "payment" | "balance"): FriendlyError {
   const msg = e instanceof Error ? e.message : "";
   if (/not built yet/i.test(msg)) {
-    return {
-      tone: "warn",
-      text:
-        what === "funds"
-          ? "Proof of funds is not switched on in this version of Gloam yet. Exact balance proofs work today."
-          : "Proof of payment is not switched on in this version of Gloam yet. Exact balance proofs work today.",
-    };
+    const name = what === "funds" ? "Proof of funds" : what === "payment" ? "Proof of payment" : "Exact balance";
+    return { tone: "warn", text: `${name} is not switched on in this version of Gloam yet.` };
   }
+  if (/not a payment/i.test(msg)) return { tone: "warn", text: msg };
   if (/reject|denied|cancel/i.test(msg)) {
     return { tone: "warn", text: "Stopped before the proof was made. Nothing was shared." };
   }

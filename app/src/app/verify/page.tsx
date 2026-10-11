@@ -10,11 +10,11 @@ import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
 import {
+  LEGACY_DISCLOSURE,
   decodeDisclosure,
   verifyDisclosureProof,
   type Disclosure,
 } from "@/lib/disclosure";
-import { demoCommitmentSeen, isDemoProof } from "@/lib/demo/proof";
 import {
   decodeProof,
   isGloamProof,
@@ -23,7 +23,7 @@ import {
   type VerifyResult,
 } from "@/lib/proofs";
 import { ProofVerdict, amountOf, symbolOf } from "@/components/verify/ProofVerdict";
-import { clientFor, commitmentSeen, networkForChain } from "@/lib/proofs/chain";
+import { networkForChain } from "@/lib/proofs/chain";
 import { getNetwork, type GloamNetwork } from "@/lib/networks";
 import { track } from "@/lib/track";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
@@ -31,11 +31,8 @@ import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 type Result =
   | { kind: "idle" }
   | { kind: "checking"; step: string }
-  | {
-      kind: "ok";
-      d: Disclosure;
-      onchain: boolean;
-    }
+  /** An older balance disclosure: never verified, whatever its math (lib/disclosure). */
+  | { kind: "legacy"; d: Disclosure }
   | { kind: "proof"; p: AnyProof; r: VerifyResult; at: number }
   | { kind: "bad"; reason: string; title?: string };
 
@@ -241,7 +238,7 @@ export default function VerifyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per proof in the link
   }, [urlProof]);
 
-  /** Proof of funds, payment and payroll total: decode, then every check in lib/proofs. */
+  /** Proof of funds, payment, exact balance and payroll total: decode, then every check in lib/proofs. */
   async function onVerifyProof(text: string) {
     setResult({ kind: "checking", step: "Reading the proof" });
     let p: AnyProof;
@@ -290,14 +287,11 @@ export default function VerifyPage() {
     try {
       setResult({ kind: "checking", step: "Checking the proof" });
       const proofOk = await verifyDisclosureProof(d);
+      track("proof_verified", { kind: "balance", ok: false });
       if (!proofOk) {
         setResult({ kind: "bad", reason: "The proof did not verify." });
-        track("proof_verified", { kind: "balance", ok: false });
         return;
       }
-
-      // The shield proof alone holds for any amount anyone makes up; only a note
-      // in Gloam's own vault, on the network the proof names, backs it.
       const net = networkForChain(Number(d.chainId));
       if (!net?.pool || typeof d.pool !== "string" || net.pool.toLowerCase() !== d.pool.toLowerCase()) {
         setResult({
@@ -306,33 +300,9 @@ export default function VerifyPage() {
         });
         return;
       }
-
-      // Membership: is this commitment a real note in the pool?
-      setResult({ kind: "checking", step: "Finding the balance on-chain" });
-      let onchain: boolean | null;
-      try {
-        const commitment32 = toHex(BigInt(d.commitment), { size: 32 });
-        // Recording demo: a pretend wallet's proof is found in the pretend vault.
-        onchain = isDemoProof(d.proof)
-          ? await demoCommitmentSeen()
-          : await commitmentSeen(clientFor(net), net.pool, commitment32);
-      } catch {
-        onchain = null;
-      }
-      track("proof_verified", { kind: "balance", ok: onchain === true });
-      if (onchain !== true) {
-        setResult({
-          kind: "bad",
-          title: onchain === null ? "Could not check this proof" : undefined,
-          reason:
-            onchain === null
-              ? `Could not reach ${net.label} to find this balance. Try again in a moment.`
-              : "The vault has no record of this balance.",
-        });
-        return;
-      }
-
-      setResult({ kind: "ok", d, onchain });
+      // Every deposit publishes a valid proof of this same statement, so a
+      // copy of it shows nothing about who holds the money. No chain lookup.
+      setResult({ kind: "legacy", d });
     } catch (e) {
       setResult({
         kind: "bad",
@@ -405,9 +375,9 @@ export default function VerifyPage() {
               <h2 className="t-display-l max-w-[12ch]">Verify a proof</h2>
               <p className="mt-5 max-w-[46ch] text-[16px] leading-relaxed text-mute">
                 Someone sent you a Gloam proof. Paste it here to check it: an
-                exact balance, a minimum they hold, a payment they received, or
-                the total a payroll run paid. You see only what they chose to
-                prove, and nothing about who they are or what else they hold.
+                exact balance, a minimum they hold, a private payment, or the
+                total of a payroll run they paid. You see only what they chose
+                to prove, and nothing about who they are or what else they hold.
               </p>
               <ul className="mt-10 divide-y divide-line border-y border-line text-[15px]">
                 <li className="flex justify-between gap-6 py-4">
@@ -455,7 +425,7 @@ export default function VerifyPage() {
                 />
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[12.5px] text-faint">
-                    Starts with gloamfunds1:, gloampay1:, gloamroll1: or gloamdisc1:
+                    Starts with gloamfunds1:, gloampay1:, gloamroll1: or gloambal1:
                   </p>
                   <button
                     type="button"
@@ -477,59 +447,14 @@ export default function VerifyPage() {
 
               {result.kind === "proof" && <ProofVerdict proof={result.p} result={result.r} checkedAt={result.at} />}
 
-              {result.kind === "ok" && (
-                <div className="gl-card relative mt-4 overflow-hidden">
-                  <div className="relative overflow-hidden border-b border-line px-5 py-6 sm:px-7">
-                    <SealedField tone="soft" />
-                    <div className="relative">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 py-1 text-[12px] font-medium text-sealed">
-                        <CheckMark size={12} /> Verified
-                      </span>
-                      <p className="t-display-m tnum mt-4">
-                        {amountOf(result.d.amount, assetAddress(result.d.asset))}{" "}
-                        <span className="text-mute">
-                          {symbolOf(assetAddress(result.d.asset), result.d.chainId)}
-                        </span>
-                      </p>
-                      <p className="mt-2 max-w-[52ch] text-[14px] leading-relaxed text-mute">
-                        put into the Gloam vault. The holder proved they own this
-                        balance without revealing the key that spends it. This
-                        older proof does not show whether it has moved since; ask
-                        for a proof of funds to check that.
-                      </p>
-                    </div>
-                  </div>
-                  <dl className="divide-y divide-line text-[14px]">
-                    <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
-                      <dt className="text-mute">Found on-chain</dt>
-                      <dd className={result.onchain ? "text-sealed" : "text-mute"}>
-                        {result.onchain
-                          ? "Yes, this balance exists in the vault"
-                          : "Unconfirmed (could not reach the network)"}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
-                      <dt className="shrink-0 text-mute">Vault</dt>
-                      <dd className="flex min-w-0 items-center gap-1">
-                        <span className="tnum min-w-0 truncate text-foreground" title={result.d.pool}>
-                          {result.d.pool}
-                        </span>
-                        <CopyButton value={result.d.pool} label="vault address" />
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
-                      <dt className="shrink-0 text-mute">Balance record</dt>
-                      <dd className="flex min-w-0 items-center gap-1">
-                        <span className="tnum min-w-0 truncate text-foreground">
-                          {toHex(BigInt(result.d.commitment), { size: 32 })}
-                        </span>
-                        <CopyButton
-                          value={toHex(BigInt(result.d.commitment), { size: 32 })}
-                          label="balance record"
-                        />
-                      </dd>
-                    </div>
-                  </dl>
+              {result.kind === "legacy" && (
+                <div role="alert" className="mt-4 rounded-[18px] bg-warn-soft p-5 sm:p-6">
+                  <p className="text-[13px] font-medium text-warn">Can&apos;t confirm who holds this</p>
+                  <p className="tnum mt-1.5 text-[15px] text-foreground">
+                    It claims {amountOf(result.d.amount, assetAddress(result.d.asset))}{" "}
+                    {symbolOf(assetAddress(result.d.asset), Number(result.d.chainId))} in Gloam&apos;s vault.
+                  </p>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-soft">{LEGACY_DISCLOSURE}</p>
                 </div>
               )}
             </div>

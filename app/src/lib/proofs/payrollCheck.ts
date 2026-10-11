@@ -1,9 +1,11 @@
 /**
  * Checking a payroll total proof, kept free of app wiring (network clients,
  * artifacts, demo switch) so node tests can run it with real snarks and a
- * pretend chain. verify.ts passes the real dependencies.
+ * pretend chain. verify.ts and lib/proofsServer pass the real dependencies.
  *
  * What a pass means, check by check:
+ *   0. the proof is within size (at most PAYROLL_MAX_PARTS parts and
+ *      PAYROLL_MAX_PAYMENTS_TOTAL payments), before any math or network work
  *   1. every part's Groth16 proof holds against the payroll_total key
  *   2. every part was sealed for this label, expiry, chain and vault
  *   3. the vault is Gloam's own on that chain
@@ -11,10 +13,15 @@
  *      (each part's list rehashes to its paymentsHash signal)
  *   5. no payment appears twice, across all parts
  *   6. every payment is the first output of a private transfer in that vault
- *      whose spend marker is the one proven: a payment the prover made, not a
- *      deposit, a trade, change, or someone else's payment to them
+ *      whose spend marker is the one proven: a payment out of a note the prover
+ *      spent, not a deposit, a trade, change, or someone else's payment to them
  *   7. when the first and last payment landed
  *   8. not expired
+ * Checks 6 and 7 read the chain, so they only run when 1 to 5 all passed.
+ *
+ * What it does not show: who was paid. A payment to yourself, or to a second
+ * wallet, looks the same as one to someone else, so the claim is "a run of N
+ * payments adding up to X, funded by the prover", never "N people".
  */
 import {
   FIELD_PRIME,
@@ -24,7 +31,16 @@ import {
   readPayrollSignals,
 } from "@gloamtrade/sdk";
 import type { Hex } from "viem";
-import type { CheckState, PayrollPayment, PayrollProof, PayrollProofPart, VerifyResult } from "./types";
+import { displayLabel, isPlainLabel } from "./label";
+import {
+  PAYROLL_MAX_PARTS,
+  PAYROLL_MAX_PAYMENTS_TOTAL,
+  type CheckState,
+  type PayrollPayment,
+  type PayrollProof,
+  type PayrollProofPart,
+  type VerifyResult,
+} from "./types";
 
 /** How one payment was found on chain. */
 export type PaymentLookup =
@@ -35,7 +51,9 @@ export type PaymentLookup =
   | { state: "change" }
   /** The named transaction does not pair this note with this spend marker. */
   | { state: "mismatch" }
-  /** Not in the named transaction's chain, or older than the bounded scan. */
+  /** The named transaction is not on this network. */
+  | { state: "no-tx" }
+  /** No transaction named, and the payment is older than the bounded scan. */
   | { state: "not-found" };
 
 /** A decoded pool event, as viem's parseEventLogs returns it. */
@@ -127,7 +145,7 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
   const expired = !(Number.isSafeInteger(p.expiresAt) && deps.now <= p.expiresAt);
   let paidBetween: [number, number] | undefined;
   const finish = (): VerifyResult => ({
-    ok: !expired && checks.every((c) => c.state === "pass"),
+    ok: !expired && checks.length > 0 && checks.every((c) => c.state === "pass"),
     kind: "payroll",
     checks,
     paidBetween,
@@ -135,7 +153,13 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
   });
   const expiry = () => add(expired ? "Expired" : "Not expired", expired ? "fail" : "pass", `Valid until ${deps.when(p.expiresAt)}.`);
 
+  // 0) Size first: nothing below runs on a proof bigger than a real run.
   const parts = Array.isArray(p.parts) ? p.parts : [];
+  const listed = Array.isArray(p.payments) ? p.payments : [];
+  if (parts.length > PAYROLL_MAX_PARTS || listed.length > PAYROLL_MAX_PAYMENTS_TOTAL) {
+    add("The proof checks out", "fail", `A payroll proof covers at most ${PAYROLL_MAX_PAYMENTS_TOTAL} payments.`);
+    return finish();
+  }
   const signals = parts.map(signalsOf);
   if (parts.length === 0 || signals.some((s) => s === null)) {
     add("The proof checks out", "fail", "This proof is damaged or incomplete.");
@@ -170,10 +194,12 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
     sealed = false;
   }
   add(
-    `Made for "${String(p.verifier)}"`,
+    `Made for "${displayLabel(p.verifier)}"`,
     sealed ? "pass" : "fail",
     sealed
-      ? "The name, expiry and network are sealed into the proof."
+      ? isPlainLabel(p.verifier)
+        ? "The name, expiry and network are sealed into the proof."
+        : "The name, expiry and network are sealed into the proof. Hidden characters in the name are not shown."
       : "The name, expiry or network was changed after the proof was made."
   );
 
@@ -185,7 +211,7 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
   );
 
   // 4) The plain total, count and list are exactly what the parts prove.
-  const payments = Array.isArray(p.payments) ? p.payments : [];
+  const payments = listed;
   const pairs = payments.map((x) => ({ commitment: fieldOf(x?.commitment), nullifier: fieldOf(x?.nullifier) }));
   const listOk = pairs.every((x) => x.commitment !== null && x.commitment !== 0n && x.nullifier !== null && x.nullifier !== 0n);
   let fieldsMatch =
@@ -209,9 +235,9 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
     }
   }
   add(
-    "Total and people match the proof",
+    "Total and count match the proof",
     fieldsMatch ? "pass" : "fail",
-    fieldsMatch ? undefined : "The total, the number of people or the list of payments was changed after the proof was made."
+    fieldsMatch ? undefined : "The total, the number of payments or the list of payments was changed after the proof was made."
   );
 
   // 5) No payment counted twice, across parts too (each part only sees its own).
@@ -226,12 +252,13 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
       : "The same payment is listed more than once."
   );
 
-  if (!deps.vault || !listOk) {
+  // The chain is only read for a proof that holds so far.
+  if (!valid || !sealed || !deps.vault || !fieldsMatch || !distinct) {
     expiry();
     return finish();
   }
 
-  // 6) Every payment is a private payment the prover made, in that vault.
+  // 6) Every payment is a private payment out of a note the prover spent, in that vault.
   const looked = await inBatches(payments, LOOKUP_PARALLEL, (x) => deps.findPayment(x).catch(() => null));
   const offline = looked.some((r) => r === null);
   const bad = looked.find((r) => r && r.state !== "found" && r.state !== "not-found");
@@ -246,7 +273,9 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
           : "One of these came out of a private trade, not a payment."
         : bad.state === "change"
           ? "One of these is change that went back to the sender, not a payment."
-          : "A transaction named in the proof did not make that payment."
+          : bad.state === "no-tx"
+            ? "A transaction named in the proof is not on this network."
+            : "A transaction named in the proof did not make that payment."
     );
   } else if (offline || missing > 0) {
     add(
@@ -254,13 +283,13 @@ export async function checkPayrollProof(p: PayrollProof, deps: PayrollCheckDeps)
       "unknown",
       offline
         ? "Could not reach the network to find every payment. Try again."
-        : `${missing} of ${payments.length} could not be found on this network.`
+        : `Can't confirm ${missing} of ${payments.length} payments: they are older than the blocks this check reads, and the proof does not name their transactions.`
     );
   } else {
     add(
       "Each one is a private payment in the vault",
       "pass",
-      "Each was paid privately inside the vault, out of the prover's own balance."
+      "Each was paid privately inside the vault, from a note the prover spent."
     );
     // 7) When they landed.
     const times = (looked as { paidAt: number }[]).map((r) => r.paidAt);

@@ -1,16 +1,25 @@
 /**
- * Selective disclosure. Private by default, prove only what you choose.
+ * The older balance disclosure (gloamdisc1). Retired as a proof of holding.
  *
- * A disclosure lets the holder of a shielded note prove to a chosen party that
- * they own a note worth `amount` of `asset` in the Gloam pool, WITHOUT revealing
- * the note secret (so it stays unspendable) or any of their other notes. It
- * reuses the shield circuit, which proves commitment == Poseidon(secret, amount,
- * asset); the auditor separately confirms the commitment is a real leaf in the
- * pool (pool.commitmentSeen). Together that is verifiable proof of holdings.
+ * It reuses the shield circuit, which proves commitment == Poseidon(secret,
+ * amount, asset). That is exactly what every deposit proves to the vault, and
+ * every deposit publishes that proof in its calldata. So anyone can lift a
+ * deposit's proof off the chain, wrap it as gloamdisc1, and it checks out: it
+ * shows a deposit happened, not who holds the money (ZK review 2026-10-11,
+ * ZK-2). Checkers answer "can't confirm who holds this" for it, never
+ * "verified". New exact balance proofs are context-bound and never published.
+ *
+ * buildDisclosure stays only so old links still decode; the app no longer
+ * offers it.
  */
 import type { Hex } from "viem";
+import { CIRCUIT_ARTIFACTS, assertArtifactIntegrity } from "./circuitArtifacts";
 import { proveShieldInBrowser } from "./proveClient";
 import { demoVerifyProof, isDemoProof } from "./demo/proof";
+
+/** What every checker says about a gloamdisc1 proof, whatever its math. */
+export const LEGACY_DISCLOSURE =
+  "Older proof format. It can't show who holds this balance: anyone can copy one from a public deposit. Ask for a new proof.";
 
 export type Disclosure = {
   v: 1;
@@ -24,7 +33,6 @@ export type Disclosure = {
   proof: unknown;
 };
 
-const VKEY_PATH = "/circuits/shield_vkey.json";
 const PREFIX = "gloamdisc1:";
 
 /** Build a disclosure for a note the holder owns. Runs the shield prover. */
@@ -71,17 +79,19 @@ export function decodeDisclosure(s: string): Disclosure {
 }
 
 /**
- * Verify the proof: confirms the discloser knows a secret binding the commitment
- * to (amount, asset). Membership (commitment is a real note in the pool) is a
- * separate on-chain check done by the caller via pool.commitmentSeen.
+ * Whether the shield proof's math holds, with the hash-pinned checking key.
+ * A true here only means a deposit with these values was proven once; it says
+ * nothing about who holds the note (see the top of this file).
  */
 export async function verifyDisclosureProof(d: Disclosure): Promise<boolean> {
   // Recording demo: a proof from the pretend wallet checks out (only in a demo tab).
   if (isDemoProof(d.proof)) return demoVerifyProof();
   const snarkjs = await import("snarkjs");
-  const res = await fetch(VKEY_PATH, { cache: "force-cache" });
+  const { path, sha256 } = CIRCUIT_ARTIFACTS.shieldVkey;
+  await assertArtifactIntegrity(path, sha256);
+  const res = await fetch(path, { cache: "force-cache" });
   if (!res.ok) throw new Error("Could not load the disclosure verification key.");
   const vkey = await res.json();
-  const publicSignals = [d.commitment, d.amount, d.asset];
+  const publicSignals = [d.commitment, d.amount, d.asset].map(String);
   return snarkjs.groth16.verify(vkey, publicSignals, d.proof);
 }

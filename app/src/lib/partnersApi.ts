@@ -83,9 +83,26 @@ export function apiFail(e: unknown, extra: Extra): NextResponse {
   );
 }
 
-/** Request body as an object, or a 400. */
-export async function jsonBody(req: Request): Promise<Record<string, unknown>> {
-  const body = (await req.json().catch(() => null)) as unknown;
+/**
+ * Request body as an object, or a 400. With `maxBytes`, a larger body is a 413
+ * before it is parsed (by its Content-Length, and by its length once read).
+ */
+export async function jsonBody(req: Request, maxBytes?: number): Promise<Record<string, unknown>> {
+  let body: unknown = null;
+  if (maxBytes != null) {
+    const tooLarge = () => new ApiError(413, "too_large", "The request body is too large.");
+    const declared = Number(req.headers.get("content-length") ?? "");
+    if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge();
+    const text = await req.text().catch(() => "");
+    if (text.length > maxBytes) throw tooLarge();
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+  } else {
+    body = (await req.json().catch(() => null)) as unknown;
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new ApiError(400, "invalid_json", "The request body must be a JSON object.");
   }

@@ -6,21 +6,35 @@ import type { LocalNote } from "@/lib/shield";
  *
  * - "funds": I hold at least `threshold` of `asset` across up to four of my
  *   unspent notes. The balance itself stays hidden.
- * - "payment": I received a payment of `asset` (the amount shown, or only that
- *   it was at least `minAmount`), in a real Gloam transaction.
- * - "payroll": a payroll run I sent paid exactly `total` of `asset` in `count`
- *   private payments. No single payment's amount is shown.
+ * - "payment": a private payment of `asset` (the amount shown, or only that it
+ *   was at least `minAmount`) was made through the vault, into a note whose key
+ *   I hold. The payer picks that key, so the payer can make the same proof, and
+ *   a payment to yourself looks the same: it does not show who paid whom.
+ * - "payroll": a run of `count` private payments adding up to exactly `total`
+ *   of `asset`, each funded from a note I spent. No single payment's amount is
+ *   shown, nor who received them (payments, not people).
+ * - "balance": one private balance (note) of exactly `amount` of `asset` is in
+ *   the vault, and I hold its key. Same receipt circuit as "payment" with the
+ *   amount shown, sealed for a different kind. It does not show the note is
+ *   still unspent (a proof of funds does). Replaces the older gloamdisc1
+ *   disclosure, which anyone could copy from a public deposit.
  *
  * Every proof is made for one named verifier: the label is bound into the proof,
  * so forwarding it to someone else shows who it was really for.
  */
-export type ProofKind = "funds" | "payment" | "payroll";
+export type ProofKind = "funds" | "payment" | "payroll" | "balance";
 
 /** Up to four notes can back one proof of funds (the circuit's fixed width). */
 export const FUNDS_MAX_NOTES = 4;
 
 /** Payments per payroll proof part (the payroll_total circuit's fixed width). */
 export const PAYROLL_MAX_PAYMENTS = 32;
+
+/** A payroll proof carries every payment; past this it stops being a thing to paste. */
+export const PAYROLL_MAX_PAYMENTS_TOTAL = 256;
+
+/** Parts of a payroll proof at most: 256 payments in parts of up to 32. */
+export const PAYROLL_MAX_PARTS = PAYROLL_MAX_PAYMENTS_TOTAL / PAYROLL_MAX_PAYMENTS;
 
 type ProofBase = {
   v: 1;
@@ -59,6 +73,15 @@ export type PaymentProof = ProofBase & {
   txHash: Hex | null;
 };
 
+export type BalanceProof = ProofBase & {
+  kind: "balance";
+  asset: Address;
+  /** The note's commitment, its anchor in the vault. */
+  commitment: Hex;
+  /** The exact amount (smallest unit). */
+  amount: string;
+};
+
 /** One payroll payment as the verifier sees it. Its amount never leaves the prover. */
 export type PayrollPayment = {
   /** The payee's note, created by the payment (Transferred newCommitments[0]). */
@@ -89,7 +112,7 @@ export type PayrollProof = Omit<ProofBase, "proof" | "publicSignals"> & {
   parts: PayrollProofPart[];
 };
 
-export type AnyProof = FundsProof | PaymentProof | PayrollProof;
+export type AnyProof = FundsProof | PaymentProof | PayrollProof | BalanceProof;
 
 export type ProveFundsArgs = {
   chainId: number;
@@ -111,6 +134,15 @@ export type ProvePaymentArgs = {
   reveal: boolean;
   /** Used when reveal is false; defaults to the note's amount. */
   minAmount?: bigint;
+  verifier: string;
+  expiresAt?: number;
+};
+
+export type ProveBalanceArgs = {
+  chainId: number;
+  pool: Address;
+  /** The balance to show, secret known, circuit-compatible. */
+  note: LocalNote;
   verifier: string;
   expiresAt?: number;
 };

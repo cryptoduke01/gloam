@@ -1,5 +1,6 @@
 /**
- * Browser provers for proof of funds, proof of payment and the payroll total.
+ * Browser provers for proof of funds, proof of payment, exact balance and the
+ * payroll total.
  * Witnesses come from @gloamtrade/sdk (buildFundsWitness / buildReceiptWitness
  * with Merkle paths from the synced vault tree; buildPayrollWitness from the
  * run's own records, no tree needed); snarkjs proves against the hash-checked
@@ -27,27 +28,31 @@ import { getActiveNetwork } from "@/lib/networks";
 import type { LocalNote } from "@/lib/shield";
 import type { SyncedTree } from "@/lib/treeSync";
 import { provingArtifacts, type ProofCircuit } from "./artifacts";
-import { isSpent, networkForChain } from "./chain";
+import { findNoteTx, isSpent, networkForChain } from "./chain";
+import { MAX_LABEL, plainLabel } from "./label";
 import {
   FUNDS_MAX_NOTES,
+  PAYROLL_MAX_PAYMENTS_TOTAL,
+  type BalanceProof,
   type FundsProof,
   type PaymentProof,
   type PayrollProof,
+  type ProveBalanceArgs,
   type ProveFundsArgs,
   type ProvePaymentArgs,
   type ProvePayrollArgs,
 } from "./types";
 
 const DEFAULT_TTL_S = 7 * 24 * 3600;
-const MAX_LABEL = 80;
-/** A payroll proof carries every payment; past this it stops being a thing to paste. */
-const PAYROLL_MAX_PAYMENTS_TOTAL = 256;
 
-/** The label exactly as it is sealed into the proof: trimmed, single spaced. */
+/**
+ * The label exactly as it is sealed into the proof: hidden and direction
+ * control characters removed, trimmed, single spaced (./label).
+ */
 export function cleanVerifierLabel(label: string): string {
-  const v = label.trim().replace(/\s+/g, " ");
+  const v = plainLabel(label);
   if (!v) throw new Error("Say who this proof is for.");
-  if (v.length > MAX_LABEL) throw new Error(`Keep the name under ${MAX_LABEL} characters.`);
+  if (Array.from(v).length > MAX_LABEL) throw new Error(`Keep the name under ${MAX_LABEL} characters.`);
   return v;
 }
 
@@ -192,8 +197,18 @@ export async function provePayment(args: ProvePaymentArgs): Promise<PaymentProof
     return { ...base, commitment: fieldToHex(commitment), txHash: note.txHash ?? null, proof, publicSignals };
   }
 
-  const { tree } = await vaultTree(chainId, pool);
+  const { client, tree } = await vaultTree(chainId, pool);
   const { index, path } = await leafOf(tree, note);
+  // The tree knows which transaction inserted each leaf; fall back to the note's own record.
+  const leaf = tree.leaves[index];
+  const txHash = (leaf?.leafIndex === index ? leaf.txHash : undefined) ?? note.txHash ?? null;
+  // The verifier accepts only the payment output of a private send. Say so now
+  // instead of making a proof that will not check out.
+  const net = networkForChain(chainId);
+  if (txHash && net) {
+    const tx = await findNoteTx(client, net, pool, note.commitment, txHash).catch(() => null);
+    if (tx?.state === "found" && tx.origin !== "payment") throw new Error(NOT_A_PAYMENT[tx.origin]);
+  }
   const w = await buildReceiptWitness({
     secretHex: note.secret,
     amount,
@@ -205,10 +220,53 @@ export async function provePayment(args: ProvePaymentArgs): Promise<PaymentProof
   });
   if (w.blocker) throw new Error(w.blocker);
   const { proof, publicSignals } = await prove("receipt", w.circomInput, w.publicSignals);
-  // The tree knows which transaction inserted each leaf; fall back to the note's own record.
-  const leaf = tree.leaves[index];
-  const txHash = (leaf?.leafIndex === index ? leaf.txHash : undefined) ?? note.txHash ?? null;
   return { ...base, commitment: fieldToHex(w.publicInputs.commitment), txHash, proof, publicSignals };
+}
+
+const NOT_A_PAYMENT: Record<"change" | "deposit" | "trade", string> = {
+  change: "This balance is change from one of your own sends, not a payment, so a proof of payment would not check out.",
+  deposit: "This balance came from a deposit, not a payment, so a proof of payment would not check out.",
+  trade: "This balance came from a private trade, not a payment, so a proof of payment would not check out.",
+};
+
+/**
+ * Exact balance: one note, its exact amount shown, sealed for one verifier and
+ * an expiry. The receipt circuit with the amount revealed, under the "balance"
+ * kind, made on this device and never put on chain (the older gloamdisc1 reused
+ * the deposit statement, which every deposit publishes). It shows the note is
+ * in the vault and the prover holds its key, not that it is still unspent.
+ */
+export async function proveBalance(args: ProveBalanceArgs): Promise<BalanceProof> {
+  const verifier = cleanVerifierLabel(args.verifier);
+  const expiresAt = expiryOf(args.expiresAt);
+  const { chainId, pool, note } = args;
+  assertUsable(note, chainId, pool);
+  const amount = BigInt(note.amountWei);
+  if (amount <= 0n) throw new Error("This balance is empty.");
+  const context = proofContext({ kind: "balance", chainId, pool, verifier, expiresAt });
+  const base = { v: 1 as const, kind: "balance" as const, chainId, pool, verifier, expiresAt, asset: note.asset, amount: amount.toString() };
+
+  if (readDemo()) {
+    const commitment = hexToField(note.commitment);
+    const signals = [hexToField(demoRoot()), commitment, BigInt(note.asset), amount, 1n, amount, context].map(String);
+    const { proof, publicSignals } = await demoHolderProof(signals);
+    return { ...base, commitment: fieldToHex(commitment), proof, publicSignals };
+  }
+
+  const { tree } = await vaultTree(chainId, pool);
+  const { path } = await leafOf(tree, note);
+  const w = await buildReceiptWitness({
+    secretHex: note.secret,
+    amount,
+    asset: note.asset,
+    path,
+    reveal: true,
+    minAmount: amount,
+    context,
+  });
+  if (w.blocker) throw new Error(w.blocker);
+  const { proof, publicSignals } = await prove("receipt", w.circomInput, w.publicSignals);
+  return { ...base, commitment: fieldToHex(w.publicInputs.commitment), proof, publicSignals };
 }
 
 /**

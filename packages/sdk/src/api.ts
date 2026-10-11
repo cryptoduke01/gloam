@@ -85,7 +85,8 @@ export interface ApiProofCheck {
 }
 
 export interface ApiProofReport {
-  format: "gloamfunds1" | "gloampay1" | "gloamroll1" | "gloamdisc1";
+  /** gloamdisc1 (the older balance disclosure) is never ok: anyone can copy one from a public deposit. */
+  format: "gloamfunds1" | "gloampay1" | "gloamroll1" | "gloambal1" | "gloamdisc1";
   kind: "funds" | "payment" | "payroll" | "balance";
   ok: boolean;
   expired: boolean;
@@ -236,7 +237,7 @@ export class GloamApiClient {
     );
   }
 
-  /** Check a gloamfunds1 / gloampay1 / gloamroll1 / gloamdisc1 proof on the server. */
+  /** Check a gloamfunds1 / gloampay1 / gloamroll1 / gloambal1 / gloamdisc1 proof on the server. */
   verifyProof(proof: string): Promise<ApiProofReport> {
     return this.request<ApiProofReport>("POST", "/proofs/verify", { proof });
   }

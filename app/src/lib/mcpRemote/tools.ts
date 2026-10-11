@@ -20,7 +20,8 @@ import {
   REQUEST_NAME_MAX,
   REQUEST_NOTE_MAX,
 } from "@/lib/paymentRequest";
-import { ProofInputError, verifyProofText, type ApiVerifyResult } from "@/lib/proofsServer";
+import { LEGACY_DISCLOSURE } from "@/lib/disclosure";
+import { MAX_PROOF_TEXT, ProofInputError, verifyProofText, type ApiVerifyResult } from "@/lib/proofsServer";
 import { hitRateLimit } from "./rateLimit";
 import { findSecret, secretWarning } from "./safety";
 
@@ -161,10 +162,10 @@ export const TOOLS: Tool[] = [
     name: "gloam_verify_proof",
     title: "Verify a Gloam proof",
     description:
-      "Check a Gloam proof someone shared with you: proof of funds (gloamfunds1:), proof of payment (gloampay1:), payroll total (gloamroll1:) or balance disclosure (gloamdisc1:). Runs the same checks as gloam.trade/verify on the server: the zero-knowledge proof, that it was made on Gloam's vault, who it is for, expiry, and the live vault state. Proofs are meant to be shared; they hold no secrets.",
+      "Check a Gloam proof someone shared with you: proof of funds (gloamfunds1:), proof of payment (gloampay1:), payroll total (gloamroll1:) or exact balance (gloambal1:). Runs the same checks as gloam.trade/verify on the server: the zero-knowledge proof, that it was made on Gloam's vault, who it is for, expiry, and the live vault state. A proof of payment shows a private payment was made, not who paid whom; a payroll total shows a run of payments the prover funded, not who was paid. The older gloamdisc1 balance disclosure is never verified: anyone can copy one from a public deposit. Proofs are meant to be shared; they hold no secrets.",
     inputSchema: {
       type: "object",
-      properties: { proof: { type: "string", description: "The full proof text, starting gloamfunds1:, gloampay1:, gloamroll1: or gloamdisc1:." } },
+      properties: { proof: { type: "string", description: "The full proof text, starting gloamfunds1:, gloampay1:, gloamroll1:, gloambal1: or gloamdisc1:." } },
       required: ["proof"],
     },
     annotations: { title: "Verify a Gloam proof", ...READ, openWorldHint: true },
@@ -243,7 +244,7 @@ function info(ctx: ToolContext) {
       "gloam_networks: networks, vault addresses, assets, explorers and faucets",
       "gloam_vault_stats: public vault totals (holdings, deposits, private transfers, cash outs)",
       "gloam_create_payment_request: a link that asks someone to pay your Gloam address privately",
-      "gloam_verify_proof: check a proof of funds, proof of payment, payroll total or balance disclosure",
+      "gloam_verify_proof: check a proof of funds, proof of payment, payroll total or exact balance",
       "gloam_plan_deposit: steps and app link for a private deposit",
       "gloam_mpp_how_to: pay or charge privately over MPP (HTTP 402), with code",
       "gloam_connect_full_agent: install the local server that can sign and pay, with spending limits",
@@ -383,25 +384,26 @@ function paymentRequest(args: Args, ctx: ToolContext): CallToolResult {
 }
 
 function verdict(r: ApiVerifyResult): string {
+  if (r.format === "gloamdisc1") return `Not verified. ${LEGACY_DISCLOSURE}`;
   if (r.ok) return "Valid. Every check passed.";
   if (r.expired) return "Expired. The proof may have been valid, but its holder set an expiry that has passed. Ask for a new one.";
   const failed = r.checks.filter((c) => c.state === "fail").map((c) => c.label);
   if (failed.length) return `Not valid. Failed: ${failed.join("; ")}.`;
   const unknown = r.checks.filter((c) => c.state === "unknown").map((c) => c.label);
-  if (unknown.length) return `Not confirmed. Could not finish: ${unknown.join("; ")}. Try again shortly.`;
+  if (unknown.length) return `Not confirmed. Could not confirm: ${unknown.join("; ")}.`;
   return "Not valid.";
 }
 
 async function verifyProof(args: Args, ctx: ToolContext): Promise<CallToolResult> {
-  const proof = optString(args, "proof", 400_000)?.trim();
-  if (!proof) return fail("Paste the full proof text, starting gloamfunds1:, gloampay1:, gloamroll1: or gloamdisc1:.");
+  const proof = optString(args, "proof", MAX_PROOF_TEXT)?.trim();
+  if (!proof) return fail("Paste the full proof text, starting gloamfunds1:, gloampay1:, gloamroll1: or gloambal1:.");
   const rl = await hitRateLimit(ctx.ip, "verify", VERIFY_PER_MINUTE);
   if (!rl.allowed) return fail(`Too many proofs checked from here in the last minute. Try again in ${rl.retryAfterSec} seconds.`);
   let r: ApiVerifyResult;
   try {
     r = await verifyProofText(proof);
   } catch (e) {
-    if (e instanceof ProofInputError) return fail(`${e.message} Proofs start gloamfunds1:, gloampay1:, gloamroll1: or gloamdisc1:.`);
+    if (e instanceof ProofInputError) return fail(`${e.message} Proofs start gloamfunds1:, gloampay1:, gloamroll1: or gloambal1:.`);
     return fail(`Could not check this proof right now. Try again, or check it in the browser at ${ctx.origin}/verify.`);
   }
   return ok({

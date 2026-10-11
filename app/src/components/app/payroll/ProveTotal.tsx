@@ -18,9 +18,11 @@ import { ScheduleIcon } from "./scheduleUi";
 
 /**
  * "Prove the total" for a finished payroll run: the employer shows someone
- * (their accountant, a tax office) that the run paid exactly this much to this
- * many people, without showing any one person's pay. Made on this device from
- * the run's own records (lib/payroll payrollProofNotes), checked at /verify.
+ * (their accountant, a tax office) a run of this many payments adding up to
+ * exactly this much, paid out of their own balance, without showing any one
+ * payment. It does not show who was paid (payments, not people). Made on this
+ * device from the run's own records (lib/payroll payrollProofNotes), checked at
+ * /verify.
  */
 
 type Records = { kind: "loading" } | { kind: "ready"; notes: PayrollNote[]; failed: number } | { kind: "blocked"; why: string };
@@ -31,8 +33,8 @@ const FOR_EXAMPLES = ["My accountant", "Tax office", "Auditor"];
 
 const noopSubscribe = () => () => {};
 
-function people(n: number) {
-  return `${n.toLocaleString("en-US")} ${n === 1 ? "person" : "people"}`;
+function payments(n: number) {
+  return `${n.toLocaleString("en-US")} ${n === 1 ? "payment" : "payments"}`;
 }
 
 /** "24, 23 and 23" */
@@ -201,7 +203,7 @@ export function ProveTotal({
                     <span className="text-mute">{symbol}</span>
                   </p>
                   <p className="mt-1 text-[15px] text-soft">
-                    to {people(count)}, in a run on {paidOn}
+                    in {payments(count)} from your balance, in a run on {paidOn}
                   </p>
                 </div>
               </section>
@@ -211,7 +213,7 @@ export function ProveTotal({
                 <dl className="divide-y divide-line border-y border-line text-[14px]">
                   {[
                     ["The total and the asset", "Shown"],
-                    ["How many people", "Shown"],
+                    ["How many payments", "Shown"],
                     ["When the payments landed", "Shown"],
                     ["Who it is for", forLabel ?? "Not set yet"],
                   ].map(([k, v]) => (
@@ -222,7 +224,7 @@ export function ProveTotal({
                   ))}
                 </dl>
                 <ul className="mt-3 divide-y divide-line rounded-[14px] bg-surface px-4 text-[13.5px]">
-                  {["What each person got", "Their names and Gloam addresses", "Your wallet and your balance"].map((n) => (
+                  {["Each payment's amount", "Who was paid", "Your wallet and your balance"].map((n) => (
                     <li key={n} className="flex min-h-11 items-center justify-between gap-3 py-2">
                       <span className="text-soft">{n}</span>
                       <SealDots n={5} className="shrink-0 text-foreground/45" label="Hidden" />
@@ -236,12 +238,12 @@ export function ProveTotal({
               ) : (
                 <>
                   {count === 1 && (
-                    <Notice tone="warn">With one person, the total is their pay. Whoever you show it to will see it.</Notice>
+                    <Notice tone="warn">With one payment, the total is that payment. Whoever you show it to will see it.</Notice>
                   )}
                   {sizes.length > 1 && (
                     <p className="text-[13px] leading-relaxed text-mute">
-                      One proof holds up to 32 people, so this one is made in {sizes.length} parts of{" "}
-                      {listParts(sizes)} people, sealed together. Each part also shows its own subtotal.
+                      One proof holds up to 32 payments, so this one is made in {sizes.length} parts of{" "}
+                      {listParts(sizes)} payments, sealed together. Each part also shows its own subtotal.
                     </p>
                   )}
                   {records.kind === "ready" && records.failed > 0 && (
@@ -408,7 +410,7 @@ function ShareCard({
     { label: "For", value: verifier },
     { label: "Good until", value: longDate(expiresAt * 1000) },
     { label: "Network", value: networkLabel },
-    { label: "Each person's pay", value: "Hidden" },
+    { label: "Each payment", value: "Hidden" },
   ];
 
   return (
@@ -424,7 +426,7 @@ function ShareCard({
             id={`${ids}-title`}
             className="tnum mt-4 text-[26px] font-light leading-tight tracking-[-0.018em] text-foreground sm:text-[30px]"
           >
-            Paid {formatAssetAmount(total, asset, 2)} <span className="text-mute">{symbol}</span> to {people(count)}
+            {payments(count)} adding up to {formatAssetAmount(total, asset, 2)} <span className="text-mute">{symbol}</span>
           </p>
           <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 text-[13.5px] sm:grid-cols-2">
             {rows.map((r) => (
@@ -471,7 +473,7 @@ function ShareCard({
           {shareable
             ? "The link opens the verifier with this proof filled in. It stays in the link, nothing is sent to Gloam."
             : "This proof is too long for a link. Copy it, and they can paste it at gloam.trade/verify."}{" "}
-          It proves the total, not who the people are or that they work for you.
+          It proves the total you paid out, not who was paid or that they work for you.
         </p>
       </div>
     </section>

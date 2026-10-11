@@ -6,14 +6,15 @@ import { allNetworks } from "@/lib/networks";
 import { assetDecimals, isNativeAsset } from "@/lib/shield";
 import { RH_STABLE_TOKENS, TEMPO_STABLE_TOKENS, TESTNET_STOCK_TOKENS } from "@/lib/tokens";
 import { SealedField } from "@/components/ui/SealedField";
+import { displayLabel } from "@/lib/proofs/label";
 import { formatUnits } from "viem";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 /**
- * The result of checking a proof of funds, a proof of payment or a payroll
- * total: one verdict line in plain words, who it was made for and until when,
- * then every check the verifier ran. A payroll total also says what it does not
- * prove.
+ * The result of checking a proof of funds, a proof of payment, an exact
+ * balance or a payroll total: one verdict line in plain words, who it was made for and until when,
+ * then every check the verifier ran. A proof of payment and a payroll total
+ * also say what they do not prove: neither shows who was paid.
  */
 
 const TOKENS = [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS, ...TEMPO_STABLE_TOKENS];
@@ -119,21 +120,38 @@ function verdictOf(r: VerifyResult): Verdict {
   return "incomplete";
 }
 
-function people(n: number): string {
-  return `${n.toLocaleString("en-US")} ${n === 1 ? "person" : "people"}`;
-}
-
 /**
- * "Holds at least 10,000 USDG" / "Paid 1,250 USDG on Oct 3" / "Paid at least
- * 1,000 USDG" / "Paid 21,500 USDG to 5 people".
+ * "Holds at least 10,000 USDG" / "A private payment of 1,250 USDG on Oct 3" /
+ * "A private payment of at least 1,000 USDG" / "5 payments adding up to
+ * 21,500 USDG". Payments, never people: nothing in a proof shows who was paid.
  */
 function claimOf(p: AnyProof, r: VerifyResult): { lead: string; amount: string; sym: string; tail?: string } {
   const sym = symbolOf(p.asset, p.chainId);
   if (p.kind === "funds") return { lead: "Holds at least", amount: amountOf(p.threshold, p.asset), sym };
-  if (p.kind === "payroll") return { lead: "Paid", amount: amountOf(p.total, p.asset), sym, tail: `to ${people(p.count)}` };
+  if (p.kind === "balance") return { lead: "A private balance of exactly", amount: amountOf(p.amount, p.asset), sym };
+  if (p.kind === "payroll") {
+    const lead = p.count === 1 ? "One payment of" : `${p.count.toLocaleString("en-US")} payments adding up to`;
+    return { lead, amount: amountOf(p.total, p.asset), sym };
+  }
   const tail = r.paidAt ? `on ${day(r.paidAt)}` : undefined;
-  if (p.amount != null) return { lead: "Paid", amount: amountOf(p.amount, p.asset), sym, tail };
-  return { lead: "Paid at least", amount: amountOf(p.minAmount, p.asset), sym, tail };
+  if (p.amount != null) return { lead: "A private payment of", amount: amountOf(p.amount, p.asset), sym, tail };
+  return { lead: "A private payment of at least", amount: amountOf(p.minAmount, p.asset), sym, tail };
+}
+
+/** What a verified proof means, in one or two plain sentences under the claim. */
+function verifiedLine(p: AnyProof, where: string): string {
+  switch (p.kind) {
+    case "funds":
+      return `in Gloam's vault on ${where}. Their balance, wallet and history stay hidden.`;
+    case "balance":
+      return `In Gloam's vault on ${where}, held by whoever made this proof. Their wallet, other balances and history stay hidden.`;
+    case "payroll":
+      return `Funded by whoever made this proof, paid privately through Gloam's vault on ${where}. Each amount stays hidden, and so does who was paid.`;
+    case "payment":
+      return `Made through Gloam's vault on ${where}. Whoever made this proof holds the key to the note it paid into, and so does the payer.${
+        p.amount == null ? " The exact amount stays hidden." : ""
+      }`;
+  }
 }
 
 export function ProofVerdict({
@@ -158,20 +176,12 @@ export function ProofVerdict({
       : verdict === "expired"
         ? { cls: "bg-warn-soft text-warn", icon: <QuestionMark size={12} />, text: "Expired" }
         : verdict === "incomplete"
-          ? { cls: "bg-warn-soft text-warn", icon: <QuestionMark size={12} />, text: "Not fully checked" }
+          ? { cls: "bg-warn-soft text-warn", icon: <QuestionMark size={12} />, text: "Can't confirm" }
           : { cls: "bg-danger-soft text-danger", icon: <CrossMark size={12} />, text: "Not verified" };
 
   const explain =
     verdict === "verified"
-      ? p.kind === "funds"
-        ? `in Gloam's vault on ${net?.label ?? "this network"}. Their balance, wallet and history stay hidden.`
-        : p.kind === "payroll"
-          ? `in ${p.count === 1 ? "one private payment" : `${p.count} private payments`} through Gloam's vault on ${
-              net?.label ?? "this network"
-            }, all sent by whoever made this proof. What each person got stays hidden.`
-          : `received in a private payment through Gloam's vault on ${net?.label ?? "this network"}.${
-              p.amount == null ? " The exact amount stays hidden." : ""
-            } The proof does not show who sent it.`
+      ? verifiedLine(p, net?.label ?? "this network")
       : verdict === "expired"
         ? `This proof checked out, but it expired on ${day(p.expiresAt)}. Ask them for a fresh one.`
         : verdict === "incomplete"
@@ -186,18 +196,19 @@ export function ProofVerdict({
           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium ${badge.cls}`}>
             {badge.icon} {badge.text}
           </span>
-          {verdict === "failed" ? (
+          {verdict === "failed" || verdict === "incomplete" ? (
             <>
-              <p className="t-display-m mt-4">This proof did not check out</p>
+              <p className="t-display-m mt-4">
+                {verdict === "failed" ? "This proof did not check out" : "This proof can't be confirmed"}
+              </p>
               <p className="tnum mt-2 text-[14px] text-mute">
                 It claims: {claim.lead.toLowerCase()} {claim.amount} {claim.sym}
-                {p.kind === "payroll" && claim.tail ? ` ${claim.tail}` : ""}
               </p>
             </>
           ) : (
             <p className="t-display-m tnum mt-4">
               {claim.lead} {claim.amount} <span className="text-mute">{claim.sym}</span>
-              {claim.tail ? <span className={p.kind === "payroll" ? undefined : "text-mute"}> {claim.tail}</span> : null}
+              {claim.tail ? <span className="text-mute"> {claim.tail}</span> : null}
             </p>
           )}
           <p
@@ -213,7 +224,7 @@ export function ProofVerdict({
       <dl className="divide-y divide-line text-[14px]">
         <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
           <dt className="shrink-0 text-mute">For</dt>
-          <dd className="min-w-0 break-words text-foreground sm:text-right">{p.verifier}</dd>
+          <dd className="min-w-0 break-words text-foreground sm:text-right">{displayLabel(p.verifier)}</dd>
         </div>
         <div className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-7">
           <dt className="shrink-0 text-mute">{r.expired ? "Expired" : "Expires"}</dt>
@@ -266,6 +277,10 @@ export function ProofVerdict({
       </dl>
 
       {p.kind === "payroll" && verdict !== "failed" && <PayrollLimits count={p.count} />}
+      {p.kind === "payment" && verdict !== "failed" && <PaymentLimits />}
+      {p.kind === "balance" && verdict !== "failed" && (
+        <Limits lines={["That it is still there. It may have moved since; a proof of funds shows that.", "Where the money came from."]} />
+      )}
 
       <div className="border-t border-line bg-surface/50 px-5 py-5 sm:px-7">
         <p className="text-[13px] text-mute">What was checked, in your browser</p>
@@ -293,16 +308,8 @@ export function ProofVerdict({
   );
 }
 
-/** A payroll total proves a sum, not a staff list. Said plainly, every time. */
-function PayrollLimits({ count }: { count: number }) {
-  const who = count === 1 ? "the person" : `the ${count.toLocaleString("en-US")} people`;
-  const lines = [
-    `Who ${who} ${count === 1 ? "is" : "are"}, or that they work for the sender.`,
-    count === 1
-      ? "That the sender did not pay themselves."
-      : `That these are ${count.toLocaleString("en-US")} different people, or that none of them is the sender.`,
-    "Anything about other runs, or the sender's balance.",
-  ];
+/** What a proof does not show, said plainly every time. */
+function Limits({ lines }: { lines: string[] }) {
   return (
     <div className="border-t border-line px-5 py-5 sm:px-7">
       <p className="text-[13px] text-mute">What this does not prove</p>
@@ -315,5 +322,33 @@ function PayrollLimits({ count }: { count: number }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A payroll total proves a sum of payments, not a staff list. */
+function PayrollLimits({ count }: { count: number }) {
+  return (
+    <Limits
+      lines={[
+        "Who was paid, or that they work for the sender.",
+        count === 1
+          ? "That the payment did not go back to the sender."
+          : `That these went to ${count.toLocaleString("en-US")} different people, or that none went back to the sender.`,
+        "Anything about other runs, or the sender's balance.",
+      ]}
+    />
+  );
+}
+
+/** A proof of payment shows a payment was made, not who made it or got it. */
+function PaymentLimits() {
+  return (
+    <Limits
+      lines={[
+        "Who paid, or who was paid. The payer can make this same proof.",
+        "That it was not a payment to themselves.",
+        "That the money is still there. Ask for a proof of funds for that.",
+      ]}
+    />
   );
 }

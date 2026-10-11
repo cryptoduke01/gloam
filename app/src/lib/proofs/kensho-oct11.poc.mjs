@@ -11,12 +11,21 @@
  *   pnpm --filter @gloamtrade/sdk build
  *   cd app && node src/lib/proofs/kensho-oct11.poc.mjs
  *
- * Scenarios (all expected to come back ok=true, which is the finding):
- *   A. Receipt for the prover's OWN change note (Transferred newCommitments[1]).
+ * Scenarios. Before the fix all four came back ok=true, which was the finding.
+ * After the fix (branch proofix) the script asserts:
+ *   A. Receipt for the prover's OWN change note (Transferred newCommitments[1]):
+ *      REJECTED.
  *   B. Receipt for the prover's OWN deposit, older than the bounded log scan,
- *      with no tx hash in the proof.
- *   C. Receipt for a note the prover sent to themselves (self-transfer, slot 0).
- *   D. Payroll total that counts a self-payment as one of the "people" paid.
+ *      with no tx hash in the proof: NOT VERIFIED ("can't confirm this payment").
+ *   C. Receipt for a note the prover sent to themselves (self-transfer, slot 0):
+ *      still verifies. Nothing on chain tells a self-send apart without a payee
+ *      key in the note, so the claim now reads "a private payment was made",
+ *      never "someone paid you".
+ *   D. Payroll total that counts a self-payment as one of the payments: still
+ *      verifies, now worded as "a run of N payments funded by the prover", not
+ *      "N people". (Change counted as a payroll payment is rejected, see
+ *      verify.selftest.mjs.)
+ * The full regression set is verify.selftest.mjs next to this file.
  */
 import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -121,6 +130,8 @@ function load(file, rewrites) {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   for (const [from, to] of rewrites) js = js.split(`from "${from}"`).join(`from ${JSON.stringify(to)}`);
+  // sibling modules (./label, ./types, ...) load from the temp dir
+  js = js.replace(/from "\.\/([^"]+)"/g, (_, name) => `from ${JSON.stringify(url(name + ".mjs"))}`);
   // verify.ts loads snarkjs lazily; resolve it from the app, not the temp dir
   js = js.split(`import("snarkjs")`).join(`import(${JSON.stringify(snarkjsUrl)})`);
   writeFileSync(join(tmp, file.replace(/\.ts$/, ".mjs")), js);
@@ -136,6 +147,8 @@ writeFileSync(join(tmp, "artifacts-stub.mjs"),
   `import { readFileSync } from "fs";\nexport async function verificationKey(kind) {\n` +
   `  const f = { funds: "funds", receipt: "receipt", payroll: "payroll_total" }[kind];\n` +
   `  return JSON.parse(readFileSync(${JSON.stringify(circuits)} + "/" + f + "_vkey.json", "utf8"));\n}\n`);
+load("label.ts", []);
+load("types.ts", []);
 load("payrollCheck.ts", [["@gloamtrade/sdk", sdkDist]]);
 load("chain.ts", [["viem", url("viem-shim.mjs")], ["@/lib/networks", url("networks-stub.mjs")], ["./payrollCheck", url("payrollCheck.mjs")]]);
 load("verify.ts", [["@gloamtrade/sdk", sdkDist], ["@/lib/demo/proof", url("demo-stub.mjs")], ["./artifacts", url("artifacts-stub.mjs")], ["./chain", url("chain.mjs")], ["./payrollCheck", url("payrollCheck.mjs")]]);
@@ -192,14 +205,14 @@ const show = (tag, r) => {
   const p = await receiptProof({ secret: S(4), amount: changeAmt, leafIndex: send.i1, txHash: send.hash, verifier: "Acme Bank (income check)" });
   const r = await verifyProof(p);
   show("A. receipt for the prover's own CHANGE (Transferred slot 1)", r);
-  assert(r.ok === true, "A: own change verifies as a payment received");
+  assert(r.ok === false, "A: own change is rejected");
 }
 // B. own old deposit, no tx hash
 {
   const p = await receiptProof({ secret: dSecret, amount: D_AMT, leafIndex: dep.idx, txHash: null, verifier: "Acme Bank (income check)" });
   const r = await verifyProof(p);
   show("B. receipt for the prover's own DEPOSIT older than the scan, no tx hash", r);
-  assert(r.ok === true, "B: old self-deposit verifies as a payment received");
+  assert(r.ok === false, "B: old self-deposit with no tx hash is not verified");
   // control: the same proof WITH the tx hash is caught as a deposit
   const r2 = await verifyProof({ ...p, txHash: dep.hash });
   assert(r2.ok === false, "B control: naming the deposit tx is rejected");
@@ -209,7 +222,7 @@ const show = (tag, r) => {
   const p = await receiptProof({ secret: S(6), amount: F_AMT - 1n, leafIndex: self.i0, txHash: self.hash, verifier: "Acme Bank (income check)" });
   const r = await verifyProof(p);
   show("C. receipt for a note the prover sent to THEMSELVES (slot 0)", r);
-  assert(r.ok === true, "C: self-payment verifies as a payment received");
+  assert(r.ok === true, "C: documented, a self-send still verifies; the claim no longer says who paid");
 }
 
 // D. payroll total padded with a self-payment
@@ -249,9 +262,10 @@ const show = (tag, r) => {
     now: NOW,
     when: (u) => new Date(u * 1000).toISOString(),
   });
-  show("D. payroll total, 43,000 USDG to \"2 people\", one of them the employer", r);
-  assert(r.ok === true, "D: self-payment counts toward the payroll total");
+  show("D. payroll total, 43,000 USDG in 2 payments, one of them back to the employer", r);
+  assert(r.ok === true, "D: documented, a self-payment counts as a payment (payments, not people)");
+  assert(r.checks.some((c) => c.label === "Total and count match the proof"), "D: the check says count, not people");
 }
 
-console.log(`\nkensho-oct11 PoC: ${checks} assertions, all scenarios accepted by the current checkers`);
+console.log(`\nkensho-oct11 PoC: ${checks} assertions. A and B rejected; C and D verify as documented limits`);
 process.exit(0);

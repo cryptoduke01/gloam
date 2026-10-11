@@ -11,8 +11,9 @@
  *  - v1 routes called directly: the JSON envelope, missing / bad / revoked
  *    keys, live keys refused on testnet, relay errors passed through before
  *    any RPC, payment request links, proof checking with a real Groth16 proof
- *    (made here from a local tree), and the vkeys bundled for the server
- *    matching the pinned hashes
+ *    (made here from a local tree), an exact balance, a gloamdisc1 copied
+ *    from a deposit (never ok), the payroll size cap, and the vkeys bundled
+ *    for the server matching the pinned hashes
  *
  * Uses the in-process store (GLOAM_PARTNERS_STORE=memory) and the development
  * pepper on localhost. Nothing is signed for real or sent to any chain; the
@@ -73,6 +74,7 @@ const {
 const { SIWE_STATEMENT, createSession, issueNonce, nonceAllowed, readSession, verifySignIn } = await import("../src/lib/partnersAuth");
 const { getNetwork } = await import("../src/lib/networks");
 const { PROOF_ARTIFACTS } = await import("../src/lib/proofs/artifacts");
+const { CIRCUIT_ARTIFACTS } = await import("../src/lib/circuitArtifacts");
 const { encodeProof } = await import("../src/lib/proofs");
 const { verifyProofText, groth16Verify, SNARK_CHECK } = await import("../src/app/api/v1/_lib/verify");
 const { GET: meGet } = await import("../src/app/api/v1/me/route");
@@ -628,6 +630,70 @@ await test("proofs: server checking keys match the pinned hashes", () => {
     const bytes = readFileSync(join(circuits, a.path.replace("/circuits/", "")));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), a.sha256, name);
   }
+  // The older disclosure's key is pinned too (lib/disclosure checks it before use).
+  const shield = CIRCUIT_ARTIFACTS.shieldVkey;
+  assert.equal(createHash("sha256").update(readFileSync(join(circuits, "shield_vkey.json"))).digest("hex"), shield.sha256, "shield");
+});
+
+await test("proofs: a gloamdisc1 copied from a deposit is never ok (ZK-2)", async () => {
+  // What anyone can lift off the chain: a deposit's own shield proof, wrapped as a disclosure.
+  const sdk = await import("@gloamtrade/sdk");
+  const snarkjs = await import("snarkjs");
+  const secret = 4242n;
+  const amount = 5_000_000n;
+  const commitment = await sdk.noteCommitmentPoseidon(secret, amount, USDG);
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    { commitment: commitment.toString(), amount: amount.toString(), asset: BigInt(USDG).toString(), secret: secret.toString() },
+    join(circuits, "shield.wasm"),
+    join(circuits, "shield_final.zkey")
+  );
+  const d = { v: 1, chainId: RH.chainId, pool: RH.pool!, commitment: publicSignals[0], amount: publicSignals[1], asset: publicSignals[2], proof };
+  const r = await verifyProofText("gloamdisc1:" + Buffer.from(JSON.stringify(d)).toString("base64"));
+  assert.equal(r.format, "gloamdisc1");
+  assert.equal(r.checks[0]!.label, SNARK_CHECK);
+  assert.equal(r.checks[0]!.state, "pass", "the math of a copied deposit proof holds");
+  const who = r.checks.find((c) => c.label === "Shows who holds it");
+  assert.equal(who?.state, "fail");
+  assert.match(who?.detail ?? "", /anyone can copy one from a public deposit/);
+  assert.equal(r.ok, false, "but it is never ok");
+});
+
+await test("proofs: an exact balance (gloambal1) is checked on the server", async () => {
+  const sdk = await import("@gloamtrade/sdk");
+  const snarkjs = await import("snarkjs");
+  const pool = RH.pool!;
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+  const context = sdk.proofContext({ kind: "balance", chainId: RH.chainId, pool, verifier: "Acme Bank", expiresAt });
+  const tree = new sdk.IncrementalMerkleTreePoseidon();
+  const amount = 700n;
+  const index = await tree.insert(await sdk.noteCommitmentPoseidon(3333n, amount, USDG));
+  const w = await sdk.buildReceiptWitness({ secretHex: sdk.fieldToHex(3333n), amount, asset: USDG, path: await tree.path(index), reveal: true, minAmount: amount, context });
+  assert.equal(w.blocker, null);
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(w.circomInput as Record<string, unknown>, join(circuits, "receipt.wasm"), join(circuits, "receipt_final.zkey"));
+  const bal = { v: 1 as const, kind: "balance" as const, chainId: RH.chainId, pool, verifier: "Acme Bank", expiresAt, asset: USDG, commitment: sdk.fieldToHex(w.publicInputs.commitment), amount: "700", proof, publicSignals };
+  const r = await verifyProofText(encodeProof(bal));
+  assert.equal(r.format, "gloambal1");
+  const byLabel = new Map(r.checks.map((c) => [c.label, c.state]));
+  assert.equal(r.checks[0]!.state, "pass", JSON.stringify(r.checks));
+  assert.equal(byLabel.get('Made for "Acme Bank"'), "pass");
+  assert.equal(byLabel.get("Asset and amount match the proof"), "pass");
+  // A local tree's root was never the vault's (or the RPC is unreachable): never ok.
+  assert.notEqual(byLabel.get("Matches a real vault state"), "pass");
+  assert.equal(r.ok, false);
+  // Relabelled as a proof of payment: the sealed kind does not match.
+  const asPay = await verifyProofText(encodeProof({ ...bal, kind: "payment", minAmount: "700", txHash: null } as never));
+  assert.equal(new Map(asPay.checks.map((c) => [c.label, c.state])).get('Made for "Acme Bank"'), "fail");
+});
+
+await test("proofs: a payroll proof over the size cap is refused before any work (ZK-4)", async () => {
+  const big = {
+    v: 1, kind: "payroll", chainId: RH.chainId, pool: RH.pool!, verifier: "Tax office", expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    asset: USDG, total: "1", count: 300,
+    payments: Array.from({ length: 300 }, () => ({ commitment: "0x" + "11".repeat(32), nullifier: "0x" + "22".repeat(32), txHash: null })),
+    parts: [{ proof: {}, publicSignals: ["1"] }],
+  };
+  await assert.rejects(verifyProofText("gloamroll1:" + Buffer.from(JSON.stringify(big)).toString("base64")), /damaged/);
+  await assert.rejects(verifyProofText("gloamroll1:" + "A".repeat(170_000)), /too large/);
 });
 
 await test("proofs: malformed input is a 400, not a crash", async () => {

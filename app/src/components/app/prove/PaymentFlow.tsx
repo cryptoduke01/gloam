@@ -155,12 +155,12 @@ export function PaymentFlow({ notes }: { notes: LocalNote[] }) {
           headline={
             done.amount != null ? (
               <>
-                Paid {formatAssetAmount(done.amount, done.asset)}{" "}
+                A payment of {formatAssetAmount(done.amount, done.asset)}{" "}
                 <span className="text-mute">{assetLabel(done.asset)}</span>
               </>
             ) : (
               <>
-                Paid at least {formatAssetAmount(done.minAmount, done.asset)}{" "}
+                A payment of at least {formatAssetAmount(done.minAmount, done.asset)}{" "}
                 <span className="text-mute">{assetLabel(done.asset)}</span>
               </>
             )
@@ -393,8 +393,9 @@ function PaymentAside({
         note={
           <p>
             The proof points at this payment&apos;s record in the vault, so they can see when it
-            landed. The record never shows the amount. It shows who sent it only if they paid
-            without Hide my wallet.
+            landed. It shows a private payment was made, not who paid whom. The record never
+            shows the amount, and shows the sender&apos;s wallet only if they paid without Hide
+            my wallet.
           </p>
         }
       />

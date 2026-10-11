@@ -1,30 +1,36 @@
 /**
- * Gloam proofs: proof of funds ("I hold at least X"), proof of payment, and the
- * payroll total ("this run paid exactly X to N people").
+ * Gloam proofs: proof of funds ("I hold at least X"), proof of payment ("a
+ * private payment of at least X was made, into a note I hold the key to"), and
+ * the payroll total ("a run of N payments adding up to X, funded by me"), and
+ * an exact balance ("one note of exactly X, whose key I hold").
  *
- *   proveFunds / provePayment / provePayrollTotal   browser provers (./prove), dev Groth16 keys
+ *   proveFunds / provePayment / provePayrollTotal / proveBalance
+ *                                                   browser provers (./prove), dev Groth16 keys
  *   verifyProof                                     snark + context + on-chain checks (./verify)
  *   encodeProof / decodeProof                       the shareable text form (prefix + base64 JSON)
  *
  * Circuits: contracts/circuits/solvency (funds), contracts/circuits/receipt
- * (payment) and contracts/circuits/payroll_total (payroll). Witnesses:
+ * (payment, and balance with the amount shown) and contracts/circuits/payroll_total
+ * (payroll). Witnesses:
  * buildFundsWitness / buildReceiptWitness / buildPayrollWitness in @gloamtrade/sdk.
  * Demo mode (lib/demoFlag) returns pretend proofs that only a demo tab accepts.
  */
-import type { AnyProof, ProofKind } from "./types";
+import { PAYROLL_MAX_PARTS, PAYROLL_MAX_PAYMENTS_TOTAL, type AnyProof, type ProofKind } from "./types";
 
 export * from "./types";
-export { proveFunds, provePayment, provePayrollTotal, cleanVerifierLabel } from "./prove";
+export { proveBalance, proveFunds, provePayment, provePayrollTotal, cleanVerifierLabel } from "./prove";
 export { verifyProof } from "./verify";
 
 export const FUNDS_PREFIX = "gloamfunds1:";
 export const PAYMENT_PREFIX = "gloampay1:";
 export const PAYROLL_PREFIX = "gloamroll1:";
+export const BALANCE_PREFIX = "gloambal1:";
 
 const PREFIXES: Record<ProofKind, string> = {
   funds: FUNDS_PREFIX,
   payment: PAYMENT_PREFIX,
   payroll: PAYROLL_PREFIX,
+  balance: BALANCE_PREFIX,
 };
 
 function prefixOf(text: string): ProofKind | null {
@@ -51,7 +57,7 @@ export function encodeProof(p: AnyProof): string {
   return PREFIXES[p.kind] + toBase64(JSON.stringify(p));
 }
 
-/** True when the text looks like one of these proofs (not the older balance disclosure). */
+/** True when the text looks like one of these proofs (not the older gloamdisc1 disclosure). */
 export function isGloamProof(text: string): boolean {
   return prefixOf(text.trim()) !== null;
 }
@@ -82,11 +88,13 @@ function wellFormed(p: AnyProof): boolean {
       isStr(p.total) &&
       Number.isSafeInteger(p.count) &&
       Array.isArray(p.payments) &&
+      p.payments.length <= PAYROLL_MAX_PAYMENTS_TOTAL &&
       p.payments.every(
         (x) => x && isStr(x.commitment) && isStr(x.nullifier) && (x.txHash === null || isStr(x.txHash))
       ) &&
       Array.isArray(p.parts) &&
       p.parts.length > 0 &&
+      p.parts.length <= PAYROLL_MAX_PARTS &&
       p.parts.every((x) => x && snarkShaped(x.proof, x.publicSignals))
     );
   }
@@ -94,6 +102,7 @@ function wellFormed(p: AnyProof): boolean {
   if (p.kind === "funds") {
     return isStr(p.threshold) && isStr(p.root) && Array.isArray(p.nullifiers) && p.nullifiers.every(isStr);
   }
+  if (p.kind === "balance") return isStr(p.commitment) && isStr(p.amount);
   return (
     isStr(p.commitment) &&
     isStr(p.minAmount) &&
