@@ -3,7 +3,6 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useAppAccount } from "@/lib/demo";
-import type { LocalNote } from "@/lib/shield";
 import { ExactBalance } from "./prove/ExactBalance";
 import { FundsFlow } from "./prove/FundsFlow";
 import { PaymentFlow } from "./prove/PaymentFlow";
@@ -11,13 +10,14 @@ import { ConnectCard, NoBalanceCard, ProveLayout, SafeToShare } from "./prove/Pr
 
 /**
  * Prove what you hold, three ways: one balance exactly, "at least" an amount
- * with the balance hidden, or a payment you received. `?mode=` picks the tab
- * so a link can open straight onto one.
+ * with the balance hidden, or a private payment. Each is sealed for one
+ * verifier and an expiry. `?mode=` picks the tab so a link can open straight
+ * onto one.
  */
 const MODES = [
   { id: "exact", label: "Exact balance", hint: "Show one private balance exactly" },
   { id: "funds", label: "At least", hint: "Show you hold at least an amount, balance hidden" },
-  { id: "payment", label: "Payment", hint: "Show you were paid, the amount or a minimum" },
+  { id: "payment", label: "Payment", hint: "Show a private payment, the amount or a minimum" },
 ] as const;
 
 type ModeId = (typeof MODES)[number]["id"];
@@ -31,10 +31,6 @@ export function DiscloseView() {
 
   const { address } = useAppAccount();
   const { open, merged } = useLocalShieldNotes(address);
-
-  const exactNotes = (open as LocalNote[]).filter(
-    (n) => n.secret && n.bound && n.status !== "recovered"
-  );
 
   function select(id: ModeId) {
     const params = new URLSearchParams(Array.from(sp.entries()));
@@ -87,7 +83,7 @@ export function DiscloseView() {
         ) : mode === "payment" ? (
           <PaymentFlow notes={merged} />
         ) : (
-          <ExactBalance notes={exactNotes} empty={exactNotes.length === 0 ? <NoBalanceCard /> : null} />
+          <ExactBalance notes={open} />
         )}
       </div>
     </div>

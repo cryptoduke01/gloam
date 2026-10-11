@@ -1,179 +1,253 @@
 "use client";
 
-import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useId, useMemo, useState } from "react";
+import { encodeProof, proveBalance } from "@/lib/proofs";
 import { assetLabel, formatAssetAmount, type LocalNote } from "@/lib/shield";
-import { buildDisclosure, encodeDisclosure } from "@/lib/disclosure";
-import { SealDots } from "@/components/ui/SealDots";
-import { LockIcon, Notice, SafeToShare, ShieldCheck, Spinner } from "./ProofParts";
-import { proveFailReason } from "./proofUtils";
+import {
+  AssetMark,
+  ExpiryPicker,
+  NoBalanceCard,
+  Notice,
+  ProofProgress,
+  ProofShareCard,
+  ProveLayout,
+  SafeToShare,
+  ShieldCheck,
+  ShowsPanel,
+  VerifierField,
+} from "./ProofParts";
+import {
+  expiresAtFor,
+  friendlyProveError,
+  isFundsNote,
+  logoIdFor,
+  longDate,
+  networkFor,
+  proveFailReason,
+  shortDate,
+  verifierLabel,
+  type ExpiryId,
+  type FriendlyError,
+} from "./proofUtils";
 
-/** What each party sees, as a quiet two-column list. */
-const SEES: { who: string; sees: string; hidden?: boolean }[] = [
-  { who: "The person you share with", sees: "That one balance, checked against the vault" },
-  { who: "Everyone else", sees: "Nothing", hidden: true },
-  { who: "Never shared", sees: "Your wallet, other balances, history", hidden: true },
-];
+type Done = {
+  token: string;
+  asset: string;
+  amount: bigint;
+  verifier: string;
+  expiresAt: number;
+  chainId: number;
+};
 
-/** The original flow: prove one private balance, amount shown exactly. */
-export function ExactBalance({ notes, empty }: { notes: LocalNote[]; empty: ReactNode }) {
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+/**
+ * Prove one private balance, amount shown exactly. Sealed for one verifier and
+ * an expiry like the other proofs, made on this device and never put on chain
+ * (lib/proofs proveBalance). The older gloamdisc1 format is retired: it reused
+ * the deposit statement, which anyone can copy from a public deposit.
+ */
+export function ExactBalance({ notes }: { notes: LocalNote[] }) {
+  const ids = useId();
+  const balances = useMemo(
+    () =>
+      notes.filter(isFundsNote).sort((a, b) => {
+        const x = BigInt(a.amountWei);
+        const y = BigInt(b.amountWei);
+        return x === y ? b.createdAt - a.createdAt : x > y ? -1 : 1;
+      }),
+    [notes]
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const note = balances.find((n) => n.id === selectedId) ?? balances[0];
+  const [verifier, setVerifier] = useState("");
+  const [expiry, setExpiry] = useState<ExpiryId>("7d");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<FriendlyError | null>(null);
+  const [done, setDone] = useState<Done | null>(null);
 
-  async function make(n: LocalNote) {
+  if (!note) {
+    return (
+      <ProveLayout aside={<BalanceAside note={null} verifier={verifier} expiry={expiry} />}>
+        <NoBalanceCard />
+      </ProveLayout>
+    );
+  }
+
+  const forLabel = verifierLabel(verifier);
+  const missing = !forLabel ? "Say who it is for" : null;
+  const canCreate = !busy && missing == null;
+
+  async function create() {
+    if (!canCreate) return;
     setErr(null);
-    setBusyId(n.id);
+    setBusy(true);
     try {
-      const d = await buildDisclosure({
-        chainId: n.chainId,
-        pool: n.pool,
-        secret: n.secret,
-        commitment: n.commitment,
-        amount: BigInt(n.amountWei),
-        asset: n.asset,
+      const p = await proveBalance({
+        chainId: note.chainId,
+        pool: note.pool,
+        note,
+        verifier: forLabel!,
+        expiresAt: expiresAtFor(expiry),
       });
-      setTokens((t) => ({ ...t, [n.id]: encodeDisclosure(d) }));
+      setDone({
+        token: encodeProof(p),
+        asset: note.asset,
+        amount: BigInt(p.amount),
+        verifier: p.verifier,
+        expiresAt: p.expiresAt,
+        chainId: note.chainId,
+      });
       void import("@/lib/track").then(({ track }) => {
-        track("proof_created", { kind: "exact", chainId: n.chainId });
+        track("proof_created", { kind: "exact", chainId: note.chainId });
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not build the proof.");
+      setErr(friendlyProveError(e, "balance"));
       void import("@/lib/track").then(({ track }) => {
         track("proof_create_failed", { kind: "exact", reason: proveFailReason(e) });
       });
     } finally {
-      setBusyId(null);
+      setBusy(false);
     }
   }
 
-  async function copy(id: string, token: string) {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(id);
-      setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
-    } catch {
-      /* ignore */
-    }
+  const aside = (
+    <BalanceAside
+      note={note}
+      verifier={done ? done.verifier : (forLabel ?? "")}
+      expiry={expiry}
+      expiresAt={done?.expiresAt}
+    />
+  );
+
+  if (done) {
+    const net = networkFor(done.chainId);
+    return (
+      <ProveLayout aside={aside}>
+        <ProofShareCard
+          token={done.token}
+          headline={
+            <>
+              Exactly {formatAssetAmount(done.amount, done.asset)}{" "}
+              <span className="text-mute">{assetLabel(done.asset)}</span>
+            </>
+          }
+          rows={[
+            { label: "For", value: done.verifier },
+            { label: "Good until", value: longDate(done.expiresAt * 1000) },
+            { label: "Network", value: net?.label ?? `Chain ${done.chainId}` },
+            { label: "Exact amount", value: "Shown" },
+          ]}
+          onEdit={() => setDone(null)}
+        />
+      </ProveLayout>
+    );
   }
 
   return (
-    <div className="grid max-lg:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
-      <div className="min-w-0 space-y-5">
-        {err && <Notice tone="danger">{err}</Notice>}
+    <ProveLayout aside={aside}>
+      <section className="gl-card min-w-0 max-sm:p-5 sm:p-7">
+        <h2 className="text-[17px] text-foreground">Show one balance exactly</h2>
+        <p className="mt-1 max-w-[52ch] text-[13.5px] leading-relaxed text-mute">
+          Pick a private balance. They see its exact amount and nothing else you hold.
+        </p>
 
-        {empty}
-
-        {notes.length > 0 && (
-          <p className="text-[13px] text-mute">
-            {notes.length === 1
-              ? "One private balance you can prove."
-              : `${notes.length} private balances you can prove. Each proof covers one.`}
+        <div className="mt-6">
+          <p id={`${ids}-bal`} className="text-[13px] text-mute">
+            Balance
           </p>
-        )}
-
-        {notes.map((n) => {
-          const token = tokens[n.id];
-          const busy = busyId === n.id;
-          return (
-            <section key={n.id} className="gl-card overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-4 max-sm:p-5 sm:p-6">
-                <div className="flex min-w-0 items-center gap-3.5">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
-                    <LockIcon />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-foreground">
-                      <span className="tnum text-[26px] font-light leading-none tracking-[-0.02em]">
-                        {formatAssetAmount(n.amountWei, n.asset)}
-                      </span>{" "}
-                      <span className="text-[15px] text-mute">{assetLabel(n.asset)}</span>
-                    </p>
-                    <p className="mt-1.5 text-[12.5px] text-mute">Private balance, only you can see it</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void make(n)}
-                  disabled={busy}
-                  className={`btn btn-sm h-10 ${token ? "btn-quiet text-mute" : "btn-ghost"}`}
-                >
-                  {busy ? <Spinner /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  {busy ? "Proving…" : token ? "New proof" : "Create proof"}
-                </button>
-              </div>
-
-              {busy && (
-                <p className="border-t border-line bg-surface/60 max-sm:px-5 py-3 text-[12.5px] text-mute sm:px-6">
-                  Building the proof on this device. It takes a few seconds, and your
-                  key never leaves this browser.
-                </p>
-              )}
-
-              {token && (
-                <div className="border-t border-line bg-surface/50 max-sm:p-5 sm:p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <label htmlFor={`proof-${n.id}`} className="text-[13px] text-mute">
-                      Your proof. Share it with whoever you choose.
-                    </label>
-                    <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Ready
+          <ul role="radiogroup" aria-labelledby={`${ids}-bal`} className="mt-2 max-h-[300px] space-y-2 overflow-y-auto">
+            {balances.map((n) => {
+              const active = n.id === note.id;
+              return (
+                <li key={n.id}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setSelectedId(n.id);
+                      setErr(null);
+                    }}
+                    className={`flex min-h-[60px] w-full items-center gap-3 rounded-[14px] border px-4 py-2.5 text-left transition-colors ${
+                      active ? "border-foreground bg-panel" : "border-line hover:border-line-strong hover:bg-surface"
+                    }`}
+                  >
+                    <AssetMark id={logoIdFor(n.asset, n.chainId)} symbol={assetLabel(n.asset)} size={32} />
+                    <span className="min-w-0 flex-1">
+                      <span className="tnum block truncate text-[16px] text-foreground">
+                        {formatAssetAmount(n.amountWei, n.asset)} <span className="text-mute">{assetLabel(n.asset)}</span>
+                      </span>
+                      <span className="block truncate text-[12px] text-mute">Private balance, {shortDate(n.createdAt)}</span>
                     </span>
-                  </div>
-                  <textarea
-                    id={`proof-${n.id}`}
-                    readOnly
-                    value={token}
-                    rows={3}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="gl-input tnum mt-2 h-auto resize-none break-all py-3 text-[12px] leading-relaxed text-soft"
-                  />
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => void copy(n.id, token)} className="btn btn-ink btn-sm h-10">
-                      {copied === n.id ? "Copied" : "Copy proof"}
-                    </button>
-                    <Link href="/verify" className="btn btn-quiet btn-sm h-10">
-                      Open the verifier
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+                    <span
+                      aria-hidden
+                      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border transition-colors ${
+                        active ? "border-foreground bg-foreground" : "border-line-strong"
+                      }`}
+                    >
+                      {active && <span className="h-2 w-2 rounded-full bg-panel" />}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
-      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        <section className="gl-card max-sm:p-5 sm:p-6">
-          <p className="t-label">What a proof shows</p>
-          <div className="mt-4 rounded-[14px] bg-surface p-4">
-            <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed">
-                <ShieldCheck />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[14px] text-foreground">Holds this balance</p>
-                <p className="text-[12px] text-mute">Checked against the Gloam vault</p>
-              </div>
+        <div className="mt-7 space-y-6 border-t border-line pt-6">
+          <VerifierField value={verifier} onChange={setVerifier} />
+          <ExpiryPicker value={expiry} onChange={setExpiry} />
+        </div>
+
+        <div className="mt-7 space-y-4">
+          {err && <Notice tone={err.tone}>{err.text}</Notice>}
+          {busy ? (
+            <ProofProgress kind="balance" />
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <button type="button" onClick={() => void create()} disabled={!canCreate} className="btn btn-ink btn-lg max-sm:w-full">
+                <ShieldCheck className="h-4 w-4" />
+                Create proof
+              </button>
+              {missing && <span className="text-[13px] text-mute">{missing}</span>}
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[12.5px]">
-              <span className="text-mute">Wallet, history, other balances</span>
-              <SealDots n={5} className="text-foreground/50" />
-            </div>
-          </div>
-          <dl className="mt-4 divide-y divide-line">
-            {SEES.map((r) => (
-              <div key={r.who} className="py-3">
-                <dt className="text-[12.5px] text-mute">{r.who}</dt>
-                <dd className={`mt-0.5 text-[14px] ${r.hidden ? "text-soft" : "text-foreground"}`}>{r.sees}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-        <SafeToShare />
-      </aside>
-    </div>
+          )}
+        </div>
+      </section>
+    </ProveLayout>
+  );
+}
+
+function BalanceAside({
+  note,
+  verifier,
+  expiry,
+  expiresAt,
+}: {
+  note: LocalNote | null;
+  verifier: string;
+  expiry: ExpiryId;
+  expiresAt?: number;
+}) {
+  const unset = <span className="text-faint">Not set yet</span>;
+  const until = expiresAt ?? expiresAtFor(expiry);
+  return (
+    <>
+      <ShowsPanel
+        shows={[
+          { label: "Asset", value: note ? assetLabel(note.asset) : unset },
+          { label: "Amount", value: note ? `${formatAssetAmount(note.amountWei, note.asset)} ${assetLabel(note.asset)}` : unset },
+          { label: "Who it is for", value: verifier.trim() || unset },
+          { label: "Good until", value: longDate(until * 1000) },
+        ]}
+        never={["Your other balances", "Your history", "Your wallet"]}
+        note={
+          <p>
+            The proof points at this balance&apos;s record in the vault. It does not show whether it
+            moves later. An At least proof does.
+          </p>
+        }
+      />
+      <SafeToShare />
+    </>
   );
 }

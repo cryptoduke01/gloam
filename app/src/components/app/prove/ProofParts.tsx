@@ -252,6 +252,11 @@ const PHASES = {
     advanceMs: 600,
     note: "A second or two. It runs on this device, and your key never leaves this browser.",
   },
+  balance: {
+    steps: ["Getting your balance ready", "Building your proof"],
+    advanceMs: 600,
+    note: "A second or two. It runs on this device, and your key never leaves this browser.",
+  },
 } as const;
 
 /**
