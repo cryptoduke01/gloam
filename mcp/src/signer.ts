@@ -114,8 +114,8 @@ export interface Signer {
  * the same key is a Tempo access key: on Tempo it signs for that account, and
  * the owner's AccountKeychain authorization (expiry, a periodic spending limit
  * and call scopes) is enforced by the protocol on every transaction, whatever
- * this server does. See `gloam-mcp authorize-access-key`. Robinhood Chain has
- * no keychain, so there the key still signs as itself.
+ * this server does. See `gloam-mcp authorize-access-key`. Robinhood Chain and
+ * Base have no keychain, so there the key still signs as itself.
  *
  * Tools return plans instead of executing when no signer is configured.
  */
