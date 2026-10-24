@@ -1,10 +1,17 @@
 /**
- * Self-test: a payroll list is read the way it was written.
+ * Self-test: a payroll list is read the way it was written, and the money the
+ * page tells you to add really covers the run.
  *
- * Review, 24 Oct 2026: every line used to split on commas, tabs and semicolons
- * at once, so a semicolon or tab list's "1,25" or "1,250" became two cells and
- * the row quietly paid 1. One delimiter per list now, a shifted row is
- * refused, and a quote that never closes is a row error.
+ * Review, 24 Oct 2026:
+ *   - every line used to split on commas, tabs and semicolons at once, so a
+ *     semicolon or tab list's "1,25" or "1,250" became two cells and the row
+ *     quietly paid 1. One delimiter per list now, a shifted row is refused,
+ *     and a quote that never closes is a row error.
+ *   - "add X as one deposit" could be too little: the new note joins the same
+ *     smallest-first order and can be spent on an earlier row. The suggestion
+ *     is now checked against that order (an independent model of it here).
+ *   - the shortfall, the run total and the invoice rounded to two decimals
+ *     (0.004 showed as 0.00, Number lost units on big amounts); they are exact.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-payroll-csv.mts
  */
@@ -12,8 +19,8 @@ import assert from "node:assert/strict";
 import "./browser-shim.mjs";
 import { parseUnits, type Address } from "viem";
 
-const { parsePayrollCsv, PAYROLL_TEMPLATE } = await import("../src/lib/payroll");
-const { assetDecimals } = await import("../src/lib/shield");
+const { parsePayrollCsv, fundingPlan, PAYROLL_TEMPLATE } = await import("../src/lib/payroll");
+const { assetDecimals, formatAssetAmountExact } = await import("../src/lib/shield");
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -23,6 +30,7 @@ function test(name: string, fn: () => void) {
 }
 
 const ASSET = "0x00000000000000000000000000000000000000ee" as Address;
+const NATIVE = "0x0000000000000000000000000000000000000000";
 const units = (s: string) => parseUnits(s, assetDecimals(ASSET));
 const one = (csv: string) => {
   const { rows, error } = parsePayrollCsv(csv, ASSET);
@@ -100,6 +108,74 @@ test("the template and plain lists read as before", () => {
   assert.equal(one("Ada,12.50").amount, units("12.50"));
   assert.equal(one("Ada,,12.50,Sept").note, "Sept");
   assert.equal(one('name,amount\r\nAda,"$1,250.00"\r\n').amount, units("1250"));
+});
+
+// ------------------------------------------------------------------ funding
+
+/** How a run spends, written apart from lib/payroll: rows in order, each from the smallest note that covers it. */
+function runCovers(amounts: bigint[], notes: bigint[]): boolean {
+  const left = notes.filter((n) => n > 0n);
+  for (const amt of amounts) {
+    let pick = -1;
+    for (let i = 0; i < left.length; i++) {
+      if (left[i] >= amt && (pick < 0 || left[i] < left[pick])) pick = i;
+    }
+    if (pick < 0) return false;
+    left[pick] -= amt;
+  }
+  return true;
+}
+
+test("the suggested deposit covers the run (1, 1, 2, 2 from notes 1 and 3)", () => {
+  const amounts = [1n, 1n, 2n, 2n];
+  const notes = [1n, 3n];
+  assert.equal(runCovers(amounts, [...notes, 2n]), false, "the old suggestion, 2, leaves the last row unpaid");
+  const plan = fundingPlan(amounts, notes);
+  assert.equal(plan.covered, 3);
+  assert.ok(runCovers(amounts, [...notes, plan.shortfall]));
+  assert.equal(plan.shortfall, 3n, "and it is the smallest that does");
+});
+
+test("a run that already fits needs nothing", () => {
+  assert.deepEqual(fundingPlan([5n, 3n], [10n]), { covered: 2, shortfall: 0n });
+  assert.deepEqual(fundingPlan([], []), { covered: 0, shortfall: 0n });
+});
+
+test("4,000 random runs: the suggestion always covers, and nothing smaller does", () => {
+  let seed = 20261024;
+  const rand = (n: number) => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return seed % n;
+  };
+  for (let t = 0; t < 4000; t++) {
+    const amounts = Array.from({ length: 1 + rand(14) }, () => BigInt(1 + rand(40)));
+    const notes = Array.from({ length: rand(9) }, () => BigInt(rand(60)));
+    const step = [1n, 1n, 5n][rand(3)];
+    const plan = fundingPlan(amounts, notes, step);
+    const covers = runCovers(amounts, notes);
+    assert.equal(plan.shortfall === 0n, covers, `case ${t}`);
+    if (covers) continue;
+    assert.equal(plan.shortfall % step, 0n, `case ${t}: a whole number of steps`);
+    assert.ok(runCovers(amounts, [...notes, plan.shortfall]), `case ${t}: covers`);
+    assert.ok(!runCovers(amounts, [...notes, plan.shortfall - step]), `case ${t}: smallest`);
+  }
+});
+
+test("a cents step rounds the deposit up to something people can type", () => {
+  const cents = 10n ** BigInt(Math.max(assetDecimals(ASSET) - 2, 0));
+  const plan = fundingPlan([units("1.234")], [], cents);
+  assert.equal(plan.shortfall, units("1.24"));
+});
+
+// ------------------------------------------------------------------ amounts
+
+test("exact amounts keep every unit", () => {
+  assert.equal(formatAssetAmountExact(1n, NATIVE), "0.000000000000000001");
+  assert.equal(formatAssetAmountExact(4n * 10n ** 15n, NATIVE, 2), "0.004");
+  assert.equal(formatAssetAmountExact(10n ** 18n, NATIVE, 2), "1.00");
+  assert.equal(formatAssetAmountExact(1_250_500_000_000_000_000_000n, NATIVE, 2), "1,250.50");
+  assert.equal(formatAssetAmountExact("9007199254740993000000000000000001", NATIVE), "9,007,199,254,740,993.000000000000000001");
+  assert.equal(formatAssetAmountExact(0n, NATIVE), "0");
 });
 
 console.log(`\n${passed} payroll list checks passed`);

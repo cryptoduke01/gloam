@@ -364,6 +364,25 @@ export function formatAssetAmount(raw: bigint | string, asset: string, maxFrac =
   return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
 }
 
+/**
+ * A raw amount with every unit kept ("1,250.5", "0.004"), never rounded, for
+ * amounts someone acts on or files: a deposit to make, an invoice line, a run
+ * total. `minFrac` pads the decimals, so an invoice reads "1,250.50".
+ */
+export function formatAssetAmountExact(raw: bigint | string, asset: string, minFrac = 0): string {
+  let v: bigint;
+  try {
+    v = typeof raw === "bigint" ? raw : BigInt(raw || "0");
+  } catch {
+    return String(raw);
+  }
+  const decimals = assetDecimals(asset);
+  const [whole, frac = ""] = formatUnits(v, decimals).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const digits = frac.padEnd(Math.min(minFrac, decimals), "0");
+  return digits ? `${grouped}.${digits}` : grouped;
+}
+
 /** "12.5 PathUSD" style label for a raw amount. */
 export function formatAssetLabel(raw: bigint | string, asset: string): string {
   return `${formatAssetAmount(raw, asset)} ${assetLabel(asset)}`;
