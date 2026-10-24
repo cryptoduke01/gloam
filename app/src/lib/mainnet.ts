@@ -1,10 +1,15 @@
 /**
- * Mainnet: the two pools, the launch time, and whether mainnet is live.
+ * Mainnet: the pools, the launch time, and whether mainnet is live.
  *
  * MAINNET_POOLS is FILLED IN ON DEPLOY DAY: paste each pool address and the
  * block its deploy transaction landed in (the deploy script prints both). Until
  * a chain has both, that mainnet is hidden everywhere: the app, the API, the
  * relay, the MCP server, Glim and proofs all act as if it does not exist.
+ *
+ * BASE_SEPOLIA_POOL is the same for Base Sepolia, Base's practice network: it
+ * runs the mainnet pool (ShieldPoolPayments, final keys, beta limits) with test
+ * funds, so it is filled in the same way after its deploy (DEPLOY-BASE.md) and
+ * hidden until then.
  *
  * The block number can be written plain (12345678) or as a bigint (12345678n).
  */
@@ -13,9 +18,14 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
   4663: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 94_194_599 },
   // Tempo mainnet (4217): USDC.e, pathUSD, USDT0, OUSD
   4217: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 45_172_561 },
+  // Base mainnet (8453): USDC, EURC, USDT, ETH. Not deployed yet (DEPLOY-BASE.md).
+  8453: { pool: null, deployBlock: null },
 };
 
-export type MainnetChainId = 4663 | 4217;
+/** Base Sepolia (84532): USDC, EURC, ETH, test funds. Not deployed yet (DEPLOY-BASE.md). */
+export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: null, deployBlock: null };
+
+export type MainnetChainId = 4663 | 4217 | 8453;
 
 type MainnetPoolInput = { pool: string | null; deployBlock: number | bigint | null };
 
@@ -26,18 +36,26 @@ export type MainnetPool = { pool: `0x${string}`; deployBlock: bigint };
  * that is not an address fails the build instead of quietly hiding the chain.
  */
 export function mainnetPool(chainId: MainnetChainId): MainnetPool | null {
-  const { pool, deployBlock } = MAINNET_POOLS[chainId];
+  return checkedPool(MAINNET_POOLS[chainId], `MAINNET_POOLS[${chainId}]`);
+}
+
+/** Base Sepolia's pool, or null while BASE_SEPOLIA_POOL is not filled in. Checked like a mainnet pool. */
+export function baseSepoliaPool(): MainnetPool | null {
+  return checkedPool(BASE_SEPOLIA_POOL, "BASE_SEPOLIA_POOL");
+}
+
+function checkedPool({ pool, deployBlock }: MainnetPoolInput, name: string): MainnetPool | null {
   if (pool === null || deployBlock === null) return null;
   if (!/^0x[0-9a-fA-F]{40}$/.test(pool) || /^0x0{40}$/.test(pool)) {
-    throw new Error(`MAINNET_POOLS[${chainId}].pool is not a pool address: ${pool}`);
+    throw new Error(`${name}.pool is not a pool address: ${pool}`);
   }
   const block = BigInt(deployBlock);
-  if (block <= 0n) throw new Error(`MAINNET_POOLS[${chainId}].deployBlock must be the deploy block, got ${deployBlock}`);
+  if (block <= 0n) throw new Error(`${name}.deployBlock must be the deploy block, got ${deployBlock}`);
   return { pool: pool as `0x${string}`, deployBlock: block };
 }
 
 /** At least one mainnet pool is filled in. */
-export const MAINNET_CONFIGURED = mainnetPool(4663) !== null || mainnetPool(4217) !== null;
+export const MAINNET_CONFIGURED = mainnetPool(4663) !== null || mainnetPool(4217) !== null || mainnetPool(8453) !== null;
 
 /**
  * Mainnet is live once the launch time has passed and at least one pool is in.
@@ -49,13 +67,16 @@ export function isMainnetLive(now: number = Date.now()): boolean {
 
 /**
  * The chains whose mainnet pool is in, as words: "Robinhood Chain and Tempo",
- * or one of them. Both, as announced, when neither is in (only a test asks then).
+ * "Robinhood Chain, Tempo and Base" once Base is in, or one of them. Robinhood
+ * Chain and Tempo, as announced, when none is in (only a test asks then).
  */
 export function liveMainnetNames(): string {
   const names: string[] = [];
   if (mainnetPool(4663)) names.push("Robinhood Chain");
   if (mainnetPool(4217)) names.push("Tempo");
-  return names.length ? names.join(" and ") : "Robinhood Chain and Tempo";
+  if (mainnetPool(8453)) names.push("Base");
+  if (!names.length) return "Robinhood Chain and Tempo";
+  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 /**
