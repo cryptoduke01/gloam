@@ -410,7 +410,7 @@ await test("a backup from before securing, restored where it was secured: the mo
   const pool = mockPool();
   const env = pool.env();
   const claim = await claimed(pool, 10_000_000n);
-  const backup = JSON.stringify(exportNotesBackup(ME));
+  const backup = JSON.stringify(await exportNotesBackup(ME));
   assert.equal((await secureClaim({ note: claim, relay: true, sendWithWallet: noWallet }, env)).status, "swept");
   const [fresh] = freshOf(claim);
 
@@ -436,7 +436,7 @@ await test("a backup made while the move was on its way, restored where it lande
     { note: claim, relay: true, sendWithWallet: noWallet },
     pool.env({
       relay: async (t) => {
-        backup = JSON.stringify(exportNotesBackup(ME)); // the claim, and its fresh note still pending
+        backup = JSON.stringify(await exportNotesBackup(ME)); // the claim, and its fresh note still pending
         return pool.transfer([t.proof, t.root, t.nullifier, t.commitments]);
       },
     })
@@ -478,7 +478,7 @@ await test("the same backup where those notes aren't: the spent claim never coun
   const pool = mockPool();
   const env = pool.env();
   const claim = await claimed(pool, 10_000_000n);
-  const backup = JSON.stringify(exportNotesBackup(ME));
+  const backup = JSON.stringify(await exportNotesBackup(ME));
   assert.equal((await secureClaim({ note: claim, relay: true, sendWithWallet: noWallet }, env)).status, "swept");
   await forget(claim);
 
@@ -498,7 +498,7 @@ await test("a backup holding the swept note restores it, counted straight away a
   const env = pool.env();
   const claim = await claimed(pool, 10_000_000n);
   assert.equal((await secureClaim({ note: claim, relay: true, sendWithWallet: noWallet }, env)).status, "swept");
-  const backup = JSON.stringify(exportNotesBackup(ME));
+  const backup = JSON.stringify(await exportNotesBackup(ME));
   const [fresh] = freshOf(claim);
   await forget(claim);
   assert.equal(total(counted(claim)), 0n);
@@ -515,7 +515,7 @@ await test("a restore that can't read the vault still adds the note, for the syn
   const pool = mockPool();
   const env = pool.env();
   const claim = await claimed(pool, 10_000_000n);
-  const backup = JSON.stringify(exportNotesBackup(ME));
+  const backup = JSON.stringify(await exportNotesBackup(ME));
   assert.equal((await secureClaim({ note: claim, relay: true, sendWithWallet: noWallet }, env)).status, "swept");
   await forget(claim);
   const down = pool.env({ chain: { ...env.chain, isSpent: async () => { throw new Error("rpc down"); } } });
