@@ -6,7 +6,8 @@
  * checked in mainnet.selftest.mjs). Here both get placeholder pools before the
  * networks are built, so the rest of the SDK can be checked against them: the
  * mainnet keys on both, payments only, the listed assets and beta limits, ETH
- * listed, no memo board, and Base Sepolia after the older testnets.
+ * listed, Base Sepolia's memo board (none on Base mainnet yet), and Base
+ * Sepolia after the older testnets.
  *
  * Run after build:  node test/base.selftest.mjs
  */
@@ -84,10 +85,11 @@ assert(test && test.key === "base" && test.chainId === 84532 && test.pool === TE
 for (const n of [main, test]) {
   assert(n.label === "Base" && n.family === "base", `${n.key}: label and family`);
   assert(n.ceremony === "production", `${n.key}: the ceremony's final keys`);
-  assert(n.nativeShield === true && n.payMemo === null, `${n.key}: ETH listed, no memo board yet`);
+  assert(n.nativeShield === true, `${n.key}: ETH listed`);
   assert(n.chain.id === n.chainId && /publicnode\.com$/.test(new URL(n.rpcUrl).host), `${n.key}: viem chain, an RPC that serves eth_getLogs`);
 }
 assert(main.testnet === false && test.testnet === true, "real money on mainnet, test funds on Sepolia");
+assert(main.payMemo === null && test.payMemo === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "a memo board on Base Sepolia, none on Base mainnet yet");
 assert(main.explorerUrl === "https://basescan.org" && test.explorerUrl === "https://sepolia.basescan.org", "Basescan");
 assert(main.assets.map((a) => a.symbol).join() === "USDC,EURC,USDT,ETH", "Base mainnet assets");
 assert(test.assets.map((a) => a.symbol).join() === "USDC,EURC,ETH", "Base Sepolia assets, no USDT");
@@ -143,7 +145,9 @@ throws(() => assertDepositAllowed(8453, BASE_SEPOLIA_USDC, 1n), /does not list/,
   assert(read.networkKey === "base" && read.asset === BASE_SEPOLIA_EURC && read.amount === "12.5", "request link on Base Sepolia");
   assert(parsePaymentRequestLink(buildPaymentRequestLink({ payTo: payee.tag, network: 8453, asset: "ETH" })).asset === NATIVE_ASSET, "request for ETH on Base mainnet");
   throws(() => buildPaymentRequestLink({ payTo: payee.tag, network: "base", asset: "USDT" }), /does not take "USDT"/, "no USDT request on Sepolia");
-  assert(payMemoBoardFor(84532) === null && payMemoBoardFor(8453) === null, "no memo boards on Base yet");
+  const board = payMemoBoardFor(84532);
+  assert(board?.address === "0x01B3172d9900Cb26d57E986429b9b23854c74598" && board.deployBlock === 49_804_175n && board.emitsPoster === false, "Base Sepolia's memo board, deployed after the pool, never logs the poster");
+  assert(payMemoBoardFor(8453) === null, "no memo board on Base mainnet yet");
 }
 
 // ── BASE_SEPOLIA_POOL is checked like MAINNET_POOLS ──────────────────────────────

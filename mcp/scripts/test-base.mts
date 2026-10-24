@@ -2,9 +2,10 @@
  * Base tests: the server as it will be once a release has the Base pools.
  *
  * The SDK builds its networks when it loads, from MAINNET_POOLS and
- * BASE_SEPOLIA_POOL, which are still null for Base (test-mainnet.mts covers
- * that state). Here both get placeholder pools before anything else loads, so
- * this file runs on its own (node --test gives each file its own process).
+ * BASE_SEPOLIA_POOL. Base Sepolia's is in; Base mainnet's is still null
+ * (test-mainnet.mts covers the state as shipped). Here both get placeholder
+ * pools before anything else loads, so this file runs on its own (node --test
+ * gives each file its own process).
  *
  *   pnpm --filter @gloamtrade/mcp test
  *

@@ -6,7 +6,7 @@
  * a forged message, spent and not-yet-landed payments, a duplicate post, a node
  * that refuses wide ranges, malformed codes, and a chain with no board. With
  * GLOAM_LIVE=1 it also scans the live testnet and mainnet boards read-only
- * (Robinhood Chain and Tempo) with a fresh key.
+ * (Robinhood Chain, Tempo and Base Sepolia) with a fresh key.
  *
  * Run after build:  node test/incoming.selftest.mjs
  */
@@ -24,6 +24,7 @@ import {
   randomSecretField,
   fieldToHex,
   mainnetNetwork,
+  testnetNetwork,
   GLOAM_NETWORKS,
   RH_MAINNET_USDG,
   FIELD_PRIME,
@@ -233,7 +234,7 @@ const someoneElse = await generateReceiveKey();
 let live = "skipped (set GLOAM_LIVE=1)";
 if (process.env.GLOAM_LIVE === "1") {
   const fresh = await generateReceiveKey();
-  for (const n of [GLOAM_NETWORKS.robinhood, GLOAM_NETWORKS.tempo]) {
+  for (const n of [GLOAM_NETWORKS.robinhood, GLOAM_NETWORKS.tempo, testnetNetwork("base")].filter(Boolean)) {
     const client = createPublicClient({ transport: http(n.rpcUrl) });
     const r = await scanIncomingPayments({ client, network: n, receiveKey: fresh });
     assert(r.payments.length === 0 && r.scannedTo > n.deployBlock, `${n.label} testnet board scans end to end`);
