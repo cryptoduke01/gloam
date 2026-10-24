@@ -37,10 +37,10 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
 
 /**
  * Base Sepolia (84532): ShieldPoolPayments on the ceremony's final keys, with
- * test funds. FILLED IN AFTER ITS DEPLOY, like MAINNET_POOLS: until it has both
- * values, Base Sepolia does not exist for the SDK either.
+ * test funds. Filled in after its deploy, like MAINNET_POOLS: without both
+ * values Base Sepolia does not exist for the SDK. Deployed 24 Oct 2026.
  */
-export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: null, deployBlock: null };
+export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 49_802_958n };
 
 function checkedPool(entry: MainnetPoolInput, name: string): { pool: Address; deployBlock: bigint } | null {
   const { pool, deployBlock } = entry;

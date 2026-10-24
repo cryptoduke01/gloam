@@ -274,8 +274,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
   // Base Sepolia: the practice network for Base, with test funds but the
   // mainnet pool (ShieldPoolPayments on the ceremony's final keys, payments
   // only, the same assets and beta deposit limits as Base mainnet, the cash-out
-  // fee), so Base mainnet ships on code proven here. Hidden until
-  // BASE_SEPOLIA_POOL is filled in (lib/mainnet.ts). No payment-memo board yet.
+  // fee), so Base mainnet ships on code proven here. Pool from BASE_SEPOLIA_POOL
+  // (lib/mainnet.ts), deployed 2026-10-24.
   base: {
     key: "base",
     label: "Base",
@@ -294,7 +294,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
     stableAssets: [],
     status: "live",
-    payMemo: null,
+    // GloamPayMemo, deployed 2026-10-24 after the vault (no owner, holds nothing, never logs the poster)
+    payMemo: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 49_804_175n, emitsPoster: false },
     note: "Practice network on Base Sepolia, test funds: private USDC, EURC and ETH payments on the mainnet vault.",
     explorerTx: (hash) => `${baseTestnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseTestnet.blockExplorers.default.url}/address/${addr}`,
