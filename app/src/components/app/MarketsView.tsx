@@ -53,7 +53,10 @@ export function MarketsView() {
 
   const { settings } = useTradingSettings();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<Filter>("stocks");
+  // The saved default filter (Settings), until one is picked here. Read each
+  // render, since settings load after the first one.
+  const [pickedKind, setKind] = useState<Filter | null>(null);
+  const kind: Filter = pickedKind ?? settings.marketFilter;
   const [menuOpen, setMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);

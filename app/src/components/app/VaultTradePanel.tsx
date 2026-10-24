@@ -79,12 +79,15 @@ export function VaultTradePanel({
   marketSymbol,
   tokenAddress,
   hasPool,
+  initialSide = "buy",
   onUsePrivate,
 }: {
   marketId?: string;
   marketSymbol: string;
   tokenAddress?: Address;
   hasPool: boolean;
+  /** The saved default side (Settings), until a side is picked here. */
+  initialSide?: Side;
   onUsePrivate?: () => void;
 }) {
   const shieldLive = isShieldDeployed();
@@ -101,7 +104,8 @@ export function VaultTradePanel({
     refresh: refreshTree,
   } = useShieldTree();
 
-  const [side, setSide] = useState<Side>("buy");
+  const [pickedSide, setSide] = useState<Side | null>(null);
+  const side: Side = pickedSide ?? initialSide;
   const [noteId, setNoteId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

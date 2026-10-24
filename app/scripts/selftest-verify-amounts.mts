@@ -1,11 +1,14 @@
 /**
  * Self-test: /verify states a proof's amount exactly, and an expired proof
- * with a check that could not run does not say it checked out.
+ * with a check that could not run does not say it checked out. Also: the
+ * saved trading defaults start where Markets opens (the stock list).
  *
  * Review, 24 Oct 2026: amounts went through Number with 6 decimals, so "a
  * private balance of exactly" 1 wei of ETH read "exactly 0" and a large amount
- * lost its last digits; and an expired proof whose vault check could not
- * reach the network still said "This proof checked out".
+ * lost its last digits; an expired proof whose vault check could not reach
+ * the network still said "This proof checked out"; and the Default side and
+ * Default market filter in Settings were never applied (both screens froze
+ * the value from before settings had loaded, and Markets ignored it).
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-verify-amounts.mts
  */
@@ -16,6 +19,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const { ProofVerdict, amountOf } = await import("../src/components/verify/ProofVerdict");
 const { knownTokens } = await import("../src/lib/tokens");
+const { DEFAULT_SETTINGS, loadSettings } = await import("../src/lib/settings");
 type BalanceProof = import("../src/lib/proofs/types").BalanceProof;
 type VerifyResult = import("../src/lib/proofs/types").VerifyResult;
 
@@ -85,6 +89,18 @@ test("an expired proof with a check that could not run does not say it checked o
   assert.match(html, />Expired</);
   assert.doesNotMatch(html, /checked out, but/);
   assert.match(html, /not every check could run/);
+});
+
+test("Markets opens on the stock list, and a saved default is kept", () => {
+  localStorage.clear();
+  assert.equal(DEFAULT_SETTINGS.marketFilter, "stocks");
+  assert.equal(loadSettings().marketFilter, "stocks");
+  localStorage.setItem("gloam_trading_settings", JSON.stringify({ defaultSide: "sell", marketFilter: "onchain" }));
+  assert.deepEqual([loadSettings().defaultSide, loadSettings().marketFilter], ["sell", "onchain"]);
+  localStorage.setItem("gloam_trading_settings", JSON.stringify({ showUsd: false }));
+  assert.equal(loadSettings().marketFilter, "stocks", "settings saved before the filter existed");
+  localStorage.setItem("gloam_trading_settings", JSON.stringify({ marketFilter: "meme" }));
+  assert.equal(loadSettings().marketFilter, "all", "an old filter still maps as before");
 });
 
 console.log(`\n${passed} proof verdict checks passed`);
