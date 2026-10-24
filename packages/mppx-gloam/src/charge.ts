@@ -25,12 +25,21 @@ import {
   isMainnetChainId,
   networkForChainId,
   networkName,
+  BASE_EURC,
+  BASE_MAINNET_CHAIN_ID,
+  BASE_SEPOLIA_CHAIN_ID,
+  BASE_SEPOLIA_EURC,
+  BASE_SEPOLIA_USDC,
+  BASE_USDC,
+  BASE_USDT,
   GLOAM_TOKEN,
   NATIVE_ASSET,
+  RH_MAINNET_CHAIN_ID,
   RH_MAINNET_USDG,
   RH_USDG,
   TEMPO_OUSD,
   TEMPO_PATHUSD,
+  TEMPO_MAINNET_CHAIN_ID,
   TEMPO_USDCE,
   TEMPO_USDT0,
   type GloamNetwork,
@@ -49,7 +58,7 @@ export type GloamMode = "push" | "pull";
 export const GLOAM_MODES: readonly GloamMode[] = ["push", "pull"];
 
 export interface GloamChargeMethodDetails {
-  /** Chain the shielded pool lives on: Tempo 4217 or Robinhood Chain 4663 (mainnet), Tempo Moderato 42431 or Robinhood Chain testnet 46630. */
+  /** Chain the shielded pool lives on: Tempo 4217 or Robinhood Chain 4663 (mainnet), Tempo Moderato 42431 or Robinhood Chain testnet 46630; Base 8453 and Base Sepolia 84532 once their pools are in. */
   chainId: number;
   /** The Gloam pool the transfer settles through. Clients and servers accept only the official pool for chainId. */
   pool: Address;
@@ -155,7 +164,8 @@ const UINT = /^(0|[1-9][0-9]*)$/;
 export function assetDecimals(currency: Address): number | undefined {
   const c = lc(currency);
   if (c === lc(NATIVE_ASSET) || c === lc(GLOAM_TOKEN)) return 18;
-  if ([TEMPO_PATHUSD, TEMPO_OUSD, TEMPO_USDCE, TEMPO_USDT0, RH_USDG, RH_MAINNET_USDG].some((a) => c === lc(a))) return 6;
+  const sixes = [TEMPO_PATHUSD, TEMPO_OUSD, TEMPO_USDCE, TEMPO_USDT0, RH_USDG, RH_MAINNET_USDG, BASE_USDC, BASE_EURC, BASE_USDT, BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC];
+  if (sixes.some((a) => c === lc(a))) return 6;
   return undefined;
 }
 
@@ -169,10 +179,13 @@ export function assetSymbol(chainId: number, currency: Address): string {
   if (c === lc(TEMPO_USDT0)) return "USDT0";
   if (c === lc(RH_USDG) || c === lc(RH_MAINNET_USDG)) return "USDG";
   if (c === lc(GLOAM_TOKEN)) return "GLOAM";
+  if (c === lc(BASE_USDC) || c === lc(BASE_SEPOLIA_USDC)) return "USDC";
+  if (c === lc(BASE_EURC) || c === lc(BASE_SEPOLIA_EURC)) return "EURC";
+  if (c === lc(BASE_USDT)) return "USDT";
   return "TOKEN";
 }
 
-/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood". */
+/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood", and "base-mainnet" / "base" once their pools are in. */
 export type GloamChargeNetwork = GloamNetworkKey;
 
 // ── building and parsing requests ─────────────────────────────────────────────
@@ -184,13 +197,14 @@ export interface BuildChargeRequestParams {
   recipient: string;
   /**
    * "tempo-mainnet" or "robinhood-mainnet" (real money), "tempo" or "robinhood"
-   * (the testnets), or a chain id. Default "tempo" (Tempo testnet), as in 0.0.x.
+   * (the testnets), or a chain id. "base-mainnet" and "base" (Base Sepolia) work
+   * once the SDK has their pools. Default "tempo" (Tempo testnet), as in 0.0.x.
    */
   network?: GloamChargeNetwork | number;
   /**
    * Token address. Default: the network's first stablecoin (USDC.e on Tempo
-   * mainnet, USDG on Robinhood Chain mainnet, PathUSD on Tempo testnet) and
-   * native ETH on Robinhood Chain testnet.
+   * mainnet, USDG on Robinhood Chain mainnet, USDC on Base, PathUSD on Tempo
+   * testnet) and native ETH on Robinhood Chain testnet.
    */
   currency?: Address;
   decimals?: number;
@@ -201,6 +215,14 @@ export interface BuildChargeRequestParams {
 }
 
 const defaultAsset = (net: GloamNetwork) => net.assets[0]!;
+
+/** Chain ids of the networks whose pool comes with an SDK release, pool or not. */
+const PUBLISHED_POOL_CHAINS: Partial<Record<GloamNetworkKey, number>> = {
+  "robinhood-mainnet": RH_MAINNET_CHAIN_ID,
+  "tempo-mainnet": TEMPO_MAINNET_CHAIN_ID,
+  "base-mainnet": BASE_MAINNET_CHAIN_ID,
+  base: BASE_SEPOLIA_CHAIN_ID,
+};
 
 /** Resolve a network name or chain id to a chain id, plus that network's default asset. */
 export function resolveNetwork(network: BuildChargeRequestParams["network"] = "tempo") {
@@ -215,9 +237,10 @@ export function resolveNetwork(network: BuildChargeRequestParams["network"] = "t
   }
   const net = getGloamNetwork(network);
   if (!net) {
+    const id = PUBLISHED_POOL_CHAINS[network];
     throw new Error(
-      network === "tempo-mainnet" || network === "robinhood-mainnet"
-        ? `This version of @gloamtrade/sdk has no ${networkName(network === "tempo-mainnet" ? 4217 : 4663)} mainnet pool yet. Update it.`
+      id !== undefined
+        ? `This version of @gloamtrade/sdk has no ${networkName(id)}${isMainnetChainId(id) ? " mainnet" : ""} pool yet. Update it.`
         : `Unknown Gloam network "${network}".`
     );
   }
