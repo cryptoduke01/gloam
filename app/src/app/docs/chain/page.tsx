@@ -429,8 +429,8 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Mainnet assets</strong>,{" "}
-          {BASE_MAINNET_TOKENS.map((t) => t.symbol).join(", ")} (6 decimals each)
-          and ETH. USDC and EURC are Circle&apos;s; USDT is Tether bridged from
+          {BASE_MAINNET_TOKENS.map((t) => t.symbol).join(", ")}{" "}
+          (6 decimals each) and ETH. USDC and EURC are Circle&apos;s; USDT is Tether bridged from
           Ethereum over Base&apos;s standard bridge.
         </li>
         <li>
@@ -489,7 +489,8 @@ export default function DocsNetworksPage() {
           would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Base yet.</strong> Private swaps (next, through a router
+          <strong>Not on Base yet.</strong>{" "}
+          Private swaps (next, through a router
           on Uniswap v4) and bringing money over from another chain (the Relay
           bridge). Payments, payroll, payment requests, claim links and proofs
           work as on the other chains. Finding a payment by scanning with your
