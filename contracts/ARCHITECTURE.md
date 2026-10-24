@@ -35,6 +35,8 @@ Mainnet runs `ShieldPoolPayments`: the same surface without `sealedSwap`, plus b
 
 Both mainnets run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol` and `DeployTempoMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open; an external audit is planned.
 
+Base is ready to deploy on the same path, not deployed: `DeployBaseSepolia.s.sol` (`84532`, the practice network, on the final keys too) and `DeployBaseMainnet.s.sol` (`8453`), with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+
 **Robinhood Chain mainnet `4663`.**
 
 | | |

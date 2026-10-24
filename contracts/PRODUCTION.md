@@ -60,6 +60,22 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
       `GLOAM_RPC_URL_4217` to a private RPC for the server (the RPC env is still to do; the public
       RPCs are the fallback)
 
+## 2b. Base (ready to deploy, not deployed)
+
+- [x] `script/DeployBaseSepolia.s.sol` (`84532`) and `script/DeployBaseMainnet.s.sol` (`8453`) on
+      the shared `script/MainnetDeploy.sol`, native ETH allowed, final keys on both (Base Sepolia
+      is a rehearsal of the mainnet deploy, so it runs the same keys and contract)
+- [x] Assets checked on chain: USDC and EURC (Circle, 6 decimals) on both, bridged USDT
+      (6 decimals) on Base mainnet only, and ETH. 500 / 25,000 per stablecoin; 0.2 / 10 ETH
+- [x] `POSEIDON_T3_ONLY=1 node circuits/scripts/deploy-poseidon.mjs` deploys PoseidonT3 alone, so
+      a fresh deployer gets the same PoseidonT3 and vault addresses as on Robinhood Chain and Tempo
+- [x] Fork dry runs of both scripts pass every read-back check; `test/DeployBase.t.sol` runs both
+      with the runbook settings
+- [ ] Base Sepolia deployed, ownership accepted, relayer funded, tested end to end in the app
+- [ ] Base mainnet deployed (only after Base Sepolia), pool and block in `MAINNET_POOLS[8453]`
+
+Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+
 ## 3. Review
 
 - [x] Internal pre-mainnet review, 20 Oct 2026 (six-part review of the mainnet

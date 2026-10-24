@@ -31,6 +31,10 @@ Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, wit
 
 Full addresses, verifiers and superseded pools: [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json) and [ARCHITECTURE.md](./ARCHITECTURE.md).
 
+## Ready to deploy: Base (not deployed)
+
+Base Sepolia (`84532`, practice network first) and Base mainnet (`8453`) run the same `ShieldPoolPayments` deploy as the mainnets, on the final keys: `script/DeployBaseSepolia.s.sol` and `script/DeployBaseMainnet.s.sol`, both through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, EURC and ETH on both, plus bridged USDT on Base mainnet; 500 / 25,000 per stablecoin and 0.2 / 10 ETH. Nothing is deployed yet; the runbook is [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+
 | Feature | Status |
 | --- | --- |
 | Shield / unshield / transfer | Live on mainnet (final keys, beta deposit limits, 0.25% cash-out fee) and testnet (dev keys); no admin withdraw, 3-day timelock on rule changes |
