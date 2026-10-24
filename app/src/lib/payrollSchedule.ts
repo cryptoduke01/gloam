@@ -373,6 +373,24 @@ export function runTitle(s: PayrollSchedule, payday: string, today: string = iso
 // ------------------------------------------------------------------ storage
 
 const STORE_KEY = "gloam.payroll.schedules.v1";
+export const MAX_PAYROLL_SCHEDULES = 50;
+const STORE_LOCK = "gloam-payroll-schedules";
+export const SCHEDULES_CHANGED_EVENT = "gloam:schedules-changed";
+const WRITE_CONFLICT = new Error("Schedules changed in another tab. Please try again.");
+// Set only by the serialized write queue, never by a read-only refresh.
+let writeSnapshot: string | null = null;
+
+export function subscribeSchedules(refresh: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORE_KEY || event.key === null) refresh();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(SCHEDULES_CHANGED_EVENT, refresh);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(SCHEDULES_CHANGED_EVENT, refresh);
+  };
+}
 
 /**
  * Every saved schedule. `forWrite` refuses when schedules are stored but cannot
@@ -391,7 +409,11 @@ async function readAll(forWrite = false): Promise<PayrollSchedule[]> {
 
 async function writeAll(list: PayrollSchedule[]): Promise<void> {
   // Names and Gloam addresses: sealed under the same device key as notes and runs.
-  window.localStorage.setItem(STORE_KEY, await sealJson(list.slice(0, 50)));
+  const sealed = await sealJson(list);
+  // Where Web Locks are unavailable, retry if another tab wrote during encryption.
+  if (window.localStorage.getItem(STORE_KEY) !== writeSnapshot) throw WRITE_CONFLICT;
+  window.localStorage.setItem(STORE_KEY, sealed);
+  window.dispatchEvent(new Event(SCHEDULES_CHANGED_EVENT));
 }
 
 export async function loadSchedules(chainId: number, pool: Address): Promise<PayrollSchedule[]> {
@@ -400,13 +422,30 @@ export async function loadSchedules(chainId: number, pool: Address): Promise<Pay
 
 let writeQueue: Promise<void> = Promise.resolve();
 function queue(task: () => Promise<void>): Promise<void> {
-  writeQueue = writeQueue.then(task, task);
+  const run = async () => {
+    const mutate = async () => {
+      for (let attempt = 0; ; attempt++) {
+        writeSnapshot = window.localStorage.getItem(STORE_KEY);
+        try {
+          return await task();
+        } catch (error) {
+          if (error !== WRITE_CONFLICT || attempt >= 5) throw error;
+        }
+      }
+    };
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    return locks?.request ? locks.request(STORE_LOCK, mutate) : mutate();
+  };
+  writeQueue = writeQueue.then(run, run);
   return writeQueue;
 }
 
 export function saveSchedule(s: PayrollSchedule): Promise<void> {
   return queue(async () => {
     const all = await readAll(true);
+    if (!all.some((x) => x.id === s.id) && all.length >= MAX_PAYROLL_SCHEDULES) {
+      throw new Error(`You can save up to ${MAX_PAYROLL_SCHEDULES} schedules across all networks. Delete one before adding another.`);
+    }
     await writeAll([s, ...all.filter((x) => x.id !== s.id)]);
   });
 }
