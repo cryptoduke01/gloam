@@ -103,6 +103,17 @@ What is different on mainnet:
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
 
+### Base: coming next
+
+Base is the third chain, and it is not live yet. Version 0.3.0 defines both Base networks, but neither has a pool in this version, so `mainnetNetwork("base")` and `testnetNetwork("base")` return `null` and the builders refuse chain ids `8453` and `84532`. They switch on once their pools are published in an SDK release. Base Sepolia comes first, as the practice network.
+
+| Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
+| --- | --- | --- | --- | --- |
+| Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
+| Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
+
+Base Sepolia is play money, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so practising there is practising the real thing. Both Base pools take native ETH. There is no payment-message board on Base yet, so a payee gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
+
 ## Quickstart: shield your first note
 
 The pool enforces a proof at deposit, so `buildShieldBoundIntent` mints the note **and** generates the shield proof. You approve the token and sign the resolved call. The `note.secret` it returns is the only spend authority, so persist it.
@@ -414,24 +425,31 @@ Everything exports from one barrel. The crypto and math core is pure and runs an
 ### Networks, keys and fees (new in 0.1.0)
 
 ```ts
-mainnetNetwork("robinhood" | "tempo"): GloamNetwork | null  // null until this SDK version has the pool
+mainnetNetwork("robinhood" | "tempo" | "base"): GloamNetwork | null  // null until this SDK version has the pool
+testnetNetwork("robinhood" | "tempo" | "base"): GloamNetwork | null  // new in 0.3.0; Base Sepolia is null until its pool is in
 gloamNetworks(): GloamNetwork[]                             // mainnets with a pool first, then testnets
-getGloamNetwork(key): GloamNetwork | null                   // "robinhood-mainnet" | "tempo-mainnet" | "robinhood" | "tempo"
+getGloamNetwork(key): GloamNetwork | null                   // "robinhood-mainnet" | "tempo-mainnet" | "base-mainnet" | "robinhood" | "tempo" | "base"
 networkForChainId(chainId): GloamNetwork | undefined        // now finds mainnets too
 GLOAM_NETWORKS / GLOAM_TESTNETS                             // the two testnets, unchanged
 poolForChainId(chainId): Address                            // throws rather than guess
 isMainnetChainId(chainId), networkName(chainId)
-ceremonyForChainId(chainId): "dev" | "production"           // production (final keys) on 4663 and 4217
+isPaymentsPoolChainId(chainId)                              // ShieldPoolPayments: every mainnet, and Base Sepolia
+ceremonyForChainId(chainId): "dev" | "production"           // production (final keys) on 4663, 4217, 8453 and 84532
 circuitArtifactUrls(circuit, chainId, base?)                // { wasm, zkey } for "shield" | "transfer" | "unshield"
 circuitArtifactFiles(circuit, ceremony), CIRCUIT_SHA256     // relative paths and SHA-256 to check a download
 GLOAM_ARTIFACTS_URL                                         // https://www.gloam.trade/circuits
 assertDepositAllowed(chainId, asset, amount)                // listed asset, beta per-deposit limit, no native on mainnet
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
+BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia pool, null until it is in
 RH_MAINNET_CHAIN, TEMPO_MAINNET_CHAIN, RH_TESTNET_CHAIN, TEMPO_TESTNET_CHAIN  // viem chains
+BASE_MAINNET_CHAIN, BASE_SEPOLIA_CHAIN                      // viem's Base chains, on RPCs that serve eth_getLogs
 RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS                     // assets with beta deposit limits
+BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS                    // Base: USDC, EURC, USDT (mainnet only), ETH
 RH_MAINNET_USDG, GLOAM_TOKEN, TEMPO_USDCE, TEMPO_USDT0, TEMPO_PATHUSD, TEMPO_OUSD
+BASE_USDC, BASE_EURC, BASE_USDT, BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC
 RH_MAINNET_CHAIN_ID (4663), TEMPO_MAINNET_CHAIN_ID (4217), MAINNET_POSEIDON_T3
+BASE_MAINNET_CHAIN_ID (8453), BASE_SEPOLIA_CHAIN_ID (84532)
 ```
 
 ### Intent builders
@@ -585,7 +603,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 - **Mainnet is beta, with real money.** Robinhood Chain (`4663`) and Tempo (`4217`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
-- **Testnet is free practice.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys and test funds that have no value.
+- **Testnet is free practice.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys and test funds that have no value. Base Sepolia (`84532`), once its pool is in, is test funds too, on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
 - **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on both mainnets; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
 - **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.
