@@ -7,6 +7,7 @@ import { formatUnits, type Address } from "viem";
 import { TokenLogo } from "../TokenLogo";
 import { assetDecimals, formatAssetAmount, parseAssetAmount } from "@/lib/shield";
 import { amountTextError } from "@/lib/amountText";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { PAYROLL_TEMPLATE, draftTotal, parsePayrollCsv } from "@/lib/payroll";
 import {
   dayLabel,
@@ -90,6 +91,10 @@ export function ScheduleEditor({
   const reduce = useReducedMotion();
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus starts on the name, stays in the dialog, and goes back to the button
+  // that opened it; Escape closes.
+  useModalFocus(dialogRef, onClose, { initial: nameRef, open: mounted });
 
   const c = base.cadence;
   const [name, setName] = useState(base.name);
@@ -154,18 +159,12 @@ export function ScheduleEditor({
                   : null;
 
   useEffect(() => {
-    nameRef.current?.focus({ preventScroll: true });
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   async function save() {
     setTried(true);
@@ -205,7 +204,9 @@ export function ScheduleEditor({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-6"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-[200] flex items-end justify-center outline-none sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="schedule-editor-title"
