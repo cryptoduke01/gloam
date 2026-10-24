@@ -69,9 +69,21 @@ export default function DocsSdkReferencePage() {
                 <code>mainnetNetwork(chain)</code>
               </td>
               <td>
-                <code>chain</code> is <code>&quot;robinhood&quot;</code> or{" "}
-                <code>&quot;tempo&quot;</code>. A mainnet <code>GloamNetwork</code>,
-                or <code>null</code> until its pool is published
+                <code>chain</code> is <code>&quot;robinhood&quot;</code>,{" "}
+                <code>&quot;tempo&quot;</code> or <code>&quot;base&quot;</code>{" "}
+                (0.3.0). A mainnet <code>GloamNetwork</code>, or <code>null</code>{" "}
+                until its pool is published (Base: not yet)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>testnetNetwork(chain)</code>
+              </td>
+              <td>
+                0.3.0. A chain&apos;s testnet: the Robinhood Chain and Tempo
+                testnets, or Base Sepolia, which is <code>null</code> until its
+                pool is published. Base Sepolia runs the mainnet pool and keys
+                with test funds
               </td>
             </tr>
             <tr>
@@ -111,7 +123,8 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 Which keys a chain&apos;s verifiers hold: <code>&quot;production&quot;</code>{" "}
-                (the final keys) on mainnet, <code>&quot;dev&quot;</code> on the testnets
+                (the final keys) on mainnet and on Base Sepolia,{" "}
+                <code>&quot;dev&quot;</code> on the Robinhood Chain and Tempo testnets
               </td>
             </tr>
             <tr>
@@ -161,6 +174,17 @@ export default function DocsSdkReferencePage() {
                 <code>TEMPO_USDT0</code>, <code>TEMPO_OUSD</code>
               </td>
               <td>Tempo mainnet pool assets, 6 decimals each</td>
+            </tr>
+            <tr>
+              <td>
+                <code>BASE_USDC</code>, <code>BASE_EURC</code>,{" "}
+                <code>BASE_USDT</code>; <code>BASE_SEPOLIA_USDC</code>,{" "}
+                <code>BASE_SEPOLIA_EURC</code>
+              </td>
+              <td>
+                0.3.0. Base mainnet and Base Sepolia pool assets, 6 decimals each;
+                native ETH is listed on both (Base is not deployed yet)
+              </td>
             </tr>
             <tr>
               <td>

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
-import { mainnetPool, type MainnetChainId } from "@/lib/mainnet";
-import { RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
+import { baseSepoliaPool, mainnetPool, type MainnetChainId } from "@/lib/mainnet";
+import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
 import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
@@ -21,6 +21,16 @@ function MainnetDeployBlock({ chainId }: { chainId: MainnetChainId }) {
   const p = mainnetPool(chainId);
   return p ? <code>{p.deployBlock.toString()}</code> : <>Published at launch</>;
 }
+
+/** Base Sepolia's pool, or a placeholder until it is filled in after its deploy. */
+function BaseSepoliaPoolAddress() {
+  const p = baseSepoliaPool();
+  return p ? <code>{p.pool}</code> : <>Not deployed yet</>;
+}
+
+/** Base's pools are in once their addresses are filled in (lib/mainnet.ts). */
+const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
+const BASE_MAINNET_LIVE = mainnetPool(8453) !== null;
 
 const MAINNET_POSEIDON_T3 = "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
 const MAINNET_OWNER = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
@@ -388,6 +398,105 @@ export default function DocsNetworksPage() {
         balance whenever you want it public. Tokenized-equity markets
         are a Robinhood Chain testnet feature and do not appear on Tempo.
       </p>
+
+      <h2 id="base">Base</h2>
+      <p>
+        Base is an Ethereum L2 (OP Stack) where a lot of USDC already moves.
+        Gloam on Base is the same vault as on the other mainnets:{" "}
+        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
+        deposit limits and the 0.25% cash-out fee. Base Sepolia comes first as
+        the practice network, then Base mainnet on the same code once it is
+        tested end to end.{" "}
+        {BASE_MAINNET_LIVE
+          ? "Both are live: Base mainnet is real money and beta software, Base Sepolia is play money."
+          : BASE_SEPOLIA_LIVE
+            ? "Base Sepolia is live with test funds (play money). Base mainnet is not deployed yet, so the app does not offer it."
+            : "Neither is deployed yet, so the app does not offer Base. This section is what to expect."}
+      </p>
+      <ul>
+        <li>
+          <strong>Mainnet chain ID</strong>, 8453
+        </li>
+        <li>
+          <strong>Mainnet RPC</strong>, <code>https://mainnet.base.org</code>
+        </li>
+        <li>
+          <strong>Mainnet explorer</strong>, <code>https://basescan.org</code>
+        </li>
+        <li>
+          <strong>Mainnet pool</strong>,{" "}
+          {BASE_MAINNET_LIVE ? <MainnetPoolAddress chainId={8453} /> : <>Not deployed yet</>}
+        </li>
+        <li>
+          <strong>Mainnet assets</strong>,{" "}
+          {BASE_MAINNET_TOKENS.map((t) => t.symbol).join(", ")} (6 decimals each)
+          and ETH. USDC and EURC are Circle&apos;s; USDT is Tether bridged from
+          Ethereum over Base&apos;s standard bridge.
+        </li>
+        <li>
+          <strong>Testnet name</strong>, Base Sepolia
+        </li>
+        <li>
+          <strong>Testnet chain ID</strong>, 84532
+        </li>
+        <li>
+          <strong>Testnet RPC</strong>, <code>https://sepolia.base.org</code>
+        </li>
+        <li>
+          <strong>Testnet explorer</strong>, <code>https://sepolia.basescan.org</code>
+        </li>
+        <li>
+          <strong>Testnet pool</strong>, <BaseSepoliaPoolAddress />
+        </li>
+        <li>
+          <strong>Testnet assets</strong>, Circle&apos;s test{" "}
+          {BASE_SEPOLIA_TOKENS.map((t) => t.symbol).join(" and ")} and test ETH.
+          There is no USDT on Base Sepolia. Faucets are in the{" "}
+          <Link href="/docs/testnet#base">testnet guide</Link>.
+        </li>
+        <li>
+          <strong>Native gas</strong>, ETH, and ETH is a pool asset here (it is
+          not on Robinhood Chain mainnet)
+        </li>
+        <li>
+          <strong>Beta limits, both networks</strong>, each stablecoin 500 per
+          deposit and 25,000 in total; ETH 0.2 per deposit and 10 in total
+        </li>
+      </ul>
+
+      <h3>Integration notes for Base</h3>
+      <ul>
+        <li>
+          <strong>Base Sepolia runs the mainnet keys.</strong> It is play money,
+          but the same contract, keys, limits and cash-out fee as Base mainnet,
+          so proofs for chain 84532 use the final keys, not the dev keys the
+          other testnets use.
+        </li>
+        <li>
+          <strong>Log reads.</strong> Base&apos;s own public RPCs cap{" "}
+          <code>eth_getLogs</code> at 200 blocks (Sepolia) or refuse it
+          (mainnet), and rebuilding the vault tree needs logs. Gloam reads Base
+          through publicnode (50,000 blocks a read); use your own RPC if you
+          sync often.
+        </li>
+        <li>
+          <strong>EURC is a euro stablecoin.</strong> The app never counts it as
+          a dollar.
+        </li>
+        <li>
+          <strong>Issuer controls.</strong> Circle can blacklist an address on
+          USDC and EURC. If it ever blacklisted the vault itself, that asset
+          would be frozen in the vault; other assets keep working.
+        </li>
+        <li>
+          <strong>Not on Base yet.</strong> Private swaps (next, through a router
+          on Uniswap v4) and bringing money over from another chain (the Relay
+          bridge). Payments, payroll, payment requests, claim links and proofs
+          work as on the other chains. Finding a payment by scanning with your
+          Gloam address needs Base&apos;s payment-message board; until it is
+          deployed, a payment there goes by claim link.
+        </li>
+      </ul>
 
       <h2>Switching networks in the app</h2>
       <p>
