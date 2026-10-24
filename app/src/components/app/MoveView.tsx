@@ -2941,7 +2941,7 @@ export function MoveView() {
                       onClick={() => {
                         void rotateReceiveIdentity().then(setMyIdentity);
                       }}
-                      title="Makes a new address. Payments sent to the old one stop opening here."
+                      title="Makes a new address to share. Payments to your earlier addresses still open in this browser."
                       className="btn btn-quiet btn-sm -mr-2 text-mute"
                     >
                       New address

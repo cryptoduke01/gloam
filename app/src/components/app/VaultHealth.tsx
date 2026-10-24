@@ -6,6 +6,7 @@ import { useNetwork } from "./NetworkProvider";
 import { vaultEnvDiagnostics } from "@/lib/config";
 import { HASH_SCHEME, isShieldDeployed } from "@/lib/shield";
 import { readVaultSealedReadiness } from "@/lib/vaultStatus";
+import { vaultSwapRouter } from "@/lib/vaultSwap";
 import { useShieldTree } from "@/hooks/useShieldTree";
 import { StatusPill } from "./StatusPill";
 
@@ -120,17 +121,11 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
       <p className="mt-3 max-w-[64ch] text-[13px] leading-relaxed text-mute">
-        {paymentsOnly ? (
-          <>
-            Money stays private while it stays in the vault. Adding to it and
-            sending from it keep amounts hidden. Cashing out shows the amount.
-          </>
-        ) : (
-          <>
-            Money stays private while it stays in the vault. Adding, sending and
-            trading from it keep amounts hidden. Cashing out shows the amount.
-          </>
-        )}
+        {/* What shows, as /docs/privacy-model has it: deposits and cash outs are public, a swap shows its amounts. */}
+        Your balance and private payments stay hidden. Adding money and cashing
+        out are public transfers that show the amount and the wallet.
+        {vaultSwapRouter(network.chainId) !== null ? " A swap hides who swapped, not the amounts." : null}
+        {network.stocks ? " Trades show their size and pair." : null}
       </p>
       {network.pool && (
         <p className="tnum mt-3 break-all border-t border-line pt-3 text-[12px] leading-relaxed text-faint">
