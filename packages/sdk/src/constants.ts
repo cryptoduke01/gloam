@@ -45,6 +45,9 @@ export const SHIELD_VERIFIER: Address =
 export const TEMPO_SEALED_VAULT: Address =
   "0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb";
 export const TEMPO_SEALED_VAULT_DEPLOY_BLOCK = 37_411_195n;
+/** Encrypted payment-message board on Base Sepolia (84532), deployed after the pool; the event has no poster address. */
+export const BASE_SEPOLIA_PAY_MEMO: Address =
+  "0x01B3172d9900Cb26d57E986429b9b23854c74598";
 /** Encrypted payment-message board on Tempo (event has no poster address). */
 export const TEMPO_PAY_MEMO: Address =
   "0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3";
@@ -286,7 +289,7 @@ export type GloamTestnetNetwork = GloamNetwork & { key: "robinhood" | "tempo"; p
  * The two TESTNETS, by chain: Robinhood Chain testnet (46630) and Tempo
  * Moderato (42431). Unchanged since 0.0.x so existing code keeps working; for
  * mainnet use mainnetNetwork() or gloamNetworks(), and for Base Sepolia
- * testnetNetwork("base") (null until its pool is in).
+ * testnetNetwork("base").
  */
 export const GLOAM_NETWORKS: Record<"robinhood" | "tempo", GloamTestnetNetwork> = {
   robinhood: {
@@ -390,7 +393,7 @@ const BASE_TESTNET: GloamNetwork | null = (() => {
     chainId: BASE_SEPOLIA_CHAIN_ID,
     pool: p.pool,
     deployBlock: p.deployBlock,
-    payMemo: null,
+    payMemo: BASE_SEPOLIA_PAY_MEMO,
     nativeShield: true,
     family: "base",
     testnet: true,

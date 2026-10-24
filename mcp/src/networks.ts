@@ -8,8 +8,8 @@
  *
  * Robinhood Chain and Tempo, each on mainnet (real money, the ceremony's final
  * keys, payments only, beta deposit limits) and testnet (test funds, dev keys),
- * and Base next: Base Sepolia (test funds on the mainnet pool and final keys)
- * and Base mainnet. A network with a pool to publish (every mainnet, Base
+ * and Base: Base Sepolia (test funds on the mainnet pool and final keys) and,
+ * once its pool is in, Base mainnet. A network with a pool to publish (every mainnet, Base
  * Sepolia) only exists here once the SDK has its pool, so a build without it
  * never offers that network. The chains are separate deployments of the same
  * pool design, so the same execution code serves every network.

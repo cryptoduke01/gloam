@@ -19,6 +19,8 @@
 
 import type { Address, Hex, PublicClient } from "viem";
 import {
+  BASE_SEPOLIA_CHAIN_ID,
+  BASE_SEPOLIA_PAY_MEMO,
   GLOAM_PAY_MEMO,
   RH_MAINNET_CHAIN_ID,
   RH_TESTNET_CHAIN_ID,
@@ -51,12 +53,14 @@ export interface PayMemoBoard {
 
 /**
  * The boards Gloam runs, by chain id: Robinhood Chain and Tempo, testnet and
- * mainnet. Base has none yet. On a chain with no board, payments to a Gloam
- * address are handed over as a sealed code (openIncomingPayment).
+ * mainnet, and Base Sepolia. Base mainnet has none yet. On a chain with no
+ * board, payments to a Gloam address are handed over as a sealed code
+ * (openIncomingPayment).
  */
 export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
   [RH_TESTNET_CHAIN_ID]: { address: GLOAM_PAY_MEMO, deployBlock: 90_421_567n, emitsPoster: true },
   [TEMPO_TESTNET_CHAIN_ID]: { address: TEMPO_PAY_MEMO, deployBlock: 37_410_900n, emitsPoster: false },
+  [BASE_SEPOLIA_CHAIN_ID]: { address: BASE_SEPOLIA_PAY_MEMO, deployBlock: 49_804_175n, emitsPoster: false },
   [RH_MAINNET_CHAIN_ID]: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 95_494_392n, emitsPoster: false },
   [TEMPO_MAINNET_CHAIN_ID]: { address: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", deployBlock: 45_417_629n, emitsPoster: false },
 };
