@@ -26,6 +26,8 @@ On mainnet:
 - **Pools come with the version.** A mainnet appears here once the SDK this package ships with has its pool. If `GLOAM_NETWORK` names a mainnet this version lacks, the server stops at startup and says so.
 - **Your own RPC.** `GLOAM_RPC_URL_4217` and `GLOAM_RPC_URL_4663` point Tempo and Robinhood Chain mainnet at another RPC (any chain id works the same way).
 
+**Base is next, not live yet.** This version knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH) and `base` (Base Sepolia, `84532`: test USDC, EURC and ETH), but neither has a pool in the SDK it ships with, so neither is offered and `GLOAM_NETWORK=base` stops the server at startup. They appear in a release that has their pools, Base Sepolia first as the practice network. Base Sepolia is test funds on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit). Base has no payment-message board yet.
+
 ## Install
 
 One command per client. The server speaks MCP over stdio and needs Node.js 20 or newer.
@@ -198,10 +200,12 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 | `robinhood-mainnet` | `USDG`, `GLOAM` |
 | `tempo` (testnet) | `PathUSD`, `OUSD`, `AlphaUSD`, `BetaUSD`, `ThetaUSD` |
 | `robinhood` (testnet) | `ETH`, `USDG` |
+| `base-mainnet`, once live | `USDC`, `EURC`, `USDT`, `ETH` |
+| `base` (Base Sepolia), once live | `USDC`, `EURC`, `ETH` |
 
 ### Mainnet assets in limits
 
-Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. That way a config written for testnet never starts approving real money by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`) and the mainnet USDG address name the mainnet asset directly.
+Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving real money by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base) name the mainnet asset directly.
 
 ```json
 {
