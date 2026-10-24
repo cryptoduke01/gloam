@@ -49,7 +49,7 @@ Mainnet pools are not env vars. After each mainnet deploy (runbook: [`contracts/
 | Tempo mainnet `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` | `45172561` |
 | Base mainnet `8453` | not deployed yet | |
 
-Base Sepolia (`84532`), Base's practice network, runs the mainnet pool too, so its pool goes in `BASE_SEPOLIA_POOL` in the same file and it stays hidden until then. Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
+Base Sepolia (`84532`), Base's practice network, runs the mainnet pool too, so its pool is in `BASE_SEPOLIA_POOL` in the same file: `0x39e28cde55cab798874746ac52cb4b5cc99a0194` at block `49802958` (24 October 2026). Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
 | Variable (server only) | Value |
 | --- | --- |

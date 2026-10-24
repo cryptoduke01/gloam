@@ -154,9 +154,9 @@ export default function DocsProductionPage() {
           tried to hide the size too, is retired and stays off
         </li>
         <li>
-          <strong>Base.</strong> Next on the same deploy script and final keys:
-          Base Sepolia first as the practice network, then Base mainnet once
-          it is tested end to end. Neither is deployed yet; see{" "}
+          <strong>Base mainnet.</strong> Next on the same deploy script and
+          final keys. Base Sepolia, the practice network, has run it since 24
+          October; Base mainnet follows once that is tested end to end. See{" "}
           <Link href="/docs/chain#base">Networks</Link>.
         </li>
         <li>

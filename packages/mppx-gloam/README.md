@@ -114,7 +114,7 @@ It also exports the Payment scheme codec (challenges, credentials, receipts, the
 
 The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official pools come from the SDK this package is built with: a mainnet appears once that SDK has its pool, and a challenge naming any other pool is refused on both sides.
 
-Base is next, not live yet: `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) and `"base"` (Base Sepolia `84532`, test USDC, EURC and ETH, on the final keys) are refused with a plain error until the SDK has their pools.
+Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, on the final keys) works with SDK 0.3.0, which has its pool. `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) is refused with a plain error until the SDK has its pool.
 
 ## Status
 

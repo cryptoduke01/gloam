@@ -103,16 +103,16 @@ What is different on mainnet:
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
 
-### Base: coming next
+### Base: practice network live, mainnet next
 
-Base is the third chain, and it is not live yet. Version 0.3.0 defines both Base networks, but neither has a pool in this version, so `mainnetNetwork("base")` and `testnetNetwork("base")` return `null` and the builders refuse chain ids `8453` and `84532`. They switch on once their pools are published in an SDK release. Base Sepolia comes first, as the practice network.
+Base is the third chain. Base Sepolia, the practice network, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys with test funds. Base mainnet is not deployed yet, so `mainnetNetwork("base")` returns `null` and the builders refuse chain id `8453` until an SDK release has its pool.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is play money, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so practising there is practising the real thing. Both Base pools take native ETH. There is no payment-message board on Base yet, so a payee gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
+Base Sepolia is play money, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so practising there is practising the real thing. Both Base pools take native ETH. Base Sepolia has a payment-message board (`payMemoBoardFor(84532)`); Base mainnet gets one at its deploy, and until then a payee there gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
 
 ## Quickstart: shield your first note
 
@@ -426,7 +426,7 @@ Everything exports from one barrel. The crypto and math core is pure and runs an
 
 ```ts
 mainnetNetwork("robinhood" | "tempo" | "base"): GloamNetwork | null  // null until this SDK version has the pool
-testnetNetwork("robinhood" | "tempo" | "base"): GloamNetwork | null  // new in 0.3.0; Base Sepolia is null until its pool is in
+testnetNetwork("robinhood" | "tempo" | "base"): GloamNetwork | null  // new in 0.3.0; "base" is Base Sepolia
 gloamNetworks(): GloamNetwork[]                             // mainnets with a pool first, then testnets
 getGloamNetwork(key): GloamNetwork | null                   // "robinhood-mainnet" | "tempo-mainnet" | "base-mainnet" | "robinhood" | "tempo" | "base"
 networkForChainId(chainId): GloamNetwork | undefined        // now finds mainnets too

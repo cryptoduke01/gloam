@@ -72,7 +72,7 @@ export default function DocsSdkReferencePage() {
                 <code>chain</code> is <code>&quot;robinhood&quot;</code>,{" "}
                 <code>&quot;tempo&quot;</code> or <code>&quot;base&quot;</code>{" "}
                 (0.3.0). A mainnet <code>GloamNetwork</code>, or <code>null</code>{" "}
-                until its pool is published (Base: not yet)
+                until its pool is published (Base mainnet: not yet)
               </td>
             </tr>
             <tr>
@@ -81,8 +81,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.3.0. A chain&apos;s testnet: the Robinhood Chain and Tempo
-                testnets, or Base Sepolia, which is <code>null</code> until its
-                pool is published. Base Sepolia runs the mainnet pool and keys
+                testnets, or Base Sepolia, which runs the mainnet pool and keys
                 with test funds
               </td>
             </tr>
@@ -183,7 +182,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.3.0. Base mainnet and Base Sepolia pool assets, 6 decimals each;
-                native ETH is listed on both (Base is not deployed yet)
+                native ETH is listed on both (Base mainnet is not deployed yet)
               </td>
             </tr>
             <tr>
