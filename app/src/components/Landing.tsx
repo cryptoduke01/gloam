@@ -189,11 +189,25 @@ const DEV_LINKS = [
   { label: "x402 payments", href: "/docs/agents" },
 ];
 
-const SNIPPET = `import { buildGloamPayment, relayIntent } from "@gloamtrade/sdk";
+const SNIPPET = `import {
+  buildGloamPayment,
+  encodePaymentHeader,
+  relayIntent,
+} from "@gloamtrade/sdk";
 
-const payment = await buildGloamPayment({ to, amount, asset });
-const hash = await relayIntent(payment.intent);
-// settled privately, your wallet never shows up`;
+// Pay a seller's 402 from a note in your vault.
+const payment = await buildGloamPayment({
+  requirements,
+  senderSecretHex: note.secret,
+  senderNoteAmountWei: BigInt(note.amountWei),
+  path, // from syncTree
+  prove, // artifactProver({ wasm, zkey })
+});
+// Store payment.changeNote: it is the rest of your balance.
+
+// The relay sends it, so your wallet never shows up.
+payment.payload.payload.txHash = await relayIntent(payment.intent);
+const header = encodePaymentHeader(payment.payload); // X-PAYMENT`;
 
 export function Landing() {
   return (
