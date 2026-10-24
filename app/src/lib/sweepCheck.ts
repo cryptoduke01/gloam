@@ -43,11 +43,13 @@ const MAX_INBOUND = 10;
 
 /**
  * How far back to look for arrivals: one query of `chunk` blocks, or several
- * where the node caps the range (Tempo's RPC allows 100,000 blocks a query).
- * About 6 days on Robinhood Chain and 2.5 on Tempo.
+ * where the node caps the range (Tempo's RPC allows 100,000 blocks a query,
+ * publicnode's on Base 50,000). About 6 days on Robinhood Chain, 2.5 on Tempo
+ * and 4.6 on Base.
  */
 function lookback(chainId: number): { chunk: bigint; chunks: number } {
   if (chainId === 4217 || chainId === 42431) return { chunk: BigInt(100_000), chunks: 4 };
+  if (chainId === 8453 || chainId === 84532) return { chunk: BigInt(50_000), chunks: 4 };
   return { chunk: BigInt(5_000_000), chunks: 1 };
 }
 
