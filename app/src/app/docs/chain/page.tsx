@@ -493,9 +493,9 @@ export default function DocsNetworksPage() {
           Private swaps (next, through a router
           on Uniswap v4) and bringing money over from another chain (the Relay
           bridge). Payments, payroll, payment requests, claim links and proofs
-          work as on the other chains. Finding a payment by scanning with your
-          Gloam address needs Base&apos;s payment-message board; until it is
-          deployed, a payment there goes by claim link.
+          work as on the other chains. Base Sepolia has its payment-message
+          board, so a payment can be found by scanning with your Gloam
+          address; Base mainnet gets its own when it is deployed.
         </li>
       </ul>
 

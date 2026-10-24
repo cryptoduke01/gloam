@@ -26,7 +26,7 @@ On mainnet:
 - **Pools come with the version.** A mainnet appears here once the SDK this package ships with has its pool. If `GLOAM_NETWORK` names a mainnet this version lacks, the server stops at startup and says so.
 - **Your own RPC.** `GLOAM_RPC_URL_4217` and `GLOAM_RPC_URL_4663` point Tempo and Robinhood Chain mainnet at another RPC (any chain id works the same way).
 
-**Base is next, not live yet.** This version knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH) and `base` (Base Sepolia, `84532`: test USDC, EURC and ETH), but neither has a pool in the SDK it ships with, so neither is offered and `GLOAM_NETWORK=base` stops the server at startup. They appear in a release that has their pools, Base Sepolia first as the practice network. Base Sepolia is test funds on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit). Base has no payment-message board yet.
+**Base: practice network live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
 
 ## Install
 
