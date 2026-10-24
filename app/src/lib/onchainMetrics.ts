@@ -217,9 +217,9 @@ export type OnchainMetrics = {
 /* ------------------------------------------------------------------ config */
 
 /** Requests in flight per chain. */
-const PARALLEL: Record<number, number> = { 46630: 4, 42431: 3, 4663: 2, 4217: 3 };
+const PARALLEL: Record<number, number> = { 46630: 4, 42431: 3, 84532: 3, 4663: 2, 4217: 3, 8453: 3 };
 /** Minimum gap between request starts per chain, ms. */
-const SPACING_MS: Record<number, number> = { 46630: 0, 42431: 120, 4663: 0, 4217: 120 };
+const SPACING_MS: Record<number, number> = { 46630: 0, 42431: 120, 84532: 120, 4663: 0, 4217: 120, 8453: 120 };
 /** First span per address-only getLogs; a range error halves it. Else `logRange`. */
 const SPAN: Record<number, bigint> = { 46630: 5_000_000n, 4663: 5_000_000n };
 /** getLogs spans per address per pass; the rest of a backlog waits for the next pass. */

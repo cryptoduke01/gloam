@@ -86,7 +86,7 @@ export type Ledger = {
 
 const RECENT_KEEP = 12;
 /** Requests in flight per chain. Tempo's public RPC answers 429 to bursts. */
-const PARALLEL: Record<number, number> = { 46630: 4, 42431: 3, 4663: 2, 4217: 3 };
+const PARALLEL: Record<number, number> = { 46630: 4, 42431: 3, 84532: 3, 4663: 2, 4217: 3, 8453: 3 };
 /**
  * First span to ask for per getLogs. Robinhood's public RPC takes millions of
  * blocks in one call (the vault's whole history today); Tempo caps at 100k.
@@ -108,7 +108,7 @@ const LEDGER_SPAN: Record<number, bigint> = { 46630: 1_000_000n, 4663: 500_000n 
  * node a block behind the one that gave the head, and returns nothing for
  * blocks it doesn't have yet; reading to the very head would mark them read.
  */
-const HEAD_LAG: Record<number, bigint> = { 46630: 20n, 4663: 20n };
+const HEAD_LAG: Record<number, bigint> = { 46630: 20n, 4663: 20n, 84532: 20n, 8453: 20n };
 const FRESH_MS = 30_000;
 const CACHE_PREFIX = "gloam_transparency_v1";
 

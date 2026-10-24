@@ -295,10 +295,11 @@ export const APPROVE_GAS_LIMIT = 120_000n;
 /**
  * The fixed limits above are sized for Robinhood Chain. Tempo meters gas very
  * differently (a fresh account's approve takes about 534k), and some wallets use
- * the app's number as-is, so on Tempo the wallet estimates instead.
+ * the app's number as-is, so on Tempo the wallet estimates instead. Base meters
+ * plain EVM gas and estimates well, so it estimates too.
  */
 export function gasFor(chainId: number, limit: bigint): bigint | undefined {
-  return chainId === 42431 || chainId === 4217 ? undefined : limit;
+  return chainId === 46630 || chainId === 4663 ? limit : undefined;
 }
 
 export function isShieldDeployed(): boolean {
