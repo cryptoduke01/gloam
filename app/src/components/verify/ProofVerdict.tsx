@@ -29,7 +29,11 @@ export function symbolOf(asset: string, chainId: number): string {
   return t?.symbol ?? `${asset.slice(0, 6)}…${asset.slice(-4)}`;
 }
 
-/** A raw amount in the asset's real decimals (USDG 6, ETH 18). */
+/**
+ * A raw amount in the asset's real decimals (USDG 6, ETH 18), with every unit
+ * the proof states: "exactly 0.000000000000000001", never "exactly 0". It is
+ * read as text, so a large amount is not rounded the way a Number would be.
+ */
 export function amountOf(raw: string, asset: string): string {
   let v: bigint;
   try {
@@ -37,9 +41,9 @@ export function amountOf(raw: string, asset: string): string {
   } catch {
     return raw;
   }
-  const n = Number(formatUnits(v, assetDecimals(asset)));
-  if (!Number.isFinite(n)) return formatUnits(v, assetDecimals(asset));
-  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  const [whole, frac] = formatUnits(v, assetDecimals(asset)).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return frac ? `${grouped}.${frac}` : grouped;
 }
 
 function day(unix: number): string {
@@ -182,7 +186,10 @@ export function ProofVerdict({
     verdict === "verified"
       ? verifiedLine(p, net?.label ?? "this network")
       : verdict === "expired"
-        ? `This proof checked out, but it expired on ${day(p.expiresAt)}. Ask them for a fresh one.`
+        ? firstUnknown
+          ? // a check that could not run (the network, say) has not checked out
+            `This proof expired on ${day(p.expiresAt)}, and not every check could run. Ask them for a fresh one.`
+          : `This proof checked out, but it expired on ${day(p.expiresAt)}. Ask them for a fresh one.`
         : verdict === "incomplete"
           ? firstUnknown?.detail ?? "Some checks could not finish. Try again in a moment."
           : `Do not rely on it. ${firstFail?.detail ?? firstFail?.label ?? "One of the checks failed."}`;
