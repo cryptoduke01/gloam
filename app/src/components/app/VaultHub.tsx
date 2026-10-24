@@ -10,6 +10,7 @@ import { VaultSwapView } from "./VaultSwapView";
 import { useNetwork } from "./NetworkProvider";
 import { swapOpenTo, vaultSwapRouter } from "@/lib/vaultSwap";
 import { useAppAccount } from "@/lib/demo";
+import { tabKeyTarget } from "@/lib/tabKeys";
 
 /**
  * The Vault hub, one surface for every money move. A calm segmented track picks
@@ -95,7 +96,10 @@ export function VaultHub() {
         aria-label="Vault actions"
         className="inline-flex max-w-full rounded-full bg-surface-2 p-1 max-sm:flex max-sm:w-full dark:bg-panel dark:ring-1 dark:ring-line"
       >
-        {tabs.map((t) => {
+        {/* One tab stop for the row (the open tab); the arrows, Home and End
+            move between tabs, and Enter or Space opens one. Opening is not
+            tied to focus, since each tab loads a whole view. */}
+        {tabs.map((t, i) => {
           const active = t.id === tab;
           return (
             <button
@@ -105,8 +109,15 @@ export function VaultHub() {
               role="tab"
               aria-selected={active}
               aria-controls="vault-panel"
+              tabIndex={active ? 0 : -1}
               title={t.hint}
               onClick={() => select(t.id)}
+              onKeyDown={(e) => {
+                const next = tabKeyTarget(e.key, i, tabs.length);
+                if (next === null) return;
+                e.preventDefault();
+                document.getElementById(`vault-tab-${tabs[next].id}`)?.focus();
+              }}
               className={`h-10 whitespace-nowrap rounded-full px-[18px] text-[14px] transition-colors duration-200 max-sm:flex-auto max-sm:px-3 ${
                 active
                   ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
