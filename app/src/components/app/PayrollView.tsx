@@ -1536,6 +1536,12 @@ export function PayrollView() {
             </div>
           </section>
 
+          {pool && sched.error && (
+            <p role="alert" className="flex items-start gap-2.5 rounded-[14px] bg-warn-soft px-4 py-3 text-[13px] leading-relaxed text-warn">
+              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">{sched.error}</span>
+            </p>
+          )}
           {pool && (
             <ScheduleList
               schedules={sched.schedules}
@@ -1546,8 +1552,9 @@ export function PayrollView() {
               onTogglePause={(s) => void sched.togglePause(s)}
               onEdit={(s) => setEditor({ base: s, isNew: false })}
               onDelete={(s) => {
-                if (fromSchedule?.id === s.id) setFromSchedule(null);
-                void sched.remove(s.id);
+                void sched.remove(s.id).then((gone) => {
+                  if (gone) setFromSchedule((cur) => (cur?.id === s.id ? null : cur));
+                });
               }}
               onNew={newScheduleFromDraft}
             />
