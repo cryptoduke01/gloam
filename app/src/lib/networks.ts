@@ -1,7 +1,7 @@
 /**
  * Gloam network registry: the runtime source of truth for every chain the
- * product can point at. Two testnets (Robinhood Chain testnet and Tempo
- * Moderato) and their two mainnets.
+ * product can point at. Three testnets (Robinhood Chain testnet, Tempo
+ * Moderato and Base Sepolia) and their three mainnets.
  *
  * Everything chain-specific (chain object, shielded pool, deploy block, hash
  * scheme, native + stable assets, explorer links) hangs off one `GloamNetwork`
@@ -10,11 +10,12 @@
  * (chain.ts / config.ts) so there is no second copy to drift.
  *
  * A mainnet only exists once its pool is filled in (MAINNET_POOLS in
- * lib/mainnet.ts). Until then it is left out of NETWORK_KEYS, isNetworkKey,
- * allNetworks and everything built on them (selector, API, relay, MCP, proofs),
- * so the app is exactly the two testnets it was before.
+ * lib/mainnet.ts), and so does Base Sepolia (BASE_SEPOLIA_POOL there). Until
+ * then it is left out of NETWORK_KEYS, isNetworkKey, allNetworks and everything
+ * built on them (selector, API, relay, MCP, proofs), as if it did not exist.
  */
 import { defineChain, type Address, type Chain } from "viem";
+import { base, baseSepolia } from "viem/chains";
 import { robinhood, robinhoodTestnet } from "./chain";
 import type { CeremonyKind } from "./circuitArtifacts";
 import {
@@ -22,12 +23,18 @@ import {
   TESTNET_POSEIDON_DEPLOY_BLOCK,
   type HashScheme,
 } from "./config";
-import { isMainnetLive, mainnetPool } from "./mainnet";
+import { baseSepoliaPool, isMainnetLive, mainnetPool } from "./mainnet";
 
-export type NetworkKey = "robinhood" | "tempo" | "robinhood-mainnet" | "tempo-mainnet";
+export type NetworkKey =
+  | "robinhood"
+  | "tempo"
+  | "base"
+  | "robinhood-mainnet"
+  | "tempo-mainnet"
+  | "base-mainnet";
 
 /** The chain a network runs on, testnet or mainnet: wallets, fees and logos follow it. */
-export type ChainFamily = "robinhood" | "tempo";
+export type ChainFamily = "robinhood" | "tempo" | "base";
 
 /**
  * Chain ids of the networks Gloam knows. Typed as the literal union so
@@ -36,7 +43,7 @@ export type ChainFamily = "robinhood" | "tempo";
  * narrow `chainId` to the configured ids. Mainnet ids are only registered with
  * wagmi once their pool is filled in (lib/wagmi.ts).
  */
-export type GloamChainId = 46630 | 42431 | 4663 | 4217;
+export type GloamChainId = 46630 | 42431 | 84532 | 4663 | 4217 | 8453;
 
 /** Whether a network is deployed and safe for real shield/spend writes. */
 export type NetworkStatus = "live" | "planned";
@@ -84,6 +91,14 @@ export interface GloamNetwork {
    * on Robinhood Chain testnet; the mainnet pools take payments only.
    */
   stocks: boolean;
+  /**
+   * The pool is ShieldPoolPayments, the mainnet contract: it takes only the
+   * assets it lists, each with a beta deposit limit, a cash out pays the fee,
+   * and there is no private trade. Every mainnet, and Base Sepolia, which runs
+   * the mainnet pool with test funds. The older testnets (Robinhood Chain and
+   * Tempo) run ShieldPoolPoseidon: anything can go in, no limits, no fee.
+   */
+  paymentsPool: boolean;
   /** viem chain used for clients, wallet_addEthereumChain, etc. */
   chain: Chain;
   chainId: GloamChainId;
@@ -100,7 +115,7 @@ export interface GloamNetwork {
    * network are made and checked with the same set (lib/circuitArtifacts).
    */
   ceremony: CeremonyKind;
-  /** The chain's native gas coin (ETH on Robinhood Chain, USD on Tempo). */
+  /** The chain's native gas coin (ETH on Robinhood Chain and Base, USD on Tempo). */
   primaryAsset: NetworkAsset;
   /** Stable assets shieldable on this network (empty until registered). */
   stableAssets: NetworkAsset[];
@@ -159,8 +174,34 @@ export const tempoMainnet = defineChain({
   contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } },
 });
 
+/**
+ * Base Sepolia, Base's practice network (an OP Stack L2, gas in ETH). The
+ * default RPC is publicnode's: sepolia.base.org caps eth_getLogs at 200 blocks,
+ * and the vault tree is rebuilt from logs (publicnode takes 50,000). The
+ * official RPC stays second, for wallets that add the chain.
+ */
+export const baseTestnet = defineChain({
+  ...baseSepolia,
+  rpcUrls: {
+    default: { http: ["https://base-sepolia-rpc.publicnode.com", "https://sepolia.base.org"] },
+  },
+});
+
+/**
+ * Base mainnet. Same RPC choice as Base Sepolia: mainnet.base.org refuses
+ * eth_getLogs from public callers.
+ */
+export const baseMainnet = defineChain({
+  ...base,
+  rpcUrls: {
+    default: { http: ["https://base-rpc.publicnode.com", "https://mainnet.base.org"] },
+  },
+});
+
 const RH_MAINNET_POOL = mainnetPool(4663);
 const TEMPO_MAINNET_POOL = mainnetPool(4217);
+const BASE_MAINNET_POOL = mainnetPool(8453);
+const BASE_SEPOLIA_POOL = baseSepoliaPool();
 
 const NETWORKS: Record<NetworkKey, GloamNetwork> = {
   robinhood: {
@@ -169,6 +210,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     family: "robinhood",
     testnet: true,
     stocks: true,
+    paymentsPool: false,
     chain: robinhoodTestnet,
     chainId: robinhoodTestnet.id,
     pool: TESTNET_POSEIDON_POOL,
@@ -199,6 +241,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     family: "tempo",
     testnet: true,
     stocks: false,
+    paymentsPool: false,
     chain: tempoTestnet,
     chainId: tempoTestnet.id,
     // No-middlemen pool redeployed on Tempo Moderato 2026-09-29: no
@@ -228,6 +271,34 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerAddress: (addr) =>
       `${tempoTestnet.blockExplorers.default.url}/address/${addr}`,
   },
+  // Base Sepolia: the practice network for Base, with test funds but the
+  // mainnet pool (ShieldPoolPayments on the ceremony's final keys, payments
+  // only, the same assets and beta deposit limits as Base mainnet, the cash-out
+  // fee), so Base mainnet ships on code proven here. Hidden until
+  // BASE_SEPOLIA_POOL is filled in (lib/mainnet.ts). No payment-memo board yet.
+  base: {
+    key: "base",
+    label: "Base",
+    family: "base",
+    testnet: true,
+    stocks: false,
+    paymentsPool: true,
+    chain: baseTestnet,
+    chainId: baseTestnet.id,
+    pool: BASE_SEPOLIA_POOL?.pool ?? null,
+    deployBlock: BASE_SEPOLIA_POOL?.deployBlock ?? null,
+    ceremony: "production",
+    // publicnode: "exceed maximum block range: 50000"
+    logRange: 50_000n,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "live",
+    payMemo: null,
+    note: "Practice network on Base Sepolia, test funds: private USDC, EURC and ETH payments on the mainnet vault.",
+    explorerTx: (hash) => `${baseTestnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) => `${baseTestnet.blockExplorers.default.url}/address/${addr}`,
+  },
   // Mainnet: ShieldPoolPayments with the ceremony's final keys, payments only
   // (no sealed swap), beta deposit limits on, and a payment-memo board (payMemo).
   "robinhood-mainnet": {
@@ -236,6 +307,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     family: "robinhood",
     testnet: false,
     stocks: false,
+    paymentsPool: true,
     chain: robinhood,
     chainId: robinhood.id,
     pool: RH_MAINNET_POOL?.pool ?? null,
@@ -258,6 +330,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     family: "tempo",
     testnet: false,
     stocks: false,
+    paymentsPool: true,
     chain: tempoMainnet,
     chainId: tempoMainnet.id,
     pool: TEMPO_MAINNET_POOL?.pool ?? null,
@@ -274,12 +347,38 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerTx: (hash) => `${tempoMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${tempoMainnet.blockExplorers.default.url}/address/${addr}`,
   },
+  // Not deployed yet (DEPLOY-BASE.md): hidden until MAINNET_POOLS[8453] is filled in.
+  "base-mainnet": {
+    key: "base-mainnet",
+    label: "Base",
+    family: "base",
+    testnet: false,
+    stocks: false,
+    paymentsPool: true,
+    chain: baseMainnet,
+    chainId: baseMainnet.id,
+    pool: BASE_MAINNET_POOL?.pool ?? null,
+    deployBlock: BASE_MAINNET_POOL?.deployBlock ?? null,
+    ceremony: "production",
+    logRange: 50_000n,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "live",
+    payMemo: null,
+    note: "Mainnet, real money: private USDC, EURC, USDT and ETH payments.",
+    explorerTx: (hash) => `${baseMainnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) => `${baseMainnet.blockExplorers.default.url}/address/${addr}`,
+  },
 };
 
+const hasPool = (k: NetworkKey) => NETWORKS[k].pool !== null && NETWORKS[k].deployBlock !== null;
+
 /** Mainnets whose pool is filled in, Robinhood Chain first. Empty before deploy day. */
-const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet"] as const).filter(
-  (k) => NETWORKS[k].pool !== null && NETWORKS[k].deployBlock !== null
-);
+const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet", "base-mainnet"] as const).filter(hasPool);
+
+/** The testnets: Robinhood Chain and Tempo, and Base Sepolia once its pool is filled in. */
+const TESTNET_KEYS: NetworkKey[] = ["robinhood", "tempo", ...(hasPool("base") ? (["base"] as const) : [])];
 
 /** True once at least one mainnet pool is filled in: the app then labels real money and test funds. */
 export const MAINNET_ENABLED = MAINNET_KEYS.length > 0;
@@ -327,12 +426,12 @@ export function getActiveNetwork(): GloamNetwork {
 }
 
 /** The networks Gloam runs on right now: mainnets with a pool first, then the testnets. */
-export const NETWORK_KEYS: NetworkKey[] = [...MAINNET_KEYS, "robinhood", "tempo"];
+export const NETWORK_KEYS: NetworkKey[] = [...MAINNET_KEYS, ...TESTNET_KEYS];
 
 /**
  * The key set a proof made for `chainId` was made with; the dev keys for a
- * chain Gloam doesn't run on. Mainnet chain ids always answer "production",
- * pool or not, so a mainnet proof is never checked against the dev keys.
+ * chain Gloam doesn't run on. Mainnet chain ids and Base Sepolia always answer
+ * "production", pool or not, so their proofs are never checked against the dev keys.
  */
 export function ceremonyForChain(chainId: unknown): CeremonyKind {
   const id = Number(chainId);
@@ -362,11 +461,11 @@ export function isNetworkWritable(n: GloamNetwork): boolean {
 
 /** The network names an API takes, for its errors: '"robinhood" or "tempo"' until a mainnet pool is in. */
 export function networkKeyChoices(): string {
-  const q = (["robinhood", "tempo", ...MAINNET_KEYS] as NetworkKey[]).map((k) => `"${k}"`);
+  const q = [...TESTNET_KEYS, ...MAINNET_KEYS].map((k) => `"${k}"`);
   return `${q.slice(0, -1).join(", ")} or ${q[q.length - 1]}`;
 }
 
-/** "Robinhood Chain testnet", "Tempo testnet", or plain "Robinhood Chain" / "Tempo" on mainnet. */
+/** "Robinhood Chain testnet", "Base testnet", or the plain chain name ("Tempo") on mainnet. */
 export function networkName(n: Pick<GloamNetwork, "label" | "testnet">): string {
   return n.testnet ? `${n.label} testnet` : n.label;
 }

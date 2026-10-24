@@ -165,13 +165,16 @@ function chainRows(n: GloamNetwork): Row[] {
 const CHAIN_LOGOS: Record<ChainFamily, string> = {
   robinhood: "/brand/logos/robinhood.png",
   tempo: "/brand/logos/tempo.svg",
+  base: "/brand/chains/8453.png",
 };
 
 const NETWORK_LINES: Record<NetworkKey, string> = {
   robinhood: "Robinhood Chain testnet",
   tempo: "Tempo Moderato testnet",
+  base: "Base Sepolia testnet",
   "robinhood-mainnet": "Robinhood Chain mainnet",
   "tempo-mainnet": "Tempo mainnet",
+  "base-mainnet": "Base mainnet",
 };
 
 /** Every network Gloam runs on: each mainnet once its pool is in, then the two testnets. */
