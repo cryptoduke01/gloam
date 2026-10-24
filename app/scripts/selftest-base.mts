@@ -3,18 +3,19 @@
  *
  * Two runs of this file:
  *
- *  - as committed (no Base pool filled in): Base exists nowhere. Not a network
- *    key, not in the API's choices, not offered by the relay or the remote MCP,
- *    and Glim says nothing about it. Its proofs would still use the final keys.
- *  - with placeholder pools put into BASE_SEPOLIA_POOL and MAINNET_POOLS[8453]
- *    before anything else loads (a child process of this one): both networks
- *    show up in the right order with the right chain, keys, assets and limits;
- *    the relay serves both chain ids; the bridge, swaps and the payment-memo
- *    board stay off; claim codes from the other Base network are refused; and
- *    Glim and the remote MCP name Base without ever counting it in the 21
- *    October launch.
+ *  - as committed: Base Sepolia is live (deployed 24 Oct 2026, pool and memo
+ *    board filled in) and Base mainnet is not. Base Sepolia is a network key
+ *    the relay serves, the remote MCP lists and Glim knows, with its vault,
+ *    block and memo board; Base mainnet exists nowhere yet. Both prove with
+ *    the final keys.
+ *  - with a placeholder pool put into MAINNET_POOLS[8453] before anything else
+ *    loads (a child process of this one): both networks show up in the right
+ *    order with the right chain, keys, assets and limits; the relay serves both
+ *    chain ids; the bridge and swaps stay off; claim codes from the other Base
+ *    network are refused; and Glim and the remote MCP name Base without ever
+ *    counting it in the 21 October launch.
  *
- * The placeholder pools are not contracts; nothing reaches any host (fetch
+ * The placeholder pool is not a contract; nothing reaches any host (fetch
  * fails the run if anything tries).
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-base.mts
@@ -31,14 +32,14 @@ globalThis.fetch = (async (url: unknown) => {
 }) as typeof fetch;
 
 const CONFIGURED = process.env.GLOAM_SELFTEST_BASE === "configured";
-const SEPOLIA_POOL = "0x00000000000000000000000000000000000BA5E1";
+/** Base Sepolia as deployed (contracts/deployments/base-sepolia.json). */
+const SEPOLIA_POOL = "0x39e28cde55cab798874746ac52cb4b5cc99a0194";
+const SEPOLIA_MEMO = "0x01B3172d9900Cb26d57E986429b9b23854c74598";
 const MAINNET_POOL = "0x00000000000000000000000000000000000BA5E2";
 
 const mainnet = await import("../src/lib/mainnet");
 if (CONFIGURED) {
-  // Filled in the way DEPLOY-BASE.md says, before networks.ts reads them.
-  mainnet.BASE_SEPOLIA_POOL.pool = SEPOLIA_POOL;
-  mainnet.BASE_SEPOLIA_POOL.deployBlock = 1_000_000;
+  // Filled in the way DEPLOY-BASE.md says, before networks.ts reads it.
   mainnet.MAINNET_POOLS[8453] = { pool: MAINNET_POOL, deployBlock: 2_000_000n };
 }
 
@@ -86,7 +87,6 @@ check("Base entries are always defined, on the mainnet pool and final keys", () 
     assert.equal(n.stocks, false);
     assert.equal(n.primaryAsset.symbol, "ETH");
     assert.equal(n.logRange, 50_000n);
-    assert.equal(n.payMemo, null);
     assert.match(n.chain.rpcUrls.default.http[0]!, /publicnode\.com$/);
   }
   assert.equal(nets.getNetwork("base").chainId, 84532);
@@ -133,7 +133,7 @@ check("Base assets as checked on chain, with EURC never counted as a dollar", ()
   assert.equal(tokens.knownTokens(8453)[0]!.symbol, "USDC");
 });
 
-check("No bridge, no swaps and no payment-memo board on Base yet", () => {
+check("No bridge and no swaps on Base yet", () => {
   assert.equal(BRIDGE_DESTINATIONS.base, undefined);
   assert.equal(bridgeVisible(nets.getNetwork("base-mainnet")), false);
   assert.equal(bridgeVisible(nets.getNetwork("base")), false);
@@ -158,44 +158,99 @@ check("Base Sepolia's faucet step points at its guide", () => {
   assert.equal(faucetFor("base-mainnet"), null);
 });
 
-// ---------------------------------------------------------------- before the pools are in
+// ---------------------------------------------------------------- Base Sepolia, both runs
+
+check("Base Sepolia: the deployed vault, its block and its memo board", () => {
+  const sepolia = nets.getNetwork("base");
+  assert.equal(sepolia.pool?.toLowerCase(), SEPOLIA_POOL);
+  assert.equal(sepolia.deployBlock, 49_802_958n);
+  assert.deepEqual(sepolia.payMemo, { address: SEPOLIA_MEMO, deployBlock: 49_804_175n, emitsPoster: false });
+  assert.equal(nets.isNetworkKey("base"), true);
+  assert.equal(nets.isNetworkWritable(sepolia), true);
+  assert.equal(nets.NETWORK_KEYS[nets.NETWORK_KEYS.length - 1], "base");
+  assert.match(nets.networkKeyChoices(), /"base"/);
+  assert.equal(nets.networkName(sepolia), "Base testnet");
+  assert.equal(nets.getNetwork("base-mainnet").payMemo, null);
+});
+
+check("Base Sepolia: the relay serves it with the same relay key", () => {
+  assert.equal(networkForChain(84532).key, "base");
+  assert.ok(relayNetworks().some((n) => n.chainId === 84532));
+});
+
+check("Base Sepolia: payment requests and claim codes", () => {
+  const assets = requestAssetsFor("base");
+  assert.deepEqual(
+    assets.map((a) => a.symbol),
+    ["USDC", "EURC", "ETH"]
+  );
+  assert.ok(assets.find((a) => a.symbol === "ETH")!.native);
+  // A Base mainnet USDC code opened on Base Sepolia (the same vault address) is refused.
+  assert.match(
+    claimNetworkProblem({ key: "base", pool: SEPOLIA_POOL }, { pool: SEPOLIA_POOL, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }) ?? "",
+    /different network/
+  );
+  assert.equal(
+    claimNetworkProblem({ key: "base", pool: SEPOLIA_POOL }, { pool: SEPOLIA_POOL, asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" }),
+    null
+  );
+});
+
+check("Base Sepolia: Glim knows it, with its faucet guide and chain details", () => {
+  const k = knowledgeBlock(false, true);
+  assert.match(k, /Base Sepolia \(chain ID 84532\)/);
+  assert.match(k, /https:\/\/sepolia\.basescan\.org/);
+  const baseSection = k.slice(k.indexOf("\nBASE"), k.indexOf("\n\n", k.indexOf("\nBASE") + 1));
+  assert.ok(baseSection.length > 100);
+  assert.doesNotMatch(baseSection, /\u2014/);
+  const fix = chainFix("Ada", { wallet: 8453, want: 84532 }, true);
+  assert.match(fix, /Switch to Base/);
+  assert.match(fix, /chain ID 84532/);
+});
+
+await checkAsync("Base Sepolia: the remote MCP lists it and gives final-key snippets", async () => {
+  const one = await toolJson("gloam_networks", { network: "base" });
+  assert.equal(one.isError, false);
+  assert.match(one.text, /"chainId": 84532/);
+  assert.match(one.text, /"symbol": "EURC"/);
+  assert.match(one.text, new RegExp(`"paymentMessageBoard": "${SEPOLIA_MEMO}"`));
+  const mpp = await toolJson("gloam_mpp_how_to", { network: "base" });
+  assert.equal(mpp.isError, false);
+  assert.match(mpp.text, /testnetNetwork\(\\"base\\"\)/);
+  assert.match(mpp.text, /BASE_SEPOLIA_USDC/);
+  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.3\.0/);
+  const info = await toolJson("gloam_info");
+  assert.match(info.text, /Base Sepolia \(84532\)/);
+});
+
+// ---------------------------------------------------------------- as shipped: Base mainnet not in yet
 
 if (!CONFIGURED) {
-  check("unconfigured: Base is no network key anywhere", () => {
-    assert.equal(nets.isNetworkKey("base"), false);
+  check("as shipped: Base mainnet is no network key anywhere", () => {
     assert.equal(nets.isNetworkKey("base-mainnet"), false);
-    assert.ok(!nets.NETWORK_KEYS.some((k) => nets.getNetwork(k).family === "base"));
-    assert.ok(!nets.allNetworks().some((n) => n.family === "base"));
-    assert.doesNotMatch(nets.networkKeyChoices(), /base/);
-    assert.equal(nets.getNetwork("base").pool, null);
-    assert.equal(nets.isNetworkWritable(nets.getNetwork("base")), false);
-    assert.equal(mainnet.baseSepoliaPool(), null);
+    assert.ok(!nets.NETWORK_KEYS.includes("base-mainnet"));
+    assert.ok(!nets.allNetworks().some((n) => n.key === "base-mainnet"));
+    assert.doesNotMatch(nets.networkKeyChoices(), /base-mainnet/);
+    assert.equal(nets.getNetwork("base-mainnet").pool, null);
     assert.equal(mainnet.mainnetPool(8453), null);
     assert.equal(mainnet.liveMainnetNames(), "Robinhood Chain and Tempo");
-  });
-
-  check("unconfigured: the relay refuses both Base chain ids", () => {
-    assert.ok(!relayNetworks().some((n) => n.family === "base"));
-    assert.throws(() => networkForChain(84532), /not supported by the relay/);
     assert.throws(() => networkForChain(8453), /not supported by the relay/);
   });
 
-  check("unconfigured: Glim says nothing about Base", () => {
-    for (const live of [false, true]) {
-      const k = knowledgeBlock(false, live);
-      assert.doesNotMatch(k, /Base Sepolia|chain ID 8453|chain ID 84532|\nBASE/);
-    }
+  check("as shipped: Glim never names Base mainnet", () => {
+    const k = knowledgeBlock(false, true);
+    assert.doesNotMatch(k, /Base mainnet \(chain ID 8453\)/);
+    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Mainnet is real money/);
   });
 
-  await checkAsync("unconfigured: the remote MCP neither lists nor takes Base", async () => {
-    const all = await toolJson("gloam_networks");
-    assert.doesNotMatch(all.text, /"base/);
-    const one = await toolJson("gloam_networks", { network: "base" });
+  await checkAsync("as shipped: the remote MCP neither lists nor takes base-mainnet", async () => {
+    const one = await toolJson("gloam_networks", { network: "base-mainnet" });
     assert.equal(one.isError, true);
-    assert.doesNotMatch(one.text, /"base/);
+    const info = await toolJson("gloam_info");
+    assert.doesNotMatch(info.text, /Base \(8453\)/);
   });
 
-  // The same file again, with the Base pools filled in.
+  // The same file again, with Base mainnet's pool filled in too.
   const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
     env: { ...process.env, GLOAM_SELFTEST_BASE: "configured" },
     encoding: "utf8",
@@ -203,27 +258,21 @@ if (!CONFIGURED) {
   process.stdout.write(child.stdout);
   process.stderr.write(child.stderr);
   assert.equal(child.status, 0, "the configured run failed");
-  console.log(`selftest-base (unconfigured): ${checks} checks passed`);
+  console.log(`selftest-base (as shipped): ${checks} checks passed`);
 }
 
 // ---------------------------------------------------------------- with the pools filled in
 
 if (CONFIGURED) {
-  check("configured: both Base networks are in, in order", () => {
+  check("configured: Base mainnet joins, after the other mainnets", () => {
     const keys = nets.NETWORK_KEYS;
     assert.ok(keys.indexOf("base-mainnet") > keys.indexOf("tempo-mainnet"));
     assert.ok(keys.indexOf("base-mainnet") < keys.indexOf("robinhood"));
     assert.equal(keys[keys.length - 1], "base");
-    assert.equal(nets.isNetworkKey("base"), true);
     assert.equal(nets.isNetworkKey("base-mainnet"), true);
-    assert.match(nets.networkKeyChoices(), /"base"/);
     assert.match(nets.networkKeyChoices(), /"base-mainnet"/);
-    const sepolia = nets.getNetwork("base");
-    assert.equal(sepolia.pool, SEPOLIA_POOL);
-    assert.equal(sepolia.deployBlock, 1_000_000n);
-    assert.equal(nets.isNetworkWritable(sepolia), true);
+    assert.equal(nets.getNetwork("base-mainnet").pool, MAINNET_POOL);
     assert.equal(nets.getNetwork("base-mainnet").deployBlock, 2_000_000n);
-    assert.equal(nets.networkName(sepolia), "Base testnet");
     assert.equal(nets.networkName(nets.getNetwork("base-mainnet")), "Base");
     assert.equal(mainnet.liveMainnetNames(), "Robinhood Chain, Tempo and Base");
   });
@@ -231,61 +280,24 @@ if (CONFIGURED) {
   check("configured: the relay serves both Base chain ids with the same relay key", () => {
     const ids = relayNetworks().map((n) => n.chainId);
     assert.ok(ids.includes(84532) && ids.includes(8453));
-    assert.equal(networkForChain(84532).key, "base");
     assert.equal(networkForChain("8453").key, "base-mainnet");
   });
 
-  check("configured: payment requests and claim codes on Base", () => {
-    const assets = requestAssetsFor("base");
-    assert.deepEqual(
-      assets.map((a) => a.symbol),
-      ["USDC", "EURC", "ETH"]
-    );
-    assert.ok(assets.find((a) => a.symbol === "ETH")!.native);
-    // A Base mainnet USDC code opened on Base Sepolia (same vault address) is refused.
-    const problem = claimNetworkProblem(
-      { key: "base", pool: SEPOLIA_POOL },
-      { pool: SEPOLIA_POOL, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
-    );
-    assert.match(problem ?? "", /different network/);
-    assert.equal(
-      claimNetworkProblem({ key: "base", pool: SEPOLIA_POOL }, { pool: SEPOLIA_POOL, asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" }),
-      null
-    );
-  });
-
-  check("configured: Glim knows Base, never as part of the 21 October launch", () => {
+  check("configured: Glim knows Base mainnet, never as part of the 21 October launch", () => {
     const k = knowledgeBlock(false, true);
     assert.match(k, /Base mainnet \(chain ID 8453\)/);
-    assert.match(k, /Base Sepolia \(chain ID 84532\)/);
-    assert.match(k, /https:\/\/sepolia\.basescan\.org/);
     assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Base mainnet joined after that/);
     assert.doesNotMatch(k, /21 October[^.\n]*Tempo and Base/);
-    const baseSection = k.slice(k.indexOf("\nBASE"), k.indexOf("\n\n", k.indexOf("\nBASE") + 1));
-    assert.ok(baseSection.length > 100);
-    assert.doesNotMatch(baseSection, /\u2014/);
-    const fix = chainFix("Ada", { wallet: 8453, want: 84532 }, true);
-    assert.match(fix, /Switch to Base/);
-    assert.match(fix, /chain ID 84532/);
   });
 
-  await checkAsync("configured: the remote MCP lists Base and gives Base Sepolia final-key snippets", async () => {
-    const one = await toolJson("gloam_networks", { network: "base" });
-    assert.equal(one.isError, false);
-    assert.match(one.text, /"chainId": 84532/);
-    assert.match(one.text, /"symbol": "EURC"/);
-    const mpp = await toolJson("gloam_mpp_how_to", { network: "base" });
-    assert.equal(mpp.isError, false);
-    assert.match(mpp.text, /testnetNetwork\(\\"base\\"\)/);
-    assert.match(mpp.text, /BASE_SEPOLIA_USDC/);
-    assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.3\.0/);
+  await checkAsync("configured: the remote MCP lists Base mainnet with its own snippets", async () => {
     const main = await toolJson("gloam_mpp_how_to", { network: "base-mainnet" });
+    assert.equal(main.isError, false);
     assert.match(main.text, /mainnetNetwork\(\\"base\\"\)/);
     assert.match(main.text, /BASE_USDC/);
     const info = await toolJson("gloam_info");
     assert.match(info.text, /Base \(8453\)/);
-    assert.match(info.text, /Base Sepolia \(84532\)/);
   });
 
-  console.log(`selftest-base (configured): ${checks} checks passed`);
+  console.log(`selftest-base (Base mainnet filled in too): ${checks} checks passed`);
 }
