@@ -1,0 +1,39 @@
+{
+  "deployedAt": "2026-10-24",
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "testnet": true,
+  "note": "The practice network for Base: the mainnet contract (ShieldPoolPayments) on the ceremony's final keys, with the same beta deposit limits and cash-out fee as Base mainnet, on test funds. Deployed with script/DeployBaseSepolia.s.sol (DEPLOY-BASE.md). The deployer started at nonce 0, so every address matches Robinhood Chain and Tempo mainnet. Every contract below except PoseidonT3 (raw circomlibjs bytecode, code hash checked instead) is an exact match on Sourcify.",
+  "ceremony": "final (13 contributors, drand 6561386, release ceremony-final)",
+  "deployer": "0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411",
+  "owner": "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8",
+  "ownershipAcceptedTx": "0xe7308f42c09d131e297edf2a8b78d94ca072facc0484cfa8793278d2a047eb62",
+  "feeRecipient": "0xB3900ac9350903218e4c7597bAb0f008F01B30B8",
+  "withdrawFeeBps": 25,
+  "relayer": "0xb1E994586E62994648a0b866BF33F2EDd942512e",
+  "rpc": "https://sepolia.base.org",
+  "logRpc": "https://base-sepolia-rpc.publicnode.com",
+  "explorer": "https://sepolia.basescan.org",
+  "contracts": {
+    "ShieldPoolPayments": "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194",
+    "deployBlock": 49802958,
+    "deployTx": "0xca7084013f142246b0efdc65b7690924059f68a0b4d2eb10b5e673be9c2744fd",
+    "PoseidonT3": "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4",
+    "PoseidonT3CodeHash": "0x354b26999e434f8256d168395315e1f51fc15bf49bf2e6bb58fc549bd597e7da",
+    "DualProofVerifier": "0x1421353d471dF6C847713aee391Db38978fE714a",
+    "ShieldIVerifier": "0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465",
+    "ShieldVerifierFinal": "0xf64F5bDB0aBDF0f179c8251FCFBA54c01ad7c35d",
+    "UnshieldVerifierFinal": "0xa8cf34C6F3985B7901F6fA0e1E13a3Da2D2dC7E4",
+    "UnshieldIVerifierFinal": "0x35de99bcD26B0F25E5a3a3b1e76FA5a708a01DF1",
+    "TransferVerifierFinal": "0x938E79B271241EC29D9279BE83A43184D415eE0b",
+    "TransferIVerifierFinal": "0x4dCac25a820D0C9Ede8f056378C08e31042AB7b1",
+    "GloamPayMemo": "0x01B3172d9900Cb26d57E986429b9b23854c74598",
+    "GloamPayMemoDeployBlock": 49804175,
+    "GloamPayMemoDeployTx": "0x5cd238216eb08aac73b709968da8ab67ecdc2d3d45c7d33c2de8df219cb86aae"
+  },
+  "assets": {
+    "USDC": { "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "decimals": 6, "perDeposit": "500000000", "total": "25000000000" },
+    "EURC": { "address": "0x808456652fdb597867f38412077A9182bf77359F", "decimals": 6, "perDeposit": "500000000", "total": "25000000000" },
+    "ETH": { "address": "0x0000000000000000000000000000000000000000", "decimals": 18, "perDeposit": "200000000000000000", "total": "10000000000000000000" }
+  }
+}
