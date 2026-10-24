@@ -56,6 +56,7 @@ import {
   circuitArtifactFiles,
   circuitArtifactUrls,
   getGloamNetwork,
+  gloamNetworks,
   networkName,
   NATIVE_ASSET,
   type GloamAsset,
@@ -82,7 +83,8 @@ const shieldBoundAbi = [
 
 // ── network ──────────────────────────────────────────────────────────────────
 
-const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "robinhood", "tempo"];
+// Base ("base-mainnet", and "base" for Base Sepolia) works once the SDK has its pools.
+const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "robinhood", "tempo", "base"];
 const isNative = (a: GloamAsset) => a.address.toLowerCase() === NATIVE_ASSET.toLowerCase();
 
 /** The network from GLOAM_NETWORK; Robinhood Chain testnet when unset. */
@@ -91,10 +93,9 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
   if (!NETWORK_KEYS.includes(key)) throw new Error(`GLOAM_NETWORK must be one of: ${NETWORK_KEYS.join(", ")}.`);
   const net = getGloamNetwork(key);
   if (!net) {
-    const family = key === "tempo-mainnet" ? "tempo" : "robinhood";
-    const label = family === "tempo" ? "Tempo" : "Robinhood Chain";
+    const testnets = gloamNetworks().filter((n) => n.testnet).map((n) => n.key);
     throw new Error(
-      `This version of @gloamtrade/sdk has no ${label} mainnet pool yet. Update the SDK once the pool is published, or practice on testnet with GLOAM_NETWORK=${family}.`
+      `This version of @gloamtrade/sdk has no ${key} pool yet. Update the SDK once the pool is published, or practice on testnet with GLOAM_NETWORK=${testnets.join(" or ")}.`
     );
   }
   if (net.testnet) {
@@ -105,12 +106,12 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
   return net;
 }
 
-/** GLOAM_ASSET (a symbol or address the pool lists) if set, else native ETH where the pool takes it (Robinhood Chain testnet), else the pool's first stablecoin. */
+/** GLOAM_ASSET (a symbol or address the pool lists) if set, else the pool's first asset: native ETH on Robinhood Chain testnet, else its first stablecoin (USDC on Base). */
 function pickAsset(net: GloamNetwork): GloamAsset {
   const want = process.env.GLOAM_ASSET?.trim();
   const asset = want
     ? net.assets.find((a) => [a.symbol, a.address].some((s) => s.toLowerCase() === want.toLowerCase()))
-    : net.assets.find((a) => isNative(a) === net.nativeShield);
+    : net.assets[0]; // native ETH on Robinhood Chain testnet, else the pool's first stablecoin
   if (!asset) {
     throw new Error(`${networkName(net.chainId)} does not take ${want}. Pick one of: ${net.assets.map((a) => a.symbol).join(", ")}.`);
   }
@@ -193,9 +194,9 @@ async function main() {
   const fund = parseUnits(isNative(asset) ? "0.0005" : "1", asset.decimals);
   // Precheck funding so an underfunded wallet fails clearly. A native shield
   // attaches its amount as msg.value; a token shield pulls via transferFrom
-  // after approve. On Robinhood Chain the wallet also needs ETH for gas; on
+  // after approve. On Robinhood Chain and Base the wallet also needs ETH for gas; on
   // Tempo, gas is paid in a stablecoin.
-  if (net.family === "robinhood") {
+  if (net.family !== "tempo") {
     const eth = await pub.getBalance({ address: account.address });
     if (eth === 0n) throw new Error(`${account.address} has no ETH for gas on ${networkName(net.chainId)}.`);
     const needed = fund + parseUnits("0.0004", 18);
