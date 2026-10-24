@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Mark } from "@/components/Logo";
 import { shortAddress } from "@/lib/chain";
-import { assetDecimals } from "@/lib/shield";
+import { formatAssetAmountExact } from "@/lib/shield";
 import type { PayrollBatch } from "@/lib/payroll";
 
 /**
@@ -33,14 +33,15 @@ export function PayrollInvoice({
   const closeRef = useRef<HTMLButtonElement>(null);
   const number = invoiceNumber(batch);
   const paid = batch.rows.filter((r) => r.status === "paid");
-  const decimals = assetDecimals(batch.asset);
   const total = paid.reduce((s, r) => s + BigInt(r.amount), 0n);
   const issued = new Date(batch.createdAt).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
   });
-  const money = (raw: bigint | string) => `${formatMoney(BigInt(raw), decimals)} ${symbol}`;
+  // Two decimals at least, the way an invoice reads, and never rounded: 0.004
+  // stays 0.004 and every line adds up to the total shown.
+  const money = (raw: bigint | string) => `${formatAssetAmountExact(raw, batch.asset, 2)} ${symbol}`;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -267,10 +268,4 @@ function invoiceNumber(b: PayrollBatch) {
 
 function shortTag(tag: string) {
   return tag.length > 24 ? `${tag.slice(0, 13)}…${tag.slice(-5)}` : tag;
-}
-
-/** Fixed two decimals, the way an invoice reads. */
-function formatMoney(raw: bigint, decimals: number) {
-  const value = Number(raw) / 10 ** decimals;
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

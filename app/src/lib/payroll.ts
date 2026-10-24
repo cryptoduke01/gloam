@@ -309,11 +309,11 @@ export function fundingNotes(address: string, asset: Address, tree: SyncedTree |
 }
 
 /**
- * Can the current notes pay these amounts, given each payment must come out of
- * one note (with its change reused)? Returns how much more to add, as a single
- * deposit, to cover the rows that do not fit.
+ * Pay `amounts` in order the way a run does: each from the smallest note that
+ * covers it, its change back among the notes. How many rows fit, and the total
+ * of the ones that do not.
  */
-export function fundingPlan(amounts: bigint[], notes: bigint[]): { covered: number; shortfall: bigint } {
+function simulateRun(amounts: bigint[], notes: bigint[]): { covered: number; shortfall: bigint } {
   const pool = notes.filter((n) => n > 0n).sort((a, b) => (a < b ? -1 : 1));
   let covered = 0;
   let shortfall = 0n;
@@ -332,6 +332,42 @@ export function fundingPlan(amounts: bigint[], notes: bigint[]): { covered: numb
     }
   }
   return { covered, shortfall };
+}
+
+/**
+ * Can the current notes pay these amounts, given each payment must come out of
+ * one note (with its change reused)? `covered` is how many rows fit now, and
+ * `shortfall` the one deposit to add so the whole run goes through: 0 when it
+ * already does.
+ *
+ * The deposit is not just the rows that do not fit. A new note joins the same
+ * smallest-first order, so a run can spend it on an earlier row and come up
+ * short again (notes 1 and 3 paying 1, 1, 2 and 2 are 2 short, and a deposit
+ * of 2 still leaves the last row unpaid). So the deposit is the smallest one
+ * that a run with it in hand covers, checked against that same order. A
+ * deposit of the whole total always covers (it holds every row left), so the
+ * search starts there. `step` rounds it up to a unit people can type: the
+ * cents of a stablecoin, say.
+ */
+export function fundingPlan(
+  amounts: bigint[],
+  notes: bigint[],
+  step = 1n
+): { covered: number; shortfall: bigint } {
+  const now = simulateRun(amounts, notes);
+  if (now.shortfall === 0n) return now;
+  const unit = step > 0n ? step : 1n;
+  const covers = (k: bigint) => simulateRun(amounts, [...notes, k * unit]).shortfall === 0n;
+  const total = amounts.reduce((s, a) => s + a, 0n);
+  // lo never covers, hi always does: hi is the answer once they meet.
+  let lo = 0n;
+  let hi = (total + unit - 1n) / unit;
+  while (hi - lo > 1n) {
+    const mid = (lo + hi) / 2n;
+    if (covers(mid)) hi = mid;
+    else lo = mid;
+  }
+  return { covered: now.covered, shortfall: hi * unit };
 }
 
 // ------------------------------------------------------------------ storage
