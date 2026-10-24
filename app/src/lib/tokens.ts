@@ -13,7 +13,14 @@ export type OnchainToken = {
   kind: "stock" | "stablecoin" | "token";
   /** CoinGecko's id, for a live USD price where the markets feed has none. */
   coingecko?: string;
+  /** A stablecoin pegged to another currency (EURC: the euro), so never counted as $1. */
+  peg?: "EUR";
 };
+
+/** Worth one dollar each: a dollar stablecoin. EURC is a stablecoin, but not one of these. */
+export function isDollarStable(t: Pick<OnchainToken, "kind" | "peg">): boolean {
+  return t.kind === "stablecoin" && !t.peg;
+}
 
 export const TESTNET_STOCK_TOKENS: OnchainToken[] = [
   {
@@ -148,10 +155,37 @@ export const TEMPO_MAINNET_TOKENS: OnchainToken[] = [
   { id: "ousd", symbol: "OUSD", name: "Open USD", address: "0x20c0000000000000000000006a37da5c996874be", decimals: 6, yahoo: "", kind: "stablecoin" },
 ];
 
+/**
+ * Base mainnet (8453): the stablecoins the mainnet pool lists, 6 decimals each,
+ * checked on chain 2026-10-24. USDC and EURC are Circle's own (Circle can
+ * blacklist an address); USDT is Tether bridged from Ethereum over Base's
+ * standard bridge. Native ETH is listed too (supportsNativeShield). Beta limits:
+ * 500 per deposit / 25,000 in total for each stablecoin, 0.2 / 10 ETH.
+ */
+export const BASE_MAINNET_TOKENS: OnchainToken[] = [
+  { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
+  { id: "usdt", symbol: "USDT", name: "Tether USD", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6, yahoo: "", kind: "stablecoin" },
+];
+
+/**
+ * Base Sepolia (84532): Circle's test USDC and EURC (faucet.circle.com), 6
+ * decimals, checked on chain 2026-10-24. Same limits as Base mainnet. There is
+ * no USDT on Base Sepolia to list.
+ */
+export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
+  { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x808456652fdb597867f38412077A9182bf77359F", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
+];
+
+export const CIRCLE_FAUCET_URL = "https://faucet.circle.com/";
+
 /** ERC-20 tokens shieldable on a given chain (stablecoins first). */
 export function shieldTokensFor(chainId: number): OnchainToken[] {
   if (chainId === 4663) return RH_MAINNET_TOKENS;
   if (chainId === 4217) return TEMPO_MAINNET_TOKENS;
+  if (chainId === 8453) return BASE_MAINNET_TOKENS;
+  if (chainId === 84532) return BASE_SEPOLIA_TOKENS;
   return chainId === 42431 ? TEMPO_STABLE_TOKENS : [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS];
 }
 
@@ -169,6 +203,8 @@ export function knownTokens(chainId?: number): OnchainToken[] {
     ...RH_MAINNET_TOKENS,
     ...RH_MAINNET_SWAP_TOKENS,
     ...TEMPO_MAINNET_TOKENS,
+    ...BASE_MAINNET_TOKENS,
+    ...BASE_SEPOLIA_TOKENS,
   ];
   return chainId === undefined ? all : [...shieldTokensFor(chainId), ...all];
 }
@@ -176,7 +212,8 @@ export function knownTokens(chainId?: number): OnchainToken[] {
 /**
  * Whether the chain's native coin can be added privately. Tempo (testnet 42431,
  * mainnet 4217) has no native coin and blocks native msg.value, and the
- * Robinhood Chain mainnet pool (4663) does not list ETH.
+ * Robinhood Chain mainnet pool (4663) does not list ETH. Base (8453, 84532)
+ * lists ETH.
  */
 export function supportsNativeShield(chainId: number): boolean {
   return chainId !== 42431 && chainId !== 4217 && chainId !== 4663;

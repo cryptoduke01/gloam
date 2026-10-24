@@ -18,7 +18,7 @@ import {
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
-import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import {
   assetLabel,
   formatAssetAmount,
@@ -248,8 +248,8 @@ export function PortfolioView() {
       .map((t, i) => {
         const raw = tokenBals[i] ?? BigInt(0);
         const m = markets.find((x) => x.id === t.id);
-        // Stablecoins are worth $1; equities use their live mark.
-        const mark = t.kind === "stablecoin" ? 1 : (m?.mark ?? 0);
+        // Dollar stablecoins are worth $1; equities use their live mark (EURC has none: no USD shown).
+        const mark = isDollarStable(t) ? 1 : (m?.mark ?? 0);
         const amount = Number(raw) / 10 ** t.decimals;
         const usd = amount * mark;
         return {
@@ -285,7 +285,7 @@ export function PortfolioView() {
         );
         if (tok) {
           const dec = tok.decimals;
-          if (tok.kind === "stablecoin") {
+          if (isDollarStable(tok)) {
             usd = Number(amount) / 10 ** dec; // $1 each
           } else {
             const m = markets.find((x) => x.id === tok.id);
