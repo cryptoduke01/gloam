@@ -189,11 +189,18 @@ const DEV_LINKS = [
   { label: "x402 payments", href: "/docs/agents" },
 ];
 
-const SNIPPET = `import { buildGloamPayment, relayIntent } from "@gloamtrade/sdk";
+const SNIPPET = `import { buildGloamPayment, relayIntent, encodePaymentHeader } from "@gloamtrade/sdk";
 
-const payment = await buildGloamPayment({ to, amount, asset });
+// Use the merchant's requirements and a funded note's proof inputs.
+const payment = await buildGloamPayment({
+  requirements, senderSecretHex, senderNoteAmountWei, path, prove,
+});
+// Persist change securely before submitting; it holds your remaining balance.
+await saveChangeNote(payment.changeNote);
 const hash = await relayIntent(payment.intent);
-// settled privately, your wallet never shows up`;
+payment.payload.payload.txHash = hash;
+const header = encodePaymentHeader(payment.payload);
+// Wait for confirmation, then retry the merchant request with this header.`;
 
 export function Landing() {
   return (
