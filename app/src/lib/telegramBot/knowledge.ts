@@ -10,7 +10,7 @@
  * says that the program's tasks, rewards and guides land in the Testers topic.
  */
 
-import { isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { baseSepoliaPool, isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
@@ -257,15 +257,51 @@ REPORTING BUGS AND WHERE TO GO
 `;
 
 /**
+ * The chains that went live on 21 October with a pool in: Robinhood Chain and
+ * Tempo. Base came after, so it is never named as part of that launch.
+ */
+function launchNames(): string {
+  const names = [mainnetPool(4663) ? "Robinhood Chain" : null, mainnetPool(4217) ? "Tempo" : null].filter(Boolean);
+  return names.length ? names.join(" and ") : "Robinhood Chain and Tempo";
+}
+
+/**
+ * What Glim knows about Base, only once a Base pool is filled in (lib/mainnet.ts:
+ * BASE_SEPOLIA_POOL, MAINNET_POOLS[8453]). Before that it says nothing about
+ * Base, so it never offers a network the app does not show.
+ */
+function baseFacts(): string | null {
+  const testnet = baseSepoliaPool() !== null;
+  const mainnet = mainnetPool(8453) !== null;
+  if (!testnet && !mainnet) return null;
+  const lines = ["BASE (overrides any line below that names only two testnets or two mainnets)"];
+  if (mainnet) {
+    lines.push(
+      "- Base mainnet (chain ID 8453): real money, beta, joined after the 21 October launch. The vault takes USDC, EURC, USDT (Tether bridged from Ethereum) and ETH: 500 per deposit and 25,000 in total for each stablecoin, 0.2 ETH per deposit and 10 ETH in total. Same fees as the other mainnets, same final keys. Details, if someone adds the chain by hand: RPC https://mainnet.base.org, chain ID 8453, currency ETH, explorer https://basescan.org."
+    );
+  }
+  if (testnet) {
+    lines.push(
+      "- Base Sepolia (chain ID 84532) is a testnet with play money, but it runs the mainnet vault: the trusted setup's final keys, the same deposit limits as Base mainnet (500 USDC or EURC per deposit and 25,000 in total, 0.2 ETH per deposit and 10 in total) and the 0.25% cash-out fee, on test funds. It takes test USDC, EURC and ETH; there is no USDT there. The Base section of the testnet guide, gloam.trade/docs/testnet, links the faucets for test USDC, EURC and ETH. Details, if someone adds the chain by hand: RPC https://sepolia.base.org, chain ID 84532, currency ETH, explorer https://sepolia.basescan.org."
+    );
+  }
+  lines.push(
+    "- On Base there are no private swaps and no Bring money over (the bridge) yet; both are planned, never give a date. Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
+  );
+  return lines.join("\n");
+}
+
+/**
  * What Glim knows once mainnet is live (lib/mainnet.ts: the launch time has
  * passed and a mainnet pool is filled in). Only the chains with a pool are named.
  */
 function mainnetLiveFacts(): string {
   const rh = mainnetPool(4663) !== null;
   const tempo = mainnetPool(4217) !== null;
+  const base = mainnetPool(8453) !== null;
   const lines = [
     "MAINNET IS LIVE (this overrides any line below that says the app is testnet only or that mainnet is coming)",
-    `- Gloam went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on ${liveMainnetNames()}. Mainnet is real money. Say so plainly when asked, and point to gloam.trade/app.`,
+    `- Gloam went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on ${launchNames()}.${base ? " Base mainnet joined after that (see BASE)." : ""} Mainnet is real money. Say so plainly when asked, and point to gloam.trade/app.`,
     ...(rh
       ? ["- Robinhood Chain mainnet (chain ID 4663): the vault takes USDG and $GLOAM. Native ETH pays gas but cannot be added privately there. Details, if someone adds the chain by hand: RPC https://rpc.mainnet.chain.robinhood.com, chain ID 4663, currency ETH, explorer RobinScan https://robin.etherscan.io (a transaction is at robin.etherscan.io/tx/ and its hash, an address at robin.etherscan.io/address/ and the address)."]
       : []),
@@ -341,11 +377,13 @@ function mainnetLiveFacts(): string {
 /** Lines that read differently once mainnet is live: [what the facts say before, what they say after]. */
 function liveSwaps(): [string, string][] {
   const names = liveMainnetNames();
+  const launch = launchNames();
+  const base = mainnetPool(8453) !== null;
   const rh = mainnetPool(4663) !== null;
   return [
     [
       "- The app is on testnet for now: play money and development proving keys, no real dollars. Mainnet is coming on both Tempo and Robinhood Chain. The trusted-setup ceremony for mainnet is done (13 contributors). Mainnet goes live on Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT), on both Tempo and Robinhood Chain. The live countdown is at gloam.trade/mainnet: when someone asks when mainnet is, give the time in UTC and send them there. That is the only date and time you may give. Never give any other, and never say mainnet is live until the team announces it; until then the app is testnet. Launch news comes in Announcements and on X @gloamtrade.",
-      `- Mainnet is live on ${names}, since Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT): real money, with the trusted setup's final keys (13 contributors). The testnets stay open with play money and development proving keys. Never give or guess any other date. Launch news comes in Announcements and on X @gloamtrade.`,
+      `- Mainnet is live on ${launch}, since Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT)${base ? ", and on Base since later (see BASE)" : ""}: real money, with the trusted setup's final keys (13 contributors). The testnets stay open with play money and development proving keys. Never give or guess any other date. Launch news comes in Announcements and on X @gloamtrade.`,
     ],
     [
       "The app itself is still on testnet; the token is not a testnet token.",
@@ -426,8 +464,10 @@ function liveSwaps(): [string, string][] {
  * mainnet is live now; before that the block is exactly what it always was.
  */
 export function knowledgeBlock(testingOpen: boolean, live: boolean = isMainnetLive()): string {
+  const base = baseFacts();
   const block = [
     ABOUT.trim(),
+    ...(base ? [base] : []),
     TOKEN.trim(),
     CRYPTO_TALK.trim(),
     APP_MAP.trim(),

@@ -6,7 +6,7 @@
  */
 import { createHash, timingSafeEqual } from "crypto";
 import { english } from "viem/accounts";
-import { isMainnetLive, mainnetPool } from "@/lib/mainnet";
+import { baseSepoliaPool, isMainnetLive, mainnetPool } from "@/lib/mainnet";
 import { COPYCAT_GLOAM, GLOAM_TOKEN } from "./knowledge";
 import type { TgMessage, TgPhotoSize, TgUser } from "./telegram";
 
@@ -1109,11 +1109,12 @@ const ABOUT_TOKEN = /\$gloam\b|\btoken\b/i;
 /** "Send your USDG to 0x...": the helper never tells anyone to send money to an address. */
 const SEND_TO_ADDRESS = /\b(?:send|transfer|deposit|move|pay)\b[^.!?\n]*?\bto\s+(?:(?:this|that|the|my|our)\s+(?:address|wallet)\s*:?\s*)?0x[0-9a-fA-F]{40}\b/i;
 
-/** $GLOAM's contract and Gloam's mainnet pools: the addresses the helper may name on its own. */
+/** $GLOAM's contract and Gloam's mainnet pools (and Base Sepolia's): the addresses the helper may name on its own. */
 function ownAddress(a: string): boolean {
   const l = a.toLowerCase();
   if (l === GLOAM_TOKEN.address.toLowerCase()) return true;
-  return ([4663, 4217] as const).some((id) => mainnetPool(id)?.pool.toLowerCase() === l);
+  if (baseSepoliaPool()?.pool.toLowerCase() === l) return true;
+  return ([4663, 4217, 8453] as const).some((id) => mainnetPool(id)?.pool.toLowerCase() === l);
 }
 
 /**
@@ -1402,13 +1403,18 @@ function escapeRe(s: string): string {
 
 // ---------------------------------------------------------------- wrong network
 
-/** Chains people's wallets end up on, by id. Gloam is on the two testnets, and each mainnet once its pool is in. */
+/**
+ * Chains people's wallets end up on, by id. Gloam is on the two testnets, and
+ * each mainnet once its pool is in (Base and Base Sepolia too, once theirs are).
+ */
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum mainnet",
   4663: "Robinhood Chain mainnet",
   46630: "Robinhood Chain testnet",
   42431: "Tempo testnet",
   4217: "Tempo mainnet",
+  8453: "Base mainnet",
+  84532: "Base Sepolia testnet",
 };
 
 /** Hand-add details for a chain the app can ask for. */
@@ -1417,15 +1423,18 @@ const CHAIN_DETAILS: Record<number, string> = {
   46630: "RPC https://rpc.testnet.chain.robinhood.com, chain ID 46630, currency ETH.",
   4663: "RPC https://rpc.mainnet.chain.robinhood.com, chain ID 4663, currency ETH.",
   4217: "RPC https://rpc.tempo.xyz, chain ID 4217, currency USD.",
+  8453: "RPC https://mainnet.base.org, chain ID 8453, currency ETH.",
+  84532: "RPC https://sepolia.base.org, chain ID 84532, currency ETH.",
 };
 
 /** The fix once mainnet is live: the wallet and the app can each be on a mainnet or a testnet. */
 function liveChainFix(name: string, m: ChainMismatch): string {
-  const mainnets = new Set([...(mainnetPool(4663) ? [4663] : []), ...(mainnetPool(4217) ? [4217] : [])]);
+  const mainnets = new Set<number>(([4663, 4217, 8453] as const).filter((id) => mainnetPool(id)));
   const want = `${chainLabel(m.want)} (${m.want})`;
   const tempo = m.want === 42431 || m.want === 4217;
-  const button = tempo ? "Switch to Tempo" : "Switch to Robinhood Chain";
-  const twin: Record<number, number> = { 46630: 4663, 4663: 46630, 42431: 4217, 4217: 42431 };
+  const base = m.want === 84532 || m.want === 8453;
+  const button = tempo ? "Switch to Tempo" : base ? "Switch to Base" : "Switch to Robinhood Chain";
+  const twin: Record<number, number> = { 46630: 4663, 4663: 46630, 42431: 4217, 4217: 42431, 84532: 8453, 8453: 84532 };
   const tap = `tap "${button}" on the wallet button at the top of the app (or Settings > Network > Add to wallet), approve it in your wallet, then try again.`;
   // the wallet sits on the other side (mainnet or testnet) of the chain the app is set to
   const otherSide = twin[m.want] === m.wallet && (mainnets.has(m.wallet) || mainnets.has(m.want));
