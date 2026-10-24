@@ -65,8 +65,8 @@ export function VaultHub() {
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
   // Tokenized-stock trading only exists on Robinhood Chain testnet (the mainnet
-  // pools take payments only), and native-coin sends only on Robinhood Chain,
-  // so those tabs drop out elsewhere (same rule as Markets in the shell).
+  // pools take payments only), and native-coin sends need a native coin (not
+  // Tempo), so those tabs drop out elsewhere (same rule as Markets in the shell).
   const isTempo = hydrated && network.family === "tempo";
   const noStocks = hydrated && !network.stocks;
   const { address } = useAppAccount();

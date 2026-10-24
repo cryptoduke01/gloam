@@ -32,9 +32,9 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
     useShieldTree();
   const [sealed, setSealed] = useState<"checking" | "ready" | "off">("checking");
   const env = useMemo(() => vaultEnvDiagnostics(), []);
-  // A mainnet vault is for payments only (no private trade there), so its
-  // status never hangs on the private-trade verifier.
-  const paymentsOnly = !network.testnet;
+  // A payments vault (every mainnet, and Base Sepolia) has no private trade,
+  // so its status never hangs on the private-trade verifier.
+  const paymentsOnly = network.paymentsPool;
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +136,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
         <p className="tnum mt-3 break-all border-t border-line pt-3 text-[12px] leading-relaxed text-faint">
           {network.pool}
           {" · block "}
-          {/* the env block is Robinhood Chain testnet's; a mainnet carries its own */}
+          {/* the env block is Robinhood Chain testnet's; a payments vault carries its own */}
           {(paymentsOnly && network.deployBlock !== null ? network.deployBlock : env.deployBlock).toString()}
           {env.remappedFromLegacy || env.deployBlockRemapped
             ? " · remapped from legacy env"

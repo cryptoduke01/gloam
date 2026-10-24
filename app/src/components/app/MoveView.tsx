@@ -162,7 +162,7 @@ type PayStyle = "direct" | "bearer";
  * Move = direct pay-to-tag + bearer tickets + cash out.
  * Never uses a public 0x as the private path.
  */
-/** Testnet pools carry no cash-out fee; every other network must report its fee first. */
+/** The older testnet pools carry no cash-out fee; every other network (Base Sepolia too) must report its fee first. */
 const TESTNET_CHAIN_IDS = new Set<number>([46630, 42431]);
 
 /** Relay failures after which the payment may still have gone out (a timeout, a lost reply). */

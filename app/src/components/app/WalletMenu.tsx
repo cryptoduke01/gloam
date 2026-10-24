@@ -142,8 +142,8 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
       try {
         await switchChain({ chainId: network.chainId });
       } catch {
-        // testnets keep their old fallback; a mainnet adds its own chain
-        await (network.testnet ? ensureRhTestnetWallet() : ensureWalletOnChain(network.chain));
+        // Robinhood Chain testnet keeps its old fallback; every other network adds its own chain
+        await (network.key === "robinhood" ? ensureRhTestnetWallet() : ensureWalletOnChain(network.chain));
         await switchChain({ chainId: network.chainId });
       }
     } catch {
@@ -259,7 +259,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
     }
 
     // Turnkey passkeys live on Robinhood Chain testnet only.
-    if (TURNKEY_ENABLED && network.testnet) {
+    if (TURNKEY_ENABLED && network.key === "robinhood") {
       return (
         <div
           ref={root}
@@ -475,8 +475,8 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
             <MenuLink href="/app" onClick={() => setOpen(false)} icon={<GridGlyph />}>
               Portfolio
             </MenuLink>
-            {/* the mainnet pools take payments only: no private trade there */}
-            {network.testnet && (
+            {/* the payments pools (mainnet, Base Sepolia) have no private trade */}
+            {!network.paymentsPool && (
               <MenuLink
                 href="/app/trade?path=sealed"
                 onClick={() => setOpen(false)}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useState } from "react";
-import { FAUCET_URL } from "@/lib/faucet";
+import { FAUCET_URL, faucetFor } from "@/lib/faucet";
 import { useNetwork } from "./NetworkProvider";
 import { useTempoFaucet } from "@/hooks/useTempoFaucet";
 import { readDemo } from "@/lib/demoFlag";
@@ -39,6 +39,9 @@ export function OnboardingCard() {
   // A mainnet holds real money: no test funds to fetch, so no faucet step.
   const steps = network.testnet ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== "faucet");
   const tempoFaucet = useTempoFaucet();
+  // Robinhood Chain's faucet, or Base Sepolia's faucet guide (Circle's test USDC and EURC, and test ETH).
+  const faucetUrl = faucetFor(network.key)?.url ?? FAUCET_URL;
+  const faucetExternal = faucetUrl.startsWith("http");
 
   const refresh = useCallback(() => setState(loadOnboarding()), []);
 
@@ -230,9 +233,9 @@ export function OnboardingCard() {
                           </button>
                         ) : (
                           <a
-                            href={FAUCET_URL}
-                            target="_blank"
-                            rel="noreferrer"
+                            href={faucetUrl}
+                            target={faucetExternal ? "_blank" : undefined}
+                            rel={faucetExternal ? "noreferrer" : undefined}
                             onClick={() => {
                               markOnboardingStep(step.id);
                               refresh();
