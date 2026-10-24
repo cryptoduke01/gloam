@@ -131,6 +131,8 @@ export function BridgeInCard({
   const [open, setOpen] = useState(false);
   const featured = FEATURED.filter((id) => CHAINS.some((c) => c.id === id));
   const solanaPrivate = !network.chain.testnet && Boolean(network.pool) && CHAINS.some(privateBridgeable);
+  // No bridge into this chain yet (Base): nothing to offer.
+  if (!dest) return null;
 
   return (
     <div className="gl-card p-5">
@@ -184,7 +186,7 @@ export function SwapToStableButton({ recipient, onArrived }: { recipient?: strin
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost btn-sm">
-        Swap to {BRIDGE_DESTINATIONS[network.family].token.symbol}
+        Swap to {BRIDGE_DESTINATIONS[network.family]?.token.symbol}
       </button>
       <BridgeSheet
         open={open}
@@ -218,7 +220,9 @@ function BridgeSheet({
   onPrivate?: () => void;
 }) {
   const { network } = useNetwork();
-  const dest = BRIDGE_DESTINATIONS[network.family];
+  // Only opened from BridgeInCard and SwapToStableButton, which render nothing
+  // on a chain without a bridge, so the destination is always there.
+  const dest = BRIDGE_DESTINATIONS[network.family]!;
   const swap = swapSource(network);
   // The swap on this chain comes first: it is the cheapest way in for ETH already here.
   const chains = useMemo(() => (swap ? [swap, ...CHAINS] : CHAINS), [swap]);
