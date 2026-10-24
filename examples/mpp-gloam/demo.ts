@@ -24,6 +24,7 @@ import {
   circuitArtifactFiles,
   generateReceiveKey,
   getGloamNetwork,
+  gloamNetworks,
   networkName,
   packGroth16Proof,
   NATIVE_ASSET,
@@ -40,7 +41,8 @@ const short = (s: string, n = 10) => (s.length > 2 * n + 1 ? `${s.slice(0, n)}�
 const step = (title: string) => console.log(`\n── ${title}`);
 
 // ── network ────────────────────────────────────────────────────────────────
-const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "robinhood", "tempo"];
+// Base ("base-mainnet", and "base" for Base Sepolia) works once the SDK has its pools.
+const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "robinhood", "tempo", "base"];
 const networkKey = (process.env.GLOAM_NETWORK?.trim() || "tempo") as GloamNetworkKey;
 if (!NETWORK_KEYS.includes(networkKey)) {
   console.error(`GLOAM_NETWORK must be one of: ${NETWORK_KEYS.join(", ")}.`);
@@ -48,13 +50,13 @@ if (!NETWORK_KEYS.includes(networkKey)) {
 }
 const net = getGloamNetwork(networkKey);
 if (!net) {
-  const family = networkKey === "tempo-mainnet" ? "tempo" : "robinhood";
+  const testnets = gloamNetworks().filter((n) => n.testnet).map((n) => n.key);
   console.error(
-    `This version of @gloamtrade/sdk has no ${family === "tempo" ? "Tempo" : "Robinhood Chain"} mainnet pool yet, so a charge has no official pool to name. Update the SDK once the pool is published, or run on testnet terms with GLOAM_NETWORK=${family}.`
+    `This version of @gloamtrade/sdk has no ${networkKey} pool yet, so a charge has no official pool to name. Update the SDK once the pool is published, or run on testnet terms with GLOAM_NETWORK=${testnets.join(" or ")}.`
   );
   process.exit(1);
 }
-// The network's first stablecoin: PathUSD on Tempo testnet, USDC.e on Tempo mainnet, USDG on Robinhood Chain.
+// The network's first stablecoin: PathUSD on Tempo testnet, USDC.e on Tempo mainnet, USDG on Robinhood Chain, USDC on Base.
 const asset = net.assets.find((a) => a.address.toLowerCase() !== NATIVE_ASSET.toLowerCase())!;
 const fmt = (base: bigint) => `${formatUnits(base, asset.decimals)} ${asset.symbol}`;
 const networkLabel = net.testnet ? networkName(net.chainId) : `${net.label} mainnet`;
