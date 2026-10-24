@@ -14,12 +14,15 @@ export const metadata: Metadata = {
   title,
   description,
   alternates: { canonical: "/blog/privacy-without-an-operator" },
+  authors: [{ name: "Duke", url: "https://x.com/dukedotsol" }],
   openGraph: {
     title,
     description,
     url: "/blog/privacy-without-an-operator",
     siteName: "Gloam",
     type: "article",
+    publishedTime: "2026-10-14",
+    authors: ["https://x.com/dukedotsol"],
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Gloam: private money on public chains" }],
   },
 };
@@ -120,6 +123,13 @@ export default function PrivacyWithoutAnOperatorPost() {
               <span>Research</span>
               <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
               <time dateTime="2026-10-14">October 14, 2026</time>
+              <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
+              <span>
+                By{" "}
+                <a href="https://x.com/dukedotsol" className="transition-colors hover:text-foreground">
+                  Duke
+                </a>
+              </span>
             </p>
             <h1 className="t-display-l mt-5 text-balance">Privacy with an operator, and privacy without one</h1>
             <p className="mt-6 text-[18px] leading-relaxed text-soft sm:text-[19px]">

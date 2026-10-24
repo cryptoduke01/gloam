@@ -16,12 +16,15 @@ export const metadata: Metadata = {
   description,
   alternates: { canonical: "/blog/live-on-mainnet" },
   // Setting openGraph here replaces the root one, so the share image is named again.
+  authors: [{ name: "Duke", url: "https://x.com/dukedotsol" }],
   openGraph: {
     title,
     description,
     url: "/blog/live-on-mainnet",
     siteName: "Gloam",
     type: "article",
+    publishedTime: "2026-10-21",
+    authors: ["https://x.com/dukedotsol"],
     images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Gloam: private money on public chains" }],
   },
 };
@@ -128,6 +131,13 @@ export default function LiveOnMainnetPost() {
               <span>Announcement</span>
               <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
               <time dateTime="2026-10-21">October 21, 2026</time>
+              <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
+              <span>
+                By{" "}
+                <a href="https://x.com/dukedotsol" className="transition-colors hover:text-foreground">
+                  Duke
+                </a>
+              </span>
             </p>
             <h1 className="t-display-l mt-5 text-balance">Private money, live on public chains</h1>
             <p className="mt-6 text-[18px] leading-relaxed text-soft sm:text-[19px]">

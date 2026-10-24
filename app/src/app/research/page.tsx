@@ -5,11 +5,12 @@ import { Footer } from "@/components/Footer";
 
 const title = "Research";
 const description =
-  "Writing from the Gloam team on private money: why payments on public chains need privacy, the models for it, and what we ship.";
+  "Writing by Duke, founder of Gloam, on private money: why payments on public chains need privacy, the models for it, and what we ship.";
 
 export const metadata: Metadata = {
   title,
   description,
+  authors: [{ name: "Duke", url: "https://x.com/dukedotsol" }],
   alternates: { canonical: "/research" },
   openGraph: { title: "Gloam research", description, url: "/research", siteName: "Gloam", type: "website" },
 };
@@ -48,11 +49,15 @@ const POSTS: { href: string; date: string; label: string; title: string; summary
   },
 ];
 
-const DEEPER: { href: string; label: string; line: string }[] = [
-  { href: "/docs/privacy-model", label: "What stays private", line: "Exactly what the chain shows, and what it never does" },
-  { href: "/docs/threat-model", label: "Threat model", line: "Who can do what, including us" },
-  { href: "/docs/compare", label: "How Gloam compares", line: "Against other ways to keep money private" },
-  { href: "/whitepaper", label: "Whitepaper", line: "The full design" },
+/** The long reads on the site that explain Gloam itself. */
+const EXPLAINED: { href: string; label: string; line: string }[] = [
+  { href: "/mainnet", label: "Mainnet launch", line: "Gloam live on Robinhood Chain and Tempo mainnet" },
+  { href: "/token", label: "The $GLOAM token", line: "What it does, how fees buy it back, and what comes next" },
+  { href: "/docs/compare", label: "How Gloam compares", line: "Against Zama, Arcium, Tempo Zones, Helius Privacy and Railgun" },
+  { href: "/whitepaper", label: "Whitepaper", line: "Thesis, architecture, cryptography and roadmap" },
+  { href: "/docs/privacy-model", label: "What stays private", line: "What an explorer still shows, and what stays hidden" },
+  { href: "/docs/threat-model", label: "Threat model", line: "Who can do what, including us, and the gaps we know about" },
+  { href: "/transparency", label: "Transparency", line: "What anyone can check about Gloam, live from the chain" },
 ];
 
 export default function ResearchPage() {
@@ -70,8 +75,11 @@ export default function ResearchPage() {
           </p>
           <h1 className="t-display-l mt-5 text-balance">Research</h1>
           <p className="mt-6 text-[18px] leading-relaxed text-soft sm:text-[19px]">
-            Why money on public chains needs privacy, the ways to get it, and what we ship. Written by the team
-            building Gloam.
+            Why money on public chains needs privacy, the ways to get it, and what we ship. Written by{" "}
+            <a href="https://x.com/dukedotsol" className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground">
+              Duke
+            </a>
+            , founder of Gloam.
           </p>
         </header>
 
@@ -87,16 +95,17 @@ export default function ResearchPage() {
                     {p.title}
                   </h2>
                   <p className="mt-2 text-[16px] leading-relaxed text-soft">{p.summary}</p>
+                  <p className="mt-3 text-[13px] text-mute">By Duke</p>
                 </Link>
               </li>
             ))}
           </ul>
         </section>
 
-        <section aria-label="Go deeper" className="mx-auto mb-24 mt-14 max-w-[68ch] px-6">
-          <h2 className="text-[20px] font-normal tracking-[-0.01em] text-foreground">Go deeper</h2>
+        <section aria-label="Gloam, explained" className="mx-auto mb-24 mt-14 max-w-[68ch] px-6">
+          <h2 className="text-[20px] font-normal tracking-[-0.01em] text-foreground">Gloam, explained</h2>
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {DEEPER.map((d) => (
+            {EXPLAINED.map((d) => (
               <li key={d.href}>
                 <Link href={d.href} className="block rounded-2xl border border-line px-5 py-4 transition-colors hover:bg-surface">
                   <span className="block text-[15px] text-foreground">{d.label}</span>
