@@ -27,6 +27,7 @@ import {
   GLOAM_CHARGE_INTENT,
   GLOAM_METHOD,
   GLOAM_MODES,
+  type GloamChargeNetwork,
   type GloamChargeRequest,
 } from "../charge.js";
 import { settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig, type ValidatedGloamCharge } from "../server.js";
@@ -55,9 +56,9 @@ export function toMppxError(e: unknown, challengeId?: string): Error {
 export declare namespace gloam {
   type Parameters = GloamChargeServerConfig &
     Method.ComposableHooks<typeof charge> & {
-      /** "tempo" (default), "robinhood", or a chain id. */
-      network?: "tempo" | "robinhood" | number;
-      /** Token address; default PathUSD on Tempo, native ETH on Robinhood Chain. */
+      /** "tempo" (default), "robinhood", a "-mainnet" key, "base" / "base-mainnet" once their pools are in, or a chain id. */
+      network?: GloamChargeNetwork | number;
+      /** Token address; default the network's first asset (PathUSD on Tempo testnet, native ETH on Robinhood Chain testnet). */
       currency?: Address;
       /** Decimals of `currency`, to read route amounts. Default 6 for PathUSD, 18 for ETH. */
       decimals?: number;
