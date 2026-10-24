@@ -12,7 +12,8 @@
  * Network: every builder takes `chainId` (default Robinhood Chain testnet, as
  * in 0.0.x) and `poolAddress` (default: Gloam's pool on that chain). For
  * mainnet, pass the mainnet network's chainId (see mainnetNetwork()); a mainnet
- * whose pool is not in this SDK version is refused rather than guessed. Prove
+ * (or Base Sepolia) whose pool is not in this SDK version is refused rather
+ * than guessed. Prove
  * with the key set of the same chain: circuitArtifactUrls(circuit, chainId).
  */
 
@@ -21,7 +22,7 @@ import {
   NATIVE_ASSET,
   RH_TESTNET_CHAIN_ID,
   assertDepositAllowed,
-  isMainnetChainId,
+  isPaymentsPoolChainId,
   networkName,
   poolForChainId,
 } from "./constants.js";
@@ -70,7 +71,7 @@ export async function buildShieldIntent(
 ): Promise<ShieldIntent> {
   if (params.amountWei <= 0n) throw new Error("amountWei must be positive");
   const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
-  if (isMainnetChainId(chainId)) {
+  if (isPaymentsPoolChainId(chainId)) {
     throw new Error(`Plain shield() is off on ${networkName(chainId)}: the pool takes deposits with a proof only. Use buildShieldBoundIntent.`);
   }
   const asset = params.asset ?? NATIVE_ASSET;
@@ -201,7 +202,7 @@ export async function buildUnshieldIntent(
     privacy:
       "Unshield is the public exit: the amount, asset, and recipient become visible. The nullifier keeps the source note unlinkable to your other activity.",
     execution: `Unsigned. Sign and broadcast unshield(proof, root, nullifier, asset, to, amount) on ${networkName(chainId)}.${
-      isMainnetChainId(chainId)
+      isPaymentsPoolChainId(chainId)
         ? " The pool keeps its cash-out fee (0.25% at launch, see cashOutFee) and sends the rest to the recipient."
         : ""
     }`,
@@ -321,8 +322,8 @@ export async function buildPrivateTradeIntent(
 ): Promise<PrivateTradeIntent> {
   const assetIn = params.assetIn ?? NATIVE_ASSET;
   const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
-  if (isMainnetChainId(chainId)) {
-    throw new Error(`Private trading is not on ${networkName(chainId)}: the mainnet pool takes payments only.`);
+  if (isPaymentsPoolChainId(chainId)) {
+    throw new Error(`Private trading is not on ${networkName(chainId)}: the pool there takes payments only.`);
   }
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
   const w = await buildSealedSwapWitness({

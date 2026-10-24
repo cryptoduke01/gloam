@@ -50,9 +50,9 @@ export interface PayMemoBoard {
 }
 
 /**
- * The boards Gloam runs, by chain id: both testnets and both mainnets. On a
- * chain with no entry here, payments to a Gloam address are handed over as a
- * sealed code (openIncomingPayment).
+ * The boards Gloam runs, by chain id: Robinhood Chain and Tempo, testnet and
+ * mainnet. Base has none yet. On a chain with no board, payments to a Gloam
+ * address are handed over as a sealed code (openIncomingPayment).
  */
 export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
   [RH_TESTNET_CHAIN_ID]: { address: GLOAM_PAY_MEMO, deployBlock: 90_421_567n, emitsPoster: true },

@@ -1,9 +1,10 @@
 /**
  * SDK self-test: mainnet networks, key sets, circuit files, fees and limits.
  *
- * Runs against whatever MAINNET_POOLS holds. Before deploy day both pools are
- * null, so mainnet is hidden and mainnet chain ids are refused; once a pool is
+ * Runs against whatever MAINNET_POOLS and BASE_SEPOLIA_POOL hold. A pool still
+ * null means its network is hidden and its chain id is refused; once a pool is
  * filled in, its network must show up with the final keys and payments only.
+ * Base with its pools filled in is covered by base.selftest.mjs.
  *
  * Run after build:  node test/mainnet.selftest.mjs
  */
@@ -17,6 +18,9 @@ import {
   poolForChainId,
   ceremonyForChainId,
   isMainnetChainId,
+  isPaymentsPoolChainId,
+  testnetNetwork,
+  baseSepoliaPool,
   networkName,
   circuitArtifactUrls,
   circuitArtifactFiles,
@@ -25,6 +29,7 @@ import {
   CASH_OUT_FEE_BPS,
   assertDepositAllowed,
   buildShieldBoundIntent,
+  buildShieldIntent,
   buildPrivateTradeIntent,
   buildGloamPaymentRequirements,
   GLOAM_NETWORKS,
@@ -38,10 +43,17 @@ import {
   TEMPO_USDT0,
   TEMPO_PATHUSD,
   TEMPO_OUSD,
+  BASE_USDC,
+  BASE_EURC,
+  BASE_USDT,
+  BASE_SEPOLIA_USDC,
+  BASE_SEPOLIA_EURC,
   RH_MAINNET_CHAIN_ID,
   TEMPO_MAINNET_CHAIN_ID,
+  BASE_MAINNET_CHAIN_ID,
   RH_TESTNET_CHAIN_ID,
   TEMPO_TESTNET_CHAIN_ID,
+  BASE_SEPOLIA_CHAIN_ID,
   MAINNET_POSEIDON_T3,
   generateReceiveKey,
 } from "../dist/index.js";
@@ -82,9 +94,15 @@ for (const n of Object.values(GLOAM_NETWORKS)) {
   assert(n.chain.id === n.chainId, `${n.key} viem chain id`);
 }
 assert(networkForChainId(RH_TESTNET_CHAIN_ID)?.key === "robinhood", "testnet lookup by chain id");
+assert(testnetNetwork("robinhood") === GLOAM_NETWORKS.robinhood && testnetNetwork("tempo") === GLOAM_NETWORKS.tempo, "testnetNetwork returns the existing entries");
 
 // ── key sets and circuit files ─────────────────────────────────────────────────
 assert(isMainnetChainId(4663) && isMainnetChainId(4217) && !isMainnetChainId(46630) && !isMainnetChainId(42431), "mainnet chain ids");
+assert(BASE_MAINNET_CHAIN_ID === 8453 && BASE_SEPOLIA_CHAIN_ID === 84532, "Base chain ids");
+assert(isMainnetChainId(8453) && !isMainnetChainId(84532), "Base mainnet is a mainnet, Base Sepolia is not");
+assert(isPaymentsPoolChainId(4663) && isPaymentsPoolChainId(8453) && isPaymentsPoolChainId(84532), "payments pools: every mainnet and Base Sepolia");
+assert(!isPaymentsPoolChainId(46630) && !isPaymentsPoolChainId(42431), "the older testnets are not payments pools");
+assert(ceremonyForChainId(BASE_MAINNET_CHAIN_ID) === "production" && ceremonyForChainId(BASE_SEPOLIA_CHAIN_ID) === "production", "Base, testnet included, proves with final keys");
 assert(ceremonyForChainId(RH_MAINNET_CHAIN_ID) === "production", "RH mainnet proves with final keys");
 assert(ceremonyForChainId(TEMPO_MAINNET_CHAIN_ID) === "production", "Tempo mainnet proves with final keys");
 assert(ceremonyForChainId(RH_TESTNET_CHAIN_ID) === "dev" && ceremonyForChainId(TEMPO_TESTNET_CHAIN_ID) === "dev", "testnets prove with dev keys");
@@ -94,6 +112,7 @@ assert(tMain.wasm === "https://www.gloam.trade/circuits/transfer.wasm", "mainnet
 assert(tMain.zkey === "https://www.gloam.trade/circuits/final/transfer_final.zkey", "mainnet zkey is the final key");
 const sTest = circuitArtifactUrls("shield", RH_TESTNET_CHAIN_ID, "/circuits/");
 assert(sTest.wasm === "/circuits/shield.wasm" && sTest.zkey === "/circuits/shield_final.zkey", "testnet files, custom base");
+assert(circuitArtifactUrls("shield", BASE_SEPOLIA_CHAIN_ID).zkey === "https://www.gloam.trade/circuits/final/shield_final.zkey", "Base Sepolia proves with the final zkey");
 const fFinal = circuitArtifactFiles("unshield", "production");
 assert(fFinal.sha256.zkey === CIRCUIT_SHA256.zkey.production.unshield && fFinal.sha256.zkey !== CIRCUIT_SHA256.zkey.dev.unshield, "final and dev zkeys differ");
 for (const set of [CIRCUIT_SHA256.wasm, CIRCUIT_SHA256.zkey.dev, CIRCUIT_SHA256.zkey.production]) {
@@ -111,6 +130,7 @@ throws(() => cashOutFee(-1n), /negative/, "negative amount");
 // ── names ───────────────────────────────────────────────────────────────────────
 assert(networkName(4663) === "Robinhood Chain" && networkName(4217) === "Tempo", "mainnet names");
 assert(networkName(46630) === "Robinhood Chain testnet" && networkName(42431) === "Tempo testnet", "testnet names");
+assert(networkName(8453) === "Base" && networkName(84532) === "Base testnet", "Base names");
 assert(MAINNET_POSEIDON_T3 === "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4", "PoseidonT3");
 
 // ── MAINNET_POOLS validation ─────────────────────────────────────────────────────
@@ -130,11 +150,33 @@ assert(MAINNET_POSEIDON_T3 === "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4", "Po
 // ── mainnet networks, as filled in ───────────────────────────────────────────────
 const prover = async () => ({ proofBytes: "0x" + "ab".repeat(256), publicSignals: [] });
 const live = gloamNetworks();
-assert(live.slice(-2).map((n) => n.key).join() === "robinhood,tempo", "testnets come last");
+{
+  const firstTest = live.findIndex((n) => n.testnet);
+  assert(firstTest >= 0 && live.slice(firstTest).every((n) => n.testnet), "testnets come last");
+  assert(live.slice(firstTest, firstTest + 2).map((n) => n.key).join() === "robinhood,tempo", "Robinhood Chain and Tempo testnets first among them");
+}
 
-for (const [family, chainId, key, assets] of [
-  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN]],
-  ["tempo", TEMPO_MAINNET_CHAIN_ID, "tempo-mainnet", [TEMPO_USDCE, TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD]],
+// Base Sepolia: hidden and refused until BASE_SEPOLIA_POOL is in.
+if (!baseSepoliaPool()) {
+  assert(testnetNetwork("base") === null && getGloamNetwork("base") === null && networkForChainId(BASE_SEPOLIA_CHAIN_ID) === undefined, "Base Sepolia hidden until its pool is in");
+  assert(!live.some((n) => n.family === "base" && n.testnet), "gloamNetworks leaves Base Sepolia out");
+  throws(() => poolForChainId(BASE_SEPOLIA_CHAIN_ID), /Base testnet is not in this version/, "Base Sepolia: no pool guessed");
+  await throwsAsync(
+    () => buildShieldBoundIntent({ chainId: BASE_SEPOLIA_CHAIN_ID, asset: BASE_SEPOLIA_USDC, amountWei: 1_000_000n, prover }),
+    /not in this version/,
+    "Base Sepolia: builder refuses it without a pool"
+  );
+}
+await throwsAsync(
+  () => buildShieldIntent({ chainId: BASE_SEPOLIA_CHAIN_ID, poolAddress: "0x00000000000000000000000000000000000000cc", amountWei: 1n }),
+  /Plain shield\(\) is off on Base testnet/,
+  "Base Sepolia: plain shield is refused, pool or not"
+);
+
+for (const [family, chainId, key, assets, native, memo] of [
+  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN], false, true],
+  ["tempo", TEMPO_MAINNET_CHAIN_ID, "tempo-mainnet", [TEMPO_USDCE, TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD], false, true],
+  ["base", BASE_MAINNET_CHAIN_ID, "base-mainnet", [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET], true, false],
 ]) {
   const filled = mainnetPoolFor(chainId);
   const net = mainnetNetwork(family);
@@ -150,7 +192,8 @@ for (const [family, chainId, key, assets] of [
     continue;
   }
   assert(net && net.key === key && net.chainId === chainId && net.pool === filled.pool && net.deployBlock === filled.deployBlock, `${key} entry`);
-  assert(net.testnet === false && net.ceremony === "production" && net.nativeShield === false && /^0x[0-9a-fA-F]{40}$/.test(net.payMemo ?? ""), `${key}: real money, final keys, no native, its memo board`);
+  assert(net.testnet === false && net.ceremony === "production" && net.nativeShield === native, `${key}: real money, final keys, native ${native ? "listed" : "not listed"}`);
+  assert(memo ? /^0x[0-9a-fA-F]{40}$/.test(net.payMemo ?? "") : net.payMemo === null, `${key}: ${memo ? "its memo board" : "no memo board yet"}`);
   assert(net.assets.map((a) => a.address).join() === assets.join(), `${key} assets`);
   assert(live[0].testnet === false, "mainnets come first");
   assert(poolForChainId(chainId) === filled.pool, `${key} pool by chain id`);
@@ -158,7 +201,7 @@ for (const [family, chainId, key, assets] of [
   const usd = net.assets[0];
   assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit);
   throws(() => assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit + 1n), /beta limit/, `${key}: over the per-deposit limit`);
-  throws(() => assertDepositAllowed(chainId, NATIVE_ASSET, 1n), /no native deposits/, `${key}: native refused`);
+  if (!native) throws(() => assertDepositAllowed(chainId, NATIVE_ASSET, 1n), /no native deposits/, `${key}: native refused`);
   throws(() => assertDepositAllowed(chainId, "0x00000000000000000000000000000000000000bb", 1n), /does not list/, `${key}: unlisted asset refused`);
   const intent = await buildShieldBoundIntent({ chainId, asset: usd.address, amountWei: usd.depositLimit.perDeposit, prover });
   assert(intent.exec.poolAddress === filled.pool && intent.chainId === chainId, `${key}: shield targets the mainnet pool`);
@@ -172,12 +215,19 @@ for (const [family, chainId, key, assets] of [
 // ── limits per asset ──────────────────────────────────────────────────────────────
 // Checked on the asset tables directly, so they hold before the pools are in too.
 {
-  const { RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS } = await import("../dist/index.js");
-  for (const a of [...TEMPO_MAINNET_ASSETS, RH_MAINNET_ASSETS[0]]) {
+  const { RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS, BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS } = await import("../dist/index.js");
+  const baseStables = [...BASE_MAINNET_ASSETS, ...BASE_SEPOLIA_ASSETS].filter((a) => a.symbol !== "ETH");
+  for (const a of [...TEMPO_MAINNET_ASSETS, RH_MAINNET_ASSETS[0], ...baseStables]) {
     assert(a.decimals === 6 && a.depositLimit.perDeposit === 500_000_000n && a.depositLimit.total === 25_000_000_000n, `${a.symbol}: 500 per deposit, 25,000 total`);
   }
   const g = RH_MAINNET_ASSETS[1];
   assert(g.symbol === "GLOAM" && g.decimals === 18 && g.depositLimit.perDeposit === 25_000n * 10n ** 18n && g.depositLimit.total === 250_000n * 10n ** 18n, "GLOAM: 25,000 per deposit, 250,000 total");
+  assert(BASE_MAINNET_ASSETS.map((a) => a.address).join() === [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET].join(), "Base mainnet lists USDC, EURC, USDT and ETH");
+  assert(BASE_SEPOLIA_ASSETS.map((a) => a.address).join() === [BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC, NATIVE_ASSET].join(), "Base Sepolia lists USDC, EURC and ETH (no USDT)");
+  for (const list of [BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS]) {
+    const eth = list.find((a) => a.symbol === "ETH");
+    assert(eth.decimals === 18 && eth.depositLimit.perDeposit === 2n * 10n ** 17n && eth.depositLimit.total === 10n * 10n ** 18n, "Base ETH: 0.2 per deposit, 10 total");
+  }
 }
 
 // ── x402 requirements resolve the pool from the network ─────────────────────────
