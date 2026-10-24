@@ -62,7 +62,15 @@ function useHeadings(rootRef: RefObject<HTMLDivElement | null>, pathname: string
 
     // Honour a deep link that arrived before the ids existed, including search
     // links that point at a heading's text slug rather than its explicit id.
-    const hash = decodeURIComponent(window.location.hash.slice(1));
+    // A fragment that is not valid percent-encoding (a link cut short, say
+    // #%E0%A4) is read as it is: decoding it threw here, and the page broke.
+    const raw = window.location.hash.slice(1);
+    let hash = raw;
+    try {
+      hash = decodeURIComponent(raw);
+    } catch {
+      /* not percent-encoded: look it up as written */
+    }
     if (hash) findDocHeading(hash)?.scrollIntoView();
 
     let frame = 0;
