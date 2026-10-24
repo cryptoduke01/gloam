@@ -117,6 +117,7 @@ export async function POST(req: Request) {
   const network = getNetwork(body.network);
   if (network.chain.testnet || !network.pool) return fail(400, "Bringing money in privately works on mainnet.");
   const dest = BRIDGE_DESTINATIONS[network.family];
+  if (!dest) return fail(400, `Bringing money over isn't on ${network.label} yet.`);
   const asset = dest.token.address as Address;
 
   const swap = swapSource(network);

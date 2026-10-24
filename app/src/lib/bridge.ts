@@ -76,8 +76,12 @@ export interface BridgeDestination {
   token: { symbol: string; address: string; decimals: number; logo: string };
 }
 
-/** Where money lands on each chain: the mainnet stablecoin its pool takes. */
-export const BRIDGE_DESTINATIONS: Record<ChainFamily, BridgeDestination> = {
+/**
+ * Where money lands on each chain: the mainnet stablecoin its pool takes. A
+ * chain with no entry has no bridge in yet (Base: the Relay bridge comes next),
+ * so the app shows no bridge panel there and the bridge routes refuse it.
+ */
+export const BRIDGE_DESTINATIONS: Partial<Record<ChainFamily, BridgeDestination>> = {
   robinhood: {
     chainId: 4663,
     chain: "Robinhood Chain",
@@ -127,7 +131,7 @@ export const BRIDGE_MAX_USD = 25_000;
 
 const CHAIN_NAMES = new Map<number, string>([
   ...BRIDGE_CHAINS.map((c) => [c.id, c.name] as [number, string]),
-  ...Object.values(BRIDGE_DESTINATIONS).map((d) => [d.chainId, d.chain] as [number, string]),
+  ...Object.values(BRIDGE_DESTINATIONS).map((d) => [d!.chainId, d!.chain] as [number, string]),
 ]);
 
 /** A chain's name by Relay id, or "Chain <id>" when Gloam doesn't list it. */
@@ -150,6 +154,7 @@ export function chainLogo(id: number, dark = false): string {
 
 /** Shown on mainnets, or anywhere when the preview flag is on. */
 export function bridgeVisible(network: GloamNetwork): boolean {
+  if (!BRIDGE_DESTINATIONS[network.family]) return false;
   return process.env.NEXT_PUBLIC_BRIDGE_PREVIEW === "1" || !network.chain.testnet;
 }
 

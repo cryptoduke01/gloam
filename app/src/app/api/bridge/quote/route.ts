@@ -63,6 +63,7 @@ export async function POST(req: Request) {
   if (typeof body.network !== "string" || !isNetworkKey(body.network)) return fail(400, "Pick Robinhood Chain or Tempo.");
   const network = getNetwork(body.network);
   const dest = BRIDGE_DESTINATIONS[network.family];
+  if (!dest) return fail(400, `Bringing money over isn't on ${network.label} yet.`);
   const swap = swapSource(network);
   const chain = swap && Number(body.chainId) === swap.id ? swap : bridgeChain(Number(body.chainId));
   const token = chain && typeof body.symbol === "string" ? bridgeToken(chain, body.symbol) : null;
