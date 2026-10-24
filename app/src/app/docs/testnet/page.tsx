@@ -4,7 +4,12 @@ import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
-import { PAXOS_FAUCET_URL } from "@/lib/tokens";
+import { baseSepoliaPool } from "@/lib/mainnet";
+import { CIRCLE_FAUCET_URL, PAXOS_FAUCET_URL } from "@/lib/tokens";
+
+/** Base Sepolia shows in the app once its pool is filled in (lib/mainnet.ts). */
+const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
+const CDP_FAUCET_URL = "https://portal.cdp.coinbase.com/products/faucet";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 export const metadata: Metadata = {
@@ -197,6 +202,43 @@ export default function DocsTestnetPage() {
         Tempo params and integration notes live in the{" "}
         <Link href="/docs/chain">Networks doc</Link>.
       </p>
+
+      <h3 id="base">Base Sepolia</h3>
+      <p>
+        {BASE_SEPOLIA_LIVE
+          ? "Gloam also runs on Base Sepolia (chain ID 84532), with play money."
+          : "Base Sepolia (chain ID 84532) is next. It is not in the app yet; this is how it will work."}{" "}
+        It is the practice network for Base, and it runs the mainnet vault: the
+        final keys, the same deposit limits as Base mainnet (500 USDC or EURC
+        per deposit and 25,000 in total, 0.2 ETH per deposit and 10 in total)
+        and the 0.25% cash-out fee, all on test funds. It takes test USDC, EURC
+        and ETH; there is no USDT on Base Sepolia.
+      </p>
+      <ul>
+        <li>
+          <strong>RPC</strong>, <code>https://sepolia.base.org</code>
+        </li>
+        <li>
+          <strong>Explorer</strong>,{" "}
+          <a href="https://sepolia.basescan.org" target="_blank" rel="noreferrer">
+            sepolia.basescan.org
+          </a>
+        </li>
+        <li>
+          <strong>Test USDC and EURC</strong>, from{" "}
+          <a href={CIRCLE_FAUCET_URL} target="_blank" rel="noreferrer">
+            Circle&apos;s faucet
+          </a>
+          : pick Base Sepolia and paste the address you use in Gloam.
+        </li>
+        <li>
+          <strong>Test ETH for gas</strong>, from a Base Sepolia faucet such as{" "}
+          <a href={CDP_FAUCET_URL} target="_blank" rel="noreferrer">
+            Coinbase&apos;s
+          </a>
+          . A little is enough: Base gas costs a fraction of a cent.
+        </li>
+      </ul>
 
       <h2 id="faucet">2. Get testnet funds (faucet)</h2>
       <p>{FAUCET_BLURB}</p>

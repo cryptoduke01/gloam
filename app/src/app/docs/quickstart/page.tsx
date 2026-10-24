@@ -90,6 +90,11 @@ circuitArtifactUrls("shield", 4663);   // final keys, Robinhood Chain mainnet
 circuitArtifactUrls("shield", 46630);  // dev keys, Robinhood Chain testnet`}</code>
       </pre>
       <p>
+        Base Sepolia (<code>84532</code>) is the exception among the testnets:
+        it runs the mainnet vault, so its proofs use the final keys too.
+        SDK 0.3.0 knows this; Base appears in it once its pools are published.
+      </p>
+      <p>
         You can also host the files yourself and pass them to{" "}
         <code>artifactProver({"{ wasm, zkey }"})</code>: file paths in{" "}
         <strong>node</strong>, URLs in the <strong>browser</strong>. Just keep
@@ -174,7 +179,11 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
         <code>circuitArtifactUrls</code> hands you the dev keys there. On Tempo,
         use <code>mainnetNetwork(&quot;tempo&quot;)</code> with{" "}
         <code>TEMPO_USDCE</code>, or <code>GLOAM_NETWORKS.tempo</code> to
-        practice.
+        practice. Base is next: <code>mainnetNetwork(&quot;base&quot;)</code>{" "}
+        and <code>testnetNetwork(&quot;base&quot;)</code> (Base Sepolia) in SDK
+        0.3.0 return null until their pools are published, then the same code
+        runs there with <code>BASE_USDC</code> or{" "}
+        <code>BASE_SEPOLIA_USDC</code>.
       </p>
 
       <h2>4. Confirm it landed</h2>

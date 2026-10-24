@@ -45,12 +45,13 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/testnet": {
     description: "Practice for free with test funds: wallet setup, faucet, adding funds privately, paying and cashing out.",
-    keywords: ["testnet", "practice", "faucet", "test money", "test funds", "wallet", "metamask", "usdg", "pathusd", "troubleshooting", "demo", "46630"],
+    keywords: ["testnet", "practice", "faucet", "test money", "test funds", "wallet", "metamask", "usdg", "pathusd", "troubleshooting", "demo", "46630", "base sepolia", "84532", "circle faucet", "eurc"],
     headings: [
       "Demo video",
       "What you can do on testnet",
       "Before you start",
       "1. Add Robinhood Chain testnet",
+      "Base Sepolia",
       "2. Get testnet funds (faucet)",
       "3. Portfolio at a glance",
       "4. Shield (deposit into the vault)",
@@ -265,13 +266,14 @@ const PAGE_META: Record<string, PageMeta> = {
     ],
   },
   "/docs/chain": {
-    description: "Robinhood Chain and Tempo, mainnet and testnet: chain IDs, RPCs, pools, assets and beta limits.",
-    keywords: ["robinhood", "tempo", "chain id", "rpc", "network", "mainnet", "testnet", "4663", "4217", "46630", "42431", "explorer", "pool address", "beta limits", "deposit limit", "usdg", "usdc.e", "usdt0", "gloam token", "relayer", "fees", "swap router", "treasury"],
+    description: "Robinhood Chain and Tempo, mainnet and testnet, and Base next: chain IDs, RPCs, pools, assets and beta limits.",
+    keywords: ["robinhood", "tempo", "base", "base sepolia", "chain id", "rpc", "network", "mainnet", "testnet", "4663", "4217", "8453", "46630", "42431", "84532", "explorer", "pool address", "beta limits", "deposit limit", "usdg", "usdc.e", "usdt0", "usdc", "eurc", "usdt", "gloam token", "relayer", "fees", "swap router", "treasury"],
     headings: [
       "Two chains, one shielded pool design",
       "Mainnet",
       "Robinhood Chain",
       "Tempo",
+      "Base",
       "Switching networks in the app",
       "Honest status",
     ],

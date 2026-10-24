@@ -154,6 +154,12 @@ export default function DocsProductionPage() {
           tried to hide the size too, is retired and stays off
         </li>
         <li>
+          <strong>Base.</strong> Next on the same deploy script and final keys:
+          Base Sepolia first as the practice network, then Base mainnet once
+          it is tested end to end. Neither is deployed yet; see{" "}
+          <Link href="/docs/chain#base">Networks</Link>.
+        </li>
+        <li>
           <strong>Stronger key custody.</strong> Notes and receive keys are encrypted at rest, but
           the key is device-bound; a wallet-bound or passphrase key is still open
         </li>
