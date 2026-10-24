@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
 import { ClaimSafetyLine } from "@/components/app/ClaimSafetyLine";
@@ -61,6 +61,9 @@ export default function ClaimPage() {
   // network fee and claiming is free. Unknown (null) until it answers.
   const [relayUp, setRelayUp] = useState<boolean | null>(null);
   const readyNet = view.kind === "ready" ? view.net : null;
+  // Counts the payments this page has started reading; only the newest one is
+  // shown, so a slow read can never put an older payment back on screen.
+  const reads = useRef(0);
 
   useEffect(() => {
     if (!readyNet) return;
@@ -73,16 +76,21 @@ export default function ClaimPage() {
     };
   }, [readyNet]);
 
+  // The payment in the address bar: read on load, and again when another claim
+  // link is opened in this tab. That only changes the fragment, which reloads
+  // nothing, so without this the page kept showing (and claiming) the first one.
   useEffect(() => {
     let cancelled = false;
-    const code = codeFromHash(window.location.hash);
-    const q = new URLSearchParams(window.location.search).get("net");
-    const known = isNetworkKey(q) ? q : null;
-    const net: NetworkKey = known ?? "tempo";
-    void (async () => {
+    const readLink = async () => {
+      const n = ++reads.current;
+      const current = () => !cancelled && n === reads.current;
+      const code = codeFromHash(window.location.hash);
+      const q = new URLSearchParams(window.location.search).get("net");
+      const known = isNetworkKey(q) ? q : null;
+      const net: NetworkKey = known ?? "tempo";
       const wb = inWalletBrowser();
       if (!code || !isClaimLink(code)) {
-        if (!cancelled) {
+        if (current()) {
           setWalletBrowser(wb);
           setLinkNet(known);
           setView({ kind: "missing" });
@@ -91,14 +99,23 @@ export default function ClaimPage() {
       }
       countLinkOpened(code, q);
       const ready = await readyView(code, net);
-      if (!cancelled) {
+      if (current()) {
         setWalletBrowser(wb);
         setLinkNet(known);
         setView(ready);
       }
-    })();
+    };
+    const onHash = () => {
+      setView({ kind: "loading" });
+      setCopied(false);
+      setPasteError(null);
+      void readLink();
+    };
+    void readLink();
+    window.addEventListener("hashchange", onHash);
     return () => {
       cancelled = true;
+      window.removeEventListener("hashchange", onHash);
     };
   }, []);
 
@@ -110,10 +127,12 @@ export default function ClaimPage() {
       return;
     }
     setPasteError(null);
+    const n = ++reads.current;
     const net = netIn(pasted) ?? linkNet ?? "tempo";
     countLinkOpened(code, net);
     setLinkNet(netIn(pasted) ?? linkNet);
-    setView(await readyView(code, net));
+    const ready = await readyView(code, net);
+    if (n === reads.current) setView(ready);
   }
 
   async function copyLink() {

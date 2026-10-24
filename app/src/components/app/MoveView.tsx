@@ -142,6 +142,7 @@ import {
   scheduledLine,
 } from "./PrivateCashOut";
 import { countLinkClaimed, countLinkCreated, countLinkOpened, countSendAfterClaim } from "@/lib/funnel";
+import { codeFromHash } from "@/lib/claimLink";
 import { countPerson } from "@/lib/people";
 import { WalletMenu } from "./WalletMenu";
 import { AfterClaimNext } from "./AfterClaimNext";
@@ -334,29 +335,40 @@ export function MoveView() {
   });
 
   // Claim links: /app/vault?tab=move&net=tempo#claim=<code>. The code lives in
-  // the URL fragment (never sent to a server) and is cleared once read.
+  // the URL fragment (never sent to a server) and is cleared once read. It is
+  // read the way /claim reads it (lib/claimLink), so a link cut mid-escape is
+  // ignored instead of throwing, and read again when another claim link is
+  // opened in this tab, which only changes the fragment.
   const { setNetworkKey, networkKey } = useNetwork();
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const h = window.location.hash;
-    if (!h.startsWith("#claim=")) return;
-    const code = decodeURIComponent(h.slice("#claim=".length));
-    const net = new URLSearchParams(window.location.search).get("net");
-    const t = window.setTimeout(() => {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-      if (isNetworkKey(net) && net !== networkKey) setNetworkKey(net);
-      if (code) {
+    let t = 0;
+    let scroll = 0;
+    const openClaim = () => {
+      const code = codeFromHash(window.location.hash);
+      if (!code) return;
+      const net = new URLSearchParams(window.location.search).get("net");
+      window.clearTimeout(t);
+      t = window.setTimeout(() => {
+        window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+        if (isNetworkKey(net) && net !== networkKey) setNetworkKey(net);
         countLinkOpened(code, net);
         setMode("receive");
         setImportText(code);
         // opened from a claim link: go straight to the claim, not the address above it
-        window.setTimeout(() => {
+        window.clearTimeout(scroll);
+        scroll = window.setTimeout(() => {
           const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
           document.getElementById("claim-payment")?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
         }, 400);
-      }
-    }, 0);
-    return () => window.clearTimeout(t);
+      }, 0);
+    };
+    openClaim();
+    window.addEventListener("hashchange", openClaim);
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(scroll);
+      window.removeEventListener("hashchange", openClaim);
+    };
   }, [networkKey, setNetworkKey]);
 
   // A request link opened in a tab that already shows Pay only changes the
