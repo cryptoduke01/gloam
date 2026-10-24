@@ -111,6 +111,16 @@ Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026
 
 The same private core runs on [Tempo](https://tempo.xyz) mainnet (`4217`), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with selective disclosure a user can hand an issuer or auditor. Shield USDC.e, pathUSD, USDT0 or OUSD, send, swap and cash out, proof-gated end to end. Because Tempo blocks native `msg.value` and pays gas in stablecoins, Gloam shields ERC-20 stablecoins there instead of a native asset. Design and constraints: [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
 
+## Next: Base
+
+Base (an Ethereum L2 on the OP Stack) is the third chain. Base Sepolia (`84532`) comes first as the practice network, then Base mainnet (`8453`) on the same code once it has been tested end to end. Both run the mainnet vault (`ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee), so Base Sepolia is play money on the real contract and keys.
+
+- **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. Each stablecoin 500 per deposit and 25,000 in total, ETH 0.2 per deposit and 10 in total.
+- **Status.** Not deployed yet. The app, the SDK (0.3.0) and the MCP server (0.5.0) know both networks and show them once their pools are filled in; until then they do not exist anywhere.
+- **Later.** Private swaps on Base (router v2 on Uniswap v4) and bringing money over into Base (the Relay bridge).
+
+Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
+
 ## Trust, verified
 
 Privacy has to be checkable and correct before it holds real money. Mainnet is beta software handling real money, and this is where it stands.
@@ -219,7 +229,7 @@ Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https:
 
 ## Practice network
 
-Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as a free practice network: the same app (switch networks in the app), test funds, no real value. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets).
+Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as a free practice network: the same app (switch networks in the app), test funds, no real value. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets). Base Sepolia (`84532`) joins the practice network once it is deployed (see [Next: Base](#next-base)); unlike the other two it runs the mainnet vault and the final keys, with test USDC and EURC from Circle's faucet.
 
 **Contracts: Robinhood Chain testnet `46630`**
 
