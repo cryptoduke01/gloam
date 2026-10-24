@@ -15,10 +15,21 @@ import {
 } from "@/lib/mainnet";
 import { AppLink } from "@/components/AppLink";
 
-/** The time left to mainnet, ticking once a second. Null until mounted, so the server and the first render agree. */
+/** A countdown that has reached zero: the same on every clock past the launch time. */
+const LAUNCHED: Remaining = remainingUntil(MAINNET_LAUNCH_MS);
+
+/**
+ * The time left to mainnet, ticking once a second. Before the launch it is
+ * null until mounted, so the server and the first render agree. Once the
+ * launch time has passed the answer no longer depends on the clock, so it is
+ * there from the first render, server included: the HTML a crawler, a link
+ * preview or a slow phone gets says mainnet is live instead of counting down
+ * to a date that has gone by.
+ */
 export function useMainnetRemaining(): Remaining | null {
-  const [r, setR] = useState<Remaining | null>(null);
+  const [r, setR] = useState<Remaining | null>(() => (Date.now() >= MAINNET_LAUNCH_MS ? LAUNCHED : null));
   useEffect(() => {
+    if (Date.now() >= MAINNET_LAUNCH_MS) return; // launched: nothing to count
     let id = 0;
     const tick = () => {
       const next = remainingUntil(Date.now());
@@ -34,8 +45,9 @@ export function useMainnetRemaining(): Remaining | null {
 
 /**
  * Whether mainnet is live: the launch time has passed and a mainnet pool is
- * filled in (lib/mainnet.ts). False until mounted, and false after the launch
- * time for as long as no pool is in, so the countdown copy stays as it was.
+ * filled in (lib/mainnet.ts). After the launch time that holds from the first
+ * render; it stays false for as long as no pool is in, so the countdown copy
+ * stays as it was.
  */
 export function useMainnetLive(): boolean {
   const r = useMainnetRemaining();
@@ -44,8 +56,8 @@ export function useMainnetLive(): boolean {
 
 /**
  * Copy that depends on whether mainnet is live, for server pages: `before`
- * until mainnet is live (and on the server, so the first render matches),
- * `live` from then on. Before a mainnet pool is filled in it is always `before`.
+ * until mainnet is live, `live` from then on, in the server HTML too. Before a
+ * mainnet pool is filled in it is always `before`.
  */
 export function MainnetCopy({ live, before }: { live: React.ReactNode; before: React.ReactNode }) {
   return <>{useMainnetLive() ? live : before}</>;
