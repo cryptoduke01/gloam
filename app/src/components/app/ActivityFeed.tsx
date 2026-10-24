@@ -67,7 +67,8 @@ function Header() {
 export function ActivityFeed() {
   const { address, isConnected } = useAppAccount();
   const { network } = useNetwork();
-  const activity = useActivity(address, network.testnet ? undefined : network.chainId);
+  // The payments pools (mainnet, Base Sepolia) read the wallet's transfers from the chain.
+  const activity = useActivity(address, network.paymentsPool ? network.chainId : undefined);
   const { data, isLoading, isError } = activity;
   const retry = "refetch" in activity ? () => void activity.refetch() : null;
   const txs = useMemo(() => data?.txs ?? [], [data]);

@@ -33,13 +33,13 @@ async function fetchActivity(address: string, mainnetChainId?: number) {
 /**
  * The wallet's public history. A testnet asks its explorer; a mainnet (pass its
  * chain id) is read straight from the chain, since its explorer has no account
- * API Gloam can use.
+ * API Gloam can use, and so is Base Sepolia, which lists its tokens like one.
  */
 export function useActivity(address: string | undefined, mainnetChainId?: number) {
   // Recording demo: the pretend wallet's history, nothing fetched.
   const demo = useDemoActivity();
   const mainnetKey = mainnetChainId
-    ? NETWORK_KEYS.find((k) => getNetwork(k).chainId === mainnetChainId && !getNetwork(k).testnet)
+    ? NETWORK_KEYS.find((k) => getNetwork(k).chainId === mainnetChainId && getNetwork(k).paymentsPool)
     : undefined;
   const query = useQuery({
     queryKey: mainnetChainId ? ["activity", address, mainnetChainId] : ["activity", address],

@@ -40,8 +40,8 @@ export function ConnectButton({ className = "" }: { className?: string }) {
       try {
         await switchChain({ chainId: network.chainId });
       } catch {
-        // testnets keep their old fallback; a mainnet adds its own chain
-        await (network.testnet ? ensureRhTestnetWallet() : ensureWalletOnChain(network.chain));
+        // Robinhood Chain testnet keeps its old fallback; every other network adds its own chain
+        await (network.key === "robinhood" ? ensureRhTestnetWallet() : ensureWalletOnChain(network.chain));
         await switchChain({ chainId: network.chainId });
       }
     } catch (e) {

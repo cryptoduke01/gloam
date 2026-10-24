@@ -36,6 +36,14 @@ const FAUCETS: Partial<Record<NetworkKey, FaucetInfo>> = {
     cta: "Faucet guide →",
     assets: "OUSD · PathUSD · AlphaUSD · BetaUSD · ThetaUSD",
   },
+  base: {
+    title: "Free test USDC, EURC and ETH",
+    blurb:
+      "Test USDC and EURC from Circle's faucet (pick Base Sepolia), and test ETH for gas from a Base Sepolia faucet. Play money only.",
+    url: "/docs/testnet#base",
+    cta: "Faucet guide →",
+    assets: "USDC · EURC · ETH",
+  },
 };
 
 export function faucetFor(key: NetworkKey): FaucetInfo | null {
