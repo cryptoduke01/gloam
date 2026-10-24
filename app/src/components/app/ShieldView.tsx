@@ -27,7 +27,7 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
@@ -294,7 +294,7 @@ export function ShieldView() {
   const decimals = selectedToken?.decimals ?? 18;
 
   const mark = selectedToken
-    ? selectedToken.kind === "stablecoin"
+    ? isDollarStable(selectedToken)
       ? 1
       : (marketData?.markets?.find((m) => m.id === selectedToken.id)?.mark ?? 0)
     : ethUsd ?? 0;
@@ -999,10 +999,11 @@ export function ShieldView() {
               recipient={address ?? undefined}
               onArrived={(arrived) => {
                 // By address on mainnet (Tempo lists Relay's USDC as USDC.e), by symbol in a testnet preview.
-                const dest = BRIDGE_DESTINATIONS[network.family].token;
-                const landed =
-                  tokens.find((t) => t.address.toLowerCase() === dest.address.toLowerCase()) ??
-                  tokens.find((t) => t.symbol === dest.symbol);
+                const dest = BRIDGE_DESTINATIONS[network.family]?.token;
+                const landed = dest
+                  ? (tokens.find((t) => t.address.toLowerCase() === dest.address.toLowerCase()) ??
+                    tokens.find((t) => t.symbol === dest.symbol))
+                  : undefined;
                 if (landed) setAssetChoice(landed.id as AssetChoice);
                 setAmount(arrived);
                 // The new balance can take a few seconds to show on the RPC.

@@ -33,7 +33,7 @@ import { getNetwork, isNetworkKey, NETWORK_KEYS, type GloamNetwork, type Network
 import { cleanText } from "./paymentNote";
 import { hashNumbers, jsonOf, k, kv, kv1 } from "./partnersKv";
 import { randomId } from "./apiKeys";
-import { shieldTokensFor, supportsNativeShield } from "./tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 
 // ---------------------------------------------------------------- fees
 
@@ -144,7 +144,7 @@ export function assetInfo(net: GloamNetwork, asset: Address): AssetInfo | null {
       : null;
   }
   const t = shieldTokensFor(net.chainId).find((x) => x.address.toLowerCase() === a);
-  return t ? { symbol: t.symbol, decimals: t.decimals, stable: t.kind === "stablecoin" } : null;
+  return t ? { symbol: t.symbol, decimals: t.decimals, stable: isDollarStable(t) } : null;
 }
 
 let ethPrice: { at: number; micros: bigint | null } | null = null;

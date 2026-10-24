@@ -33,7 +33,7 @@ import {
   type PublicClient,
 } from "viem";
 import { getNetwork, NETWORK_KEYS, networkName, type GloamNetwork, type NetworkKey } from "./networks";
-import { erc20BalanceOfAbi, shieldTokensFor, supportsNativeShield } from "./tokens";
+import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 import { loadEthUsd, loadLiveMarkets } from "./live-quotes";
 import { cacheGetJson, cacheSetJson, lastDays, utcDay } from "./tractionStore";
 import { serverTransport } from "@/lib/serverRpc";
@@ -416,7 +416,7 @@ type AssetInfo = { symbol: string; decimals: number; stable: boolean };
 function assetInfo(n: GloamNetwork, asset: string): AssetInfo {
   if (asset === NATIVE) return { symbol: n.primaryAsset.symbol, decimals: n.primaryAsset.decimals, stable: false };
   const t = shieldTokensFor(n.chainId).find((x) => x.address.toLowerCase() === asset);
-  if (t) return { symbol: t.symbol, decimals: t.decimals, stable: t.kind === "stablecoin" };
+  if (t) return { symbol: t.symbol, decimals: t.decimals, stable: isDollarStable(t) };
   return { symbol: `${asset.slice(0, 6)}…${asset.slice(-4)}`, decimals: 18, stable: false };
 }
 

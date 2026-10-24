@@ -24,7 +24,7 @@ import {
   type PublicClient,
 } from "viem";
 import { getNetwork, type GloamNetwork, type NetworkKey } from "@/lib/networks";
-import { erc20BalanceOfAbi, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { getLogsSafe } from "@/lib/logRange";
 
 export type ActivityKind = "deposit" | "transfer" | "cashout" | "trade";
@@ -432,7 +432,7 @@ async function readHoldings(n: GloamNetwork, c: PublicClient, vault: Address): P
     symbol: t.symbol,
     address: t.address,
     decimals: t.decimals,
-    stable: t.kind === "stablecoin",
+    stable: isDollarStable(t),
     raw: String(
       await gated(n.chainId, () =>
         c.readContract({

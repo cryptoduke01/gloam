@@ -33,7 +33,7 @@ import {
   withdrawFeeOf,
   type LocalNote,
 } from "@/lib/shield";
-import { knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
+import { isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
 import {
   IMPACT_WARN_BPS,
   QUOTE_TTL_MS,
@@ -164,7 +164,7 @@ function useUsdMarks(
     const out: Record<string, number | null> = {};
     assets.forEach((a, i) => {
       const t = tokens[i];
-      out[a.toLowerCase()] = t?.kind === "stablecoin" ? 1 : t?.coingecko ? (geckoCache.get(t.coingecko) ?? null) : null;
+      out[a.toLowerCase()] = t && isDollarStable(t) ? 1 : t?.coingecko ? (geckoCache.get(t.coingecko) ?? null) : null;
     });
     stocks.forEach((a, i) => {
       const t = tokenFor(chainId, a);
