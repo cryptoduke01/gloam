@@ -14,12 +14,15 @@ export const metadata: Metadata = {
   title,
   description,
   alternates: { canonical: "/blog/private-agent-payments" },
+  authors: [{ name: "Duke", url: "https://x.com/dukedotsol" }],
   openGraph: {
     title,
     description,
     url: "/blog/private-agent-payments",
     siteName: "Gloam",
     type: "article",
+    publishedTime: "2026-10-23",
+    authors: ["https://x.com/dukedotsol"],
   },
 };
 
@@ -93,6 +96,13 @@ export default function PrivateAgentPaymentsPost() {
               <span>Research</span>
               <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
               <time dateTime="2026-10-23">October 23, 2026</time>
+              <span aria-hidden className="h-1 w-1 rounded-full bg-faint" />
+              <span>
+                By{" "}
+                <a href="https://x.com/dukedotsol" className="transition-colors hover:text-foreground">
+                  Duke
+                </a>
+              </span>
             </p>
             <h1 className="t-display-l mt-5 text-balance">Agents that pay privately, and check before they pay</h1>
             <p className="mt-6 text-[18px] leading-relaxed text-soft sm:text-[19px]">
