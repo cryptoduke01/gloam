@@ -5,10 +5,16 @@
  *   export DEPLOYER_PK=0x...
  *   export RPC_URL=https://rpc.testnet.chain.robinhood.com
  *   node scripts/deploy-poseidon.mjs
+ *
+ * POSEIDON_T3_ONLY=1 deploys PoseidonT3 alone, all a mainnet pool (ShieldPoolPayments)
+ * hashes with. From a deployer with no transactions on the chain it lands at nonce 0,
+ * 0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4, and the MainnetDeploy pool after it lands
+ * at the same address as on Robinhood Chain and Tempo mainnet.
  */
 import { writeFileSync, mkdirSync } from "fs";
 
 const RPC = process.env.RPC_URL || "https://rpc.testnet.chain.robinhood.com";
+const T3_ONLY = process.env.POSEIDON_T3_ONLY === "1";
 // Never hardcode — read from environment only (secret scanners flag inline keys)
 const pk = process.env.DEPLOYER_PK;
 if (!pk || !pk.startsWith("0x") || pk.length < 66) {
@@ -38,14 +44,19 @@ async function main() {
     return { name, nInputs, address: addr, abi };
   }
 
+  const { chainId } = await provider.getNetwork();
+  const nonce = await provider.getTransactionCount(wallet.address);
+  console.log("chainId", String(chainId), "deployer", wallet.address, "nonce", nonce);
+
   const p2 = await deploy(2, "Poseidon2");
-  const p3 = await deploy(3, "Poseidon3");
+  const p3 = T3_ONLY ? null : await deploy(3, "Poseidon3");
 
   mkdirSync("build/poseidon", { recursive: true });
   const out = {
     rpc: RPC,
+    chainId: String(chainId),
     Poseidon2: p2.address,
-    Poseidon3: p3.address,
+    ...(p3 ? { Poseidon3: p3.address } : {}),
   };
   writeFileSync("build/poseidon/deployed.json", JSON.stringify(out, null, 2));
   console.log("wrote build/poseidon/deployed.json");
