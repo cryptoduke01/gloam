@@ -1,16 +1,18 @@
 /**
  * Per-network runtime config for the MCP's execution rail. Pool, chain id,
  * deploy block, key set and assets come from the SDK (single source of truth:
- * GLOAM_NETWORKS for the testnets, mainnetNetwork() for the mainnets); the RPC
- * (overridable), explorer, native currency and the default asset are added here
- * because the SDK stays transport-agnostic.
+ * GLOAM_NETWORKS for the Robinhood Chain and Tempo testnets, testnetNetwork("base")
+ * for Base Sepolia, mainnetNetwork() for the mainnets); the RPC (overridable),
+ * explorer, native currency and the default asset are added here because the
+ * SDK stays transport-agnostic.
  *
- * Four networks: Robinhood Chain and Tempo, each on mainnet (real money, the
- * ceremony's final keys, payments only, beta deposit limits) and testnet (test
- * funds, dev keys). A mainnet only exists here once the SDK has its pool, so a
- * build without it never offers that network. Robinhood Chain and Tempo are
- * separate deployments of the same pool design, so the same execution code
- * serves every network.
+ * Robinhood Chain and Tempo, each on mainnet (real money, the ceremony's final
+ * keys, payments only, beta deposit limits) and testnet (test funds, dev keys),
+ * and Base next: Base Sepolia (test funds on the mainnet pool and final keys)
+ * and Base mainnet. A network with a pool to publish (every mainnet, Base
+ * Sepolia) only exists here once the SDK has its pool, so a build without it
+ * never offers that network. The chains are separate deployments of the same
+ * pool design, so the same execution code serves every network.
  *
  * GLOAM_RPC_URL_<chainId> points a network at another RPC (for example a
  * private one), read when this module loads.
@@ -21,20 +23,21 @@ import {
   NATIVE_ASSET,
   TEMPO_PATHUSD,
   mainnetNetwork,
+  testnetNetwork,
   type CeremonyKind,
   type GloamNetwork,
 } from "@gloamtrade/sdk";
 
-export type NetworkKey = "robinhood" | "tempo" | "robinhood-mainnet" | "tempo-mainnet";
-export type ChainFamily = "robinhood" | "tempo";
+export type NetworkKey = "robinhood" | "tempo" | "base" | "robinhood-mainnet" | "tempo-mainnet" | "base-mainnet";
+export type ChainFamily = "robinhood" | "tempo" | "base";
 
 export interface McpNetwork {
   key: NetworkKey;
-  /** Which chain: Robinhood Chain or Tempo, testnet or mainnet. */
+  /** Which chain: Robinhood Chain, Tempo or Base, testnet or mainnet. */
   family: ChainFamily;
   /** Test funds (true) or real money (false). */
   testnet: boolean;
-  /** The key set the pool's verifiers hold: dev on testnet, the ceremony's final keys on mainnet. */
+  /** The key set the pool's verifiers hold: dev on the older testnets, the ceremony's final keys on mainnet and Base Sepolia. */
   ceremony: CeremonyKind;
   name: string;
   chainId: number;
@@ -44,9 +47,9 @@ export interface McpNetwork {
   /** Block the pool was deployed at, for tree scans. */
   deployBlock: bigint;
   nativeCurrency: { name: string; symbol: string; decimals: number };
-  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset). */
+  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base lists ETH). */
   nativeShield: boolean;
-  /** Default asset to shield: native ETH on Robinhood testnet, PathUSD on Tempo testnet, USDG / USDC.e on mainnet. */
+  /** Default asset to shield: native ETH on Robinhood testnet, PathUSD on Tempo testnet, the first listed asset elsewhere (USDG, USDC.e, USDC). */
   defaultAsset: Address;
   defaultAssetSymbol: string;
   defaultAssetDecimals: number;
@@ -60,7 +63,10 @@ const rpcFor = (chainId: number, fallback: string, env: Env = process.env) =>
 const NATIVE = {
   robinhood: { name: "Ether", symbol: "ETH", decimals: 18 },
   tempo: { name: "US Dollar", symbol: "USD", decimals: 18 },
+  base: { name: "Ether", symbol: "ETH", decimals: 18 },
 } as const;
+
+const CHAIN_NAMES: Record<ChainFamily, string> = { robinhood: "Robinhood Chain", tempo: "Tempo", base: "Base" };
 
 export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
   robinhood: {
@@ -99,16 +105,17 @@ export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
   },
 };
 
-function fromMainnet(n: GloamNetwork | null): McpNetwork | null {
+/** An SDK network with a published pool (a mainnet, or Base Sepolia), or null while it has none. */
+function fromSdk(n: GloamNetwork | null): McpNetwork | null {
   if (!n) return null;
-  // The first listed asset is the default: USDG on Robinhood Chain, USDC.e on Tempo.
+  // The first listed asset is the default: USDG on Robinhood Chain, USDC.e on Tempo, USDC on Base.
   const first = n.assets[0]!;
   return {
     key: n.key,
     family: n.family,
-    testnet: false,
+    testnet: n.testnet,
     ceremony: n.ceremony,
-    name: n.family === "robinhood" ? "Robinhood Chain Mainnet" : "Tempo Mainnet",
+    name: n.family === "base" && n.testnet ? "Base Sepolia Testnet" : `${CHAIN_NAMES[n.family]} ${n.testnet ? "Testnet" : "Mainnet"}`,
     chainId: n.chainId,
     pool: n.pool,
     rpc: rpcFor(n.chainId, n.rpcUrl),
@@ -123,14 +130,29 @@ function fromMainnet(n: GloamNetwork | null): McpNetwork | null {
 }
 
 /** The mainnets this build has a pool for, Robinhood Chain first. Empty before deploy day. */
-export const MCP_MAINNETS: McpNetwork[] = [fromMainnet(mainnetNetwork("robinhood")), fromMainnet(mainnetNetwork("tempo"))].filter(
-  (n): n is McpNetwork => n !== null
-);
+export const MCP_MAINNETS: McpNetwork[] = [
+  fromSdk(mainnetNetwork("robinhood")),
+  fromSdk(mainnetNetwork("tempo")),
+  fromSdk(mainnetNetwork("base")),
+].filter((n): n is McpNetwork => n !== null);
+
+/** Base Sepolia, once the SDK has its pool; null before. */
+export const MCP_BASE_TESTNET: McpNetwork | null = fromSdk(testnetNetwork("base"));
 
 /** Every network this build can use: mainnets first, then the testnets. */
 export function allNetworks(): McpNetwork[] {
-  return [...MCP_MAINNETS, MCP_NETWORKS.robinhood, MCP_NETWORKS.tempo];
+  return [...MCP_MAINNETS, MCP_NETWORKS.robinhood, MCP_NETWORKS.tempo, ...(MCP_BASE_TESTNET ? [MCP_BASE_TESTNET] : [])];
 }
+
+/** Every key a Gloam network can have, whether or not this build has its pool. */
+export const ALL_NETWORK_KEYS: readonly NetworkKey[] = [
+  "robinhood-mainnet",
+  "tempo-mainnet",
+  "base-mainnet",
+  "robinhood",
+  "tempo",
+  "base",
+];
 
 /** The network keys this build offers, for tool schemas (mainnets first). */
 export const NETWORK_KEYS = allNetworks().map((n) => n.key) as [NetworkKey, ...NetworkKey[]];
@@ -151,7 +173,7 @@ export function networkByChainId(chainId: number): McpNetwork | undefined {
 
 /** "Robinhood Chain mainnet (real money)" / "Tempo testnet (test funds)", for messages. */
 export function describeNetwork(n: McpNetwork): string {
-  const chain = n.family === "robinhood" ? "Robinhood Chain" : "Tempo";
+  const chain = CHAIN_NAMES[n.family];
   return n.testnet ? `${chain} testnet (test funds)` : `${chain} mainnet (real money)`;
 }
 
@@ -166,7 +188,7 @@ export function defaultNetworkKey(env: Env = process.env): NetworkKey {
   if (!raw) return "robinhood";
   if (isNetworkKey(raw)) return raw;
   throw new Error(
-    raw === "robinhood-mainnet" || raw === "tempo-mainnet"
+    (ALL_NETWORK_KEYS as readonly string[]).includes(raw)
       ? `GLOAM_NETWORK=${raw}, but this version of @gloamtrade/mcp has no ${raw} pool yet. Update the package, or pick one of: ${NETWORK_KEYS.join(", ")}.`
       : `GLOAM_NETWORK=${raw} is not a Gloam network. Use one of: ${NETWORK_KEYS.join(", ")}.`
   );
@@ -178,6 +200,5 @@ export function defaultNetworkKey(env: Env = process.env): NetworkKey {
  * authorized per chain, so one made on testnet does nothing on mainnet.
  */
 export function tempoAccessNetwork(env: Env = process.env): McpNetwork {
-  const key = defaultNetworkKey(env);
-  return key === "robinhood-mainnet" || key === "tempo-mainnet" ? networkByKey("tempo-mainnet") : MCP_NETWORKS.tempo;
+  return networkByKey(defaultNetworkKey(env)).testnet ? MCP_NETWORKS.tempo : networkByKey("tempo-mainnet");
 }

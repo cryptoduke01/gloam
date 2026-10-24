@@ -295,12 +295,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   const env = deps.env;
   /** The network a tool uses when the agent names none. Throws at startup on a GLOAM_NETWORK this build lacks. */
   const defaultNet = defaultNetworkKey(env);
+  // "robinhood" and "tempo", plus "base" once Base Sepolia has its pool.
+  const testnets = allNetworks().filter((n) => n.testnet).map((n) => `"${n.key}"`);
+  const testnetKeys = `${testnets.slice(0, -1).join(", ")} and ${testnets[testnets.length - 1]}`;
   const networkArg = (what: string) =>
     z
       .enum(NETWORK_KEYS)
       .default(defaultNet)
       .describe(
-        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are real money (beta deposit limits); "robinhood" and "tempo" are the testnets (test funds). Default here: "${defaultNet}".`
+        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are real money (beta deposit limits); ${testnetKeys} are the testnets (test funds). Default here: "${defaultNet}".`
       );
   /** Old behavior: secrets in tool results and arguments. Read once; restart to change. */
   const legacy = env.GLOAM_EXPOSE_NOTE_SECRETS?.trim() === "1";
@@ -362,7 +365,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          "Mainnet is beta and moves real money. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.",
+          `Mainnet is beta and moves real money. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
+            allNetworks().some((n) => n.family === "base") ? ", 0.2 and 10 for ETH on Base" : ""
+          }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
           "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
@@ -521,7 +526,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .string()
           .optional()
           .describe(
-            "ERC-20 token address to shield; omit to use the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, PathUSD on Tempo testnet, native ETH on Robinhood Chain testnet)."
+            "ERC-20 token address to shield; omit to use the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base, PathUSD on Tempo testnet, native ETH on Robinhood Chain testnet). On Base, the zero address shields ETH."
           ),
         decimals: z
           .number()
@@ -821,7 +826,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .string()
           .optional()
           .describe(
-            "Settlement token address; omit for the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, PathUSD on Tempo testnet, ETH on Robinhood Chain testnet)."
+            "Settlement token address; omit for the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base, PathUSD on Tempo testnet, ETH on Robinhood Chain testnet)."
           ),
         payTo: z
           .string()
