@@ -674,8 +674,8 @@ export function AdminDashboard() {
             </div>
             <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-mute">
               {isMain
-                ? "Robinhood Chain and Tempo mainnet: money people really moved, what it earned, and the product funnel."
-                : "Robinhood Chain and Tempo testnets: play money from testing. None of it counts toward mainnet."}
+                ? `${chainsOn("mainnet")} mainnet: money people really moved, what it earned, and the product funnel.`
+                : `${chainsOn("testnet")} testnets: play money from testing. None of it counts toward mainnet.`}
             </p>
           </div>
           <EnvSwitch env={env} onChange={setEnv} />
@@ -1813,6 +1813,13 @@ function BugsPanel() {
 }
 
 /** A network's name; "testnet" is added once a mainnet sits beside it. */
+/** The chains Gloam runs on, one side, as words: "Robinhood Chain and Tempo", or with Base once it is in. */
+function chainsOn(side: "mainnet" | "testnet"): string {
+  const labels = [...new Set(NETWORK_KEYS.map(getNetwork).filter((n) => n.testnet === (side === "testnet")).map((n) => n.label))];
+  if (!labels.length) return "Robinhood Chain and Tempo";
+  return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels[0]!;
+}
+
 function adminName(n: GloamNetwork): string {
   return MAINNET_ENABLED ? networkName(n) : n.label;
 }
