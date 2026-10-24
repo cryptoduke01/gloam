@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { isAddress } from "viem";
+import { formatEther, isAddress } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
 import {
   useAppAccount,
@@ -13,6 +13,8 @@ import {
 } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { safeParseEther } from "@/lib/amount";
+import { estimateMaxNativeSend, type MaxNativeSend } from "@/lib/nativeSend";
+import { getRhPublicClient } from "@/lib/rhClient";
 import { amountTextError } from "@/lib/amountText";
 import { useEthPrice } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
@@ -21,7 +23,7 @@ import { WalletMenu } from "./WalletMenu";
 import { SuccessModal } from "./SuccessModal";
 
 export function SendView() {
-  const { address, isConnected, chainId } = useAppAccount();
+  const { address, isConnected, chainId, demo } = useAppAccount();
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
@@ -39,6 +41,12 @@ export function SendView() {
   const [showPreview, setShowPreview] = useState(false);
   const [sentAmount, setSentAmount] = useState("");
   const [sentTo, setSentTo] = useState("");
+  // What Max set aside the fee for: sending that value to that address asks
+  // the wallet for exactly that gas and fee, so value + fee fits the balance.
+  const [maxSend, setMaxSend] = useState<(MaxNativeSend & { to: string; chainId: number }) | null>(null);
+  const [estimatingMax, setEstimatingMax] = useState(false);
+  // Bumped by every edit, so an estimate that comes back after one is dropped.
+  const maxRun = useRef(0);
 
   const {
     sendTransaction,
@@ -75,6 +83,30 @@ export function SendView() {
     return null;
   }
 
+  async function fillMax() {
+    if (!address || !bal) return;
+    if (!isAddress(to)) {
+      setFormError("Enter the address first, so Max can set the network fee aside.");
+      return;
+    }
+    const run = ++maxRun.current;
+    setFormError(null);
+    setEstimatingMax(true);
+    try {
+      const max = demo
+        ? { value: bal.value, gas: 0n, fees: { gasPrice: 0n } }
+        : await estimateMaxNativeSend(getRhPublicClient(), address, to);
+      if (run !== maxRun.current) return;
+      setMaxSend({ ...max, to, chainId: network.chainId });
+      setAmount(formatEther(max.value));
+    } catch (e) {
+      if (run === maxRun.current) setFormError(e instanceof Error ? e.message : "Could not work out Max. Try again.");
+    } finally {
+      // Max is off while it runs, so this is the only estimate in flight
+      setEstimatingMax(false);
+    }
+  }
+
   function executeSend() {
     const err = validate();
     if (err) {
@@ -93,10 +125,15 @@ export function SendView() {
     handledHash.current = null;
     setSentAmount(amount);
     setSentTo(to);
+    const fromMax =
+      !demo && maxSend && maxSend.value === value && maxSend.to === to && maxSend.chainId === network.chainId
+        ? { gas: maxSend.gas, ...maxSend.fees }
+        : {};
     sendTransaction({
       to: to as `0x${string}`,
       value,
       chainId: network.chainId,
+      ...fromMax,
     });
   }
 
@@ -117,7 +154,8 @@ export function SendView() {
     setShowPreview(true);
   }
 
-  const maxEth = bal ? formatEth(bal.value, 6) : "0";
+  // display only: Max reads the raw balance (lib/nativeSend), never this text
+  const balanceText = bal ? formatEth(bal.value, 6) : "0";
   const amtNum = Number(amount);
   // "1,25" or "-1" is refused out loud, never quietly turned into 125 or 1
   const amountProblem = amountTextError(amount, 18);
@@ -128,7 +166,7 @@ export function SendView() {
   const validPreview = !validate() && isAddress(to) && amtNum > 0;
 
   const connectedOk = isConnected && onProduct;
-  const busy = isPending || confirming;
+  const busy = isPending || confirming || estimatingMax;
 
   // Tempo has no native coin to send (its nodes report a placeholder balance),
   // so money there is stablecoins, which move privately from Move.
@@ -172,14 +210,14 @@ export function SendView() {
               </label>
               <button
                 type="button"
-                disabled={!isConnected || !onProduct}
-                onClick={() =>
-                  setAmount(maxEth === "<0.0001" ? "0" : maxEth.replace(/,/g, ""))
-                }
+                disabled={!isConnected || !onProduct || !bal || busy}
+                onClick={() => void fillMax()}
+                title="Your balance, less the network fee for this send"
+                aria-busy={estimatingMax || undefined}
                 className="tnum -my-2 inline-flex min-h-10 items-center gap-1.5 text-mute transition-colors hover:text-foreground disabled:opacity-45"
               >
-                Balance {isConnected && onProduct ? maxEth : "0"} ETH
-                <span className="font-medium text-foreground">Max</span>
+                Balance {isConnected && onProduct ? balanceText : "0"} ETH
+                <span className="font-medium text-foreground">{estimatingMax ? "Max…" : "Max"}</span>
               </button>
             </div>
             <div className="mt-2 flex items-center gap-3">
@@ -189,7 +227,10 @@ export function SendView() {
                 autoComplete="off"
                 placeholder="0"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  maxRun.current++;
+                  setAmount(e.target.value);
+                }}
                 className="tnum min-w-0 flex-1 bg-transparent text-[40px] font-light leading-[1.15] tracking-[-0.02em] text-foreground outline-none! placeholder:text-faint sm:text-[46px]"
                 aria-label="Amount to send"
               />
@@ -213,7 +254,10 @@ export function SendView() {
               spellCheck={false}
               placeholder="0x…"
               value={to}
-              onChange={(e) => setTo(e.target.value.trim())}
+              onChange={(e) => {
+                maxRun.current++;
+                setTo(e.target.value.trim());
+              }}
               className="gl-input tnum mt-2"
             />
           </div>
