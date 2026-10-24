@@ -20,6 +20,7 @@
  * the client returns `data` and throws GloamApiError with the code otherwise.
  */
 import type { Address, Hex } from "viem";
+import type { GloamNetworkKey } from "./constants.js";
 import type { GloamIntent } from "./intents.js";
 import type { SweepSubmitter } from "./sweep.js";
 
@@ -227,12 +228,12 @@ export class GloamApiClient {
     return this.request<{ vaults: Record<string, unknown>[] }>("GET", "/vaults");
   }
 
-  vault(network: "robinhood" | "tempo") {
+  vault(network: GloamNetworkKey) {
     return this.request<{ vault: Record<string, unknown> }>("GET", `/vaults/${network}`);
   }
 
   /** The vault's public leaf list. Rebuild the tree and check the root on chain before use. */
-  leaves(network: "robinhood" | "tempo") {
+  leaves(network: GloamNetworkKey) {
     return this.request<{ chainId: number; pool: Address; toBlock: string; leafCount: number; items: unknown[] }>(
       "GET",
       `/vaults/${network}/leaves`
@@ -247,7 +248,7 @@ export class GloamApiClient {
   /** A payment request link; the details ride after the # so no server sees them later. */
   paymentRequest(args: {
     to: string;
-    network?: "robinhood" | "tempo";
+    network?: GloamNetworkKey;
     asset: string;
     amount?: string;
     note?: string;

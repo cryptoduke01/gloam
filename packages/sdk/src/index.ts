@@ -2,13 +2,16 @@
  * @gloamtrade/sdk — Gloam's private path as a reusable package.
  *
  * Shielded balances, private transfers, and private payments that any app or
- * agent can plug into. It runs on both chains Gloam deploys to, Robinhood Chain
+ * agent can plug into. It runs on the chains Gloam deploys to, Robinhood Chain
  * and Tempo, on mainnet (real money, the ceremony's final keys) and on testnet
- * (test funds, dev keys). Each is a separate deployment of the same
- * shielded-pool design: pick a network (mainnetNetwork("tempo"),
- * gloamNetworks(), or GLOAM_NETWORKS for the testnets), pass its `chainId` and
- * `poolAddress`, and prove with circuitArtifactUrls(circuit, chainId). The
- * Gloam vault app is the reference implementation.
+ * (test funds, dev keys). Base is next: its networks are defined here and
+ * appear once their pools are filled in (Base Sepolia, the practice network,
+ * first; it runs the mainnet pool and keys with test funds). Each is a separate
+ * deployment of the same shielded-pool design: pick a network
+ * (mainnetNetwork("tempo"), gloamNetworks(), or GLOAM_NETWORKS for the
+ * testnets), pass its `chainId` and `poolAddress`, and prove with
+ * circuitArtifactUrls(circuit, chainId). The Gloam vault app is the reference
+ * implementation.
  *
  * Surface (all live and exported below):
  *
@@ -28,7 +31,8 @@
  *   api       GloamApiClient: the partner API (relay with a key, proofs, links)
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
  *             testnet), assets + beta limits, cash-out fee, circuit files
- *   mainnet   MAINNET_POOLS, the one place mainnet pool addresses live
+ *   mainnet   MAINNET_POOLS and BASE_SEPOLIA_POOL, the one place those pool
+ *             addresses live
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
  * (snarkjs + artifacts) and storage (notes, keys) are injected, so the same core
