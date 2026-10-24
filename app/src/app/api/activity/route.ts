@@ -18,6 +18,9 @@ function explorerFor(chainId: string | null): string | null | "bad" {
   // (lib/walletActivity), so this answers empty, as for Tempo.
   if (chainId === "4663" && NETWORK_KEYS.includes("robinhood-mainnet")) return null;
   if (chainId === "4217" && NETWORK_KEYS.includes("tempo-mainnet")) return null;
+  // Base (Sepolia too) is read from the chain like a mainnet; Basescan's API needs a key.
+  if (chainId === "8453" && NETWORK_KEYS.includes("base-mainnet")) return null;
+  if (chainId === "84532" && NETWORK_KEYS.includes("base")) return null;
   return "bad";
 }
 
