@@ -62,8 +62,21 @@ function optString(args: Args, key: string, max: number): string | undefined {
   return v;
 }
 
+/** Base Sepolia is a choice once its pool is filled in, like a mainnet. */
+const BASE_TESTNET = NETWORK_KEYS.includes("base");
+
 /** The network names a caller may pass: the testnets, then each mainnet once its pool is in. */
-const NETWORK_CHOICES: NetworkKey[] = ["tempo", "robinhood", ...NETWORK_KEYS.filter((k) => !getNetwork(k).testnet)];
+const NETWORK_CHOICES: NetworkKey[] = [
+  "tempo",
+  "robinhood",
+  ...(BASE_TESTNET ? (["base"] as const) : []),
+  ...NETWORK_KEYS.filter((k) => !getNetwork(k).testnet),
+];
+
+/** "a", "a and b", "a, b and c". */
+function andList(items: string[]): string {
+  return items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}` : items.join("");
+}
 
 function quotedChoices(): string {
   const q = NETWORK_CHOICES.map((k) => `"${k}"`);
@@ -84,13 +97,22 @@ function optEnum<T extends string>(args: Args, key: string, values: readonly T[]
   return v as T;
 }
 
-const TESTNET_PROP_TEXT =
-  'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments) or "robinhood" (Robinhood Chain testnet).';
+const TESTNET_PROP_TEXT = BASE_TESTNET
+  ? 'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments), "robinhood" (Robinhood Chain testnet) or "base" (Base Sepolia testnet).'
+  : 'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments) or "robinhood" (Robinhood Chain testnet).';
 
 const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet, real money: USDC.e, pathUSD, USDT0, OUSD)',
   "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet, real money: USDG and GLOAM)',
+  "base-mainnet": '"base-mainnet" (Base mainnet, real money: USDC, EURC, USDT, ETH)',
 };
+
+/** The testnets as a caller names them, for the mainnet-era description. */
+const TESTNET_CHOICES_TEXT = andList([
+  '"tempo" (Tempo Moderato)',
+  '"robinhood" (Robinhood Chain testnet)',
+  ...(BASE_TESTNET ? ['"base" (Base Sepolia)'] : []),
+]).replace(/ and (?=[^,]*$)/, " or ");
 
 const NETWORK_PROP = {
   type: "string",
@@ -98,7 +120,7 @@ const NETWORK_PROP = {
   description: MAINNET_ENABLED
     ? `Gloam network: ${NETWORK_CHOICES.filter((k) => !getNetwork(k).testnet)
         .map((k) => MAINNET_PROP_TEXT[k])
-        .join(", ")}, or a testnet with play money: "tempo" (Tempo Moderato) or "robinhood" (Robinhood Chain testnet).`
+        .join(", ")}, or a testnet with play money: ${TESTNET_CHOICES_TEXT}.`
     : TESTNET_PROP_TEXT,
 } as const;
 
@@ -107,12 +129,17 @@ const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true 
 /** "Leave out for both" until a mainnet is listed next to the two testnets. */
 const LEAVE_OUT = MAINNET_ENABLED ? "Leave out for every network." : "Leave out for both.";
 
+/** Base Sepolia, when it is in: a testnet on the mainnet vault and keys. */
+const BASE_TESTNET_LINE = BASE_TESTNET
+  ? " Base Sepolia (84532) is a testnet too, but runs the mainnet vault with the final keys, beta limits and the cash-out fee."
+  : "";
+
 /** Where Gloam runs, as one honest line. Testnets only until a mainnet pool is filled in. */
 const STATUS = MAINNET_ENABLED
-  ? `Mainnet, real money: ${NETWORK_KEYS.filter((k) => !getNetwork(k).testnet)
-      .map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
-      .join(" and ")}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets, play money: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys. Private swaps are live in the app on both mainnets (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
-  : "Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys. The old private trade (sealed swaps) is retired.";
+  ? `Mainnet, real money: ${andList(
+      NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
+    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets, play money: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
+  : `Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys.${BASE_TESTNET_LINE} The old private trade (sealed swaps) is retired.`;
 
 const WHAT_IS_PUBLIC =
   "Deposits and cash outs are public transactions (wallet, asset and amount show on chain). What stays private is everything in between: balances inside the vault, the amounts and parties of private sends, and the link between a deposit and a later cash out.";
@@ -535,8 +562,9 @@ function mppHowTo(args: Args): CallToolResult {
   const n = getNetwork(network);
   // The SDK's GLOAM_NETWORKS names the testnet vaults by chain ("tempo", "robinhood").
   const family = n.family;
-  // A mainnet gets the SDK 0.1.0 snippets: mainnetNetwork() for its vault and the final keys for proofs.
-  if (!n.testnet) return mppHowToMainnet(role, network);
+  // A mainnet gets the SDK 0.1.0 snippets: mainnetNetwork() for its vault and the final keys for
+  // proofs. So does Base Sepolia, a testnet on the mainnet vault and keys (testnetNetwork("base")).
+  if (!n.testnet || n.paymentsPool) return mppHowToMainnet(role, network);
   const currencyLine =
     family === "tempo"
       ? `      network: "tempo",                                   // PathUSD by default; for OUSD add:\n      // currency: "${OUSD}", decimals: 6,`
@@ -631,37 +659,47 @@ const MPP_TAIL = {
  * MPP on a mainnet, with the SDK 0.1.0 API: mainnetNetwork() gives the vault
  * (null until its pool is published), and proofs use the trusted setup's final
  * keys through circuitArtifactUrls(), never the testnet's development keys.
+ * Base needs SDK 0.3.0, and Base Sepolia (a testnet on the mainnet vault and
+ * keys) gets the same snippets through testnetNetwork("base").
  */
 function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): CallToolResult {
   const n = getNetwork(network);
   const family = n.family;
-  const name = family === "tempo" ? "Tempo" : "Robinhood Chain";
+  const name = n.label;
+  // "Base testnet" for Base Sepolia, "Tempo mainnet" and so on for the mainnets.
+  const where = n.testnet ? `${name} testnet` : `${name} mainnet`;
   const asset =
     family === "tempo"
       ? { import: "TEMPO_USDCE", line: "      currency: TEMPO_USDCE, decimals: 6,                 // or TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD" }
-      : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
-  const netLines = `const net = mainnetNetwork("${family}");                   // null until the pool is published
-if (!net) throw new Error("${name} mainnet pool not published yet");`;
+      : family === "base"
+        ? n.testnet
+          ? { import: "BASE_SEPOLIA_USDC", line: "      currency: BASE_SEPOLIA_USDC, decimals: 6,           // or BASE_SEPOLIA_EURC" }
+          : { import: "BASE_USDC", line: "      currency: BASE_USDC, decimals: 6,                   // or BASE_EURC, BASE_USDT" }
+        : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
+  const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
+  const sdkVersion = family === "base" ? "0.3.0" : "0.1.0";
+  const netLines = `const net = ${getter}("${family}");                   // null until the pool is published
+if (!net) throw new Error("${where} pool not published yet");`;
   const charge = {
     steps: [
       "Make a receive key once with generateReceiveKey() from @gloamtrade/sdk and keep it on the server. Its tag (gloamr1.…) is what payers pay to; the key itself never leaves your server.",
       "Add the gloam method to mppx. Routes answer 402 with a WWW-Authenticate: Payment challenge, then check the payer's credential.",
       "Before serving, the server sweeps the payment into a fresh note only it knows (save that note in beforeSubmit: it is the money). Until the sweep confirms, the payer could spend the payment back, so access waits for it.",
-      "The sweep is a mainnet proof, so it must use the final keys: circuitArtifactUrls(\"transfer\", net.chainId).",
+      "The sweep is proved with the final keys, as on every mainnet vault: circuitArtifactUrls(\"transfer\", net.chainId).",
     ],
     code: `import { Mppx } from "mppx/server";
 import { gloam } from "@gloamtrade/mppx-gloam/server";
 import { gloamChargeChainFromClient } from "@gloamtrade/mppx-gloam/core";
-import { artifactProver, circuitArtifactUrls, mainnetNetwork, relayIntent, ${asset.import} } from "@gloamtrade/sdk";
+import { artifactProver, circuitArtifactUrls, ${getter}, relayIntent, ${asset.import} } from "@gloamtrade/sdk";
 
 ${netLines}
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY!,
   methods: [
     gloam({
-      network: net.chainId,                               // ${name} mainnet (${n.chainId}), real money
+      network: net.chainId,                               // ${where} (${n.chainId}), ${n.testnet ? "play money" : "real money"}
 ${asset.line}
-      pools: { [net.chainId]: net.pool },                 // Gloam's mainnet vault
+      pools: { [net.chainId]: net.pool },                 // Gloam's vault on this chain
       receiveKey,                                         // from generateReceiveKey(), stored server side
       chain: gloamChargeChainFromClient(publicClient, { pool: net.pool, fromBlock: net.deployBlock }),
       prove: artifactProver(circuitArtifactUrls("transfer", net.chainId)), // the final keys
@@ -679,14 +717,14 @@ export async function handler(request: Request) {
   };
   const pay = {
     steps: [
-      `The payer needs a private note in the same ${name} mainnet vault and asset (deposit first: see gloam_plan_deposit). Deposits are capped during the beta.`,
+      `The payer needs a private note in the same ${where} vault and asset (deposit first: see gloam_plan_deposit). Deposits are capped during the beta.`,
       "Add the gloam method to an mppx client. On a 402 it checks the vault is Gloam's and the price is inside your policy, proves a private transfer to the payee's tag, and retries with Authorization: Payment.",
       'mode "pull" lets the server broadcast your transfer, so you need no gas and the server learns nothing about your wallet; "push" broadcasts it yourself or through the Gloam relay.',
-      "Mainnet proofs must use the final keys: circuitArtifactUrls(\"transfer\", net.chainId).",
+      "Proofs for this vault must use the final keys: circuitArtifactUrls(\"transfer\", net.chainId).",
     ],
     code: `import { Mppx } from "mppx/client";
 import { gloam } from "@gloamtrade/mppx-gloam/client";
-import { artifactProver, circuitArtifactUrls, mainnetNetwork, relayIntent } from "@gloamtrade/sdk";
+import { artifactProver, circuitArtifactUrls, ${getter}, relayIntent } from "@gloamtrade/sdk";
 
 ${netLines}
 const mppx = Mppx.create({
@@ -695,7 +733,7 @@ const mppx = Mppx.create({
     gloam({
       getNote: ({ amountWei, currency }) => wallet.noteCovering(amountWei, currency), // { secret, amountWei, path }
       prove: artifactProver(circuitArtifactUrls("transfer", net.chainId)), // the final keys
-      pools: { [net.chainId]: net.pool },                 // pay only into Gloam's mainnet vault
+      pools: { [net.chainId]: net.pool },                 // pay only into Gloam's vault
       mode: "auto",                                       // pull when offered, else push
       submit: (intent) => relayIntent(intent),            // only needed for push
       policy: { maxAmountWei: 50_000n },                  // refuse anything bigger, before proving
@@ -709,8 +747,13 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
   return ok({
     ...MPP_HEAD,
     network,
-    mainnet: `${name} mainnet: real money, beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk 0.1.0 returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key. GLOAM_NETWORKS.${family} stays the testnet.`,
-    install: "npm i mppx @gloamtrade/mppx-gloam@^0.1.0 @gloamtrade/sdk@^0.1.0",
+    mainnet: n.testnet
+      ? `${where} (Base Sepolia): play money, on the mainnet vault with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
+      : `${where}: real money, beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
+    install:
+      family === "base"
+        ? "npm i mppx @gloamtrade/mppx-gloam@^0.2.0 @gloamtrade/sdk@^0.3.0"
+        : "npm i mppx @gloamtrade/mppx-gloam@^0.1.0 @gloamtrade/sdk@^0.1.0",
     ...(role !== "pay" ? { charge } : {}),
     ...(role !== "charge" ? { pay } : {}),
     ...MPP_TAIL,
