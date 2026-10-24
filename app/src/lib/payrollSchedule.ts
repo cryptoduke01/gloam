@@ -373,14 +373,20 @@ export function runTitle(s: PayrollSchedule, payday: string, today: string = iso
 // ------------------------------------------------------------------ storage
 
 const STORE_KEY = "gloam.payroll.schedules.v1";
+const STORE_LOCK = "gloam-payroll-schedules";
+
+/** How many schedules this browser keeps, across every network. */
+export const MAX_SCHEDULES = 50;
 
 /**
  * Every saved schedule. `forWrite` refuses when schedules are stored but cannot
  * be opened (another device key, damaged data): writing would replace them all.
  */
-async function readAll(forWrite = false): Promise<PayrollSchedule[]> {
+async function readAll(
+  forWrite = false,
+  raw = typeof window === "undefined" ? null : window.localStorage.getItem(STORE_KEY)
+): Promise<PayrollSchedule[]> {
   if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(STORE_KEY);
   const all = await openJson<PayrollSchedule[]>(raw);
   if (Array.isArray(all)) return all;
   if (forWrite && raw) {
@@ -389,40 +395,83 @@ async function readAll(forWrite = false): Promise<PayrollSchedule[]> {
   return [];
 }
 
-async function writeAll(list: PayrollSchedule[]): Promise<void> {
-  // Names and Gloam addresses: sealed under the same device key as notes and runs.
-  window.localStorage.setItem(STORE_KEY, await sealJson(list.slice(0, 50)));
-}
-
 export async function loadSchedules(chainId: number, pool: Address): Promise<PayrollSchedule[]> {
   return (await readAll()).filter((s) => s.chainId === chainId && s.pool.toLowerCase() === pool.toLowerCase());
 }
 
-let writeQueue: Promise<void> = Promise.resolve();
-function queue(task: () => Promise<void>): Promise<void> {
-  writeQueue = writeQueue.then(task, task);
-  return writeQueue;
+/**
+ * Calls `onChange` when another tab changes the saved schedules, so a payroll
+ * page open in two tabs shows the same list.
+ */
+export function onSchedulesChangedElsewhere(onChange: () => void): () => void {
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === STORE_KEY || e.key === null) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
 }
 
-export function saveSchedule(s: PayrollSchedule): Promise<void> {
-  return queue(async () => {
-    const all = await readAll(true);
-    await writeAll([s, ...all.filter((x) => x.id !== s.id)]);
+/** Runs `fn` while no other tab is writing schedules. Without Web Locks, `fn` re-checks the store itself. */
+function withStoreLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = (globalThis.navigator as { locks?: { request: (n: string, f: () => Promise<T>) => Promise<T> } } | undefined)
+    ?.locks;
+  return locks?.request ? locks.request(STORE_LOCK, fn) : fn();
+}
+
+/**
+ * Change the saved schedules: `change` gets what is stored now and returns the
+ * new list (or throws to leave it). Runs under a cross-tab lock, so two tabs
+ * saving at once both keep their change; without Web Locks, a write that lands
+ * meanwhile is read again and the change made over it. The list is written
+ * whole: nothing is ever cut to make room.
+ */
+async function mutate(change: (all: PayrollSchedule[]) => PayrollSchedule[]): Promise<void> {
+  await withStoreLock(async () => {
+    for (let attempt = 0; ; attempt++) {
+      const raw = window.localStorage.getItem(STORE_KEY);
+      const next = change(await readAll(true, raw));
+      // Names and Gloam addresses: sealed under the same device key as notes and runs.
+      const sealed = await sealJson(next);
+      if (window.localStorage.getItem(STORE_KEY) !== raw && attempt < 5) continue;
+      window.localStorage.setItem(STORE_KEY, sealed);
+      return;
+    }
   });
+}
+
+// One failed write (a full localStorage, say) must not stop every later one,
+// so the queue itself never stays rejected; each caller still gets its error.
+let writeQueue: Promise<void> = Promise.resolve();
+function queue(task: () => Promise<void>): Promise<void> {
+  const run = writeQueue.then(task);
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+/**
+ * Save a schedule, new or edited. A new one past MAX_SCHEDULES is refused with
+ * a reason; the oldest schedule is never dropped to make room for it.
+ */
+export function saveSchedule(s: PayrollSchedule): Promise<void> {
+  return queue(() =>
+    mutate((all) => {
+      if (!all.some((x) => x.id === s.id) && all.length >= MAX_SCHEDULES) {
+        throw new Error(
+          `This browser keeps up to ${MAX_SCHEDULES} schedules, across every network. Delete one you no longer use, then save this one.`
+        );
+      }
+      return [s, ...all.filter((x) => x.id !== s.id)];
+    })
+  );
 }
 
 export function deleteSchedule(id: string): Promise<void> {
-  return queue(async () => {
-    await writeAll((await readAll(true)).filter((s) => s.id !== id));
-  });
+  return queue(() => mutate((all) => all.filter((s) => s.id !== id)));
 }
 
 /** Record a finished run against its schedule (read fresh, so a stale copy cannot undo an edit). */
 export function markSchedulePaid(id: string, payday: string, batchId: string): Promise<void> {
-  return queue(async () => {
-    const all = await readAll(true);
-    await writeAll(all.map((s) => (s.id === id ? withPaid(s, payday, batchId) : s)));
-  });
+  return queue(() => mutate((all) => all.map((s) => (s.id === id ? withPaid(s, payday, batchId) : s))));
 }
 
 // ------------------------------------------------------------------ demo
