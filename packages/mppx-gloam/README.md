@@ -114,6 +114,8 @@ It also exports the Payment scheme codec (challenges, credentials, receipts, the
 
 The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official pools come from the SDK this package is built with: a mainnet appears once that SDK has its pool, and a challenge naming any other pool is refused on both sides.
 
+Base is next, not live yet: `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) and `"base"` (Base Sepolia `84532`, test USDC, EURC and ETH, on the final keys) are refused with a plain error until the SDK has their pools.
+
 ## Status
 
 Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up for free practice.
