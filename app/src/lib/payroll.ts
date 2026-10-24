@@ -148,30 +148,58 @@ export const PAYROLL_TEMPLATE = [
   "Tunde Bello,,980,Invoice 7",
 ].join("\n");
 
-function splitCsvLine(line: string): string[] {
+const CSV_DELIMITERS = ["\t", ";", ","] as const;
+type CsvDelimiter = (typeof CSV_DELIMITERS)[number];
+
+/**
+ * The one delimiter a list uses, read from its first line: whichever splits it
+ * into the most cells outside quotes (a tab, then a semicolon, wins a tie).
+ * Splitting every line on all three at once read a semicolon or tab list's
+ * "1,25" as two cells, 1 and 25, and paid 1 without a word; with one delimiter
+ * per list it stays one cell, which the amount reader refuses out loud.
+ */
+function csvDelimiter(line: string): CsvDelimiter {
+  const seen: Record<CsvDelimiter, number> = { "\t": 0, ";": 0, ",": 0 };
+  let quoted = false;
+  for (const ch of line) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && ch in seen) seen[ch as CsvDelimiter]++;
+  }
+  return CSV_DELIMITERS.reduce((best, d) => (seen[d] > seen[best] ? d : best), CSV_DELIMITERS[0]);
+}
+
+/**
+ * One line's cells, split on `delimiter`. A quote that opens a cell runs to its
+ * closing quote (so "1,250" is one cell); a quote inside a plain cell is just a
+ * character. Null when a quoted cell never closes or has text after it, since
+ * the cells after that could be anything.
+ */
+function splitCsvLine(line: string, delimiter: CsvDelimiter): string[] | null {
   const out: string[] = [];
   let cur = "";
-  let quoted = false;
+  let state: "open" | "quoted" | "closed" = "open";
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (quoted) {
-      if (ch === '"' && line[i + 1] === '"') {
+    if (state === "quoted") {
+      if (ch !== '"') cur += ch;
+      else if (line[i + 1] === '"') {
         cur += '"';
         i++;
-      } else if (ch === '"') {
-        quoted = false;
-      } else {
-        cur += ch;
-      }
-    } else if (ch === '"') {
-      quoted = true;
-    } else if (ch === "," || ch === "\t" || ch === ";") {
+      } else state = "closed";
+    } else if (ch === delimiter) {
       out.push(cur.trim());
       cur = "";
+      state = "open";
+    } else if (state === "closed") {
+      if (ch.trim()) return null;
+    } else if (ch === '"' && !cur.trim()) {
+      cur = "";
+      state = "quoted";
     } else {
       cur += ch;
     }
   }
+  if (state === "quoted") return null;
   out.push(cur.trim());
   return out;
 }
@@ -190,14 +218,16 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
   const lines = text
     .replace(/\r\n?/g, "\n")
     .split("\n")
-    .map((l, i) => ({ l: l.trim(), i: i + 1 }))
-    .filter((x) => x.l.length > 0);
+    // Lines are not trimmed: a tab list's empty first cells are leading tabs.
+    .map((l, i) => ({ l, i: i + 1 }))
+    .filter((x) => x.l.trim().length > 0);
   if (!lines.length) return { rows: [], error: null };
 
   // Without a header: name, address, amount, then an optional note.
   let cols = { name: 0, recipient: 1, amount: 2, note: 3 };
   let start = 0;
-  const first = splitCsvLine(lines[0].l);
+  const delimiter = csvDelimiter(lines[0].l);
+  const first = splitCsvLine(lines[0].l, delimiter) ?? [];
   const looksLikeHeader = first.some((c) =>
     [...NAME_KEYS, ...RECIPIENT_KEYS, ...AMOUNT_KEYS].includes(c.toLowerCase().trim())
   );
@@ -211,6 +241,10 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
   } else if (first.length === 2) {
     cols = { name: 0, recipient: -1, amount: 1, note: -1 };
   }
+  // A row with more cells than the list has columns had a comma (or tab) inside
+  // a cell, usually an amount like 1,25 or an unquoted 1,250: its cells have
+  // shifted, so the row is refused rather than read.
+  const width = looksLikeHeader ? first.length : first.length === 2 ? 2 : Math.min(Math.max(first.length, 3), 4);
 
   const body = lines.slice(start);
   if (body.length > PAYROLL_MAX_ROWS) {
@@ -218,14 +252,21 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
   }
 
   const rows = body.map(({ l, i }, idx): DraftRow => {
-    const c = splitCsvLine(l);
+    const cells = splitCsvLine(l, delimiter);
+    const c = cells ?? [];
     const name = (cols.name >= 0 ? c[cols.name] : "")?.slice(0, 60) || `Person ${idx + 1}`;
     const recipient = (cols.recipient >= 0 ? c[cols.recipient] : "")?.trim() ?? "";
     const amountInput = (c[cols.amount] ?? "").replace(/[$\s]/g, "");
     const note = cols.note >= 0 ? cleanPaymentNote(c[cols.note]) : "";
-    let error: string | null = null;
+    // A row whose cells cannot be trusted is not read any further, amount included.
+    const unreadable = !cells
+      ? "Check the quotes in this row: a quoted cell needs its closing quote, with nothing after it."
+      : cells.length > width
+        ? 'This row has more cells than the list has columns. Put an amount with a comma in quotes, like "1,250", and use a dot for decimals.'
+        : null;
+    let error: string | null = unreadable;
     let kind: PayeeKind = "link";
-    if (recipient) {
+    if (!error && recipient) {
       if (isValidReceiveTag(recipient)) {
         kind = "gloam";
       } else if (isReceiveTag(recipient)) {
@@ -238,7 +279,7 @@ export function parsePayrollCsv(text: string, asset: Address): { rows: DraftRow[
     }
     // the same reader as every amount field: "1,25" or "-1" is a row error, never 125 or 1
     const read = readAmountText(amountInput, assetDecimals(asset));
-    const amount = read.ok ? parseAssetAmount(amountInput, asset) : null;
+    const amount = read.ok && !unreadable ? parseAssetAmount(amountInput, asset) : null;
     if (!error && !read.ok) {
       error = read.error;
     } else if (!error && (amount === null || amount <= 0n)) {
