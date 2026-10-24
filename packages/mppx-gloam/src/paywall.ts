@@ -48,9 +48,9 @@ export interface GloamPaywallConfig {
   server: GloamChargeServerConfig;
   /** Protection space. Default: the request's host. */
   realm?: string;
-  /** "tempo-mainnet" or "robinhood-mainnet" (real money), "tempo" or "robinhood" (testnet), or a chain id. Default "tempo". */
+  /** "tempo-mainnet" or "robinhood-mainnet" (real money), "tempo" or "robinhood" (testnet), or a chain id; "base-mainnet" and "base" once their pools are in. Default "tempo". */
   network?: GloamChargeNetwork | number;
-  /** Token address; default the network's first stablecoin (USDC.e on Tempo mainnet, USDG on Robinhood Chain mainnet, PathUSD on Tempo testnet), native ETH on Robinhood Chain testnet. */
+  /** Token address; default the network's first stablecoin (USDC.e on Tempo mainnet, USDG on Robinhood Chain mainnet, USDC on Base, PathUSD on Tempo testnet), native ETH on Robinhood Chain testnet. */
   currency?: Address;
   /** Decimals of `currency`, to read display amounts. Default: the asset's own (6 for the stablecoins, 18 for ETH and GLOAM). */
   decimals?: number;
