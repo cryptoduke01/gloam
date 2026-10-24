@@ -8,7 +8,8 @@ import { knownTokens } from "./tokens";
 import { getActiveNetwork } from "./networks";
 import { makeBoundNote } from "./note";
 import { readAmountText } from "./amountText";
-import { getAllNotes, setAllNotes } from "./noteVault";
+import { dataKeyLocked, getAllNotes, setAllNotes, syncFromDisk, unlockNoteVault } from "./noteVault";
+import { readDemo } from "./demoFlag";
 import type { VaultSwapRefundInfo } from "./vaultSwap";
 import type { DelayWindow } from "./relay/scheduled";
 import { walkLogs, walkTuning } from "./leafIndex";
@@ -580,8 +581,25 @@ export type NotesBackup = {
   notes: LocalNote[];
 };
 
-/** Export spendable notes (secrets!) for device backup. */
-export function exportNotesBackup(address?: string | null): NotesBackup {
+/**
+ * Bring this tab's copy of the notes up to the store on disk. A page without
+ * the notes hook (Settings) never re-reads it: its copy can be from before a
+ * claim was secured in another tab, or empty until the vault is unlocked. A
+ * vault still behind its passkey is left alone (this never asks for it).
+ */
+async function readStoreNow(): Promise<void> {
+  if (typeof window === "undefined" || readDemo() || dataKeyLocked()) return;
+  await unlockNoteVault();
+  await syncFromDisk();
+}
+
+/**
+ * Export spendable notes (secrets!) for device backup, from the store as it is
+ * now: a backup copied in a tab opened before a claim was secured elsewhere
+ * held the claim, not the note it was secured into.
+ */
+export async function exportNotesBackup(address?: string | null): Promise<NotesBackup> {
+  await readStoreNow();
   purgeSenderPaymentNotes();
   // A secured claim's pending note goes too: its move may still land.
   const notes = loadLocalNotes(address).filter(holdsSecret);
@@ -650,6 +668,8 @@ export async function importNotesBackup(
   if (!Array.isArray(data.notes)) {
     return { ok: false, error: "Backup has no notes." };
   }
+  // what is already here is read from the store itself, not this tab's copy of it
+  await readStoreNow();
   const owner = (address as Address | undefined) ?? undefined;
   const here = new Set<string>();
   const added: LocalNote[] = [];

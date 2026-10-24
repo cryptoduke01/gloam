@@ -624,17 +624,17 @@ export function SettingsView() {
             onClick={async () => {
               setBackupMsg(null);
               try {
-                const backup = exportNotesBackup(address);
-                if (!backup.notes.length) {
-                  setBackupMsg("No private balances to export.");
-                  return;
-                }
                 // Build the text and hand the clipboard a promise of it inside this click.
                 // A plain writeText after the passkey prompt and the slow passphrase lock
                 // can be refused once the click has expired, which left whatever was on
-                // the clipboard before in place.
+                // the clipboard before in place. The notes are read from the store as it
+                // is now: another tab may have secured a claim since this page opened.
+                let count = 0;
                 const textPromise = (async () => {
+                  const backup = await exportNotesBackup(address);
+                  if (!backup.notes.length) throw new Error("empty");
                   if (!(await passkeyAllowsExport())) throw new Error("cancelled");
+                  count = backup.notes.length;
                   const json = JSON.stringify(backup, null, 2);
                   return backupPass.trim() ? await sealWithPassphrase(json, backupPass) : json;
                 })();
@@ -647,7 +647,15 @@ export function SettingsView() {
                     await navigator.clipboard.writeText(await textPromise);
                   }
                 } catch (err) {
-                  if (err instanceof Error && err.message === "cancelled") return;
+                  const why = await textPromise.then(
+                    () => null,
+                    (e: unknown) => (e instanceof Error ? e.message : null)
+                  );
+                  if (why === "empty") {
+                    setBackupMsg("No private balances to export.");
+                    return;
+                  }
+                  if (why === "cancelled" || (err instanceof Error && err.message === "cancelled")) return;
                   // Last try: write the finished text directly.
                   const text = await textPromise.catch(() => null);
                   if (text === null) return;
@@ -657,8 +665,8 @@ export function SettingsView() {
                 }
                 setBackupMsg(
                   backupPass.trim()
-                    ? `Copied a locked backup (${backup.notes.length} balance(s)).`
-                    : `Copied a plain backup (${backup.notes.length} balance(s)). Anyone with this file can spend it.`
+                    ? `Copied a locked backup (${count} balance(s)).`
+                    : `Copied a plain backup (${count} balance(s)). Anyone with this file can spend it.`
                 );
               } catch (e) {
                 setBackupMsg(
@@ -676,7 +684,7 @@ export function SettingsView() {
             onClick={async () => {
               setBackupMsg(null);
               try {
-                const backup = exportNotesBackup(address);
+                const backup = await exportNotesBackup(address);
                 if (backup.notes.length && !(await passkeyAllowsExport())) return;
                 const json = JSON.stringify(backup, null, 2);
                 const text = backupPass.trim()
