@@ -82,7 +82,12 @@ export function TradeView() {
   const searchMarket = search.get("market");
   const pathParam = search.get("path");
   const sideParam = search.get("side"); // sealed trade: buy | sell
-  const [side, setSide] = useState<Side>(settings.defaultSide);
+  // Settings load after the first render, so the saved default side is read
+  // on every render until the person picks one here; frozen into state, it was
+  // always "buy".
+  const [pickedSide, setSide] = useState<Side | null>(null);
+  const side: Side = pickedSide ?? settings.defaultSide;
+  const sealedSide: Side = sideParam === "buy" || sideParam === "sell" ? sideParam : settings.defaultSide;
   const [marketId, setMarketId] = useState(searchMarket ?? "tsla");
   const [amount, setAmount] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("token");
@@ -809,6 +814,7 @@ export function TradeView() {
               marketSymbol={market.symbol}
               tokenAddress={token}
               hasPool={hasPool}
+              initialSide={settings.defaultSide}
               onUsePrivate={() => setPathMode("sealed")}
             />
           ) : pathMode === "sealed" ? (
@@ -816,7 +822,7 @@ export function TradeView() {
               marketId={resolvedId}
               marketSymbol={market.symbol}
               tokenAddress={token}
-              initialDir={sideParam === "sell" ? "sell" : "buy"}
+              initialDir={sealedSide}
             />
           ) : (
             <div className="gl-card overflow-hidden">

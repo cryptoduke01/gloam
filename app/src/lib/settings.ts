@@ -14,7 +14,8 @@ export type TradingSettings = {
 
 export const DEFAULT_SETTINGS: TradingSettings = {
   defaultSide: "buy",
-  marketFilter: "all",
+  // Markets opens on the full stock list unless someone picks another filter.
+  marketFilter: "stocks",
   showUsd: true,
   hideZeroBalances: false,
   confirmSends: true,
@@ -34,7 +35,7 @@ export function loadSettings(): TradingSettings {
       ...(JSON.parse(raw) as Partial<TradingSettings>),
     };
     const filter = String(
-      (JSON.parse(raw) as { marketFilter?: string }).marketFilter ?? "all"
+      (JSON.parse(raw) as { marketFilter?: string }).marketFilter ?? DEFAULT_SETTINGS.marketFilter
     );
     // migrate old filters
     if (filter === "meme" || filter === "stock") {
@@ -46,7 +47,7 @@ export function loadSettings(): TradingSettings {
     ) {
       parsed.marketFilter = filter;
     } else {
-      parsed.marketFilter = "all";
+      parsed.marketFilter = DEFAULT_SETTINGS.marketFilter;
     }
     return parsed;
   } catch {
