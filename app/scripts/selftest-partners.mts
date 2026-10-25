@@ -780,7 +780,9 @@ await test("proofs: a real proof of funds passes the server snark check", async 
   assert.equal(r.checks[0]!.label, SNARK_CHECK);
   assert.equal(r.checks[0]!.state, "pass", JSON.stringify(r.checks));
   assert.equal(byLabel.get('Made for "Acme Bank"'), "pass");
-  assert.equal(byLabel.get("Made on Gloam's vault on Robinhood Chain"), "pass");
+  // a testnet proof says so, in the check and in the result: test funds never read as mainnet
+  assert.equal(byLabel.get("Made on Gloam's vault on Robinhood Chain testnet"), "pass");
+  assert.deepEqual(r.network, { chainId: RH.chainId, key: RH.key, name: "Robinhood Chain testnet", testnet: true });
   assert.equal(byLabel.get("Asset and amount match the proof"), "pass");
   // The root is from a local tree, so the vault never had it (or the RPC is unreachable).
   assert.notEqual(byLabel.get("Matches a real vault state"), "pass");

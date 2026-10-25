@@ -20,7 +20,7 @@
  * What an exact balance shows: one note of exactly this amount is in the vault
  * and whoever made the proof knows its key. Not that it is still unspent.
  */
-import { ceremonyForChain } from "@/lib/networks";
+import { ceremonyForChain, networkName } from "@/lib/networks";
 import { FIELD_PRIME, fieldToHex, proofContext, readFundsSignals, readReceiptSignals } from "@gloamtrade/sdk";
 import type { Hex } from "viem";
 import { demoHolderChecks, isDemoProof } from "@/lib/demo/proof";
@@ -122,7 +122,7 @@ async function verifyPayroll(p: PayrollProof): Promise<VerifyResult> {
       const snarkjs = await import("snarkjs");
       return snarkjs.groth16.verify(await verificationKey("payroll", ceremonyForChain(p.chainId)), part.publicSignals, part.proof);
     },
-    vault: official && net ? { label: net.label } : null,
+    vault: official && net ? { label: networkName(net) } : null,
     findPayment,
     now: Math.floor(Date.now() / 1000),
     when: localWhen,
@@ -235,7 +235,8 @@ export async function checkHolderProof(
   const net = networkForChain(p.chainId);
   const official = Boolean(net?.pool && typeof p.pool === "string" && net.pool.toLowerCase() === p.pool.toLowerCase());
   add(
-    official ? `Made on Gloam's vault on ${net!.label}` : "Made on Gloam's vault",
+    // the testnet says so: a proof made with test funds never reads as mainnet
+    official ? `Made on Gloam's vault on ${networkName(net!)}` : "Made on Gloam's vault",
     official ? "pass" : "fail",
     official ? undefined : "The vault address is not Gloam's current vault, so its balances cannot be trusted."
   );
