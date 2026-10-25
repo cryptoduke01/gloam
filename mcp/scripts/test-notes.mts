@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { Hex } from "viem";
+import { TransactionNotFoundError, type Hex } from "viem";
 import {
   IncrementalMerkleTreePoseidon,
   buildPrivateSendIntent,
@@ -464,13 +464,24 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
   });
 
   /** A payer that pays through a relay whose answer is unclear, and a payee to pay. */
-  async function relayPayment(relayOn: (chain: Chain) => ServerDeps["relay"]) {
+  async function relayPayment(relayOn: (chain: Chain) => ServerDeps["relay"], opts: { unreadableSpend?: boolean } = {}) {
     const dir = tmp();
     const chain = mockChain();
     const relay = relayOn(chain);
     const payerEnv = partyEnv("payer", dir, { ...PAYER_LIMITS, GLOAM_USE_RELAY: "1" });
     const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
-    const P = await connect(makeDeps(chain, payerEnv, { relay }).deps);
+    // Optionally, the payer's isSpent reads fail (an RPC error) until readable() is called.
+    let unreadable = Boolean(opts.unreadableSpend);
+    const publicClient = {
+      ...chain.publicClient,
+      readContract: async (a: { functionName: string; args: [Hex] }) => {
+        if (unreadable && a.functionName === "isSpent") throw new Error("HTTP request failed.\n\nStatus: 503");
+        return chain.publicClient.readContract(a);
+      },
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient }) as unknown as Signer;
+    const P = await connect(makeDeps(chain, payerEnv, { relay, ...(opts.unreadableSpend ? { signer } : {}) }).deps);
     const S = await connect(makeDeps(chain, payeeEnv).deps);
     const priced = await S.call("gloam_payment_requirements", {
       amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo",
@@ -478,7 +489,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
     const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
     const byOrigin = (o: string) => openNoteStore(payerEnv).list().filter((n) => n.origin === o);
-    return { chain, payerEnv, payeeEnv, P, S, priced, input: shield.note.handle as string, paid, byOrigin };
+    return { chain, payerEnv, payeeEnv, P, S, priced, input: shield.note.handle as string, paid, byOrigin, readable: () => void (unreadable = false) };
   }
 
   test("a relay send with an unclear answer keeps the change and the payment, which land later", async () => {
@@ -536,6 +547,188 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(openNoteStore(r.payerEnv).get(r.input)?.status, "unspent", "the note is spendable again");
     assert.equal(r.byOrigin("change").length, 0);
     assert.equal(r.byOrigin("payment").length, 0);
+  });
+
+  /**
+   * A wallet (no relay) whose RPC takes the transaction named `fn` and then loses the
+   * reply: the signer noted the hash before the RPC answered, as getSigner's does.
+   * `mine` false leaves it in the mempool, to be applied by the test later.
+   */
+  function lossyWallet(chain: Chain, fn: string, opts: { mine?: boolean; error?: () => Error } = {}) {
+    const broadcasts: Hex[] = [];
+    const held: (readonly unknown[])[] = [];
+    let lost = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== fn || lost > 0) {
+          const hash = await chain.walletClient.writeContract(call);
+          broadcasts.push(hash);
+          return hash;
+        }
+        lost++;
+        const hash = opts.mine === false ? (`0x${"77".repeat(32)}` as Hex) : await chain.apply(fn, call.args);
+        if (opts.mine === false) held.push(call.args);
+        broadcasts.push(hash);
+        throw opts.error?.() ?? new Error("HTTP request failed.\n\nStatus: 504\nURL: https://rpc.example\nRequest body: {\"method\":\"eth_sendRawTransaction\"}");
+      },
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient: chain.publicClient, broadcasts }) as unknown as Signer;
+    return { signer, broadcasts, held };
+  }
+
+  test("a wallet send whose reply is lost after the node took it keeps the change and the payment, and counts", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const lossy = lossyWallet(chain, "transfer");
+    const P = await connect(makeDeps(chain, payerEnv, { signer: lossy.signer }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(paid.status, "error", JSON.stringify(paid));
+    assert.equal(paid.hash, lossy.broadcasts.at(-1), "the result names the transaction that went out");
+    assert.match(paid.check, /refresh/);
+    assert.match(paid.paymentHeader, /^gloamx402pay1:/, "the sealed payment comes back, to present once it lands");
+    const notes = openNoteStore(payerEnv).list();
+    const change = notes.find((n) => n.origin === "change");
+    const payment = notes.find((n) => n.origin === "payment");
+    assert.equal(change?.status, "pending", "the 7 change is kept");
+    assert.equal(change?.createdTx, paid.hash, "with the transaction a refresh looks up");
+    assert.equal(payment?.status, "pending", "the payee's 3 is kept");
+    assert.equal(openNoteStore(payerEnv).get(shield.note.handle)?.status, "pending", "the 10 note stays reserved");
+    const report = await P.call("gloam_get_spending_report", {});
+    assert.equal(report.recentPayments.find((e: { tool: string }) => e.tool === "pay")?.status, "unconfirmed", "it counts against the limits");
+
+    const list = await P.call("gloam_list_notes", { refresh: true });
+    assert.ok(list.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(list.refreshed));
+    assert.ok(list.refreshed.some((x: string) => x.includes(`${payment!.handle}: payment landed`)), JSON.stringify(list.refreshed));
+    assert.equal(list.balances[0].spendable, "7");
+    const v = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v.status, "settled", JSON.stringify(v));
+  });
+
+  test("a wallet send the node refused outright frees the note and forgets the outputs", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const refused = () => Object.assign(new Error("insufficient funds for gas * price + value"), { code: -32000 });
+    const lossy = lossyWallet(chain, "transfer", { mine: false, error: refused });
+    // The node does not have it.
+    const publicClient = { ...chain.publicClient, getTransaction: async ({ hash }: { hash: Hex }) => { throw new TransactionNotFoundError({ hash }); } };
+    const signer = (net: Parameters<ServerDeps["signer"]>[0]) => ({ ...lossy.signer(net), publicClient }) as unknown as Signer;
+    const P = await connect(makeDeps(chain, payerEnv, { signer }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(paid.status, "error", JSON.stringify(paid));
+    assert.match(paid.error, /insufficient funds/);
+    assert.equal(paid.paymentHeader, undefined);
+    const notes = openNoteStore(payerEnv).list();
+    assert.equal(notes.find((n) => n.handle === shield.note.handle)?.status, "unspent", "the note is spendable again");
+    assert.equal(notes.filter((n) => n.origin === "change" || n.origin === "payment").length, 0);
+    const report = await P.call("gloam_get_spending_report", {});
+    assert.equal(report.recentPayments.find((e: { tool: string }) => e.tool === "pay")?.status, "failed");
+  });
+
+  test("a wallet deposit whose reply is lost keeps its note, which confirms", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const lossy = lossyWallet(chain, "shieldBound");
+    const P = await connect(makeDeps(chain, payerEnv, { signer: lossy.signer }).deps);
+    const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    assert.equal(shield.status, "error", JSON.stringify(shield));
+    assert.equal(shield.hash, lossy.broadcasts.at(-1));
+    const [note] = openNoteStore(payerEnv).list();
+    assert.equal(note?.status, "pending", "the deposit's note is kept");
+    const report = await P.call("gloam_get_spending_report", {});
+    assert.equal(report.recentPayments[0].status, "unconfirmed", "the deposit counts against the limits");
+    const list = await P.call("gloam_list_notes", { refresh: true });
+    assert.equal(list.balances[0].spendable, "10", JSON.stringify(list));
+  });
+
+  test("a wallet sweep whose reply is lost while it is in the mempool keeps the fresh note", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const lossy = lossyWallet(chain, "transfer", { mine: false });
+    const P = await connect(makeDeps(chain, payerEnv).deps);
+    const S = await connect(makeDeps(chain, payeeEnv, { signer: lossy.signer }).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(paid.status, "paid", JSON.stringify(paid));
+    const v = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v.grantAccess, false);
+    assert.equal(v.status, "unconfirmed", JSON.stringify(v));
+    assert.equal(v.hash, lossy.broadcasts.at(-1));
+    const [fresh] = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+    assert.equal(fresh?.status, "pending", "the fresh note is kept");
+    await chain.apply("transfer", lossy.held[0]!); // mined
+    const list = await S.call("gloam_list_notes", { refresh: true });
+    assert.ok(list.refreshed.some((x: string) => x.includes(`${fresh!.handle}: confirmed`)), JSON.stringify(list.refreshed));
+    assert.equal(list.balances[0].spendable, "3", "the payee holds the payment");
+  });
+
+  test("a relay send whose receipt wait throws keeps the change and the payment, and counts", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, { ...PAYER_LIMITS, GLOAM_USE_RELAY: "1" });
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    let failReceipts = false;
+    const publicClient = {
+      ...chain.publicClient,
+      waitForTransactionReceipt: async (a: { hash: Hex }) => {
+        if (failReceipts) throw new Error("HTTP request failed.\n\nStatus: 429");
+        return chain.publicClient.waitForTransactionReceipt(a);
+      },
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient }) as unknown as Signer;
+    const P = await connect(makeDeps(chain, payerEnv, { signer }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    failReceipts = true;
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    failReceipts = false;
+    assert.equal(paid.status, "error", JSON.stringify(paid));
+    assert.ok(paid.hash, "the relay's hash comes back");
+    const notes = openNoteStore(payerEnv).list();
+    assert.equal(notes.find((n) => n.origin === "change")?.status, "pending");
+    assert.equal(notes.find((n) => n.origin === "payment")?.status, "pending");
+    const report = await P.call("gloam_get_spending_report", {});
+    assert.equal(report.recentPayments.find((e: { tool: string }) => e.tool === "pay")?.status, "unconfirmed");
+    const list = await P.call("gloam_list_notes", { refresh: true });
+    assert.equal(list.balances[0].spendable, "7", JSON.stringify(list));
+    const v = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v.status, "settled", JSON.stringify(v));
+  });
+
+  test("a reverted send whose spend check cannot be read keeps everything pending until a refresh", async () => {
+    const r = await relayPayment((chain) => async (intent) => {
+      await chain.apply("transfer", intent.exec!.args); // the first copy lands
+      return chain.apply("transfer", intent.exec!.args); // the copy whose hash comes back reverts
+    }, { unreadableSpend: true });
+    assert.equal(r.paid.status, "error", JSON.stringify(r.paid));
+    assert.match(r.paid.error, /could not be read/);
+    assert.match(r.paid.paymentHeader, /^gloamx402pay1:/);
+    const [change] = r.byOrigin("change");
+    assert.equal(change?.status, "pending", "the change is not thrown away on a failed read");
+    assert.equal(r.byOrigin("payment")[0]?.status, "pending");
+    const report = await r.P.call("gloam_get_spending_report", {});
+    assert.equal(report.recentPayments.find((e: { tool: string }) => e.tool === "pay")?.status, "unconfirmed", "it may have gone through: it counts");
+    r.readable();
+    const list = await r.P.call("gloam_list_notes", { refresh: true });
+    assert.ok(list.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(list.refreshed));
+    assert.equal(list.balances[0].spendable, "7");
   });
 
   test("a payee sweep whose relay answer is unclear keeps the fresh note, which lands later", async () => {
