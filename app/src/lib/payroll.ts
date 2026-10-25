@@ -52,6 +52,7 @@ import {
   formatAssetAmount,
   loadLocalNotes,
   noteNetworkProblem,
+  NETWORK_SWITCHING_MESSAGE,
   NOTE_OTHER_NETWORK_MESSAGE,
   parseAssetAmount,
   saveLocalNote,
@@ -498,7 +499,7 @@ export class PayrollStop extends Error {}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The network a run pays on: its own chain and vault, whatever the page shows now. */
-function runNetwork(batch: Pick<PayrollBatch, "chainId" | "pool">): GloamNetwork | undefined {
+export function runNetwork(batch: Pick<PayrollBatch, "chainId" | "pool">): GloamNetwork | undefined {
   return NETWORK_KEYS.map(getNetwork).find(
     (n) => n.chainId === batch.chainId && n.pool?.toLowerCase() === batch.pool.toLowerCase()
   );
@@ -611,8 +612,24 @@ export function runPayroll(batch: PayrollBatch, deps: PayrollEngineDeps): Promis
   return holdRun(batch.id, () => runHeld(batch, deps));
 }
 
+/**
+ * Why a run can't be read or resumed right now, or null. A run reads and pays
+ * on its own chain only: the vaults share one address, so a read made on
+ * another chain (the page switched since, or a client for it) would answer for
+ * this run's payments without failing.
+ */
+export function runNetworkProblem(batch: Pick<PayrollBatch, "chainId" | "pool">, client: Pick<PublicClient, "chain">): string | null {
+  const problem = noteNetworkProblem(batch, getActiveNetwork());
+  if (problem) return problem === NOTE_OTHER_NETWORK_MESSAGE ? "This run is on another network. Switch to it, then resume." : problem;
+  if (client.chain && client.chain.id !== batch.chainId) return NETWORK_SWITCHING_MESSAGE;
+  return null;
+}
+
 async function runHeld(batch: PayrollBatch, deps: PayrollEngineDeps): Promise<PayrollBatch> {
   const { client } = deps;
+  // before anything is read: a resume checks its sent payments on the run's own chain
+  const wrongNetwork = runNetworkProblem(batch, client);
+  if (wrongNetwork) throw new Error(wrongNetwork);
   const emit = async () => {
     deps.onUpdate({ ...batch, rows: batch.rows.map((r) => ({ ...r })) });
     await saveBatch(batch);
