@@ -19,7 +19,7 @@ import { getNetwork, isNetworkKey, type NetworkKey } from "./networks";
 import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { isValidReceiveTag } from "./receiveTag";
 import { readAmountText } from "./amountText";
-import { shieldTokensFor, supportsNativeShield } from "./tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 
 /** Same cap as the private note the payment carries (lib/paymentNote). */
 export const REQUEST_NOTE_MAX = PAYMENT_NOTE_MAX;
@@ -34,7 +34,10 @@ export type RequestAsset = {
   address: Address;
   decimals: number;
   native: boolean;
+  /** A dollar stablecoin. EURC is a stablecoin too, but a euro one, so not this. */
   stable: boolean;
+  /** Set for a stablecoin pegged to another currency (EURC: the euro). */
+  peg?: "EUR";
 };
 
 /** Tokens a request can name on a network: stablecoins first, then the rest. */
@@ -47,7 +50,8 @@ export function requestAssetsFor(key: NetworkKey): RequestAsset[] {
     address: t.address,
     decimals: t.decimals,
     native: false,
-    stable: t.kind === "stablecoin",
+    stable: isDollarStable(t),
+    ...(t.peg ? { peg: t.peg } : {}),
   });
   const native: RequestAsset[] = supportsNativeShield(n.chainId)
     ? [

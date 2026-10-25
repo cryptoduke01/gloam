@@ -145,8 +145,8 @@ export default function DocsPartnersPage() {
         Until then, a dashboard figure is an attribution count, not money owed.
       </p>
       <p>
-        USD figures use $1 for stablecoins and the live ETH price at the time of the
-        payment. Stock tokens are counted but not valued.
+        USD figures use $1 for dollar stablecoins and the live ETH price at the time of the
+        payment. EURC (a euro stablecoin) and stock tokens are counted but not valued.
       </p>
 
       <h2>Authentication and limits</h2>

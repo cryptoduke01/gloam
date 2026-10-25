@@ -187,6 +187,11 @@ check("Base Sepolia: payment requests and claim codes", () => {
     ["USDC", "EURC", "ETH"]
   );
   assert.ok(assets.find((a) => a.symbol === "ETH")!.native);
+  // EURC is a stablecoin, but a euro one: never flagged as a dollar stablecoin
+  const eurc = assets.find((a) => a.symbol === "EURC")!;
+  assert.equal(eurc.stable, false);
+  assert.equal(eurc.peg, "EUR");
+  assert.equal(assets.find((a) => a.symbol === "USDC")!.stable, true);
   // A Base mainnet USDC code opened on Base Sepolia (the same vault address) is refused.
   assert.match(
     claimNetworkProblem({ key: "base", pool: SEPOLIA_POOL }, { pool: SEPOLIA_POOL, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }) ?? "",
@@ -215,6 +220,9 @@ await checkAsync("Base Sepolia: the remote MCP lists it and gives final-key snip
   assert.equal(one.isError, false);
   assert.match(one.text, /"chainId": 84532/);
   assert.match(one.text, /"symbol": "EURC"/);
+  // gloam_networks never calls EURC a (dollar) stablecoin, and says what it is pegged to
+  const eurcView = (JSON.parse(one.text) as { networks: { assets: { symbol: string; stablecoin: boolean; peg?: string }[] }[] }).networks[0]!.assets.find((a) => a.symbol === "EURC")!;
+  assert.deepEqual([eurcView.stablecoin, eurcView.peg], [false, "EUR"]);
   assert.match(one.text, new RegExp(`"paymentMessageBoard": "${SEPOLIA_MEMO}"`));
   const mpp = await toolJson("gloam_mpp_how_to", { network: "base" });
   assert.equal(mpp.isError, false);
