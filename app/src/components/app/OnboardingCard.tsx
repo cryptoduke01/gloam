@@ -118,7 +118,7 @@ export function OnboardingCard() {
             </svg>
           </button>
           <div className="relative z-[1] pr-10">
-            <p className="t-label">
+            <p className="t-eyebrow">
               {allDone
                 ? "Setup complete"
                 : `${doneCount} of ${steps.length} done`}

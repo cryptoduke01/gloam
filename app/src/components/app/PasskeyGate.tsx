@@ -65,7 +65,7 @@ export function PasskeyGate() {
     >
       <div className="w-full max-w-[420px] rounded-[24px] border border-line bg-panel p-7 shadow-pop">
         <Mark size={32} />
-        <p className="t-label mt-6">Passkey lock</p>
+        <p className="t-eyebrow mt-6">Passkey lock</p>
         <h2 id="passkey-gate-title" className="t-display-m mt-2 text-foreground">
           Unlock your private balance
         </h2>

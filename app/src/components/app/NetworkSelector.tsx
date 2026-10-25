@@ -114,7 +114,7 @@ export function NetworkSelector() {
           ).map((group, gi) => (
             <div key={group.title} className={gi > 0 ? "mt-1 border-t border-line pt-1" : ""}>
               <p className="flex items-baseline justify-between px-2.5 pb-1 pt-2">
-                <span className="t-label">{group.title}</span>
+                <span className="t-eyebrow">{group.title}</span>
                 {group.hint && <span className="text-[11.5px] text-mute">{group.hint}</span>}
               </p>
               {group.list.map((n) => {

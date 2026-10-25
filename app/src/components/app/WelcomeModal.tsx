@@ -84,7 +84,7 @@ export function WelcomeModal() {
             <div className="mb-6 max-sm:hidden">
               <Mark size={32} />
             </div>
-            <p className="t-label">{live ? "Gloam mainnet" : "Gloam testnet"}</p>
+            <p className="t-eyebrow">{live ? "Gloam mainnet" : "Gloam testnet"}</p>
             <h2 id="welcome-title" className="t-display-m mt-2 text-foreground">
               Welcome to Gloam
             </h2>
@@ -103,7 +103,7 @@ export function WelcomeModal() {
         </div>
 
         <div className="px-7 pt-5">
-          <p className="t-label">Quick start</p>
+          <p className="text-[15px] text-foreground">Quick start</p>
           <ol className="mt-2">
             {[
               live ? (

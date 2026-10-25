@@ -175,7 +175,7 @@ export default function ClaimPage() {
 
         {view.kind === "missing" && (
           <div className="rounded-[24px] bg-panel p-7 shadow-card">
-            <p className="t-label">Claim link</p>
+            <p className="t-eyebrow">Claim link</p>
             <h1 className="mt-3 text-[30px] font-light leading-[1.1] tracking-[-0.02em]">This link lost its payment on the way</h1>
             <p className="mt-4 text-[15px] leading-relaxed text-soft">
               Some chat apps cut long links short. The payment is still in the message you got: copy the whole message and
@@ -221,7 +221,7 @@ export default function ClaimPage() {
             <div className="relative overflow-hidden rounded-[24px] bg-panel p-7 shadow-card">
               <SealedField tone="soft" />
               <div className="relative">
-                <p className="t-label inline-flex items-center gap-2">
+                <p className="t-eyebrow inline-flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-sealed" aria-hidden />
                   A private payment for you
                 </p>

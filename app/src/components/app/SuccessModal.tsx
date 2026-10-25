@@ -119,7 +119,7 @@ export function SuccessModal({
             </svg>
           </motion.div>
 
-          <p className="t-label mt-6">Confirmed</p>
+          <p className="t-eyebrow mt-6">Confirmed</p>
           <h2
             id="success-title"
             className="mt-2 text-balance text-[28px] font-light leading-[1.12] tracking-[-0.018em] text-foreground"

@@ -216,7 +216,7 @@ export function ScheduleEditor({
       >
         <header className="flex items-start justify-between gap-4 border-b border-line max-sm:px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
           <div className="min-w-0">
-            <p className="t-label">{isNew ? "New schedule" : "Edit schedule"}</p>
+            <p className="t-eyebrow">{isNew ? "New schedule" : "Edit schedule"}</p>
             <h2
               id="schedule-editor-title"
               className="mt-1.5 truncate text-[22px] font-light leading-tight tracking-[-0.012em] text-foreground"
