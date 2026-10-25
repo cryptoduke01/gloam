@@ -29,7 +29,7 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { approvalSteps, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { approvalsBeforeDeposit, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
@@ -301,6 +301,13 @@ export function ShieldView() {
   const approvalsLeft = useRef<{ token: `0x${string}`; values: bigint[] } | null>(null);
   /** The approval in the wallet now only clears an old allowance (USDT on Ethereum). */
   const [clearingAllowance, setClearingAllowance] = useState(false);
+  /** The approval has landed and the deposit is on its way: the button says so. */
+  const [approved, setApproved] = useState(false);
+  /**
+   * The deposit's proof, started at the click so it is made while the approval
+   * is mined instead of after it. Keyed by the note's commitment.
+   */
+  const depositProof = useRef<{ commitment: Hex; proofBytes: Promise<Hex> } | null>(null);
   const pendingShieldArgs = useRef<{
     value: bigint;
     commitment: Hex;
@@ -390,6 +397,7 @@ export function ShieldView() {
       // auto continue shield
       if (pending && network.pool && autoShieldAfterApprove.current) {
         autoShieldAfterApprove.current = false;
+        setApproved(true);
         // Keep handledHash on the approval: the deposit has its own hash, and
         // clearing it here let this approval's receipt count as the deposit.
         // Route through executeShield so the shieldBound (C1) branch applies
@@ -431,7 +439,9 @@ export function ShieldView() {
     }
     setPendingNote(null);
     setPendingKind(null);
+    setApproved(false);
     pendingShieldArgs.current = null;
+    depositProof.current = null;
     refreshNotes();
     void refetchEth();
     void refetchTok();
@@ -531,6 +541,29 @@ export function ShieldView() {
     return null;
   }
 
+  /**
+   * The proof that binds a deposit (C1): commitment == Poseidon(secret, amount,
+   * asset). Made once per note: onSubmit starts it, executeShield waits for it.
+   */
+  function proveDeposit(value: bigint, note: LocalNote, commitment: Hex, asset: Address): Promise<Hex> {
+    const started = depositProof.current;
+    if (started && started.commitment === commitment) return started.proofBytes;
+    const proofBytes = import("@/lib/proveClient")
+      .then(({ proveShieldInBrowser }) =>
+        proveShieldInBrowser({
+          commitment: BigInt(commitment).toString(),
+          amount: value.toString(),
+          asset: BigInt(asset).toString(),
+          secret: BigInt(note.secret).toString(),
+        })
+      )
+      .then((made) => made.proofBytes);
+    // a failure is read where the proof is awaited (executeShield)
+    proofBytes.catch(() => undefined);
+    depositProof.current = { commitment, proofBytes };
+    return proofBytes;
+  }
+
   async function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
     if (!network.pool) return;
     const asset = selectedToken ? selectedToken.address : NATIVE_ASSET;
@@ -546,13 +579,7 @@ export function ShieldView() {
     // pools (shieldVerifier unset) plain shield() still works, unchanged.
     if (shieldVerifierLive) {
       try {
-        const { proveShieldInBrowser } = await import("@/lib/proveClient");
-        const { proofBytes } = await proveShieldInBrowser({
-          commitment: BigInt(commitment).toString(),
-          amount: value.toString(),
-          asset: BigInt(asset).toString(),
-          secret: BigInt(note.secret).toString(),
-        });
+        const proofBytes = await proveDeposit(value, note, commitment, asset);
         // stored and read back before the wallet is asked: a refused write stops here
         await keepUntilLanded();
         writeContract({
@@ -570,6 +597,8 @@ export function ShieldView() {
         );
         setPendingKind(null);
         setPendingNote(null);
+        setApproved(false);
+        depositProof.current = null;
       }
       return;
     }
@@ -623,6 +652,17 @@ export function ShieldView() {
       return;
     }
 
+    // The allowance as the chain has it now, read alongside the screening: the
+    // cached one can be from before an approval that already landed, and
+    // approving again would cost a wallet prompt and a block for nothing.
+    const allowanceNow: Promise<bigint | undefined> =
+      selectedToken && !demo
+        ? refetchAllow().then(
+            (r) => (r.isSuccess ? (r.data as bigint) : allowance),
+            () => allowance
+          )
+        : Promise.resolve(allowance);
+
     // Screen the depositing wallet on the server before the wallet signs (on
     // Tempo, also the asset's TIP-403 issuer policy for this deposit).
     setChecking(true);
@@ -674,23 +714,27 @@ export function ShieldView() {
       source: "local",
     };
 
+    // ERC20: approve first if needed. USDT on Ethereum refuses to change one
+    // non-zero allowance into another, so a stale one (a deposit that never went
+    // through) is set to 0 first. Only a non-zero allowance actually read is
+    // reset; one that could not be read is read again instead of guessed.
+    const steps = selectedToken ? approvalsBeforeDeposit(selectedToken, await allowanceNow, value) : [];
+    if (steps === null) {
+      setFormError(`Could not read your ${symbol} approval for the vault. Try again in a moment.`);
+      return;
+    }
+
     setFormError(null);
     reset();
     setShowSuccess(false);
+    setApproved(false);
     handledHash.current = null;
     setSentLabel(`${amount} ${symbol}`);
     pendingShieldArgs.current = { value, commitment, note };
+    // Proved while any approval is mined, so the deposit goes out as soon as it lands.
+    if (shieldVerifierLive) void proveDeposit(value, note, commitment, assetAddress);
 
-    // ERC20: approve first if needed. USDT on Ethereum refuses to change one
-    // non-zero allowance into another, so a stale one (a deposit that never went
-    // through) is set to 0 first; an allowance not read yet counts as stale there.
     if (selectedToken) {
-      const steps =
-        allowance === undefined
-          ? selectedToken.approveResetFirst
-            ? [BigInt(0), value]
-            : [value]
-          : approvalSteps(selectedToken, allowance, value);
       if (steps.length) {
         autoShieldAfterApprove.current = true;
         approvalsLeft.current = { token: selectedToken.address, values: steps.slice(1) };
@@ -727,7 +771,9 @@ export function ShieldView() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- the wallet refused or the write failed: drop the unsent note and stop waiting
       setPendingNote(null);
       setPendingKind(null);
+      setApproved(false);
       pendingShieldArgs.current = null;
+      depositProof.current = null;
       autoShieldAfterApprove.current = false;
       approvalsLeft.current = null;
       setClearingAllowance(false);
@@ -741,13 +787,51 @@ export function ShieldView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the receipt wait gave up on a busy network: stop waiting and say the deposit may still land
     setPendingNote(null);
     setPendingKind(null);
+    setApproved(false);
     pendingShieldArgs.current = null;
+    depositProof.current = null;
     setFormError(
       "Your deposit was sent, but the network is slow to confirm it. It's saved in this browser and shows in your private balance as soon as it lands. Check the link below."
     );
     const t = window.setTimeout(() => refreshNotes(), 15_000);
     return () => window.clearTimeout(t);
   }, [receiptLost, hash, pendingKind, refreshNotes]);
+
+  // The wait for an approval's receipt gave up (a busy RPC). It may have landed
+  // anyway: read the allowance and go on to the deposit when it covers it,
+  // instead of leaving the button to ask for the same approval again.
+  useEffect(() => {
+    if (!receiptLost || !hash || pendingKind !== "approve") return;
+    const pending = pendingShieldArgs.current;
+    const more = approvalsLeft.current?.values.length ?? 0;
+    let live = true;
+    // the button waits ("Checking…") rather than offer the approval again meanwhile
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a receipt wait gave up: hold the button while the allowance is read
+    setChecking(true);
+    void refetchAllow().then((r) => {
+      setChecking(false);
+      if (!live) return;
+      const read = r.isSuccess ? (r.data as bigint) : undefined;
+      const carryOn = autoShieldAfterApprove.current && pending && more === 0 && read !== undefined && read >= pending.value;
+      autoShieldAfterApprove.current = false;
+      approvalsLeft.current = null;
+      setClearingAllowance(false);
+      setPendingKind(null);
+      if (carryOn) {
+        setApproved(true);
+        void executeShield(pending.value, pending.note, pending.commitment);
+        return;
+      }
+      pendingShieldArgs.current = null;
+      depositProof.current = null;
+      setPendingNote(null);
+      setFormError("Your approval was sent, but the network is slow to confirm it. Check the link below, then try again.");
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- executeShield reads this render's form; the effect runs once per lost receipt
+  }, [receiptLost, hash, pendingKind, refetchAllow]);
 
   const maxLabel =
     walletBalance !== undefined
@@ -875,7 +959,9 @@ export function ShieldView() {
           ? "Clearing the old approval…"
           : "Approving…"
         : proving
-          ? "Preparing your private deposit…"
+          ? approved
+            ? "Adding privately…"
+            : "Preparing your private deposit…"
           : isPending && pendingKind === "shield"
             ? "Confirm in your wallet…"
             : confirming && pendingKind === "shield"
