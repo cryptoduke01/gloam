@@ -258,6 +258,87 @@ const stranger = await generateReceiveKey();
   void req;
 }
 
+// ── 6b. a wallet send whose reply was lost (the node took it) ─────────────────
+{
+  const { pool, built } = await paidPool(payee);
+  const note = await openGloamPaymentNote(built.payload.payload.paymentNote, payee);
+  let held = null;
+  const lostHash = "0x" + "cd".repeat(32);
+  const r = await sweepReceivedNote({
+    note, poolAddress: SEALED_VAULT, chainId: NETWORK, prove: stubProve, chain: pool.chain,
+    submit: async (intent) => {
+      held = transferCallArgs(intent); // in the mempool, not mined yet
+      throw Object.assign(new Error("HTTP request failed. Status: 504"), { maybeSent: true, hash: lostHash });
+    },
+  });
+  assert(r.status === "unconfirmed" && r.freshNote && r.hash === lostHash, "a submitter error marked maybeSent keeps the fresh note and reports its hash");
+  await pool.transfer(held);
+  assert(await pool.chain.isCommitmentSeen(r.freshNote.commitment), "and the kept note is the money once it lands");
+}
+
+// ── 6c. the sweep lands between the reads that follow a lost receipt ──────────
+{
+  const { pool, built } = await paidPool(payee);
+  const note = await openGloamPaymentNote(built.payload.payload.paymentNote, payee);
+  let inFlight = null;
+  /** Each read answers from the chain as it is, then the sweep in flight is mined. */
+  const landsAfterRead = (read) => async (x) => {
+    const v = await read(x);
+    if (inFlight) {
+      const args = inFlight;
+      inFlight = null;
+      await pool.transfer(args);
+    }
+    return v;
+  };
+  const r = await sweepReceivedNote({
+    note, poolAddress: SEALED_VAULT, chainId: NETWORK, prove: stubProve,
+    chain: {
+      ...pool.chain,
+      isSpent: landsAfterRead(pool.chain.isSpent),
+      isCommitmentSeen: landsAfterRead(pool.chain.isCommitmentSeen),
+      waitForReceipt: async () => { throw new Error("HTTP request failed. Status: 429"); },
+    },
+    submit: async (intent) => {
+      inFlight = transferCallArgs(intent);
+      return "0x" + "ef".repeat(32);
+    },
+  });
+  assert(r.status === "swept" && r.final === true && r.freshNote, `a sweep that lands between the two reads is the payee's (got ${r.status})`);
+}
+
+// ── 6d. reads from nodes at different heights: spent, fresh note not seen yet ─
+{
+  const { pool, built } = await paidPool(payee);
+  const note = await openGloamPaymentNote(built.payload.payload.paymentNote, payee);
+  const r = await sweepReceivedNote({
+    note, poolAddress: SEALED_VAULT, chainId: NETWORK, prove: stubProve,
+    chain: {
+      ...pool.chain,
+      waitForReceipt: async () => { throw new Error("timeout"); },
+    },
+    submit: async (intent) => {
+      await pool.transfer(transferCallArgs(intent));
+      return "0x" + "12".repeat(32);
+    },
+  });
+  assert(r.status === "swept", "baseline: a landed sweep with a lost receipt is swept");
+  const { pool: lagging, built: b2 } = await paidPool(payee);
+  const n2 = await openGloamPaymentNote(b2.payload.payload.paymentNote, payee);
+  let sentSweep = false;
+  const r2 = await sweepReceivedNote({
+    note: n2, poolAddress: SEALED_VAULT, chainId: NETWORK, prove: stubProve,
+    chain: {
+      ...lagging.chain,
+      isSpent: async () => sentSweep, // after the send, a node that has the sweep's block
+      isCommitmentSeen: async () => false, // and a node one block behind
+      waitForReceipt: async () => { throw new Error("timeout"); },
+    },
+    submit: async () => ((sentSweep = true), "0x" + "34".repeat(32)),
+  });
+  assert(r2.status === "unconfirmed" && r2.freshNote, "a sent sweep is not given up on from one lagging read: the fresh note is kept");
+}
+
 // ── 7. the zero-change sweep is a valid transfer proof ────────────────────────
 const here = dirname(fileURLToPath(import.meta.url));
 const circuits = join(here, "../../../app/public/circuits");
