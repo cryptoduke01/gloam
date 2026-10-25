@@ -79,8 +79,11 @@ import {
   relayUnshield,
   RelaySubmitError,
   setRelayPreferred,
+  type RelayNetworkStatus,
 } from "@/lib/relay/client";
+import { gasHighMessage } from "@/lib/relay/gasCeiling";
 import { RelayToggle } from "./RelayToggle";
+import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
 import {
   claimNetworkProblem,
@@ -300,6 +303,9 @@ export function MoveView() {
   const [relayOn, setRelayOn] = useState(false);
   /** The relay status has loaded for this network; until then nothing is sent, so a quick click can't go out from the wallet. */
   const [relayChecked, setRelayChecked] = useState(false);
+  /** The relay's status on this chain, for its gas ceiling (Ethereum): over it, relayed sends wait. */
+  const [relayStatus, setRelayStatus] = useState<RelayNetworkStatus | null>(null);
+  const gasHigh = Boolean(relayStatus?.gasHigh);
   const [relayHash, setRelayHash] = useState<Hex | undefined>(undefined);
   /** The last confirmed action was a private payment, so success offers the share post. */
   const [paidPrivately, setPaidPrivately] = useState(false);
@@ -424,6 +430,7 @@ export function MoveView() {
     void relayFor(network.chainId).then((r) => {
       if (!live) return;
       const ok = Boolean(r?.enabled);
+      setRelayStatus(r);
       setRelayAvailable(ok);
       setRelayOn(ok && relayPreferred());
       setRelayChecked(true);
@@ -954,6 +961,11 @@ export function MoveView() {
       setError("Cashing out later needs the Gloam relay, which is off right now. Cash out now instead.");
       return;
     }
+    // Over the gas ceiling the relay sends nothing now; a cash out for later still schedules and waits.
+    if (!later && relayOn && gasHigh) {
+      setError(gasHighMessage(network.label));
+      return;
+    }
     if (poolForCashOut != null && poolForCashOut < amount) {
       setError(
         `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, ${formatAssetLabel(amount, selected.asset)} needed). It opens up once more of this asset is added.`
@@ -1133,6 +1145,10 @@ export function MoveView() {
       setError("Cashing out privately needs the Gloam relay, which is off right now. Send it all now instead.");
       return;
     }
+    if (gasHigh) {
+      setError(gasHighMessage(network.label));
+      return;
+    }
     if (poolForCashOut != null && poolForCashOut < amount) {
       setError(
         `Not enough in the shared vault to cash out right now (${formatAssetLabel(poolForCashOut, selected.asset)} available, ${formatAssetLabel(amount, selected.asset)} needed). It opens up once more of this asset is added.`
@@ -1278,6 +1294,11 @@ export function MoveView() {
       return;
     }
     setError(null);
+    // Over the gas ceiling the relay sends nothing: say so before proving.
+    if (relayOn && gasHigh) {
+      setError(gasHighMessage(network.label));
+      return;
+    }
     setShareBlob(null);
     setBusy(true);
     setPaidPrivately(false);
@@ -2036,14 +2057,17 @@ export function MoveView() {
   );
 
   const relayToggle = (
-    <RelayToggle
-      available={relayAvailable}
-      on={relayOn}
-      onChange={(v) => {
-        setRelayOn(v);
-        setRelayPreferred(v);
-      }}
-    />
+    <>
+      {gasHigh && <RelayGasNotice status={relayStatus} label={network.label} later={mode === "cashout"} />}
+      <RelayToggle
+        available={relayAvailable}
+        on={relayOn}
+        onChange={(v) => {
+          setRelayOn(v);
+          setRelayPreferred(v);
+        }}
+      />
+    </>
   );
 
   return (
@@ -2954,7 +2978,7 @@ export function MoveView() {
                           <li key={n.id} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
                             <span className="min-w-0">
                               <span className="tnum block text-foreground">{formatAssetLabel(n.amountWei, n.asset)}</span>
-                              <span className="block truncate text-[12px] text-mute">{scheduledLine(n)}</span>
+                              <span className="block truncate text-[12px] text-mute">{scheduledLine(n, undefined, gasHigh)}</span>
                             </span>
                             {n.cashOut?.state === "scheduled" && (
                               <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => void cancelScheduled(n)}>
