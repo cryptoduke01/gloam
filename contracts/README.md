@@ -31,9 +31,16 @@ Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, wit
 
 Full addresses, verifiers and superseded pools: [deployments/poseidon-testnet.json](./deployments/poseidon-testnet.json) and [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-## Ready to deploy: Base (not deployed)
+## Base: Base Sepolia live, Base mainnet next
 
-Base Sepolia (`84532`, the testnet, first) and Base mainnet (`8453`) run the same `ShieldPoolPayments` deploy as the mainnets, on the final keys: `script/DeployBaseSepolia.s.sol` and `script/DeployBaseMainnet.s.sol`, both through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, EURC and ETH on both, plus bridged USDT on Base mainnet; 500 / 25,000 per stablecoin and 0.2 / 10 ETH. Nothing is deployed yet; the runbook is [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+Base Sepolia (`84532`) and Base mainnet (`8453`) run the same `ShieldPoolPayments` deploy as the mainnets, on the final keys: `script/DeployBaseSepolia.s.sol` and `script/DeployBaseMainnet.s.sol`, both through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, EURC and ETH on both, plus bridged USDT on Base mainnet; 500 / 25,000 per stablecoin and 0.2 / 10 ETH. The runbook is [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+
+| Network | Vault `ShieldPoolPayments` | Deploy block | Pay memo board |
+| --- | --- | --- | --- |
+| Base Sepolia `84532` (testnet, live since 24 October 2026) | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` | `49802958` | `0x01B3172d9900Cb26d57E986429b9b23854c74598` |
+| Base mainnet `8453` | not deployed yet | | |
+
+Base Sepolia record (verifiers, assets, owner, fee recipient): [deployments/base-sepolia.json](./deployments/base-sepolia.json).
 
 | Feature | Status |
 | --- | --- |
