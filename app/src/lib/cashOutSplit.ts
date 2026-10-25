@@ -16,15 +16,15 @@
  * is never counted twice, and if that note is spent some other way the two
  * that can never land leave the balance.
  */
-import type { Address, Hex } from "viem";
+import type { Address, Hex, PublicClient } from "viem";
 import { buildTransferWitness, type TransferWitness } from "./proverTransfer";
 import { fieldToBytes32, proveTransferInBrowser } from "./proveClient";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { relayTransfer, RelaySubmitError, waitForTx } from "./relay/client";
-import { getRhPublicClient, publicClientFor } from "./rhClient";
+import { publicClientFor } from "./rhClient";
 import { readDemo } from "./demoFlag";
 import { demoLeafIndex } from "./demo/store";
-import { getActiveNetwork } from "./networks";
+import { NETWORK_KEYS, getActiveNetwork, getNetwork, type GloamNetwork } from "./networks";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { surelyNotSent } from "./walletErrors";
@@ -58,9 +58,20 @@ export function roundDownToWhole(amountWei: bigint, decimals: number): bigint {
   return (amountWei / unit) * unit;
 }
 
-/** The tree path for a note once it is in the vault, read fresh from the chain. */
-export async function freshPath(commitment: Hex): Promise<{ leafIndex: number; path: PoseidonMerklePath } | null> {
-  const net = getActiveNetwork();
+/** The network a note is on (its chain and vault), if Gloam runs it now. */
+export function networkOfNote(n: Pick<LocalNote, "chainId" | "pool">): GloamNetwork | undefined {
+  return NETWORK_KEYS.map(getNetwork).find((x) => x.chainId === n.chainId && x.pool?.toLowerCase() === n.pool.toLowerCase());
+}
+
+/**
+ * The tree path for a note once it is in the vault, read fresh from the chain:
+ * `net`'s (the active network when left out), so a step that began on one
+ * network keeps reading it if the page switches.
+ */
+export async function freshPath(
+  commitment: Hex,
+  net: GloamNetwork = getActiveNetwork()
+): Promise<{ leafIndex: number; path: PoseidonMerklePath } | null> {
   const client = publicClientFor(net);
   for (let i = 0; i < 4; i++) {
     const tree = await syncShieldTree(client, net).catch(() => null);
@@ -121,10 +132,10 @@ export function splitNotes(
   return { part, change };
 }
 
-async function seen(pool: Address, commitment: Hex): Promise<boolean> {
+async function seen(client: PublicClient, chainId: number, pool: Address, commitment: Hex): Promise<boolean> {
   // Recording demo: in the pretend vault once it has a leaf there.
-  if (readDemo()) return demoLeafIndex(getActiveNetwork().chainId, commitment) != null;
-  return (await getRhPublicClient().readContract({
+  if (readDemo()) return demoLeafIndex(chainId, commitment) != null;
+  return (await client.readContract({
     address: pool,
     abi: shieldPoolAbi,
     functionName: "commitmentSeen",
@@ -164,8 +175,11 @@ export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; cha
   const { note, amount, owner } = args;
   const total = BigInt(note.amountWei);
   if (amount <= BigInt(0) || amount >= total) throw new Error("Pick an amount below this balance.");
-  // the path came from the active network's tree: only that network's notes split
-  assertNoteOnNetwork(note, getActiveNetwork());
+  // the path came from the active network's tree: only that network's notes split, and every
+  // read after the send (receipt, landing, new paths) stays on it if the page switches meanwhile
+  const net = getActiveNetwork();
+  assertNoteOnNetwork(note, net);
+  const client = publicClientFor(net);
 
   args.onStatus("Setting the amount aside privately, this takes 10 to 30 seconds…");
   const w = await buildTransferWitness({
@@ -217,7 +231,7 @@ export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; cha
   args.onStatus("Waiting for the first step to land…");
   let outcome: "success" | "reverted" | null = null;
   try {
-    outcome = await waitForTx(hash);
+    outcome = await waitForTx(hash, undefined, client);
   } catch {
     // A slow network: it may still land, and the next sync settles it.
     throw new Error(SPLIT_MAYBE_SENT);
@@ -232,14 +246,14 @@ export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; cha
   // Landed: the original note is spent, the two new ones count from now on.
   let landed = false;
   for (let i = 0; i < 4 && !landed; i++) {
-    landed = await seen(note.pool, part.commitment).catch(() => false);
+    landed = await seen(client, net.chainId, note.pool, part.commitment).catch(() => false);
     if (!landed) await new Promise((r) => setTimeout(r, 1_250));
   }
-  const fresh = await freshPath(part.commitment);
+  const fresh = await freshPath(part.commitment, net);
   updateLocalNote(note.id, { status: "recovered", txHash: hash });
   let landedChange: LocalNote | null = null;
   if (change) {
-    const changeAt = await freshPath(change.commitment);
+    const changeAt = await freshPath(change.commitment, net);
     const at = changeAt ? { leafIndex: changeAt.leafIndex } : {};
     updateLocalNote(change.id, { sweepPending: false, txHash: hash, ...at });
     landedChange = { ...change, sweepPending: false, txHash: hash, ...at };

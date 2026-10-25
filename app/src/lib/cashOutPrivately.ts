@@ -28,7 +28,7 @@ import { cashOutPending, updateLocalNote, type LocalNote } from "./shield";
 import { getAllNotes } from "./noteVault";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { proveCashOut, type CashOutCall } from "./cashOutProof";
-import { freshPath, SPLIT_MAYBE_SENT, splitNote, type SplitArgs } from "./cashOutSplit";
+import { freshPath, networkOfNote, SPLIT_MAYBE_SENT, splitNote, type SplitArgs } from "./cashOutSplit";
 import { scheduleNoteCashOut, type CashOutWindow, type OwnedCashOutJob } from "./cashOutLater";
 import { MAX_PIECES, MIN_PIECES } from "./cashOutPlan";
 
@@ -47,7 +47,11 @@ export type PrivateCashOutDeps = {
 };
 
 const appDeps: PrivateCashOutDeps = {
-  pathOf: async (n) => (await freshPath(n.commitment))?.path ?? null,
+  // the piece's own network, even if the page switched while the run goes on
+  pathOf: async (n) => {
+    const net = networkOfNote(n);
+    return net ? ((await freshPath(n.commitment, net))?.path ?? null) : null;
+  },
   split: splitNote,
   prove: proveCashOut,
   schedule: scheduleNoteCashOut,

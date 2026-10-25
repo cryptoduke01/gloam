@@ -29,9 +29,9 @@ import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { prepareBridgeNote } from "./bridgePrivate";
-import { freshPath, splitForCashOut } from "./cashOutSplit";
+import { freshPath, networkOfNote, splitForCashOut } from "./cashOutSplit";
 import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
-import { getRhPublicClient } from "./rhClient";
+import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
 import type { GloamNetwork } from "./networks";
 import {
@@ -78,6 +78,8 @@ export async function runVaultSwap(args: {
   const { network, note, amount, router } = args;
   if (!network.pool) throw new Error("This network has no vault yet.");
   assertNoteOnNetwork(note, network);
+  // every read of this swap, before and after the send, goes to its own network's chain
+  const client = publicClientFor(network);
   const noteWei = BigInt(note.amountWei);
   if (amount <= 0n || amount > noteWei) throw new Error("Pick an amount up to this balance.");
 
@@ -108,7 +110,7 @@ export async function runVaultSwap(args: {
     throw new Error("This quote was for another swap router. Get a new quote and try again.");
   }
   const plan = await replanVaultSwap(
-    getRhPublicClient(),
+    client,
     network.chainId,
     { assetIn: target.asset, assetOut: args.assetOut, amountIn: targetWei, feeBps: args.feeBps, router },
     args.plan
@@ -133,7 +135,7 @@ export async function runVaultSwap(args: {
     routeHash: keccak256(routeBytes),
   };
   const escrow = escrowAddress(router, target.asset, key);
-  const routerSays = await getRhPublicClient().readContract({
+  const routerSays = await client.readContract({
     address: router,
     abi: vaultSwapAbi,
     functionName: "escrowFor",
@@ -204,7 +206,7 @@ export async function runVaultSwap(args: {
   args.onStatus("Waiting for the swap to land…");
   let outcome: "success" | "reverted";
   try {
-    outcome = await waitForTx(hash);
+    outcome = await waitForTx(hash, undefined, client);
   } catch {
     // A slow network: it may still land, and the next sync settles it.
     throw new Error(SWAP_MAYBE_SENT);
@@ -220,7 +222,7 @@ export async function runVaultSwap(args: {
   // the refund note. Which one is read from the vault; if that read fails both
   // stay pending and the next sync settles them, so no money is ever hidden.
   const seen = (c: Hex) =>
-    getRhPublicClient().readContract({ address: network.pool!, abi: shieldPoolAbi, functionName: "commitmentSeen", args: [c] });
+    client.readContract({ address: network.pool!, abi: shieldPoolAbi, functionName: "commitmentSeen", args: [c] });
   const [outSeen, refundSeen] = await Promise.all([seen(outNote.commitment), seen(refundNote.commitment)]).catch(
     () => [false, false] as const
   );
@@ -228,7 +230,7 @@ export async function runVaultSwap(args: {
   const refunded = !outSeen;
   const landed = refunded ? refundNote : outNote;
   const unused = refunded ? outNote : refundNote;
-  const at = await freshPath(landed.commitment);
+  const at = await freshPath(landed.commitment, network);
   updateLocalNote(target.id, { status: "recovered", txHash: hash });
   updateLocalNote(unused.id, { status: "recovered", sweepPending: false });
   updateLocalNote(landed.id, { status: "open", sweepPending: false, txHash: hash, ...(at ? { leafIndex: at.leafIndex } : {}) });
@@ -276,5 +278,7 @@ export async function finishVaultSwapRefund(note: LocalNote): Promise<void> {
     refund: { proof: proofBytes, commitment: note.commitment, asset: note.asset, amount: BigInt(note.amountWei) },
     route: info.route,
   });
-  await waitForTx(hash).catch(() => null);
+  // the receipt is read on the note's own chain, whatever the page shows by now
+  const net = networkOfNote(note);
+  await waitForTx(hash, undefined, net ? publicClientFor(net) : undefined).catch(() => null);
 }

@@ -116,7 +116,7 @@ import {
   scheduledCashOutNotes,
   type CashOutWindow,
 } from "@/lib/cashOutLater";
-import { freshPath, roundDownToWhole, splitForCashOut } from "@/lib/cashOutSplit";
+import { freshPath, networkOfNote, roundDownToWhole, splitForCashOut } from "@/lib/cashOutSplit";
 import {
   findCashOutLink,
   linkMessage,
@@ -559,7 +559,9 @@ export function MoveView() {
       let changeLeaf: number | undefined;
       if (pendingChange.current) {
         try {
-          const tree = await syncShieldTree(getRhPublicClient());
+          // the change note's own network, even if the page switched while the send landed
+          const changeNet = networkOfNote(pendingChange.current);
+          const tree = changeNet ? await syncShieldTree(publicClientFor(changeNet), changeNet) : null;
           const idx = tree?.indexByCommitment.get(
             pendingChange.current.commitment.toLowerCase()
           );
@@ -1010,7 +1012,7 @@ export function MoveView() {
         });
         splitDone = true;
         refreshNotes();
-        path = (await freshPath(target.commitment))?.path ?? null;
+        path = (await freshPath(target.commitment, network))?.path ?? null;
       } else {
         path = (await pathForLeaf(selected.leafIndex!)) as PoseidonMerklePath | null;
       }
