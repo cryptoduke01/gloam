@@ -23,6 +23,8 @@ import {
   type PaymentRequest,
   type RequestAsset,
 } from "@/lib/paymentRequest";
+import { shieldTokensFor } from "@/lib/tokens";
+import { Select } from "@/components/ui/Select";
 import { useNetwork } from "./NetworkProvider";
 import { TokenLogo } from "./TokenLogo";
 
@@ -189,7 +191,7 @@ export function RequestPaymentCard({ tag }: { tag: string }) {
   );
 }
 
-/** Token pill with a native select laid over it (same pattern as Add). */
+/** Token pill that opens the app's dropdown (same as Add). */
 function AssetPicker({
   assets,
   value,
@@ -199,28 +201,26 @@ function AssetPicker({
   value: RequestAsset;
   onChange: (id: string) => void;
 }) {
+  const { network } = useNetwork();
+  const names = useMemo(
+    () => new Map(shieldTokensFor(network.chainId).map((t) => [t.id, t.name])),
+    [network.chainId]
+  );
   return (
-    <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-foreground/25">
-      <div className="pointer-events-none flex h-11 items-center gap-2 rounded-full bg-panel pl-1.5 pr-3 text-[15px] font-medium text-foreground shadow-card">
-        <AssetGlyph asset={value} size={28} />
-        {value.symbol}
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden className="text-mute">
-          <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <select
-        value={value.id}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="Token to be paid in"
-        className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
-      >
-        {assets.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.symbol}
-          </option>
-        ))}
-      </select>
-    </div>
+    <Select
+      variant="pill"
+      align="end"
+      className="shrink-0"
+      label="Token to be paid in"
+      value={value.id}
+      onChange={onChange}
+      options={assets.map((a) => ({
+        value: a.id,
+        label: a.symbol,
+        description: a.native ? (a.symbol === "ETH" ? "Ether" : undefined) : names.get(a.id),
+        icon: <AssetGlyph asset={a} size={28} />,
+      }))}
+    />
   );
 }
 
