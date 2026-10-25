@@ -21,7 +21,7 @@ import { SealDots } from "@/components/ui/SealDots";
 import { SealedField } from "@/components/ui/SealedField";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useShieldTree } from "@/hooks/useShieldTree";
-import { getRhPublicClient } from "@/lib/rhClient";
+import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { track } from "@/lib/track";
 import { countPerson } from "@/lib/people";
 import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
@@ -58,6 +58,7 @@ import {
   loadBatches,
   newBatch,
   parsePayrollCsv,
+  runNetwork,
   runPayroll,
   saveBatch,
   withDemoProofRecords,
@@ -563,8 +564,10 @@ export function PayrollView() {
       refreshNotes();
       return;
     }
-    // one chain for the whole run: its reads and receipts stay there if the page switches
-    const runClient = getRhPublicClient();
+    // the run's own chain for the whole run, never the one shown at the click: its reads and
+    // receipts stay there if the page switches (runPayroll refuses a run of another network)
+    const runNet = runNetwork(batch);
+    const runClient = runNet ? publicClientFor(runNet) : getRhPublicClient();
     try {
       const done = await runPayroll(batch, {
         client: runClient,

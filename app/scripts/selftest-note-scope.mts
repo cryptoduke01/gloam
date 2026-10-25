@@ -42,7 +42,7 @@ const { shownTree, syncShieldTree, treeIsFor } = await import("../src/lib/treeSy
 const { proveCashOut } = await import("../src/lib/cashOutProof");
 const { splitForCashOut } = await import("../src/lib/cashOutSplit");
 const { runVaultSwap } = await import("../src/lib/vaultSwapRun");
-const { fundingNotes } = await import("../src/lib/payroll");
+const { fundingNotes, newBatch, runNetworkProblem, runPayroll } = await import("../src/lib/payroll");
 const { visibleNotes, notesOnNetwork, noteNetworkProblem, ghostEthNotes, activeSpendableNotes, sumByAsset } = shield;
 
 let passed = 0;
@@ -229,6 +229,36 @@ await test("the empty-ETH cleanup only retires nullifier-less notes of its own n
   assert.deepEqual(ghostEthNotes(all, BASE).map((n) => n.id), [legacy.id]);
   // a read of Robinhood Chain mainnet (no ETH there) can't touch Base Sepolia's notes
   assert.deepEqual(ghostEthNotes(all, RH), []);
+});
+
+await test("a payroll run of another chain is refused before anything is read, resume included", async () => {
+  nets.setShownNetworkKey("base");
+  const rhRun = newBatch({ title: "October", chainId: RH.chainId, pool: RH.pool as Address, asset: USDG, employer: ME, relay: true, rows: [] });
+  const baseRun = newBatch({ title: "October", chainId: BASE.chainId, pool: BASE.pool as Address, asset: ETH, employer: ME, relay: true, rows: [] });
+  const baseClient = { chain: { id: BASE.chainId } };
+  assert.match(runNetworkProblem(rhRun, baseClient) ?? "", /another network/);
+  assert.equal(runNetworkProblem(baseRun, { chain: { id: RH.chainId } }), shield.NETWORK_SWITCHING_MESSAGE, "a client for another chain");
+  assert.equal(runNetworkProblem(baseRun, baseClient), null);
+  // A Robinhood Chain run resumed while Base Sepolia is shown: refused before its first read.
+  let reads = 0;
+  const client = new Proxy(baseClient as unknown as PublicClient, {
+    get(t, p) {
+      if (p === "chain") return (t as unknown as { chain: unknown }).chain;
+      if (p === "then") return undefined;
+      reads++;
+      throw new Error(`read ${String(p)}`);
+    },
+  });
+  const deps = {
+    client,
+    submitTransfer: () => Promise.reject(new Error("must not send")),
+    submitMemo: null,
+    waitForTx: () => Promise.reject(new Error("must not wait")),
+    onUpdate: () => {},
+    shouldStop: () => false,
+  } as never;
+  await assert.rejects(runPayroll(rhRun, deps), /another network/);
+  assert.equal(reads, 0, "nothing was read on Base Sepolia for the Robinhood Chain run");
 });
 
 console.log(`selftest-note-scope: ${passed} checks passed`);
