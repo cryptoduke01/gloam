@@ -27,6 +27,7 @@ import {
   openGloamPaymentNote,
   settleGloamPayment,
   sweepChainFromClient,
+  sweepChainProblem,
   verifyPaymentNoteBinding,
   GLOAM_X402_SCHEME,
   GLOAM_X402_VERSION,
@@ -190,6 +191,17 @@ const lc = (s: string) => s.toLowerCase();
 const chainFor = (config: GloamChargeServerConfig, chainId: number) =>
   typeof config.chain === "function" ? config.chain(chainId) : config.chain;
 
+/** Refuses a chain reader that answers for another chain than the charge's. */
+async function requireChain(chain: GloamChargeChain, chainId: number): Promise<void> {
+  let problem: string | null;
+  try {
+    problem = await sweepChainProblem(chain, chainId);
+  } catch {
+    throw fail("Could not read which chain this server's reader is on. Retry shortly.", true);
+  }
+  if (problem) throw fail(problem.replace("the payment is on", "the charge is on"));
+}
+
 const replayStores = new WeakMap<GloamChargeServerConfig, GloamReplayStore>();
 const challengeKey = (id: string) => `challenge:${id}`;
 /** The config's replay store, or one in-memory store per config object. */
@@ -247,6 +259,9 @@ export async function validateGloamCharge(args: {
   if (!official || lc(official) !== lc(md.pool)) {
     throw fail(`The challenge names pool ${md.pool} on chain ${md.chainId}, which is not the Gloam pool. Not settling there.`);
   }
+  // The vault and native ETH share their addresses across chains: only the reader's own chain id tells.
+  const chain = chainFor(config, md.chainId);
+  await requireChain(chain, md.chainId);
   if (request.recipient.trim() !== config.receiveKey.tag.trim()) {
     throw fail("This charge pays a different receive tag than this server's.");
   }
@@ -286,7 +301,6 @@ export async function validateGloamCharge(args: {
     throw new GloamChargeError("invalid-challenge", "This challenge was already paid and used. Request the resource again for a fresh one.");
   }
 
-  const chain = chainFor(config, md.chainId);
   // Spent with no record of ours: the payer (who also knows the secret) moved it, or another server took it.
   if (!pending && (await chain.isSpent(paymentNullifier))) {
     throw fail("The payment note was already spent, most likely by the payer who created it. Do not grant access.");
@@ -358,6 +372,7 @@ export async function settleGloamCharge(args: {
   const v = args.validated ?? (await validateGloamCharge(args));
   const md = v.request.methodDetails;
   const chain = chainFor(config, md.chainId);
+  await requireChain(chain, md.chainId);
   const replay = replayStoreOf(config);
   const clock = () => config.now?.() ?? Date.now();
   const key = v.paymentNullifier;
