@@ -16,7 +16,12 @@ import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { jsonOf, kv } from "./partnersKv";
 
 const PREFIX = "gloam:recovery:v1:";
-/** Ciphertext size cap, in base64 characters (about 380 KB of notes). */
+/**
+ * Ciphertext size cap, in base64 characters (about 380 KB of notes). Kept at
+ * 512,000: a backup also carries every payroll run with a payment that may
+ * still land (up to 200 rows, about 1.5 KB each with its codes and secrets),
+ * so a real one for a team that pays by link is already in the hundreds of KB.
+ */
 export const MAX_BACKUP_CHARS = 512_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const B64 = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -101,11 +106,18 @@ export async function readBackup(id: string): Promise<BackupView | null> {
  * present the same token and a higher version number, so an older copy can
  * never replace a newer one.
  */
-export async function writeBackup(p: { id: string; write: string; c: string; n: number }): Promise<{ n: number; t: number }> {
+/** Why this is not a backup that could be saved, or null. Checked before anything is counted or read. */
+export function backupInputProblem(p: { c: unknown; n: unknown }): string | null {
   if (typeof p.c !== "string" || !p.c || p.c.length > MAX_BACKUP_CHARS || !B64.test(p.c)) {
-    throw new RecoveryError(400, "The backup is empty, too large or not encrypted.");
+    return "The backup is empty, too large or not encrypted.";
   }
-  if (!Number.isSafeInteger(p.n) || p.n < 1) throw new RecoveryError(400, "Bad backup version.");
+  if (!Number.isSafeInteger(p.n) || (p.n as number) < 1) return "Bad backup version.";
+  return null;
+}
+
+export async function writeBackup(p: { id: string; write: string; c: string; n: number }): Promise<{ n: number; t: number }> {
+  const problem = backupInputProblem(p);
+  if (problem) throw new RecoveryError(400, problem);
 
   return withBackupLock(p.id, async () => {
     const [raw] = await kv([["GET", keyFor(p.id)]]);

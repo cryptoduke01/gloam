@@ -11,8 +11,9 @@
  * Guard rails:
  *   - only the active pool's transfer/unshield and the memo board's postMemo
  *   - one request per spend at a time: a send or cash out takes a lock on its
- *     nullifier, shared across instances (lib/relay/inflight), before anything
- *     is read from the chain, so copies of one proof sent together cannot each
+ *     nullifier, shared across instances (lib/relay/inflight, Redis only: when
+ *     Redis is set but not answering, or a production build has none, the
+ *     relay is off and sends nothing), before anything is read from the chain, so copies of one proof sent together cannot each
  *     pass the dry run and then revert at the relay's expense; the lock is
  *     dropped if nothing went out, and kept until it expires once a
  *     transaction did
@@ -65,11 +66,11 @@ import {
   isNetworkWritable,
   type GloamNetwork,
 } from "@/lib/networks";
-import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
+import { SharedCountUnavailable, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
-import { forgetNonce, inSendLanes, inflightKey, takeInflight } from "@/lib/relay/inflight";
+import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, takeInflight } from "@/lib/relay/inflight";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
 
@@ -280,9 +281,31 @@ const PER_NETWORK_HOURLY = 5_000;
 const MEMOS_PER_PAYMENT = 3;
 const MEMOS_PER_PAYMENT_ALL = 10;
 
+export const RELAY_OFF_MESSAGE = "The relay is off on this network right now. Send from your wallet.";
+
+/** Nothing was sent: the relay's shared store (Redis) can't keep its locks and counts right now. */
+function relayOff(): RelayError {
+  return new RelayError(RELAY_OFF_MESSAGE, 503, "relay_off");
+}
+
+/**
+ * One of the relay's shared counts. It fails closed: when Redis is set but
+ * does not answer (or a production build has none), the relay sends nothing,
+ * since counts kept per instance could not hold anyone to a limit.
+ */
+async function relayCount(key: string, bucket: string, limit: number, now: number, windowSec: number) {
+  try {
+    return await hitRateLimit(key, bucket, limit, now, windowSec, { failClosed: true });
+  } catch (e) {
+    if (!(e instanceof SharedCountUnavailable)) throw e;
+    relayStoreDown(e.reason);
+    throw relayOff();
+  }
+}
+
 /** Per-sender limit (an IP, or an API key), checked before anything else. */
 export async function checkRateLimit(requester: string): Promise<void> {
-  if (!(await hitRateLimit(requester, "relay-ip", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
+  if (!(await relayCount(requester, "relay-ip", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
     throw new RelayError("Too many requests from this device. Wait a few minutes.", 429, "rate_limit");
   }
 }
@@ -330,7 +353,7 @@ function memoTicketOk(chainId: number, commitment: Hex, ticket: unknown): boolea
 
 /** One relay transaction on this network, counted only once it passed every check and the dry run. */
 async function takeNetworkSlot(net: GloamNetwork): Promise<void> {
-  if (!(await hitRateLimit(`chain:${net.chainId}`, "relay-net", PER_NETWORK_HOURLY, Date.now(), 3600)).allowed) {
+  if (!(await relayCount(`chain:${net.chainId}`, "relay-net", PER_NETWORK_HOURLY, Date.now(), 3600)).allowed) {
     throw new RelayError("The relay is busy. Try again shortly or send from your wallet.", 429, "rate_limit");
   }
 }
@@ -506,7 +529,9 @@ function mayHaveSent(err: unknown): boolean {
  */
 export function sendFailure(err: unknown): RelayError {
   // The private RPC set for this chain is another chain's node: refused before any node got it.
-  if (wrongChainRpc(err)) return new RelayError("The relay is off on this network right now. Send from your wallet.", 503, "relay_off");
+  if (wrongChainRpc(err)) return relayOff();
+  // a lane's lock could not be kept in Redis: refused before anything was sent
+  if (err instanceof LockStoreDown) return relayOff();
   if (mayHaveSent(err)) return new RelayError(MAYBE_SENT_MESSAGE, 502, "maybe_sent");
   return explain(err, "The relay could not submit this payment. Try again or send from your wallet.");
 }
@@ -590,6 +615,8 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
       return out.value;
     } catch (e) {
       if (e instanceof RelayError) throw e;
+      // The lane's lock could not be kept in Redis: nothing was sent.
+      if (e instanceof LockStoreDown) throw relayOff();
       // A send the node may have taken (a timeout, a dropped connection, "already
       // known") is never sent again: a second one would only revert and hide the first.
       const failure = sendFailure(e);
@@ -625,7 +652,14 @@ async function submitSpend(
 ): Promise<Hex> {
   const root = call.kind === "swap" ? call.args[0].root : call.args[1];
   const nullifier = call.kind === "swap" ? call.args[0].nullifier : call.args[2];
-  const lock = await takeInflight(inflightKey(net.chainId, nullifier));
+  let lock: Awaited<ReturnType<typeof takeInflight>>;
+  try {
+    lock = await takeInflight(inflightKey(net.chainId, nullifier));
+  } catch (e) {
+    // never on memory in production: without Redis this spend is not sent at all
+    if (e instanceof LockStoreDown) throw relayOff();
+    throw e;
+  }
   if (!lock) throw new RelayError(IN_FLIGHT_MESSAGE, 409, "in_flight");
   let keep = false;
   try {
@@ -858,10 +892,10 @@ export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>
   const payment = `memo|${net.chainId}|${commitment.toLowerCase()}`;
   const now = Date.now();
   const hit = memoTicketOk(net.chainId, commitment, body.ticket)
-    ? await hitRateLimit(`${payment}|payer`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
+    ? await relayCount(`${payment}|payer`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
     : requester?.startsWith("key:")
-      ? await hitRateLimit(`${payment}|key|${requester.slice(4).replace(/:/g, "|")}`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
-      : await hitRateLimit(payment, "relay-memo-all", MEMOS_PER_PAYMENT_ALL, now, 86_400);
+      ? await relayCount(`${payment}|key|${requester.slice(4).replace(/:/g, "|")}`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
+      : await relayCount(payment, "relay-memo-all", MEMOS_PER_PAYMENT_ALL, now, 86_400);
   if (!hit.allowed) {
     throw new RelayError("A message for this payment was already sent.", 409, "memo_sent");
   }

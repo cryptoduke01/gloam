@@ -42,6 +42,17 @@ const MEM_MAX_KEYS = 10_000;
 
 export type RateResult = { allowed: boolean; limit: number; remaining: number; retryAfterSec: number };
 
+/**
+ * A count asked to fail closed (`failClosed`) could not be kept in Redis: it
+ * is set but did not answer, or a production build has none. Nothing was counted.
+ */
+export class SharedCountUnavailable extends Error {
+  constructor(readonly reason: string) {
+    super(`shared count unavailable: ${reason}`);
+    this.name = "SharedCountUnavailable";
+  }
+}
+
 /** The client's IP as the platform reports it (Vercel sets x-forwarded-for). */
 export function clientIp(req: Request): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip")?.trim() || "local";
@@ -139,8 +150,9 @@ async function redisIncr(key: string, windowSec: number): Promise<number> {
 /**
  * Counts one hit for `bucket` from this IP and says whether it is allowed.
  * `windowSec` is the window length (default one minute; 3600 for an hour,
- * 86400 for a UTC day). Never throws: when Redis fails, the in-memory count
- * decides.
+ * 86400 for a UTC day). When Redis fails, the in-memory count decides, and
+ * this never throws; with `failClosed` (the relay's sends) it throws
+ * SharedCountUnavailable instead, and also in a production build with no Redis.
  */
 export async function hitRateLimit(
   ip: string,
@@ -148,6 +160,7 @@ export async function hitRateLimit(
   limit: number,
   now = Date.now(),
   windowSec = WINDOW_SEC,
+  opts: { failClosed?: boolean } = {},
 ): Promise<RateResult> {
   const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
   const window = Math.floor(now / 1000 / span);
@@ -159,9 +172,12 @@ export async function hitRateLimit(
     try {
       n = await redisIncr(key, span);
     } catch (e) {
+      if (opts.failClosed) throw new SharedCountUnavailable(e instanceof Error ? e.message : "redis failed");
       logRedisMiss(e);
       n = memIncr(key, now, span);
     }
+  } else if (opts.failClosed && process.env.NODE_ENV === "production") {
+    throw new SharedCountUnavailable("no redis");
   } else {
     n = memIncr(key, now, span);
   }

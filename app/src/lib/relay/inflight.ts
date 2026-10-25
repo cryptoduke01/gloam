@@ -7,8 +7,12 @@
  * on chain at the relay's expense (audit R-1).
  *
  * The lock is shared across serverless instances through Upstash Redis
- * (SET NX EX, same env and REST call as lib/mcpRemote/rateLimit), and falls
- * back to process memory when Redis is not set or does not answer.
+ * (SET NX EX, same env and REST call as lib/mcpRemote/rateLimit). It never
+ * falls back to process memory when Redis is set but does not answer, nor in a
+ * production build with no Redis: then it throws LockStoreDown and the relay
+ * sends nothing (each instance's memory would let copies of one proof through
+ * side by side). Memory is only for a build with no Redis that is not
+ * production: local dev and the self-tests.
  *
  * Whoever holds it releases it when the request fails before anything was
  * sent, so the user can retry right away. Once a transaction is out, the lock
@@ -94,12 +98,44 @@ async function redis(args: (string | number)[]): Promise<unknown> {
 // already expired cannot drop the lock a newer request now holds.
 const RELEASE_SCRIPT = 'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
 
+// ---------------------------------------------------------------- store health
+
+/** Redis is set but did not answer, or a production build has none: no lock was taken. */
+export class LockStoreDown extends Error {
+  constructor(readonly reason: string) {
+    super(`relay lock store unavailable: ${reason}`);
+    this.name = "LockStoreDown";
+  }
+}
+
+/** Where relay locks live: Redis when set; memory only with none outside production; else nowhere. */
+export function lockStore(): "redis" | "memory" | "none" {
+  if (redisConfigured()) return "redis";
+  return process.env.NODE_ENV === "production" ? "none" : "memory";
+}
+
+let downSince: number | null = null;
+
+/** The relay's shared store is down: logged once per outage (per instance), without any key or URL. */
+export function relayStoreDown(reason: string): void {
+  if (downSince !== null) return;
+  downSince = Date.now();
+  console.error("gloam_relay_store_down", JSON.stringify({ reason: reason.slice(0, 120) }));
+}
+
+/** The relay's shared store answered again after an outage. */
+export function relayStoreUp(): void {
+  if (downSince === null) return;
+  console.info("gloam_relay_store_back", JSON.stringify({ downSec: Math.round((Date.now() - downSince) / 1000) }));
+  downSince = null;
+}
+
 // ---------------------------------------------------------------- lock
 
 /**
  * Takes the lock for `key` for `ttlSec` seconds, or returns null while another
- * request holds it. Never throws: when Redis fails, this instance's memory
- * decides.
+ * request holds it. Throws LockStoreDown when it can't be kept in Redis (set
+ * but not answering, or a production build without it): never in memory then.
  */
 export async function takeInflight(
   key: string,
@@ -108,24 +144,33 @@ export async function takeInflight(
 ): Promise<InflightLock | null> {
   const ttl = Number.isSafeInteger(ttlSec) && ttlSec > 0 ? ttlSec : INFLIGHT_TTL_SEC;
   const token = randomUUID();
-  if (redisConfigured()) {
+  const store = lockStore();
+  if (store === "none") {
+    relayStoreDown("no redis in a production build");
+    throw new LockStoreDown("no redis");
+  }
+  if (store === "redis") {
+    let got: boolean;
     try {
-      const got = (await redis(["SET", key, token, "NX", "EX", ttl])) === "OK";
-      if (!got) return null;
-      return {
-        key,
-        store: "redis",
-        release: async () => {
-          try {
-            await redis(["EVAL", RELEASE_SCRIPT, 1, key, token]);
-          } catch {
-            /* it expires on its own */
-          }
-        },
-      };
-    } catch {
-      /* Redis did not answer: fall through to memory */
+      got = (await redis(["SET", key, token, "NX", "EX", ttl])) === "OK";
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "redis failed";
+      relayStoreDown(reason);
+      throw new LockStoreDown(reason);
     }
+    relayStoreUp();
+    if (!got) return null;
+    return {
+      key,
+      store: "redis",
+      release: async () => {
+        try {
+          await redis(["EVAL", RELEASE_SCRIPT, 1, key, token]);
+        } catch {
+          /* it expires on its own */
+        }
+      },
+    };
   }
   if (!memTake(key, token, ttl, now)) return null;
   return {
@@ -200,7 +245,8 @@ export async function inSendLane<T>(
 /**
  * The same over several relay accounts (one lane each): the send takes the
  * first free lane, starting at a random one, so N accounts send N at a time.
- * Returns null when every lane stayed busy for `waitMs`.
+ * Returns null when every lane stayed busy for `waitMs`. Throws LockStoreDown,
+ * before anything is sent, when a lane's lock can't be kept in Redis.
  */
 export async function inSendLanes<T>(
   lanes: { id: string; chainNonce: () => Promise<number> }[],
