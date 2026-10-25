@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { formatUnits, type Address } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -57,6 +58,7 @@ import type { GloamNetwork } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
 import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
+import { ADD_FIRST, vaultActionSearch } from "@/lib/vaultHub";
 
 const limitAbi = [
   {
@@ -492,7 +494,9 @@ export function VaultSwapView() {
         ),
         ready: false,
       }
-    : !amountInput.trim()
+    : !notes.length
+      ? { key: "addfirst", label: ADD_FIRST, ready: false }
+      : !amountInput.trim()
       ? { key: "empty", label: "Enter an amount", ready: false }
       : amountBad
         ? { key: "bad", label: amountTextError(amountInput, payAsset ? assetDecimals(payAsset) : undefined) ?? "Enter a valid amount", ready: false }
@@ -526,9 +530,14 @@ export function VaultSwapView() {
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="gl-card min-w-0 p-5 sm:p-7">
-        <div className="flex items-center justify-between gap-3 px-1 pb-5">
-          <p className="t-title text-foreground">Swap</p>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 py-1 text-[12px] font-medium text-sealed">
+        <div className="flex items-start justify-between gap-3 px-1 pb-5">
+          <div className="min-w-0">
+            <h2 className="t-title text-foreground">Swap</h2>
+            <p className="mt-1 text-[14px] leading-relaxed text-mute">
+              Who swapped stays private. The tokens and amounts show, like any trade.
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 py-1 text-[12px] font-medium text-sealed">
             <LockIcon />
             Private
           </span>
@@ -592,7 +601,7 @@ export function VaultSwapView() {
                       type="button"
                       disabled={busy || !held}
                       onClick={() => setShare(p)}
-                      className="gl-chip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15"
+                      className="gl-chip min-h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15"
                     >
                       {p === 100 ? "Max" : `${p}%`}
                     </button>
@@ -733,7 +742,14 @@ export function VaultSwapView() {
               <div className="gl-settle mt-4 space-y-2.5 px-1 text-[12.5px] leading-[1.6]">
                 {!notes.length && addable.length > 0 && (
                   <p className="text-mute">
-                    You can check prices now. To swap, add {listOr(addable.map(assetLabel))} to your private balance first, in Add.
+                    You can check prices now. To swap, add {listOr(addable.map(assetLabel))} to your private balance
+                    first.{" "}
+                    <Link
+                      href={`/app/vault${vaultActionSearch("shield", "")}`}
+                      className="inline-flex min-h-10 items-center font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                    >
+                      Add privately
+                    </Link>
                   </p>
                 )}
                 {priceError && <p className="text-warn">{priceError}</p>}
