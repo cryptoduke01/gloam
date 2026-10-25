@@ -51,25 +51,24 @@ Gas measured in the fork rehearsal, priced at Sepolia's gas on 25 October 2026
 
 | What | Gas | Cost at 3 x 0.001 gwei |
 | --- | --- | --- |
-| PoseidonT3 (1 tx) | 2,157,126 | see below |
+| PoseidonT3 (1 tx) | 2,157,126 | 0.0000065 ETH |
 | Vault, verifiers and setup (18 txs) | 6,566,234 | 0.0000197 ETH |
 | Memo board (1 tx) | 152,323 | 0.0000005 ETH |
 | acceptOwnership (owner) | 28,358 | under 0.0000001 ETH |
 | A relayed private send plus its message | 1,957,549 | 0.0000059 ETH |
 | A relayed cash out | about 1,090,000 | 0.0000033 ETH |
 
-`deploy-poseidon.mjs` uses ethers v5, which tips a fixed 1.5 gwei whatever the
-network asks, so PoseidonT3 alone costs 2,157,126 x 1.5 gwei = 0.0032 ETH. If your
-copy of the script reads `PRIORITY_FEE_GWEI` (the Ethereum mainnet change adds it),
-set `PRIORITY_FEE_GWEI=0.002` in step 3 and it costs almost nothing.
+The whole deploy is 8,875,683 gas: 0.000027 ETH at three times today's price. Step 3
+sets `PRIORITY_FEE_GWEI=0.002`; without it ethers v5 tips a fixed 1.5 gwei and
+PoseidonT3 alone costs 0.0032 ETH, which the deployer's funding still covers.
 
 | Wallet | Send it |
 | --- | --- |
-| Deployer `0x891E…F411` | **0.01 ETH** (PoseidonT3's 0.0032 three times over, the rest is dust) |
+| Deployer `0x891E…F411` | **0.005 ETH** (the deploy needs 0.000027 at 3x; this also covers gas 100 times higher, or PoseidonT3 at ethers' default tip) |
 | Relayer `0xb1E9…512e` | **0.003 ETH** (about 500 relayed sends at the buffered price) |
 | Owner `0x76b7…D4D8` keeps | **0.001 ETH** (accepting ownership, whatever fee the wallet picks) |
 
-So the owner wallet needs about **0.015 Sepolia ETH** in total before step 1.
+So the owner wallet needs about **0.01 Sepolia ETH** in total before step 1.
 
 ## Step 0: Sepolia ETH into the owner wallet
 
@@ -88,7 +87,7 @@ and USDG from faucet.paxos.com, each on Ethereum Sepolia.
 ## Step 1: fund the deployer and the relayer
 
 Open `http://127.0.0.1:4730/fund-sepolia` in the browser with the owner wallet. It
-shows the three balances, sends 0.01 to the deployer and 0.003 to the relayer (one
+shows the three balances, sends 0.005 to the deployer and 0.003 to the relayer (one
 wallet prompt each) and waits for both to land.
 
 ## Step 2: settings
@@ -100,12 +99,12 @@ source ethereum-sepolia-env.sh
 
 It reads the deployer key hidden (no file, no shell history), then prints the chain
 (must be 11155111), the deployer address (must be `0x891E…F411`), its nonce (must be 0)
-and its balance (0.01). The deploy scripts also refuse a key that is not `DEPLOYER`'s.
+and its balance (0.005). The deploy scripts also refuse a key that is not `DEPLOYER`'s.
 
 ## Step 3: PoseidonT3
 
 ```bash
-POSEIDON_T3_ONLY=1 node circuits/scripts/deploy-poseidon.mjs
+POSEIDON_T3_ONLY=1 PRIORITY_FEE_GWEI=0.002 node circuits/scripts/deploy-poseidon.mjs
 export POSEIDON2=0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4   # or the address it printed
 cast code $POSEIDON2 --rpc-url $RPC_URL | cast keccak
 # must print 0x354b26999e434f8256d168395315e1f51fc15bf49bf2e6bb58fc549bd597e7da
