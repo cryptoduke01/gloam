@@ -201,13 +201,20 @@ export default function PartnersPage() {
       <main>
         {/* hero */}
         <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
-          <div className="gl-panel flex min-h-[560px] flex-col justify-end px-5 pb-8 pt-24 sm:px-12 sm:pb-12 lg:min-h-[640px]">
+          {/* The promise runs the full width in two lines; the how and the
+              statement it earns sit under it, side by side. */}
+          <div className="gl-panel flex min-h-[560px] flex-col justify-end gap-10 px-5 pb-8 pt-24 sm:px-12 sm:pb-12 lg:min-h-[640px] lg:gap-14">
             <FlowField />
-            <div className="grid grid-cols-1 items-end gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
-              <div className="max-w-[720px]">
-                <p className="t-label">Partner program</p>
-                <h1 className="t-display-xl mt-5">Add privacy to your app. Earn on every payment.</h1>
-                <p className="mt-6 max-w-[50ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
+            <div className="relative">
+              <p className="text-[15px] text-mute">Partner program</p>
+              <h1 className="t-display-xl mt-4">
+                <span className="sm:block">Add privacy to your app.</span>{" "}
+                <span className="text-soft sm:block">Earn on every payment.</span>
+              </h1>
+            </div>
+            <div className="relative grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-14">
+              <div className="max-w-[520px]">
+                <p className="text-[16px] leading-relaxed text-soft sm:text-[17px]">
                   Give your users private payments with one API key. You set your
                   own fee, and every payment your app brings in is counted to you
                   as it happens.
@@ -216,16 +223,13 @@ export default function PartnersPage() {
                   <Link href="/partners/dashboard" className="btn btn-ink btn-lg">
                     Sign in with your wallet
                   </Link>
-                  <Link
-                    href="/docs/partners"
-                    className="gl-arrowlink"
-                  >
+                  <Link href="/docs/partners" className="gl-arrowlink">
                     Read the API docs <span aria-hidden>→</span>
                   </Link>
                 </div>
               </div>
 
-              <div className="gl-glass w-full p-2 lg:max-w-[440px] lg:justify-self-end">
+              <div className="gl-glass w-full p-2">
                 <Statement />
               </div>
             </div>
@@ -264,7 +268,7 @@ export default function PartnersPage() {
             <div className="relative mx-auto max-w-[1120px]">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <div className="max-w-[640px]">
-                  <p className="t-label">Your fee</p>
+                  <p className="text-[14px] text-mute">Your fee</p>
                   <h2 className="t-display-l mt-4">What you can charge, and why</h2>
                   <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-mute">
                     Fees follow what the chain can see. You are paid in the same
@@ -360,7 +364,7 @@ export default function PartnersPage() {
           <div className="theme-dark gl-panel grid grid-cols-1 gap-12 border border-line bg-background px-5 py-14 text-foreground sm:px-12 sm:py-20 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
             <SealedField tone="soft" />
             <div className="relative">
-              <p className="t-label">The API</p>
+              <p className="text-[14px] text-mute">The API</p>
               <h2 className="t-display-l mt-4 max-w-[14ch]">One call per payment</h2>
               <p className="mt-5 max-w-[46ch] text-[16px] leading-relaxed text-mute">
                 Your users prove their payments in their own browser or agent.
