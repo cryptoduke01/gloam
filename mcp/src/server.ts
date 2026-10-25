@@ -94,7 +94,7 @@ import {
 } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
-import { balances, noteView, openNoteStore, type NoteStore, type StoredNote } from "./noteStore.js";
+import { balances, noteView, openNoteStore, servedPayment, type NoteStore, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
@@ -1755,6 +1755,34 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       });
     };
 
+    const alreadySettled = (handle: string | null) =>
+      text({
+        status: "already_settled",
+        grantAccess: false,
+        final: false,
+        message: `This payment was already settled by this server${handle ? ` (${handle})` : ""}. Do not serve it twice.`,
+      });
+    /**
+     * Grant access from received note `n`, whose sweep is on chain, only if this verify is the one
+     * that marks the payment served (checked and set under the store lock): a payment presented
+     * many times at once is served once, and the others are told it was already settled.
+     */
+    const serveOnce = (n: StoredNote, patch: Partial<Pick<StoredNote, "status" | "createdTx">>, extra: Record<string, unknown>) => {
+      let claim: ReturnType<NoteStore["claimServed"]>;
+      try {
+        claim = notes.claimServed(n.handle, patch);
+      } catch (e) {
+        return text({
+          status: "error",
+          grantAccess: false,
+          final: false,
+          error: `The sweep confirmed, but this server could not record that it served this payment (${errMsg(e)}). Verify again; do not serve until it says settled.`,
+        });
+      }
+      if (!claim.claimed) return alreadySettled(claim.servedBy);
+      return settled(noteView(claim.note), claim.note.createdTx, extra);
+    };
+
     // An earlier sweep of this same payment. Access is granted once: when a sweep confirms, or,
     // when it confirmed later than the verify that sent it, on the next verify.
     const earlier = notes.list().filter((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
@@ -1771,26 +1799,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         }
       }
       if (!landed) return null;
-      const l = landed;
-      const status = l.status === "pending" ? "unspent" : l.status;
-      let received = noteView({ ...l, status, served: true });
-      const noteWarning = tryStore(() => {
-        const r = notes.update(l.handle, { status, served: true });
-        if (r) received = noteView(r);
-      });
-      return settled(received, l.createdTx, { ...(noteWarning ? { noteWarning } : {}), sweptBy: "an earlier sweep of this payment" });
+      return serveOnce(landed, { status: landed.status === "pending" ? "unspent" : landed.status }, { sweptBy: "an earlier sweep of this payment" });
     };
     if (earlier.length) {
-      // A note from before the served flag counts as served once it confirmed.
-      const served = earlier.find((n) => n.served === true || (n.served === undefined && n.status !== "pending"));
-      if (served) {
-        return text({
-          status: "already_settled",
-          grantAccess: false,
-          final: false,
-          message: `This payment was already settled by this server (${served.handle}). Do not serve it twice.`,
-        });
-      }
+      const served = earlier.find(servedPayment);
+      if (served) return alreadySettled(served.handle);
       // The payment's spend is read before the fresh notes: a sweep spends the one and makes the other in one block.
       const spent = await sweepChain(client, net)
         .isSpent(paymentNullifier)
@@ -1899,15 +1912,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         prove: await deps.transferProver(net),
         chain: sweepChain(client, net),
         submit: (intent) =>
-          submit(intent).catch((e: unknown) => {
-            sweepMaybeSent = mayHaveSent(e, Boolean(relay));
-            if (e instanceof WalletSendUnclear) {
-              unclearHash = e.hash;
-              const h = e.hash;
+          submit(intent).then(
+            (h) => {
+              // Noted before the receipt wait, so a verify of the same payment meanwhile serves it with this hash.
               if (held) tryStore(() => notes.update(held!.handle, { createdTx: h }));
+              return h;
+            },
+            (e: unknown) => {
+              sweepMaybeSent = mayHaveSent(e, Boolean(relay));
+              if (e instanceof WalletSendUnclear) {
+                unclearHash = e.hash;
+                const h = e.hash;
+                if (held) tryStore(() => notes.update(held!.handle, { createdTx: h }));
+              }
+              throw e;
             }
-            throw e;
-          }),
+          ),
         // The fresh note's secret is the money: store it before the sweep is sent.
         beforeSubmit: (fresh) => {
           held = notes.add({
@@ -1933,15 +1953,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       });
       const sweepHash = sweep.hash ?? unclearHash;
       if (sweep.status === "swept") {
-        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweepHash, served: true }) : null;
-        const noteWarning = held
-          ? tryStore(() => {
-              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweepHash, served: true });
-              if (r) received = noteView(r);
-            })
-          : undefined;
-        return settled(received, sweepHash, {
-          ...(noteWarning ? { noteWarning } : {}),
+        // Another verify of this payment may have seen this sweep land and served it while this one waited for the receipt.
+        return serveOnce(held!, { status: "unspent", createdTx: sweepHash }, {
           sweptBy: relay ? "gloam-relay" : "server wallet",
           ...(paymentHash ? { paymentSubmittedBy: relay ? "gloam-relay" : "server wallet", paymentHash } : {}),
         });
