@@ -70,9 +70,10 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 <code>chain</code> is <code>&quot;robinhood&quot;</code>,{" "}
-                <code>&quot;tempo&quot;</code> or <code>&quot;base&quot;</code>{" "}
-                (0.3.0). A mainnet <code>GloamNetwork</code>, or <code>null</code>{" "}
-                until its pool is published (Base mainnet: not yet)
+                <code>&quot;tempo&quot;</code>, <code>&quot;base&quot;</code>{" "}
+                (0.3.0) or <code>&quot;ethereum&quot;</code> (0.4.0). A mainnet{" "}
+                <code>GloamNetwork</code>, or <code>null</code> until its pool is
+                published (Base mainnet and Ethereum: not yet)
               </td>
             </tr>
             <tr>
@@ -82,7 +83,8 @@ export default function DocsSdkReferencePage() {
               <td>
                 0.3.0. A chain&apos;s testnet: the Robinhood Chain and Tempo
                 testnets, or Base Sepolia, which runs the mainnet pool and keys
-                with test funds
+                with test funds. Always <code>null</code> for Ethereum, which
+                has no Gloam testnet
               </td>
             </tr>
             <tr>
@@ -183,6 +185,28 @@ export default function DocsSdkReferencePage() {
               <td>
                 0.3.0. Base mainnet and Base Sepolia pool assets, 6 decimals each;
                 native ETH is listed on both (Base mainnet is not deployed yet)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>ETHEREUM_USDC</code>, <code>ETHEREUM_USDT</code>,{" "}
+                <code>ETHEREUM_USDG</code>, <code>ETHEREUM_PYUSD</code>,{" "}
+                <code>ETHEREUM_EURC</code>
+              </td>
+              <td>
+                0.4.0. Ethereum mainnet pool assets, 6 decimals each; native ETH
+                is listed too (not deployed yet)
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>approvalSteps(chainId, token, allowance, amount)</code>
+              </td>
+              <td>
+                0.4.0. The exact <code>approve(pool, value)</code> calls a
+                deposit needs, in order: none when the allowance covers it,{" "}
+                <code>[0, amount]</code> for USDT on Ethereum with an old
+                allowance in the way, else <code>[amount]</code>
               </td>
             </tr>
             <tr>

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { baseSepoliaPool, mainnetPool, type MainnetChainId } from "@/lib/mainnet";
-import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
+import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
+import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
 import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
@@ -31,6 +32,8 @@ function BaseSepoliaPoolAddress() {
 /** Base's pools are in once their addresses are filled in (lib/mainnet.ts). */
 const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
 const BASE_MAINNET_LIVE = mainnetPool(8453) !== null;
+/** Ethereum's pool is in once MAINNET_POOLS[1] is filled in (lib/mainnet.ts). */
+const ETHEREUM_LIVE = mainnetPool(1) !== null;
 
 const MAINNET_POSEIDON_T3 = "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
 const MAINNET_OWNER = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
@@ -496,6 +499,78 @@ export default function DocsNetworksPage() {
           work as on the other chains. Base Sepolia has its payment-message
           board, so a payment can be found by scanning with your Gloam
           address; Base mainnet gets its own when it is deployed.
+        </li>
+      </ul>
+
+      <h2 id="ethereum">Ethereum</h2>
+      <p>
+        Gloam on Ethereum mainnet is the same vault as on the other mainnets:{" "}
+        <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
+        deposit limits and the 0.25% cash-out fee. Ethereum has no Gloam
+        testnet; Base Sepolia runs the same contract and keys, so practise
+        there.{" "}
+        {ETHEREUM_LIVE
+          ? "Ethereum mainnet is live as beta software."
+          : "It is not deployed yet, so the app does not offer it. This section is what to expect."}
+      </p>
+      <ul>
+        <li>
+          <strong>Chain ID</strong>, 1
+        </li>
+        <li>
+          <strong>Explorer</strong>, <code>https://etherscan.io</code>
+        </li>
+        <li>
+          <strong>Pool</strong>, {ETHEREUM_LIVE ? <MainnetPoolAddress chainId={1} /> : <>Not deployed yet</>}
+        </li>
+        <li>
+          <strong>Assets</strong>, {ETHEREUM_MAINNET_TOKENS.map((t) => t.symbol).join(", ")} (6
+          decimals each) and ETH. USDC and EURC are Circle&apos;s, USDT is
+          Tether&apos;s, USDG and PYUSD are issued by Paxos.
+        </li>
+        <li>
+          <strong>Beta limits</strong>, each stablecoin 500 per deposit and
+          25,000 in total; ETH 0.2 per deposit and 10 in total
+        </li>
+      </ul>
+
+      <h3>Integration notes for Ethereum</h3>
+      <ul>
+        <li>
+          <strong>Gas.</strong> A private send costs about 1.9M gas and a cash
+          out about 0.5M to 0.7M; a deposit, which you pay yourself, about 1.3M
+          to 1.5M. The Gloam relay pays for relayed sends and cash outs, so
+          while Ethereum gas is above {DEFAULT_MAX_GAS_GWEI[1]} gwei it waits
+          and says so. A cash out for later still schedules and goes out once
+          gas is back under that. With Hide my wallet off, your wallet sends
+          and pays its own gas.
+        </li>
+        <li>
+          <strong>USDT approvals.</strong> Tether&apos;s token refuses to
+          change one non-zero approval into another, so a deposit after an old
+          approval asks for two: one back to zero, then the exact amount.{" "}
+          <code>approvalSteps</code> in the SDK gives the calls to send.
+        </li>
+        <li>
+          <strong>Log reads.</strong> Most public Ethereum RPCs serve only
+          recent logs or a few blocks a read. Gloam reads Ethereum through MEV
+          Blocker (<code>https://rpc.mevblocker.io</code>), 10,000 blocks a
+          read; use your own RPC if you sync often.
+        </li>
+        <li>
+          <strong>EURC is a euro stablecoin.</strong> The app never counts it as
+          a dollar.
+        </li>
+        <li>
+          <strong>Issuer controls.</strong> Circle, Tether and Paxos can each
+          freeze an address on their tokens. If one froze the vault itself, that
+          asset would be frozen in the vault; other assets keep working.
+        </li>
+        <li>
+          <strong>Not on Ethereum yet.</strong> Private swaps, bringing money
+          over into Ethereum (Ethereum stays a chain you can bring money over
+          from), and the payment-message board: until it is deployed, a payment
+          there goes by claim link or sealed code.
         </li>
       </ul>
 

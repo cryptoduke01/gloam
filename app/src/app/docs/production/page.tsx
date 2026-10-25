@@ -159,6 +159,13 @@ export default function DocsProductionPage() {
           <Link href="/docs/chain#base">Networks</Link>.
         </li>
         <li>
+          <strong>Ethereum mainnet.</strong> Next on the same deploy script and
+          final keys, with no testnet of its own (Base Sepolia runs the same
+          code). The relay pays Ethereum gas only under its ceiling, 3 gwei by
+          default, and waits above it. See{" "}
+          <Link href="/docs/chain#ethereum">Networks</Link>.
+        </li>
+        <li>
           <strong>Stronger key custody.</strong> Notes and receive keys are encrypted at rest, but
           the key is device-bound; a wallet-bound or passphrase key is still open
         </li>
