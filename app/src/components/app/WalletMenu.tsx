@@ -475,14 +475,14 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
             <MenuLink href="/app" onClick={() => setOpen(false)} icon={<GridGlyph />}>
               Portfolio
             </MenuLink>
-            {/* the payments pools (mainnet, Base Sepolia) have no private trade */}
-            {!network.paymentsPool && (
+            {/* Trade: tokenized stocks, where the network has them (the Vault's Trade) */}
+            {network.stocks && (
               <MenuLink
-                href="/app/trade?path=sealed"
+                href="/app/vault?tab=trade"
                 onClick={() => setOpen(false)}
                 icon={<TradeGlyph />}
               >
-                Private trade
+                Trade
               </MenuLink>
             )}
             <MenuLink
