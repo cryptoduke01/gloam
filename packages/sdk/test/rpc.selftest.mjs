@@ -191,6 +191,14 @@ reset();
 await client.request({ method: "eth_sendRawTransaction", params: ["0x02"] });
 assert(asked(fresh, "eth_sendRawTransaction").length === 1 && history.calls.length === 0, "a send never goes to history");
 
+// viem's fallback skips a transport for a method its config excludes: the split
+// keeps the fresh RPC's exclusion (a relay's public backup never gets a raw send)
+const excluded = gloamReadTransport(
+  { rpcUrl: "https://fresh.test", historyRpc: { url: "https://history.test", recentBlocks: 9_000n } },
+  { methods: { exclude: ["eth_sendRawTransaction"] } }
+)({});
+assert(excluded.config.type === "gloamRead" && excluded.config.methods?.exclude?.[0] === "eth_sendRawTransaction", "the split carries the fresh RPC's methods");
+
 // no history: the fresh transport itself
 const same = fakeRpc("fresh", "recent");
 assert(splitReadTransport({ fresh: same.transport, history: null, recentBlocks: 9_000n }) === same.transport, "no history RPC: fresh as is");

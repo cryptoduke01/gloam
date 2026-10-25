@@ -109,7 +109,7 @@ export function readRoute(method: string, params: readonly unknown[] | undefined
  * SDK's), as far as the split needs one.
  */
 export type AnyTransport = (args: any) => {
-  config: { timeout?: number | undefined; retryDelay?: number | undefined };
+  config: { timeout?: number | undefined; retryDelay?: number | undefined; methods?: unknown };
   request: (args: any, options?: any) => Promise<any>;
   value?: Record<string, unknown> | undefined;
 };
@@ -188,13 +188,17 @@ export function splitReadTransport<T extends AnyTransport = Transport>({ fresh, 
 
     // Built by hand, not with createTransport: that would wrap the inner
     // transports' errors in this package's viem classes. Each inner transport
-    // already retries, times out and maps errors.
+    // already retries, times out and maps errors. `methods` is the fresh RPC's
+    // own: viem's fallback reads it to skip a transport for a method it
+    // excludes (a relay's backup never handed a raw send), and the fresh RPC
+    // is where every method that is not a read about old blocks goes.
     return {
       config: {
         key: "gloamRead",
         name: "Gloam read (fresh head, full history)",
         type: "gloamRead",
         request,
+        methods: f.config.methods,
         retryCount: 0,
         retryDelay: f.config.retryDelay,
         timeout: f.config.timeout,
