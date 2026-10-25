@@ -311,7 +311,7 @@ async function receiveTag(): Promise<string> {
   return "gloamr1." + Buffer.from(spki).toString("base64url");
 }
 
-async function sealedMemo(note: string, amountWei = (2n ** 256n - 1n).toString()): Promise<Hex> {
+async function sealedMemo(note: string, amountWei = (2n ** 256n - 1n).toString(), chainId: number | undefined = 11155111): Promise<Hex> {
   const pack = buildNotePackage({
     pool: getAddress(POOL),
     asset: getAddress("0x20c0000000000000000000000000000000000001"),
@@ -319,6 +319,8 @@ async function sealedMemo(note: string, amountWei = (2n ** 256n - 1n).toString()
     secret: ("0x" + "f".repeat(64)) as Hex,
     commitment: ("0x" + "e".repeat(64)) as Hex,
     note,
+    // every new code names its chain; the longest id Gloam knows has 8 digits
+    chainId,
   });
   return ticketToMemoBytes(await encryptTicketForTag(encodeNotePackage(pack), await receiveTag()));
 }
@@ -331,33 +333,37 @@ await test("memo cap is 2048 bytes, under the board's 8192", () => {
   assert.equal(PAY_MEMO_MAX_BYTES, 8192);
 });
 
-await test("the largest real sealed ticket is 1714 bytes and fits", async () => {
+await test("the largest real sealed ticket is 1739 bytes and fits", async () => {
   // 80 lone surrogates: each one JSON-escapes to \uXXXX, 6 bytes, the most any character costs.
   const worst = await sealedMemo("\uD800".repeat(80));
-  assert.equal(bytesOf(worst), 1714);
+  assert.equal(bytesOf(worst), 1739);
+  // an older code with no chain pads up to the same size
+  assert.equal(bytesOf(await sealedMemo("\uD800".repeat(80), undefined, undefined)), 1739);
   assert.equal(asMemo(worst), worst);
   // 80 emoji (4 bytes each), a note made of real characters: padded to the 1024-byte step.
   const emoji = await sealedMemo("\u{1F600}".repeat(80));
   assert.equal(bytesOf(emoji), 1535);
   assert.equal(asMemo(emoji), emoji);
-  // No note at all: padded to the 512-byte step.
-  assert.equal(bytesOf(await sealedMemo("")), 852);
+  // No note at all: padded to the 512-byte step (any amount a note can hold, below 2^128).
+  assert.equal(bytesOf(await sealedMemo("", ((1n << 128n) - 1n).toString())), 852);
   // A longer note is cut to 80 characters before it is sealed.
-  assert.equal(bytesOf(await sealedMemo("\uD800".repeat(500))), 1714);
+  assert.equal(bytesOf(await sealedMemo("\uD800".repeat(500))), 1739);
 });
 
 await test("sealed messages come in three sizes, whatever the amount and note (L-2)", async () => {
-  // every amount from 1 base unit to 2^256 - 1, no note: one size
-  const amounts = ["1", "10000", "1000000", "100000000", "10000000000000", (2n ** 128n).toString(), (2n ** 256n - 1n).toString()];
+  // every amount a note can hold, 1 base unit to 2^128 - 1, no note: one size
+  const amounts = ["1", "10000", "1000000", "100000000", "10000000000000", ((1n << 128n) - 1n).toString()];
   const noNote = new Set<number>();
   for (const w of amounts) noNote.add(bytesOf(await sealedMemo("", w)));
   assert.deepEqual([...noNote], [852]);
+  // an amount no note can hold (2^256 - 1, refused when opened) still seals under the cap
+  assert.ok(bytesOf(await sealedMemo("", (2n ** 256n - 1n).toString())) <= 1739);
   // any note: one of three sizes, and never past the largest a ticket was before
   const sizes = new Set<number>();
   for (const note of ["a", "rent", "x".repeat(20), "x".repeat(40), "x".repeat(80), "\u{1F600}".repeat(40), "\uD800".repeat(80)]) {
     for (const w of ["1", "100000000", (2n ** 256n - 1n).toString()]) sizes.add(bytesOf(await sealedMemo(note, w)));
   }
-  assert.ok([...sizes].every((n) => n === 852 || n === 1535 || n === 1714), `sizes ${[...sizes].join(", ")}`);
+  assert.ok([...sizes].every((n) => n === 852 || n === 1535 || n === 1739), `sizes ${[...sizes].join(", ")}`);
 });
 
 await test("2048 bytes pass, 2049 and 8192 are refused as too large", () => {
