@@ -32,7 +32,7 @@ import shieldVkey from "../../public/circuits/shield_vkey.json";
 import fundsVkeyFinal from "../../public/circuits/final/funds_vkey.json";
 import receiptVkeyFinal from "../../public/circuits/final/receipt_vkey.json";
 import payrollVkeyFinal from "../../public/circuits/final/payroll_total_vkey.json";
-import { ceremonyForChain } from "@/lib/networks";
+import { ceremonyForChain, networkName } from "@/lib/networks";
 
 /** Checking keys by key set: a proof is checked with its own network's (dev on testnet, final on mainnet). */
 const VKEYS = {
@@ -79,7 +79,20 @@ export type ApiVerifyResult = {
   paidBetween: [number, number] | null;
   /** The proof's plain fields, as the holder shared them. */
   claims: Record<string, unknown>;
+  /**
+   * The network the proof names, when Gloam runs on it; null otherwise.
+   * `testnet` is true for a proof made with test funds: Base Sepolia uses the
+   * mainnet keys, so its proofs pass every check, and only this tells them apart.
+   */
+  network: ProofNetwork | null;
 };
+
+export type ProofNetwork = { chainId: number; key: string; name: string; testnet: boolean };
+
+function proofNetwork(chainId: unknown): ProofNetwork | null {
+  const net = networkForChain(Number(chainId));
+  return net ? { chainId: net.chainId, key: net.key, name: networkName(net), testnet: net.testnet } : null;
+}
 
 type Snarkjs = typeof import("snarkjs") & {
   curves?: { getCurveFromName(name: string, opts?: { singleThread?: boolean }): Promise<unknown> };
@@ -135,7 +148,7 @@ async function verifyPayrollServer(p: Extract<AnyProof, { kind: "payroll" }>): P
   const blockTimes = new Map<bigint, Promise<number>>();
   return checkPayrollProof(p, {
     verifySnark: (part) => groth16Verify(VKEYS[ceremonyForChain(p.chainId)].payroll, part.publicSignals, part.proof),
-    vault: official && net ? { label: net.label } : null,
+    vault: official && net ? { label: networkName(net) } : null,
     findPayment: (x) => findPayrollPayment(client!, net!, net!.pool!, x, blockTimes),
     now: Math.floor(Date.now() / 1000),
     when,
@@ -172,7 +185,7 @@ async function verifyDisclosureServer(text: string): Promise<ApiVerifyResult> {
   const net = networkForChain(Number(d.chainId));
   const official = Boolean(net?.pool && typeof d.pool === "string" && net.pool.toLowerCase() === d.pool.toLowerCase());
   checks.push({
-    label: official ? `Made on Gloam's vault on ${net!.label}` : "Made on Gloam's vault",
+    label: official ? `Made on Gloam's vault on ${networkName(net!)}` : "Made on Gloam's vault",
     state: official ? "pass" : "fail",
     detail: official ? undefined : "The vault address is not Gloam's current vault, so its balance cannot be trusted.",
   });
@@ -186,6 +199,7 @@ async function verifyDisclosureServer(text: string): Promise<ApiVerifyResult> {
     paidAt: null,
     paidBetween: null,
     claims: { chainId: d.chainId, pool: d.pool, asset: d.asset, amount: d.amount, commitment: d.commitment },
+    network: proofNetwork(d.chainId),
   };
 }
 
@@ -214,5 +228,6 @@ export async function verifyProofText(raw: unknown): Promise<ApiVerifyResult> {
     paidAt: r.paidAt ?? null,
     paidBetween: r.paidBetween ?? null,
     claims: claimsOf(p),
+    network: proofNetwork(p.chainId),
   };
 }

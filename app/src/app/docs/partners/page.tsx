@@ -336,7 +336,9 @@ curl https://gloam.trade/api/v1/relay \\
         <Link href="/verify">/verify</Link> page runs: the zero-knowledge proof, who
         it was made for, that it points at Gloam&apos;s own vault, that its plain
         fields match, and the live chain checks. <code>ok</code> is true only when
-        every check passes and the proof has not expired.
+        every check passes and the proof has not expired. <code>network</code> names
+        the chain the proof was made on; check <code>network.testnet</code> before
+        you rely on it, since a testnet proof passes every check with test funds.
       </p>
       <pre>
         <code>{`curl https://gloam.trade/api/v1/proofs/verify \\
@@ -347,7 +349,8 @@ curl https://gloam.trade/api/v1/relay \\
 # data: { "format": "gloamfunds1", "kind": "funds", "ok": true, "expired": false,
 #   "checks": [ { "label": "The proof checks out", "state": "pass", ... },
 #               { "label": "Made for \\"Acme Bank\\"", "state": "pass", ... }, ... ],
-#   "claims": { "chainId": 4663, "asset": "0x5fc5...", "threshold": "1000000000", ... } }`}</code>
+#   "claims": { "chainId": 4663, "asset": "0x5fc5...", "threshold": "1000000000", ... },
+#   "network": { "chainId": 4663, "key": "robinhood-mainnet", "name": "Robinhood Chain", "testnet": false } }`}</code>
       </pre>
 
       <h2>Payment request links</h2>

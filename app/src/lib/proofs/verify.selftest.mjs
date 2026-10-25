@@ -164,6 +164,7 @@ writeFileSync(join(tmp, "server-rpc-stub.mjs"), `export const serverTransport = 
 writeFileSync(join(tmp, "networks-stub.mjs"),
   `export const NETWORK_KEYS = ["tempo"];\n` +
   `export const ceremonyForChain = () => "dev";\n` +
+  `export const networkName = (n) => (n.testnet ? n.label + " testnet" : n.label);\n` +
   `export const getNetwork = () => ({ key: "tempo", label: "Tempo", chainId: ${CHAIN}, pool: "${POOL}", deployBlock: ${DEPLOY}n, logRange: 100000n, chain: { rpcUrls: { default: { http: ["memory://"] } } } });\n`);
 writeFileSync(join(tmp, "demo-stub.mjs"), `export const isDemoProof = () => false;\nexport const demoHolderChecks = async () => ({ paidAt: 0 });\n`);
 writeFileSync(join(tmp, "artifacts-stub.mjs"),

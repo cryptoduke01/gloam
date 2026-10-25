@@ -97,6 +97,8 @@ export interface ApiProofReport {
   paidAt: number | null;
   paidBetween: [number, number] | null;
   claims: Record<string, unknown>;
+  /** The network the proof names, when Gloam runs on it. `testnet: true` means test funds, never mainnet. */
+  network?: { chainId: number; key: string; name: string; testnet: boolean } | null;
 }
 
 export interface ApiPaymentRequest {

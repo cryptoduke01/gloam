@@ -223,7 +223,7 @@ export const TOOLS: Tool[] = [
     name: "gloam_verify_proof",
     title: "Verify a Gloam proof",
     description:
-      "Check a Gloam proof someone shared with you: proof of funds (gloamfunds1:), proof of payment (gloampay1:), payroll total (gloamroll1:) or exact balance (gloambal1:). Runs the same checks as gloam.trade/verify on the server: the zero-knowledge proof, that it was made on Gloam's vault, who it is for, expiry, and the live vault state. A proof of payment shows a private payment was made, not who paid whom; a payroll total shows a run of payments the prover funded, not who was paid. The older gloamdisc1 balance disclosure is never verified: anyone can copy one from a public deposit. Proofs are meant to be shared; they hold no secrets.",
+      "Check a Gloam proof someone shared with you: proof of funds (gloamfunds1:), proof of payment (gloampay1:), payroll total (gloamroll1:) or exact balance (gloambal1:). Runs the same checks as gloam.trade/verify on the server: the zero-knowledge proof, that it was made on Gloam's vault, who it is for, expiry, and the live vault state. The result names the network: `network.testnet` true means the proof was made with test funds, not on mainnet. A proof of payment shows a private payment was made, not who paid whom; a payroll total shows a run of payments the prover funded, not who was paid. The older gloamdisc1 balance disclosure is never verified: anyone can copy one from a public deposit. Proofs are meant to be shared; they hold no secrets.",
     inputSchema: {
       type: "object",
       properties: { proof: { type: "string", description: "The full proof text, starting gloamfunds1:, gloampay1:, gloamroll1:, gloambal1: or gloamdisc1:." } },
@@ -469,6 +469,7 @@ function paymentRequest(args: Args, ctx: ToolContext): CallToolResult {
 
 function verdict(r: ApiVerifyResult): string {
   if (r.format === "gloamdisc1") return `Not verified. ${LEGACY_DISCLOSURE}`;
+  if (r.ok && r.network?.testnet) return `Valid, on a testnet: every check passed, but it was made on ${r.network.name} with test funds, not on mainnet.`;
   if (r.ok) return "Valid. Every check passed.";
   if (r.expired) return "Expired. The proof may have been valid, but its holder set an expiry that has passed. Ask for a new one.";
   const failed = r.checks.filter((c) => c.state === "fail").map((c) => c.label);
@@ -500,6 +501,7 @@ async function verifyProof(args: Args, ctx: ToolContext): Promise<CallToolResult
     paidAt: r.paidAt ? new Date(r.paidAt * 1000).toISOString() : null,
     paidBetween: r.paidBetween ? r.paidBetween.map((t) => new Date(t * 1000).toISOString()) : null,
     claims: r.claims,
+    network: r.network,
     checkInBrowser: `${ctx.origin}/verify`,
   });
 }
