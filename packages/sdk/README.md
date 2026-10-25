@@ -133,6 +133,8 @@ Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defi
 | --- | --- | --- | --- | --- |
 | Ethereum Sepolia | `ethereum` | `11155111` | Test USDC and EURC (Circle), test USDG and PYUSD (Paxos), 500 / 25,000 each; ETH (0.2 / 10) | Final |
 
+- **RPC.** `ETHEREUM_SEPOLIA_CHAIN` reads through publicnode, which is at the chain head but keeps only about the last 10,000 blocks of logs, receipts and state. Older reads go to Tenderly's public gateway (`ETHEREUM_SEPOLIA_HISTORY_RPC`, the network's `historyRpc`), which keeps everything but can trail the head by a minute or two. `gloamReadTransport(network)` splits reads that way for you: build the public client you sync the tree and wait for receipts with on it.
+
 0.4.0 knows Ethereum Sepolia, a testnet on the mainnet pool and final keys like Base Sepolia. Its pool is not deployed yet, so `testnetNetwork("ethereum")` returns `null` and the builders refuse chain id `11155111` until a release has `ETHEREUM_SEPOLIA_POOL` filled in. Its proofs always use the final keys (`ceremonyForChainId(11155111)`).
 
 ## Quickstart: shield your first note
@@ -146,6 +148,7 @@ import {
   artifactProver,
   circuitArtifactUrls,
   TEMPO_USDCE,
+  gloamReadTransport,
 } from "@gloamtrade/sdk";
 import { createWalletClient, createPublicClient, http, erc20Abi, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -155,7 +158,8 @@ if (!net) throw new Error("This SDK version has no Tempo mainnet pool yet.");
 
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: net.chain, transport: http(net.rpcUrl) });
-const publicClient = createPublicClient({ chain: net.chain, transport: http(net.rpcUrl) });
+// Reads at the chain head, and old logs from a full-history RPC where the network names one (net.historyRpc).
+const publicClient = createPublicClient({ chain: net.chain, transport: gloamReadTransport(net) });
 const amount = parseUnits("25", 6);           // 25 USDC.e; the beta limit is 500 per deposit
 
 // 1. Mint the note and generate the shield proof with the mainnet (final) keys.
