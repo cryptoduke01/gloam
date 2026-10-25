@@ -1372,6 +1372,7 @@ export function MoveView() {
         secret: w.paymentNote.secret,
         commitment: w.paymentNote.commitment,
         note: payNote,
+        chainId: network.chainId,
       });
       setSentNote(pack.note ?? null);
       payTrack.current = { chainId: network.chainId, request: Boolean(request), note: Boolean(pack.note) };

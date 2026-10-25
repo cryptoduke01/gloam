@@ -936,6 +936,7 @@ async function payRow(
           secret: w.paymentNote.secret,
           commitment: w.paymentNote.commitment,
           note: row.note,
+          chainId: batch.chainId,
         });
         const plain = encodeNotePackage(pack);
         const ticket = row.kind === "gloam" ? await encryptTicketForTag(plain, row.recipient) : plain;
