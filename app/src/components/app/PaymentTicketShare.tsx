@@ -107,7 +107,7 @@ export function PaymentTicketShare({
       await navigator.share({
         title: "Gloam payment",
         text: code.startsWith("gloamr1.")
-          ? `My Gloam address. Paste it in Gloam under Pay to send me money privately.\n\n${code}`
+          ? `My Gloam address. Paste it in Gloam under Pay privately to send me money.\n\n${code}`
           : locked
           ? `I sent you a private payment on Gloam${amountLabel ? ` (${amountLabel})` : ""}. It's locked: I'll send you the phrase separately. Tap to claim it:\n\n${link ?? code}`
           : `I sent you a private payment on Gloam${amountLabel ? ` (${amountLabel})` : ""}. Tap to claim it:\n\n${link ?? code}`,
