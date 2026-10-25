@@ -9,11 +9,12 @@ import { CopyCommand } from "@/components/CopyCommand";
 import { CodeTabs, type CodeTab } from "./SdkClient";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
+import { liveMainnetNames } from "@/lib/mainnet";
 
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloamtrade/sdk: private balances, private payments and proofs for any app or agent on Robinhood Chain and Tempo. Plus an MCP server so AI agents can pay over x402 without showing their treasury.",
+    `@gloamtrade/sdk: private balances, private payments and proofs for any app or agent on ${liveMainnetNames()}. Plus an MCP server so AI agents can pay over x402 without showing their treasury.`,
 };
 
 const GITHUB = "https://github.com/cryptoduke01/gloam";
@@ -106,8 +107,8 @@ const SURFACE = [
   },
   {
     icon: <IconChains />,
-    title: "Two chains, one core",
-    body: "The same circuits and the same calls on Robinhood Chain and Tempo, mainnet and testnet. Pick a network, keep the code.",
+    title: "One core on each chain",
+    body: `The same circuits and the same calls on ${liveMainnetNames()}, mainnet and testnet. Pick a network, keep the code.`,
     fn: "gloamNetworks",
   },
 ];
@@ -334,7 +335,7 @@ export default function SdkPage() {
                 <h1 className="t-display-xl mt-5">Private payments, as a package</h1>
                 <p className="mt-6 max-w-[50ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
                   One import gives your app or agent private balances, private
-                  payments and proofs on Robinhood Chain and Tempo. Real proofs,
+                  payments and proofs on {liveMainnetNames()}. Real proofs,
                   checked on-chain, with no proving stack to build.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -568,11 +569,11 @@ export default function SdkPage() {
               {[
                 {
                   title: "Mainnet, in beta",
-                  body: "Live on Robinhood Chain and Tempo mainnet, under beta deposit limits. The testnets stay open.",
+                  body: `Live on ${liveMainnetNames()} mainnet, under beta deposit limits. The testnets stay open.`,
                 },
                 {
                   title: "Keys",
-                  body: "Mainnet proofs use the final keys from the 13-contributor ceremony; testnet proofs use development keys. Reviewed internally before launch; an external audit is planned.",
+                  body: "Mainnet, Base Sepolia and Ethereum Sepolia proofs use the final keys from the 13-contributor ceremony; the Robinhood Chain and Tempo testnets use development keys. Reviewed internally before launch; an external audit is planned.",
                 },
                 {
                   title: "Nothing faked",

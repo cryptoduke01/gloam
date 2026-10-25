@@ -4,7 +4,7 @@ import { TransparencyView } from "@/components/transparency/TransparencyView";
 export const metadata: Metadata = {
   title: "Transparency",
   description:
-    "What anyone can see about Gloam, read live from Robinhood Chain and Tempo: the money held in the vault, how many private deposits, transfers and cash-outs there have been, and what stays private.",
+    "What anyone can see about Gloam, read live from every network Gloam runs on: the money held in the vault, how many private deposits, transfers and cash-outs there have been, and what stays private.",
   alternates: { canonical: "/transparency" },
 };
 

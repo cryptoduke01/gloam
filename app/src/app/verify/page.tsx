@@ -28,6 +28,7 @@ import { NETWORK_KEYS, getNetwork, type ChainFamily, type GloamNetwork, type Net
 import { track } from "@/lib/track";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { useMainnetLive } from "@/components/MainnetCountdown";
+import { liveMainnetNames } from "@/lib/mainnet";
 import { swapRouterFor, vaultSwapRouter } from "@/lib/vaultSwap";
 
 type Result =
@@ -180,7 +181,7 @@ const NETWORK_LINES: Record<NetworkKey, string> = {
   "ethereum-mainnet": "Ethereum mainnet",
 };
 
-/** Every network Gloam runs on: each mainnet once its pool is in, then the two testnets. */
+/** Every network Gloam runs on: each mainnet once its pool is in, then the testnets. */
 const CHAINS: { key: NetworkKey; logo: string; testnet: string }[] = NETWORK_KEYS.map((key) => ({
   key,
   logo: CHAIN_LOGOS[getNetwork(key).family],
@@ -615,9 +616,9 @@ export default function VerifyPage() {
                   <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-mute">
                     {live ? (
                       <>
-                        Gloam runs on Robinhood Chain and Tempo, on mainnet and on
-                        testnet. The mainnet vaults hold payments, and private swaps
-                        run through a separate router on each mainnet. Every address
+                        Gloam runs on {liveMainnetNames()} mainnet, and on the
+                        testnets. The mainnet vaults hold payments, and private swaps
+                        run through a separate router on Robinhood Chain and Tempo. Every address
                         links to the public explorer, and the source behind each one
                         is on GitHub.
                       </>
@@ -657,8 +658,9 @@ export default function VerifyPage() {
                 {live ? (
                   <>
                     Mainnet proofs use the final keys from the trusted setup, which
-                    closed on 17 October with 13 contributors. The testnet keeps
-                    development keys. Gloam was reviewed internally
+                    closed on 17 October with 13 contributors, and Base Sepolia and
+                    Ethereum Sepolia use them too. The Robinhood Chain and Tempo
+                    testnets keep development keys. Gloam was reviewed internally
                     before launch, and an external audit is planned. It is beta
                     software.
                   </>

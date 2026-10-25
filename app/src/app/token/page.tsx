@@ -182,7 +182,7 @@ const LIVE_PHASES: Phase[] = [
     items: [
       `Gloam live on ${liveMainnetNames()} mainnet`,
       ...(RH_MAINNET ? ["Shield $GLOAM in the Robinhood Chain pool: 25,000 per deposit, 250,000 in total during beta"] : []),
-      "Fees on: deposits and payments free, 0.25% on cash-outs, and half of Gloam's fees buy back $GLOAM",
+      "Fees on: deposits and payments free, 0.25% on cash-outs, and half of Gloam's fees set to buy back $GLOAM",
     ],
   },
   {

@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="October 23, 2026">
+    <LegalLayout title="Privacy Policy" updated="October 26, 2026">
       <p>
         This Privacy Policy describes what information Gloam (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;) handles when you use gloam.trade, the Gloam app, the
@@ -355,9 +355,9 @@ export default function PrivacyPage() {
         <li>Telegram: runs the group and delivers its messages to Glim.</li>
         <li>Chainalysis: sanctions checks, when we turn them on.</li>
         <li>
-          The Tempo and Robinhood Chain RPC nodes and explorers, on mainnet and
-          testnet, and Tempo&apos;s fee sponsor when you use Tempo Wallet on
-          the testnet.
+          The RPC nodes and explorers of each network Gloam runs on, on
+          Robinhood Chain, Tempo, Base and Ethereum, and Tempo&apos;s fee
+          sponsor when you use Tempo Wallet on the testnet.
         </li>
         <li>
           WalletConnect (Reown), only when you choose Use a wallet app: its

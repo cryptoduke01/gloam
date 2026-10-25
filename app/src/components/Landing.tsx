@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
 import { MainnetCopy } from "@/components/MainnetCountdown";
+import { liveMainnetNames } from "@/lib/mainnet";
 import { CursorReveal } from "@/components/ui/CursorReveal";
 import { SealStream } from "@/components/landing/SealStream";
 import { PayrollLive } from "@/components/landing/PayrollLive";
@@ -146,7 +147,7 @@ const WHAT = [
     title: "Open vault contracts",
     body: (
       <MainnetCopy
-        live="Private balances on Robinhood Chain and Tempo mainnet, with a free testnet to practice on. Settlement stays public, the amounts and the people stay private."
+        live={`Private balances on ${liveMainnetNames()} mainnet, with a free testnet to practice on. Settlement stays public, the amounts and the people stay private.`}
         before="Private balances on Tempo and Robinhood Chain testnet. Settlement stays public, the amounts and the people stay private."
       />
     ),
