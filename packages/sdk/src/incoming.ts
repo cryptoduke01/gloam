@@ -21,6 +21,7 @@ import type { Address, Hex, PublicClient } from "viem";
 import {
   BASE_SEPOLIA_CHAIN_ID,
   BASE_SEPOLIA_PAY_MEMO,
+  ETHEREUM_SEPOLIA_CHAIN_ID,
   GLOAM_PAY_MEMO,
   RH_MAINNET_CHAIN_ID,
   RH_TESTNET_CHAIN_ID,
@@ -41,6 +42,7 @@ import {
   type ReceiveKeyJwk,
 } from "./receiveTag.js";
 import { POOL_STATE_ABI } from "./sweep.js";
+import { ethereumSepoliaPayMemo } from "./mainnet.js";
 
 /** A payment-message board: where payers post sealed payments for their payees to find. */
 export interface PayMemoBoard {
@@ -53,8 +55,9 @@ export interface PayMemoBoard {
 
 /**
  * The boards Gloam runs, by chain id: Robinhood Chain and Tempo, testnet and
- * mainnet, and Base Sepolia. Base mainnet and Ethereum have none yet. On a chain
- * with no board, payments to a Gloam address are handed over as a sealed code
+ * mainnet, Base Sepolia, and Ethereum Sepolia once its board is filled in.
+ * Base mainnet and Ethereum mainnet have none yet. On a chain with no
+ * board, payments to a Gloam address are handed over as a sealed code
  * (openIncomingPayment).
  */
 export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
@@ -63,7 +66,14 @@ export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
   [BASE_SEPOLIA_CHAIN_ID]: { address: BASE_SEPOLIA_PAY_MEMO, deployBlock: 49_804_175n, emitsPoster: false },
   [RH_MAINNET_CHAIN_ID]: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 95_494_392n, emitsPoster: false },
   [TEMPO_MAINNET_CHAIN_ID]: { address: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", deployBlock: 45_417_629n, emitsPoster: false },
+  // Ethereum Sepolia's, once it is filled in next to its pool (ETHEREUM_SEPOLIA_POOL in mainnet.ts).
+  [ETHEREUM_SEPOLIA_CHAIN_ID]: ethereumSepoliaBoard(),
 };
+
+function ethereumSepoliaBoard(): PayMemoBoard | null {
+  const m = ethereumSepoliaPayMemo();
+  return m ? { address: m.address, deployBlock: m.deployBlock, emitsPoster: false } : null;
+}
 
 /** The payment-message board on a chain, or null where there is none. */
 export function payMemoBoardFor(chainId: number): PayMemoBoard | null {
