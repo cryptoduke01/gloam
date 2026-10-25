@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Script, console2} from "forge-std/Script.sol";
+import {console2} from "forge-std/Script.sol";
+import {DeployerBroadcast} from "./DeployerBroadcast.sol";
 import {ShieldPoolPayments} from "../src/ShieldPoolPayments.sol";
 import {IVerifier} from "../src/interfaces/IVerifier.sol";
 import {ShieldVerifierFinal} from "../src/verifiers/final/ShieldVerifierFinal.sol";
@@ -42,6 +43,9 @@ import {KeyCheckProofs} from "./KeyCheckProofs.sol";
  *
  * Environment (read by every chain's script):
  *   DEPLOYER_PK          funded deployer
+ *   DEPLOYER             optional: the deployer's address. Next to DEPLOYER_PK the key must be
+ *                        its key; alone, a local fork rehearses the deploy as that address
+ *                        without a key (script/DeployerBroadcast.sol)
  *   POSEIDON2            PoseidonT3 deployed on this chain (circuits/scripts/deploy-poseidon.mjs)
  *   LIMIT_ASSETS         assets to list, comma separated (0x0 means the chain's native coin, where allowed)
  *   LIMIT_PER_DEPOSIT    per-deposit limit for each, raw units, same order
@@ -51,7 +55,7 @@ import {KeyCheckProofs} from "./KeyCheckProofs.sol";
  *   NEW_OWNER            the owner multisig; it must call acceptOwnership() afterwards. It must
  *                        be a contract unless NEW_OWNER_EOA=1. Unset: the deployer keeps the pool.
  */
-abstract contract MainnetDeploy is Script {
+abstract contract MainnetDeploy is DeployerBroadcast {
     struct Limits {
         address[] assets;
         uint256[] perDeposit;
@@ -65,14 +69,13 @@ abstract contract MainnetDeploy is Script {
     function _deployMainnet(uint256 chainId, bool allowNative) internal {
         require(block.chainid == chainId, "wrong chain for this script");
 
-        uint256 pk = vm.envUint("DEPLOYER_PK");
         address poseidon2 = vm.envAddress("POSEIDON2");
         require(poseidon2.code.length > 0, "POSEIDON2 has no code on this chain");
         address newOwner = _readNewOwner();
         Limits memory lim = _readLimits(allowNative);
         (uint16 feeBps, address feeRecipient) = _readWithdrawFee();
 
-        vm.startBroadcast(pk);
+        _startDeployerBroadcast();
         (address dual, address shieldI) = _deployVerifiers();
         // GATE 2: no pool until the verifiers on chain prove they hold the ceremony keys
         _requireCeremonyKeys(dual, shieldI);
