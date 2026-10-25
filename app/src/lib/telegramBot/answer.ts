@@ -79,7 +79,7 @@ function mainnetRule(live: boolean, drafts: boolean): string {
       ? "The Gloam app is on testnet until mainnet launches. Never say or hint that the app is live on mainnet. The one timing you may use, drafts included, is the announced launch: Wednesday 21 October, 13:00 UTC, with the countdown at gloam.trade/mainnet. Never give or guess any other date or time."
       : "The Gloam app is on testnet until mainnet launches. Never say or hint that the app is live on mainnet. The one timing you may give is the announced launch: Wednesday 21 October, 13:00 UTC, with the countdown at gloam.trade/mainnet. Never give or guess any other date or time.";
   }
-  return `Gloam is live on mainnet on ${liveMainnetNames()}, since Wednesday 21 October, 13:00 UTC: real money, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart: testnet is play money, mainnet is real money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
+  return `Gloam is live on mainnet on ${liveMainnetNames()}, since Wednesday 21 October, 13:00 UTC, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
 }
 
 export function botModel(): string {
@@ -277,7 +277,7 @@ export type ModelImage = { mediaType: "image/jpeg" | "image/png" | "image/webp";
 const CLASSIFIER_MODEL = "claude-haiku-5-5";
 /** Where Gloam runs, for the classifier: testnet until mainnet is live, then both. */
 function classifierSystem(): string {
-  const where = isMainnetLive() ? "on mainnet, with a testnet for practice" : "on testnet";
+  const where = isMainnetLive() ? "on mainnet and testnet" : "on testnet";
   return `You decide whether Glim, the helper bot in Gloam's Telegram group, should reply to a member's message. Gloam is private stablecoin payments ${where}. Glim only helps people use Gloam; it is not the team and it stays out of everything else. Answer with exactly one word: HELP, TEAM or NO.
 HELP when the message asks how to use Gloam or $GLOAM (even without a question mark), asks a factual question about Gloam or $GLOAM that public facts answer (fees, buybacks, burns, the treasury, contracts, supply, where to see the vault's totals), describes a problem or an error, or states something about how Gloam works that is wrong.
 TEAM when it is a request, suggestion or question meant for the team: asking them to do or change something (an audit, a mobile app, a listing, new coins or chains, moving or changing a bot, a partnership), or asking about plans, dates or decisions only the team can make.

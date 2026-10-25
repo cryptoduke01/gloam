@@ -377,15 +377,15 @@ function cantAnswer(c: BotConfig, name: string, topic: number, kind: Fallback): 
 }
 
 function codeTip(name: string): string {
-  // once mainnet is live a code in the group may be real money
+  // once mainnet is live a code in the group may be a mainnet one
   if (isMainnetLive()) {
     return (
-      `Quick heads-up, ${name}: testnet codes are fine here, but a mainnet payment code or claim link is real money and works like cash, ` +
+      `Quick heads-up, ${name}: testnet codes are fine here, but a mainnet payment code or claim link works like cash, ` +
       `so whoever sees it can claim it. Send those privately, or pay the person's Gloam address instead so the payment is sealed to them.`
     );
   }
   return (
-    `Quick heads-up, ${name}: fine here, it's testnet play money. On mainnet a plain payment code or claim link works like cash, ` +
+    `Quick heads-up, ${name}: fine here on testnet. On mainnet a plain payment code or claim link works like cash, ` +
     `so whoever sees it can claim it. Send those privately, or pay the person's Gloam address instead so the payment is sealed to them.`
   );
 }
@@ -394,11 +394,11 @@ function phraseTip(name: string): string {
   if (isMainnetLive()) {
     return (
       `Quick heads-up, ${name}: on testnet this is fine, but on mainnet share the phrase for a locked code privately, ` +
-      `never next to the code, because the code plus its phrase lets anyone claim real money.`
+      `never next to the code, because the code plus its phrase lets anyone claim it.`
     );
   }
   return (
-    `Quick heads-up, ${name}: fine here, it's testnet play money. On mainnet, share the phrase for a locked code privately, ` +
+    `Quick heads-up, ${name}: fine here on testnet. On mainnet, share the phrase for a locked code privately, ` +
     `never next to the code, because the code plus its phrase lets anyone claim it.`
   );
 }
@@ -551,8 +551,8 @@ async function loadPicture(ref: ImageRef): Promise<ModelImage | null> {
 
 /**
  * One friendly heads-up a day per person who posts a bearer code or claim
- * link, or a locked code with its phrase nearby. Testnet play money, so
- * nothing is deleted. Admins test with codes all the time and get none.
+ * link, or a locked code with its phrase nearby. Nothing is deleted.
+ * Admins test with codes all the time and get none.
  */
 async function codeHeadsUp(msg: TgMessage, from: TgUser, codes: CodeScan, name: string, threadId: number | undefined): Promise<void> {
   const chatId = msg.chat.id;

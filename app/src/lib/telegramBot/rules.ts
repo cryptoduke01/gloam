@@ -1442,8 +1442,8 @@ function liveChainFix(name: string, m: ChainMismatch): string {
   const why = otherSide
     ? `Your wallet is on ${chainLabel(m.wallet)} (${m.wallet}) and the app is set to ${want}. ` +
       (walletIsMain
-        ? `For real money, pick ${chainLabel(m.wallet)} in the app's network selector. To stay on the testnet, ${tap}`
-        : `For play money, pick ${chainLabel(m.wallet)} in the app's network selector. For mainnet, ${tap}`)
+        ? `For mainnet, pick ${chainLabel(m.wallet)} in the app's network selector. To stay on the testnet, ${tap}`
+        : `For the testnet, pick ${chainLabel(m.wallet)} in the app's network selector. For mainnet, ${tap}`)
     : `Your wallet is on ${chainLabel(m.wallet)} and the app is on ${want}, so the wallet refuses the transaction. ${tap[0]!.toUpperCase()}${tap.slice(1)}`;
   const details = CHAIN_DETAILS[m.want];
   return `Easy one, ${name}. ${why}` + (details ? ` If your wallet won't switch, add the network by hand: ${details}` : "");

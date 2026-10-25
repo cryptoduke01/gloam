@@ -545,7 +545,7 @@ await test("replies: mainnet claims, dates, secrets and posing as a person are r
 await test("mainnet live: Glim says so, still never another date, and its facts and fixes flip", () => {
   const live = { ...policy, mainnetLive: true };
   assert.ok(cleanReply("Gloam is live on mainnet.", live), "once live it is true");
-  assert.ok(cleanReply("Mainnet is live now. Pick it in the network selector for real money.", live));
+  assert.ok(cleanReply("Mainnet is live now. Pick it in the network selector.", live));
   assert.ok(cleanReply("Mainnet went live on Wednesday 21 October at 13:00 UTC.", live), "the launch date goes out");
   assert.equal(cleanReply("Mainnet goes live on Oct 22.", live), null, "any other date still does not");
   assert.equal(cleanReply("Mainnet should land in Q1 2027.", live), null);
@@ -1921,8 +1921,8 @@ await test("payment codes: one friendly heads-up a day, never a delete; addresse
   assert.ok(
     tip.startsWith(
       isMainnetLive()
-        ? "Quick heads-up, Hal: testnet codes are fine here, but a mainnet payment code or claim link is real money"
-        : "Quick heads-up, Hal: fine here, it's testnet play money."
+        ? "Quick heads-up, Hal: testnet codes are fine here, but a mainnet payment code or claim link works like cash"
+        : "Quick heads-up, Hal: fine here on testnet."
     )
   );
   assert.ok(tip.includes("pay the person's Gloam address instead"));
@@ -2584,7 +2584,7 @@ await test("talking about Glim is not tagging it, and long replies are cut to wh
     "No need to be scared, lyke, and no clock is ticking on it. A claim link doesn't expire, and the money just sits inside the link until someone claims it. " +
     "And since a code is bearer, if you still have it you can claim it back yourself under Vault > Pay > Receive > Claim a payment, same as anyone else. " +
     "The real risk is losing the link, because there's no list to pull it back up from. So when you send, hit Copy code or Download right then. " +
-    "Plus it's testnet play money, so nothing real is at stake while you get the hang of it.";
+    "Plus it's on testnet, so you can get the hang of it before you use mainnet.";
   const cut = trimReply(long);
   assert.ok(cut.split(/\s+/).length <= 75, cut);
   assert.ok(cut.endsWith("same as anyone else."), cut);
