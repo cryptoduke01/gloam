@@ -273,13 +273,16 @@ export async function validateGloamCharge(args: {
     throw fail(`This server does not accept ${mode} mode for this charge.`);
   }
 
-  let note: NoteExport & { pool?: Address };
+  let note: NoteExport & { pool?: Address; chainId?: number };
   try {
     note = await openGloamPaymentNote(payload.ticket, config.receiveKey);
   } catch {
     throw fail("The ticket does not open with this server's receive key: it was sealed to someone else, or it is corrupt.");
   }
   if (note.pool && lc(note.pool) !== lc(md.pool)) throw fail("The payment note belongs to a different pool.");
+  if (note.chainId !== undefined && note.chainId !== md.chainId) {
+    throw fail(`The payment note is on chain ${note.chainId}; the charge is on chain ${md.chainId}.`);
+  }
   if (lc(note.asset) !== lc(request.currency)) throw fail("The payment note holds a different asset than the charge asks for.");
   if (BigInt(note.amountWei) !== BigInt(request.amount)) {
     throw fail(`The payment note carries ${note.amountWei} base units; the charge is ${request.amount}.`);

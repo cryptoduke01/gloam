@@ -102,7 +102,7 @@ await rejects(() => sealToReceiveTag(plain, "gloam:rcpt:x"), /receive tag/, "can
   }
   assert(sizes.size === 1, `small and large amounts, with or without a short note, seal to one length (got ${[...sizes].join(", ")})`);
   const largest = await sealedFor(((1n << 128n) - 1n).toString(), "\u{1F600}".repeat(20) + "x".repeat(60));
-  assert(largest.length <= 1714, `the largest ticket stays within what the board and the relay take (${largest.length} bytes)`);
+  assert(largest.length <= 1739, `the largest ticket stays within what the board and the relay take (${largest.length} bytes)`);
 }
 // tamper one ciphertext byte: AES-GCM rejects it
 const flip = sealed.slice(0, -3) + (sealed.at(-3) === "A" ? "B" : "A") + sealed.slice(-2);
@@ -122,6 +122,16 @@ const withNote = "gloam1." + b64url(Buffer.from(JSON.stringify({ v: 1, t: "gloam
 assert(decodeNotePackage(withNote).secret === pkg.secret, "a package with the app's optional note still decodes");
 const exp = await notePackageToExport(back);
 assert(exp.nullifier === fieldToHex(await noteNullifierPoseidon(99n, BigInt(pkg.commitment))), "export derives the nullifier");
+// A package names its chain (the vault and ETH have one address on every chain): the same
+// key and place as the app's codes, read back, and absent from an older package.
+const named = encodeNotePackage({ ...pkg, chainId: 84532 });
+const namedExpected =
+  "gloam1." +
+  b64url(Buffer.from(JSON.stringify({ v: 1, t: "gloam-private-note", s: "poseidon", p: pkg.pool, a: pkg.asset, w: pkg.amountWei, k: pkg.secret, c: pkg.commitment, ch: 84532 })));
+assert(named === namedExpected, "a package with its chain is byte-identical to the app's (ch after c, before n)");
+assert(decodeNotePackage(named).chainId === 84532, "the chain reads back");
+assert((await notePackageToExport(decodeNotePackage(named))).chainId === 84532, "and travels with the opened note");
+assert(decodeNotePackage(expected).chainId === undefined, "an older package names no chain");
 
 // Only canonical fields decode. Poseidon reads its inputs mod p, so a package
 // claiming 250 + p (or secret + p) opens the same commitment as the real one.
