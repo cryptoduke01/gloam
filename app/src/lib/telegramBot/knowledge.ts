@@ -10,7 +10,7 @@
  * says that the program's tasks, rewards and guides land in the Testers topic.
  */
 
-import { baseSepoliaPool, isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { baseSepoliaPool, ethereumSepoliaPool, isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
@@ -300,7 +300,7 @@ function ethereumFacts(): string | null {
   if (mainnetPool(1) === null) return null;
   return [
     "ETHEREUM (overrides any line below that names fewer mainnets)",
-    "- Ethereum mainnet (chain ID 1): beta, joined after the 21 October launch. The vault takes USDC, USDT, USDG, PYUSD, EURC and ETH: 500 per deposit and 25,000 in total for each stablecoin, 0.2 ETH per deposit and 10 ETH in total. Same fees as the other mainnets, same final keys. Ethereum has no Gloam testnet; Base Sepolia is the place to practise. EURC is a euro stablecoin, never count it as dollars. Details, if someone asks: chain ID 1, currency ETH, explorer https://etherscan.io.",
+    "- Ethereum mainnet (chain ID 1): beta, joined after the 21 October launch. The vault takes USDC, USDT, USDG, PYUSD, EURC and ETH: 500 per deposit and 25,000 in total for each stablecoin, 0.2 ETH per deposit and 10 ETH in total. Same fees as the other mainnets, same final keys. " + (ethereumSepoliaPool() ? "Its testnet is Ethereum Sepolia (see ETHEREUM SEPOLIA)." : "Ethereum has no Gloam testnet; Base Sepolia is the place to practise.") + " EURC is a euro stablecoin, never count it as dollars. Details, if someone asks: chain ID 1, currency ETH, explorer https://etherscan.io.",
     "- Gas on Ethereum costs far more than on the other chains. The Gloam relay pays it for private payments and cash outs, so while Ethereum gas is above the relay's limit (3 gwei unless the team changes it) the relay waits and the app says \"Ethereum gas is high right now; try again shortly\". A cash out for later still schedules and goes out once gas is back under the limit. Turning off Hide my wallet sends from the wallet instead, which pays its own gas and shows the wallet as the sender.",
     "- Depositing USDT on Ethereum can take two approvals in the wallet: Tether's token makes an old approval go to zero before a new one. That is expected.",
     "- On Ethereum there are no private swaps and no Bring money over (the bridge) into it yet; never give a date. Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
@@ -310,6 +310,21 @@ function ethereumFacts(): string | null {
 /** The mainnets that joined after the 21 October launch, with a pool in: "Base", "Base and Ethereum". */
 function laterMainnets(): string[] {
   return [mainnetPool(8453) ? "Base" : null, mainnetPool(1) ? "Ethereum" : null].filter((n): n is string => n !== null);
+}
+
+/**
+ * What Glim knows about Ethereum Sepolia, only once its pool is filled in
+ * (lib/mainnet.ts: ETHEREUM_SEPOLIA_POOL). Before that it says nothing about
+ * it, so it never offers a network the app does not show.
+ */
+function ethereumSepoliaFacts(): string | null {
+  if (ethereumSepoliaPool() === null) return null;
+  return [
+    "ETHEREUM SEPOLIA (overrides any line below that names fewer testnets)",
+    "- Ethereum Sepolia (chain ID 11155111) is Ethereum's testnet. It runs the mainnet vault: the trusted setup's final keys, the mainnet deposit limits (500 of each stablecoin per deposit and 25,000 in total, 0.2 ETH per deposit and 10 in total) and the 0.25% cash-out fee. It takes test USDC, USDG, PYUSD, EURC and ETH; Tether issues no USDT on Sepolia. EURC is a euro stablecoin, never counted as a dollar.",
+    "- Faucets, in the Ethereum Sepolia section of gloam.trade/docs/testnet: Sepolia ETH from Google Cloud's Web3 faucet or the Sepolia PoW faucet (neither needs ETH on mainnet), test USDC and EURC from Circle's faucet, test PYUSD and USDG from Paxos's faucet. Gas on Sepolia costs a tiny fraction of a cent.",
+    "- On Ethereum Sepolia there are no private swaps and no Bring money over (the bridge). Passkey sign-in is not there: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Testnet beside it. Details, if someone adds the chain by hand: RPC https://ethereum-sepolia-rpc.publicnode.com, chain ID 11155111, currency ETH, explorer https://sepolia.etherscan.io.",
+  ].join("\n");
 }
 
 /**
@@ -490,10 +505,12 @@ function liveSwaps(): [string, string][] {
 export function knowledgeBlock(testingOpen: boolean, live: boolean = isMainnetLive()): string {
   const base = baseFacts();
   const ethereum = ethereumFacts();
+  const sepolia = ethereumSepoliaFacts();
   const block = [
     ABOUT.trim(),
     ...(base ? [base] : []),
     ...(ethereum ? [ethereum] : []),
+    ...(sepolia ? [sepolia] : []),
     TOKEN.trim(),
     CRYPTO_TALK.trim(),
     APP_MAP.trim(),

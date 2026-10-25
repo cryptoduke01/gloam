@@ -6,7 +6,7 @@
  */
 import { createHash, timingSafeEqual } from "crypto";
 import { english } from "viem/accounts";
-import { baseSepoliaPool, isMainnetLive, mainnetPool } from "@/lib/mainnet";
+import { baseSepoliaPool, ethereumSepoliaPool, isMainnetLive, mainnetPool } from "@/lib/mainnet";
 import { COPYCAT_GLOAM, GLOAM_TOKEN } from "./knowledge";
 import type { TgMessage, TgPhotoSize, TgUser } from "./telegram";
 
@@ -1109,11 +1109,12 @@ const ABOUT_TOKEN = /\$gloam\b|\btoken\b/i;
 /** "Send your USDG to 0x...": the helper never tells anyone to send money to an address. */
 const SEND_TO_ADDRESS = /\b(?:send|transfer|deposit|move|pay)\b[^.!?\n]*?\bto\s+(?:(?:this|that|the|my|our)\s+(?:address|wallet)\s*:?\s*)?0x[0-9a-fA-F]{40}\b/i;
 
-/** $GLOAM's contract and Gloam's mainnet pools (and Base Sepolia's): the addresses the helper may name on its own. */
+/** $GLOAM's contract and Gloam's mainnet pools (and Base Sepolia's and Ethereum Sepolia's): the addresses the helper may name on its own. */
 function ownAddress(a: string): boolean {
   const l = a.toLowerCase();
   if (l === GLOAM_TOKEN.address.toLowerCase()) return true;
   if (baseSepoliaPool()?.pool.toLowerCase() === l) return true;
+  if (ethereumSepoliaPool()?.pool.toLowerCase() === l) return true;
   return ([4663, 4217, 8453, 1] as const).some((id) => mainnetPool(id)?.pool.toLowerCase() === l);
 }
 
@@ -1413,8 +1414,8 @@ function escapeRe(s: string): string {
 
 /**
  * Chains people's wallets end up on, by id. Gloam is on the two testnets, and
- * each mainnet once its pool is in (Base and Base Sepolia too, once theirs are,
- * and Ethereum, which has no Gloam testnet).
+ * each mainnet once its pool is in (Base, Base Sepolia, Ethereum and Ethereum
+ * Sepolia too, once theirs are).
  */
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum mainnet",
@@ -1424,6 +1425,7 @@ const CHAIN_NAMES: Record<number, string> = {
   4217: "Tempo mainnet",
   8453: "Base mainnet",
   84532: "Base Sepolia testnet",
+  11155111: "Ethereum Sepolia testnet",
 };
 
 /** Hand-add details for a chain the app can ask for. */
@@ -1435,6 +1437,7 @@ const CHAIN_DETAILS: Record<number, string> = {
   8453: "RPC https://mainnet.base.org, chain ID 8453, currency ETH.",
   84532: "RPC https://sepolia.base.org, chain ID 84532, currency ETH.",
   1: "RPC https://ethereum-rpc.publicnode.com, chain ID 1, currency ETH.",
+  11155111: "RPC https://ethereum-sepolia-rpc.publicnode.com, chain ID 11155111, currency ETH.",
 };
 
 /** The fix once mainnet is live: the wallet and the app can each be on a mainnet or a testnet. */
@@ -1443,8 +1446,9 @@ function liveChainFix(name: string, m: ChainMismatch): string {
   const want = `${chainLabel(m.want)} (${m.want})`;
   const tempo = m.want === 42431 || m.want === 4217;
   const base = m.want === 84532 || m.want === 8453;
-  const button = tempo ? "Switch to Tempo" : base ? "Switch to Base" : m.want === 1 ? "Switch to Ethereum" : "Switch to Robinhood Chain";
-  const twin: Record<number, number> = { 46630: 4663, 4663: 46630, 42431: 4217, 4217: 42431, 84532: 8453, 8453: 84532 };
+  const ethereum = m.want === 11155111 || m.want === 1;
+  const button = tempo ? "Switch to Tempo" : base ? "Switch to Base" : ethereum ? "Switch to Ethereum" : "Switch to Robinhood Chain";
+  const twin: Record<number, number> = { 46630: 4663, 4663: 46630, 42431: 4217, 4217: 42431, 84532: 8453, 8453: 84532, 11155111: 1, 1: 11155111 };
   const tap = `tap "${button}" on the wallet button at the top of the app (or Settings > Network > Add to wallet), approve it in your wallet, then try again.`;
   // the wallet sits on the other side (mainnet or testnet) of the chain the app is set to
   const otherSide = twin[m.want] === m.wallet && (mainnets.has(m.wallet) || mainnets.has(m.want));
@@ -1469,8 +1473,9 @@ export type ChainMismatch = { wallet: number; want: number };
  */
 export function chainMismatch(text: string): ChainMismatch | null {
   const t = text.replace(/\s+/g, " ");
-  const viem = /current chain of the (?:wallet|connector) \(id: ?(\d{1,7})\) does not match the (?:target chain for the transaction|connection's chain) \(id: ?(\d{1,7})/i.exec(t);
-  const lines = /current chain id:? ?(\d{1,7}).{0,40}?expected chain id:? ?(\d{1,7})/i.exec(t);
+  // Up to 9 digits: Ethereum Sepolia is 11155111.
+  const viem = /current chain of the (?:wallet|connector) \(id: ?(\d{1,9})\) does not match the (?:target chain for the transaction|connection's chain) \(id: ?(\d{1,9})/i.exec(t);
+  const lines = /current chain id:? ?(\d{1,9}).{0,40}?expected chain id:? ?(\d{1,9})/i.exec(t);
   const m = viem ?? lines;
   if (!m) return null;
   const wallet = Number(m[1]);
