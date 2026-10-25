@@ -2,7 +2,8 @@
   "deployedAt": "2026-10-21",
   "ceremony": "final (13 contributors, drand 6561386, release ceremony-final)",
   "owner": "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8",
-  "feeRecipient": "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8",
+  "feeRecipient": "0xB3900ac9350903218e4c7597bAb0f008F01B30B8",
+  "feeRecipientNote": "The treasury since 2026-10-24 on both chains (setWithdrawFee(25, treasury) through the 3-day timelock). At deploy it was the owner, 0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8.",
   "withdrawFeeBps": 25,
   "deployer": "0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411",
   "chains": {
@@ -16,6 +17,10 @@
       "PoseidonT3": "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4",
       "DualProofVerifier": "0x1421353d471dF6C847713aee391Db38978fE714a",
       "ShieldIVerifier": "0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465",
+      "GloamPayMemo": "0x01B3172d9900Cb26d57E986429b9b23854c74598",
+      "GloamPayMemoDeployBlock": 95494392,
+      "GloamVaultSwapV4": "0x34AB06208586A737Bf1607fa996Bc9162271c52d",
+      "GloamVaultSwapV4b": "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC",
       "assets": {
         "USDG": { "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", "perDeposit": "500000000", "total": "25000000000" },
         "GLOAM": { "address": "0xDcD885F5c60b3aD49F6D58718696417314e8724d", "perDeposit": "25000000000000000000000", "total": "250000000000000000000000" }
@@ -31,6 +36,9 @@
       "PoseidonT3": "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4",
       "DualProofVerifier": "0x1421353d471dF6C847713aee391Db38978fE714a",
       "ShieldIVerifier": "0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465",
+      "GloamPayMemo": "0x342E3745967FDB4223902E196Ceb792c15d8C1c4",
+      "GloamPayMemoDeployBlock": 45417629,
+      "GloamVaultSwapTempo": "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC",
       "assets": {
         "USDC.e": { "address": "0x20c000000000000000000000b9537d11c60e8b50", "perDeposit": "500000000", "total": "25000000000" },
         "pathUSD": { "address": "0x20c0000000000000000000000000000000000000", "perDeposit": "500000000", "total": "25000000000" },

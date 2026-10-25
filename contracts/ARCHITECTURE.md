@@ -29,7 +29,7 @@ Mainnet runs `ShieldPoolPayments`: the same surface without `sealedSwap`, plus b
 
 - **No admin withdraw.** No function moves note-backed funds; notes leave only through a proof-gated `unshield()` to the recipient bound in the proof. `sweepStrayNative()` can only take native currency above `deposited[address(0)]`, i.e. ETH sent straight to the contract that backs no note.
 - **Timelocked rule changes.** Setters that affect proof validity, pricing or asset flows (`setVerifier`, `setSealedSwapVerifier`, `setShieldVerifier`, `setSwapRate`, `setPriceFeed`, `setOracleConfig`, `setOracleRatePair`) run directly only during setup. `setupMode()` is `false` on every live pool, mainnet and testnet, so every change goes `queueChange` → public `CHANGE_DELAY` (3 days) → `executeChange` within a 14-day grace window. The owner wallet can still swap verifiers this way; the delay is what gives users time to see it and cash out.
-- **Two-step ownership** (`transferOwnership` + `acceptOwnership`). On testnet the owner is a single wallet. On mainnet the owner and treasury is one wallet at launch (`0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8`); a multisig is planned.
+- **Two-step ownership** (`transferOwnership` + `acceptOwnership`). On testnet the owner is a single wallet. On mainnet the owner is one wallet (`0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8`); a multisig is planned. Cash-out fees go to the treasury `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` since 24 October 2026.
 
 ## Mainnet deploy (2026-10-21, beta)
 
@@ -37,7 +37,7 @@ Both mainnets run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the share
 
 Base runs the same deploy, with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Base Sepolia (`84532`, a testnet on the final keys) went live on 24 October 2026 through `DeployBaseSepolia.s.sol` (table below). Base mainnet (`8453`, `DeployBaseMainnet.s.sol`) is next and not deployed. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
-Ethereum is ready to deploy on the same path too, not deployed: `DeployEthereumMainnet.s.sol` (`1`), with native ETH listed next to USDC, USDT, USDG, PYUSD and EURC. USDT returns nothing from `transfer`, `transferFrom` and `approve`; the pool's low-level calls accept that (proven on a fork in `test/fork/EthereumMainnetFork.t.sol`). Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
+Ethereum runs the same path too: Ethereum Sepolia (`11155111`, a testnet on the final keys) went live on 25 October 2026 through `DeployEthereumSepolia.s.sol` (table below), and Ethereum mainnet (`1`, `DeployEthereumMainnet.s.sol`) is next and not deployed, with native ETH listed next to USDC, USDT, USDG, PYUSD and EURC. USDT returns nothing from `transfer`, `transferFrom` and `approve`; the pool's low-level calls accept that (proven on a fork in `test/fork/EthereumMainnetFork.t.sol`). Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
 
 **Robinhood Chain mainnet `4663`.**
 
@@ -49,9 +49,10 @@ Ethereum is ready to deploy on the same path too, not deployed: `DeployEthereumM
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
 | Listed assets (per deposit / total) | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (500 / 25,000), $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (25,000 / 250,000). ETH is gas only |
-| Owner and treasury | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet at launch; a multisig is planned) |
+| Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
+| Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
-| GloamPayMemo | None yet |
+| GloamPayMemo | `0x01B3172d9900Cb26d57E986429b9b23854c74598` (block `95494392`, deployed 2026-10-23) |
 
 **Tempo mainnet `4217`.**
 
@@ -63,9 +64,10 @@ Ethereum is ready to deploy on the same path too, not deployed: `DeployEthereumM
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
 | Listed assets (per deposit / total) | USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73`, OUSD `0x20c0000000000000000000006a37da5c996874be` (TIP-20, 6 decimals, 500 / 25,000 each) |
-| Owner and treasury | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet at launch; a multisig is planned) |
+| Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
+| Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
-| GloamPayMemo | None yet |
+| GloamPayMemo | `0x342E3745967FDB4223902E196Ceb792c15d8C1c4` (block `45417629`, deployed 2026-10-23) |
 
 **Base Sepolia `84532`** (testnet on the mainnet contract and final keys, deployed 2026-10-24). Record: [deployments/base-sepolia.json](./deployments/base-sepolia.json).
 
@@ -84,6 +86,22 @@ Ethereum is ready to deploy on the same path too, not deployed: `DeployEthereumM
 | GloamPayMemo | `0x01B3172d9900Cb26d57E986429b9b23854c74598` (block `49804175`) |
 
 Every Base Sepolia contract but PoseidonT3 is an exact source match on Sourcify; PoseidonT3 is raw circomlibjs bytecode, checked by code hash.
+
+**Ethereum Sepolia `11155111`** (testnet on the mainnet contract and final keys, deployed 2026-10-25). Record: [deployments/ethereum-sepolia.json](./deployments/ethereum-sepolia.json). Every contract landed one nonce later than on the other chains, so the vault is not at `0x39e2…0194` here (see [`DEPLOY-ETHEREUM-SEPOLIA.md`](../DEPLOY-ETHEREUM-SEPOLIA.md)).
+
+| | |
+| --- | --- |
+| Pool (`ShieldPoolPayments`) | `0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef` |
+| Deploy block | `11992914` |
+| PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
+| DualProofVerifier | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (final keys) |
+| ShieldIVerifier | `0xa8cf34C6F3985B7901F6fA0e1E13a3Da2D2dC7E4` (final keys) |
+| sealedSwapVerifier | `0x0`, always (no swap code) |
+| Listed assets (per deposit / total) | USDC `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`, USDG `0xfBb2A78CceEb415b00300925e464C3E44E6e06b0`, PYUSD `0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9` and EURC `0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4` (500 / 25,000 each), ETH (0.2 / 10) |
+| Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (ownership accepted) |
+| Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` |
+| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
+| GloamPayMemo | `0x8699D015087dE6D25d55d5ceB63b34b9d773f135` (block `11992942`) |
 
 On `ShieldPoolPayments` the timelocked setters are `setVerifier`, `setShieldVerifier`, `setDepositLimit` and `setWithdrawFee`. `lowerDepositLimit` (down to `0, 0`, which closes deposits for that asset) and `lowerWithdrawFee` are instant. Withdrawals and private transfers are never limited.
 

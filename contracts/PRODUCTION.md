@@ -41,8 +41,9 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
       limit or listing an asset takes the 3-day timelock
 - [x] Transfer ownership to a multisig (`NEW_OWNER`, then `acceptOwnership()`). The
       script refuses a `NEW_OWNER` with no code unless `NEW_OWNER_EOA=1`. At launch the
-      owner and treasury is one wallet (`0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8`);
-      the multisig is planned. Deployed 21 Oct 2026 on both chains (pool
+      owner and fee recipient was one wallet (`0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8`);
+      fees go to the treasury `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` since 24 Oct 2026
+      (through the timelock), and the multisig is planned. Deployed 21 Oct 2026 on both chains (pool
       `0x39e28cde55cab798874746ac52cb4b5cc99a0194`); that wallet accepted ownership on both the same morning
 - [x] After the broadcast the script reads every setting back and fails on a mismatch:
       deposit limits on, setup ended, shield verifier and spend verifier as deployed, fee
@@ -78,7 +79,7 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
 
 Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
-## 2c. Ethereum (ready to deploy, not deployed)
+## 2c. Ethereum (Ethereum Sepolia live, Ethereum mainnet not deployed)
 
 - [x] `script/DeployEthereumMainnet.s.sol` (`1`) on the shared `script/MainnetDeploy.sol`, native
       ETH allowed, final keys; its testnet is Ethereum Sepolia (`script/DeployEthereumSepolia.s.sol`,
@@ -88,6 +89,9 @@ Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 - [x] Fork rehearsal of the whole runbook ends "All checks passed", owner accepts; 8.93M gas
 - [x] `test/fork/EthereumMainnetFork.t.sol`: real USDT and ETH through the vault with final-key
       proofs; `test/DeployChains.t.sol`: every mainnet script refuses every other chain
+- [x] Ethereum Sepolia deployed (25 Oct 2026, vault `0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef` at
+      block `11992914`, memo board `0x8699D015087dE6D25d55d5ceB63b34b9d773f135`) and ownership
+      accepted; record in [`deployments/ethereum-sepolia.json`](./deployments/ethereum-sepolia.json)
 - [ ] Ethereum deployed, ownership accepted, relayer funded, pool and block in `MAINNET_POOLS[1]`
 
 Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
