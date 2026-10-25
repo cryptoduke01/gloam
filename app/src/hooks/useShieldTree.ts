@@ -3,25 +3,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   assertTreeMatchesChain,
+  shownTree,
   syncShieldTree,
   type SyncedTree,
 } from "@/lib/treeSync";
-import { getRhPublicClient } from "@/lib/rhClient";
+import { publicClientFor } from "@/lib/rhClient";
+import { useNetwork } from "@/components/app/NetworkProvider";
 import { isShieldDeployed } from "@/lib/shield";
 import type { MerklePath } from "@/lib/merkle";
 import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 
 /**
- * Vault Merkle tree, uses dedicated RH RPC (not wallet network).
+ * Vault Merkle tree of the network the page shows, read over that network's
+ * own RPC (not the wallet's). Synced again on every network switch, and a tree
+ * of another chain is never handed out: the vaults share one address, so a
+ * path from it would prove a note of that chain while the page shows this one.
  */
 export function useShieldTree() {
-  const [synced, setSynced] = useState<SyncedTree | null>(null);
+  const { network, settled } = useNetwork();
+  const [stored, setSynced] = useState<SyncedTree | null>(null);
+  const synced = shownTree(stored, network);
   const [matchesChain, setMatchesChain] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // a failed sync tries again by itself a few times (1 s, 3 s, 9 s, with jitter)
   const retries = useRef(0);
   const retryTimer = useRef<number | null>(null);
+  // a sync that started before a network switch must not replace the new network's tree
+  const shownKey = useRef(network.key);
+  useEffect(() => {
+    shownKey.current = network.key;
+  }, [network.key]);
 
   const refresh = useCallback(async (auto = false) => {
     if (!auto) retries.current = 0;
@@ -34,21 +46,27 @@ export function useShieldTree() {
       setMatchesChain(null);
       return;
     }
+    // the network isn't known yet on the first render: nothing to read
+    if (!settled) return;
     setLoading(true);
     setError(null);
+    const key = network.key;
     try {
-      const publicClient = getRhPublicClient();
-      const tree = await syncShieldTree(publicClient);
+      const publicClient = publicClientFor(network);
+      const tree = await syncShieldTree(publicClient, network);
+      if (shownKey.current !== key) return;
       setSynced(tree);
       if (tree) {
         // The sync already matched the root to the pool at the synced block.
         const ok = tree.verified || (await assertTreeMatchesChain(publicClient, tree));
+        if (shownKey.current !== key) return;
         setMatchesChain(ok);
         if (!ok) {
           setError("Rebuilt tree root does not match pool.currentRoot()");
         }
       }
     } catch (e) {
+      if (shownKey.current !== key) return;
       setError(e instanceof Error ? e.message : "Tree sync failed");
       setSynced(null);
       setMatchesChain(null);
@@ -58,9 +76,10 @@ export function useShieldTree() {
         retryTimer.current = window.setTimeout(() => void refresh(true), wait);
       }
     } finally {
-      setLoading(false);
+      if (shownKey.current === key) setLoading(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network.key, settled]);
 
   useEffect(() => {
     // Start on the next microtask so the effect body itself sets no state.
@@ -85,7 +104,8 @@ export function useShieldTree() {
 
   return {
     synced,
-    matchesChain,
+    // the root check of a tree this network no longer shows says nothing about this one
+    matchesChain: synced ? matchesChain : null,
     loading,
     error,
     refresh,
