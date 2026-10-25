@@ -116,7 +116,12 @@ export type Refusal = { code: string; message: string };
 
 // ------------------------------------------------------------------ known assets
 
-type KnownAsset = { symbol: string; chainId: number; address: Address; decimals: number };
+/**
+ * `stable`: a stablecoin (dollar or euro), whose amounts count currency units,
+ * so one agent-wide cap can cover several of them. Required, so a newly
+ * listed asset can't be left out of that rule.
+ */
+type KnownAsset = { symbol: string; chainId: number; address: Address; decimals: number; stable: boolean };
 
 const RH = GLOAM_NETWORKS.robinhood.chainId;
 const TEMPO = GLOAM_NETWORKS.tempo.chainId;
@@ -135,41 +140,41 @@ export const NETWORK_CHAIN_IDS: Record<NetworkKey, number> = {
 
 // Testnet assets first: a symbol on both sides resolves to the testnet unless a network is named.
 export const KNOWN_ASSETS: KnownAsset[] = [
-  { symbol: "ETH", chainId: RH, address: NATIVE_ASSET, decimals: 18 },
-  { symbol: "USDG", chainId: RH, address: RH_USDG, decimals: 6 },
-  { symbol: "OUSD", chainId: TEMPO, address: TEMPO_OUSD, decimals: 6 },
-  { symbol: "PathUSD", chainId: TEMPO, address: TEMPO_PATHUSD, decimals: 6 },
-  { symbol: "AlphaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000001", decimals: 6 },
-  { symbol: "BetaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000002", decimals: 6 },
-  { symbol: "ThetaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000003", decimals: 6 },
+  { symbol: "ETH", chainId: RH, address: NATIVE_ASSET, decimals: 18, stable: false },
+  { symbol: "USDG", chainId: RH, address: RH_USDG, decimals: 6, stable: true },
+  { symbol: "OUSD", chainId: TEMPO, address: TEMPO_OUSD, decimals: 6, stable: true },
+  { symbol: "PathUSD", chainId: TEMPO, address: TEMPO_PATHUSD, decimals: 6, stable: true },
+  { symbol: "AlphaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000001", decimals: 6, stable: true },
+  { symbol: "BetaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000002", decimals: 6, stable: true },
+  { symbol: "ThetaUSD", chainId: TEMPO, address: "0x20c0000000000000000000000000000000000003", decimals: 6, stable: true },
   // Base Sepolia: test funds, after the older testnets so "ETH" alone stays Robinhood Chain testnet.
-  { symbol: "USDC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_USDC, decimals: 6 },
-  { symbol: "EURC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_EURC, decimals: 6 },
-  { symbol: "ETH", chainId: BASE_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  { symbol: "USDC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_USDC, decimals: 6, stable: true },
+  { symbol: "EURC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_EURC, decimals: 6, stable: true },
+  { symbol: "ETH", chainId: BASE_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
   // Ethereum Sepolia: a testnet too, after Base Sepolia, so a bare "USDC" stays Base Sepolia's.
-  { symbol: "USDC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDC, decimals: 6 },
-  { symbol: "USDG", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDG, decimals: 6 },
-  { symbol: "PYUSD", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6 },
-  { symbol: "EURC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_EURC, decimals: 6 },
-  { symbol: "ETH", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  { symbol: "USDC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDC, decimals: 6, stable: true },
+  { symbol: "USDG", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDG, decimals: 6, stable: true },
+  { symbol: "PYUSD", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6, stable: true },
+  { symbol: "EURC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_EURC, decimals: 6, stable: true },
+  { symbol: "ETH", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
   // Mainnet: exactly what the mainnet pools list.
-  { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6 },
-  { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18 },
-  { symbol: "USDC.e", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDCE, decimals: 6 },
-  { symbol: "pathUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_PATHUSD, decimals: 6 },
-  { symbol: "USDT0", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDT0, decimals: 6 },
-  { symbol: "OUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_OUSD, decimals: 6 },
-  { symbol: "USDC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDC, decimals: 6 },
-  { symbol: "EURC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_EURC, decimals: 6 },
-  { symbol: "USDT", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDT, decimals: 6 },
-  { symbol: "ETH", chainId: BASE_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6, stable: true },
+  { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18, stable: false },
+  { symbol: "USDC.e", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDCE, decimals: 6, stable: true },
+  { symbol: "pathUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_PATHUSD, decimals: 6, stable: true },
+  { symbol: "USDT0", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDT0, decimals: 6, stable: true },
+  { symbol: "OUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_OUSD, decimals: 6, stable: true },
+  { symbol: "USDC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDC, decimals: 6, stable: true },
+  { symbol: "EURC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_EURC, decimals: 6, stable: true },
+  { symbol: "USDT", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDT, decimals: 6, stable: true },
+  { symbol: "ETH", chainId: BASE_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
   // Ethereum after Base, so "USDT" alone keeps naming Base's as before; name the network for Ethereum's.
-  { symbol: "USDC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDC, decimals: 6 },
-  { symbol: "USDT", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDT, decimals: 6 },
-  { symbol: "USDG", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDG, decimals: 6 },
-  { symbol: "PYUSD", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_PYUSD, decimals: 6 },
-  { symbol: "EURC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_EURC, decimals: 6 },
-  { symbol: "ETH", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  { symbol: "USDC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDC, decimals: 6, stable: true },
+  { symbol: "USDT", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDT, decimals: 6, stable: true },
+  { symbol: "USDG", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDG, decimals: 6, stable: true },
+  { symbol: "PYUSD", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_PYUSD, decimals: 6, stable: true },
+  { symbol: "EURC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_EURC, decimals: 6, stable: true },
+  { symbol: "ETH", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
 ];
 
 /** "Robinhood Chain", "Tempo testnet" and so on; "any network" for a limit that names none. */
@@ -240,17 +245,13 @@ function toRaw(value: string, decimals: number, what: string): bigint {
 }
 
 /**
- * Stablecoins Gloam lists (dollars, and EURC's euro): a unit of each is one unit
- * of a currency, so one agent-wide number can cap them together. Never priced
- * here, only counted.
+ * What an asset's amounts count: currency units for a stablecoin Gloam lists
+ * (KnownAsset.stable: dollars, and EURC's euro, counted, never priced here),
+ * otherwise the asset itself (ETH, GLOAM, an unknown token).
  */
-const STABLE_SYMBOLS = new Set(["usdg", "usdc", "usdt", "usdc.e", "usdt0", "pathusd", "ousd", "alphausd", "betausd", "thetausd", "eurc"]);
-
-/** What an asset's amounts count: currency units for the stablecoins, otherwise the asset itself (ETH, GLOAM, an unknown token). */
-function unitOf(symbol: string, address: Address, known: boolean): string {
-  const s = symbol.toLowerCase();
-  if (known && STABLE_SYMBOLS.has(s)) return "stablecoin";
-  return known ? s.toUpperCase() : address.toLowerCase();
+function unitOf(known: KnownAsset | undefined, symbol: string, address: Address): string {
+  if (known?.stable) return "stablecoin";
+  return known ? symbol.toUpperCase() : address.toLowerCase();
 }
 
 function normalizeRecipient(r: string): string {
@@ -311,7 +312,7 @@ export function resolveAgent(agent: string, raw: AgentConfig, source: string): A
       throw new Error(`${symbol} needs both maxPerPayment and maxPerDay (on the asset or the agent).`);
     }
     if (entry.maxPerPayment === undefined || entry.maxPerDay === undefined) {
-      shared.push({ symbol, unit: unitOf(symbol, address, Boolean(known)) });
+      shared.push({ symbol, unit: unitOf(known, symbol, address) });
     }
     return {
       symbol,

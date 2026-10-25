@@ -114,9 +114,13 @@ test("Ethereum in limits: name the network; Ethereum's addresses are mainnet alr
 
   const read = (p: string) => readFileSync(p, "utf8");
   const env = { GLOAM_LIMIT_MAX_PER_PAYMENT: "5", GLOAM_LIMIT_MAX_PER_DAY: "10", GLOAM_LIMIT_RECIPIENTS: "any" };
-  const inline = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC,USDT,USDG,PYUSD,EURC,ETH", GLOAM_LIMIT_NETWORK: "ethereum-mainnet" }, read);
+  const inline = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC,USDT,USDG,PYUSD,EURC", GLOAM_LIMIT_NETWORK: "ethereum-mainnet" }, read);
   assert.equal(inline.mode, "enforced");
-  if (inline.mode === "enforced") assert.deepEqual(inline.policy.assets.map((a) => a.chainId), [1, 1, 1, 1, 1, 1]);
+  if (inline.mode === "enforced") assert.deepEqual(inline.policy.assets.map((a) => a.chainId), [1, 1, 1, 1, 1]);
+  // one pair of caps can't cover ETH next to the stablecoins ("5" would be 5 ETH): refused by design
+  const withEth = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC,USDT,USDG,PYUSD,EURC,ETH", GLOAM_LIMIT_NETWORK: "ethereum-mainnet" }, read);
+  assert.equal(withEth.mode, "invalid");
+  if (withEth.mode === "invalid") assert.match(withEth.error, /count in each asset's own units/);
   // "ethereum" is Ethereum Sepolia, the testnet; a name Gloam does not use is refused with the right one in the message.
   const sepolia = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "ethereum" }, read);
   if (sepolia.mode === "enforced") assert.deepEqual(sepolia.policy.assets.map((a) => a.chainId), [11155111]);

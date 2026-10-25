@@ -269,6 +269,9 @@ test("one agent-wide cap never covers ETH and dollars together: 50 would have me
   // A single asset, the stablecoins together (EURC too: counted, never priced), and the README's
   // two dollar stablecoins still take the agent-wide caps.
   assert.doesNotThrow(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: { USDC: { network: "base-mainnet" }, EURC: { network: "base-mainnet" } } }, "test"));
+  // every listed stablecoin counts alike, PYUSD on Ethereum too (KnownAsset.stable), while ETH next to USDG does not
+  assert.doesNotThrow(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: { USDC: { network: "ethereum-mainnet" }, PYUSD: { network: "ethereum-mainnet" } } }, "test"));
+  assert.throws(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: ["ETH", "USDG"] }, "test"), ownUnits);
   assert.doesNotThrow(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "0.1", maxPerDay: "1", assets: ["ETH"] }, "test"));
   assert.doesNotThrow(() =>
     resolveAgent("bot", { recipients: "any", maxPerPayment: "250", maxPerDay: "1000", assets: { USDG: { network: "robinhood-mainnet" }, USDT0: {} } }, "test")
