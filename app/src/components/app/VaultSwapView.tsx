@@ -968,6 +968,8 @@ function TokenPicker({
       <button
         type="button"
         data-leaving={leaving}
+        tabIndex={-1}
+        aria-hidden="true"
         className="gl-backdrop absolute inset-0 bg-black/40 backdrop-blur-sm"
         aria-label="Close"
         onClick={() => leave(onClose)}

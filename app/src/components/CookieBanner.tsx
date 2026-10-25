@@ -28,9 +28,17 @@ export function CookieBanner() {
       aria-label="Cookie consent"
       className="fixed bottom-3 left-3 right-3 z-50 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
     >
-      <div className="rounded-[20px] border border-line bg-panel/95 p-5 shadow-pop backdrop-blur-xl">
-        <p className="text-[14px] text-foreground">Cookies</p>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-mute">
+      <div className="rounded-[20px] border border-line bg-panel/95 p-4 shadow-pop backdrop-blur-xl sm:p-5">
+        <p className="text-[14px] text-foreground max-sm:hidden">Cookies</p>
+        {/* A phone gets the short version, so the banner stays a strip, not a third of the screen. */}
+        <p className="text-[13px] leading-relaxed text-mute sm:hidden">
+          No ad or tracking cookies. Essential only keeps what the site needs and a few anonymous totals. Accept all
+          adds anonymous counts of visits and app steps.{" "}
+          <Link href="/cookies" className="text-foreground underline underline-offset-2">
+            More
+          </Link>
+        </p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-mute max-sm:hidden">
           We set no ad or tracking cookies. Essential only keeps what the site
           needs to work, plus four anonymous claim-link totals and a one-way
           count of how many wallets use Gloam. Accept all
@@ -46,7 +54,7 @@ export function CookieBanner() {
           </Link>
           .
         </p>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-3 flex gap-2 sm:mt-4">
           <button
             type="button"
             onClick={() => accept("essential")}
