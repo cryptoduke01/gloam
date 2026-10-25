@@ -31,10 +31,11 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
 export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 49_802_958 };
 
 /**
- * Ethereum Sepolia (11155111), a testnet: USDC, USDG, PYUSD, EURC, ETH. Not
- * deployed yet (DEPLOY-ETHEREUM-SEPOLIA.md). After the deploy, paste the vault
- * and its block, and the memo board and its block: that one line turns it on
- * in the app, the API, the relay, the remote MCP, Glim and proofs.
+ * Ethereum Sepolia (11155111), a testnet: USDC, USDG, PYUSD, EURC, ETH. The
+ * vault and its deploy block, and the memo board and its block, from its
+ * deploy (DEPLOY-ETHEREUM-SEPOLIA.md; contracts/ethereum-sepolia-after-deploy.sh
+ * fills this line in, here and in the SDK). Empty, Ethereum Sepolia is off in
+ * the app, the API, the relay, the remote MCP, Glim and proofs.
  */
 export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: null, deployBlock: null, payMemo: null, payMemoBlock: null };
 
