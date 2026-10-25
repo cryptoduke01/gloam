@@ -116,7 +116,9 @@ The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official po
 
 Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, on the final keys) works with SDK 0.3.0, which has its pool. `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) is refused with a plain error until the SDK has its pool.
 
-Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH) is refused the same way until the SDK has its pool. Ethereum has no Gloam testnet.
+Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH) is refused the same way until the SDK has its pool. Its testnet is Ethereum Sepolia, below.
+
+Ethereum Sepolia: `"ethereum"` (`11155111`, test USDC by default, also USDG, PYUSD, EURC and ETH, on the final keys) is known to 0.3.0 and refused with a plain error until the SDK it is built with has its pool.
 
 ## Status
 
