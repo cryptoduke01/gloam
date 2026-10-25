@@ -38,6 +38,11 @@ import {
   ETHEREUM_USDC,
   ETHEREUM_USDG,
   ETHEREUM_USDT,
+  ETHEREUM_SEPOLIA_CHAIN_ID,
+  ETHEREUM_SEPOLIA_EURC,
+  ETHEREUM_SEPOLIA_PYUSD,
+  ETHEREUM_SEPOLIA_USDC,
+  ETHEREUM_SEPOLIA_USDG,
   GLOAM_TOKEN,
   NATIVE_ASSET,
   RH_MAINNET_CHAIN_ID,
@@ -187,6 +192,10 @@ export function assetDecimals(currency: Address): number | undefined {
     ETHEREUM_USDG,
     ETHEREUM_PYUSD,
     ETHEREUM_EURC,
+    ETHEREUM_SEPOLIA_USDC,
+    ETHEREUM_SEPOLIA_USDG,
+    ETHEREUM_SEPOLIA_PYUSD,
+    ETHEREUM_SEPOLIA_EURC,
   ];
   if (sixes.some((a) => c === lc(a))) return 6;
   return undefined;
@@ -202,15 +211,15 @@ export function assetSymbol(chainId: number, currency: Address): string {
   if (c === lc(TEMPO_USDT0)) return "USDT0";
   if (c === lc(RH_USDG) || c === lc(RH_MAINNET_USDG)) return "USDG";
   if (c === lc(GLOAM_TOKEN)) return "GLOAM";
-  if (c === lc(BASE_USDC) || c === lc(BASE_SEPOLIA_USDC) || c === lc(ETHEREUM_USDC)) return "USDC";
-  if (c === lc(BASE_EURC) || c === lc(BASE_SEPOLIA_EURC) || c === lc(ETHEREUM_EURC)) return "EURC";
+  if (c === lc(BASE_USDC) || c === lc(BASE_SEPOLIA_USDC) || c === lc(ETHEREUM_USDC) || c === lc(ETHEREUM_SEPOLIA_USDC)) return "USDC";
+  if (c === lc(BASE_EURC) || c === lc(BASE_SEPOLIA_EURC) || c === lc(ETHEREUM_EURC) || c === lc(ETHEREUM_SEPOLIA_EURC)) return "EURC";
   if (c === lc(BASE_USDT) || c === lc(ETHEREUM_USDT)) return "USDT";
-  if (c === lc(ETHEREUM_USDG)) return "USDG";
-  if (c === lc(ETHEREUM_PYUSD)) return "PYUSD";
+  if (c === lc(ETHEREUM_USDG) || c === lc(ETHEREUM_SEPOLIA_USDG)) return "USDG";
+  if (c === lc(ETHEREUM_PYUSD) || c === lc(ETHEREUM_SEPOLIA_PYUSD)) return "PYUSD";
   return "TOKEN";
 }
 
-/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood", and "base-mainnet" / "base" / "ethereum-mainnet" once their pools are in. */
+/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood", and "base-mainnet" / "base" / "ethereum-mainnet" / "ethereum" (Ethereum Sepolia) once their pools are in. */
 export type GloamChargeNetwork = GloamNetworkKey;
 
 // ── building and parsing requests ─────────────────────────────────────────────
@@ -222,8 +231,9 @@ export interface BuildChargeRequestParams {
   recipient: string;
   /**
    * "tempo-mainnet" or "robinhood-mainnet" (mainnet), "tempo" or "robinhood"
-   * (the testnets), or a chain id. "base-mainnet" and "base" (Base Sepolia) work
-   * once the SDK has their pools. Default "tempo" (Tempo testnet), as in 0.0.x.
+   * (the testnets), or a chain id. "base-mainnet", "base" (Base Sepolia) and
+   * "ethereum" (Ethereum Sepolia) work once the SDK has their pools. Default
+   * "tempo" (Tempo testnet), as in 0.0.x.
    */
   network?: GloamChargeNetwork | number;
   /**
@@ -248,6 +258,7 @@ const PUBLISHED_POOL_CHAINS: Partial<Record<GloamNetworkKey, number>> = {
   "base-mainnet": BASE_MAINNET_CHAIN_ID,
   base: BASE_SEPOLIA_CHAIN_ID,
   "ethereum-mainnet": ETHEREUM_MAINNET_CHAIN_ID,
+  ethereum: ETHEREUM_SEPOLIA_CHAIN_ID,
 };
 
 /** Resolve a network name or chain id to a chain id, plus that network's default asset. */
