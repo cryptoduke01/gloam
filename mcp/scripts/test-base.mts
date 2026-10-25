@@ -24,7 +24,9 @@ const { BASE_SEPOLIA_USDC, BASE_USDC, NATIVE_ASSET, assertDepositAllowed } = awa
 const nets = await import("../src/networks.js");
 
 test("both Base networks are offered once their pools are in", () => {
-  assert.deepEqual(nets.NETWORK_KEYS.slice(-3), ["robinhood", "tempo", "base"], "Base Sepolia after the older testnets");
+  // Ethereum Sepolia, once its pool is in, comes after Base Sepolia (test-ethereum-sepolia.mts).
+  const keys = nets.NETWORK_KEYS.filter((k) => k !== "ethereum");
+  assert.deepEqual(keys.slice(-3), ["robinhood", "tempo", "base"], "Base Sepolia after the older testnets");
   assert.ok(nets.NETWORK_KEYS.indexOf("base-mainnet") < nets.NETWORK_KEYS.indexOf("robinhood"), "Base mainnet with the mainnets");
   const main = nets.networkByKey("base-mainnet");
   const test = nets.networkByKey("base");

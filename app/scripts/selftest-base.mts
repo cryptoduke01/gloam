@@ -167,7 +167,9 @@ check("Base Sepolia: the deployed vault, its block and its memo board", () => {
   assert.deepEqual(sepolia.payMemo, { address: SEPOLIA_MEMO, deployBlock: 49_804_175n, emitsPoster: false });
   assert.equal(nets.isNetworkKey("base"), true);
   assert.equal(nets.isNetworkWritable(sepolia), true);
-  assert.equal(nets.NETWORK_KEYS[nets.NETWORK_KEYS.length - 1], "base");
+  // Last of the testnets, or just before Ethereum Sepolia once that is in too.
+  const testnetKeys = nets.NETWORK_KEYS.filter((k) => k !== "ethereum");
+  assert.equal(testnetKeys[testnetKeys.length - 1], "base");
   assert.match(nets.networkKeyChoices(), /"base"/);
   assert.equal(nets.networkName(sepolia), "Base testnet");
   assert.equal(nets.getNetwork("base-mainnet").payMemo, null);
@@ -269,7 +271,7 @@ if (CONFIGURED) {
     const keys = nets.NETWORK_KEYS;
     assert.ok(keys.indexOf("base-mainnet") > keys.indexOf("tempo-mainnet"));
     assert.ok(keys.indexOf("base-mainnet") < keys.indexOf("robinhood"));
-    assert.equal(keys[keys.length - 1], "base");
+    assert.equal(keys.filter((k) => k !== "ethereum").pop(), "base");
     assert.equal(nets.isNetworkKey("base-mainnet"), true);
     assert.match(nets.networkKeyChoices(), /"base-mainnet"/);
     assert.equal(nets.getNetwork("base-mainnet").pool, MAINNET_POOL);

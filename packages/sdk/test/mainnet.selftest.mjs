@@ -174,7 +174,7 @@ if (!baseSepoliaPool()) {
   assert(n && n.pool.toLowerCase() === "0x39e28cde55cab798874746ac52cb4b5cc99a0194" && n.deployBlock === 49_802_958n, "Base Sepolia: the deployed vault and its block");
   assert(getGloamNetwork("base") === n && networkForChainId(BASE_SEPOLIA_CHAIN_ID) === n && poolForChainId(BASE_SEPOLIA_CHAIN_ID) === n.pool, "Base Sepolia found by key and chain id");
   assert(n.testnet && n.ceremony === "production" && n.nativeShield, "Base Sepolia: test funds, final keys, ETH listed");
-  assert(live[live.length - 1] === n, "gloamNetworks puts Base Sepolia after the older testnets");
+  assert(live.indexOf(n) === live.indexOf(GLOAM_NETWORKS.tempo) + 1, "gloamNetworks puts Base Sepolia after the older testnets");
   assert(n.payMemo === BASE_SEPOLIA_PAY_MEMO && payMemoBoardFor(BASE_SEPOLIA_CHAIN_ID)?.deployBlock === 49_804_175n, "Base Sepolia's memo board");
   assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_USDC, 500_000_000n);
   throws(() => assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_EURC, 500_000_001n), /at most 500 EURC/, "Base Sepolia: EURC over 500 refused");
