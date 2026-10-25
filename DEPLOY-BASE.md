@@ -18,8 +18,9 @@ because they were deployed before the ceremony.
 2. The final-key Groth16 verifiers (shield, cash out, private send), their adapters
    and the `DualProofVerifier`. No pool is created unless they accept final-key proofs
    and reject dev-key ones.
-3. `ShieldPoolPayments` (payments only, no swap code), with the shield verifier set,
-   deposit limits on, each asset listed, the 0.25% cash-out fee to the treasury, the
+3. `ShieldPoolPayments` (payments only, no swap code), with deposit limits on (before
+   the shield verifier, so no deposit can land unlimited), the shield verifier set, each
+   asset listed, the 0.25% cash-out fee to the treasury, the
    ownership handoff to the owner wallet started, and setup ended. Then every setting
    is read back and any mismatch fails the run.
 4. Optional, recommended: the payment-memo board (`GloamPayMemo`), so a recipient can
