@@ -294,7 +294,7 @@ export default function TokenPage() {
                   </a>
                   <Link
                     href="#roadmap"
-                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink"
                   >
                     See the roadmap <span aria-hidden>→</span>
                   </Link>
@@ -406,7 +406,7 @@ export default function TokenPage() {
                   href={EXPLORER_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   View on the explorer <span aria-hidden>↗</span>
                 </a>
@@ -414,7 +414,7 @@ export default function TokenPage() {
                   href={ORYNTH_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   Trade on Orynth <span aria-hidden>↗</span>
                 </a>
@@ -429,7 +429,7 @@ export default function TokenPage() {
             No promises on price. $GLOAM is a governance and utility token. It is
             not a share in Gloam and not a claim on its revenue: buybacks are
             how Gloam uses part of its fees, not a payout to holders. Nothing here is financial advice. Read the{" "}
-            <Link href="/disclosures" className="text-foreground underline underline-offset-4 hover:text-sealed">
+            <Link href="/disclosures" className="text-foreground underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-foreground">
               risk disclosures
             </Link>
             .

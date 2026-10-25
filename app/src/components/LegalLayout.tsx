@@ -67,7 +67,7 @@ export function LegalLayout({
             <div className="mt-16 border-t border-line pt-6">
               <Link
                 href="/"
-                className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                className="gl-arrowlink"
               >
                 <span aria-hidden>←</span> Back to home
               </Link>

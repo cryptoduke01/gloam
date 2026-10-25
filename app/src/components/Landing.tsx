@@ -232,7 +232,7 @@ export function Landing() {
                 <AppLink href="/app" className="btn btn-ink btn-lg">
                   Open app
                 </AppLink>
-                <Link href="/docs" className="btn btn-quiet btn-lg">
+                <Link href="/docs" className="gl-arrowlink ml-4 self-center">
                   Read the docs <span aria-hidden>→</span>
                 </Link>
               </div>
@@ -259,7 +259,7 @@ export function Landing() {
                   <p className="mt-2 max-w-[38ch] text-[14px] leading-relaxed text-mute">{w.body}</p>
                   <To
                     href={w.href}
-                    className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[14px] text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink mt-auto pt-4"
                   >
                     {w.cta} <span aria-hidden>→</span>
                   </To>
@@ -515,7 +515,7 @@ export function Landing() {
                   <p className="mt-3 text-[14px] leading-relaxed text-mute">{n.body}</p>
                   <Link
                     href={n.href}
-                    className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[14px] text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink mt-auto pt-4"
                   >
                     {n.cta} <span aria-hidden>→</span>
                   </Link>
@@ -532,7 +532,7 @@ export function Landing() {
               <h2 className="t-display-l max-w-[10ch]">No middlemen</h2>
               <Link
                 href="/verify#contracts"
-                className="mt-6 inline-flex items-center gap-1.5 text-[14px] text-foreground transition-colors hover:text-sealed"
+                className="gl-arrowlink mt-6"
               >
                 Verify the contracts <span aria-hidden>→</span>
               </Link>
