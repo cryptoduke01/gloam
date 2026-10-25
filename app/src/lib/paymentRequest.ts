@@ -81,11 +81,11 @@ export function findRequestAsset(key: NetworkKey, raw: string): RequestAsset | n
 
 /**
  * Why a payment code can't be claimed on this network, or null when it can.
- * The mainnet vaults sit at the same address (and Base's can too), so the vault
- * alone can't tell a Robinhood Chain code from a Tempo one; the asset can. A
- * code claimed on the wrong one would sit in the balance as "not settled".
- * Base Sepolia's and Base mainnet's ETH share the zero address, so for those
- * the link's own ?net= is what picks the network.
+ * The mainnet vaults sit at the same address (and Base's and Ethereum's can
+ * too), so the vault alone can't tell a Robinhood Chain code from a Tempo one;
+ * the asset can. A code claimed on the wrong one would sit in the balance as
+ * "not settled". ETH is the zero address on Base Sepolia, Base mainnet and
+ * Ethereum alike, so for ETH the link's own ?net= is what picks the network.
  */
 export function claimNetworkProblem(
   network: { key: NetworkKey; pool: string | null },

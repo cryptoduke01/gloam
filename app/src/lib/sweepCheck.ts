@@ -44,12 +44,13 @@ const MAX_INBOUND = 10;
 /**
  * How far back to look for arrivals: one query of `chunk` blocks, or several
  * where the node caps the range (Tempo's RPC allows 100,000 blocks a query,
- * publicnode's on Base 50,000). About 6 days on Robinhood Chain, 2.5 on Tempo
- * and 4.6 on Base.
+ * publicnode's on Base 50,000, MEV Blocker's on Ethereum 10,000). About 6 days
+ * on Robinhood Chain, 2.5 on Tempo, 4.6 on Base and 5.5 on Ethereum.
  */
 function lookback(chainId: number): { chunk: bigint; chunks: number } {
   if (chainId === 4217 || chainId === 42431) return { chunk: BigInt(100_000), chunks: 4 };
   if (chainId === 8453 || chainId === 84532) return { chunk: BigInt(50_000), chunks: 4 };
+  if (chainId === 1) return { chunk: BigInt(10_000), chunks: 4 };
   return { chunk: BigInt(5_000_000), chunks: 1 };
 }
 

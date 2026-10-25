@@ -16,6 +16,7 @@ const LOGOS: Record<ChainFamily, string> = {
   robinhood: "/brand/logos/robinhood.png",
   tempo: "/brand/logos/tempo.svg",
   base: "/brand/chains/8453.png",
+  ethereum: "/brand/chains/1.png",
 };
 
 const sideOf = (k: NetworkKey): Side => (getNetwork(k).testnet ? "testnet" : "mainnet");

@@ -166,6 +166,7 @@ const CHAIN_LOGOS: Record<ChainFamily, string> = {
   robinhood: "/brand/logos/robinhood.png",
   tempo: "/brand/logos/tempo.svg",
   base: "/brand/chains/8453.png",
+  ethereum: "/brand/chains/1.png",
 };
 
 const NETWORK_LINES: Record<NetworkKey, string> = {
@@ -175,6 +176,7 @@ const NETWORK_LINES: Record<NetworkKey, string> = {
   "robinhood-mainnet": "Robinhood Chain mainnet",
   "tempo-mainnet": "Tempo mainnet",
   "base-mainnet": "Base mainnet",
+  "ethereum-mainnet": "Ethereum mainnet",
 };
 
 /** Every network Gloam runs on: each mainnet once its pool is in, then the two testnets. */

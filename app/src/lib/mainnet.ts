@@ -20,12 +20,14 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
   4217: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 45_172_561 },
   // Base mainnet (8453): USDC, EURC, USDT, ETH. Not deployed yet (DEPLOY-BASE.md).
   8453: { pool: null, deployBlock: null },
+  // Ethereum mainnet (1): USDC, USDT, USDG, PYUSD, EURC, ETH. Not deployed yet (DEPLOY-ETHEREUM.md).
+  1: { pool: null, deployBlock: null },
 };
 
 /** Base Sepolia (84532): USDC, EURC, ETH, test funds. Deployed 24 Oct 2026 (DEPLOY-BASE.md). */
 export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 49_802_958 };
 
-export type MainnetChainId = 4663 | 4217 | 8453;
+export type MainnetChainId = 4663 | 4217 | 8453 | 1;
 
 type MainnetPoolInput = { pool: string | null; deployBlock: number | bigint | null };
 
@@ -54,8 +56,16 @@ function checkedPool({ pool, deployBlock }: MainnetPoolInput, name: string): Mai
   return { pool: pool as `0x${string}`, deployBlock: block };
 }
 
+/** Every mainnet Gloam knows, in the order it names them, with or without a pool. */
+export const MAINNET_CHAINS: readonly { chainId: MainnetChainId; name: string }[] = [
+  { chainId: 4663, name: "Robinhood Chain" },
+  { chainId: 4217, name: "Tempo" },
+  { chainId: 8453, name: "Base" },
+  { chainId: 1, name: "Ethereum" },
+];
+
 /** At least one mainnet pool is filled in. */
-export const MAINNET_CONFIGURED = mainnetPool(4663) !== null || mainnetPool(4217) !== null || mainnetPool(8453) !== null;
+export const MAINNET_CONFIGURED = MAINNET_CHAINS.some((c) => mainnetPool(c.chainId) !== null);
 
 /**
  * Mainnet is live once the launch time has passed and at least one pool is in.
@@ -67,14 +77,12 @@ export function isMainnetLive(now: number = Date.now()): boolean {
 
 /**
  * The chains whose mainnet pool is in, as words: "Robinhood Chain and Tempo",
- * "Robinhood Chain, Tempo and Base" once Base is in, or one of them. Robinhood
- * Chain and Tempo, as announced, when none is in (only a test asks then).
+ * "Robinhood Chain, Tempo, Base and Ethereum" once those are in, or one of
+ * them. Robinhood Chain and Tempo, as announced, when none is in (only a test
+ * asks then).
  */
 export function liveMainnetNames(): string {
-  const names: string[] = [];
-  if (mainnetPool(4663)) names.push("Robinhood Chain");
-  if (mainnetPool(4217)) names.push("Tempo");
-  if (mainnetPool(8453)) names.push("Base");
+  const names = MAINNET_CHAINS.filter((c) => mainnetPool(c.chainId)).map((c) => c.name);
   if (!names.length) return "Robinhood Chain and Tempo";
   return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }

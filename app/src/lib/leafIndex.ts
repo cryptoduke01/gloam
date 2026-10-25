@@ -155,6 +155,8 @@ export function walkTuning(chainId: number, logRange: bigint): WalkTuning {
   if (chainId === 46630 || chainId === 4663) return { span: 5_000_000n, parallel: 4, spacingMs: 0 };
   if (chainId === 42431 || chainId === 4217) return { span: logRange, parallel: 3, spacingMs: 120 };
   if (chainId === 84532 || chainId === 8453) return { span: logRange, parallel: 3, spacingMs: 120 };
+  // Ethereum reads through MEV Blocker, 10,000 blocks a read (any range under 10,000 logs).
+  if (chainId === 1) return { span: logRange, parallel: 3, spacingMs: 120 };
   return { span: logRange, parallel: 2, spacingMs: 0 };
 }
 

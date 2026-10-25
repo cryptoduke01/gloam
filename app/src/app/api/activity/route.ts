@@ -21,6 +21,8 @@ function explorerFor(chainId: string | null): string | null | "bad" {
   // Base (Sepolia too) is read from the chain like a mainnet; Basescan's API needs a key.
   if (chainId === "8453" && NETWORK_KEYS.includes("base-mainnet")) return null;
   if (chainId === "84532" && NETWORK_KEYS.includes("base")) return null;
+  // Ethereum too: Etherscan's API needs a key.
+  if (chainId === "1" && NETWORK_KEYS.includes("ethereum-mainnet")) return null;
   return "bad";
 }
 

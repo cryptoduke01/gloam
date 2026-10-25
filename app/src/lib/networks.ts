@@ -1,7 +1,8 @@
 /**
  * Gloam network registry: the runtime source of truth for every chain the
  * product can point at. Three testnets (Robinhood Chain testnet, Tempo
- * Moderato and Base Sepolia) and their three mainnets.
+ * Moderato and Base Sepolia), their three mainnets, and Ethereum mainnet,
+ * which has no Gloam testnet (Base Sepolia rehearses the same pool).
  *
  * Everything chain-specific (chain object, shielded pool, deploy block, hash
  * scheme, native + stable assets, explorer links) hangs off one `GloamNetwork`
@@ -15,7 +16,7 @@
  * built on them (selector, API, relay, MCP, proofs), as if it did not exist.
  */
 import { defineChain, type Address, type Chain } from "viem";
-import { base, baseSepolia } from "viem/chains";
+import { base, baseSepolia, mainnet as ethereum } from "viem/chains";
 import { robinhood, robinhoodTestnet } from "./chain";
 import type { CeremonyKind } from "./circuitArtifacts";
 import {
@@ -31,10 +32,11 @@ export type NetworkKey =
   | "base"
   | "robinhood-mainnet"
   | "tempo-mainnet"
-  | "base-mainnet";
+  | "base-mainnet"
+  | "ethereum-mainnet";
 
 /** The chain a network runs on, testnet or mainnet: wallets, fees and logos follow it. */
-export type ChainFamily = "robinhood" | "tempo" | "base";
+export type ChainFamily = "robinhood" | "tempo" | "base" | "ethereum";
 
 /**
  * Chain ids of the networks Gloam knows. Typed as the literal union so
@@ -43,7 +45,7 @@ export type ChainFamily = "robinhood" | "tempo" | "base";
  * narrow `chainId` to the configured ids. Mainnet ids are only registered with
  * wagmi once their pool is filled in (lib/wagmi.ts).
  */
-export type GloamChainId = 46630 | 42431 | 84532 | 4663 | 4217 | 8453;
+export type GloamChainId = 46630 | 42431 | 84532 | 4663 | 4217 | 8453 | 1;
 
 /** Whether a network is deployed and safe for real shield/spend writes. */
 export type NetworkStatus = "live" | "planned";
@@ -81,7 +83,7 @@ function envBlock(v: string | undefined, fallback: bigint): bigint {
 
 export interface GloamNetwork {
   key: NetworkKey;
-  /** The chain's name, the same for its testnet and its mainnet ("Robinhood Chain", "Tempo"). */
+  /** The chain's name, the same for its testnet and its mainnet ("Robinhood Chain", "Tempo", "Ethereum"). */
   label: string;
   family: ChainFamily;
   /** Testnet (true) or mainnet (false). */
@@ -115,7 +117,7 @@ export interface GloamNetwork {
    * network are made and checked with the same set (lib/circuitArtifacts).
    */
   ceremony: CeremonyKind;
-  /** The chain's native gas coin (ETH on Robinhood Chain and Base, USD on Tempo). */
+  /** The chain's native gas coin (ETH on Robinhood Chain, Base and Ethereum, USD on Tempo). */
   primaryAsset: NetworkAsset;
   /** Stable assets shieldable on this network (empty until registered). */
   stableAssets: NetworkAsset[];
@@ -198,9 +200,24 @@ export const baseMainnet = defineChain({
   },
 });
 
+/**
+ * Ethereum mainnet. The default RPC is MEV Blocker's: it keeps old state and
+ * answers eth_getLogs over 10,000 blocks (or any range under 10,000 logs), and
+ * the vault tree is rebuilt from logs. publicnode, second, serves only the last
+ * 10,000 blocks of logs and 128 blocks of state. Checked 2026-10-25. The server
+ * reads through GLOAM_RPC_URL_1 first once it is set (lib/serverRpc).
+ */
+export const ethereumMainnet = defineChain({
+  ...ethereum,
+  rpcUrls: {
+    default: { http: ["https://rpc.mevblocker.io", "https://ethereum-rpc.publicnode.com"] },
+  },
+});
+
 const RH_MAINNET_POOL = mainnetPool(4663);
 const TEMPO_MAINNET_POOL = mainnetPool(4217);
 const BASE_MAINNET_POOL = mainnetPool(8453);
+const ETHEREUM_MAINNET_POOL = mainnetPool(1);
 const BASE_SEPOLIA_POOL = baseSepoliaPool();
 
 const NETWORKS: Record<NetworkKey, GloamNetwork> = {
@@ -371,12 +388,38 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerTx: (hash) => `${baseMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseMainnet.blockExplorers.default.url}/address/${addr}`,
   },
+  // Not deployed yet (DEPLOY-ETHEREUM.md): hidden until MAINNET_POOLS[1] is filled in.
+  // No Gloam testnet: Base Sepolia rehearses the same pool and keys. Gas is
+  // expensive here, so the relay stops while it is over its ceiling (lib/relay/gasCeiling).
+  "ethereum-mainnet": {
+    key: "ethereum-mainnet",
+    label: "Ethereum",
+    family: "ethereum",
+    testnet: false,
+    stocks: false,
+    paymentsPool: true,
+    chain: ethereumMainnet,
+    chainId: ethereumMainnet.id,
+    pool: ETHEREUM_MAINNET_POOL?.pool ?? null,
+    deployBlock: ETHEREUM_MAINNET_POOL?.deployBlock ?? null,
+    ceremony: "production",
+    // MEV Blocker: "up to a 10,000 block range and no limit on the response size"
+    logRange: 10_000n,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "live",
+    payMemo: null,
+    note: "Mainnet: private USDC, USDT, USDG, PYUSD, EURC and ETH payments.",
+    explorerTx: (hash) => `${ethereumMainnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) => `${ethereumMainnet.blockExplorers.default.url}/address/${addr}`,
+  },
 };
 
 const hasPool = (k: NetworkKey) => NETWORKS[k].pool !== null && NETWORKS[k].deployBlock !== null;
 
 /** Mainnets whose pool is filled in, Robinhood Chain first. Empty before deploy day. */
-const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet", "base-mainnet"] as const).filter(hasPool);
+const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"] as const).filter(hasPool);
 
 /** The testnets: Robinhood Chain and Tempo, and Base Sepolia once its pool is filled in. */
 const TESTNET_KEYS: NetworkKey[] = ["robinhood", "tempo", ...(hasPool("base") ? (["base"] as const) : [])];

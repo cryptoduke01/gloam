@@ -118,6 +118,8 @@ const OWN_COPY_FRESH_MS: Record<number, number> = {
   4663: 8 * 60_000,
   4217: 6 * 3_600_000,
   8453: 6 * 3_600_000,
+  // Ethereum: 12 s blocks, a 10k-block log read is about 33 hours, past state kept (MEV Blocker)
+  1: 6 * 3_600_000,
 };
 const OWN_COPY_FRESH_DEFAULT_MS = 8 * 60_000;
 
