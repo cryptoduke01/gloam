@@ -7,6 +7,7 @@ import {DeployTempoMainnet} from "../script/DeployTempoMainnet.s.sol";
 import {DeployBaseSepolia} from "../script/DeployBaseSepolia.s.sol";
 import {DeployBaseMainnet} from "../script/DeployBaseMainnet.s.sol";
 import {DeployEthereumMainnet} from "../script/DeployEthereumMainnet.s.sol";
+import {DeployEthereumSepolia} from "../script/DeployEthereumSepolia.s.sol";
 
 interface IRun {
     function run() external;
@@ -33,6 +34,10 @@ contract DeployChainsTest is Test {
 
     function test_ethereum_mainnet_runs_only_on_chain_1() public {
         _refusesAllBut(IRun(address(new DeployEthereumMainnet())), 1);
+    }
+
+    function test_ethereum_sepolia_runs_only_on_11155111() public {
+        _refusesAllBut(IRun(address(new DeployEthereumSepolia())), 11155111);
     }
 
     function test_base_mainnet_runs_only_on_8453() public {

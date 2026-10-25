@@ -183,18 +183,6 @@ contract DeployBaseTest is Test {
     address constant ETH_SEPOLIA_PYUSD = 0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9;
     address constant ETH_SEPOLIA_EURC = 0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4;
 
-    function test_ethereum_sepolia_refuses_other_chains() public {
-        DeployEthereumSepolia s = new DeployEthereumSepolia();
-        vm.expectRevert(bytes("wrong chain for this script"));
-        s.run();
-        uint256[3] memory others = [uint256(1), 84532, 8453];
-        for (uint256 i = 0; i < others.length; i++) {
-            vm.chainId(others[i]);
-            vm.expectRevert(bytes("wrong chain for this script"));
-            s.run();
-        }
-    }
-
     /// DEPLOY-ETHEREUM-SEPOLIA.md as written, from the real deployer at nonce 0: PoseidonT3,
     /// the vault and its verifiers, and the memo board land where they did on the other
     /// chains, with the runbook's assets, limits, fee and owner handoff.
