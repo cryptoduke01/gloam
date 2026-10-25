@@ -1530,6 +1530,9 @@ export function PayrollView() {
                 </button>
               )}
               {blocker && <p className="mt-2.5 text-center text-[12.5px] text-mute">{blocker}</p>}
+              {!blocker && validRows.length === 0 && (
+                <p className="mt-2.5 text-center text-[12.5px] text-mute">Add your team first, from a CSV or a pasted list.</p>
+              )}
               {badCount > 0 && validRows.length > 0 && (
                 <p className="mt-2 text-center text-[12.5px] text-warn">
                   {badCount} {badCount === 1 ? "line" : "lines"} will be skipped until fixed.

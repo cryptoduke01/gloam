@@ -210,6 +210,7 @@ export default function ClaimPage() {
             >
               Open the payment
             </button>
+            {!pasted.trim() && <p className="mt-2 text-center text-[12.5px] text-mute">Paste the whole message first.</p>}
             <Link href="/app/vault?tab=move&mode=receive" className="btn btn-ghost btn-sm mt-3">
               Or open Gloam
             </Link>

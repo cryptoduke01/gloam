@@ -193,6 +193,9 @@ function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: Pa
           <button type="submit" disabled={busy || name.trim().length < 2} className="btn btn-ink btn-lg btn-block mt-6">
             {busy ? "Creating…" : "Create partner account"}
           </button>
+          {!busy && name.trim().length < 2 && (
+            <p className="mt-2 text-center text-[12.5px] text-mute">Name your app to create the account.</p>
+          )}
           <button type="button" onClick={onSignOut} className="btn btn-quiet btn-sm btn-block mt-2">
             Use another wallet
           </button>
