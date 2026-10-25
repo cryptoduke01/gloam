@@ -35,7 +35,7 @@ Mainnet runs `ShieldPoolPayments`: the same surface without `sealedSwap`, plus b
 
 Both mainnets run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol` and `DeployTempoMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open; an external audit is planned.
 
-Base is ready to deploy on the same path, not deployed: `DeployBaseSepolia.s.sol` (`84532`, the testnet, on the final keys too) and `DeployBaseMainnet.s.sol` (`8453`), with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+Base runs the same deploy, with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Base Sepolia (`84532`, a testnet on the final keys) went live on 24 October 2026 through `DeployBaseSepolia.s.sol` (table below). Base mainnet (`8453`, `DeployBaseMainnet.s.sol`) is next and not deployed. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
 **Robinhood Chain mainnet `4663`.**
 
@@ -64,6 +64,24 @@ Base is ready to deploy on the same path, not deployed: `DeployBaseSepolia.s.sol
 | Owner and treasury | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet at launch; a multisig is planned) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
 | GloamPayMemo | None yet |
+
+**Base Sepolia `84532`** (testnet on the mainnet contract and final keys, deployed 2026-10-24). Record: [deployments/base-sepolia.json](./deployments/base-sepolia.json).
+
+| | |
+| --- | --- |
+| Pool (`ShieldPoolPayments`) | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` |
+| Deploy block | `49802958` |
+| PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
+| DualProofVerifier | `0x1421353d471dF6C847713aee391Db38978fE714a` (final keys) |
+| ShieldIVerifier | `0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465` (final keys) |
+| sealedSwapVerifier | `0x0`, always (no swap code) |
+| Listed assets (per deposit / total) | USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e` and EURC `0x808456652fdb597867f38412077A9182bf77359F` (500 / 25,000 each), ETH (0.2 / 10) |
+| Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (ownership accepted) |
+| Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` |
+| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
+| GloamPayMemo | `0x01B3172d9900Cb26d57E986429b9b23854c74598` (block `49804175`) |
+
+Every Base Sepolia contract but PoseidonT3 is an exact source match on Sourcify; PoseidonT3 is raw circomlibjs bytecode, checked by code hash.
 
 On `ShieldPoolPayments` the timelocked setters are `setVerifier`, `setShieldVerifier`, `setDepositLimit` and `setWithdrawFee`. `lowerDepositLimit` (down to `0, 0`, which closes deposits for that asset) and `lowerWithdrawFee` are instant. Withdrawals and private transfers are never limited.
 

@@ -60,7 +60,7 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
       `GLOAM_RPC_URL_4217` to a private RPC for the server (the RPC env is still to do; the public
       RPCs are the fallback)
 
-## 2b. Base (ready to deploy, not deployed)
+## 2b. Base (Base Sepolia live, Base mainnet not deployed)
 
 - [x] `script/DeployBaseSepolia.s.sol` (`84532`) and `script/DeployBaseMainnet.s.sol` (`8453`) on
       the shared `script/MainnetDeploy.sol`, native ETH allowed, final keys on both (Base Sepolia
@@ -71,7 +71,9 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
       a fresh deployer gets the same PoseidonT3 and vault addresses as on Robinhood Chain and Tempo
 - [x] Fork dry runs of both scripts pass every read-back check; `test/DeployBase.t.sol` runs both
       with the runbook settings
-- [ ] Base Sepolia deployed, ownership accepted, relayer funded, tested end to end in the app
+- [x] Base Sepolia deployed (24 Oct 2026, block `49802958`) and ownership accepted; record in
+      [`deployments/base-sepolia.json`](./deployments/base-sepolia.json)
+- [ ] Base Sepolia relayer funded and tested end to end in the app
 - [ ] Base mainnet deployed (only after Base Sepolia), pool and block in `MAINNET_POOLS[8453]`
 
 Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
