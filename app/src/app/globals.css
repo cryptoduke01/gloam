@@ -312,6 +312,14 @@ body {
   text-transform: uppercase;
   color: var(--mute);
 }
+/* The small line over a heading in the app (a dialog's kind, a card's status):
+   sentence case in the mute ink. Caps (t-label) stay for table column heads. */
+.t-eyebrow {
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--mute);
+}
 
 /* ---------- Buttons: pills ---------- */
 .btn {
