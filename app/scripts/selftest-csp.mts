@@ -36,7 +36,7 @@ for (const c of ORIGIN_CHAINS) {
 // every Gloam network's own RPCs, the hidden ones too (a mainnet waiting for its
 // pool): lib/wagmi wires some from the chain object, http(chain.rpcUrls...),
 // which the string check below cannot see
-const KEYS: NetworkKey[] = ["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet"];
+const KEYS: NetworkKey[] = ["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"];
 for (const key of KEYS) {
   const c = getNetwork(key).chain;
   for (const url of c.rpcUrls.default.http) {

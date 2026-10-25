@@ -20,6 +20,9 @@ const GLOAM_RPCS = [
   "https://base-sepolia-rpc.publicnode.com",
   "https://sepolia.base.org",
   "https://base-rpc.publicnode.com",
+  // Ethereum mainnet reads through MEV Blocker, with publicnode behind it
+  "https://rpc.mevblocker.io",
+  "https://ethereum-rpc.publicnode.com",
 ];
 
 /** Default RPCs of the chains a private bridge order can be paid from (lib/originChains). */

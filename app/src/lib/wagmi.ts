@@ -3,7 +3,7 @@
 import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { robinhood, robinhoodTestnet } from "./chain";
-import { NETWORK_KEYS, baseMainnet, baseTestnet, tempoMainnet, tempoTestnet } from "./networks";
+import { NETWORK_KEYS, baseMainnet, baseTestnet, ethereumMainnet, tempoMainnet, tempoTestnet } from "./networks";
 import { ORIGIN_CHAINS } from "./originChains";
 import { turnkeyConnector } from "./turnkeyConnector";
 import { tempoFeeAware } from "./feeSponsor";
@@ -32,19 +32,20 @@ const mainnetChains = [
   ...(NETWORK_KEYS.includes("robinhood-mainnet") ? [robinhood] : []),
   ...(NETWORK_KEYS.includes("tempo-mainnet") ? [tempoMainnet] : []),
   ...(NETWORK_KEYS.includes("base-mainnet") ? [baseMainnet] : []),
+  ...(NETWORK_KEYS.includes("ethereum-mainnet") ? [ethereumMainnet] : []),
 ];
 const baseTestnetChains = NETWORK_KEYS.includes("base") ? [baseTestnet] : [];
 
 // The chains a wallet can pay a private bridge order from (lib/originChains),
-// only alongside a mainnet: the wallet switches to one to sign there. Base is
-// one of them, so once Base mainnet is a Gloam network it is registered once,
-// as that network (its RPC answers the vault's log reads).
+// only alongside a mainnet: the wallet switches to one to sign there. Base and
+// Ethereum are among them, so once either is a Gloam network it is registered
+// once, as that network (its RPC answers the vault's log reads).
 const originChains = mainnetChains.length
   ? ORIGIN_CHAINS.filter((c) => !mainnetChains.some((m) => m.id === c.id))
   : [];
 
 // wagmi narrows hook `chainId` options to the registered ids. The type names
-// all six (GloamChainId); at runtime only the testnets and mainnets with a pool
+// all seven (GloamChainId); at runtime only the testnets and mainnets with a pool
 // are there, plus the bridge's origin chains.
 const chains = [
   robinhoodTestnet,
@@ -59,6 +60,7 @@ const chains = [
   typeof robinhood,
   typeof tempoMainnet,
   typeof baseMainnet,
+  typeof ethereumMainnet,
 ];
 
 export const wagmiConfig = createConfig({
@@ -78,6 +80,8 @@ export const wagmiConfig = createConfig({
     [tempoMainnet.id]: http("https://rpc.tempo.xyz"),
     [baseTestnet.id]: http(baseTestnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
     [baseMainnet.id]: http(baseMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
+    // Until Ethereum is a Gloam network, the origin-chain entry below replaces this one.
+    [ethereumMainnet.id]: http(ethereumMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
     ...Object.fromEntries(originChains.map((c) => [c.id, http()])),
   },
   ssr: true,

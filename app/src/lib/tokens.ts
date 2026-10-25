@@ -15,6 +15,11 @@ export type OnchainToken = {
   coingecko?: string;
   /** A stablecoin pegged to another currency (EURC: the euro), so never counted as $1. */
   peg?: "EUR";
+  /**
+   * approve() refuses to change one non-zero allowance into another (Tether's
+   * USDT on Ethereum), so a stale allowance goes to 0 before a deposit's approve.
+   */
+  approveResetFirst?: true;
 };
 
 /** Worth one dollar each: a dollar stablecoin. EURC is a stablecoin, but not one of these. */
@@ -178,6 +183,36 @@ export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
   { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x808456652fdb597867f38412077A9182bf77359F", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
 ];
 
+/**
+ * Ethereum mainnet (1): the stablecoins the mainnet pool lists, 6 decimals
+ * each, checked on chain 2026-10-25 (symbol, name, decimals). USDC and EURC are
+ * Circle's, USDT is Tether's, USDG and PYUSD are Paxos's (PYUSD for PayPal); every
+ * issuer can freeze an address. USDT's approve() and transfer() return nothing,
+ * and approve() refuses to change one non-zero allowance into another. Native ETH
+ * is listed too (supportsNativeShield). Beta limits: 500 per deposit / 25,000 in
+ * total for each stablecoin, 0.2 / 10 ETH.
+ */
+export const ETHEREUM_MAINNET_TOKENS: OnchainToken[] = [
+  { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "usdt", symbol: "USDT", name: "Tether USD", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, yahoo: "", kind: "stablecoin", approveResetFirst: true },
+  { id: "usdg", symbol: "USDG", name: "Global Dollar", address: "0xe343167631d89B6Ffc58B88d6b7fB0228795491D", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "pyusd", symbol: "PYUSD", name: "PayPal USD", address: "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
+];
+
+/**
+ * The approve(pool, value) calls a deposit of `amount` needs, in order, given
+ * the allowance the pool has now: none when it already covers the deposit;
+ * [0, amount] for a token that refuses to go from one non-zero allowance to
+ * another; otherwise [amount]. Exact amounts only. Same rule as the SDK's
+ * approvalSteps.
+ */
+export function approvalSteps(token: Pick<OnchainToken, "approveResetFirst">, allowance: bigint, amount: bigint): bigint[] {
+  if (allowance >= amount) return [];
+  if (allowance > BigInt(0) && token.approveResetFirst) return [BigInt(0), amount];
+  return [amount];
+}
+
 export const CIRCLE_FAUCET_URL = "https://faucet.circle.com/";
 
 /** ERC-20 tokens shieldable on a given chain (stablecoins first). */
@@ -186,6 +221,7 @@ export function shieldTokensFor(chainId: number): OnchainToken[] {
   if (chainId === 4217) return TEMPO_MAINNET_TOKENS;
   if (chainId === 8453) return BASE_MAINNET_TOKENS;
   if (chainId === 84532) return BASE_SEPOLIA_TOKENS;
+  if (chainId === 1) return ETHEREUM_MAINNET_TOKENS;
   return chainId === 42431 ? TEMPO_STABLE_TOKENS : [...RH_STABLE_TOKENS, ...TESTNET_STOCK_TOKENS];
 }
 
@@ -205,6 +241,7 @@ export function knownTokens(chainId?: number): OnchainToken[] {
     ...TEMPO_MAINNET_TOKENS,
     ...BASE_MAINNET_TOKENS,
     ...BASE_SEPOLIA_TOKENS,
+    ...ETHEREUM_MAINNET_TOKENS,
   ];
   return chainId === undefined ? all : [...shieldTokensFor(chainId), ...all];
 }
@@ -213,7 +250,7 @@ export function knownTokens(chainId?: number): OnchainToken[] {
  * Whether the chain's native coin can be added privately. Tempo (testnet 42431,
  * mainnet 4217) has no native coin and blocks native msg.value, and the
  * Robinhood Chain mainnet pool (4663) does not list ETH. Base (8453, 84532)
- * lists ETH.
+ * and Ethereum (1) list ETH.
  */
 export function supportsNativeShield(chainId: number): boolean {
   return chainId !== 42431 && chainId !== 4217 && chainId !== 4663;

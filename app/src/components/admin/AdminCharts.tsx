@@ -41,7 +41,7 @@ function ago(ts: number): string {
 
 /** The chain's own logo, by family, so a testnet shows its mainnet's mark. */
 function ChainMark({ net, size = 28 }: { net: GloamNetwork; size?: number }) {
-  const id = { robinhood: 4663, tempo: 4217, base: 8453 }[net.family];
+  const id = { robinhood: 4663, tempo: 4217, base: 8453, ethereum: 1 }[net.family];
   const dark = id !== 4217;
   return (
     <span className="relative inline-block shrink-0 overflow-hidden rounded-full" style={{ width: size, height: size }}>

@@ -1114,7 +1114,7 @@ function ownAddress(a: string): boolean {
   const l = a.toLowerCase();
   if (l === GLOAM_TOKEN.address.toLowerCase()) return true;
   if (baseSepoliaPool()?.pool.toLowerCase() === l) return true;
-  return ([4663, 4217, 8453] as const).some((id) => mainnetPool(id)?.pool.toLowerCase() === l);
+  return ([4663, 4217, 8453, 1] as const).some((id) => mainnetPool(id)?.pool.toLowerCase() === l);
 }
 
 /**
@@ -1413,7 +1413,8 @@ function escapeRe(s: string): string {
 
 /**
  * Chains people's wallets end up on, by id. Gloam is on the two testnets, and
- * each mainnet once its pool is in (Base and Base Sepolia too, once theirs are).
+ * each mainnet once its pool is in (Base and Base Sepolia too, once theirs are,
+ * and Ethereum, which has no Gloam testnet).
  */
 const CHAIN_NAMES: Record<number, string> = {
   1: "Ethereum mainnet",
@@ -1433,15 +1434,16 @@ const CHAIN_DETAILS: Record<number, string> = {
   4217: "RPC https://rpc.tempo.xyz, chain ID 4217, currency USD.",
   8453: "RPC https://mainnet.base.org, chain ID 8453, currency ETH.",
   84532: "RPC https://sepolia.base.org, chain ID 84532, currency ETH.",
+  1: "RPC https://ethereum-rpc.publicnode.com, chain ID 1, currency ETH.",
 };
 
 /** The fix once mainnet is live: the wallet and the app can each be on a mainnet or a testnet. */
 function liveChainFix(name: string, m: ChainMismatch): string {
-  const mainnets = new Set<number>(([4663, 4217, 8453] as const).filter((id) => mainnetPool(id)));
+  const mainnets = new Set<number>(([4663, 4217, 8453, 1] as const).filter((id) => mainnetPool(id)));
   const want = `${chainLabel(m.want)} (${m.want})`;
   const tempo = m.want === 42431 || m.want === 4217;
   const base = m.want === 84532 || m.want === 8453;
-  const button = tempo ? "Switch to Tempo" : base ? "Switch to Base" : "Switch to Robinhood Chain";
+  const button = tempo ? "Switch to Tempo" : base ? "Switch to Base" : m.want === 1 ? "Switch to Ethereum" : "Switch to Robinhood Chain";
   const twin: Record<number, number> = { 46630: 4663, 4663: 46630, 42431: 4217, 4217: 42431, 84532: 8453, 8453: 84532 };
   const tap = `tap "${button}" on the wallet button at the top of the app (or Settings > Network > Add to wallet), approve it in your wallet, then try again.`;
   // the wallet sits on the other side (mainnet or testnet) of the chain the app is set to
