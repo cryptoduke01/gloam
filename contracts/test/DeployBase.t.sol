@@ -6,13 +6,16 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {ShieldPoolPayments} from "../src/ShieldPoolPayments.sol";
 import {DeployBaseSepolia} from "../script/DeployBaseSepolia.s.sol";
 import {DeployBaseMainnet} from "../script/DeployBaseMainnet.s.sol";
+import {DeployEthereumMainnet} from "../script/DeployEthereumMainnet.s.sol";
 import {MockERC20} from "./MockERC20.sol";
 
 /**
  * The Base deploy scripts, run in a local EVM with the exact settings in
- * DEPLOY-BASE.md: each runs only on its own chain, lists native ETH next to the
- * stablecoins with the beta limits, sets the 0.25% cash-out fee for the
- * treasury, starts the handoff to the owner wallet and ends setup.
+ * DEPLOY-BASE.md, and the Ethereum one with those in DEPLOY-ETHEREUM.md: each
+ * runs only on its own chain (test/DeployChains.t.sol covers every script),
+ * lists native ETH next to the stablecoins with the beta limits, sets the 0.25%
+ * cash-out fee for the treasury, starts the handoff to the owner wallet and
+ * ends setup.
  */
 contract DeployBaseTest is Test {
     using stdJson for string;
@@ -27,6 +30,12 @@ contract DeployBaseTest is Test {
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address constant EURC = 0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42;
     address constant USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
+
+    address constant ETH_USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant ETH_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+    address constant ETH_USDG = 0xe343167631d89B6Ffc58B88d6b7fB0228795491D;
+    address constant ETH_PYUSD = 0x6c3ea9036406852006290770BEdFcAbA0e23A0e8;
+    address constant ETH_EURC = 0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c;
 
     function _env(string memory assets, string memory per, string memory total) internal {
         vm.setEnv("DEPLOYER_PK", vm.toString(bytes32(PK)));
@@ -83,11 +92,13 @@ contract DeployBaseTest is Test {
         s.run();
     }
 
-    /// One test runs both deploys in turn: the settings travel in process env vars,
-    /// which tests running side by side would overwrite for each other.
+    /// One test runs every deploy in turn: the settings travel in process env vars,
+    /// which tests running side by side would overwrite for each other. So the
+    /// Ethereum deploy runs here too, not in a test file of its own.
     function test_deploys_with_runbook_settings() public {
         _sepoliaDeploy();
         _mainnetDeploy();
+        _ethereumDeploy();
     }
 
     function _sepoliaDeploy() internal {
@@ -125,6 +136,31 @@ contract DeployBaseTest is Test {
         _checkLimit(pool, USDC, 500e6, 25_000e6);
         _checkLimit(pool, EURC, 500e6, 25_000e6);
         _checkLimit(pool, USDT, 500e6, 25_000e6);
+    }
+
+    function _ethereumDeploy() internal {
+        vm.chainId(1);
+        address[5] memory stables = [ETH_USDC, ETH_USDT, ETH_USDG, ETH_PYUSD, ETH_EURC];
+        string memory assets;
+        for (uint256 i = 0; i < stables.length; i++) {
+            _token(stables[i]);
+            assets = string.concat(assets, vm.toString(stables[i]), ",");
+        }
+        _env(
+            string.concat(assets, "0x0000000000000000000000000000000000000000"),
+            "500000000,500000000,500000000,500000000,500000000,200000000000000000",
+            "25000000000,25000000000,25000000000,25000000000,25000000000,10000000000000000000"
+        );
+        uint256 n = vm.getNonce(vm.addr(PK));
+        new DeployEthereumMainnet().run();
+        ShieldPoolPayments pool = _poolAfter(n);
+        _checkCommon(pool);
+        for (uint256 i = 0; i < stables.length; i++) {
+            _checkLimit(pool, stables[i], 500e6, 25_000e6);
+        }
+        // Base's assets are not listed on Ethereum
+        _checkLimit(pool, USDC, 0, 0);
+        _checkLimit(pool, USDT, 0, 0);
     }
 
     function _deployPoseidon() internal returns (address addr) {
