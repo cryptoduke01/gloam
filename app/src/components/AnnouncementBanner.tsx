@@ -67,13 +67,13 @@ export function AnnouncementBanner() {
           )}
         </p>
         {live ? (
-          <AppLink href="/app" className="shrink-0 text-[13px] font-medium text-[#8fd3ad] underline-offset-4 hover:underline">
+          <AppLink href="/app" className="shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white">
             Open the app
           </AppLink>
         ) : (
           <Link
             href={MAINNET_PAGE}
-            className="shrink-0 text-[13px] font-medium text-[#8fd3ad] underline-offset-4 hover:underline"
+            className="shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white"
           >
             See the countdown
           </Link>

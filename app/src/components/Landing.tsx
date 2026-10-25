@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
-import { MainnetCopy, MainnetPill } from "@/components/MainnetCountdown";
+import { MainnetCopy } from "@/components/MainnetCountdown";
 import { CursorReveal } from "@/components/ui/CursorReveal";
 import { SealStream } from "@/components/landing/SealStream";
 import { PayrollLive } from "@/components/landing/PayrollLive";
@@ -221,7 +221,6 @@ export function Landing() {
             <FlowField />
             <CursorReveal />
             <div className="relative z-10 max-w-[720px]">
-              <MainnetPill />
               <h1 className="t-display-xl">Private money on public chains</h1>
               <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft sm:text-[18px]">
                 For people and teams paid in stablecoins, and the agents that
