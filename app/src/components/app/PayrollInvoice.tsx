@@ -78,6 +78,8 @@ export function PayrollInvoice({
     >
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         className="gl-invoice-backdrop fixed inset-0 bg-black/45 backdrop-blur-sm"
         aria-label="Close invoice"
         onClick={onClose}

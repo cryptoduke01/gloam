@@ -78,6 +78,8 @@ export function WelcomeModal() {
     >
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         aria-label="Dismiss welcome"
         onClick={dismiss}

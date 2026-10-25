@@ -2,8 +2,18 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 
-const TABBABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** What Tab stops on. tabindex="-1" is never a stop: the dialogs' backdrops are buttons for a click, not for the keyboard. */
+const NOT_SKIPPED = ':not([tabindex="-1"])';
+const TABBABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  'input:not([disabled]):not([type="hidden"])',
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]",
+]
+  .map((s) => `${s}${NOT_SKIPPED}`)
+  .join(", ");
 
 /** What Tab can reach inside `root`, in order, leaving out hidden and inert parts. */
 function tabbableIn(root: HTMLElement): HTMLElement[] {

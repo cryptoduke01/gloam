@@ -785,6 +785,8 @@ function BridgeSheet({
     >
       <motion.button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         aria-label="Close"
         onClick={onClose}
