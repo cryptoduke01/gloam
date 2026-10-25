@@ -419,8 +419,15 @@ export function claimLink(origin: string, networkKey: string, code: string): str
   return claimLinkFor(code, networkKey, origin);
 }
 
+/**
+ * One cell of the results file. A cell a spreadsheet would run as a formula
+ * (=, +, -, @, a tab or a carriage return first) gets an apostrophe in front,
+ * so it reads as text: a payee's name comes from the list as typed, and the
+ * file holds the unclaimed rows' claim links, which are bearer codes.
+ */
 function csvCell(v: string): string {
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export function exportResultsCsv(

