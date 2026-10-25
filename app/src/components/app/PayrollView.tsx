@@ -811,7 +811,7 @@ export function PayrollView() {
               ) : (
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="t-label truncate">{b.title}</p>
+                    <p className="truncate text-[13px] text-mute">{b.title}</p>
                     <p className="mt-2 flex items-center gap-2.5 max-sm:text-[22px] font-light leading-tight tracking-[-0.012em] text-foreground sm:text-[26px]">
                       {running ? <Spinner className="h-4 w-4 text-mute" /> : null}
                       <span className="truncate">
@@ -869,7 +869,7 @@ export function PayrollView() {
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           <section className="gl-card max-sm:p-5 sm:p-6">
             <div className="flex items-center justify-between">
-              <p className="t-label">{done ? "Receipt" : "This run"}</p>
+              <h2 className="text-[17px] text-foreground">{done ? "Receipt" : "This run"}</h2>
               {done ? (
                 <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
                   <Icon name="lock" className="h-3 w-3" />
@@ -1188,10 +1188,8 @@ export function PayrollView() {
                   </>
                 ) : (
                   <>
-                    <span className="grid h-12 w-12 place-items-center rounded-full bg-panel text-foreground shadow-card">
-                      <Icon name="upload" className="h-5 w-5" />
-                    </span>
-                    <p className="mt-4 text-[17px] text-foreground">
+                    <Icon name="upload" className="h-6 w-6 text-foreground" />
+                    <p className="mt-3 text-[17px] text-foreground">
                       {dragging ? "Drop it here" : "Drop your team’s CSV"}
                     </p>
                     <p className="mt-1.5 max-w-[42ch] text-[13.5px] leading-relaxed text-mute">
@@ -1415,7 +1413,7 @@ export function PayrollView() {
         {/* summary */}
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           <section className="gl-card max-sm:p-5 sm:p-6">
-            <p className="t-label">This run</p>
+            <h2 className="text-[17px] text-foreground">This run</h2>
             <p className="mt-4 flex items-center gap-2.5 text-foreground">
               <span
                 className={`tnum text-[40px] font-light leading-none tracking-[-0.025em] ${
@@ -1563,8 +1561,8 @@ export function PayrollView() {
           {batches.length > 0 && (
             <section className="gl-card max-sm:p-5 sm:p-6">
               <div className="flex items-center justify-between">
-                <p className="t-label">Past runs</p>
-                <span className="tnum text-[12px] text-faint">{batches.length}</span>
+                <h2 className="text-[17px] text-foreground">Past runs</h2>
+                <span className="tnum text-[13px] text-mute">{batches.length}</span>
               </div>
               <ul className="-mx-2 mt-3 space-y-0.5">
                 {batches.slice(0, 6).map((b) => {
