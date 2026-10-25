@@ -31,9 +31,13 @@ async function fetchMarks(): Promise<Map<string, number>> {
 
 const EMPTY = new Map<string, number>();
 
-/** USD per unit by token address (lowercase), for the tokens above; empty until read, or when `enabled` is false. */
-export function useCoingeckoMarks(enabled: boolean): Map<string, number> {
-  const { data } = useQuery({
+/**
+ * USD per unit by token address (lowercase), for the tokens above; empty until
+ * read, or when `enabled` is false. `pending` is true until the first read
+ * answers (a failed read is not pending: those tokens just have no price).
+ */
+export function useCoingeckoMarks(enabled: boolean): { marks: Map<string, number>; pending: boolean } {
+  const { data, isPending } = useQuery({
     queryKey: ["coingecko-marks"],
     queryFn: fetchMarks,
     enabled,
@@ -41,5 +45,5 @@ export function useCoingeckoMarks(enabled: boolean): Map<string, number> {
     refetchInterval: 120_000,
     retry: 1,
   });
-  return enabled ? (data ?? EMPTY) : EMPTY;
+  return enabled ? { marks: data ?? EMPTY, pending: isPending } : { marks: EMPTY, pending: false };
 }
