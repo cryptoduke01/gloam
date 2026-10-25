@@ -13,14 +13,19 @@ import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import {
-  formatMark,
   formatTokenAmount,
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
 import { isDollarStable, knownTokens, shieldTokensFor, supportsNativeShield, type OnchainToken } from "@/lib/tokens";
-import { useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
-import { privateHeadline } from "@/lib/portfolioValue";
+import { COINGECKO_MARKED, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
+import {
+  privateHeadline,
+  splitWalletRows,
+  walletRowValue,
+  walletTotal,
+  type WalletHolding,
+} from "@/lib/portfolioValue";
 import {
   assetLabel,
   formatAssetAmount,
@@ -124,6 +129,33 @@ function QuickAction({
   );
 }
 
+/** A row of the wallet card: the gas coin or a token the vault takes. */
+type WalletRow = WalletHolding & {
+  key: string;
+  native: boolean;
+  id: string;
+  name: string;
+  raw: bigint;
+  decimals: number;
+  change24h: number;
+  spark: number[];
+};
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className={`transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+    >
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-start gap-1 py-10 max-sm:px-5 sm:px-6">
@@ -145,7 +177,7 @@ export function PortfolioView() {
   // Tempo (testnet or mainnet) has no native coin worth counting.
   const isTempo = network.family === "tempo";
   const { settings } = useTradingSettings();
-  const { data: marketData } = useLiveMarkets();
+  const { data: marketData, isPlaceholderData: marketsPending } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
   const markets = useMemo(() => marketData?.markets ?? [], [marketData]);
   // The native gas asset is priced differently per chain: Robinhood is ETH
@@ -155,7 +187,7 @@ export function PortfolioView() {
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
   // $GLOAM and the swap tokens on Robinhood Chain mainnet, priced like Transparency does.
-  const geckoMarks = useCoingeckoMarks(network.chainId === 4663);
+  const { marks: geckoMarks, pending: geckoPending } = useCoingeckoMarks(network.chainId === 4663);
   /**
    * What one unit of a token is worth in dollars, or null when nothing here
    * prices it (EURC is a euro and never $1; a token with no feed): a dollar
@@ -172,6 +204,20 @@ export function PortfolioView() {
     },
     [ethUsd, markets, geckoMarks]
   );
+  /**
+   * The price unitUsd gives a token is still on its way: the markets feed's
+   * first read (WETH, the stocks; until then it holds placeholder marks) or
+   * CoinGecko's. A dollar stablecoin and a token nothing prices never wait.
+   */
+  const pricePending = useCallback(
+    (t: OnchainToken): boolean => {
+      if (isDollarStable(t)) return false;
+      if (t.id === "weth" || markets.some((x) => x.id === t.id)) return marketsPending;
+      const a = t.address.toLowerCase();
+      return geckoPending && COINGECKO_MARKED.some((c) => c.address.toLowerCase() === a);
+    },
+    [markets, marketsPending, geckoPending]
+  );
   // Every token this network can hold, its own first (a swap leaves tokens the pool list doesn't name).
   const knownHere = useMemo(() => knownTokens(network.chainId), [network.chainId]);
   const {
@@ -187,6 +233,8 @@ export function PortfolioView() {
   const vaultRows = useMemo(() => [...shieldNotes, ...waitingClaims], [shieldNotes, waitingClaims]);
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  // The wallet card's zero balances, folded under "Show N more" until asked for.
+  const [showEmptyRows, setShowEmptyRows] = useState(false);
   const refreshAll = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -235,13 +283,14 @@ export function PortfolioView() {
           mark,
           priced: unit != null,
           usd,
+          pending: pricePending(t),
           change24h: m?.change24h ?? 0,
           spark: m?.spark ?? [],
           live: m?.source === "live",
         };
       })
       .filter((p) => (settings.hideZeroBalances ? p.raw > BigInt(0) : true));
-  }, [tokenSet, tokenBals, markets, unitUsd, settings.hideZeroBalances]);
+  }, [tokenSet, tokenBals, markets, unitUsd, pricePending, settings.hideZeroBalances]);
 
   // The public balance to point at the vault: a dollar stablecoin first.
   const addSuggestion = useMemo(
@@ -327,6 +376,58 @@ export function PortfolioView() {
   // chain (and can be absurdly large), so hold everything at zero until the
   // wallet is switched, which is exactly what the wrong-network banner says.
   const balancesVisible = isConnected && onProduct;
+
+  // The wallet card: the gas coin (never on Tempo) and every token the vault
+  // takes, in one list and one order, the zero balances folded after the rest.
+  const walletRows = useMemo<WalletRow[]>(() => {
+    const rows: WalletRow[] = positions.map((p) => ({
+      key: p.id,
+      native: false,
+      id: p.id,
+      symbol: p.symbol,
+      name: p.name,
+      raw: p.raw,
+      decimals: p.decimals,
+      amount: p.amount,
+      usd: p.priced ? p.usd : null,
+      dollar: isDollarStable(p),
+      text: `${formatTokenAmount(p.raw, p.decimals)} ${p.symbol}`,
+      pending: p.pending,
+      change24h: p.change24h,
+      spark: p.spark,
+    }));
+    if (nativeWei > BigInt(0)) {
+      const amount = Number(nativeWei) / 1e18;
+      rows.push({
+        key: "native",
+        native: true,
+        id: "eth",
+        symbol: nativeSymbol,
+        name: "Ether",
+        raw: nativeWei,
+        decimals: 18,
+        amount,
+        usd: nativeUsdRate == null ? null : amount * nativeUsdRate,
+        dollar: false,
+        text: `${formatEth(nativeWei)} ${nativeSymbol}`,
+        pending: marketsPending,
+        change24h: 0,
+        spark: [],
+      });
+    }
+    return rows;
+  }, [positions, nativeWei, nativeSymbol, nativeUsdRate, marketsPending]);
+  const walletSplit = useMemo(() => splitWalletRows(walletRows), [walletRows]);
+  const foldEmpty = walletSplit.held.length > 0 && walletSplit.empty.length > 0;
+  const walletShown = foldEmpty && !showEmptyRows ? walletSplit.held : [...walletSplit.held, ...walletSplit.empty];
+  // A balance still being read leaves the total out until it is (a demo answers at once).
+  const walletReading = tokenBals.some((b) => b === undefined) || (!isTempo && !bal);
+  const walletSum = walletTotal({
+    showUsd: settings.showUsd,
+    loading: walletReading,
+    rows: walletRows,
+    formatUsd: formatUsdCompact,
+  });
 
   const totalDisplay = !balancesVisible
     ? settings.showUsd
@@ -628,13 +729,34 @@ export function PortfolioView() {
             </section>
           )}
 
-          {/* In your wallet: the public side */}
+          {/* In your wallet: the public side, its total on the right */}
           <section className="gl-card overflow-hidden">
-            <header className="flex items-center justify-between gap-3 max-sm:px-5 pb-3 pt-5 sm:px-6">
-              <div>
+            <header className="flex items-start justify-between gap-4 max-sm:px-5 pb-3 pt-5 sm:px-6">
+              <div className="min-w-0">
                 <h2 className="text-[17px] text-foreground">In your wallet</h2>
                 <p className="mt-0.5 text-[13px] text-mute">Public: anyone can see these on the explorer</p>
               </div>
+              {balancesVisible && walletRows.length > 0 && walletSum.state === "ready" && (
+                <div className="shrink-0 text-right">
+                  <p className="tnum text-[17px] text-foreground">
+                    <span className="sr-only">Total in your wallet: </span>
+                    {walletSum.figure}
+                  </p>
+                  {walletSum.extra && (
+                    <p className="tnum mt-0.5 text-[13px] text-mute">
+                      {walletSum.extra}
+                      <span className="sr-only">, no dollar price</span>
+                    </p>
+                  )}
+                </div>
+              )}
+              {balancesVisible && walletRows.length > 0 && walletSum.state === "loading" && (
+                <span
+                  role="status"
+                  aria-label="Loading the total"
+                  className="mt-1 inline-block h-5 w-16 shrink-0 rounded-md bg-surface-2 motion-safe:animate-pulse"
+                />
+              )}
             </header>
             {!balancesVisible ? (
               <div className="border-t border-line">
@@ -649,7 +771,7 @@ export function PortfolioView() {
                   }
                 />
               </div>
-            ) : positions.length === 0 && nativeWei === BigInt(0) ? (
+            ) : walletRows.length === 0 ? (
               <div className="border-t border-line">
                 {faucet ? (
                   <EmptyState
@@ -689,86 +811,83 @@ export function PortfolioView() {
                   <span className="w-[200px] max-sm:hidden" aria-hidden />
                 </div>
                 <ul className="divide-y divide-line border-t border-line">
-                  {nativeWei > BigInt(0) && (
-                    // The gas coin. Robinhood Chain mainnet's pool does not take it, so it
-                    // shows here without an add button.
-                    <li className="flex min-h-[64px] flex-wrap items-center gap-x-3 gap-y-2.5 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:flex-nowrap sm:px-6">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <TokenLogo id="eth" symbol={nativeSymbol} size={34} />
-                        <div className="min-w-0">
-                          <p className="truncate text-[14px] font-medium text-foreground">{nativeSymbol}</p>
-                          <p className="truncate text-[12.5px] text-mute">Ether</p>
+                  {walletShown.map((r) => {
+                    const value = walletRowValue(r, settings.showUsd, formatUsd);
+                    return (
+                      <li
+                        key={r.key}
+                        className="flex min-h-[64px] flex-wrap items-center gap-x-3 gap-y-2.5 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:flex-nowrap sm:px-6"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <TokenLogo id={r.id} symbol={r.symbol} size={34} />
+                          <div className="min-w-0">
+                            <p className="truncate text-[14px] font-medium text-foreground">{r.symbol}</p>
+                            <p className="truncate text-[12.5px] text-mute">{r.name}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="max-sm:hidden w-[88px] sm:block" aria-hidden />
-                      <div className="w-28 text-right">
-                        <p className="tnum text-[14px] text-foreground">{formatEth(nativeWei)}</p>
-                        {settings.showUsd && nativeUsdRate != null && (
-                          <p className="tnum text-[12.5px] text-mute">
-                            {formatUsd((Number(nativeWei) / 1e18) * nativeUsdRate)}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
-                        {shieldLive && supportsNativeShield(network.chainId) ? (
-                          <Link href={addAssetHref("eth")} className="btn btn-ghost btn-sm h-10">
-                            Add privately
-                          </Link>
+                        {r.native ? (
+                          <div className="max-sm:hidden w-[88px] sm:block" aria-hidden />
                         ) : (
-                          // Where the pool doesn't take the gas coin, swap it into the one it does.
-                          <SwapToStableButton recipient={address ?? undefined} onArrived={() => router.push("/app/shield")} />
+                          <div className="max-sm:hidden w-[88px] justify-center sm:flex">
+                            <Sparkline
+                              // Real history only: without it the line stays a flat hairline.
+                              points={r.spark.length >= 2 ? r.spark : []}
+                              up={r.change24h >= 0}
+                              width={72}
+                              height={26}
+                            />
+                          </div>
                         )}
-                      </div>
-                    </li>
-                  )}
-                  {positions.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex min-h-[64px] flex-wrap items-center gap-x-3 gap-y-2.5 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:flex-nowrap sm:px-6"
-                    >
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <TokenLogo id={p.id} symbol={p.symbol} size={34} />
-                        <div className="min-w-0">
-                          <p className="truncate text-[14px] font-medium text-foreground">{p.symbol}</p>
-                          <p className="truncate text-[12.5px] text-mute">{p.name}</p>
-                        </div>
-                      </div>
-                      <div className="max-sm:hidden w-[88px] justify-center sm:flex">
-                        <Sparkline
-                          // Real history only: without it the line stays a flat hairline.
-                          points={p.spark.length >= 2 ? p.spark : []}
-                          up={p.change24h >= 0}
-                          width={72}
-                          height={26}
-                        />
-                      </div>
-                      <div className="w-28 text-right">
-                        <p className="tnum text-[14px] text-foreground">
-                          {formatTokenAmount(p.raw, p.decimals)}
-                        </p>
-                        {settings.showUsd && p.mark > 0 && (
-                          <p className="tnum text-[12.5px] text-mute">
-                            {p.usd > 0
-                              ? formatUsd(p.usd)
-                              : `$${formatMark(p.mark)}`}
+                        <div className="w-28 text-right">
+                          <p className="tnum text-[14px] text-foreground">
+                            {r.native ? formatEth(r.raw) : formatTokenAmount(r.raw, r.decimals)}
                           </p>
-                        )}
-                      </div>
-                      <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
-                        {shieldLive && (
-                          <Link href={addAssetHref(p.id)} className="btn btn-ghost btn-sm h-10">
-                            Add privately
-                          </Link>
-                        )}
-                        {network.stocks && (
-                          <Link href={`/app/trade?market=${p.id}`} className="btn btn-quiet btn-sm h-10">
-                            Trade
-                          </Link>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                          {value && <p className="tnum text-[12.5px] text-mute">{value}</p>}
+                        </div>
+                        <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
+                          {r.native ? (
+                            // The gas coin. Where the pool doesn't take it (Robinhood Chain
+                            // mainnet), swap it into the stablecoin it does.
+                            shieldLive && supportsNativeShield(network.chainId) ? (
+                              <Link href={addAssetHref("eth")} className="btn btn-ghost btn-sm h-10">
+                                Add privately
+                              </Link>
+                            ) : (
+                              <SwapToStableButton recipient={address ?? undefined} onArrived={() => router.push("/app/shield")} />
+                            )
+                          ) : (
+                            <>
+                              {shieldLive && (
+                                <Link href={addAssetHref(r.id)} className="btn btn-ghost btn-sm h-10">
+                                  Add privately
+                                </Link>
+                              )}
+                              {network.stocks && (
+                                <Link href={`/app/trade?market=${r.id}`} className="btn btn-quiet btn-sm h-10">
+                                  Trade
+                                </Link>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
+                {/* The zero balances fold away; each one's Add privately is a tap behind this. */}
+                {foldEmpty && (
+                  <div className="border-t border-line py-2 max-sm:px-5 sm:px-6">
+                    <button
+                      type="button"
+                      aria-expanded={showEmptyRows}
+                      onClick={() => setShowEmptyRows((v) => !v)}
+                      className="btn btn-quiet btn-sm -ml-4 h-10 text-mute hover:text-foreground"
+                    >
+                      {showEmptyRows ? "Show less" : `Show ${walletSplit.empty.length} more`}
+                      <ChevronIcon open={showEmptyRows} />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </section>
