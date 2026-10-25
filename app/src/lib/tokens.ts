@@ -213,6 +213,22 @@ export function approvalSteps(token: Pick<OnchainToken, "approveResetFirst">, al
   return [amount];
 }
 
+/**
+ * approvalSteps when the allowance may not have been read (`undefined`). A
+ * standard token is then approved for the exact amount, which approve() sets
+ * outright whatever was there. A token that needs the reset gets null: send
+ * nothing and read the allowance again, since the reset to 0 is only ever for a
+ * non-zero allowance actually read, and approving over one would revert.
+ */
+export function approvalsBeforeDeposit(
+  token: Pick<OnchainToken, "approveResetFirst">,
+  allowance: bigint | undefined,
+  amount: bigint
+): bigint[] | null {
+  if (allowance !== undefined) return approvalSteps(token, allowance, amount);
+  return token.approveResetFirst ? null : [amount];
+}
+
 export const CIRCLE_FAUCET_URL = "https://faucet.circle.com/";
 
 /**
