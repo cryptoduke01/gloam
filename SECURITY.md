@@ -1,6 +1,6 @@
 # Security notes (Gloam)
 
-Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software handling real money, with the testnets (`46630`, `42431`) as the free practice network. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open); an external audit is planned, not done.
+Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software, with the testnets (`46630`, `42431`) next to them. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open); an external audit is planned, not done.
 
 ## Secrets policy
 
@@ -8,7 +8,7 @@ Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as bet
 | --- | --- |
 | Put `DEPLOYER_PK` only in shell env / CI secrets | Commit private keys, mnemonics, or `.env` |
 | Use public contract addresses in app defaults | Put funded mainnet keys anywhere in the repo |
-| Keep the testnet zkeys labeled **dev** and the mainnet ones in `circuits/final` | Use dev keys or dev verifiers for real money |
+| Keep the testnet zkeys labeled **dev** and the mainnet ones in `circuits/final` | Use dev keys or dev verifiers on mainnet |
 
 ## Secret scanners / git guard false positives
 

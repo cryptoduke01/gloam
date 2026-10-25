@@ -37,7 +37,7 @@ The vault app is the reference implementation, not the whole product.
 | **SDK** | Drop shielded balances, private sends, and selective disclosure into any onchain app or agent, on Robinhood Chain or Tempo. Unsigned intents + client proving. | [`@gloamtrade/sdk`](./packages/sdk) |
 | **Agents** | An MCP server + a reference wrapper so an AI agent can shield, move value, and pay for tools privately over x402 or MPP, under policy. | [`@gloamtrade/mcp`](./mcp) · [`@gloamtrade/mppx-gloam`](./packages/mppx-gloam) · [`examples/`](./examples) |
 | **Vault** | The live app on both mainnets that proves the whole path works. | [`app/`](./app) |
-| **Partner API** | Apps add private payments with an API key, set their own fee (flat per private payment, a share of cash outs and deposits), and see attributed volume and would-be fees live in the partner portal. Partner fees are not collected yet, on mainnet either: every response says `"charged": false` and the portal shows what the setting would earn. Only Gloam's own 0.25% cash-out fee is taken on mainnet. Live keys (`gloam_live_`) are for the mainnets, test keys (`gloam_test_`) for the practice network. | [`/partners`](https://gloam.trade/partners) · [`/docs/partners`](https://gloam.trade/docs/partners) · `GloamApiClient` |
+| **Partner API** | Apps add private payments with an API key, set their own fee (flat per private payment, a share of cash outs and deposits), and see attributed volume and would-be fees live in the partner portal. Partner fees are not collected yet, on mainnet either: every response says `"charged": false` and the portal shows what the setting would earn. Only Gloam's own 0.25% cash-out fee is taken on mainnet. Live keys (`gloam_live_`) are for the mainnets, test keys (`gloam_test_`) for the testnets. | [`/partners`](https://gloam.trade/partners) · [`/docs/partners`](https://gloam.trade/docs/partners) · `GloamApiClient` |
 
 ![The Gloam app: a private balance only you can see](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-app.jpg)
 
@@ -45,7 +45,7 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 
 ## Mainnet beta
 
-Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) since Wednesday 21 October 2026, 13:00 UTC. This is beta software handling real money. It was reviewed internally before launch (20 October 2026, no Critical or High findings open), and an independent review on 23 October found no new exploitable contract flaw and eight app issues, whose fixes are being merged. An external audit is planned, not done.
+Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) since Wednesday 21 October 2026, 13:00 UTC. This is beta software. It was reviewed internally before launch (20 October 2026, no Critical or High findings open), and an independent review on 23 October found no new exploitable contract flaw and eight app issues, whose fixes are being merged. An external audit is planned, not done.
 
 | | Robinhood Chain `4663` | Tempo `4217` |
 | --- | --- | --- |
@@ -111,9 +111,9 @@ Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026
 
 The same private core runs on [Tempo](https://tempo.xyz) mainnet (`4217`), the payments-first stablecoin L1, as private stablecoin payments for people and agents. Tempo ships its own operator-run privacy (Zones); Gloam is the self-custodial, permissionless complement, with selective disclosure a user can hand an issuer or auditor. Shield USDC.e, pathUSD, USDT0 or OUSD, send, swap and cash out, proof-gated end to end. Because Tempo blocks native `msg.value` and pays gas in stablecoins, Gloam shields ERC-20 stablecoins there instead of a native asset. Design and constraints: [`TEMPO_EXPANSION.md`](./TEMPO_EXPANSION.md).
 
-## Base: practice network live, mainnet next
+## Base: testnet live, mainnet next
 
-Base (an Ethereum L2 on the OP Stack) is the third chain. Base Sepolia (`84532`) is live as the practice network since 24 October 2026; Base mainnet (`8453`) follows on the same code once Base Sepolia has been tested end to end. Both run the mainnet vault (`ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee), so Base Sepolia is play money on the real contract and keys.
+Base (an Ethereum L2 on the OP Stack) is the third chain. Base Sepolia (`84532`) is live as the testnet since 24 October 2026; Base mainnet (`8453`) follows on the same code once Base Sepolia has been tested end to end. Both run the mainnet vault (`ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee), so Base Sepolia is a testnet on the mainnet contract and keys.
 
 - **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. Each stablecoin 500 per deposit and 25,000 in total, ETH 0.2 per deposit and 10 in total.
 - **Base Sepolia.** Vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `49802958`) and payment-message board `0x01B3172d9900Cb26d57E986429b9b23854c74598`, the same addresses as on the other chains, every contract source-verified on Sourcify. Test USDC and EURC from [faucet.circle.com](https://faucet.circle.com/), test ETH from a Base Sepolia faucet. Addresses: [`contracts/deployments/base-sepolia.json`](./contracts/deployments/base-sepolia.json).
@@ -124,7 +124,7 @@ Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
 ## Trust, verified
 
-Privacy has to be checkable and correct before it holds real money. Mainnet is beta software handling real money, and this is where it stands.
+Privacy has to be checkable and correct before mainnet. Mainnet is beta software, and this is where it stands.
 
 - **Where review stands.** An internal pre-mainnet review finished on 20 October 2026 with no Critical or High findings open. An independent review on 23 October found no new exploitable contract flaw and eight issues in the app (amount entry, saving notes, payroll resume and addresses, API key rotation, and two displayed figures), and the fixes are being merged. An external audit is planned, not done. Until then, beta deposit limits cap what each pool can take in.
 - **Earlier reviews.** Kensho reviews of the contracts and an independent review of the circuits (latest 2026-10-11) found no way to steal, inflate, double-spend or redirect pool funds. What they did find is fixed or switched off: an earlier critical drain in the first sealed pool (drained and de-published), value binding at deposit (C1), swap solvency (H1, the sealed trade is retired), an overclaiming proof checker and a copyable legacy disclosure. Every finding and its status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
@@ -155,7 +155,7 @@ const intent = await buildShieldBoundIntent({
 await wallet.writeContract({ ...intent.exec, abi: shieldPoolAbi });
 ```
 
-- Pass a mainnet network explicitly: for backward compatibility the SDK still defaults to the practice testnet. `getGloamNetwork(key)` takes `"robinhood-mainnet"` or `"tempo-mainnet"`, and `circuitArtifactUrls` picks the final keys for a mainnet chain.
+- Pass a mainnet network explicitly: for backward compatibility the SDK still defaults to the testnet. `getGloamNetwork(key)` takes `"robinhood-mainnet"` or `"tempo-mainnet"`, and `circuitArtifactUrls` picks the final keys for a mainnet chain.
 - To take payments, `scanIncomingPayments` reads the payment board for payments sealed to your Gloam address, and `sweepReceivedNote` moves each into a fresh note so the payer cannot spend it back. See [`packages/sdk/examples/receive-and-credit.ts`](./packages/sdk/examples/receive-and-credit.ts).
 - `cashOutFee(amount)` returns what the pool keeps on a mainnet cash out (`CASH_OUT_FEE_BPS = 25`, 0.25%).
 
@@ -171,7 +171,7 @@ gloam/
   mcp/                   @gloamtrade/mcp  agent server (plan + signed execution)
   examples/              agent-shield, pay-bot, pay-x402, mpp-gloam, web-shield
   app/                   Next.js reference app + docs → Vercel root: app
-  contracts/             Foundry · ShieldPoolPayments (mainnet) and ShieldPoolPoseidon (practice network) vaults, verifiers, circuits, audit
+  contracts/             Foundry · ShieldPoolPayments (mainnet) and ShieldPoolPoseidon (testnet) vaults, verifiers, circuits, audit
 ```
 
 **Contracts: Robinhood Chain mainnet `4663`**
@@ -228,9 +228,9 @@ pnpm --filter @gloamtrade/sdk test         # SDK core self-tests
 
 Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https://gloam.trade/app).
 
-## Practice network
+## Testnet
 
-Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as a free practice network: the same app (switch networks in the app), test funds, no real value. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets). Base Sepolia (`84532`) is part of the practice network too (see [Base](#base-practice-network-live-mainnet-next)); unlike the other two it runs the mainnet vault and the final keys, with test USDC and EURC from Circle's faucet.
+Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as testnets: the same app (switch networks in the app), with test funds from faucets. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets). Base Sepolia (`84532`) is a testnet too (see [Base](#base-testnet-live-mainnet-next)); unlike the other two it runs the mainnet vault and the final keys, with test USDC and EURC from Circle's faucet.
 
 **Contracts: Robinhood Chain testnet `46630`**
 
@@ -252,7 +252,7 @@ Earlier testnet pools are superseded and listed in [`contracts/ARCHITECTURE.md`]
 
 ## Guardrails
 
-- Mainnet is beta with real money: deposit limits on, reviewed internally, external audit planned. Say so plainly.
+- Mainnet is beta: deposit limits on, reviewed internally, external audit planned. Say so plainly.
 - The sealed trade stays retired. Private swaps are live on mainnet: always say the tokens and amounts are public.
 - Real privacy only. Never fake or mock a private success.
 - Selective disclosure over opacity. Verifiable, not just hidden.
@@ -260,6 +260,6 @@ Earlier testnet pools are superseded and listed in [`contracts/ARCHITECTURE.md`]
 
 ---
 
-No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Mainnet uses the trusted setup's final keys (`app/public/circuits/final`); the practice network's keys are dev artifacts. See [`SECURITY.md`](./SECURITY.md).
+No private keys in-repo. Deploy with `DEPLOYER_PK` env only. Mainnet uses the trusted setup's final keys (`app/public/circuits/final`); the older testnets' keys are dev artifacts. See [`SECURITY.md`](./SECURITY.md).
 
 Contact: [hello@gloam.trade](mailto:hello@gloam.trade) · [@gloamtrade](https://x.com/gloamtrade) · Telegram [t.me/gloamhq](https://t.me/gloamhq). Found a security issue? See [`SECURITY.md`](./SECURITY.md#reporting-a-vulnerability).

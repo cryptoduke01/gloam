@@ -4,11 +4,11 @@
 
 Tagline: private by default, provable on demand. Hero line: private money on public chains.
 
-- Lead with stablecoin payments, payroll and agent payments, on Tempo and Robinhood Chain mainnets (beta, real money). The testnets are the free practice network with test funds.
+- Lead with stablecoin payments, payroll and agent payments, on Tempo and Robinhood Chain mainnets (beta), with the testnets next to them.
 - Why the tech fits: a payment has one owner, so the owner proves it on their own device with zero-knowledge proofs and nobody else holds a key. Committee systems (Zama FHE, Arcium MPC) and operator systems (Tempo Zones) suit shared secrets, not single-owner payments.
 - Not new cryptography: the Zcash-lineage pool. New, as far as our research found: the payroll total proof, proofs scoped to one reader with an expiry (`context` input), and private payments for agents (MPP method proposal, x402, MCP with spending limits).
 - Stock tokens: Robinhood Chain testnet only, held and sent privately there. Private swaps are live on Robinhood Chain and Tempo mainnet: a swap goes from the private balance through a one-time escrow to a public DEX and back. Who swapped stays private; the pair and the amounts are public. The old sealed trade stays retired.
-- Never claim "first" or "only". Mainnet is live in beta: say it handles real money, has beta deposit limits, was reviewed internally (20 October 2026) and that an external audit is planned. Never say "audited". Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
+- Never claim "first" or "only". Mainnet is live in beta: say it has beta deposit limits, was reviewed internally (20 October 2026) and that an external audit is planned. Never say "audited". Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
 - Comparison and honest gaps: `/docs/compare`, `/docs/privacy-model`, `/docs/production`.
 
 ## Canonical
@@ -17,12 +17,12 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 - Docs: `gloam.trade/docs`
 - Whitepaper: `gloam.trade/whitepaper`
 - Pitch deck: `gloam.trade/pitch` (source `app/public/pitch/index.html`; `pitch/gloam-deck.html` is a repo copy, keep them in sync)
-- Product: `gloam.trade/app`, mainnet and the free practice testnet in one app, switched in-app (future testnet host: `testnet.gloam.trade`)
+- Product: `gloam.trade/app`, mainnet and testnet in one app, switched in-app (future testnet host: `testnet.gloam.trade`)
 - X: `@gloamtrade`
 - Vercel: one project, Root Directory = `app`
 - Contracts: `contracts/` (Foundry). Mainnet: `ShieldPoolPayments` (payments only) on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`). Testnet: `ShieldPoolPoseidon` on Robinhood Chain testnet (`46630`) and Tempo Moderato testnet (`42431`)
 - Mainnet vaults (no admin withdraw, 3-day timelock on rule changes): Robinhood Chain `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `94194599`), Tempo `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `45172561`). PoseidonT3 on both: `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4`. Owner and treasury `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet at launch, multisig planned); relayer `0xb1E994586E62994648a0b866BF33F2EDd942512e` (Gloam team runs it; it cannot move or redirect money)
-- Base: Base Sepolia (`84532`) is live as a practice network since 24 Oct 2026 (vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`; memo board `0x01B3172d9900Cb26d57E986429b9b23854c74598`; `contracts/deployments/base-sepolia.json`). Base mainnet (`8453`) is next, not deployed, hidden until `MAINNET_POOLS[8453]` is filled in (`app/src/lib/mainnet.ts`, `packages/sdk/src/mainnet.ts`). Both are `ShieldPoolPayments` on the final keys with beta limits (USDC, EURC, ETH; USDT on mainnet). Runbook `DEPLOY-BASE.md`. Base Sepolia is a testnet that sets `ceremony: "production"` and `paymentsPool: true`.
+- Base: Base Sepolia (`84532`) is live as a testnet since 24 Oct 2026 (vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`; memo board `0x01B3172d9900Cb26d57E986429b9b23854c74598`; `contracts/deployments/base-sepolia.json`). Base mainnet (`8453`) is next, not deployed, hidden until `MAINNET_POOLS[8453]` is filled in (`app/src/lib/mainnet.ts`, `packages/sdk/src/mainnet.ts`). Both are `ShieldPoolPayments` on the final keys with beta limits (USDC, EURC, ETH; USDT on mainnet). Runbook `DEPLOY-BASE.md`. Base Sepolia is a testnet that sets `ceremony: "production"` and `paymentsPool: true`.
 - Testnet vaults: Robinhood Chain `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740`. Tempo `0x841dc046ea3cc842ba3a855731472c6eb0f2d5eb`. Drainable, never use or seed: `0x4F38…12D8F` (audit H-P1). Never product-default `0xA488…`
 
 ## Live
@@ -45,7 +45,7 @@ Mainnet (final keys, beta deposit limits: 500 per deposit and 25,000 total per s
 
 - Real privacy (shielded balances, private txs). Never fake or mock success.
 - **Public path** needs no Gloam contracts. **Private path** needs `contracts/`.
-- Mainnet is the product (beta, real money); the testnets are the free practice network. Label real money and test funds plainly, and never let a mainnet path use dev keys.
+- Mainnet is the product (beta); the testnets sit next to it. Call networks mainnet and testnet, with no glosses (no "real money", "play money", "test money", "no real value" or "free practice"), and never let a mainnet path use dev keys.
 - Two key sets: testnet verifiers hold the dev keys (`contracts/src/verifiers/*`, `app/public/circuits/*`), mainnet the ceremony's final keys (`contracts/src/verifiers/final/*`, `app/public/circuits/final/*`). Each network names its set (`GloamNetwork.ceremony`); a mainnet entry sets `"production"`. `script/KeyCheckProofs.sol` (regenerate with `node contracts/circuits/scripts/gen-key-fixtures.mjs`) proves which keys a verifier holds.
 - Brand: monochrome with a green tint (`#2e7d53` light, `#8fd3ad` dark), Aeonik, light and dark. Calm, spacious, plain-language.
 - Secrets server-side only.

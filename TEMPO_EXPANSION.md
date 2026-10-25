@@ -6,7 +6,7 @@ Status: **live on Tempo mainnet (`4217`) from 21 October 2026, in beta.** Pool
 USDT0 and OUSD with beta deposit limits (500 per deposit, 25,000 in total for
 each). Deposits and private payments are free; a cash out costs 0.25%. It was
 reviewed internally before launch; an external audit is planned. Tempo Moderato
-stays up as the free practice network: current pool
+stays up as the testnet: current pool
 `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` (redeployed 2026-09-29, block
 37411195, no admin withdraw, timelocked rule changes) and memo board
 `0x3ca88712e9219b5EE4c82D31cAfEaB64C9E9b4E3`, on dev keys with test funds. Shield
@@ -148,8 +148,8 @@ selective disclosure it lacks:
 - Tempo: private, self-custodial stablecoin payments. The permissionless
   complement to Zones, with selective disclosure a user can hand an issuer or
   auditor.
-- Say "live on Tempo mainnet, in beta", with Moderato as the free practice
-  network. Never say "audited": it was reviewed internally, and an external
+- Say "live on Tempo mainnet, in beta", with Moderato as the
+  testnet. Never say "audited": it was reviewed internally, and an external
   audit is planned. Never claim private trading is live.
 
 ## 7. Open questions and risks

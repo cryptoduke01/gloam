@@ -103,8 +103,8 @@ freezing the **pool contract's own token balance** for `asset`.
   implemented in the deployed contract** yet.
 - **Reality check:** the pool is already live on Tempo Moderato shielding **PathUSD**,
   a freeze-enforcing asset — so the build-order rule "launch first on a non-freezing
-  asset" has effectively been crossed on testnet. On testnet this is acceptable (play
-  money); it must be resolved before any mainnet, compliance-enforcing deployment.
+  asset" has effectively been crossed on testnet. On testnet this is acceptable;
+  it must be resolved before any mainnet, compliance-enforcing deployment.
 
 ### Required mitigations before a mainnet freeze-enforcing asset
 

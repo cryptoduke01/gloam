@@ -1,14 +1,14 @@
 # Deploy Gloam to Base
 
 The runbook for bringing the Gloam vault to Base. You run this with your own keys;
-no agent and no CI deploys it. Base Sepolia (`84532`) goes first as the practice
-network. Base mainnet (`8453`) follows on the same scripts once Base Sepolia has been
+no agent and no CI deploys it. Base Sepolia (`84532`) goes first as the
+testnet. Base mainnet (`8453`) follows on the same scripts once Base Sepolia has been
 tested end to end.
 
 Both chains get the mainnet contract, `ShieldPoolPayments`, through the shared
 `contracts/script/MainnetDeploy.sol`, the same deploy as Robinhood Chain and Tempo.
 Base Sepolia is a dress rehearsal of Base mainnet, so it runs the ceremony's final
-keys too, with test funds (play money). The older testnets run the dev keys only
+keys too, with test funds. The older testnets run the dev keys only
 because they were deployed before the ceremony.
 
 ## What this deploys
@@ -56,7 +56,7 @@ deposit and 10 in total: about $467 and $23,400 at Chainlink's ETH/USD on Base t
 | USDT (bridged Tether) | none | `0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2` | 6 | `500000000` | `25000000000` |
 | ETH (native) | `0x0000000000000000000000000000000000000000` | same | 18 | `200000000000000000` | `10000000000000000000` |
 
-- There is no Tether or Circle-grade USDT on Base Sepolia, so the practice network
+- There is no Tether or Circle-grade USDT on Base Sepolia, so the testnet
   lists USDC, EURC and ETH only.
 - USDT on Base is Tether bridged from Ethereum through Base's standard bridge (L1 token
   `0xdAC17F958D2ee523a2206206994597C13D831ec7`), not issued by Tether on Base. It has no
@@ -87,7 +87,7 @@ several hundred sends; the relay reports low balance below the cost of two sends
 The relayer is the same key as on the other chains (`GLOAM_RELAYER_PRIVATE_KEY`); any
 extra relay key in `GLOAM_RELAYER_PRIVATE_KEYS` needs the same top-up.
 
-Faucets for Base Sepolia (test funds, play money):
+Faucets for Base Sepolia (test funds):
 
 - Test ETH: the Coinbase Developer Platform faucet (portal.cdp.coinbase.com, Faucets,
   Base Sepolia), or the Alchemy, QuickNode or Superchain faucets.
@@ -253,7 +253,7 @@ RUN=broadcast/DeployBaseMainnet.s.sol/$CHAIN/run-latest.json
 ```
 
 Accept ownership on basescan.org, and fund the relayer with 0.01 ETH on Base. This is
-real money: if the dry run or the read-back fails, do not announce the vault; deploy a
+mainnet: if the dry run or the read-back fails, do not announce the vault; deploy a
 fresh one.
 
 ## After the deploy
