@@ -732,7 +732,7 @@ export function PortfolioView() {
                         <TokenLogo id="eth" symbol={nativeSymbol} size={34} />
                         <div className="min-w-0">
                           <p className="truncate text-[14px] font-medium text-foreground">{nativeSymbol}</p>
-                          <p className="truncate text-[12.5px] text-mute">Ether, pays network fees</p>
+                          <p className="truncate text-[12.5px] text-mute">Ether</p>
                         </div>
                       </div>
                       <div className="max-sm:hidden w-[88px] sm:block" aria-hidden />
