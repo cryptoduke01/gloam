@@ -240,7 +240,7 @@ if (!CONFIGURED) {
   check("as shipped: Glim never names Base mainnet", () => {
     const k = knowledgeBlock(false, true);
     assert.doesNotMatch(k, /Base mainnet \(chain ID 8453\)/);
-    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Mainnet is real money/);
+    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Say so plainly when asked/);
   });
 
   await checkAsync("as shipped: the remote MCP neither lists nor takes base-mainnet", async () => {
