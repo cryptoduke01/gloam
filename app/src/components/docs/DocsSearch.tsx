@@ -139,6 +139,7 @@ const PAGE_META: Record<string, PageMeta> = {
     headings: [
       "Why agents need this most",
       "Two ways in",
+      "For Virtuals agents",
       "Connect by URL",
       "Reference agent (the SDK path)",
       "The MCP server",

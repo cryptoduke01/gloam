@@ -22,6 +22,7 @@ export default function DocsAgentsPage() {
       quickLinks={[
         { href: "/docs/sdk", label: "SDK" },
         { href: "/docs/sdk/disclosure", label: "Selective disclosure" },
+        { href: "/docs/virtuals", label: "Virtuals agents" },
         { href: "/docs/privacy-model", label: "Privacy model" },
       ]}
     >
@@ -53,6 +54,21 @@ export default function DocsAgentsPage() {
           privately.
         </li>
       </ul>
+
+      <h2 id="virtuals">For Virtuals agents</h2>
+      <p>
+        Agents built on GAME get Gloam as one worker:{" "}
+        <code>@gloamtrade/game-plugin-gloam</code> gives a Virtuals agent a
+        private balance, private payments, cash outs and proofs of funds, under
+        per-asset limits its owner sets. A companion provider pays out privately
+        on ACP, so the job stays on ACP&apos;s contracts while who got paid, and
+        how much, stays private.
+      </p>
+      <p>
+        <Link href="/docs/virtuals">Gloam for Virtuals agents</Link> covers
+        setup, every function, the limits, exactly what stays public, and the
+        networks.
+      </p>
 
       <h2 id="connect-by-url">Connect by URL</h2>
       <p>
