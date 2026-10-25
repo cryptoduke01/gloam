@@ -38,7 +38,7 @@ import { proveTransferInBrowser } from "./proveClient";
 import { relayTransfer, waitForTx } from "./relay/client";
 import { getRhPublicClient } from "./rhClient";
 import { getAllNotes } from "./noteVault";
-import { saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSpentCheck, type LocalNote } from "./shield";
+import { saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { escrowHolds } from "./vaultSwap";
 
@@ -392,17 +392,29 @@ export function backupSpentCheck(env: ClaimEnv = appClaimEnv()): BackupSpentChec
 }
 
 /**
- * Claimed payments the vault had not shown: count each one it shows now. A
- * claim saved before this check (no leaf on record, never checked) is checked
- * once too. Returns true when something changed.
+ * For a backup restore (shield importNotesBackup): does the vault hold this
+ * note's commitment? Null when it can't tell: another network or vault, or a
+ * read that fails (the note then goes in as before, for the sync to settle).
+ */
+export function backupSeenCheck(env: ClaimEnv = appClaimEnv()): BackupSeenCheck {
+  return async (n) => {
+    const pool = env.pool;
+    if (!pool || n.chainId !== env.chainId || n.pool.toLowerCase() !== pool.toLowerCase()) return null;
+    return env.chain.isCommitmentSeen(n.commitment).catch(() => null);
+  };
+}
+
+/**
+ * Notes the vault had not shown, claimed payments and restored ones: count
+ * each one it shows now. A claim saved before this check (no leaf on record,
+ * never checked) is checked once too. Returns true when something changed.
  */
 export async function reconcileUnfunded(env?: ClaimEnv): Promise<boolean> {
   if (typeof window === "undefined") return false;
   const unchecked = getAllNotes().filter(
     (n) =>
-      isClaimedNote(n) &&
       n.status !== "recovered" &&
-      (n.unfunded === true || (n.unfunded === undefined && n.leafIndex == null))
+      (n.unfunded === true || (isClaimedNote(n) && n.unfunded === undefined && n.leafIndex == null))
   );
   if (!unchecked.length) return false;
   const e = env ?? appClaimEnv();
