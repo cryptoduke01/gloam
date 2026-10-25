@@ -77,6 +77,34 @@ for (const bad of [
   assert(!isReceiveTag(bad), `not a receive tag: ${bad.slice(0, 30)}`);
 }
 await rejects(() => assertReceiveTag("gloam:rcpt:x"), /must be a Gloam receive tag \(gloamr1/, "assertReceiveTag explains what a tag is");
+// The right SPKI header and length are not enough: the key must be a point on P-256.
+// A payer that trusted the header alone would move the money, then fail to seal it.
+{
+  const header = Buffer.from("3059301306072a8648ce3d020106082a8648ce3d03010703420004", "hex");
+  const tagOf = (xy) => "gloamr1." + b64url(Buffer.concat([header, xy]));
+  const P = (1n << 256n) - (1n << 224n) + (1n << 192n) + (1n << 96n) - 1n;
+  const be = (n) => Buffer.from(n.toString(16).padStart(64, "0"), "hex");
+  const realXY = Buffer.from(payee.tag.slice(8).replace(/-/g, "+").replace(/_/g, "/"), "base64").subarray(27);
+  const x = BigInt("0x" + realXY.subarray(0, 32).toString("hex"));
+  const y = BigInt("0x" + realXY.subarray(32).toString("hex"));
+  assert(isReceiveTag(tagOf(Buffer.concat([be(x), be(y)]))), "the same point rebuilt is a receive tag");
+  for (const [what, xy] of [
+    ["0x01 bytes, off the curve", Buffer.alloc(64, 1)],
+    ["y nudged by one", Buffer.concat([be(x), be((y + 1n) % P)])],
+    ["x and y both zero", Buffer.alloc(64, 0)],
+    ["x at the field prime", Buffer.concat([be(P), be(y)])],
+  ]) {
+    const bad = tagOf(xy);
+    assert(!isReceiveTag(bad), `not a receive tag: ${what}`);
+    await rejects(() => sealToReceiveTag("x", bad), /receive tag/, `cannot seal to ${what}`);
+  }
+  // Every tag isReceiveTag accepts is one WebCrypto can seal to.
+  for (let i = 0; i < 8; i++) {
+    const k = await generateReceiveKey();
+    assert(isReceiveTag(k.tag), "a fresh tag is a receive tag");
+    assert((await openSealedTicket(await sealToReceiveTag("ok", k.tag), k)) === "ok", "a fresh tag seals and opens");
+  }
+}
 
 // ── seal / open ───────────────────────────────────────────────────────────────
 const plain = "gloam1.hello / ünïcödé / " + "x".repeat(300);
