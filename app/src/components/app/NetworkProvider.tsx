@@ -24,6 +24,7 @@ import {
   defaultNetworkKey,
   getNetwork,
   isNetworkKey,
+  setShownNetworkKey,
   type GloamNetwork,
   type NetworkKey,
 } from "@/lib/networks";
@@ -63,6 +64,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = readStored();
+    // lib code (notes, tree, proofs) follows the network shown, even if storage refuses writes
+    setShownNetworkKey(stored);
     if (stored !== networkKey) setKey(stored);
     setSettled(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,6 +75,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && isNetworkKey(e.newValue)) {
+        setShownNetworkKey(e.newValue);
         setKey(e.newValue);
       }
     };
@@ -80,6 +84,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setNetworkKey = (key: NetworkKey) => {
+    setShownNetworkKey(key);
     setKey(key);
     try {
       window.localStorage.setItem(STORAGE_KEY, key);
