@@ -254,7 +254,7 @@ export function readPaymentRequest(
   if (rawAsset?.trim()) {
     asset = findRequestAsset(onNet, rawAsset);
     if (!asset) {
-      problems.push(`This link asks for a token Gloam does not support on ${getNetwork(onNet).label}.`);
+      problems.push(`This link asks for a token Gloam does not support on ${networkName(getNetwork(onNet))}.`);
     }
   }
 
