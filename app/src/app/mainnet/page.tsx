@@ -93,11 +93,11 @@ export default function MainnetPage() {
           <div className="flex flex-col items-start gap-4 border-t border-line pt-10 sm:flex-row sm:items-center sm:justify-between">
             <MainnetTestnetLine />
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <AppLink href="/app" className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed">
+              <AppLink href="/app" className="gl-arrowlink">
                 {/* once live, /app opens on mainnet; the testnet is one pick away in its network menu */}
                 <MainnetCopy live="Open the app" before="Try the testnet" /> <span aria-hidden>→</span>
               </AppLink>
-              <Link href="/docs/testnet" className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed">
+              <Link href="/docs/testnet" className="gl-arrowlink">
                 Testnet guide <span aria-hidden>→</span>
               </Link>
             </div>

@@ -218,7 +218,7 @@ export default function PartnersPage() {
                   </Link>
                   <Link
                     href="/docs/partners"
-                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink"
                   >
                     Read the API docs <span aria-hidden>→</span>
                   </Link>
@@ -383,7 +383,7 @@ export default function PartnersPage() {
               </ul>
               <Link
                 href="/docs/partners"
-                className="t-label mt-8 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                className="gl-arrowlink mt-8"
               >
                 Full API reference <span aria-hidden>→</span>
               </Link>

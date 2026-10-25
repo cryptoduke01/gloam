@@ -310,7 +310,7 @@ export function LiveProduct() {
             </div>
             <Link
               href={href}
-              className="t-label mt-5 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+              className="gl-arrowlink mt-5"
             >
               {label} <span aria-hidden>→</span>
             </Link>
