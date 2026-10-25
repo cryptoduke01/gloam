@@ -1,6 +1,6 @@
 import { defineChain, formatUnits, zeroAddress, type Address, type Chain } from "viem";
-import { base, baseSepolia, mainnet as ethereum } from "viem/chains";
-import { baseSepoliaPool, mainnetPoolFor, type MainnetChainId } from "./mainnet.js";
+import { base, baseSepolia, mainnet as ethereum, sepolia } from "viem/chains";
+import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPoolFor, type MainnetChainId } from "./mainnet.js";
 
 /** Native ETH is represented as the zero address across the vault. */
 export const NATIVE_ASSET: Address = zeroAddress;
@@ -24,8 +24,10 @@ export const BASE_MAINNET_CHAIN_ID = 8453;
 /** Base Sepolia: Base's testnet, on the mainnet pool and keys. */
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
-/** Ethereum mainnet. No practice network of its own: Base Sepolia rehearses the same pool. */
+/** Ethereum mainnet. */
 export const ETHEREUM_MAINNET_CHAIN_ID = 1;
+/** Ethereum Sepolia: Ethereum's testnet, on the mainnet pool and keys. */
+export const ETHEREUM_SEPOLIA_CHAIN_ID = 11155111;
 
 /** Contracts of record (RH testnet 46630). */
 // No-middlemen Poseidon pool (shieldVerifier enforced, no emergencyWithdraw,
@@ -116,6 +118,18 @@ export const ETHEREUM_PYUSD: Address =
 /** Circle's EURC on Ethereum, 6 decimals. A euro stablecoin, never a dollar. */
 export const ETHEREUM_EURC: Address =
   "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+/** Circle's test USDC on Ethereum Sepolia, 6 decimals (faucet.circle.com). */
+export const ETHEREUM_SEPOLIA_USDC: Address =
+  "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+/** Paxos's test USDG on Ethereum Sepolia, 6 decimals (faucet.paxos.com). */
+export const ETHEREUM_SEPOLIA_USDG: Address =
+  "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0";
+/** Paxos's test PYUSD on Ethereum Sepolia, 6 decimals (faucet.paxos.com). */
+export const ETHEREUM_SEPOLIA_PYUSD: Address =
+  "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9";
+/** Circle's test EURC on Ethereum Sepolia, 6 decimals (faucet.circle.com). A euro stablecoin. */
+export const ETHEREUM_SEPOLIA_EURC: Address =
+  "0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4";
 
 /** PoseidonT3 (circomlib, 2 inputs) the mainnet pools hash with, same address on every mainnet. */
 export const MAINNET_POSEIDON_T3: Address =
@@ -141,8 +155,8 @@ export function cashOutFee(amount: bigint, bps: number = CASH_OUT_FEE_BPS): bigi
 
 /**
  * Which trusted-setup keys a network's verifiers hold. The Robinhood Chain and
- * Tempo testnets use the single-party dev keys. Every mainnet, and Base Sepolia (which
- * runs the mainnet pool), use the final keys of the 13-contributor ceremony
+ * Tempo testnets use the single-party dev keys. Every mainnet, Base Sepolia and
+ * Ethereum Sepolia (which run the mainnet pool) use the final keys of the 13-contributor ceremony
  * (drand round 6561386, release ceremony-final). A proof made with one set never
  * verifies against the other.
  */
@@ -168,12 +182,13 @@ export type GloamNetworkKey =
   | "robinhood"
   | "tempo"
   | "base"
+  | "ethereum"
   | "robinhood-mainnet"
   | "tempo-mainnet"
   | "base-mainnet"
   | "ethereum-mainnet";
 
-/** The chain a network runs on, testnet or mainnet. Ethereum has a mainnet only. */
+/** The chain a network runs on, testnet or mainnet. */
 export type GloamChainFamily = "robinhood" | "tempo" | "base" | "ethereum";
 
 /** Robinhood Chain mainnet (4663). */
@@ -249,6 +264,18 @@ export const ETHEREUM_MAINNET_CHAIN: Chain = defineChain({
   rpcUrls: { default: { http: ["https://rpc.mevblocker.io", "https://ethereum-rpc.publicnode.com"] } },
 });
 
+/**
+ * Ethereum Sepolia (11155111), from viem's definition. The default RPC is
+ * Tenderly's public gateway: it keeps the whole history and answers wide
+ * eth_getLogs, which rebuilding the pool tree from its deploy block needs.
+ * publicnode, second, keeps only about the last 10,000 blocks.
+ */
+export const ETHEREUM_SEPOLIA_CHAIN: Chain = defineChain({
+  ...sepolia,
+  name: "Ethereum Sepolia",
+  rpcUrls: { default: { http: ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"] } },
+});
+
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
@@ -295,11 +322,23 @@ export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
 ];
 
 /**
+ * Ethereum Sepolia pool assets: Circle's test USDC and EURC, Paxos's test USDG
+ * and PYUSD, and ETH, with the mainnet limits. No USDT there.
+ */
+export const ETHEREUM_SEPOLIA_ASSETS: GloamAsset[] = [
+  { symbol: "USDC", address: ETHEREUM_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
+  { symbol: "USDG", address: ETHEREUM_SEPOLIA_USDG, decimals: 6, depositLimit: stableLimit },
+  { symbol: "PYUSD", address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6, depositLimit: stableLimit },
+  { symbol: "EURC", address: ETHEREUM_SEPOLIA_EURC, decimals: 6, depositLimit: stableLimit },
+  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+];
+
+/**
  * The networks Gloam's private core runs on. Robinhood Chain, Tempo, Base and
  * Ethereum are separate deployments of the same shielded-pool design (not a
- * bridge, not one cross-chain pool), each with a mainnet and all but Ethereum
- * with a testnet. An app or agent picks one and points the builders at that
- * network's pool and chain id.
+ * bridge, not one cross-chain pool), each with a mainnet and a testnet. An
+ * app or agent picks one and points the builders at that network's pool and
+ * chain id.
  */
 export interface GloamNetwork {
   key: GloamNetworkKey;
@@ -310,7 +349,7 @@ export interface GloamNetwork {
   pool: Address;
   /** Block the pool was deployed at (start of tree scans). */
   deployBlock: bigint;
-  /** Encrypted payment-message board for this network, or null where there is none (Base and Ethereum so far). */
+  /** Encrypted payment-message board for this network, or null where there is none (Base mainnet and Ethereum mainnet so far). */
   payMemo: Address | null;
   /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base and Ethereum list ETH). */
   nativeShield: boolean;
@@ -334,8 +373,8 @@ export type GloamTestnetNetwork = GloamNetwork & { key: "robinhood" | "tempo"; p
 /**
  * The two TESTNETS, by chain: Robinhood Chain testnet (46630) and Tempo
  * Moderato (42431). Unchanged since 0.0.x so existing code keeps working; for
- * mainnet use mainnetNetwork() or gloamNetworks(), and for Base Sepolia
- * testnetNetwork("base").
+ * mainnet use mainnetNetwork() or gloamNetworks(), and for Base Sepolia and
+ * Ethereum Sepolia testnetNetwork("base") and testnetNetwork("ethereum").
  */
 export const GLOAM_NETWORKS: Record<"robinhood" | "tempo", GloamTestnetNetwork> = {
   robinhood: {
@@ -385,11 +424,11 @@ export const GLOAM_NETWORKS: Record<"robinhood" | "tempo", GloamTestnetNetwork> 
 /** The two TESTNETS, by chain. Same object as GLOAM_NETWORKS, named for what it holds. */
 export const GLOAM_TESTNETS = GLOAM_NETWORKS;
 
-/** What a mainnet entry needs beyond its pool, per chain. */
-const MAINNET_SPECS: Record<
+/** What a mainnet entry needs beyond its pool, per chain (Ethereum: none in this version). */
+const MAINNET_SPECS: Partial<Record<
   GloamChainFamily,
   { chainId: MainnetChainId; key: GloamNetworkKey; label: string; chain: Chain; payMemo: Address | null; nativeShield: boolean; assets: GloamAsset[] }
-> = {
+>> = {
   // Payment-message boards on Robinhood Chain and Tempo deployed 2026-10-23 (no owner, never log the poster).
   robinhood: { chainId: 4663, key: "robinhood-mainnet", label: "Robinhood Chain", chain: RH_MAINNET_CHAIN, payMemo: "0x01B3172d9900Cb26d57E986429b9b23854c74598", nativeShield: false, assets: RH_MAINNET_ASSETS },
   tempo: { chainId: 4217, key: "tempo-mainnet", label: "Tempo", chain: TEMPO_MAINNET_CHAIN, payMemo: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", nativeShield: false, assets: TEMPO_MAINNET_ASSETS },
@@ -401,6 +440,7 @@ const MAINNET_SPECS: Record<
 
 function buildMainnet(family: GloamChainFamily): GloamNetwork | null {
   const spec = MAINNET_SPECS[family];
+  if (!spec) return null;
   const p = mainnetPoolFor(spec.chainId);
   if (!p) return null;
   return {
@@ -421,7 +461,7 @@ function buildMainnet(family: GloamChainFamily): GloamNetwork | null {
   };
 }
 
-const MAINNETS: Record<GloamChainFamily, GloamNetwork | null> = {
+const MAINNETS: Partial<Record<GloamChainFamily, GloamNetwork | null>> = {
   robinhood: buildMainnet("robinhood"),
   tempo: buildMainnet("tempo"),
   base: buildMainnet("base"),
@@ -455,29 +495,61 @@ const BASE_TESTNET: GloamNetwork | null = (() => {
 })();
 
 /**
+ * Ethereum Sepolia, or null while ETHEREUM_SEPOLIA_POOL is not filled in. A
+ * testnet on the mainnet pool: ShieldPoolPayments on the final keys, payments
+ * only, beta deposit limits, the cash-out fee, and its payment-message board.
+ */
+const ETHEREUM_TESTNET: GloamNetwork | null = (() => {
+  const p = ethereumSepoliaPool();
+  if (!p) return null;
+  return {
+    key: "ethereum",
+    label: "Ethereum",
+    chainId: ETHEREUM_SEPOLIA_CHAIN_ID,
+    pool: p.pool,
+    deployBlock: p.deployBlock,
+    payMemo: ethereumSepoliaPayMemo()?.address ?? null,
+    nativeShield: true,
+    family: "ethereum",
+    testnet: true,
+    ceremony: "production",
+    chain: ETHEREUM_SEPOLIA_CHAIN,
+    rpcUrl: ETHEREUM_SEPOLIA_CHAIN.rpcUrls.default.http[0]!,
+    explorerUrl: ETHEREUM_SEPOLIA_CHAIN.blockExplorers!.default.url,
+    assets: ETHEREUM_SEPOLIA_ASSETS,
+  };
+})();
+
+/**
  * A chain's MAINNET network, or null while its pool is not in
  * this SDK version. Mainnet pools are ShieldPoolPayments: payments only, beta
  * deposit limits, the ceremony's final keys, a 0.25% cash-out fee.
  */
 export function mainnetNetwork(family: GloamChainFamily): GloamNetwork | null {
-  return MAINNETS[family];
+  return MAINNETS[family] ?? null;
 }
 
 /**
  * A chain's TESTNET network, or null while its pool is not in this
- * SDK version: GLOAM_NETWORKS.robinhood and .tempo, and Base Sepolia once its
- * pool is filled in. Always null for Ethereum, which has no Gloam testnet.
+ * SDK version: GLOAM_NETWORKS.robinhood and .tempo, and Base Sepolia and
+ * Ethereum Sepolia once each pool is filled in.
  */
 export function testnetNetwork(family: GloamChainFamily): GloamNetwork | null {
   if (family === "base") return BASE_TESTNET;
-  if (family === "ethereum") return null;
+  if (family === "ethereum") return ETHEREUM_TESTNET;
   return GLOAM_NETWORKS[family];
 }
 
 /** Every network Gloam runs on right now: mainnets with a pool first, then the testnets. */
 export function gloamNetworks(): GloamNetwork[] {
   const live = [MAINNETS.robinhood, MAINNETS.tempo, MAINNETS.base, MAINNETS.ethereum].filter((n): n is GloamNetwork => n !== null);
-  return [...live, GLOAM_NETWORKS.robinhood, GLOAM_NETWORKS.tempo, ...(BASE_TESTNET ? [BASE_TESTNET] : [])];
+  return [
+    ...live,
+    GLOAM_NETWORKS.robinhood,
+    GLOAM_NETWORKS.tempo,
+    ...(BASE_TESTNET ? [BASE_TESTNET] : []),
+    ...(ETHEREUM_TESTNET ? [ETHEREUM_TESTNET] : []),
+  ];
 }
 
 /** A network by key ("robinhood-mainnet", "tempo-mainnet", "base", "robinhood" and so on), or null if it has no pool yet. */
@@ -501,24 +573,24 @@ export function isMainnetChainId(chainId: number): boolean {
 }
 
 /**
- * True where the pool is ShieldPoolPayments, pool or not: every mainnet, and
- * Base Sepolia. Deposits there need a proof, assets are listed with beta
- * limits, a cash out pays the fee and there is no private trading.
+ * True where the pool is ShieldPoolPayments, pool or not: every mainnet, Base
+ * Sepolia and Ethereum Sepolia. Deposits there need a proof, assets are listed
+ * with beta limits, a cash out pays the fee and there is no private trading.
  */
 export function isPaymentsPoolChainId(chainId: number): boolean {
-  return isMainnetChainId(chainId) || chainId === BASE_SEPOLIA_CHAIN_ID;
+  return isMainnetChainId(chainId) || chainId === BASE_SEPOLIA_CHAIN_ID || chainId === ETHEREUM_SEPOLIA_CHAIN_ID;
 }
 
 /**
- * The key set a proof for `chainId` must use. Mainnet chain ids and Base
- * Sepolia always answer "production", pool or not, so a proof for them is
- * never made with dev keys.
+ * The key set a proof for `chainId` must use. Mainnet chain ids, Base Sepolia
+ * and Ethereum Sepolia always answer "production", pool or not, so a proof for
+ * them is never made with dev keys.
  */
 export function ceremonyForChainId(chainId: number): CeremonyKind {
   return isPaymentsPoolChainId(chainId) ? "production" : "dev";
 }
 
-/** "Robinhood Chain testnet", "Tempo testnet", "Base testnet", or the chain's plain name on mainnet. */
+/** "Robinhood Chain testnet", "Tempo testnet", "Base testnet", "Ethereum Sepolia", or the chain's plain name on mainnet. */
 export function networkName(chainId: number): string {
   if (chainId === RH_MAINNET_CHAIN_ID) return "Robinhood Chain";
   if (chainId === TEMPO_MAINNET_CHAIN_ID) return "Tempo";
@@ -527,6 +599,7 @@ export function networkName(chainId: number): string {
   if (chainId === RH_TESTNET_CHAIN_ID) return "Robinhood Chain testnet";
   if (chainId === TEMPO_TESTNET_CHAIN_ID) return "Tempo testnet";
   if (chainId === BASE_SEPOLIA_CHAIN_ID) return "Base testnet";
+  if (chainId === ETHEREUM_SEPOLIA_CHAIN_ID) return "Ethereum Sepolia";
   return `chain ${chainId}`;
 }
 

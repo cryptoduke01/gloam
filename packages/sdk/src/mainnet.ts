@@ -9,11 +9,12 @@
  * chain id instead of guessing a pool.
  *
  * Base Sepolia (BASE_SEPOLIA_POOL) is Base's testnet. It runs
- * the mainnet pool on the mainnet keys with test funds, so its address is kept
- * here too and is filled in the same way after its deploy.
+ * the mainnet pool on the mainnet keys, so its address is kept
+ * here too and is filled in the same way after its deploy. So is Ethereum
+ * Sepolia (ETHEREUM_SEPOLIA_POOL), with its payment-message board next to it.
  *
- * Ethereum mainnet (1) has no practice network of its own: Base Sepolia
- * rehearses the same pool and deploy.
+ * Ethereum mainnet (1) has Ethereum Sepolia as its testnet: the same pool and
+ * deploy, rehearsed there first.
  *
  * Everything else about mainnet (chains, assets, limits, keys) is derived in
  * constants.ts from these entries.
@@ -40,12 +41,29 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
   1: { pool: null, deployBlock: null },
 };
 
+/** A testnet pool and its payment-message board (null while the board is not deployed). */
+export interface TestnetPoolInput extends MainnetPoolInput {
+  /** GloamPayMemo address, or null until it is deployed. */
+  payMemo: Address | null;
+  /** Block the board's deploy transaction landed in, or null until it is deployed. */
+  payMemoBlock: bigint | null;
+}
+
 /**
  * Base Sepolia (84532): ShieldPoolPayments on the ceremony's final keys, with
  * test funds. Filled in after its deploy, like MAINNET_POOLS: without both
  * values Base Sepolia does not exist for the SDK. Deployed 24 Oct 2026.
  */
 export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 49_802_958n };
+
+/**
+ * Ethereum Sepolia (11155111): ShieldPoolPayments on the ceremony's final
+ * keys, on a testnet, and its payment-message board. Filled in after its
+ * deploy (DEPLOY-ETHEREUM-SEPOLIA.md), the same values as ETHEREUM_SEPOLIA_POOL
+ * in the app (app/src/lib/mainnet.ts): without the pool and its block,
+ * Ethereum Sepolia does not exist for the SDK. Not deployed yet.
+ */
+export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: null, deployBlock: null, payMemo: null, payMemoBlock: null };
 
 function checkedPool(entry: MainnetPoolInput, name: string): { pool: Address; deployBlock: bigint } | null {
   const { pool, deployBlock } = entry;
@@ -71,4 +89,15 @@ export function mainnetPoolFor(chainId: MainnetChainId): { pool: Address; deploy
 /** The Base Sepolia pool, or null while BASE_SEPOLIA_POOL is not filled in. Checked like mainnetPoolFor. */
 export function baseSepoliaPool(): { pool: Address; deployBlock: bigint } | null {
   return checkedPool(BASE_SEPOLIA_POOL, "BASE_SEPOLIA_POOL");
+}
+
+/** The Ethereum Sepolia pool, or null while ETHEREUM_SEPOLIA_POOL is not filled in. Checked like mainnetPoolFor. */
+export function ethereumSepoliaPool(): { pool: Address; deployBlock: bigint } | null {
+  return checkedPool(ETHEREUM_SEPOLIA_POOL, "ETHEREUM_SEPOLIA_POOL");
+}
+
+/** Ethereum Sepolia's payment-message board and its deploy block, or null until they are filled in. */
+export function ethereumSepoliaPayMemo(): { address: Address; deployBlock: bigint } | null {
+  const p = checkedPool({ pool: ETHEREUM_SEPOLIA_POOL.payMemo, deployBlock: ETHEREUM_SEPOLIA_POOL.payMemoBlock }, "ETHEREUM_SEPOLIA_POOL.payMemo");
+  return p ? { address: p.pool, deployBlock: p.deployBlock } : null;
 }

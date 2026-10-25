@@ -31,8 +31,8 @@
  *   api       GloamApiClient: the partner API (relay with a key, proofs, links)
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
  *             testnet), assets + beta limits, cash-out fee, circuit files
- *   mainnet   MAINNET_POOLS and BASE_SEPOLIA_POOL, the one place those pool
- *             addresses live
+ *   mainnet   MAINNET_POOLS, BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL, the
+ *             one place those pool addresses live
  *
  * Environment split: the crypto/math core is pure and runs anywhere. Proving
  * (snarkjs + artifacts) and storage (notes, keys) are injected, so the same core
