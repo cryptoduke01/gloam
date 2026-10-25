@@ -638,6 +638,40 @@ export async function exportNotesBackup(address?: string | null): Promise<NotesB
  */
 export type BackupSpentCheck = (n: LocalNote) => Promise<boolean | null>;
 
+/**
+ * What the vault says about a backup's note: true when it holds the note's
+ * commitment, false when not, null when it can't tell (lib/claimSweep backupSeenCheck).
+ */
+export type BackupSeenCheck = (n: LocalNote) => Promise<boolean | null>;
+
+const HEX_FIELD = /^0x[0-9a-fA-F]{1,64}$/;
+const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Whether a backup's note is one this app could have made: an id, field
+ * elements, an amount above 0 and below 2^128, real addresses, and for a
+ * Poseidon note a commitment equal to Poseidon(secret, amount, asset). The
+ * claim path checks the same (notePackage, MoveView claimCode); a made-up
+ * backup file otherwise shows any balance, and an amount like "1e5" breaks
+ * every balance sum.
+ */
+async function backupNoteValid(n: LocalNote): Promise<boolean> {
+  if (typeof n.id !== "string" || !n.id || typeof n.pool !== "string" || !HEX_ADDRESS.test(n.pool)) return false;
+  if (typeof n.amountWei !== "string" || !/^\d{1,39}$/.test(n.amountWei)) return false;
+  const amount = BigInt(n.amountWei);
+  if (amount <= BigInt(0) || amount >= BigInt(1) << BigInt(128)) return false;
+  if (typeof n.asset !== "string" || !HEX_ADDRESS.test(n.asset)) return false;
+  if (typeof n.secret !== "string" || !HEX_FIELD.test(n.secret) || typeof n.commitment !== "string" || !HEX_FIELD.test(n.commitment)) {
+    return false;
+  }
+  // the old keccak notes (testnet only) carry 256-bit secrets and are not Poseidon
+  if (n.scheme === "keccak") return true;
+  const { FIELD_PRIME, noteCommitmentPoseidon, fieldToHex } = await import("@gloamtrade/sdk");
+  if (BigInt(n.secret) >= FIELD_PRIME || BigInt(n.commitment) >= FIELD_PRIME) return false;
+  const want = fieldToHex(await noteCommitmentPoseidon(BigInt(n.secret), amount, n.asset));
+  return BigInt(want) === BigInt(n.commitment);
+}
+
 export type BackupImport =
   | {
       ok: true;
@@ -649,6 +683,10 @@ export type BackupImport =
       moved: number;
       /** Of those, claimed payments: secured (or taken back) after the backup was made. */
       movedClaims: number;
+      /** Notes new here the vault has not seen: kept out of the balance until it does. */
+      unseen: number;
+      /** Notes that are not ones this app could have made: left out. */
+      skipped: number;
     }
   | { ok: false; error: string };
 
@@ -666,11 +704,18 @@ export type BackupImport =
  * never shows that claim as money, not even for the few seconds before a sync.
  * One it can't read goes in as before, for the sync to settle. Settles once
  * the notes are on disk (rejects with NoteSaveError when the browser refuses).
+ *
+ * A note new here must be one this app could have made (backupNoteValid), or
+ * it is left out and counted in `skipped`. One the vault has not seen
+ * (`isSeen` false) goes in `unfunded`: out of the balance until the vault
+ * shows it (lib/claimSweep reconcileUnfunded). A backup is a file anyone can
+ * hand someone, so it never shows money the vault doesn't hold.
  */
 export async function importNotesBackup(
   raw: string,
   address?: string | null,
-  isSpent?: BackupSpentCheck
+  isSpent?: BackupSpentCheck,
+  isSeen?: BackupSeenCheck
 ): Promise<BackupImport> {
   let data: NotesBackup;
   try {
@@ -692,7 +737,7 @@ export async function importNotesBackup(
   await readStoreNow();
   const owner = (address as Address | undefined) ?? undefined;
   const here = new Set<string>();
-  const added: LocalNote[] = [];
+  const candidates: LocalNote[] = [];
   for (const n of data.notes) {
     if (!n?.secret || !n?.commitment || !n?.amountWei) continue;
     if (n.chainId !== scope.chainId) continue;
@@ -705,19 +750,29 @@ export async function importNotesBackup(
         m.secret !== "0x"
     );
     if (local) here.add(local.id);
-    else if (!added.some((a) => a.id === n.id)) added.push(n);
+    else if (!candidates.some((a) => a.id === n.id)) candidates.push(n);
   }
-  const spent = await Promise.all(added.map((n) => (isSpent ? isSpent(n).catch(() => null) : null)));
+  const valid = await Promise.all(candidates.map((n) => backupNoteValid(n).catch(() => false)));
+  const added = candidates.filter((_, i) => valid[i]);
+  const skipped = candidates.length - added.length;
+  const [spent, seen] = await Promise.all([
+    Promise.all(added.map((n) => (isSpent ? isSpent(n).catch(() => null) : null))),
+    Promise.all(added.map((n) => (isSeen ? isSeen(n).catch(() => null) : null))),
+  ]);
 
   const writes: Promise<void>[] = [];
   let moved = 0;
   let movedClaims = 0;
+  let unseen = 0;
   added.forEach((n, i) => {
     const gone = spent[i] === true;
+    // not in the vault (yet): kept, out of the balance until it is
+    const waiting = !gone && seen[i] === false;
     if (gone) {
       moved++;
       if (n.id.startsWith("imp-")) movedClaims++;
     }
+    if (waiting) unseen++;
     writes.push(
       saveLocalNote({
         ...n,
@@ -726,6 +781,7 @@ export async function importNotesBackup(
         status: gone ? "recovered" : "open",
         source: "local",
         bound: n.bound ?? true,
+        ...(waiting ? { unfunded: true } : {}),
       })
     );
   });
@@ -737,7 +793,7 @@ export async function importNotesBackup(
     );
   }
   await Promise.all(writes);
-  return { ok: true, count: added.length - moved, kept: here.size, moved, movedClaims };
+  return { ok: true, count: added.length - moved - unseen, kept: here.size, moved, movedClaims, unseen, skipped };
 }
 
 /** ETH only (native asset), spendable notes only */

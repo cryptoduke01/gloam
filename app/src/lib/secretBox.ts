@@ -32,7 +32,15 @@ function buf(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+/**
+ * PBKDF2 rounds. Backups locked from 25 Oct 2026 use 310,000 (OWASP's floor for
+ * PBKDF2-SHA256, as claim codes since 20 Oct); older ones used 120,000 and
+ * still open. The count isn't in the backup, so opening tries each in turn.
+ */
+const PBKDF2_ROUNDS = 310_000;
+const PBKDF2_ROUNDS_BEFORE = [120_000];
+
+async function deriveKey(passphrase: string, salt: Uint8Array, iterations = PBKDF2_ROUNDS): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey(
     "raw",
     buf(utf8(passphrase)),
@@ -44,7 +52,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     {
       name: "PBKDF2",
       salt: buf(salt),
-      iterations: 120_000,
+      iterations,
       hash: "SHA-256",
     },
     base,
@@ -98,17 +106,20 @@ export async function openWithPassphrase(
   const salt = raw.slice(0, 16);
   const iv = raw.slice(16, 28);
   const cipher = raw.slice(28);
-  const key = await deriveKey(passphrase.trim(), salt);
-  try {
-    const plain = new Uint8Array(
-      await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: buf(iv) },
-        key,
-        buf(cipher)
-      )
-    );
-    return utf8Decode(plain);
-  } catch {
-    throw new Error("Wrong passphrase or corrupt backup.");
+  for (const iterations of [PBKDF2_ROUNDS, ...PBKDF2_ROUNDS_BEFORE]) {
+    const key = await deriveKey(passphrase.trim(), salt, iterations);
+    try {
+      const plain = new Uint8Array(
+        await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: buf(iv) },
+          key,
+          buf(cipher)
+        )
+      );
+      return utf8Decode(plain);
+    } catch {
+      /* the next round count */
+    }
   }
+  throw new Error("Wrong passphrase or corrupt backup.");
 }
