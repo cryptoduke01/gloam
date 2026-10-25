@@ -21,6 +21,10 @@
  *    ticket and sends it, no secret means no ticket, and no limit keys on an IP
  *  - cash outs to the vault or the memo board are refused before any chain
  *    call, on the server, in the shared check the app uses, and in the SDK
+ *  - Redis set but not answering: every send, cash out and payment message is
+ *    refused relay_off before any chain call, logged once per outage; the
+ *    per-spend lock never runs on memory then, nor in a production build with
+ *    no Redis at all; with Redis back, the next send locks in Redis again
  *  - a private RPC (GLOAM_RPC_URL_<chainId>) that answers for another chain is
  *    never used: every chain has the vault at the same address, so its reads
  *    would look real. Reads go to the chain's public RPC, and a send is refused
@@ -111,6 +115,36 @@ const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode };
 const calls: string[] = [];
 /** Which RPC got each raw send. */
 const sends: ("public" | "private" | "wrong")[] = [];
+/** A fake Upstash REST endpoint: "up" answers, "down" drops the connection. */
+const REDIS_URL = "https://redis.selftest.invalid";
+const redisState = { mode: "up" as "up" | "down", data: new Map<string, string>(), commands: [] as string[] };
+function redisAnswer(cmd: (string | number)[]): { result?: unknown; error?: string } {
+  const [name, ...a] = cmd.map(String);
+  redisState.commands.push(`${name} ${a[0] ?? ""}`);
+  const d = redisState.data;
+  switch (name!.toUpperCase()) {
+    case "SET": {
+      if (a.includes("NX") && d.has(a[0]!)) return { result: null };
+      d.set(a[0]!, a[1]!);
+      return { result: "OK" };
+    }
+    case "GET":
+      return { result: d.get(a[0]!) ?? null };
+    case "DEL":
+      return { result: d.delete(a[0]!) ? 1 : 0 };
+    case "EVAL": // the lock release: delete only when it is still ours
+      return { result: d.get(a[2]!) === a[3] ? (d.delete(a[2]!), 1) : 0 };
+    case "INCR": {
+      const n = Number(d.get(a[0]!) ?? 0) + 1;
+      d.set(a[0]!, String(n));
+      return { result: n };
+    }
+    case "EXPIRE":
+      return { result: 1 };
+    default:
+      return { error: `fake redis: ${name}` };
+  }
+}
 /** Every method the wrong-chain RPC was asked. */
 const wrongCalls: string[] = [];
 const PRIVATE_RPC = "https://private-rpc.selftest.invalid";
@@ -189,6 +223,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   // the app's relay client (lib/relay/client) posts here: hand it to the route itself
   if (url === "/api/relay") {
     return relayPost(new Request("http://localhost/api/relay", { method: init?.method ?? "GET", headers: { "Content-Type": "application/json", "x-forwarded-for": "198.51.100.200" }, body: init?.body }));
+  }
+  if (url === REDIS_URL || url === `${REDIS_URL}/pipeline`) {
+    if (redisState.mode === "down") throw new TypeError("fetch failed");
+    const cmds = JSON.parse(String(init?.body)) as (string | number)[] | (string | number)[][];
+    const out = url.endsWith("/pipeline") ? (cmds as (string | number)[][]).map(redisAnswer) : redisAnswer(cmds as (string | number)[]);
+    return new Response(JSON.stringify(out), { status: 200, headers: { "Content-Type": "application/json" } });
   }
   const via = url === RPC.replace(/\/$/, "") ? "public" : url === PRIVATE_RPC ? "private" : url === WRONG_RPC ? "wrong" : null;
   if (!via) throw new Error(`selftest: no network (${url})`);
@@ -764,6 +804,90 @@ await test("a private RPC that answers for another chain: reads go to the public
   } finally {
     delete process.env[name];
   }
+});
+
+// ---------------------------------------------------------------- Redis down (M-1)
+
+/** Runs `fn` with the fake Redis set as the shared store, and counts the outage logs. */
+async function withRedis(fn: (logs: { down: () => number; back: () => number }) => Promise<void>) {
+  process.env.UPSTASH_REDIS_REST_URL = REDIS_URL;
+  process.env.UPSTASH_REDIS_REST_TOKEN = "selftest-token";
+  const err = console.error;
+  const info = console.info;
+  const lines: string[] = [];
+  console.error = (...a: unknown[]) => void lines.push(a.map(String).join(" "));
+  console.info = (...a: unknown[]) => void lines.push(a.map(String).join(" "));
+  try {
+    await fn({
+      down: () => lines.filter((l) => l.includes("gloam_relay_store_down")).length,
+      back: () => lines.filter((l) => l.includes("gloam_relay_store_back")).length,
+    });
+  } finally {
+    console.error = err;
+    console.info = info;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    redisState.mode = "up";
+  }
+}
+
+const relayOff = (e: unknown) =>
+  isRelayError("relay_off", 503, "The relay is off on this network right now. Send from your wallet.")(e);
+
+await test("Redis set but not answering: every relayed send is refused relay_off before any chain call, logged once", async () => {
+  await withRedis(async (logs) => {
+    redisState.mode = "down";
+    reset();
+    for (const body of [
+      { chainId: net.chainId, action: "transfer", ...transferBody(nullifier()) },
+      { chainId: net.chainId, action: "unshield", ...unshieldBody(nullifier(), CLEAN) },
+      { chainId: net.chainId, action: "memo", paymentCommitment: H32, memo: memoOf(64) },
+    ]) {
+      const res = await relayPost(req("http://localhost/api/relay", body, "203.0.113.77"));
+      assert.equal(res.status, 503, body.action);
+      assert.deepEqual(await res.json(), { ok: false, error: "The relay is off on this network right now. Send from your wallet.", code: "relay_off" });
+    }
+    // past the route too: the per-spend lock itself never falls back to memory
+    await assert.rejects(relayUnshield(net, unshieldBody(nullifier(), CLEAN)), relayOff);
+    await assert.rejects(relayTransfer(net, transferBody(nullifier())), relayOff);
+    assert.deepEqual(calls, [], "no chain call");
+    assert.deepEqual(sends, []);
+    assert.equal(logs.down(), 1, "the outage is logged once");
+  });
+});
+
+await test("Redis back: the next send locks in Redis, and the recovery is logged", async () => {
+  await withRedis(async (logs) => {
+    redisState.mode = "down";
+    reset();
+    await assert.rejects(relayTransfer(net, transferBody(nullifier())), relayOff);
+    redisState.mode = "up";
+    redisState.commands.length = 0;
+    const nul = nullifier();
+    const res = await relayPost(req("http://localhost/api/relay", { chainId: net.chainId, action: "transfer", ...transferBody(nul) }, "203.0.113.78"));
+    assert.equal(res.status, 200);
+    assert.ok(redisState.commands.includes(`SET ${inflightKey(net.chainId, nul)}`), "the per-spend lock is in Redis");
+    assert.deepEqual(sends, ["public"]);
+    assert.equal(logs.back(), 1);
+  });
+});
+
+await test("a production build with no Redis never keeps the per-spend lock in memory", async () => {
+  const env = process.env as Record<string, string | undefined>;
+  const before = env.NODE_ENV;
+  env.NODE_ENV = "production";
+  try {
+    reset();
+    await assert.rejects(takeInflight(inflightKey(net.chainId, nullifier())));
+    await assert.rejects(relayUnshield(net, unshieldBody(nullifier(), CLEAN)), relayOff);
+    assert.deepEqual(sends, []);
+  } finally {
+    env.NODE_ENV = before;
+  }
+  // local dev and self-tests (no Redis, not production): memory, as before
+  const lock = await takeInflight(inflightKey(net.chainId, nullifier()));
+  assert.ok(lock && lock.store === "memory");
+  await lock.release();
 });
 
 await test("SDK builder refuses a cash out to the pool before proving", async () => {
