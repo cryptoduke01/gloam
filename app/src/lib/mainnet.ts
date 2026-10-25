@@ -11,6 +11,9 @@
  * funds, so it is filled in the same way after its deploy (DEPLOY-BASE.md) and
  * hidden until then.
  *
+ * ETHEREUM_SEPOLIA_POOL is the same for Ethereum Sepolia, Ethereum's testnet,
+ * with its payment-message board next to it (DEPLOY-ETHEREUM-SEPOLIA.md).
+ *
  * The block number can be written plain (12345678) or as a bigint (12345678n).
  */
 export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
@@ -27,9 +30,20 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
 /** Base Sepolia (84532): USDC, EURC, ETH, test funds. Deployed 24 Oct 2026 (DEPLOY-BASE.md). */
 export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 49_802_958 };
 
+/**
+ * Ethereum Sepolia (11155111), a testnet: USDC, USDG, PYUSD, EURC, ETH. Not
+ * deployed yet (DEPLOY-ETHEREUM-SEPOLIA.md). After the deploy, paste the vault
+ * and its block, and the memo board and its block: that one line turns it on
+ * in the app, the API, the relay, the remote MCP, Glim and proofs.
+ */
+export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: null, deployBlock: null, payMemo: null, payMemoBlock: null };
+
 export type MainnetChainId = 4663 | 4217 | 8453 | 1;
 
 type MainnetPoolInput = { pool: string | null; deployBlock: number | bigint | null };
+
+/** A testnet pool and its payment-message board (null where the board is not deployed). */
+type TestnetPoolInput = MainnetPoolInput & { payMemo: string | null; payMemoBlock: number | bigint | null };
 
 export type MainnetPool = { pool: `0x${string}`; deployBlock: bigint };
 
@@ -44,6 +58,17 @@ export function mainnetPool(chainId: MainnetChainId): MainnetPool | null {
 /** Base Sepolia's pool, or null while BASE_SEPOLIA_POOL is not filled in. Checked like a mainnet pool. */
 export function baseSepoliaPool(): MainnetPool | null {
   return checkedPool(BASE_SEPOLIA_POOL, "BASE_SEPOLIA_POOL");
+}
+
+/** Ethereum Sepolia's pool, or null while ETHEREUM_SEPOLIA_POOL is not filled in. Checked like a mainnet pool. */
+export function ethereumSepoliaPool(): MainnetPool | null {
+  return checkedPool(ETHEREUM_SEPOLIA_POOL, "ETHEREUM_SEPOLIA_POOL");
+}
+
+/** Ethereum Sepolia's payment-message board, or null until it is filled in next to the pool. */
+export function ethereumSepoliaPayMemo(): MainnetPool | null {
+  const { payMemo, payMemoBlock } = ETHEREUM_SEPOLIA_POOL;
+  return checkedPool({ pool: payMemo, deployBlock: payMemoBlock }, "ETHEREUM_SEPOLIA_POOL.payMemo");
 }
 
 function checkedPool({ pool, deployBlock }: MainnetPoolInput, name: string): MainnetPool | null {

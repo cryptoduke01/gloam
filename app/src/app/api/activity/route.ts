@@ -23,6 +23,8 @@ function explorerFor(chainId: string | null): string | null | "bad" {
   if (chainId === "84532" && NETWORK_KEYS.includes("base")) return null;
   // Ethereum too: Etherscan's API needs a key.
   if (chainId === "1" && NETWORK_KEYS.includes("ethereum-mainnet")) return null;
+  // Ethereum Sepolia too; Etherscan's API needs a key.
+  if (chainId === "11155111" && NETWORK_KEYS.includes("ethereum")) return null;
   return "bad";
 }
 

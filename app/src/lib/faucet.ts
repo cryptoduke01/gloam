@@ -44,6 +44,14 @@ const FAUCETS: Partial<Record<NetworkKey, FaucetInfo>> = {
     cta: "Faucet guide →",
     assets: "USDC · EURC · ETH",
   },
+  ethereum: {
+    title: "Free test USDC, USDG, PYUSD, EURC and ETH",
+    blurb:
+      "Test USDC and EURC from Circle's faucet and test PYUSD and USDG from Paxos's (pick Ethereum Sepolia), and Sepolia ETH for gas from a Sepolia faucet.",
+    url: "/docs/testnet#ethereum",
+    cta: "Faucet guide →",
+    assets: "USDC · USDG · PYUSD · EURC · ETH",
+  },
 };
 
 export function faucetFor(key: NetworkKey): FaucetInfo | null {

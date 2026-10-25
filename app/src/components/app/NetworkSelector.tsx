@@ -23,6 +23,7 @@ function assetLine(n: GloamNetwork): string {
   if (n.key === "ethereum-mainnet") return "USDC, USDT, USDG, PYUSD, EURC and ETH";
   if (n.key === "robinhood") return "Test ETH, stablecoins and stocks";
   if (n.key === "base") return "Test USDC, EURC and ETH";
+  if (n.key === "ethereum") return "Test USDC, USDG, PYUSD, EURC and ETH";
   return "Test stablecoins";
 }
 
