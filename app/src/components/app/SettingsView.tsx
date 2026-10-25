@@ -428,7 +428,7 @@ export function SettingsView() {
                 <p className="tnum mt-0.5 break-all text-[13px] text-mute">{address}</p>
               </div>
               {onProduct ? (
-                <StatusPill tone="lime" dot>
+                <StatusPill tone="mute" dot>
                   On {network.label}
                 </StatusPill>
               ) : (
