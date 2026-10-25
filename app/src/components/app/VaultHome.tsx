@@ -270,7 +270,11 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
           <h2 id="vault-more-title" className="t-label mb-3 px-1">
             Also on {network.label}
           </h2>
-          <ul className="gl-card divide-y divide-line overflow-hidden sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          <ul
+            className={`gl-card divide-y divide-line overflow-hidden ${
+              extras.length > 1 ? "sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0" : ""
+            }`}
+          >
             {extras.map((a) => (
               <li key={a.id} className="min-w-0">
                 <ActionTile action={a} blocked={null} compact />
