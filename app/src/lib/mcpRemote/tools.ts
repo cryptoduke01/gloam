@@ -363,7 +363,9 @@ function networkView(key: NetworkKey, origin: string) {
       symbol: a.symbol,
       address: a.native ? null : a.address,
       decimals: a.decimals,
+      // a dollar stablecoin; EURC is a euro one and is never counted as $1
       stablecoin: a.stable,
+      ...(a.peg ? { peg: a.peg } : {}),
       native: a.native,
     })),
     // a mainnet has no faucet
@@ -435,6 +437,8 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
             ? {
                 mainnet: {
                   heldUsd: Math.round(m.mainnet.heldUsd * 100) / 100,
+                  // held there but not in heldUsd (no dollar price, EURC among them)
+                  unpriced: m.mainnet.unpriced,
                   deposits: m.mainnet.deposits,
                   privateTransfers: m.mainnet.transfers,
                   cashouts: m.mainnet.cashouts,
@@ -444,6 +448,7 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
             : {}),
           allNetworksIncludingTestnets: {
             heldUsd: Math.round(m.combined.heldUsd * 100) / 100,
+            unpriced: m.combined.unpriced,
             deposits: m.combined.deposits,
             privateTransfers: m.combined.transfers,
             cashouts: m.combined.cashouts,
@@ -451,7 +456,7 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
           },
         }),
     about:
-      "Vault-level totals anyone can read from public nodes. `mainnet` is the mainnets; `allNetworksIncludingTestnets` adds the testnets and is not a measure of mainnet deposits, so quote `mainnet` for how much is in Gloam. Deposits, private transfers and cash outs are counted since countedSince: on mainnet that is the public launch, 21 Oct 2026 13:00 UTC, so the team's own checks before launch are not counted, while holdings are the live balance. That is why a vault can hold money with no deposit counted. Amounts of private transfers and who holds what inside a vault are not public, and are not here.",
+      "Vault-level totals anyone can read from public nodes. `mainnet` is the mainnets; `allNetworksIncludingTestnets` adds the testnets and is not a measure of mainnet deposits, so quote `mainnet` for how much is in Gloam, and name its `unpriced` assets beside it (they are held but not in heldUsd). Deposits, private transfers and cash outs are counted since countedSince: on mainnet that is the public launch, 21 Oct 2026 13:00 UTC, so the team's own checks before launch are not counted, while holdings are the live balance. That is why a vault can hold money with no deposit counted. Amounts of private transfers and who holds what inside a vault are not public, and are not here.",
     transparency: `${ctx.origin}/transparency`,
   });
 }

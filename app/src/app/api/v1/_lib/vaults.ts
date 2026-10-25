@@ -5,7 +5,7 @@
 import { parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import { getNetwork, NETWORK_KEYS, isNetworkWritable, type GloamNetwork, type NetworkKey } from "@/lib/networks";
 import { relayPublicClient, relayStatus, type RelayNetworkStatus } from "@/lib/relay/server";
-import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 
 const POOL_VIEW_ABI = parseAbi([
   "function nextIndex() view returns (uint256)",
@@ -25,7 +25,8 @@ function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
 }
 
-export type VaultAsset = { symbol: string; address: Address; decimals: number; stable: boolean; native: boolean };
+/** `stable`: a dollar stablecoin, worth $1. EURC is a euro stablecoin, so it is not one (its `peg` says EUR). */
+export type VaultAsset = { symbol: string; address: Address; decimals: number; stable: boolean; native: boolean; peg?: "EUR" };
 
 export type VaultStatus = {
   network: NetworkKey;
@@ -52,8 +53,9 @@ export function vaultAssets(net: GloamNetwork): VaultAsset[] {
     symbol: t.symbol,
     address: t.address,
     decimals: t.decimals,
-    stable: t.kind === "stablecoin",
+    stable: isDollarStable(t),
     native: false,
+    ...(t.peg ? { peg: t.peg } : {}),
   }));
   const native: VaultAsset[] = supportsNativeShield(net.chainId)
     ? [{ symbol: net.primaryAsset.symbol, address: zeroAddress, decimals: net.primaryAsset.decimals, stable: false, native: true }]
