@@ -159,9 +159,10 @@ check("Ethereum reads: 10,000-block spans, the wallet estimates gas, the relay's
 if (!CONFIGURED) {
   check("unconfigured: Ethereum is no network key anywhere", () => {
     assert.equal(nets.isNetworkKey("ethereum-mainnet"), false);
-    assert.ok(!nets.NETWORK_KEYS.some((k) => nets.getNetwork(k).family === "ethereum"));
-    assert.ok(!nets.allNetworks().some((n) => n.family === "ethereum"));
-    assert.doesNotMatch(nets.networkKeyChoices(), /ethereum/);
+    // Ethereum Sepolia ("ethereum", 11155111) is its own network: selftest-ethereum-sepolia.mts.
+    assert.ok(!nets.NETWORK_KEYS.some((k) => nets.getNetwork(k).chainId === 1));
+    assert.ok(!nets.allNetworks().some((n) => n.chainId === 1));
+    assert.doesNotMatch(nets.networkKeyChoices(), /ethereum-mainnet/);
     assert.equal(nets.getNetwork("ethereum-mainnet").pool, null);
     assert.equal(nets.isNetworkWritable(nets.getNetwork("ethereum-mainnet")), false);
     assert.equal(mainnet.mainnetPool(1), null);
@@ -169,7 +170,7 @@ if (!CONFIGURED) {
   });
 
   check("unconfigured: the relay refuses chain 1", () => {
-    assert.ok(!relayNetworks().some((n) => n.family === "ethereum"));
+    assert.ok(!relayNetworks().some((n) => n.chainId === 1));
     assert.throws(() => networkForChain(1), /not supported by the relay/);
     assert.throws(() => networkForChain("1"), /not supported by the relay/);
   });
@@ -177,7 +178,8 @@ if (!CONFIGURED) {
   check("unconfigured: Glim says nothing about Ethereum as a Gloam network", () => {
     for (const live of [false, true]) {
       const k = knowledgeBlock(false, live);
-      assert.doesNotMatch(k, /\nETHEREUM|Ethereum mainnet \(chain ID 1\)|Ethereum gas is high/);
+      // "ETHEREUM SEPOLIA" is the testnet's own section (selftest-ethereum-sepolia.mts)
+      assert.doesNotMatch(k, /\nETHEREUM \(|Ethereum mainnet \(chain ID 1\)|Ethereum gas is high/);
     }
   });
 
@@ -250,7 +252,7 @@ if (CONFIGURED) {
     assert.match(k, /https:\/\/etherscan\.io/);
     assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. (Base and )?Ethereum mainnet joined after that/);
     assert.doesNotMatch(k, /21 October[^.\n]*Tempo and Ethereum/);
-    const section = k.slice(k.indexOf("\nETHEREUM"), k.indexOf("\n\n", k.indexOf("\nETHEREUM") + 1));
+    const section = k.slice(k.indexOf("\nETHEREUM ("), k.indexOf("\n\n", k.indexOf("\nETHEREUM (") + 1));
     assert.ok(section.length > 200);
     assert.doesNotMatch(section, /\u2014|real money|play money|happy to/);
     const fix = chainFix("Ada", { wallet: 4663, want: 1 }, true);

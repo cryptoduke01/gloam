@@ -61,7 +61,7 @@ if (!FILLED) {
   assert(sdk.MAINNET_POOLS[1].pool === null && sdk.MAINNET_POOLS[1].deployBlock === null, "MAINNET_POOLS[1] is empty until the deploy");
   assert(sdk.mainnetNetwork("ethereum") === null && sdk.getGloamNetwork("ethereum-mainnet") === null, "no Ethereum network without its pool");
   assert(sdk.networkForChainId(1) === undefined, "chain 1 resolves to nothing");
-  assert(!sdk.gloamNetworks().some((n) => n.family === "ethereum"), "gloamNetworks leaves Ethereum out");
+  assert(!sdk.gloamNetworks().some((n) => n.chainId === 1), "gloamNetworks leaves Ethereum mainnet out");
   throws(() => sdk.poolForChainId(1), /Ethereum mainnet is not in this version/, "builders refuse chain 1 instead of guessing a pool");
   await throwsAsync(
     () => sdk.buildShieldBoundIntent({ chainId: 1, asset: USDC, amountWei: 1n, prover: async () => ({ proofBytes: "0x", publicSignals: [] }) }),
