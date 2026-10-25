@@ -49,6 +49,10 @@ Base Sepolia record (verifiers, assets, owner, fee recipient): [deployments/base
 | Pay memos | Live on the testnets; none on mainnet yet |
 | Production keys | Done: the 13-contributor ceremony's final keys (drand round 6561386, release `ceremony-final`) in `src/verifiers/final`, used on mainnet |
 
+## Ready to deploy: Ethereum (not deployed)
+
+Ethereum mainnet (`1`) runs the same `ShieldPoolPayments` deploy on the final keys: `script/DeployEthereumMainnet.s.sol`, through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, USDT, USDG, PYUSD and EURC (500 / 25,000 each) and ETH (0.2 / 10). A fork test (`test/fork/EthereumMainnetFork.t.sol`, `ETH_FORK=1`) puts real USDT and ETH through the vault with final-key proofs. Nothing is deployed yet; the runbook is [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
+
 ## Stack
 
 - [Foundry](https://book.getfoundry.sh/) — `forge` / `cast` / `anvil`
