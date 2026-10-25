@@ -266,14 +266,15 @@ const PAGE_META: Record<string, PageMeta> = {
     ],
   },
   "/docs/chain": {
-    description: "Robinhood Chain and Tempo, mainnet and testnet, and Base next: chain IDs, RPCs, pools, assets and beta limits.",
-    keywords: ["robinhood", "tempo", "base", "base sepolia", "chain id", "rpc", "network", "mainnet", "testnet", "4663", "4217", "8453", "46630", "42431", "84532", "explorer", "pool address", "beta limits", "deposit limit", "usdg", "usdc.e", "usdt0", "usdc", "eurc", "usdt", "gloam token", "relayer", "fees", "swap router", "treasury"],
+    description: "Robinhood Chain and Tempo, mainnet and testnet, Base, and Ethereum next: chain IDs, RPCs, pools, assets and beta limits.",
+    keywords: ["robinhood", "tempo", "base", "base sepolia", "chain id", "rpc", "network", "mainnet", "testnet", "4663", "4217", "8453", "46630", "42431", "84532", "1", "ethereum", "explorer", "pool address", "beta limits", "deposit limit", "usdg", "usdc.e", "usdt0", "usdc", "eurc", "usdt", "pyusd", "gas", "gloam token", "relayer", "fees", "swap router", "treasury"],
     headings: [
       "Two chains, one shielded pool design",
       "Mainnet",
       "Robinhood Chain",
       "Tempo",
       "Base",
+      "Ethereum",
       "Switching networks in the app",
       "Honest status",
     ],

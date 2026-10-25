@@ -183,7 +183,12 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
         (SDK 0.3.0) with <code>BASE_SEPOLIA_USDC</code>; it runs the mainnet
         vault and keys with test funds. <code>mainnetNetwork(&quot;base&quot;)</code>{" "}
         returns null until Base mainnet&apos;s pool is published, then the same
-        code runs there with <code>BASE_USDC</code>.
+        code runs there with <code>BASE_USDC</code>. Ethereum is next the same
+        way: <code>mainnetNetwork(&quot;ethereum&quot;)</code> (SDK 0.4.0)
+        returns null until its pool is published, then runs with{" "}
+        <code>ETHEREUM_USDC</code>. For USDT on Ethereum, send the approvals{" "}
+        <code>approvalSteps</code> gives you: Tether&apos;s token clears an
+        old approval to zero first.
       </p>
 
       <h2>4. Confirm it landed</h2>
