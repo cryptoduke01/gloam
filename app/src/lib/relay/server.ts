@@ -70,7 +70,7 @@ import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { forgetNonce, inSendLanes, inflightKey, takeInflight } from "@/lib/relay/inflight";
-import { serverTransport } from "@/lib/serverRpc";
+import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
 
 const POOL_ERRORS = [
@@ -486,6 +486,11 @@ export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> 
 
 export const MAYBE_SENT_MESSAGE = "This may have gone out already. Wait a minute and refresh before trying again.";
 
+function wrongChainRpc(err: unknown): boolean {
+  if (err instanceof WrongChainRpcError) return true;
+  return err instanceof BaseError && err.walk((e) => e instanceof WrongChainRpcError) !== null;
+}
+
 /** A timeout or a dropped connection on the send can come after the node took the transaction. */
 function mayHaveSent(err: unknown): boolean {
   if (err instanceof BaseError && err.walk((e) => e instanceof TimeoutError || e instanceof HttpRequestError)) {
@@ -500,6 +505,8 @@ function mayHaveSent(err: unknown): boolean {
  * otherwise the node's refusal, explained.
  */
 export function sendFailure(err: unknown): RelayError {
+  // The private RPC set for this chain is another chain's node: refused before any node got it.
+  if (wrongChainRpc(err)) return new RelayError("The relay is off on this network right now. Send from your wallet.", 503, "relay_off");
   if (mayHaveSent(err)) return new RelayError(MAYBE_SENT_MESSAGE, 502, "maybe_sent");
   return explain(err, "The relay could not submit this payment. Try again or send from your wallet.");
 }

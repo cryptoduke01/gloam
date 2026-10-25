@@ -21,6 +21,10 @@
  *    ticket and sends it, no secret means no ticket, and no limit keys on an IP
  *  - cash outs to the vault or the memo board are refused before any chain
  *    call, on the server, in the shared check the app uses, and in the SDK
+ *  - a private RPC (GLOAM_RPC_URL_<chainId>) that answers for another chain is
+ *    never used: every chain has the vault at the same address, so its reads
+ *    would look real. Reads go to the chain's public RPC, and a send is refused
+ *    before it reaches any node
  *
  * fetch is stubbed for the whole run: chain calls go to an in-process fake
  * that answers the few JSON-RPC methods the relay uses, at the chain's public
@@ -106,8 +110,13 @@ type SendMode = "ok" | "reject" | "drop" | "http502" | "known" | "nonce_once" | 
 const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode };
 const calls: string[] = [];
 /** Which RPC got each raw send. */
-const sends: ("public" | "private")[] = [];
+const sends: ("public" | "private" | "wrong")[] = [];
+/** Every method the wrong-chain RPC was asked. */
+const wrongCalls: string[] = [];
 const PRIVATE_RPC = "https://private-rpc.selftest.invalid";
+/** A private RPC set for this chain by mistake: it is another chain's node. */
+const WRONG_RPC = "https://wrong-chain-rpc.selftest.invalid";
+const WRONG_CHAIN_ID = 8453;
 const NONCE_TOO_LOW = { code: -32000, message: "nonce too low: address 0x0000000000000000000000000000000000000000, tx: 0 state: 1" };
 const SEL = {
   spent: toFunctionSelector("spent(bytes32)"),
@@ -181,11 +190,18 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (url === "/api/relay") {
     return relayPost(new Request("http://localhost/api/relay", { method: init?.method ?? "GET", headers: { "Content-Type": "application/json", "x-forwarded-for": "198.51.100.200" }, body: init?.body }));
   }
-  const via = url === RPC.replace(/\/$/, "") ? "public" : url === PRIVATE_RPC ? "private" : null;
+  const via = url === RPC.replace(/\/$/, "") ? "public" : url === PRIVATE_RPC ? "private" : url === WRONG_RPC ? "wrong" : null;
   if (!via) throw new Error(`selftest: no network (${url})`);
   const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
   const list = Array.isArray(body) ? body : [body];
   for (const r of list) calls.push(r.method === "eth_call" ? `eth_call:${callName(r)}` : r.method);
+  if (via === "wrong") {
+    wrongCalls.push(...list.map((r) => r.method));
+    const out = list.map((r) =>
+      r.method === "eth_chainId" ? { jsonrpc: "2.0", id: r.id, result: toHex(WRONG_CHAIN_ID) } : { jsonrpc: "2.0", id: r.id, ...answer(r) }
+    );
+    return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
   const isSend = list.some((r) => r.method === "eth_sendRawTransaction");
   if (isSend) sends.push(via);
   // A dropped connection on the send: the node may or may not have the transaction.
@@ -724,6 +740,30 @@ await test("relay route answers 400 vault_recipient for a cash out to the vault"
   assert.equal(res.status, 400);
   assert.deepEqual(await res.json(), { ok: false, error: CASH_OUT_TO_VAULT_MESSAGE, code: "vault_recipient" });
   assert.deepEqual(calls, []);
+});
+
+await test("a private RPC that answers for another chain: reads go to the public RPC, a send is refused", async () => {
+  const name = `GLOAM_RPC_URL_${net.chainId}`;
+  process.env[name] = WRONG_RPC;
+  try {
+    reset();
+    wrongCalls.length = 0;
+    const nul = nullifier();
+    await assert.rejects(relayUnshield(net, unshieldBody(nul, CLEAN)), isRelayError("relay_off", 503));
+    // nothing but the chain id check reached the wrong node, and no node got a raw send
+    assert.deepEqual(wrongCalls.filter((m) => m !== "eth_chainId"), [], `the wrong chain was asked: ${wrongCalls.join(", ")}`);
+    assert.deepEqual(sends, []);
+    // the spent check and the dry run were answered by this chain's public RPC
+    assert.ok(calls.includes("eth_call:spent") && calls.includes("eth_estimateGas"));
+    assert.equal(await lockFree(nul), true, "nothing went out, so the spend is free to retry");
+    // a server read through the same transport: this chain's answer, from the public RPC
+    wrongCalls.length = 0;
+    const reads = serverTransport(net, { retryCount: 0 })({ chain: net.chain });
+    assert.equal(await reads.request({ method: "eth_chainId" }), toHex(net.chainId));
+    assert.deepEqual(wrongCalls.filter((m) => m !== "eth_chainId"), []);
+  } finally {
+    delete process.env[name];
+  }
 });
 
 await test("SDK builder refuses a cash out to the pool before proving", async () => {

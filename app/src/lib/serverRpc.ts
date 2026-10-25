@@ -4,6 +4,13 @@
  * 429. Set GLOAM_RPC_URL_<chainId> (server env only, never NEXT_PUBLIC_) to a
  * private endpoint and the server uses it first, with the public RPC behind it.
  * Without it, the public RPC alone, as before.
+ *
+ * A private RPC is used only once it answers eth_chainId with its own chain.
+ * The vault has the same address on every chain, so a node for another chain
+ * (a Base Sepolia URL pasted under Base mainnet's id, say) would answer every
+ * vault read with that chain's state, and the answers would look real. One
+ * that answers for another chain is never used: reads go to the public RPC,
+ * and a send is refused before it reaches any node (WrongChainRpcError).
  */
 import { fallback, http, type HttpTransportConfig, type Transport } from "viem";
 import type { GloamNetwork } from "./networks";
@@ -17,6 +24,57 @@ function privateRpc(net: Net): string | null {
   return process.env[`GLOAM_RPC_URL_${net.chainId}`]?.trim() || null;
 }
 
+/** The private RPC set for this chain answers for another chain. Nothing was sent. */
+export class WrongChainRpcError extends Error {
+  constructor(readonly chainId: number) {
+    super(`The private RPC set for chain ${chainId} answers for another chain, so it is not used.`);
+    this.name = "WrongChainRpcError";
+  }
+}
+
+/** Chain id checks, per chain and URL: true or false once answered. */
+const checks = new Map<string, Promise<boolean | null>>();
+
+/**
+ * Whether `url` answers eth_chainId with `chainId`. Null when it could not be
+ * asked (down, timed out): then it is asked again on the next call, and the
+ * request goes ahead as it would have, with the public RPC behind it. Logs a
+ * mismatch once, without the URL (a private URL can carry its key).
+ */
+function answersFor(url: string, chainId: number, config: HttpTransportConfig): Promise<boolean | null> {
+  const key = `${chainId} ${url}`;
+  const known = checks.get(key);
+  if (known) return known;
+  const check = http(url, { ...config, retryCount: 0 })({})
+    .request({ method: "eth_chainId" })
+    .then((id) => {
+      const ok = Number(id) === chainId;
+      if (!ok) console.error("gloam_rpc_wrong_chain", JSON.stringify({ chainId, answered: Number(id) }));
+      return ok;
+    })
+    .catch(() => {
+      checks.delete(key);
+      return null;
+    });
+  checks.set(key, check);
+  return check;
+}
+
+/** The private RPC, behind the chain id check. */
+function checkedPrivate(url: string, chainId: number, config: HttpTransportConfig): Transport {
+  const inner = http(url, config);
+  return (params) => {
+    const t = inner(params);
+    return {
+      ...t,
+      async request(args) {
+        if ((await answersFor(url, chainId, config)) === false) throw new WrongChainRpcError(chainId);
+        return t.request(args);
+      },
+    } as typeof t;
+  };
+}
+
 /**
  * `sendOnce` is for the relay's sends: a signed transaction goes to one RPC
  * only. The public backup still answers reads, but never gets a raw send the
@@ -28,7 +86,8 @@ export function serverTransport(net: Net, config: HttpTransportConfig = {}, opts
   const pub = net.chain.rpcUrls.default.http[0]!;
   const priv = privateRpc(net);
   if (!priv || priv === pub) return http(pub, config);
-  if (!opts.sendOnce) return fallback([http(priv, config), http(pub, config)]);
+  const own = checkedPrivate(priv, net.chainId, config);
+  if (!opts.sendOnce) return fallback([own, http(pub, config)]);
   const backup = http(pub, { ...config, methods: { exclude: SEND_METHODS } });
-  return fallback([http(priv, config), backup], { retryCount: config.retryCount });
+  return fallback([own, backup], { retryCount: config.retryCount });
 }
