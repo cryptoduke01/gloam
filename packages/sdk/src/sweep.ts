@@ -84,6 +84,26 @@ export interface SweepChain {
   pathForCommitment(commitment: Hex): Promise<PoseidonMerklePath | null>;
   /** Wait for a submitted transaction and report how it ended. */
   waitForReceipt(hash: Hex): Promise<{ status: "success" | "reverted" }>;
+  /**
+   * The chain these reads answer for (the RPC's own eth_chainId). Gloam's vault
+   * has one address on every chain and native ETH is 0x0 on all of them, so a
+   * reader on the wrong chain answers as if it were the right one. When this is
+   * given, a sweep or charge for another chain is refused before anything is
+   * read or sent. sweepChainFromClient sets it; a custom chain should too.
+   */
+  chainId?(): Promise<number>;
+}
+
+/**
+ * Why `chain` can't settle a payment on `chainId`, or null when it reads that
+ * chain (or does not say which chain it reads). Throws when the chain id could
+ * not be read.
+ */
+export async function sweepChainProblem(chain: Pick<SweepChain, "chainId">, chainId: number): Promise<string | null> {
+  if (!chain.chainId) return null;
+  const actual = await chain.chainId();
+  if (actual === chainId) return null;
+  return `These chain reads go to chain ${actual}, and the payment is on chain ${chainId}. Nothing was settled: point the reader at chain ${chainId}.`;
 }
 
 /** Submits a built private send and returns its transaction hash. */
@@ -91,7 +111,14 @@ export type SweepSubmitter = (intent: PrivateSendIntent) => Promise<Hex>;
 
 /** A SweepChain over a viem PublicClient: reads the pool and rebuilds the tree for each path. */
 export function sweepChainFromClient(client: PublicClient, params: SyncTreeParams): SweepChain {
+  // asked of the RPC once (a client's chain label can say one chain while its RPC is another's)
+  let id: Promise<number> | null = null;
   return {
+    chainId: () =>
+      (id ??= client.getChainId().catch((e: unknown) => {
+        id = null;
+        throw e;
+      })),
     isSpent: (nullifier) =>
       client.readContract({ address: params.pool, abi: POOL_STATE_ABI, functionName: "isSpent", args: [nullifier] }),
     isCommitmentSeen: (commitment) =>
@@ -173,6 +200,11 @@ export async function sweepReceivedNote(params: SweepParams): Promise<SweepResul
     return result("bad_note", "The received note has no readable amount.");
   }
   if (amount <= 0n) return result("bad_note", "The received note carries no value.");
+  // only on the payment's own chain: the vault and ETH have the same address on every chain
+  const wrongChain = await sweepChainProblem(chain, params.chainId).catch(
+    () => "Could not read which chain the reader is on, so nothing was settled. Try again."
+  );
+  if (wrongChain) return result("failed", wrongChain);
   if (!(await verifyPaymentNoteBinding(note))) {
     return result("bad_note", "The received note's amount does not match its commitment.");
   }
