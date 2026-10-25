@@ -33,10 +33,9 @@ import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
 import { FirstPaymentCard } from "./FirstPaymentCard";
 import { RecoveryNudge } from "./RecoveryPanel";
-import { OnboardingCard, openOnboarding } from "./OnboardingCard";
+import { OnboardingCard } from "./OnboardingCard";
 import { PaymentNoteLine } from "./PaymentNote";
 import { TokenLogo } from "./TokenLogo";
-import { TempoFaucetButton } from "./TempoFaucetButton";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
@@ -50,33 +49,6 @@ function LockIcon({ className = "" }: { className?: string }) {
       <rect x="5" y="10.5" width="14" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.8" />
     </svg>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  sub,
-  loading,
-  children,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  loading?: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="gl-card flex min-w-0 flex-col p-5">
-      <div className="flex h-6 items-center justify-between gap-3">
-        <span className="text-[13px] text-mute">{label}</span>
-      </div>
-      <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
-        {loading ? <span className="inline-block h-7 w-24 animate-pulse rounded-lg bg-surface align-middle" /> : value}
-      </p>
-      {sub && <p className="mt-2 truncate text-[13px] text-mute">{sub}</p>}
-      {children}
-    </div>
   );
 }
 
@@ -112,6 +84,7 @@ function CashOutIcon() {
 function QuickAction({
   href,
   label,
+  short,
   icon,
   primary = false,
   disabled = false,
@@ -119,24 +92,34 @@ function QuickAction({
 }: {
   href: string;
   label: string;
+  /** A phone's name for it, where three share one row. */
+  short?: string;
   icon: ReactNode;
   primary?: boolean;
   disabled?: boolean;
   className?: string;
 }) {
-  const cls = `btn ${primary ? "btn-ink" : "btn-ghost"} ${className}`;
+  const cls = `btn ${primary ? "btn-ink" : "btn-quiet"} ${className}`;
+  const text = short ? (
+    <>
+      <span className="sm:hidden">{short}</span>
+      <span className="max-sm:hidden">{label}</span>
+    </>
+  ) : (
+    label
+  );
   if (disabled) {
     return (
       <span className={cls} aria-disabled="true" title="Not live yet">
         {icon}
-        {label}
+        {text}
       </span>
     );
   }
   return (
-    <Link href={href} className={cls}>
+    <Link href={href} className={cls} aria-label={short ? label : undefined}>
       {icon}
-      {label}
+      {text}
     </Link>
   );
 }
@@ -161,14 +144,6 @@ export function PortfolioView() {
   const faucetExternal = faucet?.url.startsWith("http") ?? false;
   // Tempo (testnet or mainnet) has no native coin worth counting.
   const isTempo = network.family === "tempo";
-  // The public, unshielded asset differs by network: equities on Robinhood
-  // Chain testnet, stablecoins (and $GLOAM) everywhere else.
-  const publicAssetLabel = network.stocks ? "Stocks" : "Tokens";
-  const publicAssetSub = network.stocks
-    ? "Tokenized stocks, live prices"
-    : network.family === "tempo"
-      ? "Stablecoins in your wallet"
-      : "Stablecoins and tokens in your wallet";
   const { settings } = useTradingSettings();
   const { data: marketData } = useLiveMarkets();
   const ethUsd = marketData?.ethUsd ?? null;
@@ -221,7 +196,7 @@ export function PortfolioView() {
   };
   const shieldLive = isShieldDeployed();
 
-  const { data: bal, isLoading } = useAppBalance({
+  const { data: bal } = useAppBalance({
     address,
     chainId: network.chainId,
     enabled: Boolean(address),
@@ -361,18 +336,12 @@ export function PortfolioView() {
       ? formatUsdCompact(totalUsd)
       : `${formatEth(nativeWei + shieldedWei)} ${nativeSymbol}`;
 
-  const walletValue = isTempo
-    ? formatUsdCompact(balancesVisible ? stocksUsd : 0)
-    : !balancesVisible
-      ? `0 ${nativeSymbol}`
-      : `${formatEth(nativeWei)} ${nativeSymbol}`;
-  const walletSub = isTempo
-    ? "Stablecoins, visible on the explorer"
-    : !balancesVisible
-      ? "Visible on the explorer"
-      : ethUsdVal != null && settings.showUsd
-        ? formatUsdCompact(ethUsdVal)
-        : "Visible on the explorer";
+  // The public side in one figure, for the hero card's foot: the gas coin and
+  // the tokens together (Holdings below lists them one by one).
+  const publicDisplay =
+    settings.showUsd
+      ? formatUsdCompact(balancesVisible ? publicUsd : 0)
+      : `${formatEth(balancesVisible ? nativeWei : BigInt(0))} ${nativeSymbol}, ${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
   const vaultValue = !balancesVisible
     ? "0"
@@ -417,26 +386,18 @@ export function PortfolioView() {
             ? `${vaultValue} in your vault. Nobody else can see it.`
             : "Hidden from the public. Only this browser can read it.";
 
-  const stocksValue = !balancesVisible
-    ? settings.showUsd
-      ? formatUsd(0)
-      : "0 tokens"
-    : settings.showUsd && stocksUsd > 0 && tokensUnpriced.length === 0
-      ? formatUsdCompact(stocksUsd)
-      : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
-
-  const quietLink =
-    "inline-flex h-10 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60";
 
   return (
     <div className="space-y-5">
       <OnboardingCard />
 
-      {/* Private balance: the hero. The field behind it is the sealed signal. */}
+      {/* Private balance: the hero. The field behind it is the sealed signal.
+          One idea per row: what is private, the number, what to do with it,
+          then the public side in one quiet line at the foot. */}
       <section className="gl-card relative overflow-hidden">
         <SealedField tone="soft" />
-        <div className="relative z-[1] max-sm:p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="relative z-[1] max-sm:p-6 sm:p-8 lg:p-10">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="text-[14px] text-soft">Private balance</span>
               <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
@@ -444,24 +405,8 @@ export function PortfolioView() {
                 Only you
               </span>
             </div>
-            <div className="-mr-2 flex flex-wrap items-center gap-0.5">
+            <div className="-mr-2 flex items-center gap-0.5">
               <NetworkPulse />
-              {network.key === "tempo" ? (
-                <TempoFaucetButton className={quietLink} />
-              ) : faucet ? (
-                <a
-                  href={faucet.url}
-                  target={faucetExternal ? "_blank" : undefined}
-                  rel={faucetExternal ? "noreferrer" : undefined}
-                  className={quietLink}
-                  title={faucet.blurb}
-                >
-                  Get test funds
-                </a>
-              ) : null}
-              <button type="button" onClick={openOnboarding} className={quietLink}>
-                Getting started
-              </button>
               <button
                 type="button"
                 onClick={() => void refreshAll()}
@@ -490,56 +435,63 @@ export function PortfolioView() {
             </div>
           </div>
 
-          <div className="max-lg:mt-6 flex max-lg:flex-col gap-7 lg:mt-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0">
-              <p
-                className={`tnum truncate max-sm:text-[48px] font-light leading-none tracking-[-0.03em] sm:text-[64px] ${
-                  balancesVisible && hasShield ? "text-foreground" : "text-foreground/85"
-                }`}
-              >
-                {privateDisplay}
-              </p>
-              <p className="mt-3 max-w-[52ch] text-[14px] leading-relaxed text-mute">{privateSub}</p>
-            </div>
+          <p
+            className={`tnum mt-8 truncate max-sm:text-[52px] font-light leading-none tracking-[-0.03em] sm:text-[72px] lg:mt-10 ${
+              balancesVisible && hasShield ? "text-foreground" : "text-foreground/85"
+            }`}
+          >
+            {privateDisplay}
+          </p>
+          <p className="mt-4 max-w-[64ch] text-[15px] leading-relaxed text-mute">{privateSub}</p>
 
-            {/* The four money moves, the same names as the nav under Vault. A
-                public send stays under Vault, so Send here is never public. */}
-            <div className="shrink-0 gap-2 max-sm:grid max-sm:grid-cols-2 sm:flex sm:flex-wrap">
-              <QuickAction href="/app/vault?tab=shield" label="Add privately" icon={<AddIcon />} primary disabled={!shieldLive} />
-              <QuickAction href="/app/vault?tab=move" label="Pay privately" icon={<SendIcon />} disabled={!shieldLive} />
-              <QuickAction href="/app/vault?tab=move&mode=receive" label="Receive" icon={<ReceiveIcon />} />
-              <QuickAction href="/app/vault?tab=move&mode=cashout" label="Cash out" icon={<CashOutIcon />} disabled={!shieldLive} />
-            </div>
+          {/* One primary action; the other three money moves sit beside it,
+              quiet. The same names as the nav under Vault, so Pay is never a
+              public send. */}
+          <div className="mt-8 flex flex-wrap items-center gap-x-1 gap-y-2 max-sm:grid max-sm:grid-cols-3 lg:mt-10">
+            <QuickAction
+              href={addSuggestion ? addAssetHref(addSuggestion.id) : "/app/vault?tab=shield"}
+              label="Add privately"
+              icon={<AddIcon />}
+              primary
+              disabled={!shieldLive}
+              className="btn-lg mr-3 max-sm:col-span-3 max-sm:mr-0"
+            />
+            <QuickAction href="/app/vault?tab=move" label="Pay privately" short="Pay" icon={<SendIcon />} disabled={!shieldLive} className="max-sm:px-2" />
+            <QuickAction href="/app/vault?tab=move&mode=receive" label="Receive" icon={<ReceiveIcon />} className="max-sm:px-2" />
+            <QuickAction href="/app/vault?tab=move&mode=cashout" label="Cash out" icon={<CashOutIcon />} disabled={!shieldLive} className="max-sm:px-2" />
           </div>
         </div>
 
         {/* network banner lives in the card footer; the sidebar already
             carries the connect control, so no connect prompt here */}
         {isConnected && !onProduct && (
-          <div className="relative z-[1] flex max-sm:flex-col gap-3 border-t border-line max-sm:px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="relative z-[1] flex max-sm:flex-col gap-3 border-t border-line max-sm:px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10">
             <p className="text-[14px] text-danger">Switch your wallet to {network.label} to see balances.</p>
             <WalletMenu />
           </div>
         )}
+        {/* The public side, once: what the wallet holds and the total, with
+            the share that is private. With nothing private yet the line above
+            already names the wallet's money, so the foot keeps to the address. */}
         {isConnected && onProduct && address && (
-          <div className="relative z-[1] flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2.5 max-sm:px-6 sm:px-8">
-            {shieldLive && addSuggestion ? (
-              // The same money, still in public: one step from private.
-              <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-mute">
-                <span>
-                  You have{" "}
-                  <span className="tnum text-foreground">
-                    {formatAssetAmount(addSuggestion.raw, addSuggestion.address)} {addSuggestion.symbol}
-                  </span>{" "}
-                  in your wallet.
-                </span>
-                <Link
-                  href={addAssetHref(addSuggestion.id)}
-                  className="inline-flex min-h-10 items-center font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
-                >
-                  Add it privately
-                </Link>
-              </p>
+          <div className="relative z-[1] flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-3 max-sm:px-6 sm:px-8 lg:px-10">
+            {hasShield ? (
+              <dl className="tnum flex min-w-0 flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px]">
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-mute">In your wallet</dt>
+                  <dd className="text-foreground">{publicDisplay}</dd>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-mute">Total</dt>
+                  <dd className="text-foreground">
+                    {totalDisplay}
+                    {sealedPct != null && <span className="text-mute">, {sealedPct}% private</span>}
+                  </dd>
+                </div>
+                {settings.showUsd && unpriced.length > 0 && (
+                  <div className="text-mute">Not in the total: {unpriced.join(", ")}, no dollar price</div>
+                )}
+              </dl>
             ) : (
               <span className="text-[12.5px] text-mute">Wallet</span>
             )}
@@ -561,55 +513,6 @@ export function PortfolioView() {
       {balancesVisible && hasShield && shieldLive && (
         <FirstPaymentCard open={shieldNotes} all={allNotes} chainId={network.chainId} />
       )}
-
-      {/* Total + public accounts */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="gl-card flex min-w-0 flex-col p-5">
-          <div className="flex h-6 items-center justify-between gap-3">
-            <span className="text-[13px] text-mute">Total value</span>
-            {sealedPct != null && (
-              <span className="tnum text-[12px] text-mute">{sealedPct}% private</span>
-            )}
-          </div>
-          <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
-            {totalDisplay}
-          </p>
-          {balancesVisible && settings.showUsd && unpriced.length > 0 && (
-            <p className="mt-2 truncate text-[12px] text-mute">Not in the total: {unpriced.join(", ")}, no dollar price</p>
-          )}
-          <div className="mt-auto pt-4">
-            <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface" aria-hidden>
-              {sealedPct != null && (
-                <>
-                  <span className="h-full rounded-full bg-foreground/75" style={{ width: `${100 - sealedPct}%` }} />
-                  <span className="h-full rounded-full bg-sealed" style={{ width: `${sealedPct}%` }} />
-                </>
-              )}
-            </div>
-            <div className="mt-2.5 flex items-center gap-4 text-[12px] text-mute">
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-foreground/75" />
-                Public{sealedPct != null ? ` ${100 - sealedPct}%` : ""}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-sealed" />
-                Private{sealedPct != null ? ` ${sealedPct}%` : ""}
-              </span>
-            </div>
-          </div>
-        </div>
-        <StatCard
-          label="Wallet"
-          value={walletValue}
-          sub={walletSub}
-          loading={isConnected && isLoading}
-        />
-        <StatCard
-          label={publicAssetLabel}
-          value={stocksValue}
-          sub={publicAssetSub}
-        />
-      </div>
 
       {/* Main split: vault + holdings, with the public feed alongside */}
       <div className="grid gap-5 lg:grid-cols-12">
