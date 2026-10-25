@@ -41,7 +41,8 @@
  * It waits, still scheduled and still cancellable, and is looked at again
  * every few minutes until gas comes back under the ceiling, for up to
  * GAS_WAIT_MAX_MS past its send time. Waiting for gas never counts as a failed
- * try and never uses up the give-up time.
+ * try and never uses up the give-up time: once gas comes down, the 2 hours a
+ * passing problem gets start from the end of the wait.
  *
  * This file is the logic and an in-memory store (for tests and local runs);
  * lib/relay/scheduledStore.ts keeps jobs in Redis in production.
@@ -104,6 +105,11 @@ export type CashOutJob = {
   maybeSent?: boolean;
   /** Waiting for gas: the runner looks at the job again no sooner than this (ms). */
   notBefore?: number;
+  /**
+   * The last time the job was held for gas (ms). The 2-hour give-up runs from
+   * here once gas comes down, not from the send time the wait already passed.
+   */
+  gasHeldAt?: number;
   /** A short, public reason when it failed (never a secret). */
   reason?: string;
 };
@@ -335,7 +341,7 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     // The node did not answer. One that may be out stays "sending" and is read again later;
     // one that never reached the node tries again next pass, or gives up when long overdue.
     if (mayBeOut) return settle(store, job, "sending", now, { maybeSent: true });
-    if (now - job.sendAfter > GIVE_UP_AFTER_MS) return settle(store, job, "failed", now, { reason: "The network could not be read in time." });
+    if (now - giveUpFrom(job) > GIVE_UP_AFTER_MS) return settle(store, job, "failed", now, { reason: "The network could not be read in time." });
     return settle(store, job, "scheduled", now);
   }
   // Spent: by this job on an earlier pass whose result was lost, or elsewhere.
@@ -380,10 +386,15 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     if (PERMANENT.has(code) || (REVERTED.has(code) && !REVERTED_PASSING.has(code))) {
       return settle(store, sending, "failed", t, { reason });
     }
-    if (t - job.sendAfter > GIVE_UP_AFTER_MS) return settle(store, sending, "failed", t, { reason });
+    if (t - giveUpFrom(job) > GIVE_UP_AFTER_MS) return settle(store, sending, "failed", t, { reason });
     // A passing refusal (busy, out of gas for a moment, the vault short for now): again next pass.
     return settle(store, sending, "scheduled", t, { reason });
   }
+}
+
+/** Where the 2-hour give-up counts from: the send time, or the end of a wait for gas after it. */
+function giveUpFrom(job: CashOutJob): number {
+  return Math.max(job.sendAfter, job.gasHeldAt ?? 0);
 }
 
 /** Whether to hold a due job for gas. A check that fails holds it too: better late than paid blind. */
@@ -399,7 +410,7 @@ async function gasIsHigh(deps: RunDeps, job: CashOutJob): Promise<boolean> {
 /** A due job held for gas: looked at again in a few minutes, or given up after GAS_WAIT_MAX_MS (nothing moved). */
 function waitForGas(store: JobStore, job: CashOutJob, now: number): Promise<JobStatus> {
   if (now - job.sendAfter > GAS_WAIT_MAX_MS) return settle(store, job, "failed", now, { reason: GAS_GAVE_UP_REASON, notBefore: undefined });
-  return settle(store, job, "scheduled", now, { notBefore: now + GAS_RECHECK_MS, reason: GAS_WAIT_REASON });
+  return settle(store, job, "scheduled", now, { notBefore: now + GAS_RECHECK_MS, reason: GAS_WAIT_REASON, gasHeldAt: now });
 }
 
 /**

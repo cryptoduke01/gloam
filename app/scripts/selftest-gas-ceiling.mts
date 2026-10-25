@@ -390,6 +390,43 @@ await test("waiting for gas never uses up the 2-hour give-up time", async () => 
   assert.deepEqual(await sched.runDueJobs(store, deps(state)), [{ id: j.id, status: "sent" }]);
 });
 
+await test("after a long gas wait, a passing problem gets its 2 hours from the end of the wait, not from the send time", async () => {
+  for (const kind of ["busy", "rate_limit", "relay_empty", "check_failed", "read fails"]) {
+    const store = sched.memoryJobStore();
+    const j = job();
+    await store.put(j);
+    const state = { now: j.sendAfter + 1, high: true, failRead: false };
+    const d = {
+      now: () => state.now,
+      readChain: async () => {
+        if (state.failRead) throw new Error("rpc down");
+        return { spent: false, knownRoot: true };
+      },
+      send: async (): Promise<Hex> => {
+        throw Object.assign(new Error(kind), { code: kind });
+      },
+      gasHigh: async () => state.high,
+    };
+    // three hours of high gas, looked at every 5 minutes
+    while (state.now < j.sendAfter + 3 * HOUR) {
+      await sched.runDueJobs(store, d);
+      state.now += sched.GAS_RECHECK_MS + 1;
+    }
+    // gas comes down, and the first pass meets one passing problem: it waits, it does not fail
+    state.high = false;
+    state.failRead = kind === "read fails";
+    await sched.runDueJobs(store, d);
+    const after = (await store.get(j.id))!;
+    assert.equal(after.status, "scheduled", `${kind} right after a 3-hour gas wait`);
+    if (kind !== "read fails") assert.equal(after.reason, kind, `${kind}: the reason is the new problem, not gas`);
+    assert.equal(after.attempts, kind === "read fails" ? 0 : 1);
+    // the 2-hour rule still holds, counted from the end of the wait
+    state.now += sched.GIVE_UP_AFTER_MS + 60_000;
+    await sched.runDueJobs(store, d);
+    assert.equal((await store.get(j.id))!.status, "failed", `${kind} 2 hours after the gas wait ended`);
+  }
+});
+
 await test("a relay that refuses over gas at the last moment: the job waits, the try not counted", async () => {
   const store = sched.memoryJobStore();
   const j = job();
