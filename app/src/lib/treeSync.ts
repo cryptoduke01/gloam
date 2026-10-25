@@ -54,6 +54,12 @@ export type ChainLeaf = {
 };
 
 export type SyncedTree = {
+  /**
+   * The chain and vault this tree is of. Several chains run a vault at one
+   * address, so a tree is only ever used for a note on the same chain.
+   */
+  chainId?: number;
+  pool?: Address;
   scheme: "keccak" | "poseidon";
   leaves: ChainLeaf[];
   root: Hex;
@@ -197,18 +203,40 @@ async function fetchLeafSnapshot(net: GloamNetwork, pool: Address): Promise<Pool
 
 // ------------------------------------------------------------------ sync
 
-export function syncShieldTree(client: PublicClient): Promise<SyncedTree | null> {
+/**
+ * The vault tree of `net` (the active network when left out), read through
+ * `client`. A client for another chain is refused: the vaults share one
+ * address, so its logs would build, check out against, and be saved as this
+ * network's tree.
+ */
+export function syncShieldTree(client: PublicClient, net: GloamNetwork = getActiveNetwork()): Promise<SyncedTree | null> {
   // Recording demo: the pretend wallet's tree, nothing read from the chain.
   if (readDemo()) return Promise.resolve(demoSyncedTree());
-  const net = getActiveNetwork();
   const pool = net.pool;
   if (!pool) return Promise.resolve(null);
+  if (client.chain && client.chain.id !== net.chainId) {
+    return Promise.reject(new Error(`Vault read for chain ${client.chain.id} asked for chain ${net.chainId}.`));
+  }
   const key = `${net.chainId}:${pool.toLowerCase()}`;
   const running = inflight.get(key);
   if (running) return running;
-  const p = syncOnce(client, key, net, pool).finally(() => inflight.delete(key));
+  const p = syncOnce(client, key, net, pool)
+    .then((tree) => (tree ? Object.assign(tree, { chainId: net.chainId, pool }) : tree))
+    .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;
+}
+
+/** The tree a view of `net` may use: `tree` when it is that network's own (or the recording demo's), else null. */
+export function shownTree<T extends Pick<SyncedTree, "chainId" | "pool">>(tree: T | null, net: Pick<GloamNetwork, "chainId" | "pool">): T | null {
+  return tree && (readDemo() || treeIsFor(tree, net)) ? tree : null;
+}
+
+/** A tree is usable for `net` only when it is that network's own (chain and vault). */
+export function treeIsFor(tree: Pick<SyncedTree, "chainId" | "pool"> | null | undefined, net: Pick<GloamNetwork, "chainId" | "pool">): boolean {
+  return Boolean(
+    tree && net.pool && tree.chainId === net.chainId && tree.pool && tree.pool.toLowerCase() === net.pool.toLowerCase()
+  );
 }
 
 /** The pool's root at `block`, or null when the node cannot serve state there. */
@@ -487,8 +515,9 @@ export async function assertTreeMatchesChain(
   synced: SyncedTree
 ): Promise<boolean> {
   if (readDemo()) return true;
-  const pool = getActiveNetwork().pool;
+  const pool = synced.pool ?? getActiveNetwork().pool;
   if (!pool) return false;
+  if (synced.chainId != null && client.chain && client.chain.id !== synced.chainId) return false;
   const onchain = (await client.readContract({
     address: pool,
     abi: shieldPoolAbi,
