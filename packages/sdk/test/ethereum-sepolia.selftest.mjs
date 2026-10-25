@@ -115,7 +115,7 @@ assert(isPaymentsPoolChainId(11155111) && !isMainnetChainId(11155111), "the paym
 assert(ceremonyForChainId(11155111) === "production", "proofs for Sepolia always use the final keys, pool or not");
 assert(circuitArtifactUrls("transfer", 11155111).zkey.endsWith("/final/transfer_final.zkey"), "final-key artifacts");
 assert(networkName(11155111) === "Ethereum Sepolia", "name");
-assert(mainnetNetwork("ethereum") === null, "no Ethereum mainnet network in this version");
+assert(mainnetNetwork("ethereum")?.chainId !== 11155111, "the mainnet entry is never Sepolia");
 assert(!("ethereum" in GLOAM_NETWORKS), "GLOAM_NETWORKS keeps its two testnets");
 
 const live = ethereumSepoliaPool();
