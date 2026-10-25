@@ -19,7 +19,8 @@ pragma solidity ^0.8.24;
 // settings travel in env vars, from contracts/:
 //   SEPOLIA_FORK=1 forge test --match-path test/fork/EthereumSepoliaFork.t.sol -vv
 // SEPOLIA_FORK_URL picks the RPC (default publicnode, which keeps recent state
-// only); SEPOLIA_FORK_BLOCK pins a block (it needs an RPC that keeps old state).
+// only; https://sepolia.gateway.tenderly.co keeps all of it); SEPOLIA_FORK_BLOCK
+// pins a block (it needs an RPC that keeps old state, like Tenderly's).
 // Once the vault is deployed, the nonce check fails at the head: pin a block
 // from before the deploy to rehearse again.
 
