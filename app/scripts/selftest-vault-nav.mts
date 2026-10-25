@@ -66,20 +66,20 @@ test("Pay's mode from ?mode=: receive and cash out, anything else is Send", () =
 });
 
 test("the marked nav entry matches what the Vault shows", () => {
-  assert.equal(vaultActionFromParams(null, null), "shield", "no tab opens Add");
+  assert.equal(vaultActionFromParams(null, null), null, "no tab opens the overview: Vault itself is marked");
   assert.equal(vaultActionFromParams("shield", null), "shield");
   assert.equal(vaultActionFromParams("move", null), "pay");
   assert.equal(vaultActionFromParams("move", "pay"), "pay");
   assert.equal(vaultActionFromParams("move", "receive"), "receive");
   assert.equal(vaultActionFromParams("move", "cashout"), "cashout");
   assert.equal(vaultActionFromParams("swap", null), "swap");
-  assert.equal(vaultActionFromParams("nope", null), "shield", "an unknown tab opens Add");
+  assert.equal(vaultActionFromParams("nope", null), null, "an unknown tab opens the overview");
 });
 
-test("a tab this network does not have marks Add, which is what the Vault falls back to", () => {
+test("a tab this network does not have opens the overview, which is what the Vault falls back to", () => {
   const tempo = vaultActionsFor({ swap: false, stocks: false, native: false });
-  assert.equal(vaultActionFromParams("swap", null, tempo), "shield");
-  assert.equal(vaultActionFromParams("send", null, tempo), "shield");
+  assert.equal(vaultActionFromParams("swap", null, tempo), null);
+  assert.equal(vaultActionFromParams("send", null, tempo), null);
   assert.equal(vaultActionFromParams("move", "cashout", tempo), "cashout");
 });
 

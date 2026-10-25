@@ -46,24 +46,25 @@ export function moveModeFromParam(param: string | null): MoveMode {
 }
 
 /**
- * The Vault action a URL shows. Unknown or missing tabs open Add, as the Vault
- * does; a tab this network does not have also falls back to Add.
+ * The Vault action a URL shows, or null for the Vault's overview: a missing or
+ * unknown tab, or one this network does not have, opens the overview, which
+ * lists what the network does have (components/app/VaultHome).
  */
 export function vaultActionFromParams(
   tab: string | null,
   mode: string | null,
   available: readonly VaultAction[] = VAULT_ACTIONS
-): VaultActionId {
-  let id: VaultActionId;
+): VaultActionId | null {
+  let id: VaultActionId | null;
   if (tab === "move") {
     const m = moveModeFromParam(mode);
     id = m === "send" ? "pay" : m;
-  } else if (tab === "swap" || tab === "trade" || tab === "send") {
+  } else if (tab === "shield" || tab === "swap" || tab === "trade" || tab === "send") {
     id = tab;
   } else {
-    id = "shield";
+    id = null;
   }
-  return available.some((a) => a.id === id) ? id : "shield";
+  return id !== null && available.some((a) => a.id === id) ? id : null;
 }
 
 /**
