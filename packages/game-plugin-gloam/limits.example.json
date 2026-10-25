@@ -1,0 +1,8 @@
+{
+  "recipients": "any",
+  "actions": ["add", "pay", "cash_out"],
+  "assets": {
+    "USDC": { "maxPerPayment": "5", "maxPerDay": "20" },
+    "ETH": { "maxPerPayment": "0.002", "maxPerDay": "0.01" }
+  }
+}
