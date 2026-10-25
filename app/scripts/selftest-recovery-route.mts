@@ -8,7 +8,7 @@
  *     counts against anything daily;
  *   - a new backup counts against its connection (5 a day, an IPv6 /64 as one)
  *     and against one daily budget for every new backup
- *     (GLOAM_RECOVERY_NEW_PER_DAY, 2,000 by default); past it, new backups are
+ *     (GLOAM_RECOVERY_NEW_PER_DAY, 300 by default); past it, new backups are
  *     told to try again later, and the server logs it once;
  *   - a request that is not a valid backup is refused before it counts.
  *
