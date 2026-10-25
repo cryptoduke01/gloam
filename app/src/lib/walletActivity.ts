@@ -12,22 +12,33 @@
  * halves the span), newest rows kept, and cached for the tab so a refresh only
  * reads the blocks since.
  *
- * Not here: plain native-coin transfers (they leave no log) and private
- * transfers, which carry no address by design.
+ * Where the vault lists the native coin (ETH on Base), deposits and cash-outs
+ * of it leave no Transfer log, so they are read from the vault's own Shielded
+ * and Unshielded events for this wallet, a cash-out net of the vault's fee
+ * (what the wallet received, like a token's Transfer).
+ *
+ * Not here: plain native-coin transfers between wallets (they leave no log)
+ * and private transfers, which carry no address by design.
  */
 
-import { parseAbiItem, zeroAddress, type Address } from "viem";
+import { parseAbiItem, zeroAddress, type Address, type PublicClient } from "viem";
 import { clientFor, gated, getLogsSafe, logSpan, ranges } from "@/components/transparency/ledger";
 import type { ActivityTx } from "@/hooks/useActivity";
 import { FEE_MANAGER } from "./feeSponsor";
 import { getNetwork, type NetworkKey } from "./networks";
-import { shieldTokensFor } from "./tokens";
+import { shieldTokensFor, supportsNativeShield } from "./tokens";
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+const SHIELDED = parseAbiItem(
+  "event Shielded(bytes32 indexed commitment, address indexed asset, uint256 amount, uint256 leafIndex, address indexed from)"
+);
+const UNSHIELDED = parseAbiItem("event Unshielded(bytes32 indexed nullifier, address indexed asset, address indexed to, uint256 amount)");
+const WITHDRAW_FEE = parseAbiItem("event WithdrawFee(bytes32 indexed nullifier, address indexed asset, uint256 fee)");
 
 /** Rows kept per wallet, newest first; the feed pages through them five at a time. */
 const KEEP = 40;
-const CACHE_PREFIX = "gloam_wallet_activity_v2";
+// v3: native-coin deposits and cash-outs are read too, so a v2 copy (tokens only) is read again
+const CACHE_PREFIX = "gloam_wallet_activity_v3";
 /**
  * Robinhood's RPC takes millions of blocks for one token and one address, but
  * only 100k when several token addresses share a query; Tempo caps every query
@@ -73,21 +84,27 @@ function saveCached(k: string, c: Cached) {
 
 const inflight = new Map<string, Promise<{ txs: ActivityTx[] }>>();
 
+/** The reads this needs from a chain (a test passes its own). */
+type ActivityClient = Pick<PublicClient, "getBlockNumber" | "getLogs">;
+
 /** The wallet's token transfers on a mainnet, newest first. Concurrent callers share one read. */
-export function readWalletActivity(key: NetworkKey, address: Address): Promise<{ txs: ActivityTx[] }> {
+export function readWalletActivity(
+  key: NetworkKey,
+  address: Address,
+  client?: ActivityClient
+): Promise<{ txs: ActivityTx[] }> {
   const n = getNetwork(key);
   if (!n.pool || n.deployBlock == null) return Promise.resolve({ txs: [] });
   const k = cacheKey(key, n.pool, address);
   const running = inflight.get(k);
   if (running) return running;
-  const p = read(key, address, k).finally(() => inflight.delete(k));
+  const p = read(key, address, k, client ?? clientFor(n)).finally(() => inflight.delete(k));
   inflight.set(k, p);
   return p;
 }
 
-async function read(key: NetworkKey, address: Address, k: string): Promise<{ txs: ActivityTx[] }> {
+async function read(key: NetworkKey, address: Address, k: string, c: ActivityClient): Promise<{ txs: ActivityTx[] }> {
   const n = getNetwork(key);
-  const c = clientFor(n);
   const id = n.chainId;
   const prev = loadCached(k);
   const latest = await gated(id, () => c.getBlockNumber());
@@ -138,6 +155,66 @@ async function read(key: NetworkKey, address: Address, k: string): Promise<{ txs
       )
     )
   );
+
+  // The native coin, where the vault lists it: its deposits and cash-outs for this wallet.
+  if (supportsNativeShield(id) && n.paymentsPool && n.pool) {
+    const pool = n.pool;
+    const coin = { symbol: n.primaryAsset.symbol, decimals: n.primaryAsset.decimals };
+    await Promise.all(
+      spans.map(async ([from, to]) => {
+        const [ins, outs] = await Promise.all([
+          getLogsSafe(
+            (a, b) => gated(id, () => c.getLogs({ address: pool, event: SHIELDED, args: { asset: zeroAddress, from: address }, fromBlock: a, toBlock: b })),
+            from,
+            to
+          ),
+          getLogsSafe(
+            (a, b) => gated(id, () => c.getLogs({ address: pool, event: UNSHIELDED, args: { asset: zeroAddress, to: address }, fromBlock: a, toBlock: b })),
+            from,
+            to
+          ),
+        ]);
+        for (const l of ins) {
+          if (l.args.amount == null) continue;
+          fresh.push({
+            id: `${l.transactionHash}:${l.logIndex}`,
+            hash: l.transactionHash ?? "",
+            from: address,
+            to: pool,
+            valueWei: l.args.amount.toString(),
+            timestamp: 0,
+            ok: true,
+            token: coin,
+            block: String(l.blockNumber ?? 0n),
+            logIndex: l.logIndex ?? 0,
+          });
+        }
+        for (const l of outs) {
+          const { nullifier, amount } = l.args;
+          if (amount == null || !nullifier || l.blockNumber == null) continue;
+          // what reached the wallet: the amount less the vault's cash-out fee, from the same transaction
+          const fees = await getLogsSafe(
+            (a, b) => gated(id, () => c.getLogs({ address: pool, event: WITHDRAW_FEE, args: { nullifier }, fromBlock: a, toBlock: b })),
+            l.blockNumber,
+            l.blockNumber
+          );
+          const fee = fees.find((f) => f.transactionHash === l.transactionHash)?.args.fee ?? 0n;
+          fresh.push({
+            id: `${l.transactionHash}:${l.logIndex}`,
+            hash: l.transactionHash ?? "",
+            from: pool,
+            to: address,
+            valueWei: (amount - fee).toString(),
+            timestamp: 0,
+            ok: true,
+            token: coin,
+            block: String(l.blockNumber),
+            logIndex: l.logIndex ?? 0,
+          });
+        }
+      })
+    );
+  }
 
   // A transfer to the wallet itself matches both sides; keep one of each log.
   const seen = new Set<string>();
