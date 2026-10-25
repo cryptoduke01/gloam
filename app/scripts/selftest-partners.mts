@@ -603,7 +603,8 @@ await test("v1 relay: live key refused on testnet; relay validation errors pass 
   const badProof = await relayPost(req("/api/v1/relay", { method: "POST", key: secret, body: { chainId: 46630, action: "transfer", proof: "0x12" } }));
   assert.equal(badProof.status, 400);
   assert.equal((await json(badProof)).error!.message, "Invalid proof.");
-  const badNet = await relayPost(req("/api/v1/relay", { method: "POST", key: secret, body: { chainId: 1, action: "transfer" } }));
+  // Polygon: a chain Gloam never relays on (chain 1 is served once Ethereum is live)
+  const badNet = await relayPost(req("/api/v1/relay", { method: "POST", key: secret, body: { chainId: 137, action: "transfer" } }));
   assert.equal((await json(badNet)).error!.code, "network");
   const badAction = await relayPost(req("/api/v1/relay", { method: "POST", key: secret, body: { chainId: 46630, action: "shield" } }));
   assert.equal((await json(badAction)).error!.code, "bad_action");

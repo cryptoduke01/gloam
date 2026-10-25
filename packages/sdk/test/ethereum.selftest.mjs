@@ -13,11 +13,14 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const FILLED = process.env.GLOAM_SELFTEST_ETHEREUM === "filled";
-const POOL = "0x00000000000000000000000000000000000000e1";
-const { MAINNET_POOLS } = await import("../dist/mainnet.js");
+const { MAINNET_POOLS, mainnetPoolFor } = await import("../dist/mainnet.js");
+/** The real vault, once MAINNET_POOLS[1] is filled in after the deploy: then this run checks it, with no edit here. */
+const LIVE = mainnetPoolFor(1);
+const FILLED = process.env.GLOAM_SELFTEST_ETHEREUM === "filled" || LIVE !== null;
+const POOL = LIVE?.pool ?? "0x00000000000000000000000000000000000000e1";
+const DEPLOY_BLOCK = LIVE?.deployBlock ?? 21_000_000n;
 // Before constants.js loads: the networks are built from this when it does.
-if (FILLED) MAINNET_POOLS[1] = { pool: POOL, deployBlock: 21_000_000n };
+if (FILLED && !LIVE) MAINNET_POOLS[1] = { pool: POOL, deployBlock: DEPLOY_BLOCK };
 const sdk = await import("../dist/index.js");
 
 let checks = 0;
@@ -110,7 +113,7 @@ const {
 } = sdk;
 if (FILLED) {
   const net = mainnetNetwork("ethereum");
-  assert(net && net.key === "ethereum-mainnet" && net.chainId === 1 && net.pool === POOL && net.deployBlock === 21_000_000n, "Ethereum entry");
+  assert(net && net.key === "ethereum-mainnet" && net.chainId === 1 && net.pool === POOL && net.deployBlock === DEPLOY_BLOCK, "Ethereum entry");
   assert(net.label === "Ethereum" && net.family === "ethereum" && net.testnet === false, "label, family, mainnet");
   assert(net.ceremony === "production" && net.nativeShield === true && net.payMemo === null, "final keys, ETH listed, no memo board yet");
   assert(net.explorerUrl === "https://etherscan.io" && net.rpcUrl === "https://rpc.mevblocker.io", "explorer and RPC");

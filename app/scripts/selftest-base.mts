@@ -233,14 +233,15 @@ if (!CONFIGURED) {
     assert.doesNotMatch(nets.networkKeyChoices(), /base-mainnet/);
     assert.equal(nets.getNetwork("base-mainnet").pool, null);
     assert.equal(mainnet.mainnetPool(8453), null);
-    assert.equal(mainnet.liveMainnetNames(), "Robinhood Chain and Tempo");
+    // Ethereum may be live beside them (MAINNET_POOLS[1]); Base mainnet never is here
+    assert.doesNotMatch(mainnet.liveMainnetNames(), /Base/);
     assert.throws(() => networkForChain(8453), /not supported by the relay/);
   });
 
   check("as shipped: Glim never names Base mainnet", () => {
     const k = knowledgeBlock(false, true);
     assert.doesNotMatch(k, /Base mainnet \(chain ID 8453\)/);
-    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Say so plainly when asked/);
+    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\.( Ethereum mainnet joined after that \(see ETHEREUM\)\.)? Say so plainly when asked/);
   });
 
   await checkAsync("as shipped: the remote MCP neither lists nor takes base-mainnet", async () => {
@@ -274,7 +275,7 @@ if (CONFIGURED) {
     assert.equal(nets.getNetwork("base-mainnet").pool, MAINNET_POOL);
     assert.equal(nets.getNetwork("base-mainnet").deployBlock, 2_000_000n);
     assert.equal(nets.networkName(nets.getNetwork("base-mainnet")), "Base");
-    assert.equal(mainnet.liveMainnetNames(), "Robinhood Chain, Tempo and Base");
+    assert.match(mainnet.liveMainnetNames(), /^Robinhood Chain, Tempo(, Base and Ethereum| and Base)$/);
   });
 
   check("configured: the relay serves both Base chain ids with the same relay key", () => {
@@ -286,7 +287,7 @@ if (CONFIGURED) {
   check("configured: Glim knows Base mainnet, never as part of the 21 October launch", () => {
     const k = knowledgeBlock(false, true);
     assert.match(k, /Base mainnet \(chain ID 8453\)/);
-    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Base mainnet joined after that/);
+    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Base( and Ethereum)? mainnet joined after that/);
     assert.doesNotMatch(k, /21 October[^.\n]*Tempo and Base/);
   });
 

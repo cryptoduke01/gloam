@@ -14,6 +14,10 @@
  *    from another network are refused; and Glim and the remote MCP name
  *    Ethereum, its gas ceiling, and never count it in the 21 October launch.
  *
+ * Once MAINNET_POOLS[1] holds the real vault (after the deploy), the run as
+ * committed is the configured one, against that vault, so switching Ethereum
+ * on needs no edit here.
+ *
  * The placeholder pool is not a contract; nothing reaches any host (fetch
  * fails the run if anything tries).
  *
@@ -31,13 +35,15 @@ globalThis.fetch = (async (url: unknown) => {
   throw new Error(`selftest-ethereum: no network calls allowed (${String(url)})`);
 }) as typeof fetch;
 
-const CONFIGURED = process.env.GLOAM_SELFTEST_ETHEREUM === "configured";
-const POOL = "0x00000000000000000000000000000000000e7e01";
-
 const mainnet = await import("../src/lib/mainnet");
-if (CONFIGURED) {
+/** The real vault, once MAINNET_POOLS[1] is filled in after the deploy. */
+const LIVE = mainnet.mainnetPool(1);
+const CONFIGURED = process.env.GLOAM_SELFTEST_ETHEREUM === "configured" || LIVE !== null;
+const POOL = LIVE?.pool ?? "0x00000000000000000000000000000000000e7e01";
+const DEPLOY_BLOCK = LIVE?.deployBlock ?? 23_000_000n;
+if (CONFIGURED && !LIVE) {
   // Filled in the way DEPLOY-ETHEREUM.md says, before networks.ts reads it.
-  mainnet.MAINNET_POOLS[1] = { pool: POOL, deployBlock: 23_000_000 };
+  mainnet.MAINNET_POOLS[1] = { pool: POOL, deployBlock: DEPLOY_BLOCK };
 }
 
 const nets = await import("../src/lib/networks");
@@ -207,10 +213,10 @@ if (CONFIGURED) {
     assert.match(nets.networkKeyChoices(), /"ethereum-mainnet"/);
     const n = nets.getNetwork("ethereum-mainnet");
     assert.equal(n.pool, POOL);
-    assert.equal(n.deployBlock, 23_000_000n);
+    assert.equal(n.deployBlock, DEPLOY_BLOCK);
     assert.equal(nets.isNetworkWritable(n), true);
     assert.equal(nets.networkName(n), "Ethereum");
-    assert.equal(mainnet.liveMainnetNames(), "Robinhood Chain, Tempo and Ethereum");
+    assert.match(mainnet.liveMainnetNames(), /^Robinhood Chain, Tempo(, Base)? and Ethereum$/);
     assert.ok(mainnet.MAINNET_CONFIGURED);
   });
 
@@ -242,7 +248,7 @@ if (CONFIGURED) {
     assert.match(k, /USDC, USDT, USDG, PYUSD, EURC and ETH/);
     assert.match(k, /Ethereum gas is high right now; try again shortly/);
     assert.match(k, /https:\/\/etherscan\.io/);
-    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. Ethereum mainnet joined after that/);
+    assert.match(k, /went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on Robinhood Chain and Tempo\. (Base and )?Ethereum mainnet joined after that/);
     assert.doesNotMatch(k, /21 October[^.\n]*Tempo and Ethereum/);
     const section = k.slice(k.indexOf("\nETHEREUM"), k.indexOf("\n\n", k.indexOf("\nETHEREUM") + 1));
     assert.ok(section.length > 200);
