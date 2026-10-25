@@ -12,6 +12,7 @@ import { tabKeyTarget } from "@/lib/tabKeys";
 import {
   vaultActionFromUrl,
   vaultActionSearch,
+  vaultHashAfterQuery,
   vaultActionsFor,
   type VaultActionId,
   type VaultActionInfo,
@@ -101,9 +102,18 @@ export function VaultHub() {
   }, []);
 
   const tab = sp.get("tab");
+  const mode = sp.get("mode");
+  // Pay clears that fragment without a hashchange, so once the URL names
+  // another action (the nav's Pay privately or Cash out after a claim) it is
+  // read again, and a claim already taken no longer marks Receive.
+  const query = sp.toString();
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the address bar changed under Next's router: read its fragment again
+    setHash((kept) => vaultHashAfterQuery(kept, window.location.hash, tab, mode));
+  }, [query, tab, mode]);
   // Pay follows ?mode= and writes its own changes back (a claim opening
   // Receive, say), so the row always marks what is on screen.
-  const action = vaultActionFromUrl(tab, sp.get("mode"), hash, actions);
+  const action = vaultActionFromUrl(tab, mode, hash, actions);
   const current = actions.find((a) => a.id === action) ?? null;
 
   function select(id: VaultActionId) {

@@ -98,6 +98,19 @@ export function vaultActionFromUrl(
 }
 
 /**
+ * The fragment the Vault reads its action from, once the query has changed.
+ * Pay reads a claim link's code and clears the fragment without a hashchange,
+ * so the fragment the Vault read on arrival would hold the row on Receive
+ * after the URL moved on (the nav's Pay privately or Cash out, a step after a
+ * claim). A query that names an action of its own reads the fragment again
+ * from the address bar (`live`); one that names none, like an old claim link
+ * without a tab that Pay gave a mode, keeps the fragment it had (`kept`).
+ */
+export function vaultHashAfterQuery(kept: string, live: string, tab: string | null, mode: string | null): string {
+  return vaultActionFromParams(tab, mode) === null ? kept : live;
+}
+
+/**
  * The query string that opens an action. The rest of the query is kept as the
  * Vault always kept it (a network named by a link, say); Pay's mode and an
  * asset picked for Add belong to one action, so they go.
