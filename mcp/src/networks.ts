@@ -18,7 +18,9 @@
  * pool design, so the same execution code serves every network.
  *
  * GLOAM_RPC_URL_<chainId> points a network at another RPC (for example a
- * private one), read when this module loads.
+ * private one), read when this module loads. Without it, a network whose
+ * public RPC keeps only recent history (Ethereum Sepolia) reads old logs and
+ * state from the SDK's historyRpc for it (signer.ts, gloamReadTransport).
  */
 import type { Address } from "viem";
 import {
@@ -29,6 +31,7 @@ import {
   testnetNetwork,
   type CeremonyKind,
   type GloamNetwork,
+  type HistoryRpc,
 } from "@gloamtrade/sdk";
 
 export type NetworkKey =
@@ -53,7 +56,10 @@ export interface McpNetwork {
   name: string;
   chainId: number;
   pool: Address;
+  /** The RPC at the chain head: receipts, fresh state, sends. */
   rpc: string;
+  /** Where reads about old blocks go when `rpc` keeps only recent history; null when it keeps everything or GLOAM_RPC_URL_<chainId> is set. */
+  historyRpc: HistoryRpc | null;
   explorer: string;
   /** Block the pool was deployed at, for tree scans. */
   deployBlock: bigint;
@@ -95,6 +101,7 @@ export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
     chainId: GLOAM_NETWORKS.robinhood.chainId,
     pool: GLOAM_NETWORKS.robinhood.pool,
     rpc: rpcFor(GLOAM_NETWORKS.robinhood.chainId, "https://rpc.testnet.chain.robinhood.com"),
+    historyRpc: null,
     explorer: "https://explorer.testnet.chain.robinhood.com",
     deployBlock: GLOAM_NETWORKS.robinhood.deployBlock,
     nativeCurrency: NATIVE.robinhood,
@@ -112,6 +119,7 @@ export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
     chainId: GLOAM_NETWORKS.tempo.chainId,
     pool: GLOAM_NETWORKS.tempo.pool,
     rpc: rpcFor(GLOAM_NETWORKS.tempo.chainId, "https://rpc.moderato.tempo.xyz"),
+    historyRpc: null,
     explorer: "https://explore.testnet.tempo.xyz",
     deployBlock: GLOAM_NETWORKS.tempo.deployBlock,
     nativeCurrency: NATIVE.tempo,
@@ -136,6 +144,8 @@ function fromSdk(n: GloamNetwork | null): McpNetwork | null {
     chainId: n.chainId,
     pool: n.pool,
     rpc: rpcFor(n.chainId, n.rpcUrl),
+    // an RPC set by hand serves everything itself, as before
+    historyRpc: process.env[`GLOAM_RPC_URL_${n.chainId}`]?.trim() ? null : n.historyRpc,
     explorer: n.explorerUrl,
     deployBlock: n.deployBlock,
     nativeCurrency: NATIVE[n.family],
