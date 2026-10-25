@@ -41,7 +41,11 @@ export function NetworkSelector() {
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape") return;
+      // Only the network list closes: the phone menu around it (AppShell,
+      // listening on window) stays open, as one Escape closes one layer.
+      e.stopPropagation();
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
