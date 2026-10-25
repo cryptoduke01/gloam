@@ -81,7 +81,10 @@
   --navy-300: #a7abb2;
   --navy-100: #e6e8eb;
   --navy-50: #f2f3f5;
-  --sealed: #2e7d53; /* the private / sealed / verified signal: the green tint */
+  /* the private / sealed / verified signal: the green tint. A shade under the brand
+     green (#2e7d53) so 12px text passes AA (4.5:1) on every light surface, the
+     soft green chip and surface-2 included. */
+  --sealed: #2c774f;
   --sealed-soft: #e6f2ea;
   --green: #2e7d53;
   --green-soft: #e6f2ea;

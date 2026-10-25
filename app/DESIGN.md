@@ -18,7 +18,7 @@ The tokens live in `src/app/globals.css`. This file says how to use them.
 | Surface | `#F3F4F5` / `#EAEBED` | `#17181B` / `#1E2023` | Fields, rows, inner tiles (`bg-surface`, `bg-surface-2`) |
 | Soft, mute, faint | `#34373C`, `#5F636A`, `#979BA2` | `#CDD0D4`, `#9B9FA6`, `#6C7077` | Body copy, secondary copy, hints |
 | Line | `#E4E6E9` / `#CFD2D6` | `#232529` / `#33363B` | Hairlines (`border-line`, `border-line-strong`) |
-| Sealed green | `#2E7D53` | `#8FD3AD` | Private, sealed or verified, and nothing else (`text-sealed`, `bg-sealed-soft`) |
+| Sealed green | `#2E7D53` (brand); `#2C774F` as the `--sealed` token, so 12px text passes AA on every light surface | `#8FD3AD` | Private, sealed or verified, and nothing else (`text-sealed`, `bg-sealed-soft`) |
 | Warn, danger | `#8A5A12`, `#B4362A` | `#E8B86A`, `#F08A7E` | States only: a warning or an error |
 
 - **Green is a tint, not an accent.** Use it only where something is private, sealed or verified, and keep it under 5% of a screen. Buttons, links, nav and marketing calls to action are never green.
