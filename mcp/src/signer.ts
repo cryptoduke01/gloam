@@ -17,6 +17,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { tempo, tempoModerato } from "viem/chains";
 import { Account as TempoAccount } from "viem/tempo";
+import { splitReadTransport } from "@gloamtrade/sdk";
 import { MCP_NETWORKS, type McpNetwork } from "./networks.js";
 import { noteBroadcast } from "./walletSend.js";
 
@@ -176,7 +177,16 @@ export function getSigner(net: McpNetwork = MCP_NETWORKS.robinhood, env: Env = p
   };
 }
 
-/** A read-only client for a network, for chain reads when this server has no signer (e.g. a payee that sweeps through the relay). */
+/**
+ * A read-only client for a network, for chain reads when this server has no
+ * signer (e.g. a payee that sweeps through the relay). Reads go to the RPC at
+ * the chain head, old logs and state to the network's history RPC where it has one.
+ */
 export function getPublicClient(net: McpNetwork = MCP_NETWORKS.robinhood) {
-  return createPublicClient({ chain: chainFor(net), transport: http(net.rpc) });
+  // this package's own http on both sides, so errors stay this viem's classes
+  const fresh = http(net.rpc);
+  const transport = net.historyRpc
+    ? splitReadTransport<HttpTransport>({ fresh, history: http(net.historyRpc.url), recentBlocks: net.historyRpc.recentBlocks })
+    : fresh;
+  return createPublicClient({ chain: chainFor(net), transport });
 }

@@ -39,14 +39,22 @@ test("Ethereum Sepolia is offered once its pool is in, after the other testnets"
   assert.equal(n.name, "Ethereum Sepolia Testnet");
   assert.equal(nets.describeNetwork(n), "Ethereum Sepolia");
   assert.equal(n.explorer, "https://sepolia.etherscan.io");
-  assert.equal(n.rpc, "https://sepolia.gateway.tenderly.co", "an RPC that keeps the whole log history");
+  assert.equal(n.rpc, "https://ethereum-sepolia-rpc.publicnode.com", "an RPC at the chain head");
+  assert.equal(n.historyRpc?.url, "https://sepolia.gateway.tenderly.co", "old logs and state from an RPC that keeps the whole history");
   assert.equal(nets.networkByChainId(11155111)?.key, "ethereum");
+});
+
+test("reads go to the head on publicnode, old blocks to Tenderly's gateway", async () => {
+  const { getPublicClient } = await import("../src/signer.js");
+  assert.equal(getPublicClient(nets.networkByKey("ethereum")).transport.type, "gloamRead", "the fresh/history split");
+  assert.equal(getPublicClient(nets.networkByKey("base")).transport.type, "http", "one RPC where it keeps everything");
 });
 
 test("GLOAM_RPC_URL_11155111 and GLOAM_NETWORK=ethereum", async () => {
   process.env.GLOAM_RPC_URL_11155111 = "https://sepolia.example.test/rpc";
   const fresh = await import(`../src/networks.js?rpc=${Date.now()}`);
   assert.equal(fresh.networkByKey("ethereum").rpc, "https://sepolia.example.test/rpc");
+  assert.equal(fresh.networkByKey("ethereum").historyRpc, null, "an RPC set by hand serves everything");
   delete process.env.GLOAM_RPC_URL_11155111;
   assert.equal(nets.defaultNetworkKey({ GLOAM_NETWORK: "ethereum" }), "ethereum");
   // A testnet: the Tempo access key stays on Tempo testnet.
