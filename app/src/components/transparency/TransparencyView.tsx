@@ -658,56 +658,58 @@ export function TransparencyView() {
       <main>
         {/* hero */}
         <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
-          <div className="gl-panel flex min-h-[520px] flex-col justify-end px-6 pb-8 pt-24 sm:px-12 sm:pb-12 lg:min-h-[580px]">
+          {/* The ledger carries this hero: the title and its actions on one line,
+              then what the chain shows as one wide strip across the field. */}
+          <div className="gl-panel flex min-h-[520px] flex-col justify-end gap-12 px-6 pb-8 pt-24 sm:px-12 sm:pb-12 lg:min-h-[580px]">
             <FlowField />
-            <div className="grid grid-cols-1 items-end gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14">
+            <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between lg:gap-14">
               <div className="max-w-[720px]">
-                <p className="t-label">Transparency</p>
-                <h1 className="t-display-xl mt-5">What anyone can see</h1>
-                <p className="mt-6 max-w-[50ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
+                <h1 className="t-display-xl">What anyone can see</h1>
+                <p className="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
                   Gloam keeps who paid whom, and how much, private. The vault
                   that holds the money is public. This page reads it live from the
                   chain, in your browser, so you can see exactly what is out in
                   the open.
                 </p>
-                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-                  <a href="#ledger" className="btn btn-ink btn-lg">
-                    See the vault
-                  </a>
-                  <a href="#private" className="gl-arrowlink">
-                    What stays private <span aria-hidden>→</span>
-                  </a>
-                </div>
               </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 lg:pb-1">
+                <a href="#ledger" className="btn btn-ink btn-lg">
+                  See the vault
+                </a>
+                <a href="#private" className="gl-arrowlink">
+                  What stays private <span aria-hidden>→</span>
+                </a>
+              </div>
+            </div>
 
-              <div className="gl-glass w-full p-2 lg:max-w-[420px] lg:justify-self-end">
-                <div className="rounded-[12px] bg-panel p-4 sm:p-5">
-                  <p className="text-[13px] text-mute">What the chain shows</p>
-                  <ul className="mt-2 divide-y divide-line">
-                    {(
-                      [
-                        ["Vault balances", "Public", false],
-                        ["Deposits, cash-outs", "Public, with amounts", false],
-                        ["Private transfers", "Count only", true],
-                        ["Payment messages", "Count only", true],
-                      ] as const
-                    ).map(([k, v, sealed]) => (
-                      <li key={k} className="flex min-h-[48px] items-center justify-between gap-4 text-[14px]">
-                        <span className="text-mute">{k}</span>
-                        <span className="inline-flex items-center gap-2 text-right text-foreground">
-                          {v}
-                          <span
-                            className={`grid h-5 w-5 place-items-center rounded-full ${
-                              sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-soft"
-                            }`}
-                          >
-                            {sealed ? <LockIcon size={10} /> : <EyeIcon size={11} />}
-                          </span>
+            <div className="gl-glass relative w-full p-2">
+              <div className="rounded-[12px] bg-panel">
+                <p className="px-5 pt-4 text-[13px] text-mute sm:px-6">What the chain shows</p>
+                <ul className="grid grid-cols-1 divide-y divide-line px-5 sm:px-6 lg:grid-cols-4 lg:divide-x lg:divide-y-0 lg:px-0 lg:pb-2">
+                  {(
+                    [
+                      ["Vault balances", "Public", false],
+                      ["Deposits, cash-outs", "Public, with amounts", false],
+                      ["Private transfers", "Count only", true],
+                      ["Payment messages", "Count only", true],
+                    ] as const
+                  ).map(([k, v, sealed]) => (
+                    <li key={k} className="flex min-h-[52px] items-center justify-between gap-4 py-2 text-[14px] lg:block lg:min-h-0 lg:px-6 lg:py-3">
+                      <span className="text-mute lg:block">{k}</span>
+                      <span className="inline-flex items-center gap-2 text-right text-foreground lg:mt-1.5 lg:text-left lg:text-[17px]">
+                        <span
+                          aria-hidden
+                          className={`grid h-5 w-5 shrink-0 place-items-center rounded-full max-lg:order-2 ${
+                            sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-soft"
+                          }`}
+                        >
+                          {sealed ? <LockIcon size={10} /> : <EyeIcon size={11} />}
                         </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                        {v}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>
