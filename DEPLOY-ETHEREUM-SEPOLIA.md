@@ -98,8 +98,10 @@ source ethereum-sepolia-env.sh
 ```
 
 It reads the deployer key hidden (no file, no shell history), then prints the chain
-(must be 11155111), the deployer address (must be `0x891E…F411`), its nonce (must be 0)
-and its balance (0.005). The deploy scripts also refuse a key that is not `DEPLOYER`'s.
+(must be 11155111), the deployer address (must be `0x891E…F411`), its nonce (must be 0),
+its balance (0.005) and the gas price (`cast to-unit $(cast gas-price --rpc-url $RPC_URL) gwei`,
+about 0.001; go on while it is under 0.1). The deploy scripts also refuse a key that is
+not `DEPLOYER`'s.
 
 ## Step 3: PoseidonT3
 
@@ -117,6 +119,59 @@ forge script $SCRIPT --rpc-url $RPC_URL                      # dry run: must end
 forge script $SCRIPT --rpc-url $RPC_URL --broadcast --slow   # 18 transactions
 ```
 
+`--slow` waits for each transaction before the next, about 12 seconds a block, so a few
+minutes for all 18.
+
+### If the broadcast stops partway
+
+Never run the step 4 broadcast fresh once any of its transactions has landed: a fresh run
+deploys a second set of verifiers and a second vault at later nonces, so the vault would
+not be at `0x39e28cde55cab798874746ac52cb4b5cc99a0194` and the memo board would move too.
+Send nothing else from the deployer until the deploy is finished. First see where it
+stopped (a transaction still pending shows as a gap between the two nonces; wait for it):
+
+```bash
+POOL=0x39e28cde55cab798874746ac52cb4b5cc99a0194   # or the address the run printed
+cast nonce $DEPLOYER --rpc-url $RPC_URL; cast nonce $DEPLOYER --block pending --rpc-url $RPC_URL
+cast code $POOL --rpc-url $RPC_URL | wc -c        # 3 means no code yet
+```
+
+- **The vault has no code yet:** only ever resume. It sends the rest of the same run,
+  from `broadcast/`, at the same nonces:
+
+  ```bash
+  forge script $SCRIPT --rpc-url $RPC_URL --resume --slow
+  ```
+
+- **The vault has code:** finish the setup by hand, as the deployer. Read what is done:
+
+  ```bash
+  cast call $POOL 'setupMode()(bool)' --rpc-url $RPC_URL          # true until endSetup
+  cast call $POOL 'depositLimitsOn()(bool)' --rpc-url $RPC_URL
+  cast call $POOL 'shieldVerifier()(address)' --rpc-url $RPC_URL   # 0x0 until set
+  for a in ${LIMIT_ASSETS//,/ }; do echo "$a $(cast call $POOL 'depositLimit(address)(uint128,uint128)' $a --rpc-url $RPC_URL | tr '\n' ' ')"; done
+  cast call $POOL 'withdrawFeeBps()(uint16)' --rpc-url $RPC_URL; cast call $POOL 'feeRecipient()(address)' --rpc-url $RPC_URL
+  cast call $POOL 'pendingOwner()(address)' --rpc-url $RPC_URL
+  ```
+
+  Then send only the calls still missing, in this order, waiting for each one. The shield
+  verifier is the run's `ShieldIVerifierFinal` (`0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465`
+  from a deployer that started at nonce 0); the limits are the pairs in
+  `ethereum-sepolia-env.sh`:
+
+  ```bash
+  F="--private-key $DEPLOYER_PK --rpc-url $RPC_URL"
+  cast send $POOL 'turnOnDepositLimits()' $F
+  cast send $POOL 'setShieldVerifier(address)' 0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465 $F
+  cast send $POOL 'setDepositLimit(address,uint128,uint128)' <asset> <perDeposit> <total> $F   # each asset still 0 0
+  cast send $POOL 'setWithdrawFee(uint16,address)' 25 0xB3900ac9350903218e4c7597bAb0f008F01B30B8 $F
+  cast send $POOL 'transferOwnership(address)' 0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8 $F
+  cast send $POOL 'endSetup()' $F   # last: it cannot be undone
+  ```
+
+  The after-deploy script in step 7 then checks every setting the same way as for a
+  run that went through in one go.
+
 ## Step 5: the memo board
 
 ```bash
@@ -124,6 +179,10 @@ forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_U
 forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_URL --broadcast --slow
 # prints GloamPayMemo 0x342E3745967FDB4223902E196Ceb792c15d8C1c4
 ```
+
+If it stops before the board has code, resume it the same way
+(`forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_URL --resume --slow`),
+never a fresh broadcast.
 
 ## Step 6: accept ownership
 
