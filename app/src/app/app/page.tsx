@@ -10,8 +10,8 @@ export default function AppHomePage() {
   return (
     <AppShell
       title="Portfolio"
-      subtitle="Your private balance, your wallet, and everything you hold."
-      subtitleTempo="Private stablecoin payments for people and agents. Your private balance and your wallet, in one place."
+      subtitle="Your private balance and your public wallet, side by side."
+      subtitleTempo="Private stablecoin payments for people and agents. Your private balance and your public wallet, side by side."
     >
       <PortfolioView />
     </AppShell>

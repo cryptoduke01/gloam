@@ -38,6 +38,8 @@ import { TempoFaucetButton } from "./TempoFaucetButton";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
+import { bridgeVisible } from "@/lib/bridge";
+import { addAssetHref, pickAddAsset } from "@/lib/vaultHub";
 
 /* Small marks that carry the public / private duality. */
 function LockIcon({ className = "" }: { className?: string }) {
@@ -139,10 +141,10 @@ function QuickAction({
 
 function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-1 max-sm:px-5 py-10 sm:px-6">
+    <div className="flex flex-col items-start gap-1 py-10 max-sm:px-5 sm:px-6">
       <p className="text-[15px] text-foreground">{title}</p>
       {body && <p className="max-w-[48ch] text-[13.5px] leading-relaxed text-mute">{body}</p>}
-      {action && <div className="mt-3">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
@@ -241,6 +243,17 @@ export function PortfolioView() {
       })
       .filter((p) => (settings.hideZeroBalances ? p.raw > BigInt(0) : true));
   }, [tokenSet, tokenBals, markets, settings.hideZeroBalances]);
+
+  // The public balance to point at the vault: a dollar stablecoin first.
+  const addSuggestion = useMemo(
+    () =>
+      pickAddAsset(
+        positions
+          .filter((p) => p.raw > BigInt(0))
+          .map((p) => ({ id: p.id, symbol: p.symbol, address: p.address, raw: p.raw, amount: p.amount, dollar: isDollarStable(p) }))
+      ),
+    [positions]
+  );
 
   const shieldRows = useMemo(() => {
     const rows: {
@@ -365,7 +378,9 @@ export function PortfolioView() {
         ? "Syncing your vault…"
         : !hasShield
           ? shieldLive
-            ? "Nothing here yet. Add money privately and only you will see this number."
+            ? addSuggestion
+              ? `You have ${formatAssetAmount(addSuggestion.raw, addSuggestion.address)} ${addSuggestion.symbol} in your wallet. Add it privately and only you will see this number.`
+              : "Nothing here yet. Add money privately and only you will see this number."
             : "The private vault is not live on this network yet."
           : settings.showUsd && sealedUsd > 0
             ? `${vaultValue} in your vault. Nobody else can see it.`
@@ -380,7 +395,7 @@ export function PortfolioView() {
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
   const quietLink =
-    "inline-flex h-9 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60";
+    "inline-flex h-10 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60";
 
   return (
     <div className="space-y-5">
@@ -422,7 +437,7 @@ export function PortfolioView() {
                 disabled={refreshing || !isConnected}
                 aria-label="Refresh balances"
                 title="Refresh balances"
-                className="grid h-9 w-9 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
+                className="grid h-10 w-10 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
               >
                 <svg
                   aria-hidden
@@ -476,9 +491,30 @@ export function PortfolioView() {
           </div>
         )}
         {isConnected && onProduct && address && (
-          <div className="relative z-[1] flex items-center justify-between gap-3 border-t border-line max-sm:px-6 py-2.5 sm:px-8">
-            <span className="text-[12.5px] text-mute">Wallet</span>
-            <AddressChip address={address} className="min-h-9 text-[12.5px]" />
+          <div className="relative z-[1] flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2.5 max-sm:px-6 sm:px-8">
+            {shieldLive && addSuggestion ? (
+              // The same money, still in public: one step from private.
+              <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-mute">
+                <span className="inline-flex items-center gap-1.5">
+                  <EyeIcon />
+                  <span>
+                    <span className="tnum text-foreground">
+                      {formatAssetAmount(addSuggestion.raw, addSuggestion.address)} {addSuggestion.symbol}
+                    </span>{" "}
+                    in your wallet, public
+                  </span>
+                </span>
+                <Link
+                  href={addAssetHref(addSuggestion.id)}
+                  className="inline-flex min-h-10 items-center font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
+                >
+                  Add it privately
+                </Link>
+              </p>
+            ) : (
+              <span className="text-[12.5px] text-mute">Wallet</span>
+            )}
+            <AddressChip address={address} className="min-h-10 text-[12.5px]" />
           </div>
         )}
       </section>
@@ -612,7 +648,7 @@ export function PortfolioView() {
                           href={network.explorerTx(n.txHash)}
                           target="_blank"
                           rel="noreferrer"
-                          className="max-sm:hidden h-9 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground sm:inline-flex"
+                          className="h-10 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground max-sm:hidden sm:inline-flex"
                         >
                           Receipt
                         </a>
@@ -664,6 +700,7 @@ export function PortfolioView() {
                         : "Your tokens show up here once you connect."
                       : `Your wallet is on another network. Switch it to ${network.label} to see your tokens.`
                   }
+                  action={<WalletMenu />}
                 />
               </div>
             ) : positions.length === 0 && nativeWei === BigInt(0) ? (
@@ -677,7 +714,7 @@ export function PortfolioView() {
                         href={faucet.url}
                         target={faucetExternal ? "_blank" : undefined}
                         rel={faucetExternal ? "noreferrer" : undefined}
-                        className="btn btn-ghost btn-sm h-10"
+                        className="btn btn-ghost h-10"
                       >
                         Claim from the faucet
                       </a>
@@ -687,6 +724,13 @@ export function PortfolioView() {
                   <EmptyState
                     title="No tokens yet"
                     body={`Gloam takes ${tokenSet.map((t) => t.symbol).join(", ")} on ${network.label}. Once one is in your wallet, you can add it privately.`}
+                    action={
+                      shieldLive && bridgeVisible(network) ? (
+                        <Link href="/app/vault?tab=shield" className="btn btn-ghost h-10">
+                          Bring money over
+                        </Link>
+                      ) : undefined
+                    }
                   />
                 )}
               </div>
@@ -721,7 +765,7 @@ export function PortfolioView() {
                       </div>
                       <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
                         {shieldLive && supportsNativeShield(network.chainId) ? (
-                          <Link href="/app/shield" className="btn btn-ghost btn-sm">
+                          <Link href={addAssetHref("eth")} className="btn btn-ghost btn-sm h-10">
                             Add privately
                           </Link>
                         ) : (
@@ -766,12 +810,12 @@ export function PortfolioView() {
                       </div>
                       <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
                         {shieldLive && (
-                          <Link href="/app/shield" className="btn btn-ghost btn-sm">
+                          <Link href={addAssetHref(p.id)} className="btn btn-ghost btn-sm h-10">
                             Add privately
                           </Link>
                         )}
                         {network.stocks && (
-                          <Link href={`/app/trade?market=${p.id}`} className="btn btn-quiet btn-sm">
+                          <Link href={`/app/trade?market=${p.id}`} className="btn btn-quiet btn-sm h-10">
                             Trade
                           </Link>
                         )}
