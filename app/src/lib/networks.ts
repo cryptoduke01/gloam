@@ -1,8 +1,7 @@
 /**
  * Gloam network registry: the runtime source of truth for every chain the
- * product can point at. Three testnets (Robinhood Chain testnet, Tempo
- * Moderato and Base Sepolia), their three mainnets, and Ethereum mainnet,
- * which has no Gloam testnet (Base Sepolia rehearses the same pool).
+ * product can point at. Four testnets (Robinhood Chain testnet, Tempo
+ * Moderato, Base Sepolia and Ethereum Sepolia) and their four mainnets.
  *
  * Everything chain-specific (chain object, shielded pool, deploy block, hash
  * scheme, native + stable assets, explorer links) hangs off one `GloamNetwork`
@@ -11,12 +10,13 @@
  * (chain.ts / config.ts) so there is no second copy to drift.
  *
  * A mainnet only exists once its pool is filled in (MAINNET_POOLS in
- * lib/mainnet.ts), and so does Base Sepolia (BASE_SEPOLIA_POOL there). Until
+ * lib/mainnet.ts), and so do Base Sepolia and Ethereum Sepolia
+ * (BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL there). Until
  * then it is left out of NETWORK_KEYS, isNetworkKey, allNetworks and everything
  * built on them (selector, API, relay, MCP, proofs), as if it did not exist.
  */
 import { defineChain, type Address, type Chain } from "viem";
-import { base, baseSepolia, mainnet as ethereum } from "viem/chains";
+import { base, baseSepolia, mainnet as ethereum, sepolia } from "viem/chains";
 import { robinhood, robinhoodTestnet } from "./chain";
 import type { CeremonyKind } from "./circuitArtifacts";
 import {
@@ -24,12 +24,13 @@ import {
   TESTNET_POSEIDON_DEPLOY_BLOCK,
   type HashScheme,
 } from "./config";
-import { baseSepoliaPool, isMainnetLive, mainnetPool } from "./mainnet";
+import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, isMainnetLive, mainnetPool } from "./mainnet";
 
 export type NetworkKey =
   | "robinhood"
   | "tempo"
   | "base"
+  | "ethereum"
   | "robinhood-mainnet"
   | "tempo-mainnet"
   | "base-mainnet"
@@ -45,7 +46,7 @@ export type ChainFamily = "robinhood" | "tempo" | "base" | "ethereum";
  * narrow `chainId` to the configured ids. Mainnet ids are only registered with
  * wagmi once their pool is filled in (lib/wagmi.ts).
  */
-export type GloamChainId = 46630 | 42431 | 84532 | 4663 | 4217 | 8453 | 1;
+export type GloamChainId = 46630 | 42431 | 84532 | 11155111 | 4663 | 4217 | 8453 | 1;
 
 /** Whether a network is deployed and safe for real shield/spend writes. */
 export type NetworkStatus = "live" | "planned";
@@ -190,6 +191,22 @@ export const baseTestnet = defineChain({
 });
 
 /**
+ * Ethereum Sepolia, Ethereum's testnet (gas in Sepolia ETH). The vault tree is
+ * rebuilt from logs since the deploy block, so the default RPC is Tenderly's
+ * public gateway, which keeps the whole history and answers wide eth_getLogs.
+ * publicnode, second, keeps only about the last 10,000 blocks (a day and a
+ * half), checked 2026-10-25. The server reads through GLOAM_RPC_URL_11155111
+ * first once it is set (lib/serverRpc).
+ */
+export const ethereumTestnet = defineChain({
+  ...sepolia,
+  name: "Ethereum Sepolia",
+  rpcUrls: {
+    default: { http: ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"] },
+  },
+});
+
+/**
  * Base mainnet. Same RPC choice as Base Sepolia: mainnet.base.org refuses
  * eth_getLogs from public callers.
  */
@@ -219,6 +236,8 @@ const TEMPO_MAINNET_POOL = mainnetPool(4217);
 const BASE_MAINNET_POOL = mainnetPool(8453);
 const ETHEREUM_MAINNET_POOL = mainnetPool(1);
 const BASE_SEPOLIA_POOL = baseSepoliaPool();
+const ETHEREUM_SEPOLIA_POOL = ethereumSepoliaPool();
+const ETHEREUM_SEPOLIA_MEMO = ethereumSepoliaPayMemo();
 
 const NETWORKS: Record<NetworkKey, GloamNetwork> = {
   robinhood: {
@@ -317,6 +336,36 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerTx: (hash) => `${baseTestnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseTestnet.blockExplorers.default.url}/address/${addr}`,
   },
+  // Ethereum Sepolia: Ethereum's testnet, run like Base Sepolia on the mainnet
+  // pool (ShieldPoolPayments on the ceremony's final keys, payments only, beta
+  // deposit limits, the cash-out fee). Hidden until
+  // ETHEREUM_SEPOLIA_POOL (lib/mainnet.ts) is filled in after its deploy.
+  ethereum: {
+    key: "ethereum",
+    label: "Ethereum",
+    family: "ethereum",
+    testnet: true,
+    stocks: false,
+    paymentsPool: true,
+    chain: ethereumTestnet,
+    chainId: ethereumTestnet.id,
+    pool: ETHEREUM_SEPOLIA_POOL?.pool ?? null,
+    deployBlock: ETHEREUM_SEPOLIA_POOL?.deployBlock ?? null,
+    ceremony: "production",
+    // Read in spans publicnode, the backup RPC, also takes: "exceed maximum block range: 50000"
+    logRange: 50_000n,
+    hashScheme: "poseidon",
+    primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
+    stableAssets: [],
+    status: "live",
+    // GloamPayMemo, deployed right after the vault (no owner, holds nothing, never logs the poster)
+    payMemo: ETHEREUM_SEPOLIA_MEMO
+      ? { address: ETHEREUM_SEPOLIA_MEMO.pool, deployBlock: ETHEREUM_SEPOLIA_MEMO.deployBlock, emitsPoster: false }
+      : null,
+    note: "Ethereum Sepolia testnet: private USDC, USDG, PYUSD, EURC and ETH payments on the mainnet vault.",
+    explorerTx: (hash) => `${ethereumTestnet.blockExplorers.default.url}/tx/${hash}`,
+    explorerAddress: (addr) => `${ethereumTestnet.blockExplorers.default.url}/address/${addr}`,
+  },
   // Mainnet: ShieldPoolPayments with the ceremony's final keys, payments only
   // (no sealed swap), beta deposit limits on, and a payment-memo board (payMemo).
   "robinhood-mainnet": {
@@ -389,7 +438,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerAddress: (addr) => `${baseMainnet.blockExplorers.default.url}/address/${addr}`,
   },
   // Not deployed yet (DEPLOY-ETHEREUM.md): hidden until MAINNET_POOLS[1] is filled in.
-  // No Gloam testnet: Base Sepolia rehearses the same pool and keys. Gas is
+  // Its testnet is Ethereum Sepolia (the "ethereum" entry). Gas is
   // expensive here, so the relay stops while it is over its ceiling (lib/relay/gasCeiling).
   "ethereum-mainnet": {
     key: "ethereum-mainnet",
@@ -421,8 +470,8 @@ const hasPool = (k: NetworkKey) => NETWORKS[k].pool !== null && NETWORKS[k].depl
 /** Mainnets whose pool is filled in, Robinhood Chain first. Empty before deploy day. */
 const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"] as const).filter(hasPool);
 
-/** The testnets: Robinhood Chain and Tempo, and Base Sepolia once its pool is filled in. */
-const TESTNET_KEYS: NetworkKey[] = ["robinhood", "tempo", ...(hasPool("base") ? (["base"] as const) : [])];
+/** The testnets: Robinhood Chain and Tempo, then Base Sepolia and Ethereum Sepolia once each pool is filled in. */
+const TESTNET_KEYS: NetworkKey[] = ["robinhood", "tempo", ...(["base", "ethereum"] as const).filter(hasPool)];
 
 /** True once at least one mainnet pool is filled in: the app then labels mainnet and testnet. */
 export const MAINNET_ENABLED = MAINNET_KEYS.length > 0;
@@ -489,8 +538,9 @@ export const NETWORK_KEYS: NetworkKey[] = [...MAINNET_KEYS, ...TESTNET_KEYS];
 
 /**
  * The key set a proof made for `chainId` was made with; the dev keys for a
- * chain Gloam doesn't run on. Mainnet chain ids and Base Sepolia always answer
- * "production", pool or not, so their proofs are never checked against the dev keys.
+ * chain Gloam doesn't run on. Mainnet chain ids, Base Sepolia and Ethereum
+ * Sepolia always answer "production", pool or not, so their proofs are never
+ * checked against the dev keys.
  */
 export function ceremonyForChain(chainId: unknown): CeremonyKind {
   const id = Number(chainId);
@@ -524,7 +574,12 @@ export function networkKeyChoices(): string {
   return `${q.slice(0, -1).join(", ")} or ${q[q.length - 1]}`;
 }
 
-/** "Robinhood Chain testnet", "Base testnet", or the plain chain name ("Tempo") on mainnet. */
-export function networkName(n: Pick<GloamNetwork, "label" | "testnet">): string {
+/**
+ * "Robinhood Chain testnet", "Base testnet", "Ethereum Sepolia", or the plain
+ * chain name ("Tempo") on mainnet. Ethereum has more than one testnet, so its
+ * is named.
+ */
+export function networkName(n: Pick<GloamNetwork, "label" | "testnet" | "family">): string {
+  if (n.testnet && n.family === "ethereum") return "Ethereum Sepolia";
   return n.testnet ? `${n.label} testnet` : n.label;
 }

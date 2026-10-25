@@ -215,8 +215,23 @@ export function approvalSteps(token: Pick<OnchainToken, "approveResetFirst">, al
 
 export const CIRCLE_FAUCET_URL = "https://faucet.circle.com/";
 
+/**
+ * Ethereum Sepolia (11155111): Circle's test USDC and EURC (faucet.circle.com)
+ * and Paxos's test USDG and PYUSD (faucet.paxos.com, listed in Paxos's testnet
+ * docs), 6 decimals each, checked on chain 2026-10-25 (symbol, name, decimals,
+ * code). The same limits as the mainnets. Tether issues no USDT on Sepolia, so
+ * none is listed. Native ETH is listed too (supportsNativeShield).
+ */
+export const ETHEREUM_SEPOLIA_TOKENS: OnchainToken[] = [
+  { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "usdg", symbol: "USDG", name: "Global Dollar", address: "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "pyusd", symbol: "PYUSD", name: "PayPal USD", address: "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9", decimals: 6, yahoo: "", kind: "stablecoin" },
+  { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
+];
+
 /** ERC-20 tokens shieldable on a given chain (stablecoins first). */
 export function shieldTokensFor(chainId: number): OnchainToken[] {
+  if (chainId === 11155111) return ETHEREUM_SEPOLIA_TOKENS;
   if (chainId === 4663) return RH_MAINNET_TOKENS;
   if (chainId === 4217) return TEMPO_MAINNET_TOKENS;
   if (chainId === 8453) return BASE_MAINNET_TOKENS;
@@ -233,6 +248,7 @@ export function shieldTokensFor(chainId: number): OnchainToken[] {
  */
 export function knownTokens(chainId?: number): OnchainToken[] {
   const all = [
+    ...ETHEREUM_SEPOLIA_TOKENS,
     ...RH_STABLE_TOKENS,
     ...TESTNET_STOCK_TOKENS,
     ...TEMPO_STABLE_TOKENS,

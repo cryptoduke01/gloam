@@ -173,6 +173,7 @@ const NETWORK_LINES: Record<NetworkKey, string> = {
   robinhood: "Robinhood Chain testnet",
   tempo: "Tempo Moderato testnet",
   base: "Base Sepolia testnet",
+  ethereum: "Ethereum Sepolia testnet",
   "robinhood-mainnet": "Robinhood Chain mainnet",
   "tempo-mainnet": "Tempo mainnet",
   "base-mainnet": "Base mainnet",

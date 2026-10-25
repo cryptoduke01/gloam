@@ -157,6 +157,8 @@ export function walkTuning(chainId: number, logRange: bigint): WalkTuning {
   if (chainId === 84532 || chainId === 8453) return { span: logRange, parallel: 3, spacingMs: 120 };
   // Ethereum reads through MEV Blocker, 10,000 blocks a read (any range under 10,000 logs).
   if (chainId === 1) return { span: logRange, parallel: 3, spacingMs: 120 };
+  // Ethereum Sepolia: Tenderly's gateway first, publicnode's 50,000-block cap behind it.
+  if (chainId === 11155111) return { span: logRange, parallel: 3, spacingMs: 120 };
   return { span: logRange, parallel: 2, spacingMs: 0 };
 }
 

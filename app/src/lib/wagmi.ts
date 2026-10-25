@@ -3,7 +3,7 @@
 import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { robinhood, robinhoodTestnet } from "./chain";
-import { NETWORK_KEYS, baseMainnet, baseTestnet, ethereumMainnet, tempoMainnet, tempoTestnet } from "./networks";
+import { NETWORK_KEYS, baseMainnet, baseTestnet, ethereumMainnet, ethereumTestnet, tempoMainnet, tempoTestnet } from "./networks";
 import { ORIGIN_CHAINS } from "./originChains";
 import { turnkeyConnector } from "./turnkeyConnector";
 import { tempoFeeAware } from "./feeSponsor";
@@ -15,9 +15,10 @@ const walletConnectFn = lazyWalletConnect();
 /**
  * Both older testnets Gloam targets are registered so the app can switch
  * between them at runtime. A mainnet is registered only once its pool is
- * filled in (MAINNET_POOLS in lib/mainnet.ts), and Base Sepolia once
- * BASE_SEPOLIA_POOL is, after the first two testnets so the first chain a
- * connector starts on stays Robinhood Chain testnet.
+ * filled in (MAINNET_POOLS in lib/mainnet.ts), and Base Sepolia and Ethereum
+ * Sepolia once BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL are, after the
+ * first two testnets so the first chain a connector starts on stays Robinhood
+ * Chain testnet.
  *
  * Connectors:
  * - injected: browser wallets on every network. On Tempo (testnet and mainnet)
@@ -35,6 +36,7 @@ const mainnetChains = [
   ...(NETWORK_KEYS.includes("ethereum-mainnet") ? [ethereumMainnet] : []),
 ];
 const baseTestnetChains = NETWORK_KEYS.includes("base") ? [baseTestnet] : [];
+const ethereumTestnetChains = NETWORK_KEYS.includes("ethereum") ? [ethereumTestnet] : [];
 
 // The chains a wallet can pay a private bridge order from (lib/originChains),
 // only alongside a mainnet: the wallet switches to one to sign there. Base and
@@ -51,12 +53,14 @@ const chains = [
   robinhoodTestnet,
   tempoTestnet,
   ...baseTestnetChains,
+  ...ethereumTestnetChains,
   ...mainnetChains,
   ...originChains,
 ] as unknown as readonly [
   typeof robinhoodTestnet,
   typeof tempoTestnet,
   typeof baseTestnet,
+  typeof ethereumTestnet,
   typeof robinhood,
   typeof tempoMainnet,
   typeof baseMainnet,
@@ -82,6 +86,7 @@ export const wagmiConfig = createConfig({
     [baseMainnet.id]: http(baseMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
     // Until Ethereum is a Gloam network, the origin-chain entry below replaces this one.
     [ethereumMainnet.id]: http(ethereumMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
+    [ethereumTestnet.id]: http(ethereumTestnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
     ...Object.fromEntries(originChains.map((c) => [c.id, http()])),
   },
   ssr: true,
