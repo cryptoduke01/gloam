@@ -299,10 +299,15 @@ export function PieceLeftover({
   );
 }
 
-/** One row of Scheduled cash outs: when it goes, and for a piece, which one. */
-export function scheduledLine(n: LocalNote, now = Date.now()): string {
+/**
+ * One row of Scheduled cash outs: when it goes, and for a piece, which one.
+ * `gasWait`: gas on its chain is over the relay's ceiling (Ethereum), so one
+ * whose time has come waits for it to come down.
+ */
+export function scheduledLine(n: LocalNote, now = Date.now(), gasWait = false): string {
   const piece = n.cashOutPlan ? `Piece ${n.cashOutPlan.piece} of ${n.cashOutPlan.of} · ` : "";
-  const when = n.cashOut?.state === "sent" ? "On its way" : capital(aboutTime(n.cashOut!.at, now));
+  const waiting = gasWait && n.cashOut?.state === "scheduled" && n.cashOut.at <= now;
+  const when = n.cashOut?.state === "sent" ? "On its way" : waiting ? "Waiting for gas to come down" : capital(aboutTime(n.cashOut!.at, now));
   return `${piece}${when} · to ${shortAddress(n.cashOut!.to)}`;
 }
 

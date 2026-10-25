@@ -38,7 +38,8 @@ export type VaultStatus = {
   payMemo: Address | null;
   explorer: string | null;
   assets: VaultAsset[];
-  relay: { enabled: boolean; memo: boolean; lowBalance: boolean };
+  /** gasHigh: gas is over the relay's ceiling on this chain (Ethereum), so relayed sends wait. */
+  relay: { enabled: boolean; memo: boolean; lowBalance: boolean; gasHigh: boolean; maxGasGwei: string | null };
   /**
    * Read from the chain just now; null when the read failed or timed out.
    * `leafCapacity` and `leavesLeft` are there to watch the tree fill up.
@@ -97,7 +98,13 @@ export async function vaultStatuses(only?: NetworkKey): Promise<VaultStatus[]> {
         payMemo: net.payMemo?.address ?? null,
         explorer: net.pool ? net.explorerAddress(net.pool) : null,
         assets: vaultAssets(net),
-        relay: { enabled: relay?.enabled ?? false, memo: relay?.memo ?? false, lowBalance: relay?.lowBalance ?? false },
+        relay: {
+          enabled: relay?.enabled ?? false,
+          memo: relay?.memo ?? false,
+          lowBalance: relay?.lowBalance ?? false,
+          gasHigh: relay?.gasHigh ?? false,
+          maxGasGwei: relay?.maxGasGwei ?? null,
+        },
         chain: await chainRead(net),
       } satisfies VaultStatus;
     })

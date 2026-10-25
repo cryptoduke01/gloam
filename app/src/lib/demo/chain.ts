@@ -53,6 +53,9 @@ export function demoRelayStatus(): RelayNetworkStatus[] {
     relayer: RELAYER,
     memo: true,
     lowBalance: false,
+    gasHigh: false,
+    maxGasGwei: null,
+    gasGwei: null,
   }));
 }
 

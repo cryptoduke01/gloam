@@ -15,6 +15,12 @@ export type RelayNetworkStatus = {
   relayer: Address | null;
   memo: boolean;
   lowBalance: boolean;
+  /** Gas is over the relay's ceiling here (Ethereum): relayed sends wait until it comes down. */
+  gasHigh?: boolean;
+  /** The relay's gas ceiling in gwei, null on chains with none. */
+  maxGasGwei?: string | null;
+  /** The gas price in gwei on chains with a ceiling. */
+  gasGwei?: string | null;
 };
 
 const PREF_KEY = "gloam.relay.pref";
