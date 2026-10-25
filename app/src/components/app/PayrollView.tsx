@@ -43,7 +43,10 @@ import {
   relayTransfer,
   setRelayPreferred,
   waitForTx,
+  type RelayNetworkStatus,
 } from "@/lib/relay/client";
+import { gasHighMessage } from "@/lib/relay/gasCeiling";
+import { RelayGasNotice } from "./RelayGasNotice";
 import {
   PAYROLL_TEMPLATE,
   claimLink,
@@ -458,12 +461,16 @@ export function PayrollView() {
   // ---------------------------------------------------------------- relay
   const [relayAvailable, setRelayAvailable] = useState(false);
   const [relayOn, setRelayOn] = useState(false);
+  /** The relay's status here, for its gas ceiling (Ethereum): over it, a relayed run waits. */
+  const [relayStatus, setRelayStatus] = useState<RelayNetworkStatus | null>(null);
   useEffect(() => {
     let live = true;
     // A demo always has the relay, with the wallet hidden.
-    const enabled = demo ? Promise.resolve(true) : relayFor(network.chainId).then((r) => Boolean(r?.enabled));
-    void enabled.then((ok) => {
+    const status = demo ? Promise.resolve(null) : relayFor(network.chainId);
+    void status.then((r) => {
       if (!live) return;
+      const ok = demo || Boolean(r?.enabled);
+      setRelayStatus(r);
       setRelayAvailable(ok);
       setRelayOn(ok && (demo || relayPreferred()));
     });
@@ -522,6 +529,8 @@ export function PayrollView() {
             ? `This list is ${formatAssetAmountExact(capOver, asset)} ${token.symbol} over the schedule's cap, so the run is blocked. Edit the schedule or the list.`
             : !relayOn && !walletOnChain
           ? `Switch your wallet to ${network.label}, or turn on Hide my wallet.`
+          : relayOn && relayStatus?.gasHigh
+            ? gasHighMessage(network.label)
           : treeLoading
             ? "Syncing your private balance…"
             : null;
@@ -1488,7 +1497,8 @@ export function PayrollView() {
               </p>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
+              <RelayGasNotice status={relayStatus} label={network.label} />
               <RelayToggle
                 available={relayAvailable}
                 on={relayOn}
