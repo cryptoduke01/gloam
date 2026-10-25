@@ -13,7 +13,7 @@ pragma solidity ^0.8.24;
 // Off by default (it reads mainnet over RPC). Run on its own, since the deploy
 // settings travel in env vars, from contracts/:
 //   ETH_FORK=1 forge test --match-path test/fork/EthereumMainnetFork.t.sol -vv
-// ETH_FORK_URL picks the RPC (default MEV Blocker's, which serves old state).
+// ETH_FORK_URL picks the RPC (default Tenderly's public gateway, which serves old state).
 
 import {Test, console2} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
@@ -57,7 +57,7 @@ contract EthereumMainnetForkTest is Test {
             vm.skip(true);
             return;
         }
-        vm.createSelectFork(vm.envOr("ETH_FORK_URL", string("https://rpc.mevblocker.io")));
+        vm.createSelectFork(vm.envOr("ETH_FORK_URL", string("https://gateway.tenderly.co/public/mainnet")));
         assertEq(block.chainid, 1, "an Ethereum mainnet fork");
         fx = vm.readFile("test/fixtures/ethereum-fork-proofs.json");
 
