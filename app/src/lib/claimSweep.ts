@@ -188,14 +188,15 @@ async function nullifierOf(n: LocalNote): Promise<Hex> {
 /** The move landed: count the fresh note and retire the claimed one. */
 async function finalize(env: ClaimEnv, fresh: LocalNote, txHash: Hex | null) {
   const leafIndex = await env.leafIndexOf(fresh.commitment);
-  updateLocalNote(fresh.id, {
+  // on disk before this returns: a restore or another tab that reads the store next must see the move
+  await updateLocalNote(fresh.id, {
     // counted again even if an earlier sync gave it up (a refund that landed late)
     status: "open",
     sweepPending: false,
     ...(leafIndex != null ? { leafIndex } : {}),
     ...(txHash ? { txHash } : {}),
   });
-  if (fresh.sweptFrom) updateLocalNote(fresh.sweptFrom.id, { status: "recovered", secured: true });
+  if (fresh.sweptFrom) await updateLocalNote(fresh.sweptFrom.id, { status: "recovered", secured: true });
 }
 
 /**
