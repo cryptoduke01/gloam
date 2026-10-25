@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { AppLink } from "./AppLink";
 import { CountdownCompact, useMainnetLive, useMainnetRemaining } from "./MainnetCountdown";
 import { MAINNET_LAUNCH_SHORT, MAINNET_PAGE, liveMainnetNames } from "@/lib/mainnet";
@@ -14,20 +14,36 @@ const LIVE_KEY = "gloam:announce-dismissed:mainnet-live-v1";
 // Keep the launch note on marketing + docs; stay out of the working app and the countdown page itself.
 const HIDDEN_ON = ["/app", "/admin", "/verify", "/pitch", "/claim", MAINNET_PAGE];
 
+const DISMISSED_EVENT = "gloam-announce-dismissed";
+
+function subscribeDismissed(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(DISMISSED_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(DISMISSED_EVENT, onChange);
+  };
+}
+
+/** "countdown closed" then "live note closed", one digit each, as this browser saved them. */
+function dismissedSnapshot(): string {
+  try {
+    return `${localStorage.getItem(KEY) === "1" ? 1 : 0}${localStorage.getItem(LIVE_KEY) === "1" ? 1 : 0}`;
+  } catch {
+    return "00";
+  }
+}
+
 /** Slim site-wide mainnet countdown, then the news that mainnet is live. Dismissible per browser. */
 export function AnnouncementBanner() {
   const pathname = usePathname();
-  const [dismissed, setDismissed] = useState<{ countdown: boolean; live: boolean }>({ countdown: false, live: false });
+  // The server can't see what this browser closed, so it renders the note.
+  const stored = useSyncExternalStore(subscribeDismissed, dismissedSnapshot, () => "00");
+  // Closed here, for when storage refuses the write.
+  const [closed, setClosed] = useState<{ countdown: boolean; live: boolean }>({ countdown: false, live: false });
+  const dismissed = { countdown: closed.countdown || stored[0] === "1", live: closed.live || stored[1] === "1" };
   const remaining = useMainnetRemaining();
   const live = useMainnetLive();
-
-  useEffect(() => {
-    try {
-      setDismissed({ countdown: localStorage.getItem(KEY) === "1", live: localStorage.getItem(LIVE_KEY) === "1" });
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
 
   if (live ? dismissed.live : dismissed.countdown) return null;
   if (HIDDEN_ON.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -37,10 +53,11 @@ export function AnnouncementBanner() {
   const dismiss = () => {
     try {
       localStorage.setItem(live ? LIVE_KEY : KEY, "1");
+      window.dispatchEvent(new Event(DISMISSED_EVENT));
     } catch {
       /* ignore */
     }
-    setDismissed((d) => (live ? { ...d, live: true } : { ...d, countdown: true }));
+    setClosed((d) => (live ? { ...d, live: true } : { ...d, countdown: true }));
   };
 
   return (

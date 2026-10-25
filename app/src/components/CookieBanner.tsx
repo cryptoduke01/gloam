@@ -1,24 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { getConsent, setConsent, type ConsentValue } from "@/lib/consent";
+import { getConsent, setConsent, subscribeConsent, type ConsentValue } from "@/lib/consent";
 import { readDemo } from "@/lib/demoFlag";
 
-export function CookieBanner() {
-  const [visible, setVisible] = useState(false);
+const noopSubscribe = () => () => {};
 
-  useEffect(() => {
-    // Stays out of the way while recording the demo.
-    setVisible(getConsent() === null && !readDemo());
-  }, []);
+export function CookieBanner() {
+  // The server has no choice to read, so it renders nothing ("set").
+  const consent = useSyncExternalStore<ConsentValue | "set" | null>(subscribeConsent, getConsent, () => "set");
+  // Stays out of the way while recording the demo.
+  const demo = useSyncExternalStore(noopSubscribe, readDemo, () => false);
+  // Closes at once even where storage refuses the write (private mode).
+  const [closed, setClosed] = useState(false);
 
   const accept = (value: ConsentValue) => {
     setConsent(value);
-    setVisible(false);
+    setClosed(true);
   };
 
-  if (!visible) return null;
+  if (consent !== null || demo || closed) return null;
 
   return (
     <div

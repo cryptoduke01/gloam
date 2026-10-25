@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getConsent, setConsent, type ConsentValue } from "@/lib/consent";
+import { useState, useSyncExternalStore } from "react";
+import { getConsent, setConsent, subscribeConsent, type ConsentValue } from "@/lib/consent";
 
 export function CookiePreferences() {
-  const [current, setCurrent] = useState<ConsentValue | null>(null);
+  // Live: a choice made in the cookie banner on this page, or in another tab, shows here.
+  const stored = useSyncExternalStore(subscribeConsent, getConsent, () => null);
+  // What was picked here, for when storage refuses the write (private mode).
+  const [picked, setPicked] = useState<ConsentValue | null>(null);
+  const current = stored ?? picked;
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setCurrent(getConsent());
-  }, []);
 
   const save = (value: ConsentValue) => {
     setConsent(value);
-    setCurrent(value);
+    setPicked(value);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
