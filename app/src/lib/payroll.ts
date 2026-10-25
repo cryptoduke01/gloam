@@ -618,7 +618,7 @@ export function runPayroll(batch: PayrollBatch, deps: PayrollEngineDeps): Promis
  * another chain (the page switched since, or a client for it) would answer for
  * this run's payments without failing.
  */
-export function runNetworkProblem(batch: Pick<PayrollBatch, "chainId" | "pool">, client: Pick<PublicClient, "chain">): string | null {
+export function runNetworkProblem(batch: Pick<PayrollBatch, "chainId" | "pool">, client: { chain?: { id: number } }): string | null {
   const problem = noteNetworkProblem(batch, getActiveNetwork());
   if (problem) return problem === NOTE_OTHER_NETWORK_MESSAGE ? "This run is on another network. Switch to it, then resume." : problem;
   if (client.chain && client.chain.id !== batch.chainId) return NETWORK_SWITCHING_MESSAGE;
