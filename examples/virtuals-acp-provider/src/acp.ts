@@ -59,7 +59,24 @@ export const ACP_ABI = [
     ],
   },
   { type: "event", name: "JobCreated", inputs: [{ name: "jobId", type: "uint256", indexed: true }, { name: "client", type: "address", indexed: true }, { name: "provider", type: "address", indexed: true }, { name: "evaluator", type: "address", indexed: false }, { name: "expiredAt", type: "uint256", indexed: false }, { name: "hook", type: "address", indexed: false }] },
+  // Emitted by fund() (topic 0xe3fbcc1e…, read off the Base Sepolia contract on a fork).
+  { type: "event", name: "JobFunded", inputs: [{ name: "jobId", type: "uint256", indexed: true }, { name: "client", type: "address", indexed: true }, { name: "amount", type: "uint256", indexed: false }] },
 ] as const;
+
+/** jobs(jobId).status on the ACP contract. */
+export const ACP_STATUS = { open: 0, funded: 1, submitted: 2, completed: 3, rejected: 4, expired: 5 } as const;
+
+/** A job as the ACP contract holds it (jobs(jobId)). */
+export interface OnChainJob {
+  client: Address;
+  status: number;
+  provider: Address;
+  expiredAt: bigint;
+  evaluator: Address;
+  hook: Address;
+  budget: bigint;
+  description: string;
+}
 
 export const NO_EVALUATOR: Address = "0x0000000000000000000000000000000000000000";
 

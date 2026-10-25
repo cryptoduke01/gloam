@@ -8,11 +8,13 @@
  *   3. The provider quotes (payout total by fund transfer, fee in escrow), the
  *      client funds, the provider pays each recipient privately and submits the
  *      deliverable sealed to the client, and the escrow pays the fee.
- *   4. The client opens the deliverable and checks every proof; one recipient
- *      picks up its payment by Gloam address, another claims a claim link.
+ *   4. The client opens the deliverable and checks every proof (each shows a
+ *      private payment of the right amount was made, not who received it);
+ *      one recipient picks up its payment by Gloam address, another claims a
+ *      claim link.
  *   5. The provider adds what reached its wallet to its private balance, in a
  *      round amount, where the token is one the Gloam vault takes.
- *   6. A plain escrow job from the same client is refused, and a client that
+ *   6. A plain escrow job with no evaluator is refused, and a client that
  *      rejects a funded job gets its fee back from the escrow and its principal
  *      back from the provider, with no payout made.
  *
@@ -61,7 +63,7 @@ export interface ScenarioReport {
   backendSaw: string;
   transferLogFields: string[][];
   publicTxs: { what: string; hash: string }[];
-  /** A plain escrow job from an untrusted client: refused before any budget. */
+  /** A plain escrow job with no evaluator: refused before any budget. */
   refusedJob: { jobId: string; reason: string; onChain: boolean; detail: string } | null;
   /** A client that rejects a funded job. */
   rejectedAfterFunding: { jobId: string; acpStatus: number; payoutsMade: number; clientNetChange: string; journal: string } | null;
@@ -126,6 +128,7 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
       providerKey: providerKey.key,
       clientKey: clientKey.key,
       // The client is its own evaluator: it opens the deliverable and completes only if every proof checks out.
+      // A proof shows a private payment of that amount was made; who received it, only the recipient can confirm.
       evaluate: async (_jobId, deliverable) => {
         const outer = JSON.parse(deliverable) as { sealed?: string };
         const inner = JSON.parse(outer.sealed ? await client.openSealed(outer.sealed) : deliverable) as { payouts: PayoutResult[] };
@@ -147,14 +150,15 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
       budgetToken: (raw) => assetToken(acp.paymentToken, acp.tokenName, 6, raw),
       // Virtuals' cut, plus the evaluator's when the job has one (here the client evaluates, so that part goes back to it).
       acpFeeBps: (session) => platformFee + (session.job && session.job.evaluatorAddress !== "0x0000000000000000000000000000000000000000" ? evaluatorFee : 0),
+      // The hash once broadcast (a refund that threw is tried again, so it throws only when nothing was sent).
       refund: async (to, token, raw) => {
         const hash = await providerWallet.sendTransaction({ to: token, data: encodeFunctionData({ abi: ERC20, functionName: "transfer", args: [to, raw] }) });
-        await fork.client.waitForTransactionReceipt({ hash });
+        await fork.client.waitForTransactionReceipt({ hash }).catch(() => undefined);
         return hash;
       },
       earnings: {
-        sweep: async () => {
-          earningsResult = await earnings.sweep();
+        sweep: async (run?: Parameters<EarningsSweeper["sweep"]>[0]) => {
+          earningsResult = await earnings.sweep(run);
           return earningsResult;
         },
       } as unknown as EarningsSweeper,
@@ -232,7 +236,7 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
       publicTxs.push({ what: `Gloam payout to ${p.to}: a shielded transfer`, hash: p.tx });
     }
 
-    // A plain escrow job (no fund transfer) from a client the provider does not trust: refused.
+    // A plain escrow job (no fund transfer) with no evaluator: refused before any budget, as every job with no evaluator is.
     const refusedId = await room.clientCreateJob({ description: OFFERING_NAME, requirement, fundTransfer: false, expiresInSeconds: 3600 });
     await room.settle();
     const rej = room.rejections.get(refusedId) ?? null;
