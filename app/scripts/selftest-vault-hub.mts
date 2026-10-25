@@ -23,6 +23,7 @@ import {
   vaultActionsFor,
   vaultHashAfterQuery,
   type VaultActionId,
+  compareHoldings,
 } from "../src/lib/vaultHub";
 import { appClaimPath } from "../src/lib/claimLink";
 
@@ -155,6 +156,20 @@ test("the overview suggests a dollar stablecoin first, then the largest balance"
   assert.equal(pickAddAsset([{ id: "eth", amount: 0.4, dollar: false }, { id: "gloam", amount: 12, dollar: false }])?.id, "gloam");
   assert.equal(pickAddAsset([{ id: "usdg", amount: 0, dollar: true }]), null, "nothing to suggest at zero");
   assert.equal(pickAddAsset([]), null);
+});
+
+test("balances list in one order everywhere: dollar stablecoins, then the larger holding, then by name", () => {
+  const rows = [
+    { symbol: "TSLA", amount: 6, dollar: false },
+    { symbol: "USDG", amount: 48250, dollar: true },
+    { symbol: "AMZN", amount: 10, dollar: false },
+    { symbol: "ETH", amount: 2.4, dollar: false },
+    { symbol: "USDC", amount: 48250, dollar: true },
+  ];
+  assert.deepEqual(
+    [...rows].sort(compareHoldings).map((r) => r.symbol),
+    ["USDC", "USDG", "AMZN", "TSLA", "ETH"]
+  );
 });
 
 console.log(`\n${passed} passed`);
