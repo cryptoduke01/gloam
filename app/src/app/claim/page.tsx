@@ -7,7 +7,7 @@ import { SealDots } from "@/components/ui/SealDots";
 import { ClaimSafetyLine } from "@/components/app/ClaimSafetyLine";
 import { appClaimPath, codeFromHash } from "@/lib/claimLink";
 import { countLinkOpened, isClaimLink } from "@/lib/funnel";
-import { getNetwork, isNetworkKey, type NetworkKey } from "@/lib/networks";
+import { NETWORK_KEYS, getNetwork, isNetworkKey, type NetworkKey } from "@/lib/networks";
 import { decodeNotePackage, isEncryptedPackage, paymentCodeIn } from "@/lib/notePackage";
 import { inWalletBrowser } from "@/lib/passkey";
 import { relayFor } from "@/lib/relay/client";
@@ -27,15 +27,19 @@ type View =
   | { kind: "ready"; code: string; net: NetworkKey; amount: string | null; locked: boolean; note?: string };
 
 /** A claim view for a code, with its amount and note when the code is not locked. */
-async function readyView(code: string, net: NetworkKey): Promise<View> {
+async function readyView(code: string, linkNet: NetworkKey): Promise<View> {
   let amount: string | null = null;
   let note: string | undefined;
+  let net = linkNet;
   const locked = isEncryptedPackage(code);
   if (!locked) {
     try {
       const pack = await decodeNotePackage(code);
       amount = formatAssetLabel(pack.amountWei, pack.asset);
       note = pack.note;
+      // A code that names its chain is on that network, whatever ?net= says (a chat app can cut it off).
+      const own = pack.chainId === undefined ? undefined : NETWORK_KEYS.find((k) => getNetwork(k).chainId === pack.chainId);
+      if (own) net = own;
     } catch {
       amount = null;
     }

@@ -29,6 +29,13 @@ export type NotePackage = {
   message?: string;
   /** The payer's private note to the payee, cleaned, at most 80 characters. */
   note?: string;
+  /**
+   * The chain the payment is on. The vault has one address on every chain and
+   * native ETH is 0x0 on all of them, so pool and asset can't tell Base from
+   * Base Sepolia or Ethereum. Codes made since 25 Oct 2026 carry it (`ch`);
+   * older ones don't, and are matched on pool and asset as before.
+   */
+  chainId?: number;
 };
 
 const PREFIX_PLAIN = "gloam1.";
@@ -72,6 +79,8 @@ export function buildNotePackage(args: {
   commitment: Hex;
   /** Optional private note for the payee ("Invoice 042"). */
   note?: string;
+  /** The chain the payment is on: every new code names it. */
+  chainId?: number;
 }): NotePackage {
   const note = cleanPaymentNote(args.note);
   return {
@@ -85,7 +94,19 @@ export function buildNotePackage(args: {
     commitment: args.commitment,
     message: "Gloam payment, import under Move → Receive. Keep secret.",
     ...(note ? { note } : {}),
+    ...(validChainId(args.chainId) ? { chainId: args.chainId } : {}),
   };
+}
+
+function validChainId(v: unknown): v is number {
+  return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
+}
+
+/** The chain a code names (`ch`, or `chainId` in the long form), or nothing for an older code. */
+function chainOf(obj: Record<string, unknown>): { chainId?: number } {
+  const v = obj.ch ?? obj.chainId;
+  const n = typeof v === "string" && /^\d{1,12}$/.test(v) ? Number(v) : v;
+  return validChainId(n) ? { chainId: n } : {};
 }
 
 /** The package as short-keyed JSON, the form both plain and locked codes carry. */
@@ -100,6 +121,8 @@ function compactJson(pack: NotePackage): string {
     w: pack.amountWei,
     k: pack.secret,
     c: pack.commitment,
+    // The chain, when known: older readers skip a key they don't know.
+    ...(validChainId(pack.chainId) ? { ch: pack.chainId } : {}),
     // Only when there is one, so a package without a note is byte-for-byte the old format.
     ...(note ? { n: note } : {}),
   });
@@ -230,6 +253,7 @@ function readFields(obj: Record<string, unknown>): NotePackage | null {
         secret: String(obj.k) as Hex,
         commitment: String(obj.c || "0x") as Hex,
         ...noteOf(obj),
+        ...chainOf(obj),
       };
     }
     return null;
@@ -245,6 +269,7 @@ function readFields(obj: Record<string, unknown>): NotePackage | null {
     commitment: String(obj.commitment || obj.c || "0x") as Hex,
     message: obj.message ? String(obj.message) : undefined,
     ...noteOf(obj),
+    ...chainOf(obj),
   };
 }
 

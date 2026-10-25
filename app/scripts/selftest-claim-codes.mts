@@ -122,4 +122,28 @@ const top = (LIMIT - 1n).toString();
 assert.equal((await decodeNotePackage(encodeNotePackage({ ...pack, amountWei: top }))).amountWei, top, "the largest amount the circuits hold still reads");
 assert.equal((await decodeNotePackage(await encodeNotePackageEncrypted(pack, "pass phrase"), "pass phrase")).amountWei, pack.amountWei, "a locked code still reads");
 n += 3;
+// A new code names its chain, so ETH on Base Sepolia, Base and Ethereum (one vault address,
+// one 0x0 asset) can never be claimed on the wrong one; an older code works as before.
+{
+  const ETH = "0x0000000000000000000000000000000000000000" as const;
+  const base = getNetwork("base");
+  const ethPack = { ...pack, pool: base.pool!, asset: ETH };
+  const named = buildNotePackage({ ...ethPack, chainId: 84532 });
+  assert.equal(named.chainId, 84532);
+  const plainCode = encodeNotePackage(named);
+  assert.equal((await decodeNotePackage(plainCode)).chainId, 84532, "a plain code keeps its chain");
+  assert.equal((await decodeNotePackage(await encodeNotePackageEncrypted(named, "pass phrase"), "pass phrase")).chainId, 84532, "so does a locked one");
+  assert.equal((await decodeNotePackage(codeFromHash(`#claim=${claimLinkFor(plainCode, "base").split("#claim=")[1]}`)!)).chainId, 84532, "and a link's");
+  // the chain goes last but for the note, so a code with no chain is byte for byte the old one
+  assert.equal(encodeNotePackage(buildNotePackage(ethPack)), encodeNotePackage({ ...named, chainId: undefined }));
+  assert.equal(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 84532 }), null, "claims on its own chain");
+  // the same vault and asset, another chain: refused by name (Base mainnet, Ethereum, Robinhood Chain)
+  assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 4663 }) ?? "", /This payment is on Robinhood Chain\. Switch/);
+  assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 1 }) ?? "", /network Gloam does not run on/);
+  assert.match(claimNetworkProblem({ key: "robinhood-mainnet", pool: base.pool }, { ...ethPack, chainId: 84532 }) ?? "", /on Base testnet/);
+  // an older ETH code with no chain is matched on vault and asset, as before
+  assert.equal(claimNetworkProblem({ key: "base", pool: base.pool }, ethPack), null);
+  n += 9;
+}
+
 console.log(`${n} claim-code checks passed`);

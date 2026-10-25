@@ -15,7 +15,7 @@
  */
 
 import { zeroAddress, type Address } from "viem";
-import { getNetwork, isNetworkKey, type NetworkKey } from "./networks";
+import { NETWORK_KEYS, getNetwork, isNetworkKey, networkName, type NetworkKey } from "./networks";
 import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { isValidReceiveTag } from "./receiveTag";
 import { readAmountText } from "./amountText";
@@ -89,12 +89,23 @@ export function findRequestAsset(key: NetworkKey, raw: string): RequestAsset | n
  * too), so the vault alone can't tell a Robinhood Chain code from a Tempo one;
  * the asset can. A code claimed on the wrong one would sit in the balance as
  * "not settled". ETH is the zero address on Base Sepolia, Base mainnet and
- * Ethereum alike, so for ETH the link's own ?net= is what picks the network.
+ * Ethereum alike, so a code now names its chain (NotePackage.chainId) and is
+ * refused on any other; an older code without it is matched on vault and
+ * asset, and its link's ?net= picks the network.
  */
 export function claimNetworkProblem(
   network: { key: NetworkKey; pool: string | null },
-  pack: { pool?: string; asset: string }
+  pack: { pool?: string; asset: string; chainId?: number }
 ): string | null {
+  // A code made since 25 Oct 2026 names its chain: the only thing that tells Base from Base
+  // Sepolia (and Ethereum) for ETH, where the vault and the asset have the same address.
+  const here = getNetwork(network.key);
+  if (pack.chainId !== undefined && pack.chainId !== here.chainId) {
+    const there = NETWORK_KEYS.map(getNetwork).find((n) => n.chainId === pack.chainId);
+    return there
+      ? `This payment is on ${networkName(there)}. Switch to it, then claim it again.`
+      : "This payment is on a network Gloam does not run on.";
+  }
   if (pack.pool && network.pool && pack.pool.toLowerCase() !== network.pool.toLowerCase()) {
     return "This payment is for a different vault or network.";
   }
