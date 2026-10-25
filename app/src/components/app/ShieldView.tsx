@@ -27,7 +27,7 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { approvalSteps, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
@@ -262,6 +262,10 @@ export function ShieldView() {
   const [pendingKind, setPendingKind] = useState<TxKind>(null);
   const [sentLabel, setSentLabel] = useState("");
   const autoShieldAfterApprove = useRef(false);
+  /** Approvals still to send before the deposit: the exact amount, after USDT's stale allowance is set to 0. */
+  const approvalsLeft = useRef<{ token: `0x${string}`; values: bigint[] } | null>(null);
+  /** The approval in the wallet now only clears an old allowance (USDT on Ethereum). */
+  const [clearingAllowance, setClearingAllowance] = useState(false);
   const pendingShieldArgs = useRef<{
     value: bigint;
     commitment: Hex;
@@ -328,9 +332,26 @@ export function ShieldView() {
 
     if (pendingKind === "approve") {
       void refetchAllow();
-      setPendingKind(null);
-      // auto continue shield
       const pending = pendingShieldArgs.current;
+      // USDT: the old allowance is 0 now, so the deposit's exact amount can be approved
+      const queued = approvalsLeft.current;
+      const nextApproval = queued?.values.shift();
+      if (queued && nextApproval !== undefined && pending && network.pool && autoShieldAfterApprove.current) {
+        setClearingAllowance(false);
+        writeContract({
+          address: queued.token,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [network.pool, nextApproval],
+          gas: gasFor(network.chainId, APPROVE_GAS_LIMIT),
+          chainId: network.chainId,
+        });
+        return;
+      }
+      approvalsLeft.current = null;
+      setPendingKind(null);
+      setClearingAllowance(false);
+      // auto continue shield
       if (pending && network.pool && autoShieldAfterApprove.current) {
         autoShieldAfterApprove.current = false;
         // Keep handledHash on the approval: the deposit has its own hash, and
@@ -411,6 +432,7 @@ export function ShieldView() {
     pendingKind,
     address,
     network.testnet,
+    network.chainId,
     assetAddress,
     sentLabel,
     refreshNotes,
@@ -621,27 +643,42 @@ export function ShieldView() {
     setSentLabel(`${amount} ${symbol}`);
     pendingShieldArgs.current = { value, commitment, note };
 
-    // ERC20: approve first if needed
+    // ERC20: approve first if needed. USDT on Ethereum refuses to change one
+    // non-zero allowance into another, so a stale one (a deposit that never went
+    // through) is set to 0 first; an allowance not read yet counts as stale there.
     if (selectedToken) {
-      if (allowance === undefined || allowance < value) {
+      const steps =
+        allowance === undefined
+          ? selectedToken.approveResetFirst
+            ? [BigInt(0), value]
+            : [value]
+          : approvalSteps(selectedToken, allowance, value);
+      if (steps.length) {
         autoShieldAfterApprove.current = true;
+        approvalsLeft.current = { token: selectedToken.address, values: steps.slice(1) };
+        setClearingAllowance(steps.length > 1);
         setPendingKind("approve");
         setPendingNote(note);
-        writeContract({
-          address: selectedToken.address,
-          abi: erc20Abi,
-          functionName: "approve",
-          // Exactly this deposit, never an open-ended allowance: a standing
-          // approval would let any key on this account move more than it meant to.
-          args: [network.pool, value],
-          gas: gasFor(network.chainId, APPROVE_GAS_LIMIT),
-          chainId: network.chainId,
-        });
+        sendApprove(selectedToken.address, steps[0]!);
         return;
       }
     }
 
     await executeShield(value, note, commitment);
+  }
+
+  function sendApprove(token: `0x${string}`, value: bigint) {
+    if (!network.pool) return;
+    writeContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: "approve",
+      // Exactly this deposit, never an open-ended allowance: a standing
+      // approval would let any key on this account move more than it meant to.
+      args: [network.pool, value],
+      gas: gasFor(network.chainId, APPROVE_GAS_LIMIT),
+      chainId: network.chainId,
+    });
   }
 
   // Clear in-memory pending on wallet reject / failed write
@@ -653,6 +690,8 @@ export function ShieldView() {
       setPendingKind(null);
       pendingShieldArgs.current = null;
       autoShieldAfterApprove.current = false;
+      approvalsLeft.current = null;
+      setClearingAllowance(false);
     }
   }, [writeError, pendingKind, pendingNote]);
 
@@ -760,9 +799,13 @@ export function ShieldView() {
   const ctaLabel = checking
     ? "Checking…"
     : isPending && pendingKind === "approve"
-      ? "Approve in your wallet…"
+      ? clearingAllowance
+        ? "Clear the old approval in your wallet…"
+        : "Approve in your wallet…"
       : confirming && pendingKind === "approve"
-        ? "Approving…"
+        ? clearingAllowance
+          ? "Clearing the old approval…"
+          : "Approving…"
         : proving
           ? "Preparing your private deposit…"
           : isPending && pendingKind === "shield"
