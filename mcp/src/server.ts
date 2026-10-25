@@ -33,7 +33,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
+import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
 import {
   buildShieldBoundIntent,
   artifactProver,
@@ -268,13 +268,74 @@ const STUCK_MS = 10 * 60 * 1000;
 const RELAY_MAYBE_SENT = ["maybe_sent", "rpc", "network", "error", "internal", "in_flight"];
 
 /**
+ * A wallet send that threw after its signed transaction went to the RPC, with
+ * no answer that proves the node refused it: the reply was lost (a timeout, a
+ * gateway's 504 after the node took it) or the node said it already had it. It
+ * may land. `hash` is the transaction's own hash, noted before the RPC answered.
+ * `maybeSent` is what the SDK's sweep looks for on a submitter's error.
+ */
+class WalletSendUnclear extends Error {
+  readonly maybeSent = true;
+  constructor(
+    readonly hash: Hex,
+    cause: unknown
+  ) {
+    super(errMsg(cause), { cause });
+    this.name = "WalletSendUnclear";
+  }
+}
+
+/** Node answers that can mean an earlier attempt of this same send got in (viem retries a send that timed out). */
+const SEND_ALREADY_IN = /already known|known transaction|already imported|already exists|already in (the )?(mem)?pool|nonce too low|nonce has already been used|replacement transaction underpriced|duplicate/i;
+
+/** JSON-RPC codes that say nothing about the transaction itself: unknown, internal, rate limited. */
+const UNCLEAR_RPC_CODES = new Set([-1, -32603, -32005, 429]);
+
+/** Whether the node itself answered that it refused the transaction (not a transport failure, not a duplicate). */
+function nodeRefused(err: unknown): boolean {
+  let refused = false;
+  for (let e: unknown = err, depth = 0; e && depth < 12; e = (e as { cause?: unknown }).cause, depth++) {
+    const message = `${(e as { message?: unknown }).message ?? ""} ${(e as { details?: unknown }).details ?? ""}`;
+    if (SEND_ALREADY_IN.test(message)) return false;
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "number" && !UNCLEAR_RPC_CODES.has(code)) refused = true;
+  }
+  return refused;
+}
+
+/**
+ * Send from the agent's wallet. A throw before the transaction left (gas
+ * estimation, signing, a revert in simulation) comes back as it was. A throw
+ * once it went to the RPC is a WalletSendUnclear with its hash, unless the node
+ * answered that it refused it and does not have it.
+ */
+async function walletSend(signer: Signer, send: (wallet: Signer["walletClient"]) => Promise<Hex>): Promise<Hex> {
+  const before = signer.broadcasts?.length ?? 0;
+  try {
+    return await send(signer.walletClient);
+  } catch (err) {
+    const hash = signer.broadcasts?.slice(before).at(-1);
+    if (!hash) throw err;
+    if (nodeRefused(err)) {
+      const known = await signer.publicClient.getTransaction({ hash }).then(
+        () => true,
+        (e: unknown) => !(e instanceof TransactionNotFoundError)
+      );
+      if (!known) throw err;
+    }
+    throw new WalletSendUnclear(hash, err);
+  }
+}
+
+/**
  * Whether a send that threw may still have put the transaction on chain.
  * Through the relay only a refusal it names (limits, screening, a failed dry
- * run) is sure; a lost connection or an unclear answer is not. A wallet send is
- * judged as before: no hash back, not sent.
+ * run) is sure; a lost connection or an unclear answer is not. From the wallet,
+ * a send that reached the RPC without a clear refusal may land too
+ * (WalletSendUnclear).
  */
 function mayHaveSent(err: unknown, viaRelay: boolean): boolean {
-  if (!viaRelay) return false;
+  if (!viaRelay) return err instanceof WalletSendUnclear;
   return !(err instanceof GloamRelayError) || RELAY_MAYBE_SENT.includes(err.code);
 }
 
@@ -607,13 +668,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           });
           await signer.publicClient.waitForTransactionReceipt({ hash: approveHash });
         }
-        hash = await signer.walletClient.writeContract({
-          address: intent.exec.poolAddress,
-          abi: shieldPoolAbi,
-          functionName: "shieldBound",
-          args: intent.exec.args as readonly [Address, bigint, Hex, Hex],
-          value: intent.exec.valueWei,
-        });
+        hash = await walletSend(signer, (wallet) =>
+          wallet.writeContract({
+            address: intent.exec.poolAddress,
+            abi: shieldPoolAbi,
+            functionName: "shieldBound",
+            args: intent.exec.args as readonly [Address, bigint, Hex, Hex],
+            value: intent.exec.valueWei,
+          })
+        );
         const sentHash = hash;
         const storeWarning = tryStore(() => notes.update(held!.handle, { createdTx: sentHash }));
         const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
@@ -648,6 +711,12 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         });
       } catch (err) {
         const error = errMsg(err);
+        // shieldBound went to the RPC and its reply was lost: the deposit may land, so the note is its only key.
+        if (!hash && err instanceof WalletSendUnclear) {
+          hash = err.hash;
+          const sentHash = hash;
+          tryStore(() => notes.update(held!.handle, { createdTx: sentHash }));
+        }
         settleSpend(gate, hash ? "unconfirmed" : "failed", { hash, reason: error });
         // Nothing broadcast: forget the note. Broadcast: keep it pending, it may still land.
         if (held && !hash) tryStore(() => notes.remove(held!.handle));
@@ -695,7 +764,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const gate = authorizeSpend(spend, env);
       if (!gate.ok) return text(gate.refusal);
       try {
-        const hash = await signer.walletClient.sendTransaction({ to: to as Address, value: spend.amountWei });
+        const hash = await walletSend(signer, (wallet) => wallet.sendTransaction({ to: to as Address, value: spend.amountWei }));
         const logWarning = settleSpend(gate, "sent", { hash });
         return text({
           status: "submitted",
@@ -706,6 +775,17 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         });
       } catch (err) {
         const error = errMsg(err);
+        if (err instanceof WalletSendUnclear) {
+          // It may have gone out: it counts against the limit, and the agent looks before sending again.
+          settleSpend(gate, "unconfirmed", { hash: err.hash, reason: error });
+          return text({
+            status: "error",
+            error,
+            hash: err.hash,
+            explorer: `${CHAIN.explorer}/tx/${err.hash}`,
+            check: "It may have been sent and may still land. Look the hash up before sending again.",
+          });
+        }
         settleSpend(gate, "failed", { reason: error });
         return text({ status: "error", error });
       }
@@ -740,13 +820,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             const chain = sweepChain(client, net);
             const failed = async (hash: Hex | null | undefined) =>
               !!hash && (await client.getTransactionReceipt({ hash }).then((r) => r.status === "reverted", () => false));
+            // The node has never heard of it (a send whose reply was lost, that never got there). A read error is not that.
+            const unknownTx = async (hash: Hex) =>
+              typeof client.getTransaction === "function" &&
+              (await client.getTransaction({ hash }).then(
+                () => false,
+                (e: unknown) => e instanceof TransactionNotFoundError
+              ));
+            const stuck = Date.now() - Date.parse(n.updatedAt) > STUCK_MS;
             if (n.pending === "spend") {
               if (await chain.isSpent(n.nullifier)) {
                 notes.update(n.handle, { status: "spent" });
                 refreshed.push(`${n.handle}: spent`);
-              } else if (n.spentTx ? await failed(n.spentTx) : Date.now() - Date.parse(n.updatedAt) > STUCK_MS) {
+              } else if (n.spentTx ? (await failed(n.spentTx)) || (stuck && (await unknownTx(n.spentTx))) : stuck) {
                 // Never spent on chain, and its spend reverted or was never sent: spendable again.
-                // (If a copy is still in flight it will revert: the nullifier spends once.)
+                // (If a copy is still in flight it will revert: the nullifier spends once. The
+                // change and payment it would make stay pending, so nothing is lost if it lands.)
                 notes.update(n.handle, { status: "unspent", spentTx: null });
                 refreshed.push(`${n.handle}: spendable again`);
               }
@@ -1106,6 +1195,13 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     let hash: Hex | undefined;
     let change: StoredNote | undefined;
     let sent: StoredNote | undefined;
+    /** The transaction that spends the input and makes the change and the payment, on each note, for a refresh to look up. */
+    const noteSent = (txHash: Hex) =>
+      [
+        input.handle ? tryStore(() => notes.update(input.handle!, { spentTx: txHash })) : undefined,
+        change ? tryStore(() => notes.update(change!.handle, { createdTx: txHash })) : undefined,
+        sent ? tryStore(() => notes.update(sent!.handle, { createdTx: txHash })) : undefined,
+      ].filter(Boolean);
     let sending = false;
     let viaRelay = false;
     let header: string | undefined;
@@ -1176,40 +1272,44 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       sending = true;
       hash = relay
         ? await deps.relay(payment.intent, { url: relay })
-        : await signer.walletClient.writeContract({
-            address: payment.intent.exec.poolAddress,
-            abi: POOL_TRANSFER_ABI,
-            functionName: "transfer",
-            args: transferCallArgs(payment.intent),
-          });
+        : await walletSend(signer, (wallet) =>
+            wallet.writeContract({
+              address: payment.intent.exec.poolAddress,
+              abi: POOL_TRANSFER_ABI,
+              functionName: "transfer",
+              args: transferCallArgs(payment.intent),
+            })
+          );
       const sentHash = hash;
-      const storeWarnings = [
-        input.handle ? tryStore(() => notes.update(input.handle!, { spentTx: sentHash })) : undefined,
-        change ? tryStore(() => notes.update(change!.handle, { createdTx: sentHash })) : undefined,
-        tryStore(() => notes.update(sent!.handle, { createdTx: sentHash })),
-      ].filter(Boolean);
+      const storeWarnings = noteSent(sentHash);
       const receipt = await signer.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
-        settleSpend(gate, "reverted", { hash });
         // A revert usually means nothing moved, unless the note was already spent elsewhere.
         const nullifier = fieldToHex(await noteNullifierPoseidon(hexToField(input.secret), hexToField(commitment)));
-        const spentElsewhere = await sweepChain(signer.publicClient, net).isSpent(nullifier).catch(() => false);
-        if (spentElsewhere) {
+        const spentElsewhere = await sweepChain(signer.publicClient, net).isSpent(nullifier).catch(() => null);
+        // Spent elsewhere may be an earlier copy of this same payment that went through: it still counts.
+        settleSpend(gate, spentElsewhere === false ? "reverted" : "unconfirmed", { hash });
+        if (spentElsewhere === true) {
           // Possibly by an earlier copy of this same transfer (a resend), whose change and
           // payment notes landed: keep them pending, gloam_list_notes refresh settles them.
           if (input.handle) tryStore(() => notes.update(input.handle!, { status: "spent", spentTx: null }));
-        } else {
+        } else if (spentElsewhere === false) {
           if (change) tryStore(() => notes.remove(change!.handle));
           tryStore(() => notes.remove(sent!.handle));
           release();
         }
+        // Unread (null): everything stays pending, and gloam_list_notes refresh settles it from the chain.
         return fail({
           status: "error",
-          error: spentElsewhere
-            ? `Transfer reverted (${hash}): that note was already spent by another transaction, which may be an earlier copy of this payment.`
-            : `Transfer reverted (${hash}). Nothing moved; the note is spendable again.`,
-          ...(spentElsewhere
+          error:
+            spentElsewhere === false
+              ? `Transfer reverted (${hash}). Nothing moved; the note is spendable again.`
+              : spentElsewhere
+                ? `Transfer reverted (${hash}): that note was already spent by another transaction, which may be an earlier copy of this payment.`
+                : `Transfer reverted (${hash}), and whether that note was spent by another transaction could not be read.`,
+          ...(spentElsewhere !== false
             ? {
+                hash,
                 check: "Call gloam_list_notes with refresh. If the change or the payment confirms, this payment went through: retry the request with paymentHeader and do not pay again.",
                 paymentHeader: header,
               }
@@ -1275,8 +1375,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       };
     } catch (err) {
       const error = errMsg(err);
-      // A send that threw may still have landed (a relay timeout after the node took it):
-      // only a send surely never made frees the note and forgets its outputs.
+      // A wallet send whose reply was lost: its hash was noted before the RPC answered.
+      if (!hash && err instanceof WalletSendUnclear) {
+        hash = err.hash;
+        noteSent(hash);
+      }
+      // A send that threw may still have landed (a relay timeout after the node took it, a
+      // lost reply to the wallet's broadcast): only a send surely never made frees the note
+      // and forgets its outputs.
       const maybeSent = Boolean(hash) || (sending && mayHaveSent(err, viaRelay));
       // Broadcast but unconfirmed still counts against the limit, to be safe.
       settleSpend(gate, maybeSent ? "unconfirmed" : "failed", { hash, reason: error });
@@ -1608,24 +1714,42 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     const submit = (intent: GloamIntent) =>
       relay
         ? deps.relay(intent, { url: relay })
-        : signer!.walletClient.writeContract({
-            address: net.pool,
-            abi: POOL_TRANSFER_ABI,
-            functionName: "transfer",
-            args: transferCallArgs(intent as Parameters<typeof transferCallArgs>[0]),
-          });
+        : walletSend(signer!, (wallet) =>
+            wallet.writeContract({
+              address: net.pool,
+              abi: POOL_TRANSFER_ABI,
+              functionName: "transfer",
+              args: transferCallArgs(intent as Parameters<typeof transferCallArgs>[0]),
+            })
+          );
 
     // MPP pull: the payer handed over its proven transfer; it has to land before the note can be swept.
     let paymentHash: Hex | null = null;
     if (args.pull) {
       let landed = false;
+      // Sent, or maybe sent, without a confirmation yet: it may still land.
+      let inFlight = false;
       try {
         paymentHash = await submit(payerTransferIntent(net.chainId, net.pool, args.pull));
-        landed = (await client.waitForTransactionReceipt({ hash: paymentHash })).status === "success";
-      } catch {
+        inFlight = true;
+        const status = (await client.waitForTransactionReceipt({ hash: paymentHash })).status;
+        landed = status === "success";
+        if (!landed) inFlight = false;
+      } catch (e) {
         landed = false;
+        if (e instanceof WalletSendUnclear) paymentHash = e.hash;
+        inFlight ||= mayHaveSent(e, Boolean(relay));
       }
       if (!landed) landed = await sweepChain(client, net).isCommitmentSeen(note.commitment).catch(() => false);
+      if (!landed && inFlight) {
+        return text({
+          status: "unconfirmed",
+          grantAccess: false,
+          final: false,
+          message: "The payer's transfer was sent but has not confirmed. Verify the same credential again once it lands; do not serve until then.",
+          ...(paymentHash ? { hash: paymentHash } : {}),
+        });
+      }
       if (!landed) {
         return text({
           status: "rejected",
@@ -1640,6 +1764,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     let held: StoredNote | undefined;
     // Set when the sweep's send threw in a way that does not prove it stayed unsent.
     let sweepMaybeSent = false;
+    // The sweep's hash when its send threw after the wallet broadcast it.
+    let unclearHash: Hex | null = null;
     try {
       const sweep = await sweepReceivedNote({
         note,
@@ -1650,6 +1776,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         submit: (intent) =>
           submit(intent).catch((e: unknown) => {
             sweepMaybeSent = mayHaveSent(e, Boolean(relay));
+            if (e instanceof WalletSendUnclear) {
+              unclearHash = e.hash;
+              const h = e.hash;
+              if (held) tryStore(() => notes.update(held!.handle, { createdTx: h }));
+            }
             throw e;
           }),
         // The fresh note's secret is the money: store it before the sweep is sent.
@@ -1674,21 +1805,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           });
         },
       });
+      const sweepHash = sweep.hash ?? unclearHash;
       if (sweep.status === "swept") {
-        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweep.hash }) : null;
+        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweepHash }) : null;
         const noteWarning = held
           ? tryStore(() => {
-              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweep.hash });
+              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweepHash });
               if (r) received = noteView(r);
             })
           : undefined;
         let mppReceipt: Record<string, unknown> = {};
-        if (args.mpp && sweep.hash) {
+        if (args.mpp && sweepHash) {
           const receipt: GloamChargeReceipt = {
             status: "success",
             method: "gloam",
             timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-            reference: sweep.hash,
+            reference: sweepHash,
             challengeId: args.mpp.challengeId,
             chainId: net.chainId,
             ...(args.mpp.externalId !== undefined ? { externalId: args.mpp.externalId } : {}),
@@ -1710,29 +1842,30 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           symbol,
           sealed,
           sweptBy: relay ? "gloam-relay" : "server wallet",
-          hash: sweep.hash,
-          explorer: sweep.hash ? `${net.explorer}/tx/${sweep.hash}` : null,
+          hash: sweepHash,
+          explorer: sweepHash ? `${net.explorer}/tx/${sweepHash}` : null,
           ...(paymentHash ? { paymentSubmittedBy: relay ? "gloam-relay" : "server wallet", paymentHash } : {}),
           ...mppReceipt,
         });
       }
       if (sweep.status === "unconfirmed") {
-        if (held && sweep.hash) tryStore(() => notes.update(held!.handle, { createdTx: sweep.hash }));
+        if (held && sweepHash) tryStore(() => notes.update(held!.handle, { createdTx: sweepHash }));
         return text({
           status: "unconfirmed",
           grantAccess: false,
           final: false,
           message: `${sweep.reason} Check with gloam_list_notes (refresh), then verify again.`,
-          hash: sweep.hash,
+          hash: sweepHash,
         });
       }
       if (sweep.status === "failed" && sweepMaybeSent) {
-        // The relay may have taken the sweep before its error, and the fresh note is the money if it lands: keep it pending.
+        // The relay or the RPC may have taken the sweep before its error, and the fresh note is the money if it lands: keep it pending.
         return text({
           status: "unconfirmed",
           grantAccess: false,
           final: false,
           message: "The sweep may have been sent and may still land. Check with gloam_list_notes (refresh), then verify again.",
+          ...(sweepHash ? { hash: sweepHash } : {}),
         });
       }
       if (held) tryStore(() => notes.remove(held!.handle));

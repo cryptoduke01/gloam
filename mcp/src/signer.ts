@@ -6,6 +6,7 @@ import {
   http,
   isAddress,
   isAddressEqual,
+  keccak256,
   type Account,
   type Address,
   type Chain,
@@ -90,6 +91,29 @@ export function signerSetup(env: Env = process.env):
 
 type AgentWalletClient = WalletClient<HttpTransport, Chain, Account>;
 
+/**
+ * The wallet's RPC, noting the hash of each signed transaction before it is
+ * sent. A send whose reply never comes back (a timeout, a gateway's 504 after
+ * the node took it, a retry the node answers with "already known") throws with
+ * no hash, yet the transaction may land. This is how the caller still knows
+ * which one to look for. The hash is keccak256 of the signed bytes, the same
+ * hash the node gives a typed transaction.
+ */
+function broadcastNotingTransport(rpc: string, sent: Hex[]): HttpTransport {
+  const inner = http(rpc);
+  return ((config: Parameters<HttpTransport>[0]) => {
+    const t = inner(config);
+    const request = (async (args: { method: string; params?: unknown }) => {
+      if (args.method === "eth_sendRawTransaction" || args.method === "eth_sendRawTransactionSync") {
+        const raw = Array.isArray(args.params) ? args.params[0] : undefined;
+        if (typeof raw === "string" && /^0x[0-9a-fA-F]+$/.test(raw)) sent.push(keccak256(raw as Hex));
+      }
+      return t.request(args as Parameters<typeof t.request>[0]);
+    }) as typeof t.request;
+    return { ...t, request };
+  }) as HttpTransport;
+}
+
 export interface Signer {
   /**
    * "key": the key signs as its own address (a plain wallet).
@@ -104,6 +128,12 @@ export interface Signer {
   network: McpNetwork;
   walletClient: AgentWalletClient;
   publicClient: ReturnType<typeof getPublicClient>;
+  /**
+   * The hash of every transaction this signer handed to its RPC, noted before
+   * the RPC answered, oldest first. Set on signers from getSigner; absent on
+   * test doubles.
+   */
+  broadcasts?: Hex[];
 }
 
 /**
@@ -128,25 +158,29 @@ export function getSigner(net: McpNetwork = MCP_NETWORKS.robinhood, env: Env = p
   if (setup.mode === "access-key" && net.family === "tempo") {
     const account = TempoAccount.fromSecp256k1(key, { access: setup.owner });
     const chain = tempoChainFor(net, env);
+    const broadcasts: Hex[] = [];
     return {
       mode: "access-key",
       account: account as Account,
       keyAddress: setup.keyAddress,
       network: net,
-      walletClient: createWalletClient({ account, chain, transport: http(net.rpc) }) as unknown as AgentWalletClient,
+      walletClient: createWalletClient({ account, chain, transport: broadcastNotingTransport(net.rpc, broadcasts) }) as unknown as AgentWalletClient,
       publicClient,
+      broadcasts,
     };
   }
 
   const account = privateKeyToAccount(key);
   const chain = chainFor(net);
+  const broadcasts: Hex[] = [];
   return {
     mode: "key",
     account,
     keyAddress: account.address,
     network: net,
-    walletClient: createWalletClient({ account, chain, transport: http(net.rpc) }) as unknown as AgentWalletClient,
+    walletClient: createWalletClient({ account, chain, transport: broadcastNotingTransport(net.rpc, broadcasts) }) as unknown as AgentWalletClient,
     publicClient,
+    broadcasts,
   };
 }
 
