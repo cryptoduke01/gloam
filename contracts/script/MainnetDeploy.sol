@@ -17,9 +17,10 @@ import {KeyCheckProofs} from "./KeyCheckProofs.sol";
  * The mainnet deploy every chain shares, so Tempo and Robinhood Chain get the
  * same pool wired the same way: the Groth16 verifiers from the trusted setup's
  * final keys (src/verifiers/final) and their adapters, the
- * DualProofVerifier, ShieldPoolPayments (no sealed swap), the shield verifier
- * (deposits need shieldBound()), deposit limits on with each listed asset,
- * the cash-out fee, an optional handoff to a multisig owner, and endSetup() last.
+ * DualProofVerifier, ShieldPoolPayments (no sealed swap), deposit limits on,
+ * the shield verifier (deposits need shieldBound()), each listed asset's
+ * limits, the cash-out fee, an optional handoff to a multisig owner, and
+ * endSetup() last.
  *
  * After endSetup the owner can lower a limit at once (lowerDepositLimit, down
  * to 0/0 to close deposits) but raising one or listing a new asset takes the
@@ -76,8 +77,11 @@ abstract contract MainnetDeploy is Script {
         // GATE 2: no pool until the verifiers on chain prove they hold the ceremony keys
         _requireCeremonyKeys(dual, shieldI);
         ShieldPoolPayments pool = new ShieldPoolPayments(poseidon2, dual);
-        pool.setShieldVerifier(shieldI);
+        // Limits on before deposits can work at all (shieldBound needs the shield
+        // verifier): with nothing listed yet every deposit is refused, so there is
+        // never a block where the pool takes any asset in any amount.
         pool.turnOnDepositLimits();
+        pool.setShieldVerifier(shieldI);
         for (uint256 i = 0; i < lim.assets.length; i++) {
             pool.setDepositLimit(lim.assets[i], uint128(lim.perDeposit[i]), uint128(lim.total[i]));
         }
