@@ -1,6 +1,6 @@
 # Gloam Contracts
 
-Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, with `ShieldPoolPayments` on the trusted setup's final keys, and on the testnets (Robinhood Chain `46630`, Tempo `42431`) on dev keys. The mainnet deploy (`script/DeployRobinhoodMainnet.s.sol`, `script/DeployTempoMainnet.s.sol`) uses the final keys in `src/verifiers/final` and checks them on chain before it creates the pool; see [`PRODUCTION.md`](./PRODUCTION.md). Mainnet is beta software: reviewed internally (20 October 2026, no Critical or High findings open), external audit planned.
+Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, with `ShieldPoolPayments` on the trusted setup's final keys, and on the testnets (Robinhood Chain `46630`, Tempo `42431`) on dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets on the mainnet deploy and the final keys. The mainnet deploy (`script/DeployRobinhoodMainnet.s.sol`, `script/DeployTempoMainnet.s.sol`) uses the final keys in `src/verifiers/final` and checks them on chain before it creates the pool; see [`PRODUCTION.md`](./PRODUCTION.md). Mainnet is beta software: reviewed internally (20 October 2026, no Critical or High findings open), external audit planned.
 
 ## Do we need contracts?
 
@@ -17,10 +17,10 @@ Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, wit
 | Robinhood Chain mainnet `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` | `94194599` | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 | Tempo mainnet `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` | `45172561` | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 
-- Owner and treasury: `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet at launch; a multisig is planned). Relayer: `0xb1E994586E62994648a0b866BF33F2EDd942512e` (run by the Gloam team; it only submits already-proven transactions and pays gas, and cannot move or redirect money).
+- Owner: `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned). Fee recipient: the treasury `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` since 24 October 2026 (it was the owner at launch; the change waited the 3-day timelock). Relayer: `0xb1E994586E62994648a0b866BF33F2EDd942512e` (run by the Gloam team; it only submits already-proven transactions and pays gas, and cannot move or redirect money).
 - Assets and beta deposit limits (per deposit / total): Robinhood Chain USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (500 / 25,000) and $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (25,000 / 250,000); Tempo USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73` and OUSD `0x20c0000000000000000000006a37da5c996874be` (500 / 25,000 each). ETH is gas only on Robinhood Chain, not a pool asset.
 - Deposits and private transfers are free; `unshield` keeps 0.25% (`withdrawFeeBps = 25`) for the fee recipient. Withdrawals and private transfers are never limited. Raising a limit, listing an asset or raising the fee takes the 3-day timelock; lowering a limit or the fee is instant.
-- No payment-memo board on mainnet yet. Verifier addresses: read `verifier()` and `shieldVerifier()` on the pool.
+- Payment-memo boards (`GloamPayMemo`, deployed 23 October 2026): Robinhood Chain `0x01B3172d9900Cb26d57E986429b9b23854c74598` (block `95494392`), Tempo `0x342E3745967FDB4223902E196Ceb792c15d8C1c4` (block `45417629`). Verifier addresses: read `verifier()` and `shieldVerifier()` on the pool.
 
 ## Testnet (dev keys)
 
@@ -46,12 +46,19 @@ Base Sepolia record (verifiers, assets, owner, fee recipient): [deployments/base
 | --- | --- |
 | Shield / unshield / transfer | Live on mainnet (final keys, beta deposit limits, 0.25% cash-out fee) and testnet (dev keys); no admin withdraw, 3-day timelock on rule changes |
 | Sealed private trade | Built, switched off on the testnet pools and left out of the mainnet pool (`ShieldPoolPayments`); must not be re-enabled until the H1 and ZK-1 fixes land (see audit/REMEDIATION.md) |
-| Pay memos | Live on the testnets; none on mainnet yet |
+| Pay memos | Live on the mainnets and the testnets |
 | Production keys | Done: the 13-contributor ceremony's final keys (drand round 6561386, release `ceremony-final`) in `src/verifiers/final`, used on mainnet |
 
-## Ready to deploy: Ethereum (not deployed)
+## Ethereum: Ethereum Sepolia live, Ethereum mainnet next
 
-Ethereum mainnet (`1`) runs the same `ShieldPoolPayments` deploy on the final keys: `script/DeployEthereumMainnet.s.sol`, through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, USDT, USDG, PYUSD and EURC (500 / 25,000 each) and ETH (0.2 / 10). A fork test (`test/fork/EthereumMainnetFork.t.sol`, `ETH_FORK=1`) puts real USDT and ETH through the vault with final-key proofs. Nothing is deployed yet; the runbook is [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
+Ethereum mainnet (`1`) runs the same `ShieldPoolPayments` deploy on the final keys: `script/DeployEthereumMainnet.s.sol`, through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, USDT, USDG, PYUSD and EURC (500 / 25,000 each) and ETH (0.2 / 10). A fork test (`test/fork/EthereumMainnetFork.t.sol`, `ETH_FORK=1`) puts real USDT and ETH through the vault with final-key proofs. The runbook is [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md). Ethereum Sepolia (`script/DeployEthereumSepolia.s.sol`, runbook [`DEPLOY-ETHEREUM-SEPOLIA.md`](../DEPLOY-ETHEREUM-SEPOLIA.md)) runs the same deploy with test USDC, USDG, PYUSD, EURC and ETH.
+
+| Network | Vault `ShieldPoolPayments` | Deploy block | Pay memo board |
+| --- | --- | --- | --- |
+| Ethereum Sepolia `11155111` (testnet, live since 25 October 2026) | `0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef` | `11992914` | `0x8699D015087dE6D25d55d5ceB63b34b9d773f135` |
+| Ethereum mainnet `1` | not deployed yet | | |
+
+Ethereum Sepolia record (verifiers, assets, owner, fee recipient, and why its vault is not at `0x39e2…0194`): [deployments/ethereum-sepolia.json](./deployments/ethereum-sepolia.json) and [`DEPLOY-ETHEREUM-SEPOLIA.md`](../DEPLOY-ETHEREUM-SEPOLIA.md).
 
 ## Stack
 
