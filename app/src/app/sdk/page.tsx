@@ -409,6 +409,9 @@ export default function SdkPage() {
                 >
                   SDK docs <span aria-hidden>→</span>
                 </Link>
+                <Link href="/sdk/playground" className="gl-arrowlink">
+                  Try it live <span aria-hidden>→</span>
+                </Link>
               </div>
             </div>
             <div className="relative min-w-0">
