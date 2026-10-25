@@ -64,4 +64,5 @@ export * from "./requests.js";
 export * from "./incoming.js";
 export { PAYMENT_NOTE_MAX, cleanPaymentNote } from "./paymentNote.js";
 export * from "./relay.js";
+export * from "./rpc.js";
 export * from "./api.js";

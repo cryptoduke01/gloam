@@ -1,6 +1,7 @@
 import { defineChain, formatUnits, zeroAddress, type Address, type Chain } from "viem";
 import { base, baseSepolia, mainnet as ethereum, sepolia } from "viem/chains";
 import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPoolFor, type MainnetChainId } from "./mainnet.js";
+import type { HistoryRpc } from "./rpc.js";
 
 /** Native ETH is represented as the zero address across the vault. */
 export const NATIVE_ASSET: Address = zeroAddress;
@@ -266,15 +267,27 @@ export const ETHEREUM_MAINNET_CHAIN: Chain = defineChain({
 
 /**
  * Ethereum Sepolia (11155111), from viem's definition. The default RPC is
- * Tenderly's public gateway: it keeps the whole history and answers wide
- * eth_getLogs, which rebuilding the pool tree from its deploy block needs.
- * publicnode, second, keeps only about the last 10,000 blocks.
+ * publicnode's: it is at the chain head, so receipts and fresh state show up
+ * within seconds, but it keeps only about the last 10,000 blocks of logs,
+ * receipts and state. Older reads (rebuilding the pool tree from its deploy
+ * block) go to Tenderly's public gateway, ETHEREUM_SEPOLIA_HISTORY_RPC, which
+ * keeps everything but trails the head by up to a few minutes. Read through
+ * gloamReadTransport(network) to get both. Checked 2026-10-25.
  */
 export const ETHEREUM_SEPOLIA_CHAIN: Chain = defineChain({
   ...sepolia,
   name: "Ethereum Sepolia",
-  rpcUrls: { default: { http: ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"] } },
+  rpcUrls: { default: { http: ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"] } },
 });
+
+/**
+ * Ethereum Sepolia's history RPC: logs, receipts and state older than 9,000
+ * blocks (about 30 hours), under the roughly 10,000 that publicnode keeps.
+ */
+export const ETHEREUM_SEPOLIA_HISTORY_RPC: HistoryRpc = {
+  url: "https://sepolia.gateway.tenderly.co",
+  recentBlocks: 9_000n,
+};
 
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
@@ -361,7 +374,14 @@ export interface GloamNetwork {
   ceremony: CeremonyKind;
   /** viem chain, for clients and wallet_addEthereumChain. */
   chain: Chain;
+  /** The RPC at the chain head: receipts, fresh state, sends. */
   rpcUrl: string;
+  /**
+   * Where reads about old blocks go when `rpcUrl` keeps only recent history
+   * (Ethereum Sepolia), or null where `rpcUrl` keeps everything. Read through
+   * gloamReadTransport(network) and both are used for you.
+   */
+  historyRpc: HistoryRpc | null;
   explorerUrl: string;
   /** Assets the pool takes, with beta deposit limits on the payments pools. */
   assets: GloamAsset[];
@@ -390,6 +410,7 @@ export const GLOAM_NETWORKS: Record<"robinhood" | "tempo", GloamTestnetNetwork> 
     ceremony: "dev",
     chain: RH_TESTNET_CHAIN,
     rpcUrl: "https://rpc.testnet.chain.robinhood.com",
+    historyRpc: null,
     explorerUrl: "https://explorer.testnet.chain.robinhood.com",
     // Plus the faucet stock tokens (TSLA, AMZN, PLTR, NFLX, AMD), testnet only.
     assets: [
@@ -410,6 +431,7 @@ export const GLOAM_NETWORKS: Record<"robinhood" | "tempo", GloamTestnetNetwork> 
     ceremony: "dev",
     chain: TEMPO_TESTNET_CHAIN,
     rpcUrl: "https://rpc.moderato.tempo.xyz",
+    historyRpc: null,
     explorerUrl: "https://explore.testnet.tempo.xyz",
     assets: [
       { symbol: "PathUSD", address: TEMPO_PATHUSD, decimals: 6, depositLimit: null },
@@ -456,6 +478,7 @@ function buildMainnet(family: GloamChainFamily): GloamNetwork | null {
     ceremony: "production",
     chain: spec.chain,
     rpcUrl: spec.chain.rpcUrls.default.http[0]!,
+    historyRpc: null,
     explorerUrl: spec.chain.blockExplorers!.default.url,
     assets: spec.assets,
   };
@@ -489,6 +512,7 @@ const BASE_TESTNET: GloamNetwork | null = (() => {
     ceremony: "production",
     chain: BASE_SEPOLIA_CHAIN,
     rpcUrl: BASE_SEPOLIA_CHAIN.rpcUrls.default.http[0]!,
+    historyRpc: null,
     explorerUrl: BASE_SEPOLIA_CHAIN.blockExplorers!.default.url,
     assets: BASE_SEPOLIA_ASSETS,
   };
@@ -515,6 +539,7 @@ const ETHEREUM_TESTNET: GloamNetwork | null = (() => {
     ceremony: "production",
     chain: ETHEREUM_SEPOLIA_CHAIN,
     rpcUrl: ETHEREUM_SEPOLIA_CHAIN.rpcUrls.default.http[0]!,
+    historyRpc: ETHEREUM_SEPOLIA_HISTORY_RPC,
     explorerUrl: ETHEREUM_SEPOLIA_CHAIN.blockExplorers!.default.url,
     assets: ETHEREUM_SEPOLIA_ASSETS,
   };

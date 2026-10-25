@@ -57,6 +57,8 @@ const {
   ETHEREUM_SEPOLIA_PYUSD,
   ETHEREUM_SEPOLIA_EURC,
   BASE_SEPOLIA_USDC,
+  approvalSteps,
+  approveNeedsReset,
 } = await import("../dist/index.js");
 
 let checks = 0;
@@ -93,8 +95,8 @@ assert(ETHEREUM_SEPOLIA_CHAIN_ID === 11155111 && ETHEREUM_SEPOLIA_CHAIN.id === 1
 assert(ETHEREUM_SEPOLIA_CHAIN.testnet === true && ETHEREUM_SEPOLIA_CHAIN.name === "Ethereum Sepolia", "a testnet named Ethereum Sepolia");
 assert(ETHEREUM_SEPOLIA_CHAIN.blockExplorers.default.url === "https://sepolia.etherscan.io", "explorer");
 assert(
-  ETHEREUM_SEPOLIA_CHAIN.rpcUrls.default.http.join() === "https://sepolia.gateway.tenderly.co,https://ethereum-sepolia-rpc.publicnode.com",
-  "an RPC that keeps the whole log history first, publicnode second"
+  ETHEREUM_SEPOLIA_CHAIN.rpcUrls.default.http.join() === "https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.gateway.tenderly.co",
+  "publicnode first (at the head), Tenderly's gateway second"
 );
 assert(
   ETHEREUM_SEPOLIA_ASSETS.map((a) => `${a.symbol}:${a.address}:${a.decimals}`).join() ===
@@ -110,6 +112,15 @@ assert(
 for (const a of ETHEREUM_SEPOLIA_ASSETS) {
   const want = a.symbol === "ETH" ? [2n * 10n ** 17n, 10n * 10n ** 18n] : [500n * SIX, 25_000n * SIX];
   assert(a.depositLimit.perDeposit === want[0] && a.depositLimit.total === want[1], `${a.symbol}: the deploy's beta limits`);
+}
+// No Sepolia token needs its allowance reset first (Tether issues no USDT there):
+// a deposit approves the exact amount once, or nothing when the allowance covers it.
+for (const a of ETHEREUM_SEPOLIA_ASSETS.filter((x) => x.address !== NATIVE_ASSET)) {
+  assert(!approveNeedsReset(11155111, a.address), `${a.symbol}: no reset to 0 first`);
+  const steps = (allowance) => approvalSteps(11155111, a.address, allowance, 20n * SIX).map(String).join(",");
+  assert(steps(0n) === String(20n * SIX), `${a.symbol}: no allowance, one exact approve`);
+  assert(steps(5n * SIX) === String(20n * SIX), `${a.symbol}: a smaller allowance, one exact approve and no reset`);
+  assert(steps(20n * SIX) === "" && steps(40n * SIX) === "", `${a.symbol}: an allowance that covers it, nothing to approve`);
 }
 assert(isPaymentsPoolChainId(11155111) && !isMainnetChainId(11155111), "the payments pool, on a testnet");
 assert(ceremonyForChainId(11155111) === "production", "proofs for Sepolia always use the final keys, pool or not");
@@ -142,7 +153,8 @@ if (CONFIGURED || live !== null) {
   assert(n && n.key === "ethereum" && n.family === "ethereum" && n.label === "Ethereum", "the network");
   assert(n.chainId === 11155111 && n.pool === pool && n.testnet === true && n.ceremony === "production", "pool, testnet, final keys");
   assert(n.nativeShield === true && n.assets === ETHEREUM_SEPOLIA_ASSETS, "ETH and the stablecoins listed");
-  assert(n.rpcUrl === "https://sepolia.gateway.tenderly.co" && n.explorerUrl === "https://sepolia.etherscan.io", "rpc and explorer");
+  assert(n.rpcUrl === "https://ethereum-sepolia-rpc.publicnode.com" && n.explorerUrl === "https://sepolia.etherscan.io", "rpc at the head, and explorer");
+  assert(n.historyRpc?.url === "https://sepolia.gateway.tenderly.co" && n.historyRpc.recentBlocks === 9_000n, "old blocks from Tenderly's gateway, which keeps the whole history");
   const keys = gloamNetworks().map((x) => x.key);
   assert(keys[keys.length - 1] === "ethereum" && keys.indexOf("ethereum") > keys.indexOf("tempo"), `listed after the other testnets (${keys.join()})`);
   assert(getGloamNetwork("ethereum") === n && networkForChainId(11155111) === n && poolForChainId(11155111) === pool, "lookups");
