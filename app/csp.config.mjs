@@ -23,9 +23,10 @@ const GLOAM_RPCS = [
   // Ethereum mainnet reads through MEV Blocker, with publicnode behind it
   "https://rpc.mevblocker.io",
   "https://ethereum-rpc.publicnode.com",
-  // Ethereum Sepolia reads through Tenderly's gateway (it keeps the whole history), publicnode behind it
-  "https://sepolia.gateway.tenderly.co",
+  // Ethereum Sepolia reads through publicnode (at the head), and logs and state
+  // older than 9,000 blocks through Tenderly's gateway (it keeps the whole history)
   "https://ethereum-sepolia-rpc.publicnode.com",
+  "https://sepolia.gateway.tenderly.co",
 ];
 
 /** Default RPCs of the chains a private bridge order can be paid from (lib/originChains). */

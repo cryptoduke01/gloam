@@ -97,7 +97,9 @@ check("the entry is always defined: a testnet on the mainnet pool and final keys
   assert.equal(n.stocks, false);
   assert.equal(n.primaryAsset.symbol, "ETH");
   assert.equal(n.logRange, 50_000n);
-  assert.deepEqual(n.chain.rpcUrls.default.http, ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"]);
+  // publicnode first, at the head; Tenderly's gateway (the whole history, trailing the head) for old blocks
+  assert.deepEqual(n.chain.rpcUrls.default.http, ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"]);
+  assert.deepEqual(n.historyRpc, { url: "https://sepolia.gateway.tenderly.co", recentBlocks: 9_000n });
   assert.equal(n.explorerTx("0xab"), "https://sepolia.etherscan.io/tx/0xab");
   assert.equal(n.explorerAddress("0xcd"), "https://sepolia.etherscan.io/address/0xcd");
   assert.equal(nets.networkName(n), "Ethereum Sepolia");

@@ -25,7 +25,7 @@ import {
 import { getNetwork, type GloamNetwork, type NetworkKey } from "@/lib/networks";
 import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { getLogsSafe } from "@/lib/logRange";
-import { rpcListTransport } from "@/lib/rpcList";
+import { readTransport } from "@/lib/readTransport";
 
 export type ActivityKind = "deposit" | "transfer" | "cashout" | "trade";
 
@@ -140,9 +140,10 @@ export function clientFor(n: GloamNetwork): PublicClient {
   if (hit) return hit;
   const c = createPublicClient({
     chain: n.chain,
-    // The chain's public RPCs in order (lib/rpcList); 429s, 5xx and timeouts are
-    // retried with exponential backoff (0.5s, 1s, 2s, 4s).
-    transport: rpcListTransport(n.chain.rpcUrls.default.http, { timeout: 20_000, retryCount: 4, retryDelay: 500 }),
+    // The chain's public RPCs in order (lib/rpcList), and old logs from the
+    // network's history RPC where they keep only recent ones (lib/readTransport);
+    // 429s, 5xx and timeouts are retried with exponential backoff (0.5s, 1s, 2s, 4s).
+    transport: readTransport(n, { timeout: 20_000, retryCount: 4, retryDelay: 500 }),
   });
   clients.set(n.chainId, c);
   return c;

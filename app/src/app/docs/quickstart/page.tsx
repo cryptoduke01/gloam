@@ -113,7 +113,7 @@ circuitArtifactUrls("shield", 46630);  // dev keys, Robinhood Chain testnet`}</c
       <pre>
         <code>{`import {
   mainnetNetwork, buildShieldBoundIntent, artifactProver,
-  circuitArtifactUrls, RH_MAINNET_USDG,
+  circuitArtifactUrls, RH_MAINNET_USDG, gloamReadTransport,
 } from "@gloamtrade/sdk";
 import { createWalletClient, createPublicClient, http, parseUnits, erc20Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -124,7 +124,8 @@ if (!net) throw new Error("Robinhood Chain mainnet pool not published yet");
 
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as \`0x\${string}\`);
 const wallet = createWalletClient({ account, chain: net.chain, transport: http(net.rpcUrl) });
-const publicClient = createPublicClient({ chain: net.chain, transport: http(net.rpcUrl) });
+// reads at the chain head, old logs from the network's full-history RPC where it names one
+const publicClient = createPublicClient({ chain: net.chain, transport: gloamReadTransport(net) });
 
 const amount = parseUnits("25", 6);   // 25 USDG (6 decimals); beta cap is 500 per deposit
 

@@ -36,11 +36,16 @@ for (const c of ORIGIN_CHAINS) {
 // every Gloam network's own RPCs, the hidden ones too (a mainnet waiting for its
 // pool): lib/wagmi wires some from the chain object, http(chain.rpcUrls...),
 // which the string check below cannot see
-const KEYS: NetworkKey[] = ["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"];
+const KEYS: NetworkKey[] = ["robinhood", "tempo", "base", "ethereum", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"];
 for (const key of KEYS) {
-  const c = getNetwork(key).chain;
-  for (const url of c.rpcUrls.default.http) {
+  const net = getNetwork(key);
+  for (const url of net.chain.rpcUrls.default.http) {
     assert.ok(allowed(url), `${key} RPC ${url} is in connect-src`);
+    n++;
+  }
+  // old logs and state are read from the browser too (lib/readTransport)
+  if (net.historyRpc) {
+    assert.ok(allowed(net.historyRpc.url), `${key} history RPC ${net.historyRpc.url} is in connect-src`);
     n++;
   }
 }

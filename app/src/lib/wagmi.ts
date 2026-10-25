@@ -3,7 +3,8 @@
 import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { robinhood, robinhoodTestnet } from "./chain";
-import { NETWORK_KEYS, baseMainnet, baseTestnet, ethereumMainnet, ethereumTestnet, tempoMainnet, tempoTestnet } from "./networks";
+import { NETWORK_KEYS, baseMainnet, baseTestnet, ethereumMainnet, ethereumTestnet, getNetwork, tempoMainnet, tempoTestnet } from "./networks";
+import { BLOCK_POLL_MS, readTransport } from "./readTransport";
 import { ORIGIN_CHAINS } from "./originChains";
 import { turnkeyConnector } from "./turnkeyConnector";
 import { tempoFeeAware } from "./feeSponsor";
@@ -68,6 +69,13 @@ const chains = [
   typeof ethereumMainnet,
 ];
 
+// Ethereum's 12 s blocks: receipt waits look for a new one every 2 s. Keyed by
+// chain id, and only for chains registered here: wagmi hands a map with none of
+// a client's chain ids to that client whole. Other chains keep viem's default.
+const pollingInterval: { [id: number]: number } = Object.fromEntries(
+  chains.flatMap((c) => (BLOCK_POLL_MS[c.id] ? [[c.id, BLOCK_POLL_MS[c.id]!]] : []))
+);
+
 export const wagmiConfig = createConfig({
   chains,
   connectors: [
@@ -89,9 +97,11 @@ export const wagmiConfig = createConfig({
     [baseMainnet.id]: rpcListTransport(baseMainnet.rpcUrls.default.http, { batch: { wait: 16 }, retryCount: 2 }),
     // Until Ethereum is a Gloam network, the origin-chain entry below replaces this one.
     [ethereumMainnet.id]: rpcListTransport(ethereumMainnet.rpcUrls.default.http, { batch: { wait: 16 }, retryCount: 2 }),
-    [ethereumTestnet.id]: rpcListTransport(ethereumTestnet.rpcUrls.default.http, { batch: { wait: 16 }, retryCount: 2 }),
+    // Ethereum Sepolia: the list for the head, old logs and state from its history RPC (lib/readTransport)
+    [ethereumTestnet.id]: readTransport(getNetwork("ethereum"), { batch: { wait: 16 }, retryCount: 2 }),
     ...Object.fromEntries(originChains.map((c) => [c.id, http()])),
   },
+  ...(Object.keys(pollingInterval).length ? { pollingInterval } : {}),
   ssr: true,
   storage: createStorage({
     storage: cookieStorage,

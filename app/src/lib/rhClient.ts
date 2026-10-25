@@ -8,7 +8,7 @@
 
 import { createPublicClient, type PublicClient } from "viem";
 import { getActiveNetwork, type GloamNetwork } from "./networks";
-import { rpcListTransport } from "./rpcList";
+import { readTransport } from "./readTransport";
 
 const cache = new Map<number, PublicClient>();
 
@@ -19,13 +19,14 @@ const cache = new Map<number, PublicClient>();
  * chain: several vaults share one address, and a read there answers for the
  * wrong chain without failing.
  */
-export function publicClientFor(net: Pick<GloamNetwork, "chainId" | "chain">): PublicClient {
+export function publicClientFor(net: Pick<GloamNetwork, "chainId" | "chain" | "historyRpc">): PublicClient {
   const existing = cache.get(net.chainId);
   if (existing) return existing;
   const client = createPublicClient({
     chain: net.chain,
-    // the chain's public RPCs in order: one that is down is passed over for a while (lib/rpcList)
-    transport: rpcListTransport(net.chain.rpcUrls.default.http, {
+    // the chain's public RPCs in order, one that is down passed over for a while
+    // (lib/rpcList); old logs and state from the network's history RPC (lib/readTransport)
+    transport: readTransport(net, {
       timeout: 25_000,
       retryCount: 2,
     }),

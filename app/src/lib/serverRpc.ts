@@ -26,8 +26,9 @@
 import { fallback, http, type HttpTransportConfig, type Transport } from "viem";
 import type { GloamNetwork } from "./networks";
 import { SEND_METHODS, nodeFailed, resetRpcRest, rpcListTransport } from "./rpcList";
+import { readTransport } from "./readTransport";
 
-type Net = Pick<GloamNetwork, "chainId" | "chain">;
+type Net = Pick<GloamNetwork, "chainId" | "chain" | "historyRpc">;
 
 function privateRpc(net: Net): string | null {
   return process.env[`GLOAM_RPC_URL_${net.chainId}`]?.trim() || null;
@@ -153,13 +154,19 @@ function checkedPrivate(url: string, chainId: number, config: HttpTransportConfi
 export function serverTransport(net: Net, config: HttpTransportConfig = {}, opts: { sendOnce?: boolean } = {}): Transport {
   const urls = net.chain.rpcUrls.default.http;
   const priv = privateRpc(net);
-  if (!priv || priv === urls[0]) return rpcListTransport(urls, config, opts.sendOnce ? { sendTo: "one" } : {});
+  // The public side reads the way the browser does (lib/readTransport): the
+  // chain's public RPCs in order for the head, and old logs and state from the
+  // network's history RPC where it has one. A send goes to one head RPC only.
+  if (!priv || priv === urls[0]) return readTransport(net, config, opts.sendOnce ? { sendTo: "one" } : {});
   // the fallback retries the pair as a whole; each side asks each of its RPCs once a pass
   const once = { ...config, retryCount: 0 };
   if (!opts.sendOnce) {
-    return fallback([checkedPrivate(priv, net.chainId, config), rpcListTransport(urls, once)], { retryCount: config.retryCount });
+    return fallback([checkedPrivate(priv, net.chainId, config), readTransport(net, once)], { retryCount: config.retryCount });
   }
+  // sendInstead only ever takes a send: one head RPC
   const own = checkedPrivate(priv, net.chainId, config, rpcListTransport(urls, once, { sendTo: "one" }));
-  const backup = rpcListTransport(urls, { ...once, methods: { exclude: SEND_METHODS } });
+  // The backup never gets a raw send. Its exclusion has to show on the transport
+  // fallback reads (config.methods), which the history split carries over from the head list.
+  const backup = readTransport(net, { ...once, methods: { exclude: SEND_METHODS } });
   return fallback([own, backup], { retryCount: config.retryCount });
 }
