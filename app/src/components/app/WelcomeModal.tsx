@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Mark } from "@/components/Logo";
 import { SealedField } from "@/components/ui/SealedField";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { readDemo } from "@/lib/demoFlag";
 import { MAINNET_CONFIGURED, MAINNET_LAUNCH_MS, isMainnetLive, liveMainnetNames } from "@/lib/mainnet";
 
@@ -58,6 +59,10 @@ export function WelcomeModal() {
     }
     setOpen(false);
   }
+
+  // Focus starts on Enter the app and stays in the welcome; Escape closes it.
+  const enter = useRef<HTMLButtonElement>(null);
+  useModalFocus(ref, dismiss, { initial: enter, open });
 
   return (
     <>
@@ -161,6 +166,7 @@ export function WelcomeModal() {
 
         <div className="flex flex-wrap gap-2 px-7 pb-7 pt-5">
           <button
+            ref={enter}
             type="button"
             onClick={dismiss}
             className="btn btn-ink h-[44px] flex-1 px-[20px] sm:h-12 sm:px-6 sm:text-[15px]"
