@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useReadContract, useReadContracts } from "wagmi";
 import {
   decodeEventLog,
@@ -16,6 +17,7 @@ import {
   useAppAccount,
   useAppBalance,
   useAppTokenBalance,
+  useAppTokenBalances,
   useAppTxReceipt,
   useAppWriteContract,
 } from "@/lib/demo";
@@ -45,6 +47,9 @@ import { BridgeInCard } from "./BridgeIn";
 import { RefreshIcon } from "./VaultHealth";
 import { BRIDGE_DESTINATIONS, bridgeVisible } from "@/lib/bridge";
 import { countPerson } from "@/lib/people";
+import { pickAddAsset, vaultActionSearch } from "@/lib/vaultHub";
+import { faucetFor } from "@/lib/faucet";
+import { TempoFaucetButton } from "./TempoFaucetButton";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
@@ -64,9 +69,20 @@ export function ShieldView() {
     refresh: refreshNotes,
   } = useLocalShieldNotes(address);
 
-  const [assetChoice, setAssetChoice] = useState<AssetChoice>("eth");
   const tokens = shieldTokensFor(network.chainId);
   const nativeOk = supportsNativeShield(network.chainId);
+  // A link can pick the asset (?asset=usdg, from a Holdings row or the Vault
+  // overview); that choice, or one made here, is never changed for you.
+  const searchParams = useSearchParams();
+  const askedAsset = searchParams.get("asset");
+  const askedValid =
+    askedAsset !== null &&
+    (askedAsset === "eth" ? nativeOk : tokens.some((t) => t.id === askedAsset));
+  const [assetChoice, setAssetChoice] = useState<AssetChoice>(() =>
+    askedValid ? askedAsset! : nativeOk ? "eth" : tokens[0]?.id ?? "eth"
+  );
+  // The network an asset was picked on, by a link or by hand; there it stays.
+  const [pickedOn, setPickedOn] = useState<number | null>(askedValid ? network.chainId : null);
   const selectedToken =
     assetChoice === "eth"
       ? null
@@ -88,6 +104,19 @@ export function ShieldView() {
     chainId: network.chainId,
     enabled: Boolean(address),
   });
+
+  // Every asset the vault takes, read once, so the form opens on one this
+  // wallet holds rather than on one it has none of.
+  const tokenAddrs = useMemo(() => tokens.map((t) => t.address), [tokens]);
+  const allTokenBals = useAppTokenBalances({
+    tokens: tokenAddrs,
+    address,
+    chainId: network.chainId,
+    enabled: Boolean(address && onProduct),
+  });
+  const walletEmpty =
+    !allTokenBals.some((b) => b === undefined || b > BigInt(0)) &&
+    (!nativeOk || (ethBal !== undefined && ethBal.value === BigInt(0)));
 
   const { data: tokenBal, refetch: refetchTok } = useAppTokenBalance({
     token: selectedToken?.address,
@@ -237,6 +266,33 @@ export function ShieldView() {
     verifier !== "0x0000000000000000000000000000000000000000";
 
   const [amount, setAmount] = useState("");
+
+  // The first time every balance is in for this wallet and network, open on
+  // an asset it holds (a dollar stablecoin first), unless one was picked. Once
+  // per wallet and network, so the form never jumps under you.
+  const [autoFor, setAutoFor] = useState<string | null>(null);
+  const autoKey = address && onProduct ? `${network.chainId}:${address}` : null;
+  if (
+    autoKey &&
+    autoFor !== autoKey &&
+    pickedOn !== network.chainId &&
+    !allTokenBals.some((b) => b === undefined) &&
+    (!nativeOk || ethBal)
+  ) {
+    setAutoFor(autoKey);
+    const best = pickAddAsset([
+      ...(nativeOk && ethBal ? [{ id: "eth", amount: Number(formatEther(ethBal.value)), dollar: false }] : []),
+      ...tokens.map((t, i) => ({
+        id: t.id,
+        amount: Number(formatUnits(allTokenBals[i] ?? BigInt(0), t.decimals)),
+        dollar: isDollarStable(t),
+      })),
+    ]);
+    if (best && best.id !== assetChoice) {
+      setAssetChoice(best.id);
+      setAmount("");
+    }
+  }
   const [formError, setFormError] = useState<string | null>(null);
   const vault = useVaultStatus();
   // Sanctions screening of the depositing wallet (public address only). Checked
@@ -393,8 +449,7 @@ export function ShieldView() {
           is now in your private balance. Only you can see it.
         </p>
         <p className="mt-2">
-          Open <strong className="font-medium text-foreground">Pay</strong> to
-          send it privately or cash out.
+          From the Vault you can pay privately or cash out to any wallet.
         </p>
       </>
     );
@@ -757,6 +812,28 @@ export function ShieldView() {
       }))
     : [];
 
+  // What stops this deposit before the wallet is asked, said on the button
+  // itself; the checks on submit (validate) stay as they were.
+  const working = busy || proving || checking;
+  const typedValue = amount.trim() && !amountProblem ? parseAmount() : null;
+  const liveLimit = typedValue !== null && typedValue > BigInt(0) ? limitProblem(typedValue) : null;
+  const ctaStop: string | null = working
+    ? null
+    : walletBalance === BigInt(0)
+      ? `No ${symbol} in this wallet`
+      : !amount.trim() || (typedValue !== null && typedValue <= BigInt(0))
+        ? "Enter an amount"
+        : amountProblem
+          ? "Enter a valid amount"
+          : typedValue !== null && walletBalance !== undefined && typedValue > walletBalance
+            ? `Not enough ${symbol}`
+            : liveLimit
+              ? limit && limit[1] === BigInt(0)
+                ? `${symbol} deposits are closed`
+                : "Over the beta limit"
+              : null;
+  const faucet = network.testnet ? faucetFor(network.key) : null;
+
   const ctaLabel = checking
     ? "Checking…"
     : isPending && pendingKind === "approve"
@@ -783,10 +860,9 @@ export function ShieldView() {
           <DevKeysBanner compact />
 
           <div className="min-w-0">
-            <h2 className="t-title text-foreground">Add money privately</h2>
+            <h2 className="t-title text-foreground">Add privately</h2>
             <p className="mt-1 text-[14px] leading-relaxed text-mute">
-              Move funds from your wallet into your private balance. From there
-              you can pay anyone without the amount showing up.
+              Move money from your wallet into your private balance.
             </p>
           </div>
 
@@ -827,7 +903,7 @@ export function ShieldView() {
                   className="tnum -my-2 inline-flex min-h-10 min-w-0 items-center gap-1.5 text-mute transition-colors hover:text-foreground disabled:opacity-45"
                 >
                   <span className="truncate">
-                    Balance {isConnected ? maxDisplay : "0"} {symbol}
+                    In wallet {isConnected ? maxDisplay : "0"} {symbol}
                   </span>
                   <span className="font-medium text-foreground">Max</span>
                 </button>
@@ -851,6 +927,7 @@ export function ShieldView() {
                   label="Asset to add"
                   value={assetChoice}
                   onChange={(v) => {
+                    setPickedOn(network.chainId);
                     setAssetChoice(v);
                     setAmount("");
                   }}
@@ -867,8 +944,11 @@ export function ShieldView() {
                   ]}
                 />
               </div>
-              <p className={`tnum mt-1 min-h-5 text-[13px] ${amountProblem ? "text-danger" : "text-mute"}`} role={amountProblem ? "alert" : undefined}>
-                {amountProblem ?? (usdHint ? `≈ ${usdHint}` : " ")}
+              <p
+                className={`tnum mt-1 min-h-5 text-[13px] ${amountProblem ? "text-danger" : liveLimit ? "text-warn" : "text-mute"}`}
+                role={amountProblem || liveLimit ? "alert" : undefined}
+              >
+                {amountProblem ?? liveLimit ?? (usdHint ? `≈ ${usdHint}` : " ")}
               </p>
             </div>
 
@@ -934,12 +1014,37 @@ export function ShieldView() {
             ) : (
               <button
                 type="submit"
-                disabled={busy || proving || checking}
+                disabled={working || ctaStop !== null}
                 className="btn btn-ink btn-lg btn-block"
               >
-                {(busy || proving || checking) && <Spinner />}
-                {ctaLabel}
+                {working && <Spinner />}
+                {ctaStop ?? ctaLabel}
               </button>
+            )}
+            {/* Nothing the vault takes is in this wallet: say where it comes from. */}
+            {connectedOk && !screenBlocked && walletEmpty && !working && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[16px] bg-surface px-4 py-3">
+                <p className="min-w-0 text-[13.5px] leading-relaxed text-soft">
+                  {faucet
+                    ? "Nothing to add yet. Get testnet funds first."
+                    : bridgeVisible(network)
+                      ? `Nothing to add yet. Send ${tokens.map((t) => t.symbol).join(" or ")} to this wallet, or bring money over from another chain.`
+                      : `Nothing to add yet. Send ${tokens.map((t) => t.symbol).join(" or ")} to this wallet first.`}
+                </p>
+                {faucet &&
+                  (network.key === "tempo" ? (
+                    <TempoFaucetButton className="btn btn-ghost h-10 shrink-0" />
+                  ) : (
+                    <a
+                      href={faucet.url}
+                      target={faucet.url.startsWith("http") ? "_blank" : undefined}
+                      rel={faucet.url.startsWith("http") ? "noreferrer" : undefined}
+                      className="btn btn-ghost h-10 shrink-0"
+                    >
+                      Get testnet funds
+                    </a>
+                  ))}
+              </div>
             )}
           </div>
 
@@ -981,10 +1086,10 @@ export function ShieldView() {
             actions={
               balanceRows.length > 0 ? (
                 <>
-                  <Link href="/app/vault?tab=move" className="btn btn-ink btn-sm">
-                    Send privately
+                  <Link href={`/app/vault${vaultActionSearch("pay", "")}`} className="btn btn-ghost btn-sm h-10">
+                    Pay privately
                   </Link>
-                  <Link href="/app/vault?tab=move&mode=cashout" className="btn btn-ghost btn-sm">
+                  <Link href={`/app/vault${vaultActionSearch("cashout", "")}`} className="btn btn-ghost btn-sm h-10">
                     Cash out
                   </Link>
                 </>
@@ -1002,7 +1107,10 @@ export function ShieldView() {
                   ? (tokens.find((t) => t.address.toLowerCase() === dest.address.toLowerCase()) ??
                     tokens.find((t) => t.symbol === dest.symbol))
                   : undefined;
-                if (landed) setAssetChoice(landed.id as AssetChoice);
+                if (landed) {
+                  setPickedOn(network.chainId);
+                  setAssetChoice(landed.id as AssetChoice);
+                }
                 setAmount(arrived);
                 // The new balance can take a few seconds to show on the RPC.
                 void refreshBalances();
@@ -1121,7 +1229,7 @@ function PrivateBalanceCard({
                 onClick={() => setHidden((v) => !v)}
                 aria-pressed={hidden}
                 aria-label={hidden ? "Show amounts" : "Hide amounts"}
-                className="-mr-2 grid h-9 w-9 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
+                className="-mr-2 grid h-10 w-10 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
               >
                 <EyeIcon off={hidden} />
               </button>
