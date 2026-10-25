@@ -223,7 +223,7 @@ export interface NotePackage {
   /**
    * The chain the payment is on. The vault has one address on every chain and
    * native ETH is 0x0 everywhere, so pool and asset alone can't tell Base from
-   * Base Sepolia or Ethereum. Packages made since SDK 0.3.0 carry it (`ch`);
+   * Base Sepolia or Ethereum. Packages made since SDK 0.4.0 carry it (`ch`);
    * older ones don't, and readers skip a key they don't know.
    */
   chainId?: number;
