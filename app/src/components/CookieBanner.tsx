@@ -26,7 +26,7 @@ export function CookieBanner() {
     <div
       role="dialog"
       aria-label="Cookie consent"
-      className="fixed bottom-3 left-3 right-3 z-50 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
+      className="gl-cookie fixed bottom-3 left-3 right-3 z-50 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
     >
       <div className="rounded-[20px] border border-line bg-panel/95 p-4 shadow-pop backdrop-blur-xl sm:p-5">
         <p className="text-[14px] text-foreground max-sm:hidden">Cookies</p>

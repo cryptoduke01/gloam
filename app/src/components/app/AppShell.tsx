@@ -172,6 +172,38 @@ function ProductNav({
 }
 
 /**
+ * Phones and tablets: the top-level places as a tab bar along the bottom, in
+ * reach of a thumb and always in view (Apple's guidance for a tab bar: a few
+ * top-level places, no More tab). The menu at the top keeps the rest:
+ * Vault's actions, Settings, Docs and the network.
+ */
+function TabBar({ items, pathname }: { items: NavItem[]; pathname: string }) {
+  return (
+    <nav aria-label="App tabs" className="gl-tabbar fixed inset-x-0 bottom-0 z-30 border-t border-line bg-background/92 backdrop-blur-xl">
+      <ul className="mx-auto flex max-w-[640px] items-stretch justify-around px-2">
+        {items.map((item) => {
+          const active = isActive(pathname, item.href, item.exact);
+          return (
+            <li key={item.href} className="min-w-0 flex-1">
+              <Link
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`flex h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] leading-none transition-colors ${
+                  active ? "font-medium text-foreground" : "text-mute hover:text-foreground"
+                }`}
+              >
+                {item.icon}
+                <span className="max-w-full truncate">{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/**
  * The app frame: a floating sidebar on desktop (the app.zama.org pattern), a
  * slim top bar with a sheet on mobile, and a calm page header.
  */
@@ -305,7 +337,9 @@ export function AppShell({
         )}
       </header>
 
-      <div className="flex flex-1 flex-col lg:pl-[272px]">
+      <TabBar items={navItems} pathname={pathname} />
+
+      <div className="gl-tabbar-space flex flex-1 flex-col lg:pl-[272px]">
         <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-16 pt-8 sm:px-8 sm:pt-12">
           <TestFundsNotice />
           <div className="gl-pagehead rise mb-8 gap-4 sm:mb-10">
