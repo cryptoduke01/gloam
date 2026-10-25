@@ -29,6 +29,7 @@ import {
   TEMPO_USDCE,
   baseSepoliaPool,
   circuitArtifactFiles,
+  ethereumSepoliaPool,
   mainnetPoolFor,
 } from "@gloamtrade/sdk";
 import { checkSpend, loadPolicy, resolveAgent, type Spend } from "../src/policy.js";
@@ -55,17 +56,24 @@ test("networks: older testnets always; a mainnet or Base Sepolia only once the S
   const baseLive = mainnetPoolFor(8453) !== null;
   const ethLive = mainnetPoolFor(1) !== null;
   const baseTestLive = baseSepoliaPool() !== null;
+  const sepoliaLive = ethereumSepoliaPool() !== null;
   assert.equal(MCP_MAINNETS.length, Number(rhLive) + Number(tempoLive) + Number(baseLive) + Number(ethLive));
   const firstTest = NETWORK_KEYS.indexOf("robinhood");
-  assert.deepEqual(NETWORK_KEYS.slice(firstTest), ["robinhood", "tempo", ...(baseTestLive ? ["base"] : [])], "testnets last");
+  assert.deepEqual(
+    NETWORK_KEYS.slice(firstTest),
+    ["robinhood", "tempo", ...(baseTestLive ? ["base"] : []), ...(sepoliaLive ? ["ethereum"] : [])],
+    "testnets last"
+  );
   assert.equal(NETWORK_KEYS.includes("robinhood-mainnet"), rhLive);
   assert.equal(NETWORK_KEYS.includes("tempo-mainnet"), tempoLive);
   assert.equal(NETWORK_KEYS.includes("base-mainnet"), baseLive);
   assert.equal(NETWORK_KEYS.includes("base"), baseTestLive);
   assert.equal(NETWORK_KEYS.includes("ethereum-mainnet"), ethLive);
+  assert.equal(NETWORK_KEYS.includes("ethereum"), sepoliaLive);
   for (const n of allNetworks()) {
-    // Base Sepolia runs the mainnet pool, so it proves with the final keys too.
-    assert.equal(n.ceremony, n.testnet && n.family !== "base" ? "dev" : "production", `${n.key} proves with the right keys`);
+    // Base Sepolia and Ethereum Sepolia run the mainnet pool, so they prove with the final keys too.
+    const older = n.family === "robinhood" || n.family === "tempo";
+    assert.equal(n.ceremony, n.testnet && older ? "dev" : "production", `${n.key} proves with the right keys`);
     if (!n.testnet) {
       assert.equal(n.nativeShield, n.family === "base" || n.family === "ethereum", `${n.key}: native deposits only on Base and Ethereum`);
       assert.notEqual(n.defaultAsset, "0x0000000000000000000000000000000000000000");
@@ -74,6 +82,7 @@ test("networks: older testnets always; a mainnet or Base Sepolia only once the S
   if (!baseLive) assert.equal(networkByChainId(8453), undefined, "no Base pool, no Base mainnet");
   if (!baseTestLive) assert.equal(networkByChainId(84532), undefined, "no Base Sepolia pool, no Base Sepolia");
   if (!ethLive) assert.equal(networkByChainId(1), undefined, "no Ethereum pool, no Ethereum");
+  if (!sepoliaLive) assert.equal(networkByChainId(11155111), undefined, "no Ethereum Sepolia pool, no Ethereum Sepolia");
   assert.equal(MCP_NETWORKS.tempo.chainId, GLOAM_NETWORKS.tempo.chainId);
   if (!rhLive) assert.equal(networkByChainId(4663), undefined, "no pool, no network");
 });
@@ -92,6 +101,7 @@ test("GLOAM_NETWORK picks the default network, and a missing or wrong one fails 
   if (baseSepoliaPool() === null) assert.throws(() => defaultNetworkKey({ GLOAM_NETWORK: "base" }), /no base pool yet/);
   if (mainnetPoolFor(8453) === null) assert.throws(() => defaultNetworkKey({ GLOAM_NETWORK: "base-mainnet" }), /no base-mainnet pool yet/);
   if (mainnetPoolFor(1) === null) assert.throws(() => defaultNetworkKey({ GLOAM_NETWORK: "ethereum-mainnet" }), /no ethereum-mainnet pool yet/);
+  if (ethereumSepoliaPool() === null) assert.throws(() => defaultNetworkKey({ GLOAM_NETWORK: "ethereum" }), /no ethereum pool yet/);
 });
 
 test("mainnet proofs use the final keys, kept apart from the dev keys", () => {
