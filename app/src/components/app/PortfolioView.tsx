@@ -729,8 +729,11 @@ export function PortfolioView() {
             </section>
           )}
 
-          {/* In your wallet: the public side, its total on the right */}
-          <section className="gl-card overflow-hidden">
+          {/* In your wallet: the public side, its total on the right. The rows
+              follow the card's own width (a container), not the window's: at
+              1024 the card is narrow beside the activity feed, and fixed 24h
+              and action columns left the asset's name no room at all. */}
+          <section className="gl-card @container overflow-hidden">
             <header className="flex items-start justify-between gap-4 max-sm:px-5 pb-3 pt-5 sm:px-6">
               <div className="min-w-0">
                 <h2 className="text-[17px] text-foreground">In your wallet</h2>
@@ -804,11 +807,11 @@ export function PortfolioView() {
               </div>
             ) : (
               <>
-                <div className="flex items-center border-t border-line max-sm:px-5 py-2.5 sm:px-6">
+                <div className="flex items-center gap-x-3 border-t border-line py-2.5 max-sm:px-5 sm:px-6">
                   <span className="t-label flex-1">Asset</span>
-                  <span className="t-label max-sm:hidden w-[88px] text-center sm:block">24h</span>
+                  <span className="t-label hidden w-[88px] text-center @2xl:block">24h</span>
                   <span className="t-label w-28 text-right">Balance</span>
-                  <span className="w-[200px] max-sm:hidden" aria-hidden />
+                  <span className="hidden w-[200px] @xl:block" aria-hidden />
                 </div>
                 <ul className="divide-y divide-line border-t border-line">
                   {walletShown.map((r) => {
@@ -816,7 +819,7 @@ export function PortfolioView() {
                     return (
                       <li
                         key={r.key}
-                        className="flex min-h-[64px] flex-wrap items-center gap-x-3 gap-y-2.5 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:flex-nowrap sm:px-6"
+                        className="flex min-h-[64px] flex-wrap items-center gap-x-3 gap-y-2.5 py-3 transition-colors hover:bg-surface/60 max-sm:px-5 sm:px-6 @xl:flex-nowrap"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           <TokenLogo id={r.id} symbol={r.symbol} size={34} />
@@ -826,9 +829,9 @@ export function PortfolioView() {
                           </div>
                         </div>
                         {r.native ? (
-                          <div className="max-sm:hidden w-[88px] sm:block" aria-hidden />
+                          <div className="hidden w-[88px] @2xl:block" aria-hidden />
                         ) : (
-                          <div className="max-sm:hidden w-[88px] justify-center sm:flex">
+                          <div className="hidden w-[88px] justify-center @2xl:flex">
                             <Sparkline
                               // Real history only: without it the line stays a flat hairline.
                               points={r.spark.length >= 2 ? r.spark : []}
@@ -844,7 +847,7 @@ export function PortfolioView() {
                           </p>
                           {value && <p className="tnum text-[12.5px] text-mute">{value}</p>}
                         </div>
-                        <div className="flex justify-end gap-1 max-sm:w-full max-sm:justify-start max-sm:pl-[46px] max-sm:empty:hidden sm:w-[200px]">
+                        <div className="flex gap-1 @max-xl:w-full @max-xl:justify-start @max-xl:pl-[46px] @max-xl:empty:hidden @xl:w-[200px] @xl:justify-end">
                           {r.native ? (
                             // The gas coin. Where the pool doesn't take it (Robinhood Chain
                             // mainnet), swap it into the stablecoin it does.
