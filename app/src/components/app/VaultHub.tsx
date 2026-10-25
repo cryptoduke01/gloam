@@ -1,12 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useSyncExternalStore } from "react";
-import { ShieldView } from "./ShieldView";
-import { TradeView } from "./TradeView";
-import { SendView } from "./SendView";
-import { MoveView } from "./MoveView";
-import { VaultSwapView } from "./VaultSwapView";
 import { useNetwork } from "./NetworkProvider";
 import { swapOpenTo, vaultSwapRouter } from "@/lib/vaultSwap";
 import { useAppAccount } from "@/lib/demo";
@@ -56,6 +52,30 @@ function PanelSkeleton() {
     </div>
   );
 }
+
+// Each action is its own chunk, fetched when its tab opens. The views only
+// render in the browser (see `hydrated` below), so nothing is lost on the
+// server, and opening the vault no longer downloads every action's code.
+const ShieldView = dynamic(() => import("./ShieldView").then((m) => m.ShieldView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
+const MoveView = dynamic(() => import("./MoveView").then((m) => m.MoveView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
+const TradeView = dynamic(() => import("./TradeView").then((m) => m.TradeView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
+const VaultSwapView = dynamic(() => import("./VaultSwapView").then((m) => m.VaultSwapView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
+const SendView = dynamic(() => import("./SendView").then((m) => m.SendView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
 
 export function VaultHub() {
   const router = useRouter();
