@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   MAINNET_CONFIGURED,
   MAINNET_LAUNCH_MS,
@@ -100,26 +100,30 @@ export function CountdownCompact() {
   return <span className="tnum">{compactRemaining(r)}</span>;
 }
 
+const noopSubscribe = () => () => {};
+
+/** The launch time in the browser's time zone; null in UTC, on the server, or without Intl. */
+function localLaunchText(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!zone || zone === "UTC" || zone === "Etc/UTC") return null;
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(MAINNET_LAUNCH_MS));
+  } catch {
+    /* Intl unavailable: UTC alone is fine */
+    return null;
+  }
+}
+
 /** The launch time in the viewer's own time zone, when it isn't UTC. */
 export function LocalLaunchTime() {
-  const [text, setText] = useState<string | null>(null);
-  useEffect(() => {
-    try {
-      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (!zone || zone === "UTC" || zone === "Etc/UTC") return;
-      const when = new Intl.DateTimeFormat(undefined, {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      }).format(new Date(MAINNET_LAUNCH_MS));
-      setText(when);
-    } catch {
-      /* Intl unavailable: UTC alone is fine */
-    }
-  }, []);
+  const text = useSyncExternalStore(noopSubscribe, localLaunchText, () => null);
   if (!text) return null;
   return <>Your time: {text}</>;
 }

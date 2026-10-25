@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { SealDots } from "@/components/ui/SealDots";
+import { useReducedMotion } from "@/components/useReducedMotion";
 
 /**
  * A live payroll run, rendered with the same rows, chips and step ticks as the
@@ -74,16 +75,14 @@ function Lock() {
 export function PayrollLive() {
   const [t, setT] = useState(RUN_END + 600);
   const root = useRef<HTMLDivElement>(null);
-  const [still, setStill] = useState(false);
+  // Reduced motion holds the finished run (the first frame) and hides the controls.
+  const still = useReducedMotion();
   const [picked, setPicked] = useState<"you" | "public" | null>(null);
   const [hideWallet, setHideWallet] = useState(true);
   const restart = useRef<() => void>(() => {});
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setStill(true);
-      return;
-    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     // Statuses change every half second or so and the progress bar eases with
     // CSS, so ten renders a second look identical to sixty and cost a phone far less.
     const STEP_MS = 100;
@@ -119,6 +118,7 @@ export function PayrollLive() {
       shown = 0;
       setT(0);
     };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the server renders the finished run; the browser starts it from the first frame
     setT(0);
     return () => {
       cancelAnimationFrame(raf);

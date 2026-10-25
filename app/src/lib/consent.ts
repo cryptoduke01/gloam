@@ -23,6 +23,16 @@ export function setConsent(value: ConsentValue): void {
   }
 }
 
+/** Calls back when the choice changes, in this tab (setConsent) or another one. */
+export function subscribeConsent(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("gloam-consent", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("gloam-consent", onChange);
+  };
+}
+
 /** Optional analytics only when user chose "all". */
 export function analyticsAllowed(): boolean {
   return getConsent() === "all";

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
+
+const noopSubscribe = () => () => {};
 
 /**
  * Renders children only after client mount. Used to wrap components that call
  * Turnkey's useTurnkey(), whose provider has no context during SSR.
  */
 export function ClientOnly({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   return mounted ? <>{children}</> : null;
 }
