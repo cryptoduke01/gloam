@@ -37,6 +37,8 @@ Both mainnets run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the share
 
 Base runs the same deploy, with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Base Sepolia (`84532`, a testnet on the final keys) went live on 24 October 2026 through `DeployBaseSepolia.s.sol` (table below). Base mainnet (`8453`, `DeployBaseMainnet.s.sol`) is next and not deployed. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
+Ethereum is ready to deploy on the same path too, not deployed: `DeployEthereumMainnet.s.sol` (`1`), with native ETH listed next to USDC, USDT, USDG, PYUSD and EURC. USDT returns nothing from `transfer`, `transferFrom` and `approve`; the pool's low-level calls accept that (proven on a fork in `test/fork/EthereumMainnetFork.t.sol`). Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
+
 **Robinhood Chain mainnet `4663`.**
 
 | | |

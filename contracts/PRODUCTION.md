@@ -78,6 +78,19 @@ deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
 
 Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
+## 2c. Ethereum (ready to deploy, not deployed)
+
+- [x] `script/DeployEthereumMainnet.s.sol` (`1`) on the shared `script/MainnetDeploy.sol`, native
+      ETH allowed, final keys; no testnet of its own (Base Sepolia runs the same path)
+- [x] Assets checked on chain: USDC, USDT, USDG, PYUSD and EURC (6 decimals each) and ETH. 500 /
+      25,000 per stablecoin; 0.2 / 10 ETH
+- [x] Fork rehearsal of the whole runbook ends "All checks passed", owner accepts; 8.93M gas
+- [x] `test/fork/EthereumMainnetFork.t.sol`: real USDT and ETH through the vault with final-key
+      proofs; `test/DeployChains.t.sol`: every mainnet script refuses every other chain
+- [ ] Ethereum deployed, ownership accepted, relayer funded, pool and block in `MAINNET_POOLS[1]`
+
+Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
+
 ## 3. Review
 
 - [x] Internal pre-mainnet review, 20 Oct 2026 (six-part review of the mainnet
