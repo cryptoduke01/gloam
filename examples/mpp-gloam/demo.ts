@@ -41,8 +41,8 @@ const short = (s: string, n = 10) => (s.length > 2 * n + 1 ? `${s.slice(0, n)}�
 const step = (title: string) => console.log(`\n── ${title}`);
 
 // ── network ────────────────────────────────────────────────────────────────
-// Base ("base-mainnet", and "base" for Base Sepolia) works once the SDK has its pools.
-const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "robinhood", "tempo", "base"];
+// Base ("base-mainnet", and "base" for Base Sepolia) and Ethereum ("ethereum-mainnet") work once the SDK has their pools.
+const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet", "robinhood", "tempo", "base"];
 const networkKey = (process.env.GLOAM_NETWORK?.trim() || "tempo") as GloamNetworkKey;
 if (!NETWORK_KEYS.includes(networkKey)) {
   console.error(`GLOAM_NETWORK must be one of: ${NETWORK_KEYS.join(", ")}.`);
@@ -56,7 +56,7 @@ if (!net) {
   );
   process.exit(1);
 }
-// The network's first stablecoin: PathUSD on Tempo testnet, USDC.e on Tempo mainnet, USDG on Robinhood Chain, USDC on Base.
+// The network's first stablecoin: PathUSD on Tempo testnet, USDC.e on Tempo mainnet, USDG on Robinhood Chain, USDC on Base and Ethereum.
 const asset = net.assets.find((a) => a.address.toLowerCase() !== NATIVE_ASSET.toLowerCase())!;
 const fmt = (base: bigint) => `${formatUnits(base, asset.decimals)} ${asset.symbol}`;
 const networkLabel = net.testnet ? networkName(net.chainId) : `${net.label} mainnet`;

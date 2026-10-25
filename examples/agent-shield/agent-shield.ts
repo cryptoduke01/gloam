@@ -39,6 +39,7 @@ import {
   artifactProver,
   circuitArtifactFiles,
   circuitArtifactUrls,
+  approvalSteps,
   getGloamNetwork,
   gloamNetworks,
   networkName,
@@ -67,8 +68,8 @@ const shieldBoundAbi = [
 
 // ── network ──────────────────────────────────────────────────────────────────
 
-// Base ("base-mainnet", and "base" for Base Sepolia) works once the SDK has its pools.
-const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "robinhood", "tempo", "base"];
+// Base ("base-mainnet", and "base" for Base Sepolia) and Ethereum ("ethereum-mainnet") work once the SDK has their pools.
+const NETWORK_KEYS: GloamNetworkKey[] = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet", "robinhood", "tempo", "base"];
 const isNative = (a: GloamAsset) => a.address.toLowerCase() === NATIVE_ASSET.toLowerCase();
 
 /** The network from GLOAM_NETWORK; Robinhood Chain testnet when unset. */
@@ -192,12 +193,13 @@ async function main() {
       functionName: "allowance",
       args: [account.address, net.pool],
     });
-    if (allowance < amountWei) {
+    // Exact amounts; USDT on Ethereum first clears a stale allowance to 0 (approvalSteps).
+    for (const value of approvalSteps(net.chainId, asset.address, allowance, amountWei)) {
       const approveHash = await wallet.writeContract({
         address: asset.address,
         abi: erc20Abi,
         functionName: "approve",
-        args: [net.pool, amountWei],
+        args: [net.pool, value],
       });
       const approved = await pub.waitForTransactionReceipt({ hash: approveHash });
       if (approved.status !== "success") throw new Error("The approval reverted.");
