@@ -1,14 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
+import { liveMainnetNames } from "@/lib/mainnet";
 
-export const alt = "Gloam mainnet goes live Wednesday 21 October, 13:00 UTC";
+// The chains come from lib/mainnet, so a new mainnet shows up here when its pool is filled in.
+export const alt = `Gloam is live on mainnet: private payments on ${liveMainnetNames()}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 const asset = (f: string) => join(process.cwd(), "src/assets/og", f);
 
-/** Mainnet share card: the home card with the launch time in place of the tagline. */
+/** Mainnet share card: the home card, saying mainnet is live and on which chains. */
 export default async function OpenGraphImage() {
   const [light, medium, etching] = await Promise.all([
     readFile(asset("Aeonik-Light.ttf")),
@@ -82,11 +84,23 @@ export default async function OpenGraphImage() {
               letterSpacing: "-0.028em",
               color: "#F4F5F6",
               display: "flex",
-              flexDirection: "column",
             }}
           >
-            <span style={{ display: "flex" }}>Mainnet goes live</span>
-            <span style={{ display: "flex", color: "#A9AEB5" }}>Wed 21 Oct, 13:00 UTC</span>
+            Live on mainnet
+          </div>
+          <div
+            style={{
+              marginTop: 18,
+              maxWidth: 1000,
+              fontSize: 38,
+              lineHeight: 1.2,
+              fontWeight: 300,
+              letterSpacing: "-0.015em",
+              color: "#A9AEB5",
+              display: "flex",
+            }}
+          >
+            {`Private payments on ${liveMainnetNames()}`}
           </div>
         </div>
         <img
