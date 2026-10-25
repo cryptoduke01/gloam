@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   // Compile the workspace SDK from source so there is no build-order dependency
   // (Vercel builds only `app`). @gloamtrade/sdk exports TS source; Next transpiles it.
   transpilePackages: ["@gloamtrade/sdk"],
+  // no "X-Powered-By: Next.js" on responses
+  poweredByHeader: false,
   images: {
     formats: ["image/avif", "image/webp"],
   },
@@ -61,6 +63,17 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     // WalletConnect optional deps — silence missing optional modules
     config.externals.push("pino-pretty", "encoding");
+    // Two libraries import a module by a computed name: web-worker's Node shim
+    // (under snarkjs) and ox's Tempo address miner (worker_threads). Webpack can't
+    // follow either and says so on every build; dropping the notice changes nothing
+    // in the output. Only these two are dropped, so a new one from anywhere else shows.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      {
+        module: /node_modules[\\/](web-worker[\\/]cjs[\\/]node\.js|ox[\\/]_esm[\\/]tempo[\\/]internal[\\/]virtualMasterPool\.js)/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
