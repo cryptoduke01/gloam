@@ -9,10 +9,12 @@
  * `context` signal (proofContext in the SDK), so a proof forwarded to someone
  * else shows who it was really for.
  *
- * What they do not show: a proof of funds hides the balance and which notes
- * back it. A proof of payment shows the payment exists and its amount (or a
- * minimum), not who paid whom: the payer picks the payee note's key, so the
- * payer can make the same proof.
+ * What they show and do not: a proof of funds does not show the balance, but
+ * it carries the nullifiers of the notes behind it (so the reader can check
+ * they are unspent), and a reader who keeps them sees when those notes are
+ * spent later. A proof of payment shows the payment exists and its amount (or
+ * a minimum), not who paid whom or who received it: the payer picks the payee
+ * note's key, so the payer can make the same proof.
  */
 import {
   FIELD_PRIME,

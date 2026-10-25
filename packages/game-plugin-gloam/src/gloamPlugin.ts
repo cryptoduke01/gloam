@@ -5,7 +5,7 @@ import {
   GameWorker,
 } from "@virtuals-protocol/game";
 import { GloamAgent, type GloamAgentOptions } from "./agent.js";
-import { redact } from "./redact.js";
+import { redact, safeErrorMessage } from "./redact.js";
 
 /**
  * Gloam for agents built on the GAME framework: a private balance, private
@@ -25,7 +25,11 @@ interface IGloamPluginOptions extends GloamAgentOptions {
   description?: string;
   /** Use this engine instead of building one from the options. */
   agent?: GloamAgent;
-  /** Share private balance amounts in the environment the planner reads. Default true. */
+  /**
+   * Share private balance amounts in the environment the planner reads each
+   * step. Default false: the planner is Virtuals' hosted LLM, and the agent can
+   * still ask with gloam_private_balance when it needs the figures.
+   */
   shareBalances?: boolean;
 }
 
@@ -52,7 +56,7 @@ class GloamPlugin {
     this.id = options.id || "gloam_worker";
     this.name = options.name || "Gloam Worker";
     this.description = options.description || DESCRIPTION;
-    this.shareBalances = options.shareBalances ?? true;
+    this.shareBalances = options.shareBalances ?? false;
     this.agent = options.agent ?? new GloamAgent(options);
   }
 
@@ -65,7 +69,8 @@ class GloamPlugin {
       const ok = out.status === "done" || out.status === "ok" || out.status === "pending";
       return new ExecutableGameFunctionResponse(ok ? ExecutableGameFunctionStatus.Done : ExecutableGameFunctionStatus.Failed, text);
     } catch (e) {
-      const message = redact(e instanceof Error ? e.message : String(e));
+      // One short line: an RPC error's full text quotes the URL, which can carry an API key.
+      const message = safeErrorMessage(e);
       logger(`${what} failed: ${message}`);
       return new ExecutableGameFunctionResponse(ExecutableGameFunctionStatus.Failed, JSON.stringify({ status: "error", message }));
     }
@@ -128,13 +133,13 @@ class GloamPlugin {
     return new GameFunction({
       name: "gloam_receive",
       description:
-        'Receive privately. mode "address": the agent\'s Gloam address to share. mode "request": a payment request link (optional amount, asset and note). mode "check": find payments sent to the agent\'s Gloam address and secure them (a payment counts only once moved into a note only this agent knows). mode "claim": claim a claim link someone gave the agent.',
+        'Receive privately. mode "address": the agent\'s Gloam address to share. mode "request": a payment request link (optional amount, asset and note). mode "check": find payments sent to the agent\'s Gloam address and secure them (a payment counts only once moved into a note only this agent knows). mode "claim": claim a claim link or code someone gave the agent. A plain claim link is the money itself and passes through this planner: ask the payer to pay the Gloam address instead, or to seal the link to it (a gloam2t.… code, which only this agent opens).',
       args: [
         { name: "mode", description: '"address", "request", "check" or "claim".', type: "string" },
         { name: "amount", description: "For a request: how much to ask for. Leave out to let the payer choose.", type: "string", optional: true },
         { name: "asset", description: "For a request: the asset symbol.", type: "string", optional: true },
         { name: "note", description: "For a request: a private note the payment will carry, at most 80 characters.", type: "string", optional: true },
-        { name: "claim_link", description: "For claim: the claim link or code.", type: "string", optional: true },
+        { name: "claim_link", description: "For claim: a code sealed to this agent's Gloam address (gloam2t.…), or a claim link or code. A plain link is a bearer secret: prefer the sealed code.", type: "string", optional: true },
       ],
       executable: async (args, logger) =>
         this.run(logger, `receive (${args.mode ?? "?"})`, async () => {
@@ -173,7 +178,7 @@ class GloamPlugin {
     return new GameFunction({
       name: "gloam_prove_funds",
       description:
-        "Make a proof that the agent holds at least an amount of an asset privately, for one named reader and an expiry, without showing the balance or which notes back it. Returns a gloamfunds1: proof anyone can check at gloam.trade/verify.",
+        "Make a proof that the agent holds at least an amount of an asset privately, for one named reader and an expiry, without showing the balance. The proof carries the nullifiers of the notes behind it, so the reader can check they are unspent and can tell when they are spent later. Returns a gloamfunds1: proof anyone can check at gloam.trade/verify.",
       args: [
         { name: "at_least", description: "The amount to prove, in the asset's units.", type: "string" },
         { name: "for", description: 'Who the proof is for, as they should see it ("Acme counterparty desk"). Sealed into the proof.', type: "string" },
@@ -196,7 +201,7 @@ class GloamPlugin {
     return new GameFunction({
       name: "gloam_verify_proof",
       description:
-        "Check a Gloam proof of funds (gloamfunds1:…) or proof of payment (gloampay1:…) against the chain: the zero-knowledge proof, who it was made for, Gloam's vault, the amounts, that the notes are unspent or the payment was a private send, and the expiry. ok is true only when every check passes.",
+        "Check a Gloam proof of funds (gloamfunds1:…) or proof of payment (gloampay1:…) against the chain: the zero-knowledge proof, who it was made for, Gloam's vault, the amounts, that the notes are unspent or the payment was a private send, and the expiry. ok is true only when every check passes. A proof of payment shows a private payment of that amount was made; it does not show who received it.",
       args: [{ name: "proof", description: "The proof text.", type: "string" }],
       executable: async (args, logger) => this.run(logger, "verify proof", () => this.agent.verifyProof(args.proof ?? "")),
     });
@@ -217,7 +222,7 @@ class GloamPlugin {
       }
       out.gloam_limits = this.agent.limitsReport();
     } catch (e) {
-      out.gloam_error = redact(e instanceof Error ? e.message : String(e));
+      out.gloam_error = safeErrorMessage(e);
     }
     return JSON.parse(redact(JSON.stringify(out)));
   }
