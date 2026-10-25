@@ -95,6 +95,7 @@ import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
 import { balances, noteView, openNoteStore, type NoteStore, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
+import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
 import {
   credentialField,
@@ -268,66 +269,6 @@ const STUCK_MS = 10 * 60 * 1000;
 const RELAY_MAYBE_SENT = ["maybe_sent", "rpc", "network", "error", "internal", "in_flight"];
 
 /**
- * A wallet send that threw after its signed transaction went to the RPC, with
- * no answer that proves the node refused it: the reply was lost (a timeout, a
- * gateway's 504 after the node took it) or the node said it already had it. It
- * may land. `hash` is the transaction's own hash, noted before the RPC answered.
- * `maybeSent` is what the SDK's sweep looks for on a submitter's error.
- */
-class WalletSendUnclear extends Error {
-  readonly maybeSent = true;
-  constructor(
-    readonly hash: Hex,
-    cause: unknown
-  ) {
-    super(errMsg(cause), { cause });
-    this.name = "WalletSendUnclear";
-  }
-}
-
-/** Node answers that can mean an earlier attempt of this same send got in (viem retries a send that timed out). */
-const SEND_ALREADY_IN = /already known|known transaction|already imported|already exists|already in (the )?(mem)?pool|nonce too low|nonce has already been used|replacement transaction underpriced|duplicate/i;
-
-/** JSON-RPC codes that say nothing about the transaction itself: unknown, internal, rate limited. */
-const UNCLEAR_RPC_CODES = new Set([-1, -32603, -32005, 429]);
-
-/** Whether the node itself answered that it refused the transaction (not a transport failure, not a duplicate). */
-function nodeRefused(err: unknown): boolean {
-  let refused = false;
-  for (let e: unknown = err, depth = 0; e && depth < 12; e = (e as { cause?: unknown }).cause, depth++) {
-    const message = `${(e as { message?: unknown }).message ?? ""} ${(e as { details?: unknown }).details ?? ""}`;
-    if (SEND_ALREADY_IN.test(message)) return false;
-    const code = (e as { code?: unknown }).code;
-    if (typeof code === "number" && !UNCLEAR_RPC_CODES.has(code)) refused = true;
-  }
-  return refused;
-}
-
-/**
- * Send from the agent's wallet. A throw before the transaction left (gas
- * estimation, signing, a revert in simulation) comes back as it was. A throw
- * once it went to the RPC is a WalletSendUnclear with its hash, unless the node
- * answered that it refused it and does not have it.
- */
-async function walletSend(signer: Signer, send: (wallet: Signer["walletClient"]) => Promise<Hex>): Promise<Hex> {
-  const before = signer.broadcasts?.length ?? 0;
-  try {
-    return await send(signer.walletClient);
-  } catch (err) {
-    const hash = signer.broadcasts?.slice(before).at(-1);
-    if (!hash) throw err;
-    if (nodeRefused(err)) {
-      const known = await signer.publicClient.getTransaction({ hash }).then(
-        () => true,
-        (e: unknown) => !(e instanceof TransactionNotFoundError)
-      );
-      if (!known) throw err;
-    }
-    throw new WalletSendUnclear(hash, err);
-  }
-}
-
-/**
  * Whether a send that threw may still have put the transaction on chain.
  * Through the relay only a refusal it names (limits, screening, a failed dry
  * run) is sure; a lost connection or an unclear answer is not. From the wallet,
@@ -388,6 +329,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch (e) {
       return { ok: false, error: errMsg(e) };
     }
+  }
+
+  /** What the chain says about a transaction this server sent. */
+  function txReads(client: ChainClient) {
+    return {
+      /** Its receipt says it reverted. */
+      reverted: async (hash: Hex | null | undefined) =>
+        !!hash && (await client.getTransactionReceipt({ hash }).then((r) => r.status === "reverted", () => false)),
+      /** The node has never heard of it (a send whose reply was lost, that never got there). A read error is not that. */
+      unknown: async (hash: Hex) =>
+        typeof client.getTransaction === "function" &&
+        (await client.getTransaction({ hash }).then(
+          () => false,
+          (e: unknown) => e instanceof TransactionNotFoundError
+        )),
+    };
   }
 
   function sweepChain(client: ChainClient, net: McpNetwork): SweepChain {
@@ -812,31 +769,30 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
-        for (const n of notes.list().filter((x) => x.status === "pending")) {
+        // Pending notes, and notes made spendable again whose old spend may have landed since.
+        for (const n of notes.list().filter((x) => x.status === "pending" || (x.status === "unspent" && x.recheck))) {
           const net = networkByChainId(n.chainId);
           if (!net) continue;
           try {
             const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
             const chain = sweepChain(client, net);
-            const failed = async (hash: Hex | null | undefined) =>
-              !!hash && (await client.getTransactionReceipt({ hash }).then((r) => r.status === "reverted", () => false));
-            // The node has never heard of it (a send whose reply was lost, that never got there). A read error is not that.
-            const unknownTx = async (hash: Hex) =>
-              typeof client.getTransaction === "function" &&
-              (await client.getTransaction({ hash }).then(
-                () => false,
-                (e: unknown) => e instanceof TransactionNotFoundError
-              ));
+            const tx = txReads(client);
             const stuck = Date.now() - Date.parse(n.updatedAt) > STUCK_MS;
-            if (n.pending === "spend") {
+            if (n.status === "unspent") {
               if (await chain.isSpent(n.nullifier)) {
-                notes.update(n.handle, { status: "spent" });
+                notes.update(n.handle, { status: "spent", recheck: false });
+                refreshed.push(`${n.handle}: spent, an earlier send of it landed`);
+              }
+            } else if (n.pending === "spend") {
+              if (await chain.isSpent(n.nullifier)) {
+                notes.update(n.handle, { status: "spent", recheck: false });
                 refreshed.push(`${n.handle}: spent`);
-              } else if (n.spentTx ? (await failed(n.spentTx)) || (stuck && (await unknownTx(n.spentTx))) : stuck) {
-                // Never spent on chain, and its spend reverted or was never sent: spendable again.
+              } else if (n.spentTx ? (await tx.reverted(n.spentTx)) || (stuck && (await tx.unknown(n.spentTx))) : stuck) {
+                // Never spent on chain, and its spend reverted or never showed up: spendable again.
                 // (If a copy is still in flight it will revert: the nullifier spends once. The
-                // change and payment it would make stay pending, so nothing is lost if it lands.)
-                notes.update(n.handle, { status: "unspent", spentTx: null });
+                // change and payment it would make stay pending, so nothing is lost if it lands,
+                // and the note is checked again on every refresh in case it did.)
+                notes.update(n.handle, { status: "unspent", spentTx: null, recheck: true });
                 refreshed.push(`${n.handle}: spendable again`);
               }
             } else if (await chain.isCommitmentSeen(n.commitment)) {
@@ -844,10 +800,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               const sent = n.origin === "payment";
               notes.update(n.handle, { status: sent ? "spent" : "unspent" });
               refreshed.push(`${n.handle}: ${sent ? "payment landed" : "confirmed"}`);
-            } else if (await failed(n.createdTx)) {
+            } else if (await tx.reverted(n.createdTx)) {
               // Its creating transaction reverted, so the note never existed.
               notes.remove(n.handle);
               refreshed.push(`${n.handle}: removed, its transaction reverted`);
+            } else if (
+              n.origin === "received" &&
+              n.sweptFrom &&
+              stuck &&
+              (!n.createdTx || (await tx.unknown(n.createdTx))) &&
+              (await chain.isSpent(n.sweptFrom)) &&
+              !(await chain.isCommitmentSeen(n.commitment))
+            ) {
+              // Its sweep never showed up, and the payment it was to take is spent by another
+              // transaction (a later sweep of it, or the payer): this note can never exist.
+              notes.remove(n.handle);
+              refreshed.push(`${n.handle}: removed, its payment was taken by another transaction`);
             }
           } catch (e) {
             refreshed.push(`${n.handle}: could not check (${errMsg(e)})`);
@@ -1147,17 +1115,33 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       input = { secret: opts.legacyNote.secret as Hex, amountWei: parseUnits(String(opts.legacyNote.amount), dec), handle: null };
     } else {
       let chosen: StoredNote | undefined;
+      // A note whose nullifier the chain already reads as spent (an earlier send of it landed after
+      // all) is never picked: it is marked spent. An unreadable answer leaves the note to the send.
+      const spentOnChain = async (n: StoredNote) => {
+        const spent = await (async () => sweepChain(signer.publicClient, net).isSpent(n.nullifier))().catch(() => false);
+        if (spent) tryStore(() => notes.update(n.handle, { status: "spent", recheck: false }));
+        return spent;
+      };
       if (opts.handle) {
         chosen = notes.get(opts.handle);
         if (!chosen) return fail({ status: "error", error: `There is no note "${opts.handle}". Call gloam_list_notes.` });
         if (chosen.status !== "unspent") return fail({ status: "error", error: `Note ${chosen.handle} is ${chosen.status}, not spendable.` });
         const why = fits(chosen);
         if (why) return fail({ status: "error", error: why });
+        if (await spentOnChain(chosen)) {
+          return fail({ status: "error", error: `Note ${chosen.handle} is already spent on chain: an earlier send of it landed. It is marked spent; call gloam_list_notes with refresh.` });
+        }
       } else {
-        chosen = notes
+        const candidates = notes
           .list()
           .filter((n) => n.status === "unspent" && fits(n) === null)
-          .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1))[0];
+          .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1));
+        for (const c of candidates) {
+          if (!(await spentOnChain(c))) {
+            chosen = c;
+            break;
+          }
+        }
         if (!chosen) {
           return fail({
             status: "error",
@@ -1687,19 +1671,117 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     if (notCanonical || BigInt(note.amountWei) <= 0n) {
       return text({ status: "rejected", grantAccess: false, final: false, message: `The payment note is not a real payment: ${notCanonical ?? "it carries no value."}` });
     }
-    const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
-    if (earlier) {
-      return text({
-        status: "already_settled",
-        grantAccess: false,
-        final: false,
-        message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
-      });
-    }
-
     const signer = deps.signer(net);
     const relay = relayUrl();
     const { symbol, decimals } = assetInfo(net.chainId, note.asset);
+    const client = signer?.publicClient ?? deps.publicClient(net);
+
+    /** The answer that grants access, for a payment now in a note only this server knows. */
+    const settled = (received: ReturnType<typeof noteView> | null, hash: Hex | null, extra: Record<string, unknown> = {}) => {
+      let mppReceipt: Record<string, unknown> = {};
+      if (args.mpp && hash) {
+        const receipt: GloamChargeReceipt = {
+          status: "success",
+          method: "gloam",
+          timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+          reference: hash,
+          challengeId: args.mpp.challengeId,
+          chainId: net.chainId,
+          ...(args.mpp.externalId !== undefined ? { externalId: args.mpp.externalId } : {}),
+        };
+        mppReceipt = {
+          receipt,
+          paymentReceipt: serializeReceipt(receipt),
+          httpHint: "Serve the resource with the header Payment-Receipt set to paymentReceipt and Cache-Control: private.",
+        };
+      }
+      return text({
+        status: "settled",
+        grantAccess: true,
+        final: true,
+        ...extra,
+        message: "Paid and final: the payment now sits in a note only this server knows. Serve the resource.",
+        received,
+        amount: formatUnits(BigInt(note.amountWei), decimals),
+        symbol,
+        sealed,
+        hash,
+        explorer: hash ? `${net.explorer}/tx/${hash}` : null,
+        ...mppReceipt,
+      });
+    };
+
+    // An earlier sweep of this same payment. Access is granted once: when a sweep confirms, or,
+    // when it confirmed later than the verify that sent it, on the next verify.
+    const earlier = notes.list().filter((n) => n.sweptFrom?.toLowerCase() === paymentNullifier.toLowerCase());
+    /** One of the earlier sweeps is on chain now: serve it, once. */
+    const serveEarlier = async (): Promise<ReturnType<typeof text> | null> => {
+      const chain = sweepChain(client, net);
+      let landed = earlier.find((n) => n.status !== "pending");
+      if (!landed) {
+        for (const n of earlier) {
+          if (await chain.isCommitmentSeen(n.commitment).catch(() => false)) {
+            landed = n;
+            break;
+          }
+        }
+      }
+      if (!landed) return null;
+      const l = landed;
+      const status = l.status === "pending" ? "unspent" : l.status;
+      let received = noteView({ ...l, status, served: true });
+      const noteWarning = tryStore(() => {
+        const r = notes.update(l.handle, { status, served: true });
+        if (r) received = noteView(r);
+      });
+      return settled(received, l.createdTx, { ...(noteWarning ? { noteWarning } : {}), sweptBy: "an earlier sweep of this payment" });
+    };
+    if (earlier.length) {
+      // A note from before the served flag counts as served once it confirmed.
+      const served = earlier.find((n) => n.served === true || (n.served === undefined && n.status !== "pending"));
+      if (served) {
+        return text({
+          status: "already_settled",
+          grantAccess: false,
+          final: false,
+          message: `This payment was already settled by this server (${served.handle}). Do not serve it twice.`,
+        });
+      }
+      // The payment's spend is read before the fresh notes: a sweep spends the one and makes the other in one block.
+      const spent = await sweepChain(client, net)
+        .isSpent(paymentNullifier)
+        .catch(() => null);
+      const serve = await serveEarlier();
+      if (serve) return serve;
+      // None is on chain. One that may still land keeps the payment waiting; one that reverted, or whose
+      // transaction the node never saw after the release window, cannot land.
+      const tx = txReads(client);
+      let waiting = false;
+      for (const n of earlier) {
+        const stuck = Date.now() - Date.parse(n.updatedAt) > STUCK_MS;
+        const dead = (await tx.reverted(n.createdTx)) || (stuck && (!n.createdTx || (await tx.unknown(n.createdTx))));
+        if (!dead) waiting = true;
+      }
+      if (waiting || spent === null) {
+        return text({
+          status: "unconfirmed",
+          grantAccess: false,
+          final: false,
+          message: "A sweep of this payment was sent and has not confirmed. Verify again shortly; do not serve until it says settled.",
+          ...(earlier.at(-1)?.createdTx ? { hash: earlier.at(-1)!.createdTx } : {}),
+        });
+      }
+      if (spent) {
+        return text({
+          status: "already_spent",
+          grantAccess: false,
+          final: false,
+          message: "The payment note was spent by another transaction before this server's sweep landed, most likely by the payer who created it. Do not grant access.",
+        });
+      }
+      // Still unspent, and no earlier sweep can land: sweep it again. Their fresh notes stay until a refresh clears them.
+    }
+
     if (!signer && !relay) {
       return text({
         status: "verified_not_final",
@@ -1710,7 +1792,6 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         verify: verifyView,
       });
     }
-    const client = signer?.publicClient ?? deps.publicClient(net);
     const submit = (intent: GloamIntent) =>
       relay
         ? deps.relay(intent, { url: relay })
@@ -1801,52 +1882,31 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             origin: "received",
             createdTx: null,
             sweptFrom: paymentNullifier,
+            served: false,
             label: args.label,
           });
         },
       });
       const sweepHash = sweep.hash ?? unclearHash;
       if (sweep.status === "swept") {
-        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweepHash }) : null;
+        let received = held ? noteView({ ...held, status: "unspent", createdTx: sweepHash, served: true }) : null;
         const noteWarning = held
           ? tryStore(() => {
-              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweepHash });
+              const r = notes.update(held!.handle, { status: "unspent", createdTx: sweepHash, served: true });
               if (r) received = noteView(r);
             })
           : undefined;
-        let mppReceipt: Record<string, unknown> = {};
-        if (args.mpp && sweepHash) {
-          const receipt: GloamChargeReceipt = {
-            status: "success",
-            method: "gloam",
-            timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-            reference: sweepHash,
-            challengeId: args.mpp.challengeId,
-            chainId: net.chainId,
-            ...(args.mpp.externalId !== undefined ? { externalId: args.mpp.externalId } : {}),
-          };
-          mppReceipt = {
-            receipt,
-            paymentReceipt: serializeReceipt(receipt),
-            httpHint: "Serve the resource with the header Payment-Receipt set to paymentReceipt and Cache-Control: private.",
-          };
-        }
-        return text({
-          status: "settled",
-          grantAccess: true,
-          final: true,
+        return settled(received, sweepHash, {
           ...(noteWarning ? { noteWarning } : {}),
-          message: "Paid and final: the payment now sits in a note only this server knows. Serve the resource.",
-          received,
-          amount: formatUnits(BigInt(note.amountWei), decimals),
-          symbol,
-          sealed,
           sweptBy: relay ? "gloam-relay" : "server wallet",
-          hash: sweepHash,
-          explorer: sweepHash ? `${net.explorer}/tx/${sweepHash}` : null,
           ...(paymentHash ? { paymentSubmittedBy: relay ? "gloam-relay" : "server wallet", paymentHash } : {}),
-          ...mppReceipt,
         });
+      }
+      if (sweep.status === "already_spent" && earlier.length) {
+        // Spent by an earlier sweep of this payment that landed after all, while this one was sent: serve that one.
+        if (held) tryStore(() => notes.remove(held!.handle));
+        const serve = await serveEarlier();
+        if (serve) return serve;
       }
       if (sweep.status === "unconfirmed") {
         if (held && sweepHash) tryStore(() => notes.update(held!.handle, { createdTx: sweepHash }));

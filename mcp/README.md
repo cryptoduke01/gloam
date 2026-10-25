@@ -121,6 +121,7 @@ In x402 the payer builds the payment note, so the payer knows its secret too. If
 2. It checks the note binds the required amount and asset, is the payment output of the presented transfer, and sits in Gloam's pool on that network (requirements naming any other pool are refused).
 3. It sweeps the note: a private transfer of the whole amount into a fresh note only this server knows. The fresh note is stored before the sweep is sent.
 4. Only when the sweep confirms does it return `grantAccess: true`. If the payer already spent the note, the sweep cannot land and the answer is `already_spent`. The same header presented twice gets `already_settled`.
+5. If the sweep has not confirmed yet, the answer is `unconfirmed`. Present the same payment again: once the sweep is on chain it answers `grantAccess: true`, once. A sweep that never reached the node (unknown to it ten minutes on, with the payment still unspent) is sent again.
 
 The sweep is signed by `GLOAM_AGENT_PRIVATE_KEY`, or sent through the Gloam relay with `GLOAM_USE_RELAY=1` (or `GLOAM_RELAY_URL`), so a payee needs no gas and its wallet never appears. With neither, the answer is `verified_not_final` and `grantAccess: false`. The sweep is not a spend under the limits: it can only move money this server just received into a note this server holds.
 
