@@ -106,7 +106,7 @@ The x402 tools are private agent payments (the MCPay pattern, but the settlement
 A private balance is a note, and whoever knows a note's secret can spend it. So the secrets never go to the agent. They live in an encrypted file inside this server, and the tools hand out handles plus facts that are not secret: network, asset, amount, status (`unspent`, `pending`, `spent`) and the transaction that created the note.
 
 - `gloam_execute_shield` stores the minted note before anything is broadcast, then marks it unspent once the deposit confirms. If the deposit never goes out, the note is dropped.
-- `gloam_execute_private_pay` takes a handle (or picks the smallest note that covers the price), reserves it so no other call can spend it at the same time, and stores the change as a new note. On success the input is marked spent. If nothing was broadcast, the input is spendable again. If a transaction went out but its result is unknown, both stay pending until `gloam_list_notes` with `refresh` settles them.
+- `gloam_execute_private_pay` takes a handle (or picks the smallest note that covers the price), reserves it so no other call can spend it at the same time, and stores the change as a new note. On success the input is marked spent. If nothing was broadcast, the input is spendable again. If a transaction went out but its result is unknown (a receipt that never came, or a broadcast whose reply was lost), the input, the change and the payment stay pending until `gloam_list_notes` with `refresh` settles them, and the spend counts against the limits.
 - A payment spends one note. Notes are not combined, so a balance split across small notes may not cover one large payment.
 
 | Setting | Meaning |
