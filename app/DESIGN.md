@@ -1,67 +1,109 @@
 # Gloam design system
 
-The Twilight brand, plus the principles pulled from studying the leading privacy
-protocols (Arcium, Zama, Umbra). Use this to keep every surface consistent. The
-short version: **use space, be confident, speak plainly, never jam things into
-boxes, and never stamp "private" on everything.**
+Calm, monochrome and plain, in the spirit of zama.ai: ink and paper, one green
+tint for what is private, Aeonik for everything, and dark mode as first-class
+as light. The short version: **use space, say less, keep one action per
+screen, and never stamp "private" on everything.**
 
-## Tokens (light-only)
+The tokens live in `src/app/globals.css`. This file says how to use them.
 
-| Role | Value | Tailwind token |
+## Colour
+
+| Role | Light | Dark | Use |
+| --- | --- | --- | --- |
+| Ink | `#0B0C0E` | `#F4F5F6` | Text and the one primary action (`btn-ink`, `text-foreground`) |
+| Paper | `#FFFFFF` | `#08090A` | Page background (`bg-background`) |
+| App ground | `#F4F4F5` | `#08090A` | Behind app cards (set by `.gloam-app`) |
+| Panel | `#FFFFFF` | `#111214` | Cards (`bg-panel`) |
+| Surface | `#F3F4F5` / `#EAEBED` | `#17181B` / `#1E2023` | Fields, rows, inner tiles (`bg-surface`, `bg-surface-2`) |
+| Soft, mute, faint | `#34373C`, `#5F636A`, `#979BA2` | `#CDD0D4`, `#9B9FA6`, `#6C7077` | Body copy, secondary copy, hints |
+| Line | `#E4E6E9` / `#CFD2D6` | `#232529` / `#33363B` | Hairlines (`border-line`, `border-line-strong`) |
+| Sealed green | `#2E7D53` | `#8FD3AD` | Private, sealed or verified, and nothing else (`text-sealed`, `bg-sealed-soft`) |
+| Warn, danger | `#8A5A12`, `#B4362A` | `#E8B86A`, `#F08A7E` | States only: a warning or an error |
+
+- **Green is a tint, not an accent.** Use it only where something is private, sealed or verified, and keep it under 5% of a screen. Buttons, links, nav and marketing calls to action are never green.
+- **No other hues.** No indigo, purple, blue or yellow accents. Warn and danger are for states, not decoration.
+- The legacy `--lime` and `--navy*` slots now alias ink and greys. Don't build anything new on them.
+- Every colour comes from a token, so dark mode is automatic. Don't use raw hex in components; logos and the OG cards (`lib/docsCard`) are the exception.
+
+## Type
+
+One family, Aeonik, self-hosted. Light (300) for display, Regular and Medium for UI.
+
+| Class | Size | Use |
 | --- | --- | --- |
-| Paper (bg) | `#F4F3EF` | `bg-background` |
-| Ink (text) | `#121316` | `text-foreground` |
-| Indigo (accent) | `#3B3766` | `text-lime` / `bg-lime` (the `--lime` slot) |
-| Mute | `#6E6E76` | `text-mute` |
-| Line | `#E5E3DD` | `border-line` |
-| Panel | `#FFFFFF` | `bg-panel` |
-| Signal green | `#2E7D53` | `--chart-up` |
-| Rust (error/down) | `#C0432F` | `--chart-down` |
-| Twilight gradient | gold `#EEC996` → rose `#E4A69E` → violet `#9674B2` → indigo `#4A498C` | `.twilight-atmos` |
+| `t-display-xl` | 42 to 76 | One per page: the landing hero, a section's big statement, /research |
+| `t-display-l` | 32 to 48 | Page and post titles on the site |
+| `t-display-m` | 26 to 34 | App page titles, section heads |
+| `t-title` | 20 | Card titles |
+| body | 15 to 18 | 17 to 18 for reading (`.article-prose`, `.docs-prose`), 14 to 15 in the app |
+| `t-label` | 11 caps | Rare. Not every label is caps: a card title, a meta line or a form label is sentence case |
 
-Typeface: **Aeonik** (self-hosted woff2), one family across the whole system.
-Never reintroduce acid lime `#C8FF00`, Instrument Serif, or a second family.
+- Money is `tnum`, light weight when large, and never truncated mid-number (`formatUsdCompact`).
+- Keep display lines to one or two lines, with `text-wrap: balance`.
 
-## What the references teach us
+## Shape
 
-- **Arcium** (light bg, a bold indigo-violet gradient, minimal nav, generous
-  whitespace, rounded pills). Validates Twilight almost exactly. Takeaway: use
-  the twilight gradient with confidence as a hero/section device, and give
-  sections room.
-- **Zama** (bold black + bright accent, huge type, enormous whitespace, and the
-  positioning: "Confidential Onchain Finance", "the HTTPS moment", institutional
-  / compliance framing). Takeaway: bigger, more confident headlines; more air;
-  and lean the copy toward "private but provable / compliance-friendly", which is
-  the answer to the dark-pool objection (this is what selective disclosure buys).
-- **Umbra** (simple, clean, non-technical). Takeaway: keep the app approachable,
-  plain-language, no jargon. A user should never see "dev proving keys" or a
-  witness dump.
+| Radius | Where |
+| --- | --- |
+| 999 (pill) | Buttons (`.btn`), chips (`.gl-chip`), segmented controls |
+| 12 | Rows, list items, inner panels |
+| 14 | Inputs (`.gl-input`, `.gl-inputwrap`) |
+| 18 | Cards (`.gl-card`) |
+| 20 | Big amount fields (`.gl-inputcard`), glass rims (`.gl-glass`: 8px of glass around a 12px panel, so the curves stay concentric) |
+| 24 | Feature panels with the sealed field (`.gl-panel`) |
 
-## Principles (apply everywhere)
+A box inside a box takes the outer radius minus the padding between them.
 
-1. **Space over density.** Generous padding and gaps. If it feels jammed, it is.
-   App content sits in `max-w-7xl` with `sm:px-8` and `sm:py-14`; docs use real
-   `gap-x-16` between columns. Cards are `rounded-2xl` with `p-5`/`p-6`.
-2. **Confident type.** Big display headlines (`text-4xl`/`5xl`+), tight tracking,
-   Aeonik. Let headlines breathe with `text-wrap: balance` where possible.
-3. **No stacked panes on a boxed form.** The Vault uses a quiet vertical action
-   rail (sticky on desktop, horizontal scroller on mobile) beside a roomy form
-   column, not four tabs over a centered box. Reuse `.vault-rail`.
-4. **Plain language, no chrome.** No "dev proving keys / testnet only / production
-   gate" stamped on forms or footers. Caveats live in the docs. Copy names things
-   by what a person does (Shield, Send, Cash out, Trade), not the mechanism.
-5. **Do not over-mark "private".** One clear signal is enough. No per-row PRIVATE
-   pills, no "· private" suffixes on every market. It reads as childish.
-6. **Dev-safe responsive swaps.** Webpack dev loses `sm:`/`lg:` display variants
-   to a conflicting base class. For row↔column swaps use a real CSS media query
-   (`.app-nav`, `.mkt-controls`, `.vault-rail`), not `flex-col sm:flex-row`.
-7. **Theme-honest colors.** Everything from the token set. No `text-red-300` /
-   dark-mode leftovers on the light theme (use Rust `#C0432F`).
+## Components
 
-## Applied so far
+- **Buttons** (`.btn`, pill, 44px, `btn-sm` 36px, `btn-lg` 48px):
+  - `btn-ink` is the one primary action on a screen.
+  - `btn-ghost` (outlined) is a real second action.
+  - `btn-quiet` is anything else. Prefer it over a second outlined button next to an ink one.
+  - `btn-danger` is for destructive confirms only.
+  - Buttons never move on hover; they change tone. Only `.btn:active` presses in a touch.
+- **Cards** (`.gl-card`): panel, hairline, `shadow-card`, radius 18, `p-5` to `p-7`. A clickable card firms its edge on hover (`.lift`) and never lifts.
+- **Fields**: `.gl-input` for text, `.gl-inputcard` for the big amount fields, `.gl-chip` for small picks (25%, Max). Dropdowns use the shared Gloam dropdown, never a native `<select>`.
+- **Sealed field** (`SealedField` in a `.gl-panel`): the one luminous surface. It signals privacy in the app and carries covers on the site. Use one per screen at most.
+- **Status**: one clear signal. No "Private" pill on every row and no "Public" pill on every card. Say it once in the card title or the empty state.
+- **Icons**: bare strokes at 1.5 to 1.8 weight in `currentColor`, with no tile or circle behind them. Real logos come from `TokenLogo` and `public/brand/logos`, never a monogram when the real mark exists.
 
-Vault (action rail + roomy form), Markets (aligned filters, no private pills),
-Docs (wide, real column gaps, borderless nav), 404 (branded, spacious), Admin
-(light-theme error colors, wider, rounded), and the app shell padding. The
-landing already uses the twilight system; when polishing it, push space and type
-per the principles above rather than restructuring it.
+## Layout
+
+- The site container is `max-w-[1400px] px-4 sm:px-7`, the same as the header. Every section aligns to it.
+- Reading columns are 680 to 720px (`ArticleLayout`, docs).
+- The app frame (`AppShell`) is a floating sidebar on desktop and a top bar with a sheet on phones. Content sits in `max-w-[1120px]`. The page header is the title on the left, one short line under it, and at most one action on the right.
+- App navigation:
+  - Portfolio
+  - Vault, with its actions listed under it: Add privately, Pay privately, Receive, Swap, Cash out, then Trade and Public send where the network has them
+  - Payroll
+  - Markets, on stock networks
+  - Prove
+  - Settings and Docs at the foot
+
+  Every action is a deep link (`lib/vaultNav`). The Portfolio quick actions use the same names.
+- For row and column swaps, use real media queries (`.gl-sidebar`, `.gl-pagehead`), not `hidden lg:flex`. Webpack dev can drop the variant.
+- Mind the touch targets: 40px for anything tappable on a phone, and visible focus rings everywhere.
+
+## Writing
+
+Plain language, short sentences, no jargon on screen:
+- Say private balance, not note.
+- Say Gloam address, not receive tag.
+- Say claim link and cash out.
+- Say mainnet and testnet, with no gloss.
+
+No em dashes, no hype, never "happy to". Keep the product verbs: Add privately, Pay privately, Receive, Swap, Cash out, Prove.
+
+## The anti-slop law
+
+Read `https://pols.dev/slop.md` before any UI work. The tells this product has slipped into before:
+
+- A filled button next to an outlined one as the default action row
+- A tinted pill on every piece of metadata, and an icon sitting in a coloured circle
+- The same tracked-caps label on every heading, eyebrow and footer title
+- A card that lifts and blooms a shadow on hover, and a pulsing "live" dot as decoration
+- Content that starts at opacity 0 and waits for a script to show it
+- Tabs inside tabs
+- A nav label that doesn't match its page title
