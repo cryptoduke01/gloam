@@ -40,15 +40,6 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 
 /* Small marks that carry the public / private duality. */
-function EyeIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function LockIcon({ className = "" }: { className?: string }) {
   return (
     <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -58,29 +49,14 @@ function LockIcon({ className = "" }: { className?: string }) {
   );
 }
 
-function KindBadge({ sealed }: { sealed: boolean }) {
-  return (
-    <span
-      className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium ${
-        sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-mute"
-      }`}
-    >
-      {sealed ? <LockIcon /> : <EyeIcon />}
-      {sealed ? "Private" : "Public"}
-    </span>
-  );
-}
-
 function StatCard({
   label,
-  sealed,
   value,
   sub,
   loading,
   children,
 }: {
   label: string;
-  sealed: boolean;
   value: string;
   sub?: string;
   loading?: boolean;
@@ -90,7 +66,6 @@ function StatCard({
     <div className="gl-card flex min-w-0 flex-col p-5">
       <div className="flex h-6 items-center justify-between gap-3">
         <span className="text-[13px] text-mute">{label}</span>
-        <KindBadge sealed={sealed} />
       </div>
       <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
         {loading ? <span className="inline-block h-7 w-24 animate-pulse rounded-lg bg-surface align-middle" /> : value}
@@ -557,14 +532,12 @@ export function PortfolioView() {
         </div>
         <StatCard
           label="Wallet"
-          sealed={false}
           value={walletValue}
           sub={walletSub}
           loading={isConnected && isLoading}
         />
         <StatCard
           label={publicAssetLabel}
-          sealed={false}
           value={stocksValue}
           sub={publicAssetSub}
         />
@@ -580,7 +553,6 @@ export function PortfolioView() {
                   <h2 className="text-[17px] text-foreground">In your vault</h2>
                   <p className="mt-0.5 text-[13px] text-mute">Only this browser can read these amounts</p>
                 </div>
-                <KindBadge sealed />
               </header>
               <ul className="divide-y divide-line border-t border-line">
                 {vaultRows.slice(0, 6).map((n) => (
@@ -589,9 +561,16 @@ export function PortfolioView() {
                     className="flex min-h-[64px] items-center justify-between gap-3 max-sm:px-5 py-3 transition-colors hover:bg-surface/60 sm:px-6"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sealed-soft text-sealed" aria-hidden>
-                        <LockIcon />
-                      </span>
+                      <TokenLogo
+                        id={
+                          isNativeAsset(n.asset)
+                            ? "eth"
+                            : (tokenSet.find((t) => t.address.toLowerCase() === n.asset.toLowerCase())?.id ??
+                              assetLabel(n.asset).toLowerCase())
+                        }
+                        symbol={assetLabel(n.asset)}
+                        size={34}
+                      />
                       <div className="min-w-0">
                         <p className="tnum truncate text-[15px] text-foreground">
                           {isNativeAsset(n.asset)
@@ -603,7 +582,7 @@ export function PortfolioView() {
                           {n.unfunded
                             ? "Waiting for this payment to reach the vault. Not in your balance yet."
                             : n.leafIndex != null
-                              ? "Ready to send privately or cash out"
+                              ? "Ready to use"
                               : "Confirming…"}
                           {!n.unfunded && (isClaimedNote(n) || isSecuredClaim(n)) ? ", received" : ""}
                         </p>
@@ -673,7 +652,6 @@ export function PortfolioView() {
                 <h2 className="text-[17px] text-foreground">Holdings</h2>
                 <p className="mt-0.5 text-[13px] text-mute">Public tokens in your wallet</p>
               </div>
-              <KindBadge sealed={false} />
             </header>
             {!balancesVisible ? (
               <div className="border-t border-line">
