@@ -1,0 +1,21 @@
+{
+  "name": "gloam-virtuals-acp-provider-example",
+  "private": true,
+  "type": "module",
+  "description": "A Gloam provider agent for Virtuals' Agent Commerce Protocol: one service, private payout. Plus a provider that adds its ACP earnings to a private balance.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && tsx --test test/*.test.mts",
+    "demo:fork": "tsx scripts/fork-demo.mts"
+  },
+  "dependencies": {
+    "@gloamtrade/game-plugin-gloam": "workspace:*",
+    "@gloamtrade/sdk": "workspace:*",
+    "viem": "2.55.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
