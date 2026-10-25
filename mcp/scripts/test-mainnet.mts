@@ -155,7 +155,8 @@ test("naming a mainnet network in limits allows exactly that asset there", () =>
 
 test("Base in limits: a symbol on both sides is the testnet; base-mainnet names the mainnet asset", () => {
   // USDC, EURC and ETH are on both Base networks: alone they are the testnet ones (ETH alone stays Robinhood Chain testnet).
-  const plain = resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: ["USDC", "EURC", "ETH", NATIVE_ASSET] }, "test");
+  const caps = { maxPerPayment: "5", maxPerDay: "10" };
+  const plain = resolveAgent("bot", { recipients: "any", assets: { USDC: caps, EURC: caps, ETH: caps, [NATIVE_ASSET]: caps } }, "test");
   assert.deepEqual(
     plain.assets.map((a) => [a.address, a.chainId]),
     [
@@ -217,4 +218,59 @@ test("GLOAM_LIMIT_NETWORK names the network of inline limits", () => {
 test("authorize-access-key takes --network", () => {
   assert.equal(parseFlags(["--network", "tempo-mainnet", "--owner", "0x1"]).network, "tempo-mainnet");
   assert.equal(parseFlags(["--network=tempo"]).network, "tempo");
+});
+
+test("one agent-wide cap never covers ETH and dollars together: 50 would have meant 50 ETH", () => {
+  const ownUnits = /count in each asset's own units/;
+  // The inline form has only the agent-wide numbers: USDC, EURC and ETH on Base mainnet are refused.
+  const inline = loadPolicy(
+    {
+      GLOAM_LIMIT_ASSETS: "USDC,EURC,ETH",
+      GLOAM_LIMIT_NETWORK: "base-mainnet",
+      GLOAM_LIMIT_MAX_PER_PAYMENT: "50",
+      GLOAM_LIMIT_MAX_PER_DAY: "200",
+      GLOAM_LIMIT_RECIPIENTS: "any",
+    },
+    read
+  );
+  assert.equal(inline.mode, "invalid");
+  if (inline.mode === "invalid") assert.match(inline.error, ownUnits);
+  // In a file too, wherever the agent-wide numbers reach more than one kind of asset.
+  const bad: unknown[] = [
+    { recipients: "any", maxPerPayment: "50", maxPerDay: "200", assets: ["USDG", "GLOAM"] },
+    { recipients: "any", maxPerPayment: "50", maxPerDay: "200", assets: { USDC: { network: "base-mainnet" }, ETH: { network: "base-mainnet" } } },
+    // ETH and GLOAM are different assets too
+    { recipients: "any", maxPerPayment: "50", maxPerDay: "200", assets: { ETH: {}, GLOAM: {} } },
+    // one cap of its own is not enough: the other still comes from the agent
+    { recipients: "any", maxPerPayment: "50", maxPerDay: "200", assets: { USDC: { network: "base-mainnet" }, ETH: { network: "base-mainnet", maxPerPayment: "0.01" } } },
+  ];
+  for (const cfg of bad) assert.throws(() => resolveAgent("bot", cfg as never, "test"), ownUnits, JSON.stringify(cfg));
+  // Stablecoins share one number; ETH with caps of its own sits beside them.
+  const ok = resolveAgent(
+    "bot",
+    {
+      recipients: "any",
+      maxPerPayment: "50",
+      maxPerDay: "200",
+      assets: {
+        USDC: { network: "base-mainnet" },
+        USDT: {},
+        ETH: { network: "base-mainnet", maxPerPayment: "0.01", maxPerDay: "0.05" },
+      },
+    },
+    "test"
+  );
+  const eth = ok.assets.find((a) => a.symbol === "ETH")!;
+  assert.equal(eth.maxPerPayment, parseUnits("0.01", 18));
+  assert.equal(eth.maxPerDay, parseUnits("0.05", 18));
+  assert.equal(ok.assets.find((a) => a.symbol === "USDT")!.maxPerPayment, parseUnits("50", 6));
+  const ethSpend = (wei: bigint): Spend => ({ tool: "pay", network: "base-mainnet", chainId: 8453, asset: NATIVE_ASSET, amountWei: wei, recipient: PAYEE });
+  assert.equal(checkSpend(ok, ethSpend(parseUnits("49", 18)), [], NOW)?.code, "over_per_payment");
+  // A single asset, the stablecoins together (EURC too: counted, never priced), and the README's
+  // two dollar stablecoins still take the agent-wide caps.
+  assert.doesNotThrow(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: { USDC: { network: "base-mainnet" }, EURC: { network: "base-mainnet" } } }, "test"));
+  assert.doesNotThrow(() => resolveAgent("bot", { recipients: "any", maxPerPayment: "0.1", maxPerDay: "1", assets: ["ETH"] }, "test"));
+  assert.doesNotThrow(() =>
+    resolveAgent("bot", { recipients: "any", maxPerPayment: "250", maxPerDay: "1000", assets: { USDG: { network: "robinhood-mainnet" }, USDT0: {} } }, "test")
+  );
 });
