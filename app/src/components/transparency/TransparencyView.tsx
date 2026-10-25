@@ -379,7 +379,7 @@ function HoldingsCard({ ledger, prices, waiting }: { ledger: Ledger; prices: Pri
         {unpriced.length > 0 && !pricesLoading && (
           <p className="mt-1 text-[12.5px] leading-relaxed text-mute">
             {prices
-              ? `Not in the total: ${unpriced.map((r) => r.h.symbol).join(", ")}, no price right now.`
+              ? `Not in the total: ${unpriced.map((r) => r.h.symbol).join(", ")}, no dollar price.`
               : `Not in the total yet: ${unpriced.map((r) => r.h.symbol).join(", ")}, prices are still loading.`}
           </p>
         )}

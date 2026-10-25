@@ -314,12 +314,19 @@ export function PortfolioView() {
   const hasShield = shieldRows.length > 0;
   const stockCount = positions.filter((p) => p.raw > BigInt(0)).length;
 
+  // Held but with no dollar price here (EURC is a euro, never $1; a stock whose feed is down):
+  // left out of the dollar figures, and said so, never counted as $0.
+  const shieldUnpriced = shieldRows.filter((r) => r.usd == null).map((r) => r.label);
+  const publicUnpriced = positions.filter((p) => p.raw > BigInt(0) && p.mark <= 0).map((p) => p.symbol);
+  const unpriced = [...new Set([...shieldUnpriced, ...publicUnpriced])];
+
   // Public (wallet + tokens) vs sealed (vault) split, the whole point.
   const publicUsd = nativeHeldUsd + stocksUsd;
   const sealedUsd = shieldEthUsd + shieldStocksUsd;
   const totalKnown = publicUsd + sealedUsd;
+  // A share of the priced part only would mislead, so no split while something has no price.
   const sealedPct =
-    isConnected && onProduct && totalKnown > 0
+    isConnected && onProduct && totalKnown > 0 && unpriced.length === 0
       ? Math.round((sealedUsd / totalKnown) * 100)
       : null;
 
@@ -367,7 +374,7 @@ export function PortfolioView() {
     ? settings.showUsd
       ? formatUsd(0)
       : "0"
-    : settings.showUsd && (sealedUsd > 0 || !hasShield)
+    : settings.showUsd && shieldUnpriced.length === 0 && (sealedUsd > 0 || !hasShield)
       ? formatUsdCompact(sealedUsd)
       : vaultValue;
   const privateSub = !isConnected
@@ -382,7 +389,7 @@ export function PortfolioView() {
               ? `You have ${formatAssetAmount(addSuggestion.raw, addSuggestion.address)} ${addSuggestion.symbol} in your wallet. Add it privately and only you will see this number.`
               : "Nothing here yet. Add money privately and only you will see this number."
             : "The private vault is not live on this network yet."
-          : settings.showUsd && sealedUsd > 0
+          : settings.showUsd && sealedUsd > 0 && shieldUnpriced.length === 0
             ? `${vaultValue} in your vault. Nobody else can see it.`
             : "Hidden from the public. Only this browser can read it.";
 
@@ -390,7 +397,7 @@ export function PortfolioView() {
     ? settings.showUsd
       ? formatUsd(0)
       : "0 tokens"
-    : settings.showUsd && stocksUsd > 0
+    : settings.showUsd && stocksUsd > 0 && publicUnpriced.length === 0
       ? formatUsdCompact(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
@@ -543,6 +550,9 @@ export function PortfolioView() {
           <p className="tnum mt-4 truncate text-[28px] font-light leading-none tracking-[-0.02em] text-foreground">
             {totalDisplay}
           </p>
+          {balancesVisible && settings.showUsd && unpriced.length > 0 && (
+            <p className="mt-2 truncate text-[12px] text-mute">Not in the total: {unpriced.join(", ")}, no dollar price</p>
+          )}
           <div className="mt-auto pt-4">
             <div className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface" aria-hidden>
               {sealedPct != null && (
