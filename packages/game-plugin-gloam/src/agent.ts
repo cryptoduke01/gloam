@@ -60,6 +60,7 @@ import {
   networkName,
   normalizeRequestAmount,
   notePackageToExport,
+  openSealedTicket,
   parsePaymentRequestLink,
   payMemoBoardFor,
   relayIntent,
@@ -647,6 +648,19 @@ export class GloamAgent {
   /** The agent's notes as handles and public facts. */
   notes() {
     return this.store.list().filter((n) => n.chainId === this.network.chainId).map(noteView);
+  }
+
+  /** The most one payment can be right now, in base units: a payment spends one note. */
+  largestPayment(asset?: string): bigint {
+    const all = this.spendable(this.asset(asset));
+    return all.length ? BigInt(all[all.length - 1]!.amountWei) : 0n;
+  }
+
+  /** Open a code sealed to this agent's Gloam address (owner code: a sealed request or deliverable). */
+  async openSealed(sealed: string): Promise<string> {
+    const key = this.store.receiveKey();
+    if (!key) throw new Error("This agent has no Gloam address yet, so nothing can be sealed to it.");
+    return openSealedTicket(sealed, key);
   }
 
   // ------------------------------------------------------------------ add privately

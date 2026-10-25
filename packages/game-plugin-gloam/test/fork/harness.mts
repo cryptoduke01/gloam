@@ -110,7 +110,9 @@ export async function startFork(opts: { upstream: string; chainId: number; log?:
   const sendAs = async (from: Address, to: Address, data: Hex, value = 0n): Promise<Hex> => {
     await rpc("anvil_impersonateAccount", [from]);
     try {
-      const hash = await rpc<Hex>("eth_sendTransaction", [{ from, to, data, value: toHex(value) }]);
+      // Name the gas: on Arbitrum-style chains anvil would otherwise reserve the whole block's gas limit.
+      const gas = await rpc<Hex>("eth_estimateGas", [{ from, to, data, value: toHex(value) }]);
+      const hash = await rpc<Hex>("eth_sendTransaction", [{ from, to, data, value: toHex(value), gas: toHex((BigInt(gas) * 12n) / 10n) }]);
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`call from ${from} reverted (${hash})`);
       return hash;
@@ -124,14 +126,14 @@ export async function startFork(opts: { upstream: string; chainId: number; log?:
     chainId: opts.chainId,
     client,
     rpc,
-    async newKey(eth = 10n ** 18n) {
+    async newKey(eth = 10n ** 19n) {
       const key = generatePrivateKey();
       const address = privateKeyToAccount(key).address;
       await rpc("anvil_setBalance", [address, toHex(eth)]);
       return { key, address };
     },
     async sendFromHolder(token, holder, to, amount) {
-      await rpc("anvil_setBalance", [holder, toHex(10n ** 17n)]);
+      await rpc("anvil_setBalance", [holder, toHex(10n ** 19n)]);
       return sendAs(holder, token, encodeFunctionData({ abi: ERC20, functionName: "transfer", args: [to, amount] }));
     },
     async setTokenBalance(token, slot, who, amount) {

@@ -1,0 +1,136 @@
+/**
+ * The slice of Virtuals' Agent Commerce Protocol this provider needs, typed to
+ * match @virtuals-protocol/acp-node-v2 0.1.15 (commit 392dcc6) structurally, so
+ * its real AcpAgent and JobSession plug straight in, and so does the fork room
+ * in ./forkRoom.ts. The SDK is not a dependency here: it pulls in Privy and
+ * Alchemy wallet clients this example does not need to run.
+ *
+ * ACP today is the ERC-8183 job escrow ("ACP v2" in the whitepaper changelog):
+ *
+ *   createJob(provider, evaluator, expiredAt, description, hook)   client
+ *   setBudget(jobId, amount, optParams)                            provider
+ *   fund(jobId, expectedBudget, optParams)                         client, pulls the budget into escrow
+ *   submit(jobId, keccak256(deliverable), optParams)               provider
+ *   complete / reject(jobId, reason, optParams)                    evaluator; with no evaluator, submit completes
+ *   claimRefund(jobId)                                             anyone, after expiry
+ *
+ * On completion the escrow pays the provider the budget less Virtuals' fees
+ * (platformFeeBP, plus evaluatorFeeBP when there is an evaluator). The budget
+ * is in one token per contract. Requirement and deliverable texts are
+ * messages on Virtuals' ACP backend; only the deliverable's hash is on chain.
+ */
+import type { Address, Hex } from "viem";
+
+/** acp-node-v2 core/constants.ts and the contracts themselves, read 25 Oct 2026. */
+export const ACP_CONTRACTS: Record<number, { acp: Address; paymentToken: Address; tokenName: string }> = {
+  // Base mainnet: Circle USDC, the same token Gloam's Base vault takes.
+  8453: { acp: "0x238E541BfefD82238730D00a2208E5497F1832E0", paymentToken: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", tokenName: "USDC" },
+  // Robinhood Chain mainnet: Paxos USDG (the SDK calls it USDC), the same token Gloam's Robinhood Chain vault takes.
+  4663: { acp: "0x238E541BfefD82238730D00a2208E5497F1832E0", paymentToken: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", tokenName: "USDG" },
+  // Base Sepolia: Virtuals' own test "USD Coin", not Circle's test USDC that Gloam's Base Sepolia vault takes.
+  84532: { acp: "0x0b93793923CD5De81850aF8604a233f3f24d461e", paymentToken: "0xECc22a8F6fD62388498fBa19813E214605a2BDb3", tokenName: "test USD Coin" },
+};
+
+export const ACP_ABI = [
+  { type: "function", name: "createJob", stateMutability: "nonpayable", inputs: [{ name: "provider", type: "address" }, { name: "evaluator", type: "address" }, { name: "expiredAt", type: "uint256" }, { name: "description", type: "string" }, { name: "hook", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "setBudget", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "optParams", type: "bytes" }], outputs: [] },
+  { type: "function", name: "fund", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "expectedBudget", type: "uint256" }, { name: "optParams", type: "bytes" }], outputs: [] },
+  { type: "function", name: "submit", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "deliverable", type: "bytes32" }, { name: "optParams", type: "bytes" }], outputs: [] },
+  { type: "function", name: "reject", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "reason", type: "bytes32" }, { name: "optParams", type: "bytes" }], outputs: [] },
+  { type: "function", name: "jobCounter", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "platformFeeBP", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "evaluatorFeeBP", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "paymentToken", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  {
+    type: "function",
+    name: "jobs",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [
+      { name: "client", type: "address" },
+      { name: "status", type: "uint8" },
+      { name: "provider", type: "address" },
+      { name: "expiredAt", type: "uint48" },
+      { name: "evaluator", type: "address" },
+      { name: "hook", type: "address" },
+      { name: "budget", type: "uint256" },
+      { name: "description", type: "string" },
+    ],
+  },
+  { type: "event", name: "JobCreated", inputs: [{ name: "jobId", type: "uint256", indexed: true }, { name: "client", type: "address", indexed: true }, { name: "provider", type: "address", indexed: true }, { name: "evaluator", type: "address", indexed: false }, { name: "expiredAt", type: "uint256", indexed: false }, { name: "hook", type: "address", indexed: false }] },
+] as const;
+
+export const NO_EVALUATOR: Address = "0x0000000000000000000000000000000000000000";
+
+// ------------------------------------------------------------------ acp-node-v2 shapes (events/types.ts)
+
+export type JobCreatedEvent = { type: "job.created"; jobId: string; client: string; provider: string; evaluator: string; expiredAt: string; hook: string };
+export type BudgetSetEvent = { type: "budget.set"; jobId: string; amount: number };
+export type JobFundedEvent = { type: "job.funded"; jobId: string; client: string; amount: number };
+export type JobSubmittedEvent = { type: "job.submitted"; jobId: string; provider: string; deliverableHash: string; deliverable: string };
+export type JobCompletedEvent = { type: "job.completed"; jobId: string; evaluator: string; reason: string };
+export type JobRejectedEvent = { type: "job.rejected"; jobId: string; rejector: string; reason: string };
+export type JobExpiredEvent = { type: "job.expired"; jobId: string };
+export type AcpJobEvent = JobCreatedEvent | BudgetSetEvent | JobFundedEvent | JobSubmittedEvent | JobCompletedEvent | JobRejectedEvent | JobExpiredEvent;
+
+export type SystemEntry = { kind: "system"; onChainJobId: string; chainId: number; event: AcpJobEvent; timestamp: number };
+export type AgentMessage = {
+  kind: "message";
+  onChainJobId: string;
+  chainId: number;
+  from: string;
+  contentType: "text" | "proposal" | "deliverable" | "structured" | "requirement";
+  content: string;
+  timestamp: number;
+};
+export type JobRoomEntry = SystemEntry | AgentMessage;
+
+/** core/assetToken.ts: what setBudget takes. AssetToken.usdc(amount, chainId) builds one in the real SDK. */
+export interface AssetTokenLike {
+  readonly address: Address;
+  readonly symbol: string;
+  readonly decimals: number;
+  readonly amount: number;
+  readonly rawAmount: bigint;
+}
+
+/** acpJob.ts AcpJob, the fields this provider reads. */
+export interface AcpJobLike {
+  readonly chainId: number;
+  readonly clientAddress: string;
+  readonly providerAddress: string;
+  readonly evaluatorAddress: string;
+  readonly description: string;
+  readonly budget: AssetTokenLike;
+  readonly expiredAt: bigint;
+  readonly hookAddress: string;
+}
+
+export type DerivedStatus = "open" | "budget_set" | "funded" | "submitted" | "completed" | "rejected" | "expired";
+
+/** jobSession.ts JobSession, the methods this provider calls. */
+export interface JobSessionLike {
+  readonly jobId: string;
+  readonly chainId: number;
+  readonly job: AcpJobLike | null;
+  readonly status: DerivedStatus;
+  setBudget(amount: AssetTokenLike): Promise<void>;
+  submit(deliverable: string): Promise<void>;
+  sendMessage(content: string, contentType?: string): Promise<void>;
+  reject(reason: string): Promise<void>;
+}
+
+/** acpAgent.ts AcpAgent: agent.on("entry", handler), then agent.start(). */
+export interface AcpAgentLike {
+  on(event: "entry", handler: (session: JobSessionLike, entry: JobRoomEntry) => void | Promise<void>): unknown;
+  getAddress(): Promise<string>;
+  start(): Promise<void>;
+}
+
+export function assetToken(address: Address, symbol: string, decimals: number, rawAmount: bigint): AssetTokenLike {
+  const s = rawAmount.toString().padStart(decimals + 1, "0");
+  const amount = Number(`${s.slice(0, -decimals) || "0"}.${s.slice(-decimals)}`);
+  return { address, symbol, decimals, amount, rawAmount };
+}
+
+export type { Hex };
