@@ -319,15 +319,15 @@ async function ecdhAesKey(
 /** Sealed tickets grow in steps of this many bytes before they are encrypted. */
 const SEAL_PAD_STEP = 512;
 /**
- * The largest plaintext a ticket can be (a 78-digit amount and an 80-character
- * note at its worst, RELAY_MEMO_MAX_BYTES in lib/relay/server has the sums):
- * the last step stops here, so padding never makes a ticket bigger than the
- * biggest one already was.
+ * The largest plaintext a ticket can be (a 78-digit amount, an 8-digit chain id
+ * and an 80-character note at its worst, RELAY_MEMO_MAX_BYTES in
+ * lib/relay/server has the sums): the last step stops here, so padding never
+ * makes a ticket bigger than the biggest one already was. The SDK pads the same.
  */
-const SEAL_PAD_MAX = 1158;
+const SEAL_PAD_MAX = 1177;
 
 /**
- * Pads a ticket with spaces to the next 512-byte step (512, 1024, then 1158),
+ * Pads a ticket with spaces to the next 512-byte step (512, 1024, then 1177),
  * so a payment message's length on the public board no longer gives away how
  * many digits the amount has or how long the note is. Readers trim it: the
  * app's and the SDK's decodeNotePackage, and decryptTicketWithLocalTag here.

@@ -396,21 +396,22 @@ export function asAmount(v: unknown): bigint {
 /**
  * Largest payment message the relay posts, in bytes. The memo board itself
  * takes up to 8192 (GloamPayMemo.MAX_MEMO), but a real message is always a
- * sealed ticket, and the largest one is 1714 bytes:
+ * sealed ticket, and the largest one is 1739 bytes:
  *
  *   note JSON   376 bytes with no note (pool and asset addresses, a 78-digit
- *               amount, the secret and the commitment), plus `,"n":""` (7)
+ *               amount, the secret and the commitment), plus the chain
+ *               `,"ch":11155111` (14, an 8-digit chain id), `,"n":""` (7)
  *               and the note: 80 characters at 6 bytes each at worst once
  *               JSON escapes them (a lone surrogate becomes \uXXXX; emoji are
- *               4), so 480. Total 863.
- *   gloam1.     7 + base64url(863) = 7 + 1151 = 1158
- *   sealed      2 + 91 (P-256 key) + 12 (IV) + 1158 + 16 (GCM tag) = 1279
- *   gloam2t.    8 + base64url(1279) = 8 + 1706 = 1714
+ *               4), so 480. Total 877.
+ *   gloam1.     7 + base64url(877) = 7 + 1170 = 1177
+ *   sealed      2 + 91 (P-256 key) + 12 (IV) + 1177 + 16 (GCM tag) = 1298
+ *   gloam2t.    8 + base64url(1298) = 8 + 1731 = 1739
  *
  * The app pads every ticket before sealing it (lib/receiveTag padSealed) to
- * 512, 1024 or at most 1158 bytes, so padding never takes one past 1714.
+ * 512, 1024 or at most 1177 bytes, so padding never takes one past 1739.
  *
- * 2048 leaves 334 bytes over that worst case (over 600 for a note of real
+ * 2048 leaves 309 bytes over that worst case (over 550 for a note of real
  * characters), and a junk message costs the relay a quarter of what the board
  * would take.
  */
