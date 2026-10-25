@@ -6,7 +6,7 @@ import {MainnetDeploy} from "./MainnetDeploy.sol";
 /**
  * Gloam on Ethereum Sepolia (chainId 11155111), Ethereum's testnet: the same
  * payments pool, final keys, beta deposit limits and cash-out fee as the
- * mainnets, on test funds. The deploy itself is MainnetDeploy, shared with
+ * mainnets. The deploy itself is MainnetDeploy, shared with
  * Robinhood Chain, Tempo and Base, so a dry run here is a rehearsal of the
  * Ethereum mainnet one.
  *
