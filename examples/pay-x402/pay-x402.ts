@@ -13,10 +13,10 @@
  * feed. This is NOT a Tempo Zone: no operator sees the payment; only the payer
  * and the payee learn the amount.
  *
- *   # mainnet, real money: a 0.01 USDC.e payment on Tempo (or USDG on Robinhood Chain)
+ *   # mainnet: a 0.01 USDC.e payment on Tempo (or USDG on Robinhood Chain)
  *   GLOAM_NETWORK=tempo-mainnet GLOAM_PAY_KEY=0x... npx tsx examples/pay-x402/pay-x402.ts
  *
- *   # testnet, test funds (the default): test ETH on Robinhood Chain testnet
+ *   # testnet (the default): test ETH on Robinhood Chain testnet
  *   GLOAM_PAY_KEY=0x... npx tsx examples/pay-x402/pay-x402.ts
  *
  * GLOAM_NETWORK is robinhood-mainnet, tempo-mainnet, robinhood or tempo (the
@@ -99,9 +99,9 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
     );
   }
   if (net.testnet) {
-    console.log(`${networkName(net.chainId)} (test funds). Set GLOAM_NETWORK=${net.family}-mainnet to use real money.`);
+    console.log(`${networkName(net.chainId)}. Set GLOAM_NETWORK=${net.family}-mainnet to use mainnet.`);
   } else {
-    console.log(`${net.label} mainnet. This moves REAL MONEY. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
+    console.log(`${net.label} mainnet. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
   }
   return net;
 }

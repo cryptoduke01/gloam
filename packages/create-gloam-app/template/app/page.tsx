@@ -9,8 +9,8 @@
  * browser. The private balance is read back straight from the pool with
  * commitmentSeen(): no backend, no indexer.
  *
- * Network: NEXT_PUBLIC_GLOAM_NETWORK = "robinhood-mainnet" (real money) or
- * "robinhood" (testnet, test funds). Unset, it is Robinhood Chain mainnet when
+ * Network: NEXT_PUBLIC_GLOAM_NETWORK = "robinhood-mainnet" (mainnet) or
+ * "robinhood" (testnet). Unset, it is Robinhood Chain mainnet when
  * this SDK version has its pool, and Robinhood Chain testnet otherwise.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -309,7 +309,7 @@ export default function Page() {
       <h1>Shield a private balance</h1>
       <p className="lede">
         Deposit USDG into a shielded note on {NETWORK_LABEL}
-        {NET ? (MAINNET ? ". This is real money." : ", with test funds.") : "."} The proof is generated in your
+        {"."} The proof is generated in your
         browser; the note secret never leaves it.
       </p>
 
@@ -360,7 +360,7 @@ export default function Page() {
 
       {MAINNET ? (
         <p className="foot">
-          Robinhood Chain mainnet: real money. Gloam is beta software, with deposit limits of 500 USDG per deposit
+          Robinhood Chain mainnet. Gloam is beta software, with deposit limits of 500 USDG per deposit
           and 25,000 USDG across the pool for now. Deposits and private payments are free; cashing out costs 0.25%.
           Proofs use the final keys from the trusted setup. Practice first on testnet with{" "}
           <span className="mono">NEXT_PUBLIC_GLOAM_NETWORK=robinhood</span>. Docs at{" "}
@@ -371,7 +371,7 @@ export default function Page() {
         </p>
       ) : NET ? (
         <p className="foot">
-          Robinhood Chain testnet: test funds with no real value, dev keys. Get test ETH for gas from the{" "}
+          Robinhood Chain testnet, on dev keys. Get test ETH for gas from the{" "}
           <a href="https://faucet.testnet.chain.robinhood.com/" target="_blank" rel="noreferrer">
             Robinhood faucet
           </a>{" "}

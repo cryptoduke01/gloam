@@ -13,8 +13,8 @@ The `gloam` MCP server runs with `npx -y @gloamtrade/mcp`. With no settings it o
 To execute it needs a key, a note-store key and limits, all read from `~/.gloam/agent.env` (mode
 600), never from the plugin config or the chat.
 
-First ask whether the user wants **mainnet** (real money, beta: `tempo-mainnet` or
-`robinhood-mainnet`) or the **testnet** (free practice with test funds: `tempo` or `robinhood`).
+First ask whether the user wants **mainnet** (beta: `tempo-mainnet` or
+`robinhood-mainnet`) or the **testnet** (`tempo` or `robinhood`).
 Suggest practicing on testnet first if they are new to it. `GLOAM_NETWORK` in the settings file sets
 the default network; unset, it is the Robinhood Chain testnet.
 
@@ -34,7 +34,7 @@ caps hold even if the agent is tricked or the server is compromised. The owner's
 leaves the owner.
 
 1. Ask the user for their Tempo account address (public, starts with `0x`), the network
-   (`tempo-mainnet` for real money, `tempo` for testnet), and the limit, reset period and expiry they
+   (`tempo-mainnet` for mainnet, `tempo` for testnet), and the limit, reset period and expiry they
    want. Suggest small numbers, such as 10 USDC.e a day for 30 days on mainnet or 10 PathUSD on
    testnet. The user decides; never pick larger numbers for them.
 2. Run, with their values:

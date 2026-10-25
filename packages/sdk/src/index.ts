@@ -3,9 +3,9 @@
  *
  * Shielded balances, private transfers, and private payments that any app or
  * agent can plug into. It runs on the chains Gloam deploys to, Robinhood Chain
- * and Tempo, on mainnet (real money, the ceremony's final keys) and on testnet
- * (test funds, dev keys), and Base: Base Sepolia, the practice network, runs
- * the mainnet pool and keys with test funds, and Base mainnet appears once its
+ * and Tempo, on mainnet (the ceremony's final keys) and on testnet (dev keys),
+ * and Base: Base Sepolia, its testnet, runs the mainnet pool and keys, and
+ * Base mainnet appears once its
  * pool is filled in. Each is a separate
  * deployment of the same shielded-pool design: pick a network
  * (mainnetNetwork("tempo"), gloamNetworks(), or GLOAM_NETWORKS for the

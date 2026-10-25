@@ -4,7 +4,7 @@
   "version": "0.5.0",
   "private": false,
   "type": "module",
-  "description": "Gloam MCP server: private stablecoin payments for AI agents on Tempo and Robinhood Chain, live on mainnet (beta) with testnet for practice, under spending limits the agent cannot lift.",
+  "description": "Gloam MCP server: private stablecoin payments for AI agents on Tempo and Robinhood Chain, live on mainnet (beta) and testnet, under spending limits the agent cannot lift.",
   "license": "MIT",
   "homepage": "https://gloam.trade/docs/agents",
   "repository": {

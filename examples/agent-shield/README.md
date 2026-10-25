@@ -8,7 +8,7 @@ It mints a Poseidon note, generates the zero-knowledge shield proof, and deposit
 via `shieldBound()`. Who can spend the balance leaves the public feed; only the
 holder (with `note.secret`) can later spend, send, or disclose it.
 
-## Run on mainnet (real money)
+## Run on mainnet
 
 ```bash
 # from the repo root
@@ -28,7 +28,7 @@ GLOAM_NETWORK=robinhood-mainnet GLOAM_AGENT_PRIVATE_KEY=0x... npx tsx agent-shie
 - The script approves the pool for the token, waits for that approval, then
   sends `shieldBound`.
 
-What to know before you use real money:
+What to know before you use mainnet:
 
 - **Beta.** Gloam is beta software. Deposits are capped at 500 per deposit and
   25,000 in total for each stablecoin ($GLOAM: 25,000 and 250,000). Cash outs and

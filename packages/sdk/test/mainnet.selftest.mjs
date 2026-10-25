@@ -206,7 +206,7 @@ for (const [family, chainId, key, assets, native, memo] of [
     continue;
   }
   assert(net && net.key === key && net.chainId === chainId && net.pool === filled.pool && net.deployBlock === filled.deployBlock, `${key} entry`);
-  assert(net.testnet === false && net.ceremony === "production" && net.nativeShield === native, `${key}: real money, final keys, native ${native ? "listed" : "not listed"}`);
+  assert(net.testnet === false && net.ceremony === "production" && net.nativeShield === native, `${key}: mainnet, final keys, native ${native ? "listed" : "not listed"}`);
   assert(memo ? /^0x[0-9a-fA-F]{40}$/.test(net.payMemo ?? "") : net.payMemo === null, `${key}: ${memo ? "its memo board" : "no memo board yet"}`);
   assert(net.assets.map((a) => a.address).join() === assets.join(), `${key} assets`);
   assert(live[0].testnet === false, "mainnets come first");

@@ -43,8 +43,8 @@ test("both Base networks are offered once their pools are in", () => {
   assert.equal(test.defaultAsset, BASE_SEPOLIA_USDC);
   assert.equal(main.name, "Base Mainnet");
   assert.equal(test.name, "Base Sepolia Testnet");
-  assert.equal(nets.describeNetwork(main), "Base mainnet (real money)");
-  assert.equal(nets.describeNetwork(test), "Base testnet (test funds)");
+  assert.equal(nets.describeNetwork(main), "Base mainnet");
+  assert.equal(nets.describeNetwork(test), "Base testnet");
   assert.equal(main.explorer, "https://basescan.org");
   assert.equal(test.explorer, "https://sepolia.basescan.org");
   assert.equal(nets.networkByChainId(84532)?.key, "base");
@@ -53,7 +53,7 @@ test("both Base networks are offered once their pools are in", () => {
 test("GLOAM_NETWORK takes the Base keys, and access keys stay on Tempo", () => {
   assert.equal(nets.defaultNetworkKey({ GLOAM_NETWORK: "base" }), "base");
   assert.equal(nets.defaultNetworkKey({ GLOAM_NETWORK: "base-mainnet" }), "base-mainnet");
-  // Base Sepolia is a testnet: the access key stays on Tempo testnet. Base mainnet is real money: Tempo mainnet.
+  // Base Sepolia is a testnet: the access key stays on Tempo testnet. Base mainnet: Tempo mainnet.
   assert.equal(nets.tempoAccessNetwork({ GLOAM_NETWORK: "base" }).chainId, nets.MCP_NETWORKS.tempo.chainId);
   assert.equal(nets.tempoAccessNetwork({ GLOAM_NETWORK: "base-mainnet" }).chainId, 4217);
 });

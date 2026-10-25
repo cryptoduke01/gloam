@@ -88,7 +88,7 @@ for (const n of [main, test]) {
   assert(n.nativeShield === true, `${n.key}: ETH listed`);
   assert(n.chain.id === n.chainId && /publicnode\.com$/.test(new URL(n.rpcUrl).host), `${n.key}: viem chain, an RPC that serves eth_getLogs`);
 }
-assert(main.testnet === false && test.testnet === true, "real money on mainnet, test funds on Sepolia");
+assert(main.testnet === false && test.testnet === true, "Base is mainnet, Base Sepolia is a testnet");
 assert(main.payMemo === null && test.payMemo === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "a memo board on Base Sepolia, none on Base mainnet yet");
 assert(main.explorerUrl === "https://basescan.org" && test.explorerUrl === "https://sepolia.basescan.org", "Basescan");
 assert(main.assets.map((a) => a.symbol).join() === "USDC,EURC,USDT,ETH", "Base mainnet assets");

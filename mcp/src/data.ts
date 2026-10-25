@@ -50,7 +50,7 @@ export function findMarket(query: string): Market | undefined {
  */
 export const PRIVACY_STATUS = {
   network:
-    "Mainnet (beta, real money) on Robinhood Chain and Tempo, launched 21 October 2026. The testnets stay up for free practice with test funds.",
+    "Mainnet (beta) on Robinhood Chain and Tempo, launched 21 October 2026. The testnets stay up.",
   provingKeys:
     "Mainnet verifies the final keys of the 13-contributor trusted setup (drand round 6561386, release ceremony-final). The testnets use single-party dev keys. This server proves with the set of the network it pays on.",
   live: ["shield (deposit)", "private send and private payments (x402 and MPP)", "receiving and sweeping payments", "cash out (in the Gloam app and SDK)"],
@@ -66,5 +66,5 @@ export const PRIVACY_STATUS = {
   anonymitySet:
     "thin on a new pool, and the mainnet pools are new. Unlinkability is only as strong as the crowd of notes to hide among. Do not treat a cash-out as fully private until the pool has real volume, and do not cash out the same amount you just deposited.",
   execution:
-    "gloam_execute_shield performs a real private deposit (mints a note, generates the Groth16 proof server-side, and broadcasts shieldBound) when GLOAM_AGENT_PRIVATE_KEY is set; on a -mainnet network that is real money. Private trading stays a plan until it is re-enabled.",
+    "gloam_execute_shield performs a real private deposit (mints a note, generates the Groth16 proof server-side, and broadcasts shieldBound) when GLOAM_AGENT_PRIVATE_KEY is set, on mainnet too when the network is a -mainnet one. Private trading stays a plan until it is re-enabled.",
 } as const;

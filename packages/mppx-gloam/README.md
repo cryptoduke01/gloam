@@ -4,7 +4,7 @@ Private payments for the [Machine Payments Protocol](https://mpp.dev) (MPP).
 
 MPP is HTTP 402 done properly: a server answers `WWW-Authenticate: Payment …`, the client pays and retries with `Authorization: Payment …`, and gets a `Payment-Receipt`. Every method so far (tempo, evm, stripe, solana) settles in public, so the ledger shows which agent paid which service, how much, how often.
 
-This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo or Robinhood Chain, on mainnet (real money, beta) or testnet (free practice):
+This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo or Robinhood Chain, on mainnet (beta) or testnet:
 
 - the payment note is sealed to the payee's receive tag, so only the payee can open it;
 - the server checks it binds the price, that it is the payment output of a `Transferred` event in the official pool, and that the credential is bound to this exact challenge;
@@ -107,10 +107,10 @@ It also exports the Payment scheme codec (challenges, credentials, receipts, the
 
 | `network` | Chain | Default currency | Keys |
 | --- | --- | --- | --- |
-| `"tempo-mainnet"` | Tempo mainnet `4217`, real money | USDC.e (also pathUSD, USDT0, OUSD) | Final ceremony keys |
-| `"robinhood-mainnet"` | Robinhood Chain mainnet `4663`, real money | USDG (also GLOAM) | Final ceremony keys |
-| `"tempo"` | Tempo Moderato `42431`, test funds | PathUSD | Dev keys |
-| `"robinhood"` | Robinhood Chain testnet `46630`, test funds | ETH | Dev keys |
+| `"tempo-mainnet"` | Tempo mainnet `4217` | USDC.e (also pathUSD, USDT0, OUSD) | Final ceremony keys |
+| `"robinhood-mainnet"` | Robinhood Chain mainnet `4663` | USDG (also GLOAM) | Final ceremony keys |
+| `"tempo"` | Tempo Moderato `42431` | PathUSD | Dev keys |
+| `"robinhood"` | Robinhood Chain testnet `46630` | ETH | Dev keys |
 
 The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official pools come from the SDK this package is built with: a mainnet appears once that SDK has its pool, and a challenge naming any other pool is refused on both sides.
 
@@ -118,7 +118,7 @@ Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, o
 
 ## Status
 
-Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up for free practice.
+Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.
 
 ## Tests
 

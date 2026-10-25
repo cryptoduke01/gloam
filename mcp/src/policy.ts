@@ -20,8 +20,8 @@
  * token address on both (pathUSD and OUSD sit at the same address on Tempo
  * mainnet and testnet; ETH is the zero address everywhere), means the TESTNET
  * asset unless the entry says "network": "robinhood-mainnet" / "tempo-mainnet" /
- * "base-mainnet". So a config written for testnet never starts approving real
- * money by itself. Mainnet-only symbols (USDC.e, USDT0, GLOAM, USDT) and
+ * "base-mainnet". So a config written for testnet never starts approving mainnet
+ * assets by itself. Mainnet-only symbols (USDC.e, USDT0, GLOAM, USDT) and
  * mainnet-only addresses (USDG on Robinhood Chain mainnet, USDC on Base) name
  * the mainnet asset directly.
  */
@@ -130,7 +130,7 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "USDC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_USDC, decimals: 6 },
   { symbol: "EURC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_EURC, decimals: 6 },
   { symbol: "ETH", chainId: BASE_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
-  // Mainnet (real money): exactly what the mainnet pools list.
+  // Mainnet: exactly what the mainnet pools list.
   { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6 },
   { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18 },
   { symbol: "USDC.e", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDCE, decimals: 6 },

@@ -16,7 +16,7 @@ the spend path: shield, sync the tree from chain, and transfer privately.
 4. Prints the **payment note** to hand the recipient (they open or cash it out)
    and the **change note** to keep.
 
-## Run on mainnet (real money)
+## Run on mainnet
 
 ```bash
 # from the repo root
@@ -35,7 +35,7 @@ GLOAM_NETWORK=robinhood-mainnet GLOAM_PAY_KEY=0x... npx tsx pay-bot.ts
 - `GLOAM_ASSET` picks another asset the pool lists (`GLOAM` on Robinhood Chain;
   `pathUSD`, `USDT0`, `OUSD` on Tempo).
 
-What to know before you use real money:
+What to know before you use mainnet:
 
 - **Beta.** Gloam is beta software. Deposits are capped at 500 per deposit and
   25,000 in total for each stablecoin ($GLOAM: 25,000 and 250,000). Private

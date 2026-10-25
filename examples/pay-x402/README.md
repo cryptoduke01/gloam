@@ -15,7 +15,7 @@ settlement made private and self-custodial. It is **not** a Tempo Zone: no
 operator sees the payment; only the payer and the payee learn the amount, and
 compliance visibility is opt-in per payment through an issuer-scoped disclosure.
 
-## Run on mainnet (real money)
+## Run on mainnet
 
 ```bash
 # from the repo root
@@ -34,7 +34,7 @@ GLOAM_NETWORK=tempo-mainnet GLOAM_PAY_KEY=0x... npx tsx examples/pay-x402/pay-x4
 - The one key plays both sides here: it funds the buyer and signs the seller's
   sweep. Set `GLOAM_RELAY_URL` to sweep through the Gloam relay instead.
 
-What to know before you use real money:
+What to know before you use mainnet:
 
 - **Beta.** Gloam is beta software. Deposits are capped at 500 per deposit and
   25,000 in total for each stablecoin. Private payments and cash outs are never

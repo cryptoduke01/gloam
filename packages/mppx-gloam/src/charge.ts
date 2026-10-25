@@ -196,7 +196,7 @@ export interface BuildChargeRequestParams {
   /** Payee receive tag (gloamr1.…). */
   recipient: string;
   /**
-   * "tempo-mainnet" or "robinhood-mainnet" (real money), "tempo" or "robinhood"
+   * "tempo-mainnet" or "robinhood-mainnet" (mainnet), "tempo" or "robinhood"
    * (the testnets), or a chain id. "base-mainnet" and "base" (Base Sepolia) work
    * once the SDK has their pools. Default "tempo" (Tempo testnet), as in 0.0.x.
    */

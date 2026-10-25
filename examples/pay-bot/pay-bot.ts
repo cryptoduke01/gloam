@@ -5,10 +5,10 @@
  * transfer, no visible amount. The recipient gets a payment note they can later
  * open or cash out; the sender keeps a change note.
  *
- *   # mainnet, real money: shields 2 USDG, pays 1 privately, keeps 1 as change
+ *   # mainnet: shields 2 USDG, pays 1 privately, keeps 1 as change
  *   GLOAM_NETWORK=robinhood-mainnet GLOAM_PAY_KEY=0x... npx tsx examples/pay-bot/pay-bot.ts
  *
- *   # testnet, test funds (the default): 0.002 / 0.001 test ETH on Robinhood Chain testnet
+ *   # testnet (the default): 0.002 / 0.001 test ETH on Robinhood Chain testnet
  *   GLOAM_PAY_KEY=0x... npx tsx examples/pay-bot/pay-bot.ts
  *
  * GLOAM_NETWORK is robinhood-mainnet, tempo-mainnet, robinhood or tempo (the
@@ -102,9 +102,9 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
     );
   }
   if (net.testnet) {
-    console.log(`${networkName(net.chainId)} (test funds). Set GLOAM_NETWORK=${net.family}-mainnet to use real money.`);
+    console.log(`${networkName(net.chainId)}. Set GLOAM_NETWORK=${net.family}-mainnet to use mainnet.`);
   } else {
-    console.log(`${net.label} mainnet. This moves REAL MONEY. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
+    console.log(`${net.label} mainnet. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
   }
   return net;
 }

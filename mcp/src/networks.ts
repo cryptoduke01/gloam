@@ -6,9 +6,9 @@
  * explorer, native currency and the default asset are added here because the
  * SDK stays transport-agnostic.
  *
- * Robinhood Chain and Tempo, each on mainnet (real money, the ceremony's final
- * keys, payments only, beta deposit limits) and testnet (test funds, dev keys),
- * and Base: Base Sepolia (test funds on the mainnet pool and final keys) and,
+ * Robinhood Chain and Tempo, each on mainnet (the ceremony's final keys,
+ * payments only, beta deposit limits) and testnet (dev keys), and Base: Base
+ * Sepolia (a testnet on the mainnet pool and final keys) and,
  * once its pool is in, Base mainnet. A network with a pool to publish (every mainnet, Base
  * Sepolia) only exists here once the SDK has its pool, so a build without it
  * never offers that network. The chains are separate deployments of the same
@@ -35,7 +35,7 @@ export interface McpNetwork {
   key: NetworkKey;
   /** Which chain: Robinhood Chain, Tempo or Base, testnet or mainnet. */
   family: ChainFamily;
-  /** Test funds (true) or real money (false). */
+  /** Testnet (true) or mainnet (false). */
   testnet: boolean;
   /** The key set the pool's verifiers hold: dev on the older testnets, the ceremony's final keys on mainnet and Base Sepolia. */
   ceremony: CeremonyKind;
@@ -171,10 +171,10 @@ export function networkByChainId(chainId: number): McpNetwork | undefined {
   return allNetworks().find((n) => n.chainId === chainId);
 }
 
-/** "Robinhood Chain mainnet (real money)" / "Tempo testnet (test funds)", for messages. */
+/** "Robinhood Chain mainnet" / "Tempo testnet", for messages. */
 export function describeNetwork(n: McpNetwork): string {
   const chain = CHAIN_NAMES[n.family];
-  return n.testnet ? `${chain} testnet (test funds)` : `${chain} mainnet (real money)`;
+  return n.testnet ? `${chain} testnet` : `${chain} mainnet`;
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Mainnet tests: which networks this build offers, how a mainnet is named in
- * limits, that a testnet config never approves real money by itself, the key
+ * limits, that a testnet config never approves mainnet assets by itself, the key
  * set each network proves with, and that a price on a chain this build has no
  * pool for is refused.
  *
@@ -99,7 +99,7 @@ test("mainnet proofs use the final keys, kept apart from the dev keys", () => {
   assert.notEqual(dev.sha256.zkey, fin.sha256.zkey);
 });
 
-test("a testnet limits config never approves real money by itself", () => {
+test("a testnet limits config never approves mainnet assets by itself", () => {
   // "USDG" alone is the testnet USDG.
   const testnetOnly = resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: ["USDG"] }, "test");
   assert.equal(testnetOnly.assets[0]!.address, RH_USDG);
@@ -139,7 +139,7 @@ test("naming a mainnet network in limits allows exactly that asset there", () =>
   assert.equal(checkSpend(p, spend({ network: "tempo", chainId: GLOAM_NETWORKS.tempo.chainId, asset: TEMPO_PATHUSD }), [], NOW)?.code, "asset_not_allowed");
 });
 
-test("Base in limits: a symbol on both sides is the testnet; base-mainnet names real money", () => {
+test("Base in limits: a symbol on both sides is the testnet; base-mainnet names the mainnet asset", () => {
   // USDC, EURC and ETH are on both Base networks: alone they are the testnet ones (ETH alone stays Robinhood Chain testnet).
   const plain = resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: ["USDC", "EURC", "ETH", NATIVE_ASSET] }, "test");
   assert.deepEqual(

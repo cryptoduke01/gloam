@@ -45,7 +45,7 @@ The chain id, pool and stablecoin come from the SDK's network list (`getGloamNet
 
 ## Going live on mainnet
 
-Mainnet is real money. Gloam is beta software: deposits are capped (500 per deposit and 25,000 in total for each stablecoin), private payments and cash outs are not. MPP payments are private sends, so Gloam takes no fee on them; a cash out costs 0.25% (`cashOutFee(amount)`). The mainnet pools take payments only, with no private trading.
+On mainnet, Gloam is beta software: deposits are capped (500 per deposit and 25,000 in total for each stablecoin), private payments and cash outs are not. MPP payments are private sends, so Gloam takes no fee on them; a cash out costs 0.25% (`cashOutFee(amount)`). The mainnet pools take payments only, with no private trading.
 
 Swap the mock for the chain, using the network object for every value:
 
@@ -71,4 +71,4 @@ gloam({
 
 ## Practice on testnet
 
-Run the same setup against `GLOAM_NETWORKS.tempo` (Tempo testnet, test PathUSD) or `GLOAM_NETWORKS.robinhood` (Robinhood Chain testnet, test USDG) first. Test funds have no real value, and the testnets use the dev keys, which `circuitArtifactUrls` picks from the chain id. For Robinhood Chain testnet, get test ETH from the [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com/) and test USDG from the [Paxos faucet](https://faucet.paxos.com/).
+Run the same setup against `GLOAM_NETWORKS.tempo` (Tempo testnet, test PathUSD) or `GLOAM_NETWORKS.robinhood` (Robinhood Chain testnet, test USDG) first. The testnets use the dev keys, which `circuitArtifactUrls` picks from the chain id. For Robinhood Chain testnet, get test ETH from the [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com/) and test USDG from the [Paxos faucet](https://faucet.paxos.com/).
