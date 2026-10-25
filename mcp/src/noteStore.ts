@@ -265,6 +265,29 @@ export class NoteStore {
     });
   }
 
+  /**
+   * Serve a received payment from this note, once: under the lock, mark it served
+   * (with `patch`) only if no note swept from the same payment was served before.
+   * Of any verifies at once, exactly one gets claimed: true.
+   */
+  claimServed(
+    handle: string,
+    patch: Partial<Pick<StoredNote, "status" | "createdTx">> = {}
+  ): { claimed: true; note: StoredNote } | { claimed: false; servedBy: string | null } {
+    return this.mutate((d) => {
+      const i = d.notes.findIndex((n) => n.handle === handle);
+      const note = d.notes[i];
+      if (!note?.sweptFrom) return { claimed: false, servedBy: null };
+      const from = note.sweptFrom.toLowerCase();
+      const before = d.notes.find((n) => n.sweptFrom?.toLowerCase() === from && servedPayment(n));
+      if (before) return { claimed: false, servedBy: before.handle };
+      const next: StoredNote = { ...note, ...patch, served: true, updatedAt: new Date().toISOString() };
+      if (next.status !== "pending") delete next.pending;
+      d.notes[i] = next;
+      return { claimed: true, note: next };
+    });
+  }
+
   receiveKey(): ReceiveKey | null {
     return this.read().receiveKey;
   }
@@ -276,6 +299,11 @@ export class NoteStore {
       return d.receiveKey;
     });
   }
+}
+
+/** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */
+export function servedPayment(n: StoredNote): boolean {
+  return n.served === true || (n.served === undefined && n.status !== "pending");
 }
 
 /** Open this agent's note store (throws with a plain reason when there is no usable key). */
