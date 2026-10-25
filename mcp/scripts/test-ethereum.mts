@@ -48,7 +48,7 @@ test("Ethereum is offered with the mainnets once its pool is in", () => {
   assert.equal(n.nativeCurrency.symbol, "ETH");
   assert.equal(n.defaultAsset, ETHEREUM_USDC);
   assert.equal(n.name, "Ethereum Mainnet");
-  assert.equal(nets.describeNetwork(n), "Ethereum mainnet (real money)");
+  assert.equal(nets.describeNetwork(n), "Ethereum mainnet");
   assert.equal(n.explorer, "https://etherscan.io");
   assert.equal(n.rpc, "https://rpc.mevblocker.io", "an RPC that keeps old logs");
   assert.equal(nets.networkByChainId(1)?.key, "ethereum-mainnet");
