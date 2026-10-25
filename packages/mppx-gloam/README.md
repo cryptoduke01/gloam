@@ -120,6 +120,14 @@ Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also 
 
 Ethereum Sepolia: `"ethereum"` (`11155111`, test USDC by default, also USDG, PYUSD, EURC and ETH, on the final keys) is known to 0.3.0 and refused with a plain error until the SDK it is built with has its pool.
 
+### The chain reader must say which chain it reads
+
+Gloam's vault has one address on every chain, and ETH is `0x0` on all of them. A server pricing a charge on one chain with a reader pointed at another (Base mainnet `8453` and Base Sepolia `84532`, Ethereum `1` and Ethereum Sepolia `11155111`) would otherwise see the other chain's payments as real.
+
+- `gloamChargeChainFromClient` asks the RPC for its chain id once (`eth_chainId`).
+- A charge is validated and settled only when that id is the charge's. Otherwise it gets a 402.
+- A custom `GloamChargeChain` should set `chainId()` the same way. Without it nothing can be checked, so set it on every Base and Ethereum chain especially.
+
 ## Status
 
 Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.

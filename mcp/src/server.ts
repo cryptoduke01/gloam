@@ -340,7 +340,19 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   }
 
   function sweepChain(client: ChainClient, net: McpNetwork): SweepChain {
+    // the RPC's own chain id, asked once: a sweep or payment check for another chain is refused
+    // (the vault and ETH have one address on every chain, so its reads would look right)
+    let id: Promise<number> | null = null;
+    const chainId =
+      typeof client.getChainId === "function"
+        ? () =>
+            (id ??= client.getChainId().catch((e: unknown) => {
+              id = null;
+              throw e;
+            }))
+        : undefined;
     return {
+      ...(chainId ? { chainId } : {}),
       isSpent: (nullifier) =>
         client.readContract({ address: net.pool, abi: POOL_STATE_ABI, functionName: "isSpent", args: [nullifier] }),
       isCommitmentSeen: (commitment) =>

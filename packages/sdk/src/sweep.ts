@@ -101,8 +101,9 @@ export interface SweepChain {
  */
 export async function sweepChainProblem(chain: Pick<SweepChain, "chainId">, chainId: number): Promise<string | null> {
   if (!chain.chainId) return null;
-  const actual = await chain.chainId();
-  if (actual === chainId) return null;
+  // compared as numbers: a custom reader may answer with a bigint or a string
+  const actual = Number(await chain.chainId());
+  if (actual === Number(chainId)) return null;
   return `These chain reads go to chain ${actual}, and the payment is on chain ${chainId}. Nothing was settled: point the reader at chain ${chainId}.`;
 }
 
