@@ -42,7 +42,7 @@ const PNG_LOGO_IDS = new Set([
 ]);
 
 /** Round marks (a full disc): shown as a circle with no plate, so no white corners. */
-const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux"]);
+const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux"]);
 
 const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
@@ -54,6 +54,8 @@ const SPECIAL_LOGOS: Record<string, string> = {
   ethereum: "/brand/chains/1.png",
   // Circle's USDC, Tether's USDT and PayPal's PYUSD, the marks the bridge list uses
   usdc: "/brand/tokens/usdc.png",
+  // Circle's EURC, on Base and Ethereum (from the Trust Wallet assets list)
+  eurc: "/brand/tokens/eurc.png",
   usdt: "/brand/tokens/usdt.png",
   pyusd: "/brand/tokens/pyusd.png",
   ousd: "/brand/logos/ousd.svg",
