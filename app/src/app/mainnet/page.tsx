@@ -13,23 +13,26 @@ import {
   MainnetTestnetLine,
 } from "@/components/MainnetCountdown";
 import { FlowField } from "@/components/ui/FlowField";
-import { MAINNET_LAUNCH_LABEL } from "@/lib/mainnet";
+import { MAINNET_LAUNCH_LABEL, liveMainnetNames } from "@/lib/mainnet";
+
+/** The mainnets with a pool in, as words: Base and Ethereum join once theirs are (lib/mainnet.ts). */
+const MAINNETS = liveMainnetNames();
 
 export const metadata: Metadata = {
   title: "Mainnet",
-  description: "Gloam is live on Robinhood Chain and Tempo mainnet: private stablecoin payments for people and AI agents.",
+  description: `Gloam is live on ${MAINNETS} mainnet: private stablecoin payments for people and AI agents.`,
   alternates: { canonical: "/mainnet" },
   openGraph: {
     title: "Gloam is live on mainnet",
-    description: "Private payments are live on Robinhood Chain and Tempo mainnet.",
+    description: `Private payments are live on ${MAINNETS} mainnet.`,
   },
 };
 
 const LIVE = [
-  { title: "Robinhood Chain and Tempo", body: "Private payments on both mainnets, for people, teams and agents." },
+  { title: MAINNETS, body: "Private payments on each mainnet, for people, teams and agents." },
   { title: "Free to pay", body: "Deposits and private payments are free. Cash-outs carry a 0.25% fee." },
   { title: "$GLOAM, held privately", body: "Shield $GLOAM next to USDG in the Robinhood Chain pool." },
-  { title: "Private swaps", body: "Swap from your private balance on both mainnets. Who swapped stays private; the amounts are public." },
+  { title: "Private swaps", body: "Swap from your private balance on Robinhood Chain and Tempo. Who swapped stays private; the amounts are public." },
 ];
 
 export default function MainnetPage() {
