@@ -72,7 +72,7 @@ if (!FILLED) {
   assert(sdk.ceremonyForChainId(1) === "production", "Ethereum proves with the final keys, pool or not");
   assert(sdk.circuitArtifactUrls("transfer", 1).zkey.endsWith("/final/transfer_final.zkey"), "final-key artifacts for chain 1");
   assert(sdk.networkName(1) === "Ethereum", "name");
-  assert(sdk.testnetNetwork("ethereum") === null, "Ethereum has no testnet");
+  assert(sdk.testnetNetwork("ethereum")?.chainId !== 1, "Ethereum's testnet entry is Sepolia, never chain 1");
   assert(sdk.payMemoBoardFor(1) === null, "no memo board on Ethereum");
   assert(sdk.ETHEREUM_MAINNET_CHAIN_ID === 1 && sdk.ETHEREUM_MAINNET_CHAIN.id === 1, "chain id and viem chain");
   assert(new URL(sdk.ETHEREUM_MAINNET_CHAIN.rpcUrls.default.http[0]).host === "rpc.mevblocker.io", "default RPC keeps old state and logs");

@@ -160,8 +160,8 @@ export default function DocsProductionPage() {
         </li>
         <li>
           <strong>Ethereum mainnet.</strong> Next on the same deploy script and
-          final keys, with no testnet of its own (Base Sepolia runs the same
-          code). The relay pays Ethereum gas only under its ceiling, 3 gwei by
+          final keys, with Ethereum Sepolia as its testnet on the same code.
+          The relay pays Ethereum gas only under its ceiling, 3 gwei by
           default, and waits above it. See{" "}
           <Link href="/docs/chain#ethereum">Networks</Link>.
         </li>

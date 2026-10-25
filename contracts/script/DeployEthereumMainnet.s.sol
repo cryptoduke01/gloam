@@ -6,8 +6,8 @@ import {MainnetDeploy} from "./MainnetDeploy.sol";
 /**
  * Gloam on Ethereum mainnet (chainId 1): the payments pool with beta deposit
  * limits. The deploy itself is MainnetDeploy, shared with Robinhood Chain, Tempo
- * and Base, so every chain gets the same pool wired the same way. Ethereum has
- * no practice network of its own: Base Sepolia rehearses this same deploy.
+ * and Base, so every chain gets the same pool wired the same way. Ethereum
+ * Sepolia, its testnet, runs this same deploy first (DeployEthereumSepolia.s.sol).
  *
  * The USER runs this. It is NOT executed by CI or by any agent. Runbook: DEPLOY-ETHEREUM.md.
  *

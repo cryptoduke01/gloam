@@ -116,7 +116,7 @@ Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) o
 
 ### Ethereum: coming next
 
-Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defines it, but it has no pool in this version, so `mainnetNetwork("ethereum")` returns `null` and the builders refuse chain id `1`. It switches on once its pool is published in an SDK release. Its testnet is Ethereum Sepolia (below): `testnetNetwork("ethereum")` is always `null`, and Base Sepolia rehearses the same pool and keys.
+Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defines it, but it has no pool in this version, so `mainnetNetwork("ethereum")` returns `null` and the builders refuse chain id `1`. It switches on once its pool is published in an SDK release. Its testnet is Ethereum Sepolia (below), `testnetNetwork("ethereum")`.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
