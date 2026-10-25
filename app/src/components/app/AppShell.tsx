@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import { WalletMenu } from "./WalletMenu";
 import { AutoSwitchNetwork } from "./AutoSwitchNetwork";
@@ -12,6 +12,7 @@ import { PasskeyGate } from "./PasskeyGate";
 import { NetworkSelector } from "./NetworkSelector";
 import { useNetwork } from "./NetworkProvider";
 import { TestFundsNotice } from "./TestFundsNotice";
+import { VaultNavGroup, VaultNavGroupStatic, navActiveFill } from "./VaultNavGroup";
 
 type NavItem = {
   href: string;
@@ -19,6 +20,8 @@ type NavItem = {
   icon: ReactNode;
   exact?: boolean;
   robinhoodOnly?: boolean;
+  /** Vault lists its actions under it (VaultNavGroup). */
+  group?: "vault";
 };
 
 const ic = "h-[18px] w-[18px] shrink-0";
@@ -40,6 +43,7 @@ const nav: NavItem[] = [
   {
     href: "/app/vault",
     label: "Vault",
+    group: "vault",
     icon: (
       <svg className={ic} viewBox="0 0 24 24" fill="none" aria-hidden>
         <rect x="3.75" y="5.75" width="16.5" height="13.5" rx="3" stroke="currentColor" strokeWidth="1.5" />
@@ -110,10 +114,12 @@ function NavLink({
   item,
   active,
   onClick,
+  size = "desktop",
 }: {
   item: { href: string; label: string; icon: ReactNode };
   active: boolean;
   onClick?: () => void;
+  size?: "desktop" | "sheet";
 }) {
   return (
     <Link
@@ -122,13 +128,46 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       className={`flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] transition-colors ${
         active
-          ? "bg-surface font-medium text-foreground"
+          ? `${navActiveFill(size)} font-medium text-foreground`
           : "text-mute hover:bg-surface/70 hover:text-foreground"
       }`}
     >
       {item.icon}
       {item.label}
     </Link>
+  );
+}
+
+/** The product nav, shared by the sidebar and the phone sheet. */
+function ProductNav({
+  items,
+  pathname,
+  size,
+  onNavigate,
+}: {
+  items: NavItem[];
+  pathname: string;
+  size: "desktop" | "sheet";
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {items.map((item) =>
+        item.group === "vault" ? (
+          <Suspense key={item.href} fallback={<VaultNavGroupStatic icon={item.icon} size={size} />}>
+            <VaultNavGroup icon={item.icon} size={size} onNavigate={onNavigate} />
+          </Suspense>
+        ) : (
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(pathname, item.href, item.exact)}
+            onClick={onNavigate}
+            size={size}
+          />
+        )
+      )}
+    </>
   );
 }
 
@@ -196,16 +235,10 @@ export function AppShell({
           <Logo size={24} />
         </div>
         <NetworkSelector />
-        <nav className="mt-4 flex flex-col gap-0.5" aria-label="Product">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              active={isActive(pathname, item.href, item.exact)}
-            />
-          ))}
+        <nav className="-mx-1 mt-4 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-3" aria-label="Product">
+          <ProductNav items={navItems} pathname={pathname} size="desktop" />
         </nav>
-        <div className="mt-auto flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5">
           <NavLink
             item={{ href: "/app/settings", label: "Settings", icon: settingsIcon }}
             active={isActive(pathname, "/app/settings")}
@@ -248,18 +281,12 @@ export function AppShell({
           <div className="h-[calc(100dvh-3.5rem)] overflow-y-auto border-t border-line bg-background px-4 pb-8 pt-4">
             <NetworkSelector />
             <nav className="mt-4 flex flex-col gap-0.5" aria-label="Product mobile">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  active={isActive(pathname, item.href, item.exact)}
-                  onClick={() => setOpen(false)}
-                />
-              ))}
+              <ProductNav items={navItems} pathname={pathname} size="sheet" onNavigate={() => setOpen(false)} />
               <NavLink
                 item={{ href: "/app/settings", label: "Settings", icon: settingsIcon }}
                 active={isActive(pathname, "/app/settings")}
                 onClick={() => setOpen(false)}
+                size="sheet"
               />
               <NavLink
                 item={{ href: "/docs", label: "Docs", icon: docsIcon }}
