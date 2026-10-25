@@ -527,7 +527,8 @@ html.gl-lite .gl-field.gl-drift {
 .gl-input:hover:not(:focus):not(:disabled) {
   border-color: color-mix(in srgb, var(--line-strong) 70%, var(--foreground));
 }
-.gl-input:focus {
+.gl-input:focus,
+.gl-input[aria-expanded="true"] {
   outline: none;
   border-color: color-mix(in srgb, var(--navy-500) 65%, var(--line-strong));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--navy-500) 12%, transparent);
@@ -721,6 +722,21 @@ html.gl-lite .gl-field.gl-drift {
   animation: gl-fade-out 0.17s ease-in both;
 }
 
+/* Dropdown lists (components/ui/Select) settle in from the button's edge. */
+@keyframes gl-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.gl-pop {
+  transform-origin: top center;
+  animation: gl-pop-in 0.14s var(--ease-out) both;
+}
+[data-side="top"] > .gl-pop {
+  transform-origin: bottom center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gl-input,
   .gl-input::placeholder,
@@ -742,7 +758,8 @@ html.gl-lite .gl-field.gl-drift {
   .gl-sheet,
   .gl-sheet[data-leaving="true"],
   .gl-backdrop,
-  .gl-backdrop[data-leaving="true"] {
+  .gl-backdrop[data-leaving="true"],
+  .gl-pop {
     animation: none;
   }
 }
