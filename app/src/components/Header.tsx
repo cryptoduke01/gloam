@@ -76,10 +76,9 @@ export function Header() {
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle className="hidden sm:grid" />
-          <Link href="/docs" className="btn btn-ink btn-sm hidden sm:inline-flex">
-            Read the docs
-          </Link>
-          <AppLink href="/app" className="btn btn-accent btn-sm">
+          {/* One action. Docs is already in the nav, and the green tint is kept
+              for what is private, so the button is plain ink. */}
+          <AppLink href="/app" className="btn btn-ink btn-sm">
             Open app <ArrowUpRight />
           </AppLink>
           <button
@@ -115,7 +114,7 @@ export function Header() {
               <span className="text-[14px] text-mute">Appearance</span>
               <ThemeSegmented />
             </div>
-            <div className="mt-6 flex flex-col gap-2">
+            <div className="mt-6">
               <AppLink
                 href="/app"
                 className="btn btn-ink btn-lg btn-block"
@@ -123,13 +122,6 @@ export function Header() {
               >
                 Open app
               </AppLink>
-              <Link
-                href="/docs"
-                className="btn btn-ghost btn-lg btn-block"
-                onClick={() => setOpen(false)}
-              >
-                Read the docs
-              </Link>
             </div>
           </nav>
         </div>
