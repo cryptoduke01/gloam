@@ -806,6 +806,7 @@ export class GloamAgent {
     this.settle(gate.id, "sent", { hash: sent.hash });
     const pack = encodeNotePackage({
       pool: this.network.pool,
+      chainId: this.network.chainId,
       asset: sent.paymentNote.asset,
       amountWei: sent.paymentNote.amountWei,
       secret: sent.paymentNote.secret,
@@ -897,7 +898,7 @@ export class GloamAgent {
   }
 
   private claimLinkOf(n: StoredNote): ClaimLinkOut {
-    const code = encodeNotePackage({ pool: n.pool, asset: n.asset, amountWei: n.amountWei, secret: n.secret, commitment: n.commitment, note: n.memo });
+    const code = encodeNotePackage({ pool: n.pool, chainId: n.chainId, asset: n.asset, amountWei: n.amountWei, secret: n.secret, commitment: n.commitment, note: n.memo });
     return {
       handle: n.handle,
       link: claimLinkFor(code, n.network),
@@ -1015,7 +1016,13 @@ export class GloamAgent {
   async claim(link: string): Promise<Outcome> {
     const { pack, networkKey } = readClaimLink(link);
     registerSecret(pack.secret);
-    if (networkKey && networkKey !== this.network.key) throw new Error(`That claim link is for ${networkKey}, and this agent is on ${this.network.key}.`);
+    // The vault address is the same on several chains, so a code that names its chain must name this one.
+    if (pack.chainId !== undefined && pack.chainId !== this.network.chainId) {
+      throw new Error(`That claim code is for ${networkName(pack.chainId)}, and this agent is on ${this.where()}.`);
+    }
+    if (networkKey && networkKey !== this.network.key && pack.chainId === undefined) {
+      throw new Error(`That claim link is for ${networkKey}, and this agent is on ${this.network.key}.`);
+    }
     if (pack.pool.toLowerCase() !== this.network.pool.toLowerCase()) throw new Error("That claim link is for a different vault.");
     const asset = this.network.assets.find((a) => a.address.toLowerCase() === pack.asset.toLowerCase());
     if (!asset) throw new Error("That claim link holds an asset this vault does not list.");
