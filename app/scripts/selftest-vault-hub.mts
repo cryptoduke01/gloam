@@ -21,6 +21,7 @@ import {
   vaultActionFromUrl,
   vaultActionSearch,
   vaultActionsFor,
+  vaultHashAfterQuery,
   type VaultActionId,
 } from "../src/lib/vaultHub";
 import { appClaimPath } from "../src/lib/claimLink";
@@ -77,6 +78,25 @@ test("claim links open Receive, old ones without a mode too", () => {
   assert.equal(vaultActionFromUrl("move", null, "#claim=gloam1.abc", ALL), "receive");
   assert.equal(vaultActionFromUrl(null, null, "#claim=gloam1.abc", ALL), "receive");
   assert.equal(vaultActionFromUrl("move", null, "#to=gloamr1.x&amount=5", ALL), "pay", "a request fragment stays on Pay");
+});
+
+test("a claim already taken stops marking Receive once the URL names another action", () => {
+  // QA, 25 Oct 2026: after a claim link, the nav's Pay privately (and Cash
+  // out, and the steps after a claim) showed Pay's form under a row that
+  // still marked Receive, because Pay clears the fragment without a hashchange.
+  const claim = "#claim=gloam1.abc";
+  const after = (tab: string | null, mode: string | null, live = "") => {
+    const hash = vaultHashAfterQuery(claim, live, tab, mode);
+    return vaultActionFromUrl(tab, mode, hash, ALL);
+  };
+  assert.equal(after("move", null), "pay", "the nav's Pay privately");
+  assert.equal(after("move", "cashout"), "cashout", "the nav's Cash out");
+  assert.equal(after("move", "receive"), "receive", "Pay writing back the claim's mode");
+  assert.equal(after("shield", null), "shield");
+  assert.equal(after("move", null, claim), "receive", "a claim not read yet still opens Receive");
+  assert.equal(after(null, "receive"), "receive", "an old claim link without a tab keeps its claim once Pay writes a mode");
+  assert.equal(after(null, null), "receive", "nor does a bare Vault URL drop a claim Pay has not read");
+  assert.equal(vaultHashAfterQuery("", "#to=gloamr1.x", "move", "pay"), "#to=gloamr1.x", "a request fragment is read as it is");
 });
 
 test("a tab this network does not have opens the overview, not a blank page", () => {
