@@ -64,7 +64,7 @@ export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab79887
  * (app/src/lib/mainnet.ts): without the pool and its block, Ethereum Sepolia
  * does not exist for the SDK.
  */
-export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: null, deployBlock: null, payMemo: null, payMemoBlock: null };
+export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: "0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef", deployBlock: 11992914n, payMemo: "0x8699D015087dE6D25d55d5ceB63b34b9d773f135", payMemoBlock: 11992942n };
 
 function checkedPool(entry: MainnetPoolInput, name: string): { pool: Address; deployBlock: bigint } | null {
   const { pool, deployBlock } = entry;

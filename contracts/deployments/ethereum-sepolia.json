@@ -1,0 +1,66 @@
+{
+  "deployedAt": "2026-10-25",
+  "network": "Ethereum Sepolia",
+  "chainId": 11155111,
+  "testnet": true,
+  "note": "Ethereum's testnet: the mainnet contract (ShieldPoolPayments) on the ceremony's final keys, with the mainnet beta deposit limits and cash-out fee. Deployed with script/DeployEthereumSepolia.s.sol (DEPLOY-ETHEREUM-SEPOLIA.md) and read back by ethereum-sepolia-after-deploy.sh.",
+  "ceremony": "final (13 contributors, drand 6561386, release ceremony-final)",
+  "deployer": "0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411",
+  "owner": "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8",
+  "ownershipAcceptedTx": "0xa7aed436658a85084349b79d0cb08eeb6f92e876ebd554f794251de8865ab3da",
+  "feeRecipient": "0xB3900ac9350903218e4c7597bAb0f008F01B30B8",
+  "withdrawFeeBps": 25,
+  "relayer": "0xb1E994586E62994648a0b866BF33F2EDd942512e",
+  "rpc": "https://ethereum-sepolia-rpc.publicnode.com",
+  "logRpc": "https://sepolia.gateway.tenderly.co",
+  "explorer": "https://sepolia.etherscan.io",
+  "contracts": {
+    "ShieldPoolPayments": "0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef",
+    "deployBlock": 11992914,
+    "deployTx": "0x489fd3792446b2bf6f1ac8c00054098521e68483cfe6284473b011d33d7a9aa7",
+    "PoseidonT3": "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4",
+    "PoseidonT3CodeHash": "0x354b26999e434f8256d168395315e1f51fc15bf49bf2e6bb58fc549bd597e7da",
+    "DualProofVerifier": "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194",
+    "ShieldIVerifier": "0xa8cf34C6F3985B7901F6fA0e1E13a3Da2D2dC7E4",
+    "ShieldVerifierFinal": "0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465",
+    "UnshieldVerifierFinal": "0x35de99bcD26B0F25E5a3a3b1e76FA5a708a01DF1",
+    "UnshieldIVerifierFinal": "0x938E79B271241EC29D9279BE83A43184D415eE0b",
+    "TransferVerifierFinal": "0x4dCac25a820D0C9Ede8f056378C08e31042AB7b1",
+    "TransferIVerifierFinal": "0x1421353d471dF6C847713aee391Db38978fE714a",
+    "GloamPayMemo": "0x8699D015087dE6D25d55d5ceB63b34b9d773f135",
+    "GloamPayMemoDeployBlock": 11992942,
+    "GloamPayMemoDeployTx": "0x625c40c708240e71cf055385f59677c216b1e972ffe4976c049e1b398c3e58f7"
+  },
+  "assets": {
+    "USDC": {
+      "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+      "decimals": 6,
+      "perDeposit": "500000000",
+      "total": "25000000000"
+    },
+    "USDG": {
+      "address": "0xfBb2A78CceEb415b00300925e464C3E44E6e06b0",
+      "decimals": 6,
+      "perDeposit": "500000000",
+      "total": "25000000000"
+    },
+    "PYUSD": {
+      "address": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+      "decimals": 6,
+      "perDeposit": "500000000",
+      "total": "25000000000"
+    },
+    "EURC": {
+      "address": "0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4",
+      "decimals": 6,
+      "perDeposit": "500000000",
+      "total": "25000000000"
+    },
+    "ETH": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "decimals": 18,
+      "perDeposit": "200000000000000000",
+      "total": "10000000000000000000"
+    }
+  }
+}
