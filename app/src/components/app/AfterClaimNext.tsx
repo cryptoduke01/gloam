@@ -116,7 +116,7 @@ export function AfterClaimNext({
         <ActionTile
           onClick={send}
           icon={<ArrowIcon dir="out" />}
-          title="Send some privately"
+          title="Pay privately"
           hint="Pay anyone with a link or their Gloam address."
         />
         <ActionTile
