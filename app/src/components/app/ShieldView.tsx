@@ -92,6 +92,7 @@ export function ShieldView() {
   useEffect(() => {
     const valid =
       assetChoice === "eth" ? nativeOk : tokens.some((t) => t.id === assetChoice);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a network that can't take the picked asset falls back to its first one
     if (!valid) setAssetChoice(nativeOk ? "eth" : tokens[0]?.id ?? "eth");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network.chainId]);
@@ -216,26 +217,8 @@ export function ShieldView() {
     }
   };
 
-  const nextIndex =
-    poolData?.[0]?.status === "success"
-      ? (poolData[0].result as bigint)
-      : null;
-  const poolEth =
-    poolData?.[1]?.status === "success"
-      ? (poolData[1].result as bigint)
-      : null;
-  const currentRoot =
-    poolData?.[2]?.status === "success"
-      ? (poolData[2].result as Hex)
-      : null;
-  const verifier =
-    poolData?.[3]?.status === "success"
-      ? (poolData[3].result as string)
-      : null;
-  const owner =
-    poolData?.[4]?.status === "success"
-      ? (poolData[4].result as string)
-      : null;
+  // poolData[0..4] (next index, pool ETH, current root, verifier, owner) are
+  // read with the rest but not shown here.
   const poolSelected =
     poolData?.[5]?.status === "success"
       ? (poolData[5].result as bigint)
@@ -260,10 +243,6 @@ export function ShieldView() {
     demo ||
     (Boolean(shieldVerifierAddr) &&
       shieldVerifierAddr !== "0x0000000000000000000000000000000000000000");
-
-  const verifierLive =
-    Boolean(verifier) &&
-    verifier !== "0x0000000000000000000000000000000000000000";
 
   const [amount, setAmount] = useState("");
 
@@ -367,6 +346,7 @@ export function ShieldView() {
       void refetchEth();
       void refetchTok();
       void refetchPool();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- a transaction's receipt arrived: update the notes and show the result once per transaction
       setSuccessTitle("Pulled back");
       setSuccessBody(
         <>
@@ -393,6 +373,7 @@ export function ShieldView() {
         // clearing it here let this approval's receipt count as the deposit.
         // Route through executeShield so the shieldBound (C1) branch applies
         // after an ERC20 approval too.
+        // eslint-disable-next-line react-hooks/immutability -- declared further down; the effect runs after render, when it exists
         void executeShield(pending.value, pending.note, pending.commitment);
       }
       return;
@@ -652,8 +633,10 @@ export function ShieldView() {
       commitment = n.commitment;
       nullifier = n.nullifier;
     }
+    // eslint-disable-next-line react-hooks/purity -- runs in the submit handler, never during render
+    const now = Date.now();
     const note: LocalNote = {
-      id: `${Date.now()}-${commitment.slice(0, 10)}`,
+      id: `${now}-${commitment.slice(0, 10)}`,
       chainId: network.chainId,
       pool: network.pool,
       asset: assetAddress,
@@ -664,7 +647,7 @@ export function ShieldView() {
       bound: true,
       scheme: HASH_SCHEME,
       from: address,
-      createdAt: Date.now(),
+      createdAt: now,
       status: "open",
       source: "local",
     };
@@ -704,6 +687,7 @@ export function ShieldView() {
     if (!writeError) return;
     if (pendingKind === "shield" && pendingNote) dropUnsentNote(pendingNote.id);
     if (pendingKind === "shield" || pendingKind === "approve") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the wallet refused or the write failed: drop the unsent note and stop waiting
       setPendingNote(null);
       setPendingKind(null);
       pendingShieldArgs.current = null;
@@ -715,6 +699,7 @@ export function ShieldView() {
   // note is already saved and settles on its own, so stop the spinner and say so.
   useEffect(() => {
     if (!receiptLost || !hash || pendingKind !== "shield") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the receipt wait gave up on a busy network: stop waiting and say the deposit may still land
     setPendingNote(null);
     setPendingKind(null);
     pendingShieldArgs.current = null;
