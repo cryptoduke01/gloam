@@ -19,7 +19,7 @@
  * is in one token per contract. Requirement and deliverable texts are
  * messages on Virtuals' ACP backend; only the deliverable's hash is on chain.
  */
-import type { Address, Hex } from "viem";
+import { encodeAbiParameters, type Address, type Hex } from "viem";
 
 /** acp-node-v2 core/constants.ts and the contracts themselves, read 25 Oct 2026. */
 export const ACP_CONTRACTS: Record<number, { acp: Address; paymentToken: Address; tokenName: string }> = {
@@ -36,6 +36,7 @@ export const ACP_ABI = [
   { type: "function", name: "setBudget", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "optParams", type: "bytes" }], outputs: [] },
   { type: "function", name: "fund", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "expectedBudget", type: "uint256" }, { name: "optParams", type: "bytes" }], outputs: [] },
   { type: "function", name: "submit", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "deliverable", type: "bytes32" }, { name: "optParams", type: "bytes" }], outputs: [] },
+  { type: "function", name: "complete", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "reason", type: "bytes32" }, { name: "optParams", type: "bytes" }], outputs: [] },
   { type: "function", name: "reject", stateMutability: "nonpayable", inputs: [{ name: "jobId", type: "uint256" }, { name: "reason", type: "bytes32" }, { name: "optParams", type: "bytes" }], outputs: [] },
   { type: "function", name: "jobCounter", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "platformFeeBP", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
@@ -62,10 +63,29 @@ export const ACP_ABI = [
 
 export const NO_EVALUATOR: Address = "0x0000000000000000000000000000000000000000";
 
+/**
+ * Virtuals' FundTransferHook (whitelisted on these contracts): with it as the
+ * job's hook, the provider's setBudget names a token, an amount and a
+ * destination, and the client's fund() moves that amount from the client to
+ * the destination in the same transaction, outside the escrow. Only the budget
+ * is escrowed. acp-node-v2 uses it for offerings with requiredFunds.
+ */
+export const FUND_TRANSFER_HOOKS: Record<number, Address> = {
+  8453: "0x0EaD25150985Bce0B4925c54E4ee1D856381A86B",
+  4663: "0x0EaD25150985Bce0B4925c54E4ee1D856381A86B",
+  84532: "0xbbeC2c985F9483473B9e0Da0704395943034266B",
+};
+
+/** The optParams of setBudget and fund on a fund-transfer job: (token, amount, destination). Same as acp-node-v2's hookEncoding.ts. */
+export function encodeFundTransfer(token: Address, amount: bigint, destination: Address): Hex {
+  return encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "address" }], [token, amount, destination]);
+}
+
 // ------------------------------------------------------------------ acp-node-v2 shapes (events/types.ts)
 
 export type JobCreatedEvent = { type: "job.created"; jobId: string; client: string; provider: string; evaluator: string; expiredAt: string; hook: string };
-export type BudgetSetEvent = { type: "budget.set"; jobId: string; amount: number };
+export type FundIntent = { amount: number; tokenAddress: string; symbol: string; recipient: string };
+export type BudgetSetEvent = { type: "budget.set"; jobId: string; amount: number; fundRequest?: FundIntent };
 export type JobFundedEvent = { type: "job.funded"; jobId: string; client: string; amount: number };
 export type JobSubmittedEvent = { type: "job.submitted"; jobId: string; provider: string; deliverableHash: string; deliverable: string };
 export type JobCompletedEvent = { type: "job.completed"; jobId: string; evaluator: string; reason: string };
@@ -115,6 +135,8 @@ export interface JobSessionLike {
   readonly job: AcpJobLike | null;
   readonly status: DerivedStatus;
   setBudget(amount: AssetTokenLike): Promise<void>;
+  /** A fund-transfer job: `transferAmount` goes from the client to `destination` when the client funds. */
+  setBudgetWithFundRequest(amount: AssetTokenLike, transferAmount: AssetTokenLike, destination: string): Promise<void>;
   submit(deliverable: string): Promise<void>;
   sendMessage(content: string, contentType?: string): Promise<void>;
   reject(reason: string): Promise<void>;
@@ -134,3 +156,4 @@ export function assetToken(address: Address, symbol: string, decimals: number, r
 }
 
 export type { Hex };
+export type { Address };

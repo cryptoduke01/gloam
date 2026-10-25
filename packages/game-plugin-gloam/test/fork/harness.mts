@@ -104,6 +104,8 @@ export async function startFork(opts: { upstream: string; chainId: number; log?:
     if (Date.now() > deadline) throw new Error("anvil did not start within 60 seconds.");
     await new Promise((r) => setTimeout(r, 300));
   }
+  // One local block on top of the fork: on Arbitrum-style chains a call at the forked block itself fails ("Excess blob gas not set").
+  await rpc("anvil_mine", ["0x1"]);
   opts.log?.(`fork of ${opts.upstream} on ${url}`);
   const client = createPublicClient({ transport: http(url) }) as PublicClient;
 

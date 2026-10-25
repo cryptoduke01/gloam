@@ -2,16 +2,19 @@
  * The private payout job, end to end, on a local fork:
  *
  *   1. A provider agent holds a private float in Gloam.
- *   2. A client agent creates an ACP job on Virtuals' real ACP contract, with
- *      the payout list sealed to the provider and replyTo set to its own
- *      Gloam address.
- *   3. The provider quotes, the client funds the escrow, the provider pays
- *      each recipient privately and submits the deliverable (sealed to the
- *      client), and the escrow pays the provider.
+ *   2. A client agent creates a fund-transfer job on Virtuals' real ACP
+ *      contract, with the payout list sealed to the provider and replyTo set
+ *      to its own Gloam address.
+ *   3. The provider quotes (payout total by fund transfer, fee in escrow), the
+ *      client funds, the provider pays each recipient privately and submits the
+ *      deliverable sealed to the client, and the escrow pays the fee.
  *   4. The client opens the deliverable and checks every proof; one recipient
  *      picks up its payment by Gloam address, another claims a claim link.
- *   5. The provider adds its ACP earnings to its private balance, where the
- *      chain's ACP token is one the Gloam vault takes.
+ *   5. The provider adds what reached its wallet to its private balance, in a
+ *      round amount, where the token is one the Gloam vault takes.
+ *   6. A plain escrow job from the same client is refused, and a client that
+ *      rejects a funded job gets its fee back from the escrow and its principal
+ *      back from the provider, with no payout made.
  *
  * Fresh keys for every run, funded inside the fork; every transaction is
  * self-sent and lands only in the fork.
@@ -20,12 +23,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatUnits, parseEventLogs, parseUnits, type Address, type Hex } from "viem";
+import { createWalletClient, encodeFunctionData, formatUnits, http, parseEventLogs, parseUnits, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { GloamAgent, shutdownProver, type LimitsConfig } from "@gloamtrade/game-plugin-gloam";
 // The plugin's fork harness (anvil, fresh keys, impersonated funding).
-import { startFork, type Fork } from "../../../packages/game-plugin-gloam/test/fork/harness.mts";
+import { ERC20, startFork, type Fork } from "../../../packages/game-plugin-gloam/test/fork/harness.mts";
 import { ACP_ABI, ACP_CONTRACTS, assetToken } from "../src/acp.js";
-import { EarningsSweeper } from "../src/earnings.js";
+import { EarningsSweeper, type SweepOutcome } from "../src/earnings.js";
 import { ForkAcpRoom } from "../src/forkRoom.js";
 import { OFFERING_NAME, buildPayoutRequirement } from "../src/offering.js";
 import { DELIVERABLE_TYPE, PrivatePayoutProvider, type PayoutResult } from "../src/provider.js";
@@ -45,19 +49,22 @@ export interface ScenarioReport {
   network: string;
   jobId: string;
   acpStatus: number;
-  quoteBudget: string;
-  providerEscrowIncome: string;
+  feeBudget: string;
+  principalToProvider: string;
+  escrowPaidProvider: string;
   payouts: PayoutResult[];
   proofsOk: boolean[];
   recipientReceived: string | null;
   claimed: string | null;
-  earnings: Record<string, unknown> | null;
+  earnings: SweepOutcome | null;
   deliverableSealed: boolean;
   backendSaw: string;
   transferLogFields: string[][];
   publicTxs: { what: string; hash: string }[];
-  /** A second job with an evaluator the provider does not trust: refused before any budget. */
+  /** A plain escrow job from an untrusted client: refused before any budget. */
   refusedJob: { jobId: string; reason: string; onChain: boolean; detail: string } | null;
+  /** A client that rejects a funded job. */
+  rejectedAfterFunding: { jobId: string; acpStatus: number; payoutsMade: number; clientNetChange: string; journal: string } | null;
 }
 
 export async function runScenario(args: { network: "base" | "robinhood-mainnet"; upstream: string; log?: (m: string) => void }): Promise<ScenarioReport> {
@@ -90,22 +97,24 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
     const r1 = make("recipient-1", r1Key.key);
     const r2 = make("recipient-2", r2Key.key);
     const asset = provider.network.assets[0]!;
+    const sameToken = acp.paymentToken.toLowerCase() === asset.address.toLowerCase();
+    const bal = (token: Address, who: Address) => fork.client.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [who] });
 
-    // Fund: the provider's float in the Gloam asset; the client's ACP budget in ACP's token.
+    // Fund: the provider's float, and the client's payouts in the Gloam asset; the client's fees in ACP's token.
     await fork.sendFromHolder(asset.address, HOLDERS[args.network]!, providerKey.address, parseUnits("60", asset.decimals));
-    if (args.network === "base") {
-      // Virtuals' test token keeps balances in a plain mapping at slot 0.
+    await fork.sendFromHolder(asset.address, HOLDERS[args.network]!, clientKey.address, parseUnits("50", asset.decimals));
+    if (!sameToken) {
+      // Base Sepolia: Virtuals' test token keeps balances in a plain mapping at slot 0.
       await fork.setTokenBalance(acp.paymentToken, 0, clientKey.address, parseUnits("50", 6));
-    } else {
-      await fork.sendFromHolder(acp.paymentToken, HOLDERS[args.network]!, clientKey.address, parseUnits("50", 6));
     }
-    log(`provider ${providerKey.address}: 60 ${asset.symbol}; client ${clientKey.address}: 50 ${acp.tokenName} for ACP`);
+    log(`provider ${providerKey.address}: 60 ${asset.symbol}; client ${clientKey.address}: 50 ${asset.symbol}${sameToken ? "" : ` and 50 ${acp.tokenName} for ACP fees`}`);
 
     const float = await provider.add({ amount: "40", asset: asset.symbol, label: "payout float" });
     if (float.status !== "done") throw new Error(`float: ${JSON.stringify(float)}`);
     log(`provider added 40 ${asset.symbol} to its private float (${float.hash})`);
 
     const platformFee = Number(await fork.client.readContract({ address: acp.acp, abi: ACP_ABI, functionName: "platformFeeBP" }));
+    const evaluatorFee = Number(await fork.client.readContract({ address: acp.acp, abi: ACP_ABI, functionName: "evaluatorFeeBP" }));
     const room = new ForkAcpRoom({
       client: fork.client,
       rpc: fork.url,
@@ -116,20 +125,37 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
       tokenDecimals: 6,
       providerKey: providerKey.key,
       clientKey: clientKey.key,
+      // The client is its own evaluator: it opens the deliverable and completes only if every proof checks out.
+      evaluate: async (_jobId, deliverable) => {
+        const outer = JSON.parse(deliverable) as { sealed?: string };
+        const inner = JSON.parse(outer.sealed ? await client.openSealed(outer.sealed) : deliverable) as { payouts: PayoutResult[] };
+        for (const p of inner.payouts) if (!p.proof || !(await client.verifyProof(p.proof)).ok) return false;
+        return inner.payouts.length > 0;
+      },
       log,
     });
-    // Keep the 20 left over from funding public, so only the escrow's payment is added.
-    const earnings = new EarningsSweeper({ wallet: provider, acpPaymentToken: acp.paymentToken, minBatch: "5", roundTo: "1", keepPublic: "20" });
-    let earningsResult: Record<string, unknown> | null = null;
+    // Keep the 20 left over from funding public, so only what ACP brought in is added.
+    const earnings = new EarningsSweeper({ wallet: provider, tokens: [acp.paymentToken, asset.address], minBatch: "5", roundTo: "1", keepPublic: "20" });
+    let earningsResult: SweepOutcome | null = null;
+    const providerWallet = createWalletClient({
+      account: privateKeyToAccount(providerKey.key),
+      chain: { id: chainId, name: "fork", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [fork.url] } } },
+      transport: http(fork.url),
+    });
     const service = new PrivatePayoutProvider({
       wallet: provider,
       budgetToken: (raw) => assetToken(acp.paymentToken, acp.tokenName, 6, raw),
-      acpFeeBps: () => platformFee,
+      // Virtuals' cut, plus the evaluator's when the job has one (here the client evaluates, so that part goes back to it).
+      acpFeeBps: (session) => platformFee + (session.job && session.job.evaluatorAddress !== "0x0000000000000000000000000000000000000000" ? evaluatorFee : 0),
+      refund: async (to, token, raw) => {
+        const hash = await providerWallet.sendTransaction({ to: token, data: encodeFunctionData({ abi: ERC20, functionName: "transfer", args: [to, raw] }) });
+        await fork.client.waitForTransactionReceipt({ hash });
+        return hash;
+      },
       earnings: {
         sweep: async () => {
-          const r = await earnings.sweep();
-          earningsResult = r;
-          return r;
+          earningsResult = await earnings.sweep();
+          return earningsResult;
         },
       } as unknown as EarningsSweeper,
       log: (m) => log(`[provider] ${m}`),
@@ -152,24 +178,26 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
     await room.settle();
 
     const job = (await fork.client.readContract({ address: acp.acp, abi: ACP_ABI, functionName: "jobs", args: [BigInt(jobId)] })) as readonly unknown[];
-    // What the escrow paid the provider: the token transfer to it in the submit transaction.
     const acpTxs = room.txs.get(jobId) ?? [];
     publicTxs.push(...acpTxs.map((t) => ({ what: `ACP ${t.what}`, hash: t.hash })));
-    let income = 0n;
-    const submit = acpTxs.find((t) => t.what.startsWith("submit"));
-    if (submit) {
-      const receipt = await fork.client.getTransactionReceipt({ hash: submit.hash });
-      const transfers = parseEventLogs({
-        abi: [{ type: "event", name: "Transfer", inputs: [{ name: "from", type: "address", indexed: true }, { name: "to", type: "address", indexed: true }, { name: "value", type: "uint256", indexed: false }] }] as const,
-        logs: receipt.logs.filter((l) => l.address.toLowerCase() === acp.paymentToken.toLowerCase()),
-      });
-      for (const t of transfers) if (t.args.to.toLowerCase() === providerKey.address.toLowerCase()) income += t.args.value;
-    }
-    log(`ACP job ${jobId}: on-chain status ${job[1]} (3 = completed); budget ${formatUnits(job[6] as bigint, 6)}; the escrow paid the provider ${formatUnits(income, 6)} ${acp.tokenName}`);
+    // The public token movements to the provider, read from the fund and submit transactions.
+    const TRANSFER = [
+      { type: "event", name: "Transfer", inputs: [{ name: "from", type: "address", indexed: true }, { name: "to", type: "address", indexed: true }, { name: "value", type: "uint256", indexed: false }] },
+    ] as const;
+    const toProvider = async (hash: Hex | undefined, token: Address) => {
+      if (!hash) return 0n;
+      const receipt = await fork.client.getTransactionReceipt({ hash });
+      return parseEventLogs({ abi: TRANSFER, logs: receipt.logs.filter((l) => l.address.toLowerCase() === token.toLowerCase()) })
+        .filter((t) => t.args.to.toLowerCase() === providerKey.address.toLowerCase())
+        .reduce((s, t) => s + t.args.value, 0n);
+    };
+    const principal = await toProvider(acpTxs.find((t) => t.what.startsWith("fund"))?.hash, asset.address);
+    const escrowPaid = await toProvider(acpTxs.find((t) => t.what.startsWith("complete"))?.hash, acp.paymentToken);
+    log(`ACP job ${jobId}: on-chain status ${job[1]} (3 = completed); ${formatUnits(principal, asset.decimals)} ${asset.symbol} reached the provider at funding; the escrow paid it ${formatUnits(escrowPaid, 6)} ${acp.tokenName}`);
 
     // The client opens the sealed deliverable and checks each proof.
     const text = room.deliverables.get(jobId) ?? "";
-    const outer = JSON.parse(text) as { type: string; sealed?: string; summary?: unknown };
+    const outer = JSON.parse(text) as { type: string; sealed?: string };
     if (outer.type !== DELIVERABLE_TYPE) throw new Error("unexpected deliverable");
     const inner = JSON.parse(outer.sealed ? await client.openSealed(outer.sealed) : text) as { payouts: PayoutResult[] };
     const proofsOk: boolean[] = [];
@@ -186,13 +214,12 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
     let claimed: string | null = null;
     const sealedLink = inner.payouts.find((p) => p.sealedClaimLink)?.sealedClaimLink;
     if (sealedLink) {
-      const link = await client.openSealed(sealedLink);
-      const c = await r2.claim(link);
+      const c = await r2.claim(await client.openSealed(sealedLink));
       claimed = `${c.amount} (${c.result})`;
       log(`recipient 2 claimed ${claimed} from the claim link the client passed on`);
     }
 
-    // What a watcher sees of a payout: the Transferred event, a nullifier and two commitments.
+    // What a watcher sees of a payout: a Transferred event with a nullifier and two commitments.
     const transferLogFields: string[][] = [];
     for (const p of inner.payouts) {
       if (!p.tx) continue;
@@ -202,21 +229,40 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
         logs: receipt.logs,
       });
       for (const l of logs) transferLogFields.push(Object.keys(l.args));
-      publicTxs.push({ what: `payout to ${p.to}: a shielded transfer`, hash: p.tx });
+      publicTxs.push({ what: `Gloam payout to ${p.to}: a shielded transfer`, hash: p.tx });
     }
 
-    // A job the provider refuses before anything is committed: an evaluator it does not trust.
-    const refusedId = await room.clientCreateJob({ description: OFFERING_NAME, requirement, evaluator: "0x000000000000000000000000000000000000dEaD", expiresInSeconds: 3600 });
+    // A plain escrow job (no fund transfer) from a client the provider does not trust: refused.
+    const refusedId = await room.clientCreateJob({ description: OFFERING_NAME, requirement, fundTransfer: false, expiresInSeconds: 3600 });
     await room.settle();
     const rej = room.rejections.get(refusedId) ?? null;
 
-    await shutdownProver();
+    // A client that rejects a funded job: the escrow gives the fee back, the provider the principal.
+    const before = { fee: await bal(acp.paymentToken, clientKey.address), principal: await bal(asset.address, clientKey.address) };
+    const attackId = await room.clientCreateJob({ description: OFFERING_NAME, requirement, rejectAfterFunding: true, expiresInSeconds: 3600 });
+    await room.settle();
+    const attackJob = (await fork.client.readContract({ address: acp.acp, abi: ACP_ABI, functionName: "jobs", args: [BigInt(attackId)] })) as readonly unknown[];
+    const journal = service.status(chainId, attackId);
+    const feeDelta = (await bal(acp.paymentToken, clientKey.address)) - before.fee;
+    const principalDelta = (await bal(asset.address, clientKey.address)) - before.principal;
+    const rejectedAfterFunding = {
+      jobId: attackId,
+      acpStatus: Number(attackJob[1]),
+      payoutsMade: journal?.results.filter((r) => r.status === "paid").length ?? 0,
+      clientNetChange: sameToken
+        ? `${formatUnits(principalDelta, asset.decimals)} ${asset.symbol}`
+        : `${formatUnits(principalDelta, asset.decimals)} ${asset.symbol}, ${formatUnits(feeDelta, 6)} ${acp.tokenName}`,
+      journal: `${journal?.state}${journal?.refundTx ? `, principal sent back in ${journal.refundTx}` : journal?.refundOwed ? `, ${journal.refundOwed} owed` : ""}`,
+    };
+    log(`ACP job ${attackId}: the client rejected it after funding; payouts made ${rejectedAfterFunding.payoutsMade}; client's net change ${rejectedAfterFunding.clientNetChange}; ${rejectedAfterFunding.journal}`);
+
     return {
       network: args.network,
       jobId,
       acpStatus: Number(job[1]),
-      quoteBudget: formatUnits(job[6] as bigint, 6),
-      providerEscrowIncome: formatUnits(income, 6),
+      feeBudget: formatUnits(job[6] as bigint, 6),
+      principalToProvider: formatUnits(principal, asset.decimals),
+      escrowPaidProvider: formatUnits(escrowPaid, 6),
       payouts: inner.payouts,
       proofsOk,
       recipientReceived,
@@ -227,6 +273,7 @@ export async function runScenario(args: { network: "base" | "robinhood-mainnet";
       transferLogFields,
       publicTxs,
       refusedJob: rej ? { jobId: refusedId, ...rej } : null,
+      rejectedAfterFunding,
     };
   } finally {
     await shutdownProver();

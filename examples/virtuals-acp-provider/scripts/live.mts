@@ -17,11 +17,15 @@
  * token's approve; under ACP's default policy those calls are refused. Private
  * payouts go through the Gloam relay, so the smart account only signs deposits.
  */
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, encodeFunctionData, http, type Address } from "viem";
 import { GloamAgent, acpCallSender, resolveNetwork, type AcpEvmProviderLike } from "@gloamtrade/game-plugin-gloam";
 import { ACP_ABI, ACP_CONTRACTS, type AcpAgentLike } from "../src/acp.js";
 import { EarningsSweeper } from "../src/earnings.js";
 import { PrivatePayoutProvider } from "../src/provider.js";
+
+const ERC20_TRANSFER = [
+  { type: "function", name: "transfer", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ type: "bool" }] },
+] as const;
 
 function need(name: string): string {
   const v = process.env[name]?.trim();
@@ -76,6 +80,7 @@ const reader = createPublicClient({ chain, transport: http() });
 const service = new PrivatePayoutProvider({
   wallet,
   budgetToken: (raw, id) => AssetToken.usdcFromRaw(raw, id),
+  transferToken: (address, symbol, decimals, raw) => AssetToken.create(address, symbol, decimals, Number(raw) / 10 ** decimals),
   acpFeeBps: async (session) => {
     const platform = Number(await reader.readContract({ address: acp.acp, abi: ACP_ABI, functionName: "platformFeeBP" }));
     const hasEvaluator = session.job && session.job.evaluatorAddress !== "0x0000000000000000000000000000000000000000";
@@ -83,7 +88,14 @@ const service = new PrivatePayoutProvider({
     return platform + evaluator;
   },
   journalPath: process.env.PAYOUT_JOURNAL ?? "./payout-jobs.json",
-  earnings: new EarningsSweeper({ wallet, acpPaymentToken: acp.paymentToken, minBatch: "25", roundTo: "5" }),
+  // Unpaid principal of a job that ends early goes back to the client from the ACP wallet.
+  refund: async (to, token, raw) =>
+    String(
+      await evmProvider.sendCalls(chainId, [
+        { to: token, data: encodeFunctionData({ abi: ERC20_TRANSFER, functionName: "transfer", args: [to, raw] }), value: 0n },
+      ])
+    ),
+  earnings: new EarningsSweeper({ wallet, tokens: [acp.paymentToken, wallet.network.assets[0]!.address], minBatch: "25", roundTo: "5" }),
 });
 
 agent.on("entry", (session, entry) => service.onEntry(session, entry));
