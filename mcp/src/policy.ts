@@ -20,10 +20,12 @@
  * token address on both (pathUSD and OUSD sit at the same address on Tempo
  * mainnet and testnet; ETH is the zero address everywhere), means the TESTNET
  * asset unless the entry says "network": "robinhood-mainnet" / "tempo-mainnet" /
- * "base-mainnet". So a config written for testnet never starts approving mainnet
- * assets by itself. Mainnet-only symbols (USDC.e, USDT0, GLOAM, USDT) and
- * mainnet-only addresses (USDG on Robinhood Chain mainnet, USDC on Base) name
- * the mainnet asset directly.
+ * "base-mainnet" / "ethereum-mainnet". So a config written for testnet never
+ * starts approving mainnet assets by itself. Mainnet-only symbols (USDC.e,
+ * USDT0, GLOAM, USDT, PYUSD) and mainnet-only addresses (USDG on Robinhood
+ * Chain mainnet, USDC on Base, every Ethereum token) name the mainnet asset
+ * directly. A symbol on two mainnets (USDT on Base and Ethereum) names the
+ * first listed, Base; name "ethereum-mainnet" for Ethereum's.
  */
 import { formatUnits, isAddress, parseUnits, type Address } from "viem";
 import { z } from "zod";
@@ -35,6 +37,12 @@ import {
   BASE_SEPOLIA_USDC,
   BASE_USDC,
   BASE_USDT,
+  ETHEREUM_EURC,
+  ETHEREUM_MAINNET_CHAIN_ID,
+  ETHEREUM_PYUSD,
+  ETHEREUM_USDC,
+  ETHEREUM_USDG,
+  ETHEREUM_USDT,
   GLOAM_NETWORKS,
   GLOAM_TOKEN,
   NATIVE_ASSET,
@@ -115,6 +123,7 @@ export const NETWORK_CHAIN_IDS: Record<NetworkKey, number> = {
   "robinhood-mainnet": RH_MAINNET_CHAIN_ID,
   "tempo-mainnet": TEMPO_MAINNET_CHAIN_ID,
   "base-mainnet": BASE_MAINNET_CHAIN_ID,
+  "ethereum-mainnet": ETHEREUM_MAINNET_CHAIN_ID,
 };
 
 // Testnet assets first: a symbol on both sides resolves to the testnet unless a network is named.
@@ -141,6 +150,13 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "EURC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_EURC, decimals: 6 },
   { symbol: "USDT", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDT, decimals: 6 },
   { symbol: "ETH", chainId: BASE_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  // Ethereum after Base, so "USDT" alone keeps naming Base's as before; name the network for Ethereum's.
+  { symbol: "USDC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDC, decimals: 6 },
+  { symbol: "USDT", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDT, decimals: 6 },
+  { symbol: "USDG", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDG, decimals: 6 },
+  { symbol: "PYUSD", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_PYUSD, decimals: 6 },
+  { symbol: "EURC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_EURC, decimals: 6 },
+  { symbol: "ETH", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
 ];
 
 /** "Robinhood Chain", "Tempo testnet" and so on; "any network" for a limit that names none. */
@@ -157,7 +173,7 @@ export function assetLabel(chainId: number, asset: Address): string {
 // ------------------------------------------------------------------ config shape
 
 const amount = z.union([z.string(), z.number()]).transform((v) => String(v).trim());
-const network = z.enum(["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet"]);
+const network = z.enum(["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"]);
 
 const assetEntry = z
   .object({
@@ -365,7 +381,7 @@ export function loadPolicy(env: Record<string, string | undefined>, readFile: (p
         mode: "invalid",
         agent,
         source,
-        error: `GLOAM_LIMIT_NETWORK "${limitNetwork}" is not a Gloam network. Use robinhood-mainnet, tempo-mainnet, base-mainnet, robinhood, tempo or base.`,
+        error: `GLOAM_LIMIT_NETWORK "${limitNetwork}" is not a Gloam network. Use robinhood-mainnet, tempo-mainnet, base-mainnet, ethereum-mainnet, robinhood, tempo or base.`,
       };
     }
     const assetKeys = list(env.GLOAM_LIMIT_ASSETS ?? "");
