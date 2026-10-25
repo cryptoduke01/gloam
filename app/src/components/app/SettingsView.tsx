@@ -40,6 +40,7 @@ import { WalletMenu } from "./WalletMenu";
 import { StatusPill } from "./StatusPill";
 import { VaultHealth } from "./VaultHealth";
 import { RecoverySettingsCard } from "./RecoveryPanel";
+import { restoreMessage } from "@/lib/restoreMessage";
 
 /* ------------------------------------------------------------ primitives */
 
@@ -181,43 +182,6 @@ function Status({ children }: { children: ReactNode }) {
       {children}
     </p>
   );
-}
-
-/** What a restore did, in plain words. */
-function restoreMessage(r: { count: number; kept: number; moved: number; movedClaims: number; unseen: number; skipped: number }): string {
-  const parts: string[] = [];
-  if (r.count || (!r.kept && !r.moved && !r.unseen && !r.skipped)) {
-    parts.push(`Restored ${r.count} balance(s). Open Portfolio or Vault to see them.`);
-  } else if (!r.moved) {
-    parts.push("Everything in this backup is already in this browser, so nothing changed.");
-  }
-  if (r.moved) {
-    parts.push(
-      r.moved === 1
-        ? "One balance in this backup was spent after the backup was made, so it stays out of your balance."
-        : `${r.moved} balances in this backup were spent after the backup was made, so they stay out of your balance.`
-    );
-  }
-  if (r.movedClaims) {
-    parts.push(
-      "A claimed payment you secured since then is in the browser where you secured it, and in any backup made after that."
-    );
-  }
-  if (r.unseen) {
-    parts.push(
-      r.unseen === 1
-        ? "One balance in this backup is not in the vault, so it stays out of your balance until it is."
-        : `${r.unseen} balances in this backup are not in the vault, so they stay out of your balance until they are.`
-    );
-  }
-  if (r.skipped) {
-    parts.push(
-      r.skipped === 1
-        ? "One entry in this backup is not a Gloam balance, so it was left out."
-        : `${r.skipped} entries in this backup are not Gloam balances, so they were left out.`
-    );
-  }
-  return parts.join(" ");
 }
 
 /* ------------------------------------------------------------ passkey */
