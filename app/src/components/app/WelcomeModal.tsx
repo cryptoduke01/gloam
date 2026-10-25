@@ -170,7 +170,7 @@ export function WelcomeModal() {
           <Link
             href="/docs/testnet"
             onClick={dismiss}
-            className="btn btn-ghost h-[44px] px-[20px] sm:h-12 sm:px-6 sm:text-[15px]"
+            className="btn btn-quiet h-[44px] px-[20px] sm:h-12 sm:px-6 sm:text-[15px]"
           >
             Testnet guide
           </Link>
