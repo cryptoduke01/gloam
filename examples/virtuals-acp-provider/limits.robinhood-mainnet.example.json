@@ -1,0 +1,7 @@
+{
+  "recipients": "any",
+  "actions": ["add", "pay"],
+  "assets": {
+    "USDG": { "maxPerPayment": "25", "maxPerDay": "250" }
+  }
+}

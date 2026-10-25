@@ -21,6 +21,7 @@ import { createPublicClient, encodeFunctionData, http, type Address } from "viem
 import { GloamAgent, acpCallSender, resolveNetwork, type AcpEvmProviderLike } from "@gloamtrade/game-plugin-gloam";
 import { ACP_ABI, ACP_CONTRACTS, type AcpAgentLike } from "../src/acp.js";
 import { EarningsSweeper } from "../src/earnings.js";
+import { limitsFileFor } from "../src/limitsFile.js";
 import { PrivatePayoutProvider } from "../src/provider.js";
 
 const ERC20_TRANSFER = [
@@ -63,18 +64,20 @@ const evmProvider = await PrivyAlchemyEvmProviderAdapter.create({
 });
 const agent = (await AcpAgent.create({ evmProvider })) as AcpAgentLike;
 
-// Limits from GLOAM_LIMITS_FILE (see limits.example.json), else 25 a payout and 250 a day of the network's first asset.
-const first = resolveNetwork(gloamNetwork).assets[0]!.symbol;
+// Limits from GLOAM_LIMITS_FILE, else the example file for the network (USDC on Base Sepolia, USDG on Robinhood Chain).
+resolveNetwork(gloamNetwork);
+const limitsFile = limitsFileFor(gloamNetwork);
 const wallet = new GloamAgent({
   network: gloamNetwork,
+  env: { ...process.env, GLOAM_LIMITS_FILE: limitsFile },
   sender: await acpCallSender(evmProvider as AcpEvmProviderLike, chainId),
-  limits: process.env.GLOAM_LIMITS_FILE
-    ? undefined
-    : { recipients: "any", actions: ["add", "pay"], assets: { [first]: { maxPerPayment: "25", maxPerDay: "250" } } },
 });
 if (wallet.network.chainId !== chainId && !(chainId === 84532 && wallet.network.key === "base")) {
   throw new Error(`GLOAM_NETWORK=${gloamNetwork} is not on chain ${chainId}.`);
 }
+const limits = wallet.limitsReport();
+if (!limits.enforced) throw new Error(`The limits in ${limitsFile} cannot be used: ${"reason" in limits ? limits.reason : ""}`);
+console.log(`limits from ${limitsFile}`);
 
 const reader = createPublicClient({ chain, transport: http() });
 const service = new PrivatePayoutProvider({
@@ -89,6 +92,7 @@ const service = new PrivatePayoutProvider({
   },
   journalPath: process.env.PAYOUT_JOURNAL ?? "./payout-jobs.json",
   // Unpaid principal of a job that ends early goes back to the client from the ACP wallet.
+  // A refund that throws is tried again later, so this must throw only when nothing was sent.
   refund: async (to, token, raw) =>
     String(
       await evmProvider.sendCalls(chainId, [

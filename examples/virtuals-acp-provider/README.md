@@ -9,6 +9,11 @@ provider pays each recipient privately from its Gloam balance and delivers a
 proof of each payment, or a claim link for someone with no Gloam address,
 sealed to the client.
 
+A proof of payment (`gloampay1:`) shows that a private payment of that amount
+was made from the provider's notes. It does not show who received it, so it
+is not proof of delivery: each recipient confirms receipt itself (a Gloam
+address picks it up with `checkIncoming`).
+
 ## What stays public
 
 ACP's contracts are public, and this does not change that:
@@ -18,7 +23,9 @@ ACP's contracts are public, and this does not change that:
   client to the provider when the job is funded, the hash of the deliverable,
   and the escrow paying the fee and ACP's cut.
 - On Virtuals' ACP backend: the requirement and the deliverable messages. With
-  `sealedPayouts` and `replyTo` both are sealed, so the backend stores ciphertext.
+  `sealedPayouts` and `replyTo` the payout list and the deliverable are sealed,
+  so the backend stores ciphertext. `replyTo` itself, the client's Gloam
+  address, sits outside the seal: the backend sees it.
 
 Gloam makes the legs around ACP private:
 
@@ -41,21 +48,28 @@ client                               ACP (public)                           prov
   |                                      |               pays each recipient privately
   |                                      |<-------- submit(hash of deliverable) --|
   |<------------- deliverable, sealed to the client ------------------------------|
-  |-- complete (after checking proofs) ->|--- fee to provider ------------------->| adds received money privately
+  |-- complete ------------------------->|--- fee to provider ------------------->| adds received money privately
 ```
 
 The offering sets `requiredFunds`, so acp-node-v2's `createJobFromOffering`
 creates the job with ACP's FundTransferHook: the payout total goes from the
 client to the provider inside the same `fund()` transaction, outside the
 escrow, and only the provider's fee is escrowed. The client evaluates its own
-job, as acp-node-v2's fund-transfer examples do.
+job, as acp-node-v2's fund-transfer examples do. Before paying, the provider
+reads the job on the ACP contract (`jobs(jobId)`): funded, this provider, the
+hook, budget and evaluator it quoted, and enough time before expiry. The
+`job.funded` event alone moves nothing.
 
 Why: the provider pays out before it submits, and an escrow can still go back
 to the client before then (a self-evaluating client may reject a funded job).
 Private payouts cannot be undone, so they never depend on the escrow. A client
 that rejects after funding gets the fee back from the escrow, and the provider
 sends back any principal it has not paid out yet. Plain escrow jobs are taken
-only from clients the owner trusts.
+only from clients the owner trusts, with an evaluator the owner trusts.
+
+Every job needs an evaluator. With none, ACP lets the client reject a funded
+job and take the whole escrow back after the payouts have gone out, so a job
+with no evaluator is refused in every mode, before its requirement is read.
 
 Requirement, either form (see `src/offering.ts`):
 
@@ -76,9 +90,18 @@ Other rules the provider keeps:
   contract (platform 1% on Base Sepolia, 5% on Base and Robinhood Chain mainnet,
   plus 5% to the evaluator, here the client).
 - A job it cannot pay in full is never submitted; it expires, the fee goes back,
-  and the provider sends back what it did not pay out.
-- A journal (no secrets) records each payout as it lands, so a restart never
-  pays twice.
+  and the provider sends back what did not leave its float.
+- A journal (no secrets) records each payout before it is sent, then what came
+  of it. A payout whose answer was lost is never sent again: on the next event
+  or restart (or `provider.resume(session)`) the provider looks it up by its
+  label in its note store, after reading the chain, and carries on only once it
+  has settled.
+- A refund counts only what certainly did not leave the float. A payout that
+  may have gone out is held back from the refund until it settles. A refund
+  that fails is tried again on the next job end and before each earnings sweep.
+- The earnings sweep adds only fees and settled principal: it leaves in the
+  wallet the principal of jobs not yet paid out, of jobs quoted but not yet
+  funded, and refunds owed or held (`publicReserve`).
 
 ## Run it on a fork
 
@@ -103,8 +126,8 @@ BASE_SEPOLIA_RPC_URL=https://sepolia.base.org ROBINHOOD_RPC_URL=https://rpc.main
   pnpm --filter gloam-virtuals-acp-provider-example test
 ```
 
-Each run makes one job that completes, one plain escrow job the provider
-refuses, and one job the client rejects after funding. sepolia.base.org answers
+Each run makes one job that completes, one plain escrow job with no evaluator
+the provider refuses, and one job the client rejects after funding. sepolia.base.org answers
 200 blocks per log request, so the first read of the vault there takes a few
 minutes. On Base Sepolia, ACP's escrow takes the fee in Virtuals' own test
 token (`0xECc2…DBb3`), which Gloam's vault does not take, so only the payout
@@ -118,16 +141,25 @@ USDC.
 `pnpm add @virtuals-protocol/acp-node-v2@0.1.15` in this folder. Copy
 `.env.example` to `.env`. It defaults to ACP's testnet; mainnet needs
 `ACP_MAINNET=1`. The agent's wallet policy must allow the Gloam vault and the
-token's approve for received money to go into its private balance.
+token's approve for received money to go into its private balance. Limits come
+from `GLOAM_LIMITS_FILE`, else `limits.example.json` (USDC, Base Sepolia) or
+`limits.robinhood-mainnet.example.json` (USDG); the script stops if they cannot
+be used.
 
 ```ts
 const agent = await AcpAgent.create({ evmProvider });
-const wallet = new GloamAgent({ network: "robinhood-mainnet", sender: await acpCallSender(evmProvider, 4663) });
+const wallet = new GloamAgent({
+  network: "robinhood-mainnet",
+  env: { ...process.env, GLOAM_LIMITS_FILE: "./limits.robinhood-mainnet.example.json" },
+  sender: await acpCallSender(evmProvider, 4663),
+});
 const service = new PrivatePayoutProvider({
   wallet,
   budgetToken: (raw, chainId) => AssetToken.usdcFromRaw(raw, chainId),
   transferToken: (address, symbol, decimals, raw) => AssetToken.create(address, symbol, decimals, Number(raw) / 10 ** decimals),
   acpFeeBps: () => 1000, // platform 5% + evaluator 5%
+  // Resolve with the hash once broadcast; throw only when nothing was sent (a refund that threw is retried).
+  refund: async (client, token, raw) => sendTransfer(client, token, raw),
   earnings: new EarningsSweeper({ wallet, tokens: [ACP_CONTRACTS[4663].paymentToken] }),
 });
 agent.on("entry", (session, entry) => service.onEntry(session, entry));
@@ -139,6 +171,7 @@ await agent.start();
 - `src/acp.ts`: the ACP types this needs, matching acp-node-v2 0.1.15, and the contract and hook addresses.
 - `src/offering.ts`: the offering record, requirement checks, and the client's `buildPayoutRequirement`.
 - `src/provider.ts`: `PrivatePayoutProvider`.
-- `src/earnings.ts`: `EarningsSweeper`, received money into the private balance in round batches.
+- `src/earnings.ts`: `EarningsSweeper`, received money into the private balance in round batches, leaving what is owed to clients.
+- `src/limitsFile.ts`: which limits file `scripts/live.mts` reads.
 - `src/forkRoom.ts`: ACP on a fork: the real contract and hook on chain, the job room in process.
 - `scripts/scenario.mts`, `scripts/fork-demo.mts`: the whole job on a fork.
