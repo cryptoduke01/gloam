@@ -11,6 +11,63 @@ import { SealDots } from "@/components/ui/SealDots";
  * the full-size figure on the post and a scaled thumbnail on /research.
  */
 
+/* ---------- Agents should not do business in public: one ACP job, twice ---------- */
+
+type JobRow = { k: string; v: string; sealed?: boolean };
+
+const JOB_PUBLIC: JobRow[] = [
+  { k: "Job", v: "Client to provider" },
+  { k: "Fee in escrow", v: "0.05 USDC" },
+  { k: "Payout to 0x7a1f…e2c9", v: "7.00 USDC" },
+  { k: "Payout to 0x5d90…41ab", v: "3.00 USDC" },
+  { k: "Agent balance", v: "40.00 USDC" },
+];
+
+const JOB_GLOAM: JobRow[] = [
+  { k: "Job", v: "Client to provider" },
+  { k: "Fee in escrow", v: "0.05 USDC" },
+  { k: "Private transfer", v: "", sealed: true },
+  { k: "Private transfer", v: "", sealed: true },
+  { k: "Agent balance", v: "", sealed: true },
+];
+
+function AcpArt() {
+  return (
+    <div className="grid w-full max-w-[860px] grid-cols-1 gap-3 @xl:grid-cols-2">
+      {(
+        [
+          ["Paid in public", JOB_PUBLIC, false],
+          ["Paid with Gloam", JOB_GLOAM, true],
+        ] as const
+      ).map(([name, rows, gloam]) => (
+        <div key={name} className="gl-glass p-2 shadow-pop">
+          <div className="h-full rounded-[12px] bg-panel p-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[15px] text-foreground">{name}</span>
+              <span className="text-[12px] text-mute">What the explorer shows</span>
+            </div>
+            <ul className="mt-3 divide-y divide-line">
+              {rows.map((r, i) => (
+                <li key={`${r.k}-${i}`} className="flex min-h-[44px] items-center justify-between gap-4 text-[14px]">
+                  <span className={r.sealed ? "text-sealed" : "text-soft"}>{r.k}</span>
+                  {r.sealed ? (
+                    <span className="inline-flex items-center gap-2 text-[13px] text-sealed">
+                      <SealDots n={4} className="text-sealed" />
+                      Private
+                    </span>
+                  ) : (
+                    <span className={`tnum ${gloam ? "text-mute" : "text-foreground"}`}>{r.v}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ---------- Agents that pay privately: one payment, checked on the way ---------- */
 
 const AGENT_STEPS: { name: string; line: string; sealed?: boolean }[] = [
@@ -197,6 +254,7 @@ function TempoArt() {
  * thumbnail can scale it to fit any card. Measured from the rendered artifact.
  */
 const COVERS: Record<PostCoverId, { Art: () => React.JSX.Element; w: number; h: number }> = {
+  acp: { Art: AcpArt, w: 860, h: 330 },
   agents: { Art: AgentsArt, w: 1040, h: 196 },
   mainnet: { Art: MainnetArt, w: 820, h: 364 },
   operator: { Art: OperatorArt, w: 860, h: 300 },

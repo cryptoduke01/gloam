@@ -837,3 +837,41 @@ export function WorkerArt() {
     </div>
   );
 }
+
+/** Research, agent commerce: one ACP job on an explorer, the job public and the payouts sealed. */
+export function JobArt() {
+  const line = (label: string, value: ReactNode, sealed = false) => (
+    <div
+      style={{
+        ...row,
+        justifyContent: "space-between",
+        height: 52,
+        padding: "0 16px",
+        borderRadius: 12,
+        border: `1.5px solid ${sealed ? C.tintLine : "transparent"}`,
+        background: sealed ? C.tintSoft : "transparent",
+      }}
+    >
+      <Text size={21} color={sealed ? C.tint : C.faint}>{label}</Text>
+      {value}
+    </div>
+  );
+  return (
+    <div
+      style={{
+        ...col,
+        gap: 6,
+        width: 330,
+        padding: "12px 10px",
+        borderRadius: 20,
+        border: `1.5px solid ${C.line}`,
+        background: C.surface,
+      }}
+    >
+      {line("Job", <Text size={21}>Client to provider</Text>)}
+      {line("Fee", <Text size={21}>0.05 USDC</Text>)}
+      {line("Payout", <Hidden n={4} d={8} gap={6} />, true)}
+      {line("Payout", <Hidden n={4} d={8} gap={6} />, true)}
+    </div>
+  );
+}

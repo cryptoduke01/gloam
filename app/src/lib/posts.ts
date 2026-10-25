@@ -4,7 +4,7 @@
  * is one entry here plus its page under app/blog/<slug>.
  */
 
-export type PostCoverId = "agents" | "mainnet" | "operator" | "tempo";
+export type PostCoverId = "acp" | "agents" | "mainnet" | "operator" | "tempo";
 
 export type Post = {
   slug: string;
@@ -30,6 +30,18 @@ export const AUTHOR = {
 } as const;
 
 export const POSTS: Post[] = [
+  {
+    slug: "agents-should-not-do-business-in-public",
+    title: "Agents should not do business in public",
+    short: "Agents and ACP",
+    summary:
+      "Every ACP job is on chain by design. What that gives away about an agent's business, and how Gloam keeps the job public and the money private.",
+    date: "2026-10-25",
+    dateLabel: "October 25, 2026",
+    kind: "Research",
+    minutes: 6,
+    cover: "acp",
+  },
   {
     slug: "private-agent-payments",
     title: "Agents that pay privately, and check before they pay",

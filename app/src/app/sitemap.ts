@@ -21,6 +21,7 @@ const PAGES: { path: string; priority: number }[] = [
   { path: "/partners", priority: 0.6 },
   { path: "/testers", priority: 0.5 },
   { path: "/pitch", priority: 0.5 },
+  { path: "/blog/agents-should-not-do-business-in-public", priority: 0.6 },
   { path: "/blog/private-agent-payments", priority: 0.6 },
   { path: "/blog/live-on-mainnet", priority: 0.6 },
   { path: "/blog/privacy-without-an-operator", priority: 0.6 },
