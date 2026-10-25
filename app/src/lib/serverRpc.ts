@@ -9,8 +9,9 @@
  * The vault has the same address on every chain, so a node for another chain
  * (a Base Sepolia URL pasted under Base mainnet's id, say) would answer every
  * vault read with that chain's state, and the answers would look real. One
- * that answers for another chain is never used: reads go to the public RPC,
- * and a send is refused before it reaches any node (WrongChainRpcError).
+ * that answers for another chain is never used, and neither is one that has
+ * not answered yet (down, timed out): reads go to the public RPC, and a send
+ * is refused before it reaches any node (WrongChainRpcError).
  */
 import { fallback, http, type HttpTransportConfig, type Transport } from "viem";
 import type { GloamNetwork } from "./networks";
@@ -32,14 +33,27 @@ export class WrongChainRpcError extends Error {
   }
 }
 
+/**
+ * The private RPC set for this chain has not said which chain it serves yet
+ * (down, timed out), so this request does not use it. Nothing was sent to it;
+ * it is asked again on the next request.
+ */
+export class UncheckedRpcError extends WrongChainRpcError {
+  constructor(chainId: number) {
+    super(chainId);
+    this.message = `The private RPC set for chain ${chainId} has not said which chain it serves yet, so it is not used.`;
+    this.name = "UncheckedRpcError";
+  }
+}
+
 /** Chain id checks, per chain and URL: true or false once answered. */
 const checks = new Map<string, Promise<boolean | null>>();
 
 /**
  * Whether `url` answers eth_chainId with `chainId`. Null when it could not be
- * asked (down, timed out): then it is asked again on the next call, and the
- * request goes ahead as it would have, with the public RPC behind it. Logs a
- * mismatch once, without the URL (a private URL can carry its key).
+ * asked (down, timed out): then it is asked again on the next call, and this
+ * request skips it for the public RPC behind it. Logs a mismatch once, without
+ * the URL (a private URL can carry its key).
  */
 function answersFor(url: string, chainId: number, config: HttpTransportConfig): Promise<boolean | null> {
   const key = `${chainId} ${url}`;
@@ -68,7 +82,10 @@ function checkedPrivate(url: string, chainId: number, config: HttpTransportConfi
     return {
       ...t,
       async request(args) {
-        if ((await answersFor(url, chainId, config)) === false) throw new WrongChainRpcError(chainId);
+        const answered = await answersFor(url, chainId, config);
+        if (answered === false) throw new WrongChainRpcError(chainId);
+        // never used before it says it is this chain's node
+        if (answered === null) throw new UncheckedRpcError(chainId);
         return t.request(args);
       },
     } as typeof t;
