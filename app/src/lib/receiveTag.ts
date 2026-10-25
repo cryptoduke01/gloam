@@ -236,10 +236,28 @@ const P256_SPKI_HEAD = [
   0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04,
 ];
 
+// P-256: y^2 = x^3 - 3x + b over the prime field p.
+const P256_P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
+const P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
+
+const toBig = (bytes: Uint8Array) => BigInt(`0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`);
+
+/** Whether the uncompressed point x | y (32 bytes each) is on P-256. */
+function onP256(xy: Uint8Array): boolean {
+  if (xy.length !== 64) return false;
+  const x = toBig(xy.subarray(0, 32));
+  const y = toBig(xy.subarray(32));
+  if (x >= P256_P || y >= P256_P) return false;
+  const rhs = (((((x * x) % P256_P) * x - 3n * x + P256_B) % P256_P) + P256_P) % P256_P;
+  return (y * y) % P256_P === rhs;
+}
+
 /**
  * A whole Gloam address: gloamr1. followed by a P-256 public key that decodes,
- * not just the prefix. "gloamr1." or "gloamr1.invalid" fail here, so a payroll
- * row or a payment is refused when it is entered, not after it is proven.
+ * not just the prefix, and whose point is on the curve. "gloamr1.",
+ * "gloamr1.invalid" or a key off the curve fail here, so a payroll row or a
+ * payment is refused when it is entered, not after it is proven (sealing to a
+ * key off the curve fails with "Invalid keyData").
  */
 export function isValidReceiveTag(input: string): boolean {
   const t = input.trim();
@@ -252,7 +270,7 @@ export function isValidReceiveTag(input: string): boolean {
   } catch {
     return false;
   }
-  return bytes.length === 91 && P256_SPKI_HEAD.every((b, i) => bytes[i] === b);
+  return bytes.length === 91 && P256_SPKI_HEAD.every((b, i) => bytes[i] === b) && onP256(bytes.subarray(P256_SPKI_HEAD.length));
 }
 
 export function isPayToTagPackage(input: string): boolean {
