@@ -170,7 +170,7 @@ export function decodePaymentNote(token: string): NoteExport {
 export async function openGloamPaymentNote(
   paymentNote: string,
   receiveKey?: ReceiveKey | ReceiveKeyJwk
-): Promise<NoteExport & { pool?: Address }> {
+): Promise<NoteExport & { pool?: Address; chainId?: number }> {
   let inner = paymentNote.trim();
   if (isSealedTicket(inner)) {
     if (!receiveKey) {
@@ -400,6 +400,7 @@ export async function buildGloamPayment(
           amountWei: intent.paymentNote.amountWei,
           secret: intent.paymentNote.secret,
           commitment: intent.paymentNote.commitment,
+          chainId: req.network,
         }),
         req.payTo
       )
@@ -513,6 +514,9 @@ export function verifyGloamPayment(args: {
   }
   // Poseidon reads every field mod p, so amount + p would open the same note.
   if (noteFieldProblem(note)) return fail("payment note fields are not canonical");
+  // A note that names its chain must name this one: the vault and ETH have one address on every chain.
+  const noteChain = (note as NoteExport & { chainId?: number }).chainId;
+  if (noteChain !== undefined && noteChain !== req.network) return fail("payment note is on another chain");
   if (note.asset.toLowerCase() !== req.asset.toLowerCase()) {
     return fail("payment note asset does not match required asset");
   }

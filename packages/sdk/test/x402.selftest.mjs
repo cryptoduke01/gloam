@@ -100,6 +100,7 @@ const payNote = await openGloamPaymentNote(built.payload.payload.paymentNote, pa
 assert(payNote.secret === built.paymentNote.secret, "payee's receive key opens the sealed note");
 assert(BigInt(payNote.amountWei) === PRICE, "payment note carries the required amount");
 assert(payNote.asset.toLowerCase() === STABLE.toLowerCase(), "payment note asset = stable");
+assert(payNote.chainId === req.network, "the sealed note names the chain the payment is on");
 
 // X-PAYMENT header round-trips
 const roundTrip = decodePaymentHeader(built.header);
@@ -111,6 +112,9 @@ const vSealed = verifyGloamPayment({ requirements: req, payload: built.payload }
 assert(vSealed.ok === false && /sealed/.test(vSealed.reason), "verify asks for the opened note when the note is sealed");
 const v = verifyGloamPayment({ requirements: req, payload: built.payload, note: payNote });
 assert(v.ok === true, `verify ok (got: ${v.reason})`);
+// the same note claimed for a charge on another chain (the vault and assets can share an address)
+const vOtherChain = verifyGloamPayment({ requirements: req, payload: built.payload, note: { ...payNote, chainId: req.network + 1 } });
+assert(vOtherChain.ok === false && /another chain/.test(vOtherChain.reason), "verify refuses a note that names another chain");
 assert(v.sealed === true, "verify reports the note arrived sealed");
 assert(v.final === false && v.finality === GLOAM_NOT_FINAL, "verify without a sweep says plainly it is not final");
 assert(/spend the money back/.test(v.finality) && /settleGloamPayment/.test(v.finality), "not-final notice names the risk and the fix");

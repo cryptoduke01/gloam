@@ -202,6 +202,8 @@ async function openForKey(
     return null; // sealed to someone else, or not a payment
   }
   if (pack.pool && pack.pool.toLowerCase() !== network.pool.toLowerCase()) return null;
+  // A code that names its chain is only this network's if it names this chain (the vault has one address everywhere).
+  if (pack.chainId !== undefined && pack.chainId !== network.chainId) return null;
   // The code must open the commitment it names: Poseidon(secret, amount, asset).
   const real = fieldToHex(await noteCommitmentPoseidon(hexToField(pack.secret), BigInt(pack.amountWei), pack.asset));
   if (real.toLowerCase() !== pack.commitment.toLowerCase()) return null;

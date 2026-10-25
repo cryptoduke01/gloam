@@ -149,12 +149,12 @@ async function ecdhAesKey(privateKey: WebCryptoKey, publicKey: WebCryptoKey): Pr
 /**
  * A sealed ticket's length would show the amount's size and the note's length,
  * so the plaintext is padded with spaces to a 512-byte step. The cap is the
- * largest note package (1158 bytes: a 78-digit amount and an 80-character note),
- * so no ticket grows past what the memo board and the relay take. Openers trim
- * the padding off.
+ * largest note package (1177 bytes: a 78-digit amount, an 8-digit chain id and
+ * an 80-character note), so no ticket grows past what the memo board and the
+ * relay take, and the app pads the same. Openers trim the padding off.
  */
 const SEAL_PAD_STEP = 512;
-const SEAL_PAD_MAX = 1158;
+const SEAL_PAD_MAX = 1177;
 
 function padSealed(raw: Uint8Array): Uint8Array {
   if (raw.length >= SEAL_PAD_MAX) return raw;
@@ -220,6 +220,17 @@ export interface NotePackage {
   message?: string;
   /** The payer's private note to the payee (an invoice number, an agent ID), cleaned, at most 80 characters. */
   note?: string;
+  /**
+   * The chain the payment is on. The vault has one address on every chain and
+   * native ETH is 0x0 everywhere, so pool and asset alone can't tell Base from
+   * Base Sepolia or Ethereum. Packages made since SDK 0.3.0 carry it (`ch`);
+   * older ones don't, and readers skip a key they don't know.
+   */
+  chainId?: number;
+}
+
+function validChainId(v: unknown): v is number {
+  return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
 }
 
 /** Notes are range checked to < 2^128 in every Gloam circuit. */
@@ -262,6 +273,8 @@ export function encodeNotePackage(pack: Omit<NotePackage, "v" | "type" | "scheme
     w: pack.amountWei,
     k: pack.secret,
     c: pack.commitment,
+    // The chain, when known (same key and place as the app's codes).
+    ...(validChainId(pack.chainId) ? { ch: pack.chainId } : {}),
     // Only when there is one, so a package without a note keeps the old bytes.
     ...(note ? { n: note } : {}),
   });
@@ -291,13 +304,15 @@ export function decodeNotePackage(input: string): NotePackage {
   };
   const note = cleanPaymentNote(obj.note ?? obj.n);
   if (note) pack.note = note;
+  const ch = obj.ch ?? obj.chainId;
+  if (validChainId(ch)) pack.chainId = ch;
   const problem = noteFieldProblem(pack);
   if (problem) throw new Error(`Not a valid Gloam note package. ${problem}`);
   return pack;
 }
 
 /** A note package as the NoteExport the spend builders take (nullifier derived). */
-export async function notePackageToExport(pack: NotePackage): Promise<NoteExport & { pool: Address }> {
+export async function notePackageToExport(pack: NotePackage): Promise<NoteExport & { pool: Address; chainId?: number }> {
   const nullifier = await noteNullifierPoseidon(hexToField(pack.secret), hexToField(pack.commitment));
   return {
     secret: pack.secret,
@@ -306,5 +321,6 @@ export async function notePackageToExport(pack: NotePackage): Promise<NoteExport
     amountWei: pack.amountWei,
     asset: pack.asset,
     pool: pack.pool,
+    ...(pack.chainId !== undefined ? { chainId: pack.chainId } : {}),
   };
 }
