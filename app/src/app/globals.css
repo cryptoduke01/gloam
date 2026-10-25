@@ -959,6 +959,155 @@ html.gl-lite .gl-field.gl-drift {
   }
 }
 
+/* Research posts: the reading column (components/blog/ArticleLayout). 18/30
+   body in the soft ink, real space before each heading, Aeonik throughout.
+   Unlayered like .docs-prose so it sets the type of the plain elements inside;
+   a block with its own layout opts out with .not-prose. */
+.article-prose {
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--soft);
+}
+.article-prose > * + * {
+  margin-top: 1.4em;
+}
+.article-prose :where(h2):not(:where(.not-prose, .not-prose *)) {
+  margin-top: 2.6em;
+  font-size: 1.65rem;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+.article-prose :where(h3):not(:where(.not-prose, .not-prose *)) {
+  margin-top: 2em;
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.article-prose > :where(h2, h3) + * {
+  margin-top: 0.75em;
+}
+.article-prose :where(strong):not(:where(.not-prose, .not-prose *)) {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.article-prose :where(ul, ol):not(:where(.not-prose, .not-prose *)) {
+  padding-left: 1.4rem;
+}
+.article-prose :where(ul):not(:where(.not-prose, .not-prose *)) {
+  list-style: disc;
+}
+.article-prose :where(ol):not(:where(.not-prose, .not-prose *)) {
+  list-style: decimal;
+}
+.article-prose :where(li):not(:where(.not-prose, .not-prose *)) {
+  padding-left: 0.3rem;
+}
+.article-prose :where(li + li):not(:where(.not-prose, .not-prose *)) {
+  margin-top: 0.6em;
+}
+.article-prose :where(li)::marker {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.article-prose :where(a):not(:where(.not-prose, .not-prose *, .btn)) {
+  color: var(--foreground);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+  transition: text-decoration-color 0.15s ease;
+}
+.article-prose :where(a):not(:where(.not-prose, .not-prose *, .btn)):hover {
+  text-decoration-color: var(--foreground);
+}
+.article-prose :where(:not(pre) > code):not(:where(.not-prose, .not-prose *)) {
+  font-size: 0.88em;
+  font-weight: 500;
+  color: var(--foreground);
+  background: var(--surface);
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* A pull line: bigger, lighter and in full ink, with no rule beside it. */
+.article-prose :where(blockquote):not(:where(.not-prose, .not-prose *)) {
+  margin-block: 2em;
+  font-size: 1.4rem;
+  font-weight: 300;
+  line-height: 1.4;
+  letter-spacing: -0.012em;
+  color: var(--foreground);
+  text-wrap: balance;
+}
+@media (min-width: 640px) {
+  .article-prose {
+    font-size: 18px;
+  }
+}
+
+/* Post thumbnails on /research: the post's cover artifact, drawn at its stage
+   size (--sw x --sh, set by PostCover) and scaled to fit the card. tan(atan2())
+   turns the two lengths into a plain ratio; browsers without it keep the
+   fixed fallback scale. */
+.post-thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: 20px;
+  container-type: size;
+}
+.post-thumb-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--sw) * 1px);
+  transform: translate(-50%, -50%) scale(0.4);
+  transform: translate(-50%, -50%)
+    scale(
+      min(
+        tan(atan2(calc(100cqw * 0.88), calc(var(--sw) * 1px))),
+        tan(atan2(calc(100cqh * 0.8), calc(var(--sh) * 1px)))
+      )
+    );
+  transition: transform 0.5s var(--ease-out);
+}
+/* The latest post on /research: the cover at full size, in a fixed shape. */
+.post-feature {
+  aspect-ratio: 16 / 10;
+}
+/* On a phone the artifact at full size is taller than the screen, so the
+   latest post shows its thumbnail there instead, like the other cards. */
+.post-feature-small {
+  display: none;
+}
+@media (max-width: 639.98px) {
+  .post-feature {
+    display: none;
+  }
+  .post-feature-small {
+    display: block;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .post-card:hover :is(.post-thumb, .post-feature) .gl-field {
+    transform: scale(1.05);
+  }
+  .post-feature .gl-field {
+    transition: transform 0.8s var(--ease-out);
+  }
+  .post-card:hover .post-thumb .gl-field {
+    transform: scale(1.05);
+  }
+  .post-thumb .gl-field {
+    transition: transform 0.8s var(--ease-out);
+  }
+}
+
 /* Oblique display accent (Aeonik italic). */
 
 /* App sidebar / mobile bar swap: plain media queries (immune to the Tailwind
