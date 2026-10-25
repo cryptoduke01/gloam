@@ -124,13 +124,17 @@ Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
 ## Next: Ethereum
 
-Ethereum mainnet (`1`) is the fourth chain, on the same mainnet vault (`ShieldPoolPayments`, the final keys, beta deposit limits, the 0.25% cash-out fee). It has no Gloam testnet: Base Sepolia runs the same contract and keys.
+Ethereum mainnet (`1`) is the fourth chain, on the same mainnet vault (`ShieldPoolPayments`, the final keys, beta deposit limits, the 0.25% cash-out fee). Its testnet is Ethereum Sepolia, below, on the same contract and keys.
 
 - **Assets.** USDC, USDT, USDG, PYUSD and EURC, each 500 per deposit and 25,000 in total, and ETH, 0.2 per deposit and 10 in total.
 - **Gas.** The Gloam relay pays Ethereum gas for relayed private sends and cash outs only while gas is under its ceiling (3 gwei by default); above it the relay waits and the app says so, and a cash out for later waits for gas to come down.
 - **Status.** Not deployed yet. The app, the SDK (0.4.0) and the MCP server (0.6.0) show it once its pool is filled in; until then it does not exist anywhere.
 
 Runbook: [`DEPLOY-ETHEREUM.md`](./DEPLOY-ETHEREUM.md).
+
+## Ethereum Sepolia: next testnet
+
+Ethereum Sepolia (`11155111`) runs the mainnet vault the same way as Base Sepolia: `ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee. It takes test USDC and EURC (Circle), test USDG and PYUSD (Paxos), and ETH, each stablecoin at 500 per deposit and 25,000 in total, ETH at 0.2 and 10. It is ready to deploy and not deployed yet: the app, the SDK and the MCP server show it once `ETHEREUM_SEPOLIA_POOL` is filled in. Runbook: [`DEPLOY-ETHEREUM-SEPOLIA.md`](./DEPLOY-ETHEREUM-SEPOLIA.md).
 
 ## Trust, verified
 

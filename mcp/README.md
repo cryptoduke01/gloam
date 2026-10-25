@@ -28,7 +28,8 @@ On mainnet:
 
 **Base: testnet live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
 
-**Ethereum is next too, not live yet.** This version knows `ethereum-mainnet` (Ethereum, `1`: USDC, USDT, USDG, PYUSD, EURC and ETH, 500 per stablecoin and 0.2 ETH per deposit), but the SDK it ships with has no pool for it, so it is not offered and `GLOAM_NETWORK=ethereum-mainnet` stops the server at startup. Ethereum has no Gloam testnet; practise on Base Sepolia. Gas costs more there: the Gloam relay waits while Ethereum gas is above its ceiling (3 gwei by default) and answers `gas_high`. A USDT shield clears an old USDT approval first, since Tether's token refuses to change one non-zero approval into another. `GLOAM_RPC_URL_1` points it at your own RPC.
+**Ethereum is next too, not live yet.** This version knows `ethereum-mainnet` (Ethereum, `1`: USDC, USDT, USDG, PYUSD, EURC and ETH, 500 per stablecoin and 0.2 ETH per deposit), but the SDK it ships with has no pool for it, so it is not offered and `GLOAM_NETWORK=ethereum-mainnet` stops the server at startup. Its testnet is Ethereum Sepolia (`ethereum`), below. Gas costs more there: the Gloam relay waits while Ethereum gas is above its ceiling (3 gwei by default) and answers `gas_high`. A USDT shield clears an old USDT approval first, since Tether's token refuses to change one non-zero approval into another. `GLOAM_RPC_URL_1` points it at your own RPC.
+**Ethereum Sepolia: next.** This version knows `ethereum` (Ethereum Sepolia, `11155111`: test USDC, USDG, PYUSD, EURC and ETH on the mainnet pool and final keys). It is offered once the SDK it ships with has its pool; until then `GLOAM_NETWORK=ethereum` stops the server at startup. `GLOAM_RPC_URL_11155111` points it at your own RPC.
 
 ## Install
 
@@ -205,6 +206,7 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 | `base-mainnet`, once live | `USDC`, `EURC`, `USDT`, `ETH` |
 | `base` (Base Sepolia), once live | `USDC`, `EURC`, `ETH` |
 | `ethereum-mainnet`, once live | `USDC`, `USDT`, `USDG`, `PYUSD`, `EURC`, `ETH` |
+| `ethereum` (Ethereum Sepolia), once live | `USDC`, `USDG`, `PYUSD`, `EURC`, `ETH` |
 
 ### Mainnet assets in limits
 

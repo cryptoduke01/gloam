@@ -1,10 +1,10 @@
 # Deploy Gloam to Ethereum
 
 The runbook for bringing the Gloam vault to Ethereum mainnet (`1`). You run this with
-your own keys; no agent and no CI deploys it. Ethereum has no Gloam testnet of its own:
-Base Sepolia runs the same contract, keys and deploy script path, so it is the
-rehearsal for the shared code, and a local fork of Ethereum mainnet is the rehearsal
-for this chain (see [Rehearsal](#rehearsal-on-a-fork)).
+your own keys; no agent and no CI deploys it. Ethereum Sepolia, its testnet, runs the
+same contract, keys and deploy script path ([`DEPLOY-ETHEREUM-SEPOLIA.md`](./DEPLOY-ETHEREUM-SEPOLIA.md)),
+so it is the rehearsal for the shared code, and a local fork of Ethereum mainnet is the
+rehearsal for this chain (see [Rehearsal](#rehearsal-on-a-fork)).
 
 Ethereum gets the mainnet contract, `ShieldPoolPayments`, through the shared
 `contracts/script/MainnetDeploy.sol`, the same deploy as Robinhood Chain, Tempo and

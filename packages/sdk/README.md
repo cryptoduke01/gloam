@@ -116,7 +116,7 @@ Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) o
 
 ### Ethereum: coming next
 
-Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defines it, but it has no pool in this version, so `mainnetNetwork("ethereum")` returns `null` and the builders refuse chain id `1`. It switches on once its pool is published in an SDK release. Ethereum has no Gloam testnet: `testnetNetwork("ethereum")` is always `null`, and Base Sepolia rehearses the same pool and keys.
+Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defines it, but it has no pool in this version, so `mainnetNetwork("ethereum")` returns `null` and the builders refuse chain id `1`. It switches on once its pool is published in an SDK release. Its testnet is Ethereum Sepolia (below): `testnetNetwork("ethereum")` is always `null`, and Base Sepolia rehearses the same pool and keys.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
@@ -127,6 +127,13 @@ Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defi
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
 - No payment-message board on Ethereum yet, no private swaps, and no bridge into Ethereum.
+### Ethereum Sepolia: next
+
+| Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
+| --- | --- | --- | --- | --- |
+| Ethereum Sepolia | `ethereum` | `11155111` | Test USDC and EURC (Circle), test USDG and PYUSD (Paxos), 500 / 25,000 each; ETH (0.2 / 10) | Final |
+
+0.4.0 knows Ethereum Sepolia, a testnet on the mainnet pool and final keys like Base Sepolia. Its pool is not deployed yet, so `testnetNetwork("ethereum")` returns `null` and the builders refuse chain id `11155111` until a release has `ETHEREUM_SEPOLIA_POOL` filled in. Its proofs always use the final keys (`ceremonyForChainId(11155111)`).
 
 ## Quickstart: shield your first note
 
@@ -440,15 +447,15 @@ Everything exports from one barrel. The crypto and math core is pure and runs an
 
 ```ts
 mainnetNetwork("robinhood" | "tempo" | "base" | "ethereum"): GloamNetwork | null  // null until this SDK version has the pool
-testnetNetwork("robinhood" | "tempo" | "base" | "ethereum"): GloamNetwork | null  // new in 0.3.0; "base" is Base Sepolia, "ethereum" is always null
+testnetNetwork("robinhood" | "tempo" | "base" | "ethereum"): GloamNetwork | null  // "base" (0.3.0) is Base Sepolia, "ethereum" (0.4.0) Ethereum Sepolia
 gloamNetworks(): GloamNetwork[]                             // mainnets with a pool first, then testnets
 getGloamNetwork(key): GloamNetwork | null                   // "robinhood-mainnet" | "tempo-mainnet" | "base-mainnet" | "ethereum-mainnet" | "robinhood" | "tempo" | "base"
 networkForChainId(chainId): GloamNetwork | undefined        // now finds mainnets too
 GLOAM_NETWORKS / GLOAM_TESTNETS                             // the two testnets, unchanged
 poolForChainId(chainId): Address                            // throws rather than guess
 isMainnetChainId(chainId), networkName(chainId)
-isPaymentsPoolChainId(chainId)                              // ShieldPoolPayments: every mainnet, and Base Sepolia
-ceremonyForChainId(chainId): "dev" | "production"           // production (final keys) on 4663, 4217, 8453, 1 and 84532
+isPaymentsPoolChainId(chainId)                              // ShieldPoolPayments: every mainnet, Base Sepolia and Ethereum Sepolia
+ceremonyForChainId(chainId): "dev" | "production"           // production (final keys) on 4663, 4217, 8453, 1, 84532 and 11155111
 circuitArtifactUrls(circuit, chainId, base?)                // { wasm, zkey } for "shield" | "transfer" | "unshield"
 circuitArtifactFiles(circuit, ceremony), CIRCUIT_SHA256     // relative paths and SHA-256 to check a download
 GLOAM_ARTIFACTS_URL                                         // https://www.gloam.trade/circuits
@@ -456,6 +463,7 @@ assertDepositAllowed(chainId, asset, amount)                // listed asset, bet
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
 BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia pool, null until it is in
+ETHEREUM_SEPOLIA_POOL, ethereumSepoliaPool(), ethereumSepoliaPayMemo()  // Ethereum Sepolia's pool and board (0.4.0), null until in
 RH_MAINNET_CHAIN, TEMPO_MAINNET_CHAIN, RH_TESTNET_CHAIN, TEMPO_TESTNET_CHAIN  // viem chains
 BASE_MAINNET_CHAIN, BASE_SEPOLIA_CHAIN                      // viem's Base chains, on RPCs that serve eth_getLogs
 RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS                     // assets with beta deposit limits
@@ -467,6 +475,8 @@ BASE_MAINNET_CHAIN_ID (8453), BASE_SEPOLIA_CHAIN_ID (84532)
 ETHEREUM_MAINNET_CHAIN, ETHEREUM_MAINNET_ASSETS, ETHEREUM_MAINNET_CHAIN_ID (1)       // 0.4.0
 ETHEREUM_USDC, ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD, ETHEREUM_EURC         // 0.4.0, 6 decimals each
 approvalSteps(chainId, token, allowance, amount), approveNeedsReset(chainId, token) // 0.4.0: USDT's approve rule
+ETHEREUM_SEPOLIA_CHAIN_ID (11155111), ETHEREUM_SEPOLIA_CHAIN, ETHEREUM_SEPOLIA_ASSETS
+ETHEREUM_SEPOLIA_USDC, ETHEREUM_SEPOLIA_USDG, ETHEREUM_SEPOLIA_PYUSD, ETHEREUM_SEPOLIA_EURC
 ```
 
 ### Intent builders

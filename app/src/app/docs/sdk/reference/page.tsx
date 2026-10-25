@@ -82,9 +82,9 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.3.0. A chain&apos;s testnet: the Robinhood Chain and Tempo
-                testnets, or Base Sepolia, which runs the mainnet pool and keys
-                with test funds. Always <code>null</code> for Ethereum, which
-                has no Gloam testnet
+                testnets, or Base Sepolia, which runs the mainnet pool and keys.
+                0.4.0 adds <code>&quot;ethereum&quot;</code>, Ethereum Sepolia, null
+                until its pool is published
               </td>
             </tr>
             <tr>
@@ -124,7 +124,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 Which keys a chain&apos;s verifiers hold: <code>&quot;production&quot;</code>{" "}
-                (the final keys) on mainnet and on Base Sepolia,{" "}
+                (the final keys) on mainnet, Base Sepolia and Ethereum Sepolia,{" "}
                 <code>&quot;dev&quot;</code> on the Robinhood Chain and Tempo testnets
               </td>
             </tr>
@@ -207,6 +207,16 @@ export default function DocsSdkReferencePage() {
                 deposit needs, in order: none when the allowance covers it,{" "}
                 <code>[0, amount]</code> for USDT on Ethereum with an old
                 allowance in the way, else <code>[amount]</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>ETHEREUM_SEPOLIA_USDC</code>, <code>ETHEREUM_SEPOLIA_USDG</code>,{" "}
+                <code>ETHEREUM_SEPOLIA_PYUSD</code>, <code>ETHEREUM_SEPOLIA_EURC</code>
+              </td>
+              <td>
+                0.4.0. Ethereum Sepolia pool assets, 6 decimals each; native ETH is
+                listed too (not deployed yet)
               </td>
             </tr>
             <tr>

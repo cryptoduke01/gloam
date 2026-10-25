@@ -52,6 +52,8 @@ Mainnet pools are not env vars. After each mainnet deploy (runbook: [`contracts/
 
 Base Sepolia (`84532`), Base's testnet, runs the mainnet pool too, so its pool is in `BASE_SEPOLIA_POOL` in the same file: `0x39e28cde55cab798874746ac52cb4b5cc99a0194` at block `49802958` (24 October 2026). Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
+Ethereum Sepolia (`11155111`) is the same: `ETHEREUM_SEPOLIA_POOL` in the same file holds its vault, block and memo board once deployed. Runbook: [`DEPLOY-ETHEREUM-SEPOLIA.md`](./DEPLOY-ETHEREUM-SEPOLIA.md).
+
 | Variable (server only) | Value |
 | --- | --- |
 | `GLOAM_RPC_URL_4663` | A private Robinhood Chain mainnet RPC. The server tries it first, then the public `https://rpc.mainnet.chain.robinhood.com` |
@@ -59,6 +61,7 @@ Base Sepolia (`84532`), Base's testnet, runs the mainnet pool too, so its pool i
 | `GLOAM_RPC_URL_8453`, `GLOAM_RPC_URL_84532` | Private Base and Base Sepolia RPCs, once Base is on. The fallback is publicnode (`https://base-rpc.publicnode.com`, `https://base-sepolia-rpc.publicnode.com`), since Base's own public RPCs refuse wide `eth_getLogs` reads |
 | `GLOAM_RPC_URL_1` | A private archive Ethereum RPC, **required** before Ethereum is switched on: the public ones serve only recent logs or a few blocks a read. The fallback is MEV Blocker (`https://rpc.mevblocker.io`) |
 | `GLOAM_RELAY_MAX_GAS_GWEI_<chainId>` | The relay's gas ceiling on that chain, in gwei; `off` turns it off. Unset: 3 on Ethereum (`1`), none elsewhere. Over it the relay sends nothing (`gas_high`) and scheduled cash outs wait |
+| `GLOAM_RPC_URL_11155111` | A private Ethereum Sepolia RPC, once it is on. The fallback is Tenderly's public gateway (`https://sepolia.gateway.tenderly.co`), then publicnode (`https://ethereum-sepolia-rpc.publicnode.com`), which keeps only about the last 10,000 blocks |
 | `GLOAM_RELAY_MEMO_SECRET` | 32 or more random characters (`openssl rand -base64 32`). Signs the memo ticket the relay hands back with each private send, so the payer's heads-up gets its own few relayed messages. Unset, every relayed message but a partner key's shares one small allowance per payment, which a stranger can use up for a day |
 
 Never put these behind `NEXT_PUBLIC_`. The same `GLOAM_RPC_URL_<chainId>` works for the testnets.
