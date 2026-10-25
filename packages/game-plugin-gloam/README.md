@@ -34,6 +34,7 @@ import { GameAgent } from "@virtuals-protocol/game";
 import GloamPlugin from "@gloamtrade/game-plugin-gloam";
 
 const gloam = new GloamPlugin({
+  // Or GLOAM_LIMITS_FILE, not both.
   limits: {
     recipients: "any",
     assets: { USDC: { maxPerPayment: "5", maxPerDay: "20" } },
@@ -57,10 +58,14 @@ Environment (the agent's own, never passed through the planner):
 ```bash
 GLOAM_NETWORK=base                      # or robinhood-mainnet
 GLOAM_AGENT_PRIVATE_KEY=0x...           # the wallet that holds public funds and signs deposits
-GLOAM_LIMITS_FILE=./limits.json         # or pass `limits` in code
+GLOAM_LIMITS_FILE=./limits.example.json # or pass `limits` in code (not both: that is refused)
+# GLOAM_RPC_URL=...                     # your own RPC; an API key in it never reaches a message
 # GLOAM_NOTE_KEY=...                    # store key; derived from the agent key when unset
 # GLOAM_SUBMIT=wallet                   # default relay: the Gloam relay submits private sends
 ```
+
+`limits.example.json` names USDC and ETH, which the Base Sepolia vault takes.
+On `robinhood-mainnet` name USDG instead.
 
 An ACP agent's Privy smart wallet can be the sender instead of a local key:
 `new GloamPlugin({ sender: await acpCallSender(evmProvider, chainId) })`.
@@ -72,9 +77,9 @@ An ACP agent's Privy smart wallet can be the sender instead of a local key:
 | `gloam_private_balance` | Private balance per asset, wallet balance, Gloam address, limits left today | Nothing |
 | `gloam_add_privately` | Deposit from the wallet into the private balance | The deposit: wallet, asset, amount |
 | `gloam_pay_privately` | Pay a Gloam address (`gloamr1.…`), a payment request link, or by claim link | A shielded transfer only |
-| `gloam_receive` | `address`, `request` (a payment request link), `check` (pick up payments sent to it), `claim` (a claim link) | A shielded transfer only |
+| `gloam_receive` | `address`, `request` (a payment request link), `check` (pick up payments sent to it), `claim` (a claim link or a code sealed to the agent) | A shielded transfer only |
 | `gloam_cash_out` | Private balance to a 0x address (0.25% fee on mainnet and Base Sepolia) | The exit: asset, amount, recipient |
-| `gloam_prove_funds` | A proof it holds at least an amount, for one named reader | Nothing |
+| `gloam_prove_funds` | A proof it holds at least an amount, for one named reader | Nothing (the proof itself carries the backing notes' nullifiers) |
 | `gloam_verify_proof` | Check a `gloamfunds1:` or `gloampay1:` proof against the chain | Nothing |
 
 A payment spends one note, so the most one payment can be is the largest note
@@ -83,7 +88,38 @@ been moved into a fresh note only this agent knows.
 
 The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
 `payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
-`proveFunds`, `provePayment`, `verifyProof`.
+`proveFunds`, `provePayment`, `verifyProof`, `refresh`.
+
+What the proofs show:
+
+- A proof of funds (`gloamfunds1:`) does not show the balance. It does carry
+  the nullifiers of the notes behind it, so the reader can check they are
+  unspent, and a reader who keeps them can tell when those notes are spent later.
+- A proof of payment (`gloampay1:`) shows that a private payment of an amount
+  was made into a note, and when. It does not show who received it: the payer
+  chose the payee note's key, so the payer could make the same proof. Ask the
+  payee to confirm receipt.
+
+## When an answer is lost
+
+A send can go out and its answer never come back: a receipt wait that gives
+up, a relay or smart wallet that throws after submitting. The plugin never
+forgets a note once a send has started:
+
+- The deposit's note, a payment's change and payment notes, a split's halves,
+  a sweep's fresh note are kept as pending, and the note being spent stays
+  held. The outcome says `unconfirmed`, with the hash when there is one.
+- `refresh()` (or `gloam_private_balance` with `refresh: "true"`) reads the
+  chain and settles them: what landed becomes spendable, a payment's sealed
+  message is posted to the board then, and a note whose transaction reverted is
+  dropped.
+- An unconfirmed payment counts against the daily limit, and the same payment
+  (payee, asset, amount, note) is refused until it settles, so a retry never
+  pays twice.
+- A Gloam address is checked to be a real P-256 key, and the payment sealed to
+  it, before any money moves.
+- A payment message that can never be secured (one anyone could post, worth
+  nothing) is recorded as `bad_note` once and skipped after.
 
 ## Limits
 
@@ -108,6 +144,8 @@ The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
 - No limits means nothing moves. The MCP server's limits file
   (`{ "agents": { "<id>": … } }`, keyed by `GLOAM_AGENT_ID`) works too, as long
   as each asset has its own caps.
+- Limits in code and `GLOAM_LIMITS_FILE` together are refused (nothing moves),
+  so one never silently replaces the other.
 - The limits are enforced by this plugin before it signs. The vault contract
   does not know them, so they bind the agent, not whoever holds its key.
 
@@ -118,9 +156,18 @@ The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
 - Notes live in an encrypted file on the agent's machine (AES-256-GCM,
   `~/.gloam/game-notes.<agent>.json`), named to the planner only by handle.
 - Every text a function returns, and every log line, is checked for known
-  secrets and claim codes before it leaves. The GAME planner is a hosted LLM:
-  it sees amounts, handles, hashes, Gloam addresses and proofs. Pass
-  `shareBalances: false` to keep balances out of the environment it reads.
+  secrets and claim codes before it leaves, also when they are URL-encoded,
+  wrapped in base64 or written in decimal. Errors reach the planner as one short
+  line, never with the RPC URL (which may carry an API key) or the request body.
+- The GAME planner is Virtuals' hosted LLM: it sees amounts, handles, hashes,
+  Gloam addresses and proofs. Balances stay out of the environment it reads
+  each step unless you pass `shareBalances: true`.
+- `gloam_receive` with `claim` takes `claim_link` from the planner. A plain
+  claim link is a bearer secret, and it passes through Virtuals' hosted planner
+  on its way in. The safe ways: have payers pay the agent's Gloam address
+  (`gloamr1.…`, nothing secret); or have them seal the link to that address and
+  pass the sealed code (`gloam2t.…`), which only this agent opens; or claim in
+  your own code with `plugin.agent.claim(link)`, outside GAME.
 
 ## Test
 
@@ -129,8 +176,12 @@ pnpm --filter @gloamtrade/game-plugin-gloam test
 BASE_SEPOLIA_RPC_URL=https://sepolia.base.org pnpm --filter @gloamtrade/game-plugin-gloam test:fork
 ```
 
-The fork test runs every flow against the Base Sepolia vault inside a local
-anvil fork, with fresh keys funded in the fork. It needs Foundry's `anvil`.
+The fork tests run every flow against the Base Sepolia vault inside a local
+anvil fork, with fresh keys funded in the fork, and then the money-safety cases:
+a deposit, payment, split and sweep whose answer is lost while the transaction
+sits in the mempool, a Gloam address that is not a real key, and a payment
+message that can never be secured. They need Foundry's `anvil`.
+`GLOAM_FORK_CACHE=<folder>` keeps the vault leaf cache (public data) between runs.
 sepolia.base.org answers 200 blocks per log request, so its first vault read
 takes about two minutes; the leaf cache makes later reads quick.
 
