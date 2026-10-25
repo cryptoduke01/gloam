@@ -300,7 +300,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
         </button>
         {error && !compact && (
           <p className="mt-2 text-[12px] leading-snug text-danger">
-            {error.message.slice(0, 80)}
+            {connectErrorText(error)}
           </p>
         )}
         {sheet}
@@ -524,6 +524,10 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
 /** Friendly text for a failed connect (a closed passkey prompt is not an error). */
 function connectErrorText(error: Error): string {
   if (error.name === "UserRejectedRequestError") return "Sign-in cancelled.";
+  // No wallet extension in this browser (wagmi says "Provider not found" and its version).
+  if (error.name === "ProviderNotFoundError") {
+    return "No wallet found in this browser. Add one such as MetaMask or Rabby, or open this page in your wallet app.";
+  }
   const short = (error as Error & { shortMessage?: string }).shortMessage;
   return (short ?? error.message).slice(0, 100);
 }
