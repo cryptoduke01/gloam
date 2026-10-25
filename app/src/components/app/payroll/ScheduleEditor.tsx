@@ -22,6 +22,7 @@ import {
   type ScheduleCadence,
 } from "@/lib/payrollSchedule";
 import { ScheduleIcon, SELF_CUSTODY_NOTE, type AssetOption } from "./scheduleUi";
+import { Select, type SelectOption } from "@/components/ui/Select";
 
 const noopSubscribe = () => () => {};
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -38,6 +39,8 @@ const KINDS: { kind: Kind; label: string }[] = [
 /** Monday first, the way a work week reads. */
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
 
+const MONTH_DAYS: SelectOption<number>[] = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: ordinal(i + 1) }));
+
 function people(n: number) {
   return `${n} ${n === 1 ? "person" : "people"}`;
 }
@@ -49,21 +52,6 @@ function Field({ label, hint, children }: { label: string; hint?: ReactNode; chi
       {children}
       {hint ? <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">{hint}</p> : null}
     </div>
-  );
-}
-
-function Chevron() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
-      className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute"
-    >
-      <path d="M6 9.5l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 
@@ -281,20 +269,14 @@ export function ScheduleEditor({
               {kind === "monthly" && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <span className="text-[14px] text-foreground">On the</span>
-                  <div className="relative w-[112px]">
-                    <select
+                  <div className="w-[112px]">
+                    <Select
+                      label="Day of the month"
                       value={monthDay}
-                      onChange={(e) => setMonthDay(Number(e.target.value))}
-                      aria-label="Day of the month"
-                      className="gl-input h-11 cursor-pointer appearance-none pr-9 text-[14px]"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>
-                          {ordinal(d)}
-                        </option>
-                      ))}
-                    </select>
-                    <Chevron />
+                      onChange={setMonthDay}
+                      options={MONTH_DAYS}
+                      className="h-11 text-[14px]"
+                    />
                   </div>
                   <span className="text-[13px] text-mute">
                     {monthDay > 28 ? "or the last day, in shorter months" : "of every month"}
@@ -351,25 +333,17 @@ export function ScheduleEditor({
 
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Pay in">
-              <div className="relative">
-                <div className="pointer-events-none flex h-11 items-center gap-2.5 rounded-[12px] border border-line-strong bg-panel pl-2 pr-9 text-[14px] text-foreground">
-                  {token && <TokenLogo id={token.logoId} symbol={token.symbol} size={26} />}
-                  {symbol}
-                </div>
-                <select
-                  value={asset}
-                  onChange={(e) => setAsset(e.target.value as Address)}
-                  aria-label="Currency"
-                  className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-[12px] opacity-0"
-                >
-                  {assetOptions.map((o) => (
-                    <option key={o.address} value={o.address}>
-                      {o.symbol}
-                    </option>
-                  ))}
-                </select>
-                <Chevron />
-              </div>
+              <Select
+                label="Currency"
+                value={token?.address ?? asset}
+                onChange={setAsset}
+                options={assetOptions.map((o) => ({
+                  value: o.address,
+                  label: o.symbol,
+                  icon: <TokenLogo id={o.logoId} symbol={o.symbol} size={26} />,
+                }))}
+                className="h-11 text-[14px]"
+              />
             </Field>
             <Field
               label="Cap per run"
