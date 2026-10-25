@@ -184,6 +184,7 @@ const NEW = [
 ];
 
 const DEV_LINKS = [
+  { label: "Try it live", href: "/sdk/playground" },
   { label: "SDK on npm", href: "https://www.npmjs.com/package/@gloamtrade/sdk" },
   { label: "MCP server", href: "/docs/agents#the-mcp-server" },
   { label: "x402 payments", href: "/docs/agents" },
