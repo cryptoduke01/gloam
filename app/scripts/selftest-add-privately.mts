@@ -1,0 +1,142 @@
+/**
+ * Self-test: the decisions in an Add privately (lib/depositFlow) and how the
+ * view (components/app/ShieldView) wires them.
+ *
+ *  - The deposit is built from the note alone: an asset picked again while the
+ *    approval was mined, or another network by then, never sends this note's
+ *    proof with something else (the vault reverted it, 265k gas on a fork).
+ *  - An approval whose receipt wait gave up goes on to the deposit only when
+ *    the allowance read now covers it, and then with its own hash: the lost
+ *    approval's hash never counts as a lost deposit.
+ *  - "Checking…" holds from the click until the approvals are worked out, and
+ *    the asset can't be changed while a deposit is under way.
+ *
+ * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-add-privately.mts
+ */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import type { Address, Hex } from "viem";
+
+globalThis.fetch = (async (url: unknown) => {
+  throw new Error(`selftest-add-privately: no network calls allowed (${String(url)})`);
+}) as typeof fetch;
+
+const { depositCall, depositAfterLostApproval, createTxLog } = await import("../src/lib/depositFlow");
+const { getNetwork } = await import("../src/lib/networks");
+const { shieldTokensFor } = await import("../src/lib/tokens");
+const { NATIVE_ASSET } = await import("../src/lib/shield");
+
+let n = 0;
+function check(name: string, fn: () => void) {
+  try {
+    fn();
+    n++;
+  } catch (e) {
+    console.error(`FAIL ${name}`);
+    throw e;
+  }
+}
+
+const sepolia = getNetwork("ethereum");
+const rh = getNetwork("robinhood-mainnet");
+const usdc = shieldTokensFor(11155111).find((t) => t.symbol === "USDC")!;
+const COMMITMENT = `0x${"12".repeat(32)}` as Hex;
+const PROOF = `0x${"ab".repeat(256)}` as Hex;
+const note = (asset: Address, amountWei: string, chainId = sepolia.chainId, pool = sepolia.pool!) => ({
+  chainId,
+  pool,
+  asset,
+  amountWei,
+  commitment: COMMITMENT,
+});
+
+check("a USDC note deposits USDC, its own amount and commitment, nothing sent with it", () => {
+  const call = depositCall(note(usdc.address, "20000000"), sepolia, PROOF)!;
+  assert.equal(call.functionName, "shieldBound");
+  assert.equal(call.address, sepolia.pool);
+  assert.deepEqual(call.args, [usdc.address, 20_000_000n, COMMITMENT, PROOF]);
+  assert.equal(call.value, undefined);
+});
+
+check("an asset picked again mid-flow changes nothing: the call is the note's (L-1)", () => {
+  // The form now shows ETH; the note, its proof and its approval are USDC's.
+  const call = depositCall(note(usdc.address, "20000000"), sepolia, PROOF)!;
+  assert.equal(call.args[0], usdc.address);
+  assert.equal(call.value, undefined, "no ETH sent with a USDC deposit");
+});
+
+check("an ETH note sends its amount as value", () => {
+  const call = depositCall(note(NATIVE_ASSET, "1000000000000000"), sepolia, PROOF)!;
+  assert.equal(call.args[0], NATIVE_ASSET);
+  assert.equal(call.value, 1_000_000_000_000_000n);
+});
+
+check("another network or vault by the time it goes out: nothing is sent", () => {
+  assert.equal(depositCall(note(usdc.address, "20000000"), rh, PROOF), null, "the page moved to Robinhood Chain");
+  assert.equal(depositCall(note(usdc.address, "20000000", sepolia.chainId, "0x00000000000000000000000000000000000000aa"), sepolia, PROOF), null, "another vault");
+  assert.equal(depositCall(note(usdc.address, "20000000"), { chainId: sepolia.chainId, pool: null }, PROOF), null, "no vault");
+});
+
+check("a pool without the shield proof gets plain shield() from the same note", () => {
+  const call = depositCall(note(usdc.address, "20000000"), sepolia, null)!;
+  assert.equal(call.functionName, "shield");
+  assert.deepEqual(call.args, [usdc.address, 20_000_000n, COMMITMENT]);
+});
+
+check("a lost approval receipt: on to the deposit only when the allowance read now covers it", () => {
+  const base = { depositWanted: true, amount: 20_000_000n, approvalsLeft: 0, allowance: 20_000_000n };
+  assert.equal(depositAfterLostApproval(base), true, "landed: deposit");
+  assert.equal(depositAfterLostApproval({ ...base, allowance: 0n }), false, "not landed yet: stop, never approve again on a stale read");
+  assert.equal(depositAfterLostApproval({ ...base, allowance: undefined }), false, "unread: stop");
+  assert.equal(depositAfterLostApproval({ ...base, approvalsLeft: 1 }), false, "USDT's reset landed but the approval is still to send: stop");
+  assert.equal(depositAfterLostApproval({ ...base, depositWanted: false }), false);
+  assert.equal(depositAfterLostApproval({ ...base, amount: null }), false);
+});
+
+check("a lost approval's hash is never the deposit's, even once the deposit is being written (M-2)", () => {
+  const log = createTxLog();
+  log.writing("approve");
+  log.handed("0xa1"); // the approval's hash
+  assert.equal(log.isDeposit("0xa1"), false);
+  // the approval's wait gave up and the allowance covers it: the view resets the
+  // write (hash back to undefined), then writes the deposit
+  log.writing("shield");
+  assert.equal(log.isDeposit("0xa1"), false, "the lost approval does not read as a lost deposit");
+  log.handed(undefined);
+  log.handed("0xd1");
+  assert.equal(log.isDeposit("0xd1"), true, "the deposit's own hash");
+  log.clear();
+  assert.equal(log.isDeposit("0xd1"), false, "a new click starts over");
+});
+
+const view = readFileSync(new URL("../src/components/app/ShieldView.tsx", import.meta.url), "utf8");
+const body = (name: string) => {
+  const start = view.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, name);
+  const next = view.indexOf("\n  }\n", start);
+  return view.slice(start, next);
+};
+
+check("the view sends what depositCall builds, never the picked asset", () => {
+  const exec = body("executeShield");
+  assert.equal((exec.match(/depositCall\(note, network,/g) ?? []).length, 3, "checked first, then built for both pool kinds");
+  assert.ok(!exec.includes("selectedToken"), "executeShield does not read the form's asset");
+  assert.ok(view.includes("proveDeposit(value, note, commitment, note.asset)"), "the proof is for the note's asset");
+});
+
+check("every write is logged before it goes to the wallet, and the deposit-lost notice is the deposit's", () => {
+  assert.equal((view.match(/writeContract\(\{/g) ?? []).length, (view.match(/txLog\.writing\("(approve|shield)"\);\s*\n\s*writeContract\(/g) ?? []).length);
+  assert.ok(view.includes("txLog.handed(hash);"));
+  assert.ok(/!receiptLost \|\| !txLog\.isDeposit\(hash\) \|\| pendingKind !== "shield"/.test(view), "keyed on the deposit's own hash");
+  assert.ok(/reset\(\);\s*\n\s*setApproved\(true\);\s*\n\s*void executeShield\(pending\.value/.test(view), "the approval's hash and error are dropped before the deposit");
+  assert.ok(view.includes("depositAfterLostApproval({"));
+});
+
+check("Checking… holds until the approvals are worked out, and the asset is fixed while a deposit is under way (L-2)", () => {
+  assert.ok(/if \(submitting\.current\) return;\s*\n\s*submitting\.current = true;\s*\n\s*setChecking\(true\);/.test(view));
+  assert.ok(/ready = await prepareDeposit\([^)]*\);\s*\n\s*\} finally \{\s*\n\s*submitting\.current = false;\s*\n\s*setChecking\(false\);/.test(view));
+  assert.ok(!/screenWallets\([^)]*\)[\s\S]{0,120}\.finally\(\(\) => setChecking\(false\)\)/.test(view), "screening no longer ends Checking… early");
+  assert.ok(/label="Asset to add"[\s\S]{0,200}disabled=\{working \|\| pendingKind !== null\}/.test(view));
+});
+
+console.log(`add-privately: ${n} passed`);
