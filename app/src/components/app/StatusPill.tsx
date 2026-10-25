@@ -9,7 +9,7 @@ export function StatusPill({
   children,
 }: {
   tone?: "lime" | "mute" | "warn";
-  /** Show a leading status dot; pulses softly when tone is lime. */
+  /** Show a leading status dot. It stays still: a status is not live activity. */
   dot?: boolean;
   children: React.ReactNode;
 }) {
@@ -26,12 +26,7 @@ export function StatusPill({
       className={`inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[12px] font-medium leading-none ${styles}`}
     >
       {dot && (
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${dotColor} ${
-            tone === "lime" ? "livedot" : ""
-          }`}
-          aria-hidden
-        />
+        <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} aria-hidden />
       )}
       {children}
     </span>
