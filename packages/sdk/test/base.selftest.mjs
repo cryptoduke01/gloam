@@ -6,12 +6,15 @@
  * checked in mainnet.selftest.mjs). Here both get placeholder pools before the
  * networks are built, so the rest of the SDK can be checked against them: the
  * mainnet keys on both, payments only, the listed assets and beta limits, ETH
- * listed, Base Sepolia's memo board (none on Base mainnet yet), and Base
- * Sepolia after the older testnets.
+ * listed, Base Sepolia's memo board (and Base mainnet's once its deploy has
+ * filled it in next to the vault), and Base Sepolia after the older testnets.
  *
  * Run after build:  node test/base.selftest.mjs
  */
 import { MAINNET_POOLS, BASE_SEPOLIA_POOL } from "../dist/mainnet.js";
+
+/** Base mainnet's real vault, once base-mainnet-after-deploy.sh has filled it in; its memo board comes with it. */
+const LIVE = MAINNET_POOLS[8453].pool !== null ? { ...MAINNET_POOLS[8453] } : null;
 
 const MAIN_POOL = "0x00000000000000000000000000000000000000b5";
 const TEST_POOL = "0x00000000000000000000000000000000000000b6";
@@ -47,6 +50,7 @@ const {
   BASE_SEPOLIA_USDC,
   BASE_SEPOLIA_EURC,
 } = await import("../dist/index.js");
+const BASE_MAINNET_BOARD = payMemoBoardFor(8453);
 
 let checks = 0;
 function assert(cond, msg) {
@@ -90,7 +94,10 @@ for (const n of [main, test]) {
   assert(n.chain.id === n.chainId && /publicnode\.com$/.test(new URL(n.rpcUrl).host), `${n.key}: viem chain, an RPC that serves eth_getLogs`);
 }
 assert(main.testnet === false && test.testnet === true, "Base is mainnet, Base Sepolia is a testnet");
-assert(main.payMemo === null && test.payMemo === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "a memo board on Base Sepolia, none on Base mainnet yet");
+assert(test.payMemo === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "a memo board on Base Sepolia");
+// Base mainnet's board comes in with its vault (base-mainnet-after-deploy.sh writes both): none before then.
+assert(main.payMemo === (BASE_MAINNET_BOARD?.address ?? null), "Base mainnet's memo board, once it is filled in");
+if (!LIVE) assert(main.payMemo === null, "no memo board on Base mainnet before its deploy");
 assert(main.explorerUrl === "https://basescan.org" && test.explorerUrl === "https://sepolia.basescan.org", "Basescan");
 assert(main.assets.map((a) => a.symbol).join() === "USDC,EURC,USDT,ETH", "Base mainnet assets");
 assert(test.assets.map((a) => a.symbol).join() === "USDC,EURC,ETH", "Base Sepolia assets, no USDT");
@@ -151,7 +158,11 @@ throws(() => assertDepositAllowed(8453, BASE_SEPOLIA_USDC, 1n), /does not list/,
   throws(() => buildPaymentRequestLink({ payTo: payee.tag, network: "base", asset: "USDT" }), /does not take "USDT"/, "no USDT request on Sepolia");
   const board = payMemoBoardFor(84532);
   assert(board?.address === "0x01B3172d9900Cb26d57E986429b9b23854c74598" && board.deployBlock === 49_804_175n && board.emitsPoster === false, "Base Sepolia's memo board, deployed after the pool, never logs the poster");
-  assert(payMemoBoardFor(8453) === null, "no memo board on Base mainnet yet");
+  if (LIVE) {
+    assert(/^0x[0-9a-fA-F]{40}$/.test(BASE_MAINNET_BOARD?.address ?? "") && BASE_MAINNET_BOARD.deployBlock >= LIVE.deployBlock && BASE_MAINNET_BOARD.emitsPoster === false, "Base mainnet's memo board, deployed after its vault, never logs the poster");
+  } else {
+    assert(payMemoBoardFor(8453) === null, "no memo board on Base mainnet before its deploy");
+  }
 }
 
 // ── BASE_SEPOLIA_POOL is checked like MAINNET_POOLS ──────────────────────────────

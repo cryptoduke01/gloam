@@ -14,6 +14,7 @@ import { buildNotePackage, decodeNotePackage, encodeNotePackage, encodeNotePacka
 import { appClaimPath, claimLinkFor, codeFromHash } from "../src/lib/claimLink";
 import { isClaimLink } from "../src/lib/funnel";
 import { getNetwork } from "../src/lib/networks";
+import { mainnetPool } from "../src/lib/mainnet";
 import { claimNetworkProblem } from "../src/lib/paymentRequest";
 
 const pack = buildNotePackage({
@@ -139,11 +140,13 @@ n += 3;
   assert.equal(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 84532 }), null, "claims on its own chain");
   // the same vault and asset, another chain: refused by name (Base mainnet, Ethereum, Robinhood Chain)
   assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 4663 }) ?? "", /This payment is on Robinhood Chain\. Switch/);
-  assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 1 }) ?? "", /network Gloam does not run on/);
+  // Ethereum by name once its vault is in; a chain Gloam never runs on (Polygon) is named as such
+  assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 1 }) ?? "", mainnetPool(1) ? /This payment is on Ethereum\. Switch/ : /network Gloam does not run on/);
+  assert.match(claimNetworkProblem({ key: "base", pool: base.pool }, { ...ethPack, chainId: 137 }) ?? "", /network Gloam does not run on/);
   assert.match(claimNetworkProblem({ key: "robinhood-mainnet", pool: base.pool }, { ...ethPack, chainId: 84532 }) ?? "", /on Base testnet/);
   // an older ETH code with no chain is matched on vault and asset, as before
   assert.equal(claimNetworkProblem({ key: "base", pool: base.pool }, ethPack), null);
-  n += 9;
+  n += 10;
 }
 
 console.log(`${n} claim-code checks passed`);

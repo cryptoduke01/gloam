@@ -78,7 +78,8 @@ assert(
 // What is refused before a link exists.
 throws(() => buildPaymentRequestLink({ payTo: "0x1111111111111111111111111111111111111111", network: rh, asset: "USDG" }), /receive tag/, "a public address is not a Gloam address");
 throws(() => buildPaymentRequestLink({ payTo: tag, network: rh, asset: "ETH" }), /does not take "ETH". It takes: USDG, GLOAM/, "a token the mainnet vault does not take");
-throws(() => buildPaymentRequestLink({ payTo: tag, network: 1, asset: "USDG" }), /does not run on 1/, "a chain Gloam is not on");
+// Polygon: chain 1 was "a chain Gloam is not on" until Ethereum mainnet's vault (ethereum.selftest.mjs).
+throws(() => buildPaymentRequestLink({ payTo: tag, network: 137, asset: "USDG" }), /does not run on 137/, "a chain Gloam is not on");
 throws(() => normalizeRequestAmount("1.1234567", { decimals: 6, symbol: "USDG" }), /6 decimal places/, "too many decimals");
 throws(() => normalizeRequestAmount("0", { decimals: 6, symbol: "USDG" }), /above zero/, "zero");
 throws(() => normalizeRequestAmount("12,5x", { decimals: 6, symbol: "USDG" }), /numbers and one dot/, "not a number");

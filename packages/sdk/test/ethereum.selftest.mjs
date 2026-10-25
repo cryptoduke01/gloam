@@ -5,8 +5,9 @@
  * MAINNET_POOLS[1]. This file checks that state, then runs itself again in a
  * child process with a placeholder pool put in before the SDK loads, so the
  * rest of the SDK can be checked against it: the final keys, payments only, the
- * five listed stablecoins and ETH with their beta limits, no testnet, no memo
- * board. USDT's approve rule is checked in both.
+ * five listed stablecoins and ETH with their beta limits, no testnet, and no
+ * memo board until the real deploy fills one in next to the vault. USDT's
+ * approve rule is checked in both.
  *
  * Run after build:  node test/ethereum.selftest.mjs
  */
@@ -115,7 +116,15 @@ if (FILLED) {
   const net = mainnetNetwork("ethereum");
   assert(net && net.key === "ethereum-mainnet" && net.chainId === 1 && net.pool === POOL && net.deployBlock === DEPLOY_BLOCK, "Ethereum entry");
   assert(net.label === "Ethereum" && net.family === "ethereum" && net.testnet === false, "label, family, mainnet");
-  assert(net.ceremony === "production" && net.nativeShield === true && net.payMemo === null, "final keys, ETH listed, no memo board yet");
+  assert(net.ceremony === "production" && net.nativeShield === true, "final keys, ETH listed");
+  // The memo board comes in with the vault (ethereum-mainnet-after-deploy.sh writes both); the placeholder run has none.
+  const board = payMemoBoardFor(1);
+  assert(net.payMemo === (board?.address ?? null), "the network's memo board is the one payments are scanned on");
+  if (LIVE) {
+    assert(/^0x[0-9a-fA-F]{40}$/.test(board?.address ?? "") && board.deployBlock >= DEPLOY_BLOCK && board.emitsPoster === false, "Ethereum's memo board, deployed after its vault, never logs the poster");
+  } else {
+    assert(board === null, "no memo board on Ethereum before its deploy");
+  }
   assert(net.explorerUrl === "https://etherscan.io" && net.rpcUrl === "https://rpc.mevblocker.io", "explorer and RPC");
   assert(net.assets.map((a) => a.symbol).join() === "USDC,USDT,USDG,PYUSD,EURC,ETH", "assets in the deploy's order");
   assert(net.assets.map((a) => a.address).join() === [USDC, USDT, USDG, PYUSD, EURC, NATIVE_ASSET].join(), "asset addresses as checked on chain");
@@ -159,7 +168,6 @@ if (FILLED) {
   const read = parsePaymentRequestLink(link);
   assert(read.networkKey === "ethereum-mainnet" && read.asset === PYUSD && read.amount === "12.5", "request link on Ethereum");
   assert(parsePaymentRequestLink(buildPaymentRequestLink({ payTo: payee.tag, network: 1, asset: "ETH" })).asset === NATIVE_ASSET, "request for ETH on Ethereum");
-  assert(payMemoBoardFor(1) === null, "no memo board on Ethereum yet");
 }
 
 if (!FILLED) {

@@ -207,7 +207,12 @@ for (const [family, chainId, key, assets, native, memo] of [
   }
   assert(net && net.key === key && net.chainId === chainId && net.pool === filled.pool && net.deployBlock === filled.deployBlock, `${key} entry`);
   assert(net.testnet === false && net.ceremony === "production" && net.nativeShield === native, `${key}: mainnet, final keys, native ${native ? "listed" : "not listed"}`);
-  assert(memo ? /^0x[0-9a-fA-F]{40}$/.test(net.payMemo ?? "") : net.payMemo === null, `${key}: ${memo ? "its memo board" : "no memo board yet"}`);
+  // Robinhood Chain and Tempo have a board. Base gets its own with its vault: base-mainnet-after-deploy.sh
+  // writes both, so a board, when there is one, is the one incoming payments are scanned on, posted after the vault.
+  const board = payMemoBoardFor(chainId);
+  if (memo) assert(/^0x[0-9a-fA-F]{40}$/.test(net.payMemo ?? ""), `${key}: its memo board`);
+  assert(net.payMemo === (board?.address ?? null), `${key}: the network's memo board is the one payments are scanned on`);
+  if (board) assert(board.deployBlock >= filled.deployBlock && board.emitsPoster === false, `${key}: board deployed after the vault, never logs the poster`);
   assert(net.assets.map((a) => a.address).join() === assets.join(), `${key} assets`);
   assert(live[0].testnet === false, "mainnets come first");
   assert(poolForChainId(chainId) === filled.pool, `${key} pool by chain id`);
