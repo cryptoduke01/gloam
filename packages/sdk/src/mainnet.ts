@@ -12,12 +12,15 @@
  * the mainnet pool on the mainnet keys with test funds, so its address is kept
  * here too and is filled in the same way after its deploy.
  *
+ * Ethereum mainnet (1) has no practice network of its own: Base Sepolia
+ * rehearses the same pool and deploy.
+ *
  * Everything else about mainnet (chains, assets, limits, keys) is derived in
  * constants.ts from these entries.
  */
 import type { Address } from "viem";
 
-export type MainnetChainId = 4663 | 4217 | 8453;
+export type MainnetChainId = 4663 | 4217 | 8453 | 1;
 
 export interface MainnetPoolInput {
   /** ShieldPoolPayments address, or null until it is deployed. */
@@ -33,6 +36,8 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
   4217: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 45_172_561n },
   // Base mainnet (8453): USDC, EURC, USDT, ETH. Not deployed yet; follows Base Sepolia.
   8453: { pool: null, deployBlock: null },
+  // Ethereum mainnet (1): USDC, USDT, USDG, PYUSD, EURC, ETH. Not deployed yet (DEPLOY-ETHEREUM.md).
+  1: { pool: null, deployBlock: null },
 };
 
 /**
