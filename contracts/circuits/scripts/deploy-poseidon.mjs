@@ -10,6 +10,10 @@
  * hashes with. From a deployer with no transactions on the chain it lands at nonce 0,
  * 0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4, and the MainnetDeploy pool after it lands
  * at the same address as on Robinhood Chain and Tempo mainnet.
+ *
+ * PRIORITY_FEE_GWEI sets the tip. Without it, ethers v5 tips 1.5 gwei, which on
+ * Ethereum can be fifty times the base fee itself; with it, the max fee is twice
+ * the latest base fee plus that tip. Leave it unset on the L2s.
  */
 import { writeFileSync, mkdirSync } from "fs";
 
@@ -32,11 +36,21 @@ async function main() {
   const provider = new ProviderCtor(RPC);
   const wallet = new ethers.Wallet(pk, provider);
 
+  async function feeOverrides() {
+    const tip = process.env.PRIORITY_FEE_GWEI?.trim();
+    if (!tip) return {};
+    const parseUnits = ethers.parseUnits ?? ethers.utils.parseUnits;
+    const block = await provider.getBlock("latest");
+    const base = BigInt(block.baseFeePerGas.toString());
+    const t = BigInt(parseUnits(tip, "gwei").toString());
+    return { maxPriorityFeePerGas: t.toString(), maxFeePerGas: (base * 2n + t).toString() };
+  }
+
   async function deploy(nInputs, name) {
     const abi = poseidonContract.generateABI(nInputs);
     const bytecode = poseidonContract.createCode(nInputs);
     const factory = new ethers.ContractFactory(abi, bytecode, wallet);
-    const c = await factory.deploy();
+    const c = await factory.deploy(await feeOverrides());
     if (typeof c.waitForDeployment === "function") await c.waitForDeployment();
     else if (typeof c.deployed === "function") await c.deployed();
     const addr = typeof c.getAddress === "function" ? await c.getAddress() : c.address;
