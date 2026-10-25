@@ -59,9 +59,10 @@ export const BASE_SEPOLIA_POOL: MainnetPoolInput = { pool: "0x39e28cde55cab79887
 /**
  * Ethereum Sepolia (11155111): ShieldPoolPayments on the ceremony's final
  * keys, on a testnet, and its payment-message board. Filled in after its
- * deploy (DEPLOY-ETHEREUM-SEPOLIA.md), the same values as ETHEREUM_SEPOLIA_POOL
- * in the app (app/src/lib/mainnet.ts): without the pool and its block,
- * Ethereum Sepolia does not exist for the SDK. Not deployed yet.
+ * deploy (DEPLOY-ETHEREUM-SEPOLIA.md; contracts/ethereum-sepolia-after-deploy.sh
+ * writes it), the same values as ETHEREUM_SEPOLIA_POOL in the app
+ * (app/src/lib/mainnet.ts): without the pool and its block, Ethereum Sepolia
+ * does not exist for the SDK.
  */
 export const ETHEREUM_SEPOLIA_POOL: TestnetPoolInput = { pool: null, deployBlock: null, payMemo: null, payMemoBlock: null };
 
