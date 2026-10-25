@@ -113,3 +113,11 @@ test("the SDK sweep refuses to settle an x402 payment through a reader on anothe
   assert.match(r.reason ?? "", /84532/);
   assert.deepEqual(sepolia.submitted, [], "nothing was submitted");
 });
+
+test("chain ids compare as numbers, whatever type a custom reader answers with", async () => {
+  assert.equal(await sdk.sweepChainProblem({ chainId: async () => 8453n as unknown as number }, 8453), null);
+  assert.equal(await sdk.sweepChainProblem({ chainId: async () => "8453" as unknown as number }, 8453), null);
+  assert.match((await sdk.sweepChainProblem({ chainId: async () => 84532n as unknown as number }, 8453)) ?? "", /84532/);
+  // a reader that does not say which chain it reads is not checked (custom readers should set chainId)
+  assert.equal(await sdk.sweepChainProblem({}, 8453), null);
+});
