@@ -228,7 +228,7 @@ contract DeployBaseTest is Test {
         assertEq(pool.owner(), DEPLOYER, "the deployer holds it until the owner wallet accepts");
 
         // Step 4: the memo board, the deployer's next contract. On chain the ten setup
-        // calls (shield verifier, limits on, five limits, fee, handoff, endSetup) are
+        // calls (limits on, shield verifier, five limits, fee, handoff, endSetup) are
         // transactions 9 to 18; a forge test counts only the deploys, so skip ahead.
         assertEq(vm.getNonce(DEPLOYER), 9, "eight contracts after PoseidonT3");
         vm.setNonce(DEPLOYER, 19);
