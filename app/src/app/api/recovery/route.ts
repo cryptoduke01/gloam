@@ -23,7 +23,7 @@ const SAVES_PER_BACKUP_PER_MIN = 60;
  */
 const NEW_BACKUPS_PER_DAY = 5;
 /** New backups a UTC day across everyone, unless GLOAM_RECOVERY_NEW_PER_DAY says otherwise. */
-const NEW_BACKUPS_ALL_PER_DAY = 2_000;
+const NEW_BACKUPS_ALL_PER_DAY = 300;
 const MAX_BODY = 600_000;
 
 const BUDGET_FULL = "New backups are paused for today. Try again later. A backup you already have keeps saving.";
