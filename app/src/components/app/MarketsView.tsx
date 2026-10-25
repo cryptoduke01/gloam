@@ -61,7 +61,8 @@ export function MarketsView() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { data, isFetching, isError, refetch } = useLiveMarkets();
-  const markets = data?.markets ?? [];
+  // one array per response, so the memos and effects below re-run only when it changes
+  const markets = useMemo(() => data?.markets ?? [], [data?.markets]);
 
   useEffect(() => {
     if (!menuOpen) return;

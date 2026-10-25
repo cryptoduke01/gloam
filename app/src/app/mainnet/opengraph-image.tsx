@@ -89,7 +89,6 @@ export default async function OpenGraphImage() {
             <span style={{ display: "flex", color: "#A9AEB5" }}>Wed 21 Oct, 13:00 UTC</span>
           </div>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={etchingSrc}
           alt=""

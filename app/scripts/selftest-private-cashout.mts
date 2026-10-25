@@ -61,7 +61,6 @@ async function test(name: string, fn: () => Promise<void> | void) {
 }
 
 const U = 1_000_000n; // one whole USDG (6 decimals)
-const usd = (n: number) => BigInt(Math.round(n * 1_000_000));
 const ASSET = "0x5fc5360d0400a0fd4f2af552add042d716f1d168" as Address;
 const OTHER_ASSET = "0x20c0000000000000000000000000000000000000" as Address;
 const TO = "0x1111111111111111111111111111111111111111" as Address;

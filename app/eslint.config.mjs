@@ -5,6 +5,18 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    // the same files the Next preset lints
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    rules: {
+      // A leading underscore marks a parameter or binding kept on purpose
+      // (a retired component's props, a stub's argument).
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
