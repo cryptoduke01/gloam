@@ -213,15 +213,10 @@ function UseRows({ uses }: { uses: typeof USES }) {
           key={u.n}
           className="grid grid-cols-1 gap-3 border-b border-line px-5 py-6 last:border-0 sm:grid-cols-[180px_minmax(0,1fr)_200px] sm:items-start sm:gap-8 sm:px-7"
         >
-          <p className="flex items-baseline gap-3 text-[18px] tracking-[-0.01em] text-foreground">
-            <span className="tnum text-[13px] text-mute">{u.n}</span>
-            {u.title}
-          </p>
+          <p className="text-[18px] tracking-[-0.01em] text-foreground">{u.title}</p>
           <p className="max-w-[60ch] text-[14.5px] leading-relaxed text-mute">{u.body}</p>
-          <span className="inline-flex w-fit items-center gap-2 rounded-full bg-sealed-soft px-3 py-1.5 text-[12.5px] font-medium text-sealed sm:justify-self-end">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-sealed" />
-            {u.when}
-          </span>
+          {/* When each job arrives: a plain line, since the green tint is kept for what is private. */}
+          <p className="text-[13.5px] text-soft sm:text-right">{u.when}</p>
         </div>
       ))}
     </>
