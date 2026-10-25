@@ -37,7 +37,7 @@ import { fieldToHex, hexToField } from "./poseidon";
 import { proveTransferInBrowser } from "./proveClient";
 import { relayTransfer, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
-import { getAllNotes } from "./noteVault";
+import { dataKeyLocked, getAllNotes, unlockNoteVault } from "./noteVault";
 import { isNativeAsset, saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { escrowHolds } from "./vaultSwap";
@@ -451,6 +451,9 @@ const GHOST_REPAIR_KEY = "gloam.repair.ghostEth.v1";
  */
 export async function reopenGhostEthNotes(env?: ClaimEnv): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  // A vault behind its passkey (or not read from disk yet) shows no notes: not the same as none to repair.
+  if (dataKeyLocked()) return false;
+  await unlockNoteVault();
   const e = env ?? appClaimEnv();
   const pool = e.pool;
   if (!pool) return false;
@@ -476,6 +479,7 @@ export async function reopenGhostEthNotes(env?: ClaimEnv): Promise<boolean> {
   );
   let changed = false;
   let unread = false;
+  const writes: Promise<void>[] = [];
   for (const n of candidates) {
     const nullifier = await nullifierOf(n).catch(() => null);
     if (!nullifier) continue;
@@ -488,11 +492,13 @@ export async function reopenGhostEthNotes(env?: ClaimEnv): Promise<boolean> {
       continue;
     }
     if (!spent && seen) {
-      updateLocalNote(n.id, { status: "open" });
+      writes.push(updateLocalNote(n.id, { status: "open" }));
       changed = true;
     }
   }
-  if (!unread) {
+  // done only once every reopened note is on disk
+  const saved = await Promise.all(writes).then(() => true, () => false);
+  if (!unread && saved) {
     try {
       window.localStorage.setItem(flag, String(Date.now()));
     } catch {
