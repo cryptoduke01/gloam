@@ -45,9 +45,9 @@ export function ScheduleList({
   return (
     <section className="gl-card max-sm:p-5 sm:p-6" aria-labelledby="payroll-schedules">
       <div className="flex items-center justify-between gap-3">
-        <p id="payroll-schedules" className="t-label">
+        <h2 id="payroll-schedules" className="text-[17px] text-foreground">
           Schedules
-        </p>
+        </h2>
         <button type="button" onClick={onNew} className="btn btn-quiet btn-sm -mr-3 h-9 text-mute hover:text-foreground">
           <ScheduleIcon name="calendar" className="h-3.5 w-3.5" />
           New schedule
