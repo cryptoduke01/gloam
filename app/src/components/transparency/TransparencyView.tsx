@@ -670,12 +670,12 @@ export function TransparencyView() {
                   chain, in your browser, so you can see exactly what is out in
                   the open.
                 </p>
-                <div className="mt-8 flex flex-wrap gap-2">
+                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
                   <a href="#ledger" className="btn btn-ink btn-lg">
                     See the vault
                   </a>
-                  <a href="#private" className="btn btn-ghost btn-lg">
-                    What stays private
+                  <a href="#private" className="gl-arrowlink">
+                    What stays private <span aria-hidden>→</span>
                   </a>
                 </div>
               </div>
@@ -801,7 +801,7 @@ export function TransparencyView() {
                 </p>
                 <Link
                   href="/verify"
-                  className="t-label mt-8 inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  className="gl-arrowlink mt-8"
                 >
                   Check the contracts yourself <span aria-hidden>→</span>
                 </Link>

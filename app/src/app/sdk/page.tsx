@@ -337,12 +337,12 @@ export default function SdkPage() {
                   payments and proofs on Robinhood Chain and Tempo. Real proofs,
                   checked on-chain, with no proving stack to build.
                 </p>
-                <div className="mt-8 flex flex-wrap gap-2">
+                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
                   <Link href="/docs/quickstart" className="btn btn-ink btn-lg">
                     Read the quickstart
                   </Link>
-                  <Link href="/docs/sdk/reference" className="btn btn-ghost btn-lg">
-                    API reference
+                  <Link href="/docs/sdk/reference" className="gl-arrowlink">
+                    API reference <span aria-hidden>→</span>
                   </Link>
                 </div>
               </div>
@@ -399,13 +399,13 @@ export default function SdkPage() {
               <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3">
                 <Link
                   href="/docs/quickstart"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   Full walkthrough <span aria-hidden>→</span>
                 </Link>
                 <Link
                   href="/docs/sdk"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   SDK docs <span aria-hidden>→</span>
                 </Link>
@@ -547,7 +547,7 @@ export default function SdkPage() {
                   href={GITHUB}
                   target="_blank"
                   rel="noreferrer"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   Source on GitHub <ArrowUpRight />
                 </a>
@@ -555,7 +555,7 @@ export default function SdkPage() {
                   href="https://www.npmjs.com/package/@gloamtrade/sdk"
                   target="_blank"
                   rel="noreferrer"
-                  className="t-label inline-flex items-center gap-1.5 text-foreground hover:text-sealed"
+                  className="gl-arrowlink"
                 >
                   npm <ArrowUpRight />
                 </a>
