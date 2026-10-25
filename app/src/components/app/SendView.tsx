@@ -12,6 +12,7 @@ import {
   useAppTxReceipt,
 } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { safeParseEther } from "@/lib/amount";
 import { estimateMaxNativeSend, type MaxNativeSend } from "@/lib/nativeSend";
 import { getRhPublicClient } from "@/lib/rhClient";
@@ -47,6 +48,9 @@ export function SendView() {
   const [estimatingMax, setEstimatingMax] = useState(false);
   // Bumped by every edit, so an estimate that comes back after one is dropped.
   const maxRun = useRef(0);
+  // The review is a modal: focus moves into it and stays there, Escape closes it.
+  const review = useRef<HTMLDivElement>(null);
+  useModalFocus(review, () => setShowPreview(false), { open: showPreview });
 
   const {
     sendTransaction,
@@ -381,7 +385,9 @@ export function SendView() {
       {showPreview &&
         createPortal(
           <div
-            className="fixed inset-0 z-[200] flex items-center justify-center p-[16px] sm:p-6"
+            ref={review}
+            tabIndex={-1}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-[16px] outline-none sm:p-6"
             role="dialog"
             aria-modal="true"
             aria-labelledby="send-review-title"
