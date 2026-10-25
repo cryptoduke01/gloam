@@ -22,6 +22,8 @@ export const NETWORK_KEYS: readonly NetworkKey[] = [
   "robinhood",
   "tempo-mainnet",
   "tempo",
+  "ethereum-mainnet",
+  "ethereum",
 ];
 
 export interface PluginNetwork extends GloamNetwork {
