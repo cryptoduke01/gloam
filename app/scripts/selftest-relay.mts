@@ -28,7 +28,8 @@
  *  - a private RPC (GLOAM_RPC_URL_<chainId>) that answers for another chain is
  *    never used: every chain has the vault at the same address, so its reads
  *    would look real. Reads go to the chain's public RPC, and a send is refused
- *    before it reaches any node
+ *    before it reaches any node. The same holds for one that has not answered
+ *    eth_chainId yet (down, timed out), until it says it is this chain's node
  *
  * fetch is stubbed for the whole run: chain calls go to an in-process fake
  * that answers the few JSON-RPC methods the relay uses, at the chain's public
@@ -151,6 +152,13 @@ const PRIVATE_RPC = "https://private-rpc.selftest.invalid";
 /** A private RPC set for this chain by mistake: it is another chain's node. */
 const WRONG_RPC = "https://wrong-chain-rpc.selftest.invalid";
 const WRONG_CHAIN_ID = 8453;
+/**
+ * A private RPC that has not said which chain it serves: eth_chainId gets a
+ * 503 until `says` is set, while every other call is answered from its own
+ * state (block 0xdead, every send taken). It may be another chain's node.
+ */
+const UNCHECKED_RPC = "https://unchecked-rpc.selftest.invalid";
+const unchecked = { says: null as number | null, calls: [] as string[] };
 const NONCE_TOO_LOW = { code: -32000, message: "nonce too low: address 0x0000000000000000000000000000000000000000, tx: 0 state: 1" };
 const SEL = {
   spent: toFunctionSelector("spent(bytes32)"),
@@ -229,6 +237,22 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     const cmds = JSON.parse(String(init?.body)) as (string | number)[] | (string | number)[][];
     const out = url.endsWith("/pipeline") ? (cmds as (string | number)[][]).map(redisAnswer) : redisAnswer(cmds as (string | number)[]);
     return new Response(JSON.stringify(out), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  if (url === UNCHECKED_RPC) {
+    const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
+    const list = Array.isArray(body) ? body : [body];
+    unchecked.calls.push(...list.map((r) => r.method));
+    if (list.some((r) => r.method === "eth_chainId") && unchecked.says === null) {
+      return new Response("busy", { status: 503 });
+    }
+    const out = list.map((r) =>
+      r.method === "eth_chainId"
+        ? { jsonrpc: "2.0", id: r.id, result: toHex(unchecked.says!) }
+        : r.method === "eth_blockNumber"
+          ? { jsonrpc: "2.0", id: r.id, result: "0xdead" }
+          : { jsonrpc: "2.0", id: r.id, ...answer(r) }
+    );
+    return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { status: 200, headers: { "Content-Type": "application/json" } });
   }
   const via = url === RPC.replace(/\/$/, "") ? "public" : url === PRIVATE_RPC ? "private" : url === WRONG_RPC ? "wrong" : null;
   if (!via) throw new Error(`selftest: no network (${url})`);
@@ -808,6 +832,38 @@ await test("a private RPC that answers for another chain: reads go to the public
     assert.equal(await reads.request({ method: "eth_chainId" }), toHex(net.chainId));
     assert.deepEqual(wrongCalls.filter((m) => m !== "eth_chainId"), []);
   } finally {
+    delete process.env[name];
+  }
+});
+
+await test("a private RPC that has not answered eth_chainId is not used: reads go to the public RPC, a send is refused, until it says this chain", async () => {
+  const name = `GLOAM_RPC_URL_${net.chainId}`;
+  process.env[name] = UNCHECKED_RPC;
+  try {
+    reset();
+    unchecked.says = null;
+    unchecked.calls.length = 0;
+    const others = () => unchecked.calls.filter((m) => m !== "eth_chainId");
+    // a relayed cash out: refused before any send, and the unchecked node is asked nothing else
+    const nul = nullifier();
+    await assert.rejects(relayUnshield(net, unshieldBody(nul, CLEAN)), isRelayError("relay_off", 503));
+    assert.deepEqual(others(), [], `the unchecked node was asked: ${unchecked.calls.join(", ")}`);
+    assert.deepEqual(sends, []);
+    assert.equal(await lockFree(nul), true, "nothing went out, so the spend is free to retry");
+    // a server read: this chain's public RPC answers, not the unchecked node
+    const reads = serverTransport(net, { retryCount: 0 })({ chain: net.chain });
+    assert.equal(await reads.request({ method: "eth_blockNumber" }), "0x1");
+    assert.deepEqual(others(), []);
+    // a raw send through the relay's transport never reaches it either
+    const once = serverTransport(net, { retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+    await assert.rejects(once.request({ method: "eth_sendRawTransaction", params: [("0x" + "02".repeat(100)) as Hex] }));
+    assert.deepEqual(others(), []);
+    // it is asked again on the next request; once it says this chain, it is used
+    unchecked.says = net.chainId;
+    assert.equal(await reads.request({ method: "eth_blockNumber" }), "0xdead");
+    assert.deepEqual(others(), ["eth_blockNumber"]);
+  } finally {
+    unchecked.says = null;
     delete process.env[name];
   }
 });
