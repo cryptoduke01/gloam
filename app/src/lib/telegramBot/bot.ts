@@ -1053,6 +1053,10 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   if (sentinel === "secret" && pictureMsg) {
     // a seed phrase or key in a screenshot: the same as one pasted as text
     const owner = pictureMsg.from ?? from;
+    // Someone else's tag never takes down the team's own picture: the tagger's
+    // words reach the model, so its [[SECRET]] there can be talked into, and the
+    // warning would tell the group a team wallet is exposed. As moderate() and /spam.
+    if (pictureMsg !== msg && (isTrusted(owner, c) || (await isChatAdmin(chatId, owner.id)))) return;
     const removed = await deleteMessage(chatId, pictureMsg.message_id);
     await count(removed ? "secrets" : "secretsMissed");
     await sendMessage(chatId, leakWarning(firstName(owner, c), removed), { threadId, replyTo: removed ? undefined : pictureMsg.message_id });
