@@ -24,24 +24,67 @@ export type Call = { to: Address; data: Hex; value?: bigint };
 export interface CallSender {
   /** The address that holds the agent's public funds and signs its deposits. */
   readonly address: Address;
-  /** Send the calls in order; resolve with the hash of the transaction carrying the last one, once it is mined. */
+  /**
+   * Send the calls in order and resolve with the hash of the transaction
+   * carrying the last one as soon as it is broadcast. The caller waits for its
+   * receipt, so a receipt wait that gives up never hides a transaction that went out.
+   *
+   * Throw a NotSentError (or any error with `notSent: true`) only when the last
+   * call was certainly not broadcast. Any other error means it may have been,
+   * and the agent keeps every note of that send until the chain settles it.
+   */
   sendCalls(calls: Call[]): Promise<Hex>;
 }
 
-/** An EOA (viem wallet client with an account): each call is sent and mined before the next. */
+/** The last call of a batch was never broadcast: nothing of that send can land. */
+export class NotSentError extends Error {
+  readonly notSent = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "NotSentError";
+  }
+}
+
+/** True when an error says the send never went out. */
+export function isNotSent(e: unknown): boolean {
+  return Boolean(e && typeof e === "object" && (e as { notSent?: unknown }).notSent === true);
+}
+
+/**
+ * An EOA (viem wallet client with an account). Each earlier call (an approve)
+ * is sent and mined before the next; the last is handed back once broadcast.
+ */
 export function walletCallSender(wallet: WalletClient<Transport, Chain, Account>, publicClient: PublicClient): CallSender {
   return {
     address: wallet.account.address,
     async sendCalls(calls) {
-      let last: Hex | null = null;
-      for (const c of calls) {
-        const hash = await wallet.sendTransaction({ account: wallet.account, chain: wallet.chain, to: c.to, data: c.data, value: c.value ?? 0n });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
-        last = hash;
+      if (!calls.length) throw new NotSentError("Nothing to send.");
+      for (let i = 0; i < calls.length - 1; i++) {
+        const c = calls[i]!;
+        // Anything that goes wrong here happens before the last call is sent.
+        try {
+          const hash = await wallet.sendTransaction({ account: wallet.account, chain: wallet.chain, to: c.to, data: c.data, value: c.value ?? 0n });
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          if (receipt.status !== "success") throw new Error(`Transaction ${hash} reverted.`);
+        } catch (e) {
+          const why = (e as { shortMessage?: string }).shortMessage ?? (e instanceof Error ? e.message.split("\n")[0] : String(e));
+          throw new NotSentError(`${why} The last call was not sent.`);
+        }
       }
-      if (!last) throw new Error("Nothing to send.");
-      return last;
+      const c = calls[calls.length - 1]!;
+      const tx = { account: wallet.account, chain: wallet.chain, to: c.to, data: c.data, value: c.value ?? 0n };
+      if (wallet.account.type !== "local") return wallet.sendTransaction(tx);
+      // A local key: estimate and sign first, so a call that would revert, or a
+      // key that cannot sign, is known not to have been sent. Only the broadcast
+      // itself can leave it open.
+      let signed: Hex;
+      try {
+        signed = await wallet.signTransaction(await wallet.prepareTransactionRequest(tx));
+      } catch (e) {
+        const why = (e as { shortMessage?: string }).shortMessage ?? (e instanceof Error ? e.message.split("\n")[0] : String(e));
+        throw new NotSentError(`${why} Nothing was sent.`);
+      }
+      return wallet.sendRawTransaction({ serializedTransaction: signed });
     },
   };
 }
@@ -62,10 +105,12 @@ export async function acpCallSender(provider: AcpEvmProviderLike, chainId: numbe
   const address = await provider.getAddress();
   return {
     address,
+    // A user operation that throws or answers without a hash may still have gone
+    // out, so neither is a NotSentError: the agent keeps the note pending.
     async sendCalls(calls) {
       const out = await provider.sendCalls(chainId, calls.map((c) => ({ to: c.to, data: c.data, value: c.value ?? 0n })));
       const hash = Array.isArray(out) ? out[out.length - 1] : out;
-      if (!hash) throw new Error("The ACP wallet returned no transaction hash.");
+      if (!hash) throw new Error("The ACP wallet returned no transaction hash. The calls may still land.");
       return hash as Hex;
     },
   };

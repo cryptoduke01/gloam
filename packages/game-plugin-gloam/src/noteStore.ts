@@ -70,6 +70,18 @@ export type StoredNote = {
   label?: string;
   /** Claim links and payments: the private note the payment carries, if any. */
   memo?: string;
+  /** The input of a spend: when its send started (it may have gone out even without a hash). */
+  spendStarted?: string;
+  /** A payment: the sealed payment message, until it is posted for the payee (sealed, so not a secret). */
+  deliver?: string;
+  /** A payment: what identifies it (payee, asset, amount, note), so a second one is refused while it confirms. */
+  requestKey?: string;
+  /**
+   * Pending for over an hour with nothing on chain: most likely never landed.
+   * Still checked on every refresh (it settles if it lands after all), but no
+   * longer counted as confirming or as a payment in flight.
+   */
+  stale?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -306,6 +318,7 @@ export function noteView(n: StoredNote) {
     amount: formatUnits(BigInt(n.amountWei), n.decimals),
     status: n.status,
     ...(n.pending ? { pending: n.pending } : {}),
+    ...(n.stale && n.status === "pending" ? { stale: true } : {}),
     origin: n.origin,
     createdTx: n.createdTx,
     ...(n.label ? { label: n.label } : {}),
@@ -318,7 +331,7 @@ export function balances(notes: StoredNote[], chainId: number) {
   for (const n of notes) {
     if (n.chainId !== chainId) continue;
     if (n.status === "spent" || n.origin === "payment" || n.origin === "claim") continue;
-    if (n.status === "pending" && n.pending === "spend") continue;
+    if (n.status === "pending" && (n.pending === "spend" || n.stale)) continue;
     const k = n.asset.toLowerCase();
     const cur = by.get(k) ?? { asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, notes: 0, largest: 0n };
     const amt = BigInt(n.amountWei);

@@ -124,3 +124,18 @@ test("adding to its own private balance is allowed or not, never capped", () => 
   const payOnly = resolveLimits("a", { recipients: "any", actions: ["pay"], assets: { USDC: { maxPerPayment: 5, maxPerDay: 10 } } }, "t", "base");
   assert.equal(checkSpend(payOnly, spend({ action: "add", recipient: null }), [], now)?.code, "action_not_allowed");
 });
+
+test("the example limits file is enforceable on the network .env.example names, and code plus a file is refused", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { dirname, join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const env = readFileSync(join(root, ".env.example"), "utf8");
+  const network = env.match(/^GLOAM_NETWORK=(\S+)/m)![1]!;
+  const file = env.match(/^GLOAM_LIMITS_FILE=\.\/(\S+)/m)![1]!;
+  const read = (p: string) => readFileSync(join(root, p), "utf8");
+  const loaded = loadLimits({ agent: "default", network: network as never, file, readFile: read });
+  assert.equal(loaded.mode, "enforced", "error" in loaded ? loaded.error : "");
+  const both = loadLimits({ agent: "default", network: network as never, file, limits: { recipients: "any", assets: { USDC: { maxPerPayment: "1", maxPerDay: "1" } } }, readFile: read });
+  assert.equal(both.mode, "invalid");
+});
