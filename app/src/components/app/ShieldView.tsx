@@ -38,6 +38,7 @@ import { SealedField } from "@/components/ui/SealedField";
 import { SealDots } from "@/components/ui/SealDots";
 import { WalletMenu } from "./WalletMenu";
 import { TokenLogo } from "./TokenLogo";
+import { Select } from "@/components/ui/Select";
 import { SuccessModal } from "./SuccessModal";
 import { DevKeysBanner } from "./DevKeysBanner";
 import { BridgeInCard } from "./BridgeIn";
@@ -843,31 +844,28 @@ export function ShieldView() {
                   className="tnum min-w-0 flex-1 bg-transparent text-[40px] font-light leading-[1.15] tracking-[-0.02em] text-foreground outline-none! placeholder:text-faint sm:text-[46px]"
                   aria-label="Amount to add"
                 />
-                <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-foreground/20">
-                  <div className="pointer-events-none flex h-11 items-center gap-2 rounded-full bg-panel pl-1.5 pr-3 text-[15px] font-medium text-foreground shadow-card">
-                    <AssetMark id={selectedToken?.id ?? null} symbol={symbol} size={30} />
-                    {symbol}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden className="text-mute">
-                      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                  <select
-                    value={assetChoice}
-                    onChange={(e) => {
-                      setAssetChoice(e.target.value);
-                      setAmount("");
-                    }}
-                    className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
-                    aria-label="Asset to add"
-                  >
-                    {nativeOk && <option value="eth">ETH</option>}
-                    {tokens.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.symbol}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Select
+                  variant="pill"
+                  align="end"
+                  className="shrink-0"
+                  label="Asset to add"
+                  value={assetChoice}
+                  onChange={(v) => {
+                    setAssetChoice(v);
+                    setAmount("");
+                  }}
+                  options={[
+                    ...(nativeOk
+                      ? [{ value: "eth", label: "ETH", description: "Ether", icon: <AssetMark id={null} symbol="ETH" size={30} /> }]
+                      : []),
+                    ...tokens.map((t) => ({
+                      value: t.id,
+                      label: t.symbol,
+                      description: t.name,
+                      icon: <AssetMark id={t.id} symbol={t.symbol} size={30} />,
+                    })),
+                  ]}
+                />
               </div>
               <p className={`tnum mt-1 min-h-5 text-[13px] ${amountProblem ? "text-danger" : "text-mute"}`} role={amountProblem ? "alert" : undefined}>
                 {amountProblem ?? (usdHint ? `≈ ${usdHint}` : " ")}
