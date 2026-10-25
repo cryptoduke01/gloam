@@ -86,8 +86,21 @@ export interface SweepChain {
   waitForReceipt(hash: Hex): Promise<{ status: "success" | "reverted" }>;
 }
 
-/** Submits a built private send and returns its transaction hash. */
+/**
+ * Submits a built private send and returns its transaction hash. A submitter
+ * that throws without knowing whether the transaction went out (a timeout, a
+ * reply lost after the node took it) should throw an error with
+ * `maybeSent: true`, and its `hash` when known, so the sweep keeps the fresh
+ * note instead of reporting that nothing moved. A GloamRelayError with an
+ * unclear code counts the same.
+ */
 export type SweepSubmitter = (intent: PrivateSendIntent) => Promise<Hex>;
+
+/** The hash a submitter's error carries for a send that may have gone out, or null. */
+function sentHashOf(e: unknown): Hex | null {
+  const h = (e as { hash?: unknown } | null)?.hash;
+  return typeof h === "string" && /^0x[0-9a-fA-F]{64}$/.test(h) ? (h as Hex) : null;
+}
 
 /** A SweepChain over a viem PublicClient: reads the pool and rebuilds the tree for each path. */
 export function sweepChainFromClient(client: PublicClient, params: SyncTreeParams): SweepChain {
@@ -210,15 +223,27 @@ export async function sweepReceivedNote(params: SweepParams): Promise<SweepResul
     reverted = true;
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
-    maybeSent = !hash && e instanceof GloamRelayError && RELAY_MAYBE_SENT.has(e.code);
+    if (!hash) {
+      maybeSent =
+        (e instanceof GloamRelayError && RELAY_MAYBE_SENT.has(e.code)) || (e as { maybeSent?: unknown } | null)?.maybeSent === true;
+      if (maybeSent) hash = sentHashOf(e);
+    }
   }
 
-  // It did not confirm cleanly. Ask the chain what actually happened.
+  // It did not confirm cleanly. Ask the chain what actually happened. The spend is read
+  // before the fresh note: the sweep spends the one and makes the other in the same block,
+  // so a spend seen first and no fresh note read after it was another transaction's. Read
+  // the other way round, a sweep landing between the two reads would look like someone
+  // else's spend, and the fresh note would be given up while it holds the money.
+  const spent = await chain.isSpent(nullifier).catch(() => null);
   const landed = await chain.isCommitmentSeen(fresh.commitment).catch(() => null);
   if (landed === true) return result("swept", null, { hash, freshNote: fresh });
-  const spent = await chain.isSpent(nullifier).catch(() => null);
-  if (landed === false && spent === true) return result("already_spent", ALREADY_SPENT, { hash });
-  if (landed === false && spent === false && !maybeSent && (!hash || reverted)) {
+  // Only a sweep that surely did nothing (never sent, or reverted) is given up on. One that
+  // may be on its way keeps its fresh note, even with the note spent: two reads can come
+  // from nodes at different heights.
+  const didNothing = reverted || (!hash && !maybeSent);
+  if (landed === false && spent === true && didNothing) return result("already_spent", ALREADY_SPENT, { hash });
+  if (landed === false && spent === false && didNothing) {
     return result("failed", `The sweep did not go through and nothing moved${error ? `: ${error}` : "."} It can be retried.`, { hash });
   }
   return result(
