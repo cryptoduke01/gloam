@@ -43,6 +43,11 @@ import {
   ETHEREUM_USDC,
   ETHEREUM_USDG,
   ETHEREUM_USDT,
+  ETHEREUM_SEPOLIA_CHAIN_ID,
+  ETHEREUM_SEPOLIA_EURC,
+  ETHEREUM_SEPOLIA_PYUSD,
+  ETHEREUM_SEPOLIA_USDC,
+  ETHEREUM_SEPOLIA_USDG,
   GLOAM_NETWORKS,
   GLOAM_TOKEN,
   NATIVE_ASSET,
@@ -120,6 +125,7 @@ export const NETWORK_CHAIN_IDS: Record<NetworkKey, number> = {
   robinhood: RH,
   tempo: TEMPO,
   base: BASE_SEPOLIA_CHAIN_ID,
+  ethereum: ETHEREUM_SEPOLIA_CHAIN_ID,
   "robinhood-mainnet": RH_MAINNET_CHAIN_ID,
   "tempo-mainnet": TEMPO_MAINNET_CHAIN_ID,
   "base-mainnet": BASE_MAINNET_CHAIN_ID,
@@ -139,6 +145,12 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "USDC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_USDC, decimals: 6 },
   { symbol: "EURC", chainId: BASE_SEPOLIA_CHAIN_ID, address: BASE_SEPOLIA_EURC, decimals: 6 },
   { symbol: "ETH", chainId: BASE_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
+  // Ethereum Sepolia: a testnet too, after Base Sepolia, so a bare "USDC" stays Base Sepolia's.
+  { symbol: "USDC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDC, decimals: 6 },
+  { symbol: "USDG", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_USDG, decimals: 6 },
+  { symbol: "PYUSD", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_PYUSD, decimals: 6 },
+  { symbol: "EURC", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: ETHEREUM_SEPOLIA_EURC, decimals: 6 },
+  { symbol: "ETH", chainId: ETHEREUM_SEPOLIA_CHAIN_ID, address: NATIVE_ASSET, decimals: 18 },
   // Mainnet: exactly what the mainnet pools list.
   { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6 },
   { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18 },
@@ -173,7 +185,7 @@ export function assetLabel(chainId: number, asset: Address): string {
 // ------------------------------------------------------------------ config shape
 
 const amount = z.union([z.string(), z.number()]).transform((v) => String(v).trim());
-const network = z.enum(["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"]);
+const network = z.enum(["robinhood", "tempo", "base", "ethereum", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet"]);
 
 const assetEntry = z
   .object({
@@ -381,7 +393,7 @@ export function loadPolicy(env: Record<string, string | undefined>, readFile: (p
         mode: "invalid",
         agent,
         source,
-        error: `GLOAM_LIMIT_NETWORK "${limitNetwork}" is not a Gloam network. Use robinhood-mainnet, tempo-mainnet, base-mainnet, ethereum-mainnet, robinhood, tempo or base.`,
+        error: `GLOAM_LIMIT_NETWORK "${limitNetwork}" is not a Gloam network. Use robinhood-mainnet, tempo-mainnet, base-mainnet, ethereum-mainnet, robinhood, tempo, base or ethereum.`,
       };
     }
     const assetKeys = list(env.GLOAM_LIMIT_ASSETS ?? "");

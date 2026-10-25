@@ -302,7 +302,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   const env = deps.env;
   /** The network a tool uses when the agent names none. Throws at startup on a GLOAM_NETWORK this build lacks. */
   const defaultNet = defaultNetworkKey(env);
-  // "robinhood" and "tempo", plus "base" once Base Sepolia has its pool.
+  // "robinhood" and "tempo", plus "base" and "ethereum" once Base Sepolia and Ethereum Sepolia have their pools.
   const testnets = allNetworks().filter((n) => n.testnet).map((n) => `"${n.key}"`);
   const testnetKeys = `${testnets.slice(0, -1).join(", ")} and ${testnets[testnets.length - 1]}`;
   const networkArg = (what: string) =>

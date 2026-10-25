@@ -2,16 +2,18 @@
  * Per-network runtime config for the MCP's execution rail. Pool, chain id,
  * deploy block, key set and assets come from the SDK (single source of truth:
  * GLOAM_NETWORKS for the Robinhood Chain and Tempo testnets, testnetNetwork("base")
- * for Base Sepolia, mainnetNetwork() for the mainnets); the RPC (overridable),
+ * for Base Sepolia, testnetNetwork("ethereum") for Ethereum Sepolia,
+ * mainnetNetwork() for the mainnets); the RPC (overridable),
  * explorer, native currency and the default asset are added here because the
  * SDK stays transport-agnostic.
  *
  * Robinhood Chain and Tempo, each on mainnet (the ceremony's final keys,
  * payments only, beta deposit limits) and testnet (dev keys), and Base: Base
- * Sepolia (a testnet on the mainnet pool and final keys) and,
- * once its pool is in, Base mainnet; and Ethereum mainnet once its pool is in.
- * A network with a pool to publish (every mainnet, Base
- * Sepolia) only exists here once the SDK has its pool, so a build without it
+ * Sepolia (a testnet on the mainnet pool and final keys) and, once its pool is
+ * in, Base mainnet; Ethereum mainnet, and Ethereum Sepolia (a testnet on the
+ * mainnet pool and final keys), each once its pool is in. A network with a pool
+ * to publish (every mainnet, Base Sepolia, Ethereum Sepolia) only exists here
+ * once the SDK has its pool, so a build without it
  * never offers that network. The chains are separate deployments of the same
  * pool design, so the same execution code serves every network.
  *
@@ -33,6 +35,7 @@ export type NetworkKey =
   | "robinhood"
   | "tempo"
   | "base"
+  | "ethereum"
   | "robinhood-mainnet"
   | "tempo-mainnet"
   | "base-mainnet"
@@ -76,6 +79,11 @@ const NATIVE = {
 } as const;
 
 const CHAIN_NAMES: Record<ChainFamily, string> = { robinhood: "Robinhood Chain", tempo: "Tempo", base: "Base", ethereum: "Ethereum" };
+
+/** A testnet's name: "Base Sepolia Testnet", "Ethereum Sepolia Testnet", "Tempo Testnet". */
+function testnetName(family: ChainFamily): string {
+  return family === "base" || family === "ethereum" ? `${CHAIN_NAMES[family]} Sepolia Testnet` : `${CHAIN_NAMES[family]} Testnet`;
+}
 
 export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
   robinhood: {
@@ -124,7 +132,7 @@ function fromSdk(n: GloamNetwork | null): McpNetwork | null {
     family: n.family,
     testnet: n.testnet,
     ceremony: n.ceremony,
-    name: n.family === "base" && n.testnet ? "Base Sepolia Testnet" : `${CHAIN_NAMES[n.family]} ${n.testnet ? "Testnet" : "Mainnet"}`,
+    name: n.testnet ? testnetName(n.family) : `${CHAIN_NAMES[n.family]} Mainnet`,
     chainId: n.chainId,
     pool: n.pool,
     rpc: rpcFor(n.chainId, n.rpcUrl),
@@ -149,9 +157,18 @@ export const MCP_MAINNETS: McpNetwork[] = [
 /** Base Sepolia, once the SDK has its pool; null before. */
 export const MCP_BASE_TESTNET: McpNetwork | null = fromSdk(testnetNetwork("base"));
 
+/** Ethereum Sepolia, once the SDK has its pool; null before. */
+export const MCP_ETHEREUM_TESTNET: McpNetwork | null = fromSdk(testnetNetwork("ethereum"));
+
 /** Every network this build can use: mainnets first, then the testnets. */
 export function allNetworks(): McpNetwork[] {
-  return [...MCP_MAINNETS, MCP_NETWORKS.robinhood, MCP_NETWORKS.tempo, ...(MCP_BASE_TESTNET ? [MCP_BASE_TESTNET] : [])];
+  return [
+    ...MCP_MAINNETS,
+    MCP_NETWORKS.robinhood,
+    MCP_NETWORKS.tempo,
+    ...(MCP_BASE_TESTNET ? [MCP_BASE_TESTNET] : []),
+    ...(MCP_ETHEREUM_TESTNET ? [MCP_ETHEREUM_TESTNET] : []),
+  ];
 }
 
 /** Every key a Gloam network can have, whether or not this build has its pool. */
@@ -163,6 +180,7 @@ export const ALL_NETWORK_KEYS: readonly NetworkKey[] = [
   "robinhood",
   "tempo",
   "base",
+  "ethereum",
 ];
 
 /** The network keys this build offers, for tool schemas (mainnets first). */
@@ -182,9 +200,10 @@ export function networkByChainId(chainId: number): McpNetwork | undefined {
   return allNetworks().find((n) => n.chainId === chainId);
 }
 
-/** "Robinhood Chain mainnet" / "Tempo testnet", for messages. */
+/** "Robinhood Chain mainnet" / "Tempo testnet" / "Ethereum Sepolia", for messages. */
 export function describeNetwork(n: McpNetwork): string {
   const chain = CHAIN_NAMES[n.family];
+  if (n.testnet && n.family === "ethereum") return "Ethereum Sepolia";
   return n.testnet ? `${chain} testnet` : `${chain} mainnet`;
 }
 
