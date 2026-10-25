@@ -301,10 +301,10 @@ export function AppShell({
               {!networkSettled
                 ? "Gloam. Not investment, legal or tax advice."
                 : !network.testnet
-                ? `Gloam on ${network.label} mainnet. Beta software with real money. Not investment, legal or tax advice.`
+                ? `Gloam on ${network.label} mainnet. Beta software. Not investment, legal or tax advice.`
                 : isTempo
-                  ? "Gloam on Tempo testnet. Private stablecoin payments for people and agents. Play money only."
-                  : `Gloam on ${network.label} testnet. Play money only. Not investment, legal or tax advice.`}
+                  ? "Gloam on Tempo testnet. Private stablecoin payments for people and agents."
+                  : `Gloam on ${network.label} testnet. Not investment, legal or tax advice.`}
             </p>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <Link href="/docs/testnet" className="hover:text-foreground">

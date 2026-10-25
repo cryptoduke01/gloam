@@ -30,7 +30,7 @@ const GLANCE = [
   { k: "Networks", v: "Robinhood Chain and Tempo mainnet" },
   { k: "Live since", v: "21 October 2026, 13:00 UTC" },
   { k: "Fees", v: "Free to add and pay, 0.25% to cash out" },
-  { k: "Status", v: "Beta, real money, deposit limits on" },
+  { k: "Status", v: "Mainnet beta, deposit limits on" },
 ];
 
 const READ_MORE: { label: string; href: string }[] = [
@@ -226,7 +226,7 @@ export default function LiveOnMainnetPost() {
 
       <h2>What it does not do yet</h2>
       <p>
-        This is beta software holding real money. We would rather you know its
+        This is beta software. We would rather you know its
         limits than assume more than it offers.
       </p>
       <p>

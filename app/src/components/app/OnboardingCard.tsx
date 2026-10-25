@@ -36,7 +36,7 @@ export function OnboardingCard() {
   const [open, setOpen] = useState(false);
   const { network } = useNetwork();
   const isTempo = network.key === "tempo";
-  // A mainnet holds real money: no test funds to fetch, so no faucet step.
+  // A mainnet has no faucet, so no faucet step.
   const steps = network.testnet ? ONBOARDING_STEPS : ONBOARDING_STEPS.filter((s) => s.id !== "faucet");
   const tempoFaucet = useTempoFaucet();
   // Robinhood Chain's faucet, or Base Sepolia's faucet guide (Circle's test USDC and EURC, and test ETH).

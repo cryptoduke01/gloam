@@ -25,8 +25,8 @@ export default function DisclosuresPage() {
       </p>
       <h2>Mainnet is beta</h2>
       <p>
-        From Gloam&apos;s mainnet launch on 21 October 2026, the mainnet pools
-        on Robinhood Chain and Tempo hold real money. They are beta software.
+        Since Gloam&apos;s mainnet launch on 21 October 2026, the mainnet pools
+        on Robinhood Chain and Tempo have been live. They are beta software.
         The contracts were reviewed internally before launch; an external
         audit is planned and has not been done.
       </p>
@@ -48,7 +48,7 @@ export default function DisclosuresPage() {
       </p>
       <p>
         The testnets (Robinhood Chain testnet and Tempo Moderato) use test
-        tokens with no value and single-party development keys.
+        tokens and single-party development keys.
         Mainnet uses the final keys from the 13-contributor trusted setup.
       </p>
       <h2>Privacy is not absolute</h2>

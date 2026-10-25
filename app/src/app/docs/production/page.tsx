@@ -6,14 +6,14 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 export const metadata: Metadata = {
   title: "Production gate",
   description:
-    "What was in place before Gloam took real money on mainnet, and what is still ahead: final ceremony keys, beta limits, timelock, internal review, external audit, multisig.",
+    "What was in place before Gloam launched on mainnet, and what is still ahead: final ceremony keys, beta limits, timelock, internal review, external audit, multisig.",
 };
 
 export default function DocsProductionPage() {
   return (
     <DocsLayout
       title="Production gate"
-      lede="What mainnet cleared before real money went in, and what is still ahead."
+      lede="What mainnet cleared before launch, and what is still ahead."
       glance={[
         { label: "Mainnet", value: "Live since 21 Oct, 13:00 UTC" },
         { label: "Keys", value: "Final, 13 contributors" },
@@ -23,15 +23,14 @@ export default function DocsProductionPage() {
     >
       <h2>Why this page exists</h2>
       <p>
-        Mainnet is beta software handling real money, so we keep a plain list of
+        Mainnet is beta software, so we keep a plain list of
         what had to be true before it opened, what is in place now, and what is
         not done yet. The app proves shield, unshield, and private send in the
         browser, and that is real cryptography. On mainnet the proofs use the
         final keys from the production trusted setup (see the{" "}
         <a href="https://github.com/cryptoduke01/gloam/releases/tag/ceremony-final">transcript</a>).
         The testnets keep development keys, which are{" "}
-        <strong>not</strong> safe for real money, so they stay the free practice
-        network with test funds.
+        <strong>not</strong> safe for mainnet, so they stay testnet only.
       </p>
 
       <FlowDiagram
@@ -155,7 +154,7 @@ export default function DocsProductionPage() {
         </li>
         <li>
           <strong>Base mainnet.</strong> Next on the same deploy script and
-          final keys. Base Sepolia, the practice network, has run it since 24
+          final keys. Base Sepolia, its testnet, has run it since 24
           October; Base mainnet follows once that is tested end to end. See{" "}
           <Link href="/docs/chain#base">Networks</Link>.
         </li>

@@ -2,7 +2,7 @@
 
 /**
  * Once a mainnet sits next to the testnets, a testnet page says so at the top:
- * what is here is test funds, and real money is one tap away. Nothing shows
+ * this is a testnet, and mainnet is one tap away. Nothing shows
  * before a mainnet pool is filled in, or on a mainnet.
  */
 import { MAINNET_ENABLED, NETWORK_KEYS, getNetwork } from "@/lib/networks";
@@ -19,8 +19,8 @@ export function TestFundsNotice() {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-soft">
       <p className="min-w-0">
-        <span className="font-medium text-foreground">Testnet.</span> Balances here are test funds
-        with no real value.
+        <span className="font-medium text-foreground">Testnet.</span> Balances here stay on this
+        testnet.
       </p>
       <button
         type="button"

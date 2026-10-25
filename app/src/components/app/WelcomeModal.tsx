@@ -15,7 +15,7 @@ const MAINNET_STORAGE_KEY = "gloam_mainnet_welcome_v1";
  * Before the app's JavaScript arrives the server HTML holds the testnet
  * welcome. Once mainnet is live (a pool is in and the launch time has passed)
  * the head start below stands aside and React shows the mainnet welcome, so
- * nobody reads "play money" on a page that now opens on real money. Before
+ * nobody reads the testnet welcome on a page that now opens on mainnet. Before
  * that this is empty and the script is exactly what it was.
  */
 const LIVE_GUARD = MAINNET_CONFIGURED ? `if(Date.now()>=${MAINNET_LAUNCH_MS})return;` : "";
@@ -89,13 +89,13 @@ export function WelcomeModal() {
             </h2>
             {live ? (
               <p className="mt-3 text-[15px] leading-relaxed text-mute">
-                Private money on {liveMainnetNames()}. Mainnet is real money.
-                The testnet stays open with play money for trying things first.
+                Private money on {liveMainnetNames()} mainnet.
+                The testnet stays open for trying things first.
               </p>
             ) : (
               <p className="mt-3 text-[15px] leading-relaxed text-mute">
-                Private money on Robinhood Chain and Tempo. This is a test version
-                with play money, so don&apos;t use real funds.
+                Private money on Robinhood Chain and Tempo. This is the testnet,
+                so don&apos;t send mainnet funds here.
               </p>
             )}
           </div>

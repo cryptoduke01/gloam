@@ -145,8 +145,8 @@ export default function ClaimPage() {
     }
   }
 
-  // The link's own network: real money on a mainnet, play money on a testnet,
-  // and no claim either way when the link names none.
+  // The link's own network, mainnet or testnet, and no claim either way when
+  // the link names none.
   const shownNet = view.kind === "ready" ? view.net : linkNet;
   const net = shownNet ? getNetwork(shownNet) : null;
   const realNet = net && !net.testnet ? net : null;
@@ -304,9 +304,9 @@ export default function ClaimPage() {
 
         <p className="mt-auto pt-10 text-center text-[12.5px] leading-relaxed text-mute">
           {realNet
-            ? `This is real money on ${realNet.label}.`
+            ? `This link is on ${realNet.label} mainnet.`
             : net
-              ? "This link is on a testnet: it's play money with no real value."
+              ? "This link is on a testnet."
               : "Gloam runs on Robinhood Chain and Tempo."}{" "}
           <Link href="/docs/private-pay" className="underline underline-offset-4">
             How private payments work

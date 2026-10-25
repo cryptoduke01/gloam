@@ -279,7 +279,7 @@ export default function DocsThreatModelPage() {
       <h2 id="gaps">Known gaps</h2>
       <ul>
         <li>
-          <strong>Beta software with real money.</strong> Mainnet is new. Beta deposit
+          <strong>Beta software.</strong> Mainnet is new. Beta deposit
           limits cap what each pool can take while it is young.
         </li>
         <li>

@@ -255,8 +255,7 @@ export default function DocsComparePage() {
         <li>
           <strong>New on mainnet.</strong> Gloam went live on mainnet on 21
           October 2026, on the final keys from a 13-contributor ceremony, with
-          beta deposit limits on what the pools take. It is beta software
-          handling real money.
+          beta deposit limits on what the pools take. It is beta software.
         </li>
         <li>
           <strong>Internal review only.</strong> Several rounds, with fixes

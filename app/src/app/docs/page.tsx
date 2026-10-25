@@ -25,20 +25,19 @@ export default function DocsOverviewPage() {
       </p>
       <p>
         It runs on <strong>Tempo</strong> and <strong>Robinhood Chain</strong>{" "}
-        mainnet, with real money, and on their testnets for free practice. You
+        mainnet, and on their testnets. You
         put money into a shared vault (“shield”), pay privately inside it, and
         cash out with a real proof. Proofs are made on your device, and nobody
         else holds a key. See{" "}
         <Link href="/docs/compare">how Gloam compares</Link>.
       </p>
       <p>
-        Mainnet is <strong>beta software handling real money</strong>. It uses
+        Mainnet is <strong>beta software</strong>. It uses
         the final keys from a 13-contributor trusted setup, and beta deposit
         limits cap what goes in. The code was reviewed internally before
         launch; an external audit is planned. Deposits and private payments are
         free, and cashing out costs 0.25%. The testnets keep{" "}
-        <strong>development proving keys</strong> and test funds with no real
-        value. Details: <Link href="/docs/chain">Networks</Link>.
+        <strong>development proving keys</strong>. Details: <Link href="/docs/chain">Networks</Link>.
       </p>
 
       <PoolPicture title="One picture" />
@@ -54,8 +53,8 @@ export default function DocsOverviewPage() {
       <ol>
         <li>
           Open <AppLink href="/app">/app</AppLink>, connect a wallet, and pick a
-          network: Robinhood Chain or Tempo mainnet for real money, or a testnet
-          to practice with test funds.
+          network: Robinhood Chain or Tempo mainnet, or a testnet
+          to practice first.
         </li>
         <li>
           <AppLink href="/app/vault?tab=shield">Shield</AppLink> a small amount.

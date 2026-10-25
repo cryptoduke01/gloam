@@ -415,9 +415,9 @@ export default function DocsPrivacyPage() {
         run, and nothing else about the cash out changes.
       </p>
 
-      <h2>Before you put real money in</h2>
+      <h2>Before you use mainnet</h2>
       <p>
-        Mainnet is beta software handling real money. These are the honest gaps
+        Mainnet is beta software. These are the honest gaps
         to know about first:
       </p>
       <ul>

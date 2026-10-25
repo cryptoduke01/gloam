@@ -69,8 +69,7 @@ npm install snarkjs   # optional peer, for proving`}</code>
 
       <h2 id="networks">Mainnet and testnet</h2>
       <p>
-        From 0.1.0 the SDK knows both mainnets and both testnets. Mainnet is
-        real money; the testnets are the free practice network. The builders
+        From 0.1.0 the SDK knows both mainnets and both testnets. The builders
         still default to Robinhood Chain testnet so older code keeps working,
         so pass a mainnet network explicitly.
       </p>
@@ -414,7 +413,7 @@ for (const p of payments) {
       <h2>Guardrails</h2>
       <p>
         Mainnet (Robinhood Chain <code>4663</code>, Tempo <code>4217</code>) is
-        beta software handling real money: final ceremony keys, beta deposit
+        beta software: final ceremony keys, beta deposit
         limits, a 0.25% cash-out fee. It was reviewed internally before launch;
         an external audit is planned. The testnets (<code>46630</code>,{" "}
         <code>42431</code>) run on dev-ceremony keys with test funds. Real

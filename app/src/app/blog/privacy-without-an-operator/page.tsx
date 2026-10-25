@@ -240,7 +240,7 @@ export default function PrivacyWithoutAnOperatorPost() {
         What does not, yet: mainnet. Private trading is built but switched off
         until its accounting is proven safe. The proving keys come from a
         development ceremony, and a public production ceremony plus an external
-        audit come before any real money. The vaults are young, so their crowd is
+        audit come before mainnet. The vaults are young, so their crowd is
         small, and you should treat unlinkability as weak until it grows. We would
         rather tell you that than let you assume more privacy than you have.
       </p>

@@ -100,7 +100,7 @@ export function MovedHero({
         <div className="min-w-0">
           <p className="t-label">
             Money moved in and out, {window}
-            {testnet ? ", play money" : ""}
+            {testnet ? ", testnet" : ""}
           </p>
           {total == null ? (
             <span

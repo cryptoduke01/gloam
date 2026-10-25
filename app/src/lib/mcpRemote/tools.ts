@@ -102,9 +102,9 @@ const TESTNET_PROP_TEXT = BASE_TESTNET
   : 'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments) or "robinhood" (Robinhood Chain testnet).';
 
 const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
-  "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet, real money: USDC.e, pathUSD, USDT0, OUSD)',
-  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet, real money: USDG and GLOAM)',
-  "base-mainnet": '"base-mainnet" (Base mainnet, real money: USDC, EURC, USDT, ETH)',
+  "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet: USDC.e, pathUSD, USDT0, OUSD)',
+  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG and GLOAM)',
+  "base-mainnet": '"base-mainnet" (Base mainnet: USDC, EURC, USDT, ETH)',
 };
 
 /** The testnets as a caller names them, for the mainnet-era description. */
@@ -120,7 +120,7 @@ const NETWORK_PROP = {
   description: MAINNET_ENABLED
     ? `Gloam network: ${NETWORK_CHOICES.filter((k) => !getNetwork(k).testnet)
         .map((k) => MAINNET_PROP_TEXT[k])
-        .join(", ")}, or a testnet with play money: ${TESTNET_CHOICES_TEXT}.`
+        .join(", ")}, or a testnet: ${TESTNET_CHOICES_TEXT}.`
     : TESTNET_PROP_TEXT,
 } as const;
 
@@ -136,9 +136,9 @@ const BASE_TESTNET_LINE = BASE_TESTNET
 
 /** Where Gloam runs, as one honest line. Testnets only until a mainnet pool is filled in. */
 const STATUS = MAINNET_ENABLED
-  ? `Mainnet, real money: ${andList(
+  ? `Mainnet: ${andList(
       NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
-    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets, play money: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
+    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
   : `Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys.${BASE_TESTNET_LINE} The old private trade (sealed swaps) is retired.`;
 
 const WHAT_IS_PUBLIC =
@@ -343,7 +343,7 @@ function networkView(key: NetworkKey, origin: string) {
       stablecoin: a.stable,
       native: a.native,
     })),
-    // a mainnet holds real money: no faucet
+    // a mainnet has no faucet
     faucet: faucet
       ? {
           url: faucet.url.startsWith("/") ? `${origin}${faucet.url}` : faucet.url,
@@ -407,7 +407,7 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
     ...(only
       ? {}
       : {
-          // Real money first. The all-networks total adds testnet play money and says so in its name.
+          // Mainnet first. The all-networks total adds the testnets and says so in its name.
           ...(m.mainnet
             ? {
                 mainnet: {
@@ -428,7 +428,7 @@ async function vaultStats(args: Args, ctx: ToolContext): Promise<CallToolResult>
           },
         }),
     about:
-      "Vault-level totals anyone can read from public nodes. `mainnet` is real money; `allNetworksIncludingTestnets` adds the testnets' play money and is not a measure of real deposits, so quote `mainnet` for how much is in Gloam. Deposits, private transfers and cash outs are counted since countedSince: on mainnet that is the public launch, 21 Oct 2026 13:00 UTC, so the team's own checks before launch are not counted, while holdings are the live balance. That is why a vault can hold money with no deposit counted. Amounts of private transfers and who holds what inside a vault are not public, and are not here.",
+      "Vault-level totals anyone can read from public nodes. `mainnet` is the mainnets; `allNetworksIncludingTestnets` adds the testnets and is not a measure of mainnet deposits, so quote `mainnet` for how much is in Gloam. Deposits, private transfers and cash outs are counted since countedSince: on mainnet that is the public launch, 21 Oct 2026 13:00 UTC, so the team's own checks before launch are not counted, while holdings are the live balance. That is why a vault can hold money with no deposit counted. Amounts of private transfers and who holds what inside a vault are not public, and are not here.",
     transparency: `${ctx.origin}/transparency`,
   });
 }
@@ -522,7 +522,7 @@ function planDeposit(args: Args, ctx: ToolContext): CallToolResult {
   const steps = [
     faucetUrl
       ? `Get test funds: ${faucetUrl}${network === "robinhood" && asset.symbol === "USDG" ? " (test USDG: https://faucet.paxos.com/)" : ""}.`
-      : `Have the ${asset.symbol} in your own wallet on ${n.label}. This is mainnet: real money, with beta deposit limits the app shows before you sign.`,
+      : `Have the ${asset.symbol} in your own wallet on ${n.label}. This is mainnet, with beta deposit limits the app shows before you sign.`,
     n.testnet
       ? `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet (or sign in with a passkey), and choose ${n.label} in the network menu.`
       : `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet, and choose ${n.label} mainnet in the network menu.`,
@@ -697,7 +697,7 @@ const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY!,
   methods: [
     gloam({
-      network: net.chainId,                               // ${where} (${n.chainId}), ${n.testnet ? "play money" : "real money"}
+      network: net.chainId,                               // ${where} (${n.chainId}), ${n.testnet ? "testnet" : "mainnet"}
 ${asset.line}
       pools: { [net.chainId]: net.pool },                 // Gloam's vault on this chain
       receiveKey,                                         // from generateReceiveKey(), stored server side
@@ -748,8 +748,8 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     ...MPP_HEAD,
     network,
     mainnet: n.testnet
-      ? `${where} (Base Sepolia): play money, on the mainnet vault with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
-      : `${where}: real money, beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
+      ? `${where} (Base Sepolia): a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
+      : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
     install:
       family === "base"
         ? "npm i mppx @gloamtrade/mppx-gloam@^0.2.0 @gloamtrade/sdk@^0.3.0"

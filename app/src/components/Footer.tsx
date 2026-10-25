@@ -188,8 +188,8 @@ export function Footer() {
             <p className="text-[12.5px] text-mute">
               © {year} Gloam.{" "}
               <MainnetCopy
-                live="Beta software: real money on mainnet, play money on the testnet."
-                before="Testnet software with play money."
+                live="Beta software."
+                before="Testnet software."
               />{" "}
               Not investment, legal or tax advice.
             </p>

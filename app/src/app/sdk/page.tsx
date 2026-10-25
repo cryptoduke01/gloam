@@ -123,7 +123,7 @@ const PAY_SNIPPET = `import {
   TEMPO_USDCE,
 } from "@gloamtrade/sdk";
 
-// Tempo mainnet, real money. GLOAM_NETWORKS.tempo is the free testnet.
+// Tempo mainnet. GLOAM_NETWORKS.tempo is the testnet.
 const net = mainnetNetwork("tempo");
 if (!net) throw new Error("Tempo mainnet pool not published yet");
 const target = { chainId: net.chainId, poolAddress: net.pool, asset: TEMPO_USDCE };
@@ -565,7 +565,7 @@ export default function SdkPage() {
               {[
                 {
                   title: "Mainnet, in beta",
-                  body: "Live on Robinhood Chain and Tempo mainnet with real money, under beta deposit limits. The testnets stay open for free practice.",
+                  body: "Live on Robinhood Chain and Tempo mainnet, under beta deposit limits. The testnets stay open.",
                 },
                 {
                   title: "Keys",

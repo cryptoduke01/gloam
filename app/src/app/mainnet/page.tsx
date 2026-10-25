@@ -75,7 +75,7 @@ export default function MainnetPage() {
                 <MainnetCopy live="What is live" before="What goes live" />
               </h2>
               <p className="mt-5 max-w-[34ch] text-[15px] leading-relaxed text-mute">
-                The same Gloam you can try today, with real money.
+                The same Gloam you can try today, on mainnet.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">

@@ -140,7 +140,7 @@ export default function WhitepaperPage() {
           physical world, legal process, or operator error.
         </li>
         <li>
-          <strong>Real money only when ready.</strong> Production capital
+          <strong>Mainnet only when ready.</strong> Production capital
           requires production ceremonies, reviews, and operational maturity.
           Mainnet opened on the final ceremony keys, after an internal review,
           with beta deposit limits.
@@ -640,7 +640,7 @@ export default function WhitepaperPage() {
       <h2 id="risks">12. Risks and limitations</h2>
       <ul>
         <li>
-          Beta software handling real money on mainnet; beta deposit limits cap
+          Beta software on mainnet; beta deposit limits cap
           what the pools take
         </li>
         <li>
@@ -678,7 +678,7 @@ export default function WhitepaperPage() {
       <p>
         Gloam is live on mainnet as beta software. It does not claim an
         external audit, insurance of funds, legal immunity, or invisibility
-        from investigation. Testnet assets have no real-world value. Nothing in
+        from investigation. Nothing in
         this paper is investment advice.
       </p>
 

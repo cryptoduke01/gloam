@@ -204,7 +204,7 @@ export default function DocsSdkReferencePage() {
         <code>{`const net = mainnetNetwork("robinhood");     // null until the pool is published
 if (!net) throw new Error("not published yet");
 
-net.testnet;                                  // false: real money
+net.testnet;                                  // false: mainnet
 net.ceremony;                                 // "production"
 circuitArtifactUrls("unshield", net.chainId); // the final keys
 cashOutFee(500_000_000n);                     // what the pool keeps on a 500 USDG cash out`}</code>
@@ -679,8 +679,8 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
 
       <h2>Guardrails</h2>
       <p>
-        Mainnet (<code>4663</code>, <code>4217</code>) is beta software handling
-        real money, on the final ceremony keys, with beta deposit limits and a
+        Mainnet (<code>4663</code>, <code>4217</code>) is beta software,
+        on the final ceremony keys, with beta deposit limits and a
         0.25% cash-out fee. The testnets (<code>46630</code>, <code>42431</code>)
         run on dev-ceremony keys with test funds. Real proofs only, never a mock.
         Note secrets are the sole spend authority: persist and protect them. See

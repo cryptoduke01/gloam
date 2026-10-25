@@ -17,11 +17,11 @@ export default function PrivacyPage() {
       <h2>1. Mainnet and testnet</h2>
       <p>
         Gloam runs on two kinds of network. On mainnet (Robinhood Chain and
-        Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it handles
-        real money. It is beta software, with deposit limits, and it was
+        Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it is
+        beta software, with deposit limits, and it was
         reviewed internally before launch; an external audit is planned. On
         the testnets (Tempo Moderato testnet and Robinhood Chain testnet) the
-        tokens you use are test tokens with no value. Do not send real funds
+        tokens you use are test tokens. Do not send mainnet funds
         to a testnet address or contract.
       </p>
       <h2>2. What Gloam never has</h2>

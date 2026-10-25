@@ -202,11 +202,11 @@ export type OnchainMetrics = {
   ageSec: number;
   prices: { ethUsd: number | null; stocks: "live" | "unpriced" };
   networks: NetworkMetrics[];
-  /** Every network together, test money included. */
+  /** Every network together, testnets included. */
   combined: CombinedMetrics;
-  /** Mainnets only: real money. Absent on snapshots cached before it was added. */
+  /** Mainnets only. Absent on snapshots cached before it was added. */
   mainnet?: CombinedMetrics;
-  /** Testnets only: play money. */
+  /** Testnets only. */
   testnet?: CombinedMetrics;
   /** $GLOAM creator fees on Robinhood Chain; absent before it was added or while that chain is not live. */
   creator?: CreatorFees | { error: string };
@@ -307,7 +307,7 @@ async function loadState(n: GloamNetwork): Promise<ScanState | null> {
   const m = states.get(n.key);
   if (m && m.pool === pool && (m.fee || n.testnet)) return m;
   const r = await cacheGetJson<ScanState>(stateKey(n));
-  // Testnet states keep their history (their fees are play money); a mainnet one is
+  // Testnet states keep their history (their fees are not revenue); a mainnet one is
   // read again so every cash-out fee is counted.
   if (r && r.v === 1 && r.pool === pool && Array.isArray(r.events) && (r.fee || n.testnet)) {
     states.set(n.key, r);
