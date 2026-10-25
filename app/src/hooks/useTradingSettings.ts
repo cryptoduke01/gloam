@@ -13,6 +13,7 @@ export function useTradingSettings() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- saved settings live in this browser; the server renders the defaults and this reads them once after mount
     setSettingsState(loadSettings());
     setReady(true);
   }, []);

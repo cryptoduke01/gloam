@@ -115,6 +115,7 @@ export function TradeView() {
   // Sync market from URL
   useEffect(() => {
     if (searchMarket && markets.some((m) => m.id === searchMarket)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- follows a ?market= link once that market is in the live list
       setMarketId(searchMarket);
     }
   }, [searchMarket, markets]);
@@ -122,6 +123,7 @@ export function TradeView() {
   // Sync path tab from URL; default private-ready markets to sealed
   useEffect(() => {
     if (pathParam === "sealed" || pathParam === "private") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- follows a ?path= link, or opens sealed for a market that can trade privately
       setPathMode("sealed");
       return;
     }
@@ -197,6 +199,7 @@ export function TradeView() {
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a different market starts on the mode it supports
     if (hasPool) setMode("swap");
     else if (hasToken) setMode("transfer");
   }, [hasPool, hasToken, resolvedId]);
@@ -292,6 +295,7 @@ export function TradeView() {
     void refetchAllow();
 
     if (pendingKind === "approve") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the approval's receipt arrived: clear the pending step once per transaction
       setPendingKind(null);
       setError(null);
       // will re-enable sell on next click with fresh allowance, auto sell:
@@ -326,6 +330,7 @@ export function TradeView() {
     if (allowance === undefined || allowance < sellAmountIn) return;
     autoSellAfterApprove.current = false;
     if (!quoteOut || quoteOut <= 0n) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the allowance read after an approval came back: continue the sell or say why not
       setError("No quote, try again.");
       return;
     }

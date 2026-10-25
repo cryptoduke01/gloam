@@ -68,6 +68,7 @@ export function SendView() {
     if (handledHash.current === hash) return;
     handledHash.current = hash;
     void refetch();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the transfer's receipt arrived: open the confirmation once per transaction
     if (settings.confirmSends) setShowSuccess(true);
   }, [isSuccess, hash, refetch, settings.confirmSends]);
 

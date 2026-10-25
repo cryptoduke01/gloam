@@ -50,6 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // The head script normally stamps this before paint. When Next serves a
     // client-rendered error shell that script never runs, so stamp it here too.
     apply(r);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the saved theme lives only in the browser (the head script already painted it); React reads it once after mount
     setChoice(saved);
     setResolved(r);
   }, []);

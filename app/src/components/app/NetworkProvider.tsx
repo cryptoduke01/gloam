@@ -66,6 +66,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     const stored = readStored();
     // lib code (notes, tree, proofs) follows the network shown, even if storage refuses writes
     setShownNetworkKey(stored);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the saved network lives only in the browser; the server renders the default and this reads it once after mount
     if (stored !== networkKey) setKey(stored);
     setSettled(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
