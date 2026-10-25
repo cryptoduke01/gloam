@@ -11,6 +11,7 @@ import { faucetFor } from "@/lib/faucet";
 import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, type NetworkKey } from "@/lib/networks";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
 import { vaultSwapRouter } from "@/lib/vaultSwap";
+import { formatGwei, maxGasPriceWei } from "@/lib/relay/gasCeiling";
 import { fetchOnchainMetrics } from "@/lib/onchainMetrics";
 import {
   buildPaymentRequestLink,
@@ -105,6 +106,7 @@ const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet: USDC.e, pathUSD, USDT0, OUSD)',
   "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG and GLOAM)',
   "base-mainnet": '"base-mainnet" (Base mainnet: USDC, EURC, USDT, ETH)',
+  "ethereum-mainnet": '"ethereum-mainnet" (Ethereum mainnet: USDC, USDT, USDG, PYUSD, EURC, ETH)',
 };
 
 /** The testnets as a caller names them, for the mainnet-era description. */
@@ -129,6 +131,11 @@ const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true 
 /** "Leave out for both" until a mainnet is listed next to the two testnets. */
 const LEAVE_OUT = MAINNET_ENABLED ? "Leave out for every network." : "Leave out for both.";
 
+/** Ethereum, when its pool is in: gas costs real ETH there, so the relay has a ceiling. */
+const ETHEREUM_LINE = NETWORK_KEYS.includes("ethereum-mainnet")
+  ? ` On Ethereum (1) the Gloam relay waits while gas is over its ceiling (${formatGwei(maxGasPriceWei(1) ?? 0n)} gwei); a cash out for later waits for gas to come down.`
+  : "";
+
 /** Base Sepolia, when it is in: a testnet on the mainnet vault and keys. */
 const BASE_TESTNET_LINE = BASE_TESTNET
   ? " Base Sepolia (84532) is a testnet too, but runs the mainnet vault with the final keys, beta limits and the cash-out fee."
@@ -138,7 +145,7 @@ const BASE_TESTNET_LINE = BASE_TESTNET
 const STATUS = MAINNET_ENABLED
   ? `Mainnet: ${andList(
       NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
-    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
+    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, external audit planned. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE}${ETHEREUM_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
   : `Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys.${BASE_TESTNET_LINE} The old private trade (sealed swaps) is retired.`;
 
 const WHAT_IS_PUBLIC =
@@ -335,6 +342,11 @@ function networkView(key: NetworkKey, origin: string) {
     paymentMessageBoard: n.payMemo?.address ?? null,
     swapRouter: vaultSwapRouter(n.chainId),
     gas: n.family === "tempo" ? "Paid in stablecoins; Tempo has no gas coin. Deposits are tokens only." : "ETH",
+    // The relay pays the gas of relayed payments; over this price it waits (Ethereum)
+    relayMaxGasGwei: (() => {
+      const c = maxGasPriceWei(n.chainId);
+      return c === null ? null : formatGwei(c);
+    })(),
     mainStablecoin: assets.find((a) => a.stable)?.symbol ?? null,
     assets: assets.map((a) => ({
       symbol: a.symbol,
@@ -662,7 +674,8 @@ const MPP_TAIL = {
  * (null until its pool is published), and proofs use the trusted setup's final
  * keys through circuitArtifactUrls(), never the testnet's development keys.
  * Base needs SDK 0.3.0, and Base Sepolia (a testnet on the mainnet vault and
- * keys) gets the same snippets through testnetNetwork("base").
+ * keys) gets the same snippets through testnetNetwork("base"). Ethereum needs
+ * SDK 0.4.0 and has no testnet.
  */
 function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): CallToolResult {
   const n = getNetwork(network);
@@ -677,9 +690,11 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
         ? n.testnet
           ? { import: "BASE_SEPOLIA_USDC", line: "      currency: BASE_SEPOLIA_USDC, decimals: 6,           // or BASE_SEPOLIA_EURC" }
           : { import: "BASE_USDC", line: "      currency: BASE_USDC, decimals: 6,                   // or BASE_EURC, BASE_USDT" }
-        : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
+        : family === "ethereum"
+          ? { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
+          : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
-  const sdkVersion = family === "base" ? "0.3.0" : "0.1.0";
+  const sdkVersion = family === "ethereum" ? "0.4.0" : family === "base" ? "0.3.0" : "0.1.0";
   const netLines = `const net = ${getter}("${family}");                   // null until the pool is published
 if (!net) throw new Error("${where} pool not published yet");`;
   const charge = {
@@ -751,11 +766,13 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     network,
     mainnet: n.testnet
       ? `${where} (Base Sepolia): a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
-      : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
+      : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" || family === "ethereum" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
     install:
-      family === "base"
-        ? "npm i mppx @gloamtrade/mppx-gloam@^0.2.0 @gloamtrade/sdk@^0.3.0"
-        : "npm i mppx @gloamtrade/mppx-gloam@^0.1.0 @gloamtrade/sdk@^0.1.0",
+      family === "ethereum"
+        ? "npm i mppx @gloamtrade/mppx-gloam@^0.3.0 @gloamtrade/sdk@^0.4.0"
+        : family === "base"
+          ? "npm i mppx @gloamtrade/mppx-gloam@^0.2.0 @gloamtrade/sdk@^0.3.0"
+          : "npm i mppx @gloamtrade/mppx-gloam@^0.1.0 @gloamtrade/sdk@^0.1.0",
     ...(role !== "pay" ? { charge } : {}),
     ...(role !== "charge" ? { pay } : {}),
     ...MPP_TAIL,
