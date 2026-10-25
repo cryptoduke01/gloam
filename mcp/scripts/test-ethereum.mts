@@ -19,7 +19,7 @@ import type { Spend } from "../src/policy.js";
 
 MAINNET_POOLS[1] = { pool: "0x00000000000000000000000000000000000000e1", deployBlock: 23_000_000n };
 
-const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, approvalSteps } = await import("@gloamtrade/sdk");
+const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, approvalSteps, ethereumSepoliaPool } = await import("@gloamtrade/sdk");
 const nets = await import("../src/networks.js");
 const { checkSpend, loadPolicy, resolveAgent } = await import("../src/policy.js");
 
@@ -57,7 +57,8 @@ test("Ethereum is offered with the mainnets once its pool is in", () => {
 test("GLOAM_NETWORK takes ethereum-mainnet, the access key goes to Tempo mainnet, and GLOAM_RPC_URL_1 is read", () => {
   assert.equal(nets.defaultNetworkKey({ GLOAM_NETWORK: "ethereum-mainnet" }), "ethereum-mainnet");
   assert.equal(nets.tempoAccessNetwork({ GLOAM_NETWORK: "ethereum-mainnet" }).chainId, 4217);
-  assert.throws(() => nets.defaultNetworkKey({ GLOAM_NETWORK: "ethereum" }), /not a Gloam network/);
+  // "ethereum" is Ethereum Sepolia: refused by name until the SDK has its pool (test-ethereum-sepolia.mts).
+  if (ethereumSepoliaPool() === null) assert.throws(() => nets.defaultNetworkKey({ GLOAM_NETWORK: "ethereum" }), /no ethereum pool yet/);
   const src = readFileSync(new URL("../src/networks.ts", import.meta.url), "utf8");
   assert.match(src, /GLOAM_RPC_URL_\$\{chainId\}/, "any chain id, 1 included");
 });
@@ -77,7 +78,7 @@ test("a stale USDT allowance is cleared before the shield's approval", () => {
   assert.match(src, /approveNeedsReset\(net\.chainId, assetAddr\)/, "the shield tool checks it");
 });
 
-test("Ethereum in limits: name the network; PYUSD and Ethereum addresses are mainnet already", () => {
+test("Ethereum in limits: name the network; Ethereum's addresses are mainnet already, and PYUSD alone is Ethereum Sepolia's", () => {
   const real = resolveAgent(
     "bot",
     {
@@ -86,7 +87,7 @@ test("Ethereum in limits: name the network; PYUSD and Ethereum addresses are mai
         USDC: { network: "ethereum-mainnet", maxPerPayment: "5", maxPerDay: "10" },
         USDT: { network: "ethereum-mainnet", maxPerPayment: "5", maxPerDay: "10" },
         ETH: { network: "ethereum-mainnet", maxPerPayment: "0.01", maxPerDay: "0.05" },
-        PYUSD: { maxPerPayment: "3", maxPerDay: "6" },
+        PYUSD: { network: "ethereum-mainnet", maxPerPayment: "3", maxPerDay: "6" },
       },
     },
     "test"
@@ -95,7 +96,10 @@ test("Ethereum in limits: name the network; PYUSD and Ethereum addresses are mai
   assert.deepEqual([usdc!.address, usdc!.chainId], [ETHEREUM_USDC, 1]);
   assert.deepEqual([usdt!.address, usdt!.chainId], [ETHEREUM_USDT, 1]);
   assert.deepEqual([ethAsset!.address, ethAsset!.chainId, ethAsset!.decimals], [NATIVE_ASSET, 1, 18]);
-  assert.deepEqual([pyusd!.address, pyusd!.chainId], [ETHEREUM_PYUSD, 1], "PYUSD is on Ethereum only");
+  assert.deepEqual([pyusd!.address, pyusd!.chainId], [ETHEREUM_PYUSD, 1], "PYUSD on Ethereum mainnet when the entry names it");
+  // A symbol on both sides is the testnet's unless a network is named: PYUSD alone is Ethereum Sepolia's.
+  const bare = resolveAgent("bot", { recipients: "any", maxPerPayment: "5", maxPerDay: "10", assets: ["PYUSD"] }, "test");
+  assert.equal(bare.assets[0]!.chainId, 11155111);
   assert.equal(checkSpend(real, spend({}), [], NOW), null);
   assert.equal(checkSpend(real, spend({ amountWei: 6_000_000n }), [], NOW)?.code, "over_per_payment");
   // Ethereum's USDT entry does not open Base's USDT
@@ -113,7 +117,11 @@ test("Ethereum in limits: name the network; PYUSD and Ethereum addresses are mai
   const inline = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC,USDT,USDG,PYUSD,EURC,ETH", GLOAM_LIMIT_NETWORK: "ethereum-mainnet" }, read);
   assert.equal(inline.mode, "enforced");
   if (inline.mode === "enforced") assert.deepEqual(inline.policy.assets.map((a) => a.chainId), [1, 1, 1, 1, 1, 1]);
-  const bad = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "ethereum" }, read);
+  // "ethereum" is Ethereum Sepolia, the testnet; a name Gloam does not use is refused with the right one in the message.
+  const sepolia = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "ethereum" }, read);
+  if (sepolia.mode === "enforced") assert.deepEqual(sepolia.policy.assets.map((a) => a.chainId), [11155111]);
+  else assert.fail("GLOAM_LIMIT_NETWORK=ethereum names Ethereum Sepolia");
+  const bad = loadPolicy({ ...env, GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "eth" }, read);
   assert.equal(bad.mode, "invalid");
   if (bad.mode === "invalid") assert.match(bad.error, /ethereum-mainnet/);
 });

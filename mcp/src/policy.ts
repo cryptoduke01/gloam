@@ -16,13 +16,14 @@
  * a token. Amounts are compared in raw units using each asset's real decimals.
  *
  * Mainnet and testnet are different chains, so a limit names one of them. A
- * symbol on both (USDG, pathUSD, OUSD, and on Base USDC, EURC and ETH), or a
+ * symbol on both (USDG, pathUSD, OUSD, Base's USDC, EURC and ETH, and Ethereum
+ * Sepolia's PYUSD), or a
  * token address on both (pathUSD and OUSD sit at the same address on Tempo
  * mainnet and testnet; ETH is the zero address everywhere), means the TESTNET
  * asset unless the entry says "network": "robinhood-mainnet" / "tempo-mainnet" /
  * "base-mainnet" / "ethereum-mainnet". So a config written for testnet never
  * starts approving mainnet assets by itself. Mainnet-only symbols (USDC.e,
- * USDT0, GLOAM, USDT, PYUSD) and mainnet-only addresses (USDG on Robinhood
+ * USDT0, GLOAM, USDT) and mainnet-only addresses (USDG on Robinhood
  * Chain mainnet, USDC on Base, every Ethereum token) name the mainnet asset
  * directly. A symbol on two mainnets (USDT on Base and Ethereum) names the
  * first listed, Base; name "ethereum-mainnet" for Ethereum's.

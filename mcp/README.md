@@ -210,7 +210,7 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 
 ### Mainnet assets in limits
 
-Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving mainnet assets by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`, `PYUSD`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base, every Ethereum token) name the mainnet asset directly. `USDT` alone is Base's; add `"network": "ethereum-mainnet"` for Ethereum's.
+Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, Base's `USDC`, `EURC` and `ETH`, and `PYUSD`, which Ethereum Sepolia lists too), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving mainnet assets by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base, every Ethereum token) name the mainnet asset directly. `USDT` alone is Base's; add `"network": "ethereum-mainnet"` for Ethereum's.
 
 ```json
 {
