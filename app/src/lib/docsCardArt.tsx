@@ -798,3 +798,42 @@ export function GuardArt() {
     </div>
   );
 }
+
+/** Virtuals agents: the Gloam worker's functions, the private payment one in green. */
+export function WorkerArt() {
+  const names = ["gloam_private_balance", "gloam_add_privately", "gloam_pay_privately", "gloam_prove_funds"];
+  return (
+    <div
+      style={{
+        ...col,
+        gap: 4,
+        width: 330,
+        padding: "14px 10px",
+        borderRadius: 20,
+        border: `1.5px solid ${C.line}`,
+        background: C.surface,
+      }}
+    >
+      {names.map((n) => {
+        const on = n === "gloam_pay_privately";
+        return (
+          <div
+            key={n}
+            style={{
+              ...row,
+              justifyContent: "space-between",
+              height: 50,
+              padding: "0 14px",
+              borderRadius: 12,
+              border: `1.5px solid ${on ? C.tintLine : "transparent"}`,
+              background: on ? C.tintSoft : "transparent",
+            }}
+          >
+            <Text size={20} color={on ? C.tint : C.mute} style={{ whiteSpace: "nowrap" }}>{n}</Text>
+            {on && <Hidden n={3} d={7} gap={5} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

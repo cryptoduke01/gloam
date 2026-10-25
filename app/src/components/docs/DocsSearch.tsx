@@ -148,6 +148,22 @@ const PAGE_META: Record<string, PageMeta> = {
       "Honesty",
     ],
   },
+  "/docs/virtuals": {
+    description: "Private balances and payments for Virtuals agents, built on GAME, and private payouts on ACP.",
+    keywords: ["virtuals", "virtuals protocol", "game", "game framework", "game plugin", "acp", "agent commerce protocol", "erc-8183", "8183", "job", "escrow", "provider", "client", "evaluator", "payout", "private payout", "fund transfer", "wallet policy", "acp_only", "privy", "base", "robinhood", "usdc", "usdg", "agent", "plugin"],
+    headings: [
+      "Why agent commerce needs privacy",
+      "Install and set up",
+      "Functions",
+      "Limits",
+      "What the planner sees",
+      "Private payouts on ACP",
+      "What stays public",
+      "Wallet policies",
+      "Networks",
+      "FAQ",
+    ],
+  },
   "/docs/partners": {
     description: "Build on Gloam with an API key: relay payments, count deposits, check proofs and see your volume.",
     keywords: ["partner", "partners", "api", "api key", "rest", "http", "integrate", "wallet", "app", "fees", "revenue", "volume", "bearer", "v1", "portal", "live key", "test key", "charged"],
