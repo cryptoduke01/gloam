@@ -405,14 +405,29 @@ export function defaultNetworkKey(): NetworkKey {
 /** localStorage key the network selector persists to (mirror of NetworkProvider). */
 const ACTIVE_NETWORK_STORAGE_KEY = "gloam.network";
 
+/** The network NetworkProvider shows, once it has read this browser's choice. */
+let shownKey: NetworkKey | null = null;
+
+/**
+ * Called by NetworkProvider whenever the network it shows changes, so lib code
+ * (notes, the tree, proofs, the relay client) follows the page even where
+ * storage refuses the write. Several vaults share one address (Robinhood Chain,
+ * Tempo and Base Sepolia mainnet-pool deploys), so lib code on a different
+ * chain than the page would read another chain's notes under this one's name.
+ */
+export function setShownNetworkKey(key: NetworkKey): void {
+  shownKey = key;
+}
+
 /**
  * The active network for non-React code (lib functions that cannot use the
- * useNetwork hook). Reads the same localStorage key the selector writes, and
- * falls back to defaultNetworkKey(). SSR and blocked-storage safe. React
- * components should prefer useNetwork().
+ * useNetwork hook): the one NetworkProvider shows, else the localStorage key
+ * the selector writes, else defaultNetworkKey(). SSR and blocked-storage safe.
+ * React components should prefer useNetwork().
  */
 export function getActiveNetwork(): GloamNetwork {
   if (typeof window === "undefined") return NETWORKS[DEFAULT_NETWORK_KEY];
+  if (shownKey && isNetworkKey(shownKey) && isNetworkWritable(NETWORKS[shownKey])) return NETWORKS[shownKey];
   try {
     const v = window.localStorage.getItem(ACTIVE_NETWORK_STORAGE_KEY);
     if (isNetworkKey(v)) {

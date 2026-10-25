@@ -7,12 +7,18 @@
  */
 
 import { createPublicClient, http, type PublicClient } from "viem";
-import { getActiveNetwork } from "./networks";
+import { getActiveNetwork, type GloamNetwork } from "./networks";
 
 const cache = new Map<number, PublicClient>();
 
-export function getRhPublicClient(): PublicClient {
-  const net = getActiveNetwork();
+/**
+ * The read client for one network. Work that spans several reads (a sync, a
+ * claim, a payroll run) takes its network once and reads through this, so a
+ * network switch halfway through can't send the rest of its reads to another
+ * chain: several vaults share one address, and a read there answers for the
+ * wrong chain without failing.
+ */
+export function publicClientFor(net: Pick<GloamNetwork, "chainId" | "chain">): PublicClient {
   const existing = cache.get(net.chainId);
   if (existing) return existing;
   const client = createPublicClient({
@@ -26,4 +32,8 @@ export function getRhPublicClient(): PublicClient {
   });
   cache.set(net.chainId, client);
   return client;
+}
+
+export function getRhPublicClient(): PublicClient {
+  return publicClientFor(getActiveNetwork());
 }
