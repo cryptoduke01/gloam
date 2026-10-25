@@ -1,7 +1,7 @@
 # Production gate (contracts + circuits)
 
-Testnet Poseidon pools are live with **dev ceremony** keys, as the free practice
-network. The mainnet deploy uses the multi-party ceremony's final keys and checks them
+Testnet Poseidon pools are live with **dev ceremony** keys.
+The mainnet deploy uses the multi-party ceremony's final keys and checks them
 on chain. Mainnet launches Wednesday 21 October 2026, 13:00 UTC, as a beta with
 deposit limits, on Robinhood Chain (`4663`) and Tempo (`4217`).
 
@@ -95,6 +95,6 @@ Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 ## Explicit non-claims
 
 - No external audit yet: reviewed internally, an external audit is planned
-- Beta software handling real money: deposit limits on, one owner wallet until the multisig
+- Mainnet is beta software: deposit limits on, one owner wallet until the multisig
 - Private trading is not on mainnet (`ShieldPoolPayments` has no swap code)
-- Dev zkeys must not be used for real money
+- Dev zkeys must not be used on mainnet

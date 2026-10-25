@@ -3,7 +3,7 @@
   "network": "Base Sepolia",
   "chainId": 84532,
   "testnet": true,
-  "note": "The practice network for Base: the mainnet contract (ShieldPoolPayments) on the ceremony's final keys, with the same beta deposit limits and cash-out fee as Base mainnet, on test funds. Deployed with script/DeployBaseSepolia.s.sol (DEPLOY-BASE.md). The deployer started at nonce 0, so every address matches Robinhood Chain and Tempo mainnet. Every contract below except PoseidonT3 (raw circomlibjs bytecode, code hash checked instead) is an exact match on Sourcify.",
+  "note": "Base's testnet: the mainnet contract (ShieldPoolPayments) on the ceremony's final keys, with the same beta deposit limits and cash-out fee as Base mainnet. Deployed with script/DeployBaseSepolia.s.sol (DEPLOY-BASE.md). The deployer started at nonce 0, so every address matches Robinhood Chain and Tempo mainnet. Every contract below except PoseidonT3 (raw circomlibjs bytecode, code hash checked instead) is an exact match on Sourcify.",
   "ceremony": "final (13 contributors, drand 6561386, release ceremony-final)",
   "deployer": "0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411",
   "owner": "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8",

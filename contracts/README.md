@@ -1,6 +1,6 @@
 # Gloam Contracts
 
-Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, with `ShieldPoolPayments` on the trusted setup's final keys, and on the testnets (Robinhood Chain `46630`, Tempo `42431`) as the free practice network, on dev keys. The mainnet deploy (`script/DeployRobinhoodMainnet.s.sol`, `script/DeployTempoMainnet.s.sol`) uses the final keys in `src/verifiers/final` and checks them on chain before it creates the pool; see [`PRODUCTION.md`](./PRODUCTION.md). Mainnet is beta software handling real money: reviewed internally (20 October 2026, no Critical or High findings open), external audit planned.
+Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, with `ShieldPoolPayments` on the trusted setup's final keys, and on the testnets (Robinhood Chain `46630`, Tempo `42431`) on dev keys. The mainnet deploy (`script/DeployRobinhoodMainnet.s.sol`, `script/DeployTempoMainnet.s.sol`) uses the final keys in `src/verifiers/final` and checks them on chain before it creates the pool; see [`PRODUCTION.md`](./PRODUCTION.md). Mainnet is beta software: reviewed internally (20 October 2026, no Critical or High findings open), external audit planned.
 
 ## Do we need contracts?
 
@@ -22,7 +22,7 @@ Live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) in beta, wit
 - Deposits and private transfers are free; `unshield` keeps 0.25% (`withdrawFeeBps = 25`) for the fee recipient. Withdrawals and private transfers are never limited. Raising a limit, listing an asset or raising the fee takes the 3-day timelock; lowering a limit or the fee is instant.
 - No payment-memo board on mainnet yet. Verifier addresses: read `verifier()` and `shieldVerifier()` on the pool.
 
-## Testnet (free practice network, dev keys)
+## Testnet (dev keys)
 
 | Network | Vault `ShieldPoolPoseidon` | Pay memo board |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ Full addresses, verifiers and superseded pools: [deployments/poseidon-testnet.js
 
 ## Ready to deploy: Base (not deployed)
 
-Base Sepolia (`84532`, practice network first) and Base mainnet (`8453`) run the same `ShieldPoolPayments` deploy as the mainnets, on the final keys: `script/DeployBaseSepolia.s.sol` and `script/DeployBaseMainnet.s.sol`, both through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, EURC and ETH on both, plus bridged USDT on Base mainnet; 500 / 25,000 per stablecoin and 0.2 / 10 ETH. Nothing is deployed yet; the runbook is [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
+Base Sepolia (`84532`, the testnet, first) and Base mainnet (`8453`) run the same `ShieldPoolPayments` deploy as the mainnets, on the final keys: `script/DeployBaseSepolia.s.sol` and `script/DeployBaseMainnet.s.sol`, both through `script/MainnetDeploy.sol` with native ETH allowed. Assets: USDC, EURC and ETH on both, plus bridged USDT on Base mainnet; 500 / 25,000 per stablecoin and 0.2 / 10 ETH. Nothing is deployed yet; the runbook is [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
 | Feature | Status |
 | --- | --- |
@@ -73,4 +73,4 @@ forge script script/SeedVaultInventory.s.sol \
 
 - No mock “private success” in the app.
 - Public app paths work without this package.
-- Dev ceremony zkeys on the testnets only; mainnet runs on the final keys. Never use dev keys for real money.
+- Dev ceremony zkeys on the testnets only; mainnet runs on the final keys. Never use dev keys on mainnet.

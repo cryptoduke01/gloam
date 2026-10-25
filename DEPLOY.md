@@ -20,7 +20,7 @@ If Root Directory is the repo root instead of `app`, Vercel looks for `.next` at
 | Path | Content |
 | --- | --- |
 | `/` | Landing |
-| `/app` | The product: mainnet and the free practice testnet, switched in-app |
+| `/app` | The product: mainnet and testnet, switched in-app |
 | `/app/trade?path=sealed` | Private trade (switched off on every network) |
 | `/pitch` | Pitch deck |
 | `/docs` | Docs overview (Arrow-style) |
@@ -49,7 +49,7 @@ Mainnet pools are not env vars. After each mainnet deploy (runbook: [`contracts/
 | Tempo mainnet `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` | `45172561` |
 | Base mainnet `8453` | not deployed yet | |
 
-Base Sepolia (`84532`), Base's practice network, runs the mainnet pool too, so its pool is in `BASE_SEPOLIA_POOL` in the same file: `0x39e28cde55cab798874746ac52cb4b5cc99a0194` at block `49802958` (24 October 2026). Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
+Base Sepolia (`84532`), Base's testnet, runs the mainnet pool too, so its pool is in `BASE_SEPOLIA_POOL` in the same file: `0x39e28cde55cab798874746ac52cb4b5cc99a0194` at block `49802958` (24 October 2026). Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
 | Variable (server only) | Value |
 | --- | --- |

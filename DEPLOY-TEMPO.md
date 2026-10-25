@@ -134,7 +134,7 @@ and its deploy block in `MAINNET_POOLS` in `app/src/lib/mainnet.ts` (the app's
   Mainnet uses `DeployTempoMainnet.s.sol` above, on the final keys.
 - Enable sealedSwap. It stays off until the H1 confidential-reserve work lands.
 - Ship a compliance-enforcing stablecoin without the issuer-viewing-key path.
-- Reuse the dev-ceremony keys for any real value.
+- Reuse the dev-ceremony keys on mainnet.
 
 ## Notes
 

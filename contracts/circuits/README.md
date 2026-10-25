@@ -2,7 +2,7 @@
 
 **Proof system:** Groth16 on BN254. Circuits are written in Circom 2.1.6 (`pragma circom 2.1.6` in every file) with circomlib 2.0.5, and proved and verified with snarkjs 0.7.5, in the browser and in Node. Pool circuits are checked on-chain by snarkjs-exported Solidity verifiers; the proofs a holder shares with others are checked off-chain.
 
-**Trusted setup: two key sets.** The testnet keys come from a 2^16 Powers of Tau file and a single-contributor phase-2 contribution with throwaway entropy: fine for testnet, never for real money, since whoever held that entropy could forge proofs. Mainnet uses the multi-party ceremony's final keys (13 contributors, beacon drand round 6561386, release `ceremony-final`; see [`../ceremony`](../ceremony)): `../src/verifiers/final` on chain and `app/public/circuits/final` in the app, hash-pinned. `scripts/gen-key-fixtures.mjs` makes real proofs with both sets (`../script/KeyCheckProofs.sol`), and the mainnet deploy refuses to create a pool unless its verifiers accept the final-key proofs and reject the dev ones (audit M-2, pre-mainnet GATE 2).
+**Trusted setup: two key sets.** The testnet keys come from a 2^16 Powers of Tau file and a single-contributor phase-2 contribution with throwaway entropy: fine for testnet, never for mainnet, since whoever held that entropy could forge proofs. Mainnet uses the multi-party ceremony's final keys (13 contributors, beacon drand round 6561386, release `ceremony-final`; see [`../ceremony`](../ceremony)): `../src/verifiers/final` on chain and `app/public/circuits/final` in the app, hash-pinned. `scripts/gen-key-fixtures.mjs` makes real proofs with both sets (`../script/KeyCheckProofs.sol`), and the mainnet deploy refuses to create a pool unless its verifiers accept the final-key proofs and reject the dev ones (audit M-2, pre-mainnet GATE 2).
 
 **Do not deploy a mock verifier that always returns true on a funded pool.**
 
@@ -142,6 +142,6 @@ NEXT_PUBLIC_SHIELD_DEPLOY_BLOCK=<deploy block>
 
 ## Safety
 
-- Two key sets: the dev-ceremony keys are for the testnets only (never present them as production or use them for real money); mainnet uses the ceremony's final keys.
+- Two key sets: the dev-ceremony keys are for the testnets only (never present them as production or use them on mainnet); mainnet uses the ceremony's final keys.
 - Unit tests may use `MockVerifier`; production never does.
 - Every regeneration of a proving key invalidates proofs made with the previous key; for the pool circuits the on-chain verifier must also be redeployed and switched through the 3-day timelock.

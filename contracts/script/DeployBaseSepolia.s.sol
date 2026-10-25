@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {MainnetDeploy} from "./MainnetDeploy.sol";
 
 /**
- * Gloam on Base Sepolia (chainId 84532), the practice network for Base: the
+ * Gloam on Base Sepolia (chainId 84532), Base's testnet: the
  * same payments pool, final keys, beta deposit limits and cash-out fee as Base
  * mainnet, on test funds. The deploy itself is MainnetDeploy, shared with
  * Robinhood Chain and Tempo, so a dry run here is a rehearsal of the mainnet one.
