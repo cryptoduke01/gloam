@@ -1,6 +1,6 @@
 # `@gloam/app`
 
-Product app → **https://app.gloam.trade**
+Product app → **https://gloam.trade/app**
 
 ```bash
 pnpm dev    # from repo root: pnpm dev:app

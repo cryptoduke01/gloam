@@ -55,7 +55,7 @@ Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) sin
 | Keys | Final keys from the trusted setup | Final keys from the trusted setup |
 | Private swaps | USDG and $GLOAM on Uniswap v4 (`GloamVaultSwapV4`). Router v2 (`GloamVaultSwapV4b`, any allowlisted pool, ETH via WETH) is deployed and opens in the app once the queued deposit limits for 28 more tokens execute on 26 October | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) |
 
-- **Fees.** Deposits and private payments are free. Cashing out costs 0.25%. A private swap pays the same 0.25% on the amount swapped, plus a price buffer (0.5% on Robinhood Chain, 0.1% on Tempo) whose unused part goes to the treasury. Once fees move to their own treasury wallet (a change queued behind the public timelock), half of them buy back $GLOAM, half of that burned and half kept.
+- **Fees.** Deposits and private payments are free. Cashing out costs 0.25%. A private swap pays the same 0.25% on the amount swapped, plus a price buffer (0.5% on Robinhood Chain, 0.1% on Tempo) whose unused part goes to the treasury. Since 24 October fees go to their own treasury wallet (`0xB390…30B8`), and half of them are set to buy back $GLOAM, half of that burned and half kept.
 - **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin; $GLOAM 25,000 per deposit and 250,000 in total. Cash outs and private payments are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.
 - **Keys.** Mainnet proofs use the final keys from the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`).
 - **Partners.** [Raeto](https://raeto.cc) funds AI agents from a private Gloam balance, and [Agent Wormhole](https://agentwormhole.com) checks an agent's payment request before it pays (MCP 0.4.0, optional).
@@ -132,9 +132,9 @@ Ethereum mainnet (`1`) is the fourth chain, on the same mainnet vault (`ShieldPo
 
 Runbook: [`DEPLOY-ETHEREUM.md`](./DEPLOY-ETHEREUM.md).
 
-## Ethereum Sepolia: next testnet
+## Ethereum Sepolia: testnet live
 
-Ethereum Sepolia (`11155111`) runs the mainnet vault the same way as Base Sepolia: `ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee. It takes test USDC and EURC (Circle), test USDG and PYUSD (Paxos), and ETH, each stablecoin at 500 per deposit and 25,000 in total, ETH at 0.2 and 10. It is ready to deploy and not deployed yet: the app, the SDK and the MCP server show it once `ETHEREUM_SEPOLIA_POOL` is filled in. Runbook: [`DEPLOY-ETHEREUM-SEPOLIA.md`](./DEPLOY-ETHEREUM-SEPOLIA.md).
+Ethereum Sepolia (`11155111`) runs the mainnet vault the same way as Base Sepolia: `ShieldPoolPayments` on the final keys, beta deposit limits, the 0.25% cash-out fee. It takes test USDC and EURC (Circle), test USDG and PYUSD (Paxos), and ETH, each stablecoin at 500 per deposit and 25,000 in total, ETH at 0.2 and 10. It is live since 25 October 2026: vault `0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef` (deploy block `11992914`) and payment-message board `0x8699D015087dE6D25d55d5ceB63b34b9d773f135` (block `11992942`), in the app now and in the SDK and the MCP server from their next release. Addresses: [`contracts/deployments/ethereum-sepolia.json`](./contracts/deployments/ethereum-sepolia.json). Runbook: [`DEPLOY-ETHEREUM-SEPOLIA.md`](./DEPLOY-ETHEREUM-SEPOLIA.md).
 
 ## Trust, verified
 
@@ -145,7 +145,7 @@ Privacy has to be checkable and correct before mainnet. Mainnet is beta software
 - **No admin withdraw, timelocked rule changes.** There is no function the team can call to take pooled funds, and notes leave only through an unshield proof. The mainnet pools end setup in the same deploy run that creates them (`endSetup()`), so a new verifier, a raised deposit limit, a new asset or a higher fee must be queued on-chain and waits a public 3-day delay before it can run (`queueChange`). Lowering a limit or closing deposits works at once. Verify `setupMode() == false` on the pools listed below.
 - **Selective disclosure, not a mixer.** Prove balance or a payment to a counterparty or auditor without revealing everything. The right posture for a regulated-sponsor chain.
 - **Fast vault sync, same privacy.** The app loads the vault's public leaf list (every commitment, in order) from `/api/vault-leaves` in one request instead of walking the chain, rebuilds the Merkle tree in the browser, and uses it only if the root matches the pool's on-chain root; otherwise it reads the chain itself. The request names only the network and is the same for everyone, so the server never learns which notes are yours.
-- **Honest gates.** Mainnet runs on the final keys from the multi-party trusted setup (13 contributors, drand round 6561386, release `ceremony-final`): the deploy script refuses to create a pool unless the verifiers on chain accept final-key proofs and reject dev-key ones. At launch the owner wallet also receives cash-out fees; a move to a dedicated treasury wallet is queued behind the timelock, and a multisig is planned. The Gloam team runs the relayer: it only submits already-proven transactions and pays gas, and cannot move or redirect money. Note secrets and the receive key are encrypted at rest (AES-GCM under a non-extractable device key, or wrapped by a passkey PRF), audit M-1. A payment someone sends you is moved into a fresh note only you know as you claim it, so the sender cannot spend it back.
+- **Honest gates.** Mainnet runs on the final keys from the multi-party trusted setup (13 contributors, drand round 6561386, release `ceremony-final`): the deploy script refuses to create a pool unless the verifiers on chain accept final-key proofs and reject dev-key ones. Cash-out fees go to a dedicated treasury wallet since 24 October (a change that waited out the timelock); the owner is one wallet, and a multisig is planned. The Gloam team runs the relayer: it only submits already-proven transactions and pays gas, and cannot move or redirect money. Note secrets and the receive key are encrypted at rest (AES-GCM under a non-extractable device key, or wrapped by a passkey PRF), audit M-1. A payment someone sends you is moved into a fresh note only you know as you claim it, so the sender cannot spend it back.
 
 ## Using the SDK
 
@@ -195,12 +195,12 @@ gloam/
 | Payments vault `ShieldPoolPayments` (payments only, no admin withdraw, 3-day timelock on rule changes) | [`0x39e28cde55cab798874746ac52cb4b5cc99a0194`](https://robin.etherscan.io/address/0x39e28cde55cab798874746ac52cb4b5cc99a0194) |
 | Deploy block | `94194599` |
 | `PoseidonT3` | [`0x1a32…9Cb4`](https://robin.etherscan.io/address/0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4) |
-| Owner and treasury (one wallet at launch; a multisig is planned) | [`0x76b7…D4D8`](https://robin.etherscan.io/address/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8) |
+| Owner (one wallet; a multisig is planned) | [`0x76b7…D4D8`](https://robin.etherscan.io/address/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8) |
 | Relayer (run by the Gloam team; submits proven transactions and pays gas, cannot move or redirect money) | [`0xb1E9…512e`](https://robin.etherscan.io/address/0xb1E994586E62994648a0b866BF33F2EDd942512e) |
 | Private swap router `GloamVaultSwapV4` (Uniswap v4, three pools fixed at deploy; no owner, admin or upgrade) | [`0x34AB…c52d`](https://robin.etherscan.io/address/0x34AB06208586A737Bf1607fa996Bc9162271c52d) |
 | Private swap router v2 `GloamVaultSwapV4b` (allowlisted Uniswap v4 pools, ETH via WETH, up to 3 hops; pools added only after a 3-day delay; opens in the app once the queued deposit limits execute) | [`0xfCa1…F2DC`](https://robin.etherscan.io/address/0xfCa1887e77f738ef9C5751974b3f3873d029F2DC) |
 | Payment board `GloamPayMemo` (encrypted heads-ups; no owner, never logs the poster) | [`0x01B3…4598`](https://robin.etherscan.io/address/0x01B3172d9900Cb26d57E986429b9b23854c74598) |
-| Swap treasury (where a swap's unused input goes, fixed in the router) | [`0xB390…30B8`](https://robin.etherscan.io/address/0xB3900ac9350903218e4c7597bAb0f008F01B30B8) |
+| Treasury (cash-out fees since 24 October, and where a swap's unused input goes, fixed in the router) | [`0xB390…30B8`](https://robin.etherscan.io/address/0xB3900ac9350903218e4c7597bAb0f008F01B30B8) |
 
 | Asset | Address | Beta limit (per deposit / total) |
 | --- | --- | --- |
@@ -214,11 +214,11 @@ gloam/
 | Payments vault `ShieldPoolPayments` (payments only, no admin withdraw, 3-day timelock on rule changes) | [`0x39e28cde55cab798874746ac52cb4b5cc99a0194`](https://explore.tempo.xyz/address/0x39e28cde55cab798874746ac52cb4b5cc99a0194) |
 | Deploy block | `45172561` |
 | `PoseidonT3` | [`0x1a32…9Cb4`](https://explore.tempo.xyz/address/0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4) |
-| Owner and treasury (one wallet at launch; a multisig is planned) | [`0x76b7…D4D8`](https://explore.tempo.xyz/address/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8) |
+| Owner (one wallet; a multisig is planned) | [`0x76b7…D4D8`](https://explore.tempo.xyz/address/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8) |
 | Relayer (run by the Gloam team; submits proven transactions and pays gas, cannot move or redirect money) | [`0xb1E9…512e`](https://explore.tempo.xyz/address/0xb1E994586E62994648a0b866BF33F2EDd942512e) |
 | Private swap router `GloamVaultSwapTempo` (Tempo's stablecoin exchange; no owner, admin or upgrade) | [`0xfCa1…F2DC`](https://explore.tempo.xyz/address/0xfCa1887e77f738ef9C5751974b3f3873d029F2DC) |
 | Payment board `GloamPayMemo` (encrypted heads-ups; no owner, never logs the poster) | [`0x342E…C1c4`](https://explore.tempo.xyz/address/0x342E3745967FDB4223902E196Ceb792c15d8C1c4) |
-| Swap treasury (where a swap's unused input goes, fixed in the router) | [`0xB390…30B8`](https://explore.tempo.xyz/address/0xB3900ac9350903218e4c7597bAb0f008F01B30B8) |
+| Treasury (cash-out fees since 24 October, and where a swap's unused input goes, fixed in the router) | [`0xB390…30B8`](https://explore.tempo.xyz/address/0xB3900ac9350903218e4c7597bAb0f008F01B30B8) |
 
 | Asset (TIP-20, 6 decimals) | Address | Beta limit (per deposit / total) |
 | --- | --- | --- |
@@ -244,7 +244,7 @@ Run the reference app from `app/` (`next dev`), or open [gloam.trade/app](https:
 
 ## Testnet
 
-Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as testnets: the same app (switch networks in the app), with test funds from faucets. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets). Base Sepolia (`84532`) is a testnet too (see [Base](#base-testnet-live-mainnet-next)); unlike the other two it runs the mainnet vault and the final keys, with test USDC and EURC from Circle's faucet.
+Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) stay up as testnets: the same app (switch networks in the app), with test funds from faucets. Get testnet ETH and stock tokens from [faucet.testnet.chain.robinhood.com](https://faucet.testnet.chain.robinhood.com/), and test stablecoins (PathUSD and friends) from the Tempo faucet (`tempo_fundAddress`). The testnets run on single-contributor dev keys, fine for test funds only. On the Robinhood Chain testnet you can also shield ETH and hold and send stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) privately; neither is a mainnet pool asset. The SDK and MCP default to the Robinhood Chain testnet for backward compatibility (`GLOAM_NETWORKS.robinhood` and `.tempo` are the testnets). Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too (see [Base](#base-testnet-live-mainnet-next) and [Ethereum Sepolia](#ethereum-sepolia-testnet-live)); unlike the other two they run the mainnet vault and the final keys, with test stablecoins from Circle's faucet (and Paxos's on Ethereum Sepolia).
 
 **Contracts: Robinhood Chain testnet `46630`**
 

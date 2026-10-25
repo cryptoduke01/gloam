@@ -532,6 +532,12 @@ about Base mainnet check the real vault and memo board once `MAINNET_POOLS[8453]
 If you deploy Ethereum the same day, run its step 7 in the same tree and make this one
 PR for both (add `contracts/deployments/ethereum-mainnet.json` too).
 
+The repo's Markdown does not switch on by itself. In the same PR, say Base mainnet is live
+with its vault, block and memo board where these say it is next or not deployed: `README.md`
+(the opening line, the Base section), `AGENTS.md`, `DEPLOY.md` (the mainnet table),
+`SECURITY.md` (the opening line), `contracts/README.md`, `contracts/ARCHITECTURE.md` and
+`contracts/PRODUCTION.md` (tick the Base mainnet box).
+
 Before the PR is merged: set `GLOAM_RPC_URL_8453` on Vercel to a private Base RPC
 (server env, never `NEXT_PUBLIC_`; Base's own RPC refuses `eth_getLogs`), and check the
 relayer holds its 0.005 ETH. Later, when you want them: publish `@gloamtrade/sdk` with

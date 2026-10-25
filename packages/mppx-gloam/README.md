@@ -118,7 +118,7 @@ Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, o
 
 Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH) is refused the same way until the SDK has its pool. Its testnet is Ethereum Sepolia, below.
 
-Ethereum Sepolia: `"ethereum"` (`11155111`, test USDC by default, also USDG, PYUSD, EURC and ETH, on the final keys) is known to 0.3.0 and refused with a plain error until the SDK it is built with has its pool.
+Ethereum Sepolia: `"ethereum"` (`11155111`, test USDC by default, also USDG, PYUSD, EURC and ETH, on the final keys) is known to 0.3.0 and works with SDK 0.4.0, which has its pool (deployed 25 October 2026). Built with an older SDK it is refused with a plain error.
 
 ### The chain reader must say which chain it reads
 
