@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CSP_CONNECT_SOURCES, CSP_REPORT_ONLY } from "../csp.config.mjs";
 import { ORIGIN_CHAINS } from "../src/lib/originChains";
+import { getNetwork, type NetworkKey } from "../src/lib/networks";
 
 let n = 0;
 function allowed(url: string): boolean {
@@ -28,6 +29,18 @@ function allowed(url: string): boolean {
 for (const c of ORIGIN_CHAINS) {
   for (const url of [...c.rpcUrls.default.http, ...(c.rpcUrls.default.webSocket ?? [])]) {
     assert.ok(allowed(url), `${c.name} RPC ${url} is in connect-src`);
+    n++;
+  }
+}
+
+// every Gloam network's own RPCs, the hidden ones too (a mainnet waiting for its
+// pool): lib/wagmi wires some from the chain object, http(chain.rpcUrls...),
+// which the string check below cannot see
+const KEYS: NetworkKey[] = ["robinhood", "tempo", "base", "robinhood-mainnet", "tempo-mainnet", "base-mainnet"];
+for (const key of KEYS) {
+  const c = getNetwork(key).chain;
+  for (const url of c.rpcUrls.default.http) {
+    assert.ok(allowed(url), `${key} RPC ${url} is in connect-src`);
     n++;
   }
 }

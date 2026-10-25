@@ -17,6 +17,9 @@ const GLOAM_RPCS = [
   "https://rpc.tempo.xyz",
   "https://rpc.moderato.tempo.xyz",
   "https://sponsor.moderato.tempo.xyz",
+  "https://base-sepolia-rpc.publicnode.com",
+  "https://sepolia.base.org",
+  "https://base-rpc.publicnode.com",
 ];
 
 /** Default RPCs of the chains a private bridge order can be paid from (lib/originChains). */

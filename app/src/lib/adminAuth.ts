@@ -5,12 +5,14 @@ import { cookies } from "next/headers";
 const COOKIE = "gloam_admin";
 const MAX_AGE_SEC = 60 * 60 * 24 * 7; // 7 days
 
+/**
+ * The admin code, from ADMIN_ACCESS_CODE only, in development too. A built-in
+ * code is public in the repo: it opened any dev server reachable from outside,
+ * and since sessions are signed with the code, anyone could sign their own.
+ * Locally, put a code in app/.env.local.
+ */
 function secret(): string | null {
-  const a = process.env.ADMIN_ACCESS_CODE?.trim();
-  if (a) return a;
-  // Dev fallback so local works; production must set ADMIN_ACCESS_CODE
-  if (process.env.NODE_ENV !== "production") return "gloam-dev-admin";
-  return null;
+  return process.env.ADMIN_ACCESS_CODE?.trim() || null;
 }
 
 function sign(payload: string): string {
