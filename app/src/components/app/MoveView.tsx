@@ -151,6 +151,7 @@ import { canSwapAfterClaim, takeFirstClaim } from "@/lib/afterClaim";
 import { TokenLogo } from "./TokenLogo";
 import { AddTokenToWallet } from "./AddTokenToWallet";
 import { checkSweep, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { moveModeFromParam, searchWithMoveMode } from "@/lib/vaultNav";
 
 /** How securing a claim ended (lib/claimSweep), or "error" when it threw. */
 type SweepStatus = SweepResult["status"] | "error";
@@ -189,10 +190,7 @@ export function MoveView() {
 
   // ?mode=receive|cashout opens a specific action (e.g. "Cash out" links).
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<Mode>(() => {
-    const m = searchParams.get("mode");
-    return m === "receive" || m === "cashout" ? m : "send";
-  });
+  const [mode, setMode] = useState<Mode>(() => moveModeFromParam(searchParams.get("mode")));
   // Payment request links (lib/paymentRequest, mode=pay) open Send with the
   // recipient, amount and token filled in. Read once; the payer still sends.
   const [request, setRequest] = useState<PaymentRequest | null>(() =>
@@ -1897,6 +1895,32 @@ export function MoveView() {
     setImportOk(null);
     setClaimPreview(null);
   }
+
+  // The URL and the mode follow each other. The app nav's Pay privately,
+  // Receive and Cash out links only change ?mode= on a page already showing
+  // Pay, so a new ?mode= switches the mode as a tab click would; and a mode
+  // picked here, or by a claim or request link, is written back (fragment
+  // kept) so the nav and a reload show the same thing.
+  const urlMode = moveModeFromParam(searchParams.get("mode"));
+  const modeNow = useRef(mode);
+  useEffect(() => {
+    modeNow.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    if (urlMode === modeNow.current) return;
+    setMode(urlMode);
+    setError(null);
+    setStatus(null);
+    setImportOk(null);
+    setClaimPreview(null);
+  }, [urlMode]);
+  useEffect(() => {
+    const next = searchWithMoveMode(window.location.search, mode);
+    if (next === null) return;
+    // No state object: Next skips a replaceState that carries its own state, and
+    // then the nav's useSearchParams would not see the new mode.
+    window.history.replaceState(null, "", window.location.pathname + next + window.location.hash);
+  }, [mode]);
 
   /**
    * An action picked after a claim (AfterClaimNext): open that part of Pay with
