@@ -8,7 +8,7 @@
  */
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { faucetFor } from "@/lib/faucet";
-import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, type NetworkKey } from "@/lib/networks";
+import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, networkName, type NetworkKey } from "@/lib/networks";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
 import { vaultSwapRouter } from "@/lib/vaultSwap";
 import { formatGwei, maxGasPriceWei } from "@/lib/relay/gasCeiling";
@@ -65,12 +65,15 @@ function optString(args: Args, key: string, max: number): string | undefined {
 
 /** Base Sepolia is a choice once its pool is filled in, like a mainnet. */
 const BASE_TESTNET = NETWORK_KEYS.includes("base");
+/** So is Ethereum Sepolia. */
+const ETHEREUM_TESTNET = NETWORK_KEYS.includes("ethereum");
 
 /** The network names a caller may pass: the testnets, then each mainnet once its pool is in. */
 const NETWORK_CHOICES: NetworkKey[] = [
   "tempo",
   "robinhood",
   ...(BASE_TESTNET ? (["base"] as const) : []),
+  ...(ETHEREUM_TESTNET ? (["ethereum"] as const) : []),
   ...NETWORK_KEYS.filter((k) => !getNetwork(k).testnet),
 ];
 
@@ -98,9 +101,12 @@ function optEnum<T extends string>(args: Args, key: string, values: readonly T[]
   return v as T;
 }
 
-const TESTNET_PROP_TEXT = BASE_TESTNET
-  ? 'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments), "robinhood" (Robinhood Chain testnet) or "base" (Base Sepolia testnet).'
-  : 'Gloam network: "tempo" (Tempo Moderato testnet, private stablecoin payments) or "robinhood" (Robinhood Chain testnet).';
+const TESTNET_PROP_TEXT = `Gloam network: ${andList([
+  '"tempo" (Tempo Moderato testnet, private stablecoin payments)',
+  '"robinhood" (Robinhood Chain testnet)',
+  ...(BASE_TESTNET ? ['"base" (Base Sepolia testnet)'] : []),
+  ...(ETHEREUM_TESTNET ? ['"ethereum" (Ethereum Sepolia testnet)'] : []),
+]).replace(/ and (?=[^,]*$)/, " or ")}.`;
 
 const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet: USDC.e, pathUSD, USDT0, OUSD)',
@@ -114,6 +120,7 @@ const TESTNET_CHOICES_TEXT = andList([
   '"tempo" (Tempo Moderato)',
   '"robinhood" (Robinhood Chain testnet)',
   ...(BASE_TESTNET ? ['"base" (Base Sepolia)'] : []),
+  ...(ETHEREUM_TESTNET ? ['"ethereum" (Ethereum Sepolia)'] : []),
 ]).replace(/ and (?=[^,]*$)/, " or ");
 
 const NETWORK_PROP = {
@@ -137,9 +144,13 @@ const ETHEREUM_LINE = NETWORK_KEYS.includes("ethereum-mainnet")
   : "";
 
 /** Base Sepolia, when it is in: a testnet on the mainnet vault and keys. */
-const BASE_TESTNET_LINE = BASE_TESTNET
-  ? " Base Sepolia (84532) is a testnet too, but runs the mainnet vault with the final keys, beta limits and the cash-out fee."
-  : "";
+const BASE_TESTNET_LINE =
+  (BASE_TESTNET
+    ? " Base Sepolia (84532) is a testnet too, but runs the mainnet vault with the final keys, beta limits and the cash-out fee."
+    : "") +
+  (ETHEREUM_TESTNET
+    ? " Ethereum Sepolia (11155111) is a testnet on the mainnet vault as well, with the final keys, beta limits and the cash-out fee."
+    : "");
 
 /** Where Gloam runs, as one honest line. Testnets only until a mainnet pool is filled in. */
 const STATUS = MAINNET_ENABLED
@@ -577,7 +588,8 @@ function mppHowTo(args: Args): CallToolResult {
   // The SDK's GLOAM_NETWORKS names the testnet vaults by chain ("tempo", "robinhood").
   const family = n.family;
   // A mainnet gets the SDK 0.1.0 snippets: mainnetNetwork() for its vault and the final keys for
-  // proofs. So does Base Sepolia, a testnet on the mainnet vault and keys (testnetNetwork("base")).
+  // proofs. So do Base Sepolia and Ethereum Sepolia, testnets on the mainnet vault and keys
+  // (testnetNetwork("base"), testnetNetwork("ethereum")).
   if (!n.testnet || n.paymentsPool) return mppHowToMainnet(role, network);
   const currencyLine =
     family === "tempo"
@@ -675,14 +687,15 @@ const MPP_TAIL = {
  * keys through circuitArtifactUrls(), never the testnet's development keys.
  * Base needs SDK 0.3.0, and Base Sepolia (a testnet on the mainnet vault and
  * keys) gets the same snippets through testnetNetwork("base"). Ethereum needs
- * SDK 0.4.0 and has no testnet.
+ * SDK 0.4.0, and Ethereum Sepolia gets its snippets the same way through
+ * testnetNetwork("ethereum").
  */
 function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): CallToolResult {
   const n = getNetwork(network);
   const family = n.family;
   const name = n.label;
-  // "Base testnet" for Base Sepolia, "Tempo mainnet" and so on for the mainnets.
-  const where = n.testnet ? `${name} testnet` : `${name} mainnet`;
+  // "Base testnet" for Base Sepolia, "Ethereum Sepolia", "Tempo mainnet" and so on for the mainnets.
+  const where = n.testnet ? networkName(n) : `${name} mainnet`;
   const asset =
     family === "tempo"
       ? { import: "TEMPO_USDCE", line: "      currency: TEMPO_USDCE, decimals: 6,                 // or TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD" }
@@ -691,7 +704,9 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
           ? { import: "BASE_SEPOLIA_USDC", line: "      currency: BASE_SEPOLIA_USDC, decimals: 6,           // or BASE_SEPOLIA_EURC" }
           : { import: "BASE_USDC", line: "      currency: BASE_USDC, decimals: 6,                   // or BASE_EURC, BASE_USDT" }
         : family === "ethereum"
-          ? { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
+          ? n.testnet
+            ? { import: "ETHEREUM_SEPOLIA_USDC", line: "      currency: ETHEREUM_SEPOLIA_USDC, decimals: 6,       // or ETHEREUM_SEPOLIA_PYUSD, _USDG, _EURC" }
+            : { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
           : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
   const sdkVersion = family === "ethereum" ? "0.4.0" : family === "base" ? "0.3.0" : "0.1.0";
@@ -765,7 +780,7 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     ...MPP_HEAD,
     network,
     mainnet: n.testnet
-      ? `${where} (Base Sepolia): a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
+      ? `${family === "base" ? `${where} (Base Sepolia)` : where}: a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
       : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" || family === "ethereum" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
     install:
       family === "ethereum"
