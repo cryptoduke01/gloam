@@ -63,6 +63,19 @@ export type StoredNote = {
   spentTx?: Hex | null;
   /** Received notes: the nullifier of the payment note this was swept from (stops a replayed payment). */
   sweptFrom?: Hex;
+  /**
+   * Received notes: whether gloam_verify_payment has granted access for this
+   * payment. false from the sweep's send until a verify answers settled, so a
+   * sweep that confirms later still serves the payer, once. Absent on notes
+   * from before this field: taken as served once confirmed.
+   */
+  served?: boolean;
+  /**
+   * Set when a refresh made this note spendable again because its spend never
+   * showed up. That spend may still land, so every refresh checks the nullifier
+   * again and marks the note spent if it did.
+   */
+  recheck?: boolean;
   /** What the note is for, e.g. the resource a received payment paid for. */
   label?: string;
   createdAt: string;

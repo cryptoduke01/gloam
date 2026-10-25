@@ -42,6 +42,7 @@ import {
 import { createGloamServer, type ServerDeps } from "../src/server.js";
 import type { Signer } from "../src/signer.js";
 import { NoteStore, noteStoreKey, openNoteStore, type NewNote } from "../src/noteStore.js";
+import { noteBroadcast } from "../src/walletSend.js";
 
 type Env = Record<string, string | undefined>;
 const TEMPO = GLOAM_NETWORKS.tempo;
@@ -563,18 +564,20 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
       writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
         if (call.functionName !== fn || lost > 0) {
           const hash = await chain.walletClient.writeContract(call);
+          noteBroadcast(hash);
           broadcasts.push(hash);
           return hash;
         }
         lost++;
         const hash = opts.mine === false ? (`0x${"77".repeat(32)}` as Hex) : await chain.apply(fn, call.args);
         if (opts.mine === false) held.push(call.args);
+        noteBroadcast(hash); // what the signer's transport does before the RPC answers
         broadcasts.push(hash);
         throw opts.error?.() ?? new Error("HTTP request failed.\n\nStatus: 504\nURL: https://rpc.example\nRequest body: {\"method\":\"eth_sendRawTransaction\"}");
       },
     };
     const signer = (net: unknown) =>
-      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient: chain.publicClient, broadcasts }) as unknown as Signer;
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient: chain.publicClient }) as unknown as Signer;
     return { signer, broadcasts, held };
   }
 
@@ -618,8 +621,15 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
     const refused = () => Object.assign(new Error("insufficient funds for gas * price + value"), { code: -32000 });
     const lossy = lossyWallet(chain, "transfer", { mine: false, error: refused });
-    // The node does not have it.
-    const publicClient = { ...chain.publicClient, getTransaction: async ({ hash }: { hash: Hex }) => { throw new TransactionNotFoundError({ hash }); } };
+    // The node does not have it, a block later.
+    let block = 100n;
+    const publicClient = {
+      ...chain.publicClient,
+      getBlockNumber: async () => block++,
+      getTransaction: async ({ hash }: { hash: Hex }) => {
+        throw new TransactionNotFoundError({ hash });
+      },
+    };
     const signer = (net: Parameters<ServerDeps["signer"]>[0]) => ({ ...lossy.signer(net), publicClient }) as unknown as Signer;
     const P = await connect(makeDeps(chain, payerEnv, { signer }).deps);
     const S = await connect(makeDeps(chain, payeeEnv).deps);
@@ -729,6 +739,285 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const list = await r.P.call("gloam_list_notes", { refresh: true });
     assert.ok(list.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(list.refreshed));
     assert.equal(list.balances[0].spendable, "7");
+  });
+
+  // ------------------------------------------------ wallet sends under review: hashes, refusals, stuck sweeps
+
+  const realNow = Date.now;
+  /** Run `fn` as if `ms` had passed (past the ten-minute release window, say). */
+  async function later<T>(ms: number, fn: () => Promise<T>): Promise<T> {
+    Date.now = () => realNow() + ms;
+    try {
+      return await fn();
+    } finally {
+      Date.now = realNow;
+    }
+  }
+  const HOUR = 60 * 60 * 1000;
+
+  /**
+   * A chain whose node knows only the transactions in `known`: getTransaction and
+   * getTransactionReceipt answer for those alone, like a real node with one it never
+   * got. Blocks move on every read.
+   */
+  function nodeView(chain: Chain, known: Set<string>) {
+    let block = 1000n;
+    return {
+      ...chain.publicClient,
+      getBlockNumber: async () => block++,
+      getTransaction: async ({ hash }: { hash: Hex }) => {
+        if (known.has(hash.toLowerCase())) return { hash };
+        throw new TransactionNotFoundError({ hash });
+      },
+      getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+        if (!known.has(hash.toLowerCase())) throw new Error(`Transaction receipt with hash "${hash}" could not be found.`);
+        return chain.publicClient.getTransactionReceipt({ hash });
+      },
+    };
+  }
+
+  /** A payer whose wallet is `walletClient` over `publicClient`, and a payee pricing 3 PathUSD. */
+  async function walletParties(chain: Chain, walletClient: unknown, publicClient: unknown, payeeSigner?: ServerDeps["signer"]) {
+    const dir = tmp();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient }) as unknown as Signer;
+    const P = await connect(makeDeps(chain, payerEnv, { signer }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv, payeeSigner ? { signer: payeeSigner, publicClient: () => publicClient as Signer["publicClient"] } : {}).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    return { P, S, priced, payerEnv, payeeEnv };
+  }
+
+  /** A transfer that lands, its hash noted for the send it belongs to, and known to the node. */
+  async function lands(chain: Chain, known: Set<string>, args: readonly unknown[]) {
+    const h = await chain.apply("transfer", args);
+    noteBroadcast(h);
+    known.add(h.toLowerCase());
+    return h;
+  }
+
+  test("two pays at once: one that fails before it is sent frees its note at once, and never takes the other's hash", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let releaseA!: () => void;
+    const bSent = new Promise<void>((r) => (releaseA = r));
+    let transfers = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        if (++transfers === 1) {
+          await bSent; // A's gas estimate fails, after B broadcast
+          throw new Error('HTTP request failed.\n\nStatus: 503\nRequest body: {"method":"eth_estimateGas"}');
+        }
+        const h = await lands(chain, known, call.args);
+        releaseA();
+        return h;
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    const a = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const b = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const [pa, pb] = await Promise.all([
+      P.call("gloam_execute_private_pay", { requirements: priced.encoded, note: a.note.handle }),
+      P.call("gloam_execute_private_pay", { requirements: priced.encoded, note: b.note.handle }),
+    ]);
+    const [failed, paid] = pa.status === "error" ? [pa, pb] : [pb, pa];
+    const failedNote = pa.status === "error" ? a : b;
+    assert.equal(paid.status, "paid", JSON.stringify(paid));
+    assert.equal(failed.status, "error");
+    assert.equal(failed.hash, undefined, "nothing went out for it, so it names no transaction");
+    assert.equal(openNoteStore(payerEnv).get(failedNote.note.handle)?.status, "unspent", "its note is spendable again right away");
+    const report = await P.call("gloam_get_spending_report", {});
+    assert.deepEqual(report.recentPayments.filter((e: { tool: string }) => e.tool === "pay").map((e: { status: string }) => e.status).sort(), ["failed", "sent"]);
+  });
+
+  test("two pays at once on one nonce: the one refused as a replacement keeps its own hash and its note comes back later", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let releaseA!: () => void;
+    const bLanded = new Promise<void>((r) => (releaseA = r));
+    let transfers = 0;
+    const aHash = `0x${"aa".repeat(32)}` as Hex;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        if (++transfers === 1) {
+          noteBroadcast(aHash); // A goes out with the same nonce as B ...
+          await bLanded;
+          throw Object.assign(new Error("replacement transaction underpriced"), { code: -32000 }); // ... and B got there first
+        }
+        const h = await lands(chain, known, call.args);
+        releaseA();
+        return h;
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    const a = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const b = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const [pa, pb] = await Promise.all([
+      P.call("gloam_execute_private_pay", { requirements: priced.encoded, note: a.note.handle }),
+      P.call("gloam_execute_private_pay", { requirements: priced.encoded, note: b.note.handle }),
+    ]);
+    const [lost, won] = pa.status === "error" ? [pa, pb] : [pb, pa];
+    const lostNote = pa.status === "error" ? a : b;
+    assert.equal(won.status, "paid");
+    assert.equal(lost.hash, aHash, `its own transaction, not the other's (${won.hash})`);
+    assert.equal(openNoteStore(payerEnv).get(lostNote.note.handle)?.spentTx, aHash);
+    await later(HOUR, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(openNoteStore(payerEnv).get(lostNote.note.handle)?.status, "unspent", "its transaction never showed up: spendable again");
+  });
+
+  test("a coded timeout (-32002) after the node took it is not taken as a refusal, even when the node read lags", async () => {
+    const chain = mockChain();
+    const known = new Set<string>(); // the node answering reads has not seen it yet
+    let lost = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        const h = await chain.apply("transfer", call.args); // it lands
+        noteBroadcast(h);
+        if (lost++ === 0) throw Object.assign(new Error("request timed out"), { code: -32002 });
+        return h;
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(paid.status, "error");
+    assert.ok(paid.hash, JSON.stringify(paid));
+    const notes = openNoteStore(payerEnv).list();
+    assert.equal(notes.find((n) => n.origin === "change")?.status, "pending", "the change is kept");
+    assert.equal(notes.find((n) => n.origin === "payment")?.status, "pending", "the payment is kept");
+  });
+
+  test("a note made spendable again whose old send lands later is marked spent, and never picked to pay", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    const held: (readonly unknown[])[] = [];
+    let n = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName === "transfer" && ++n === 1) {
+          noteBroadcast(`0x${"77".repeat(32)}`); // sent, the reply lost, not mined, unknown to the node read later
+          held.push(call.args);
+          throw new Error("HTTP request failed.\n\nStatus: 504");
+        }
+        if (call.functionName === "transfer") {
+          // estimateGas reverts on a spent nullifier, before anything is sent
+          const [, , nullifier] = call.args as [Hex, Hex, Hex];
+          if (await chain.publicClient.readContract({ functionName: "isSpent", args: [nullifier] })) throw Object.assign(new Error("execution reverted"), { code: 3 });
+          return lands(chain, known, call.args);
+        }
+        return chain.walletClient.writeContract(call);
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    const s = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const p1 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(p1.status, "error");
+    const freed = await later(11 * 60 * 1000, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.ok(freed.refreshed.some((x: string) => x.includes(`${s.note.handle}: spendable again`)), JSON.stringify(freed.refreshed));
+    known.add((await chain.apply("transfer", held[0]!)).toLowerCase()); // the old send lands after all
+
+    // Before any refresh: the pay must not pick the dead note.
+    const p2 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(p2.status, "error", JSON.stringify(p2));
+    assert.match(p2.error, /No single private note/, "the dead 10 is not picked (the 7 change is still confirming)");
+    assert.equal(openNoteStore(payerEnv).get(s.note.handle)?.status, "spent", "and it is marked spent");
+
+    const list = await P.call("gloam_list_notes", { refresh: true });
+    assert.equal(list.balances[0].spendable, "7", `the change, and not the spent 10: ${JSON.stringify(list.balances)}`);
+
+    // The same check runs on every refresh for a note freed this way.
+    const chain2 = mockChain();
+    const known2 = new Set<string>();
+    const held2: (readonly unknown[])[] = [];
+    let m = 0;
+    const wallet2 = {
+      ...chain2.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName === "transfer" && ++m === 1) {
+          noteBroadcast(`0x${"78".repeat(32)}`);
+          held2.push(call.args);
+          throw new Error("HTTP request failed.\n\nStatus: 504");
+        }
+        return chain2.walletClient.writeContract(call);
+      },
+    };
+    const w2 = await walletParties(chain2, wallet2, nodeView(chain2, known2));
+    const s2 = await w2.P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    await w2.P.call("gloam_execute_private_pay", { requirements: w2.priced.encoded });
+    await later(11 * 60 * 1000, () => w2.P.call("gloam_list_notes", { refresh: true }));
+    await chain2.apply("transfer", held2[0]!);
+    const l2 = await w2.P.call("gloam_list_notes", { refresh: true });
+    assert.ok(l2.refreshed.some((x: string) => x.includes(`${s2.note.handle}: spent`)), JSON.stringify(l2.refreshed));
+    assert.equal(l2.balances[0].spendable, "7");
+  });
+
+  test("a wallet sweep that never reached the node is swept again once its transaction is unknown, and serves once", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let first = true;
+    const payeeWallet = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName === "transfer" && first) {
+          first = false;
+          noteBroadcast(`0x${"66".repeat(32)}`); // noted, then the connection fails before the node got it
+          throw new Error("HTTP request failed.\n\nDetails: fetch failed");
+        }
+        return call.functionName === "transfer" ? lands(chain, known, call.args) : chain.walletClient.writeContract(call);
+      },
+    };
+    const view = nodeView(chain, known);
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: payeeWallet, publicClient: view }) as unknown as Signer;
+    const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const v1 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+    const v2 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v2.status, "unconfirmed", "inside the release window it waits for the first sweep");
+    assert.equal(v2.grantAccess, false);
+    const v3 = await later(HOUR, () => S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader }));
+    assert.equal(v3.status, "settled", `the first sweep never showed up and the payment is unspent: swept again (${JSON.stringify(v3)})`);
+    assert.equal(v3.grantAccess, true);
+    const v4 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v4.status, "already_settled", "served once");
+    assert.equal(v4.grantAccess, false);
+    const l = await later(HOUR, () => S.call("gloam_list_notes", { refresh: true }));
+    assert.ok(l.refreshed.some((x: string) => x.includes("removed, its payment was taken by another transaction")), JSON.stringify(l.refreshed));
+    assert.equal(l.balances[0].spendable, "3");
+    assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").length, 1, "one note for the payment");
+  });
+
+  test("a sweep that confirms after its verify said unconfirmed serves the payer on the next verify, once", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const lossy = lossyWallet(chain, "transfer", { mine: false });
+    const P = await connect(makeDeps(chain, payerEnv).deps);
+    const S = await connect(makeDeps(chain, payeeEnv, { signer: lossy.signer }).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const v1 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v1.status, "unconfirmed");
+    await chain.apply("transfer", lossy.held[0]!); // mined
+    const v2 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v2.status, "settled", JSON.stringify(v2));
+    assert.equal(v2.grantAccess, true, "the payer is served");
+    const v3 = await S.call("gloam_verify_payment", { requirements: priced.encoded, payment: paid.paymentHeader });
+    assert.equal(v3.status, "already_settled");
+    assert.equal(v3.grantAccess, false, "and only once");
+    assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received" && n.status === "unspent").length, 1);
   });
 
   test("a payee sweep whose relay answer is unclear keeps the fresh note, which lands later", async () => {
