@@ -30,14 +30,12 @@ export async function generateMetadata({
   };
 }
 
+/** The overview's shape: the balances card, then the actions. */
 function VaultSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true" aria-label="Loading the vault">
-      <div className="h-12 w-full max-w-[380px] rounded-full bg-surface-2 motion-safe:animate-pulse" />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="gl-card h-[420px] motion-safe:animate-pulse" />
-        <div className="gl-card h-[220px] motion-safe:animate-pulse" />
-      </div>
+      <div className="gl-card h-[260px] motion-safe:animate-pulse" />
+      <div className="gl-card h-[380px] motion-safe:animate-pulse xl:h-[190px]" />
     </div>
   );
 }
@@ -46,7 +44,7 @@ export default function VaultPage() {
   return (
     <AppShell
       title="Vault"
-      subtitle="Add money privately, send it, and cash out, all in one place. Your amounts stay hidden."
+      subtitle="Add money privately, pay from your private balance, and cash out to any wallet."
     >
       <Suspense fallback={<VaultSkeleton />}>
         <VaultHub />
