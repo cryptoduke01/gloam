@@ -4,6 +4,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPool, type MainnetChainId } from "@/lib/mainnet";
 import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, ETHEREUM_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
 import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
+import { getNetwork } from "@/lib/networks";
 import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
@@ -34,6 +35,9 @@ const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
 const BASE_MAINNET_LIVE = mainnetPool(8453) !== null;
 /** Ethereum's pool is in once MAINNET_POOLS[1] is filled in (lib/mainnet.ts). */
 const ETHEREUM_LIVE = mainnetPool(1) !== null;
+/** Base's and Ethereum's mainnet memo boards, filled in with their vaults (lib/networks.ts). */
+const BASE_MAINNET_MEMO = getNetwork("base-mainnet").payMemo;
+const ETHEREUM_MAINNET_MEMO = getNetwork("ethereum-mainnet").payMemo;
 
 /** Ethereum Sepolia's pool and memo board, once filled in after its deploy (lib/mainnet.ts). */
 const ETHEREUM_SEPOLIA = ethereumSepoliaPool();
@@ -435,6 +439,10 @@ export default function DocsNetworksPage() {
           {BASE_MAINNET_LIVE ? <MainnetPoolAddress chainId={8453} /> : <>Not deployed yet</>}
         </li>
         <li>
+          <strong>Mainnet payment-message board</strong>,{" "}
+          {BASE_MAINNET_MEMO ? <code>{BASE_MAINNET_MEMO.address}</code> : <>Not deployed yet</>}
+        </li>
+        <li>
           <strong>Mainnet assets</strong>,{" "}
           {BASE_MAINNET_TOKENS.map((t) => t.symbol).join(", ")}{" "}
           (6 decimals each) and ETH. USDC and EURC are Circle&apos;s; USDT is Tether bridged from
@@ -500,9 +508,10 @@ export default function DocsNetworksPage() {
           Private swaps (next, through a router
           on Uniswap v4) and bringing money over from another chain (the Relay
           bridge). Payments, payroll, payment requests, claim links and proofs
-          work as on the other chains. Base Sepolia has its payment-message
-          board, so a payment can be found by scanning with your Gloam
-          address; Base mainnet gets its own when it is deployed.
+          work as on the other chains.{" "}
+          {BASE_MAINNET_MEMO
+            ? "Base and Base Sepolia each have a payment-message board, so a payment can be found by scanning with your Gloam address."
+            : "Base Sepolia has its payment-message board, so a payment can be found by scanning with your Gloam address; Base mainnet gets its own when it is deployed."}
         </li>
       </ul>
 
@@ -525,6 +534,10 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Pool</strong>, {ETHEREUM_LIVE ? <MainnetPoolAddress chainId={1} /> : <>Not deployed yet</>}
+        </li>
+        <li>
+          <strong>Payment-message board</strong>,{" "}
+          {ETHEREUM_MAINNET_MEMO ? <code>{ETHEREUM_MAINNET_MEMO.address}</code> : <>Not deployed yet</>}
         </li>
         <li>
           <strong>Assets</strong>, {ETHEREUM_MAINNET_TOKENS.map((t) => t.symbol).join(", ")} (6
@@ -570,10 +583,10 @@ export default function DocsNetworksPage() {
           asset would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Ethereum yet.</strong> Private swaps, bringing money
-          over into Ethereum (Ethereum stays a chain you can bring money over
-          from), and the payment-message board: until it is deployed, a payment
-          there goes by claim link or sealed code.
+          <strong>Not on Ethereum yet.</strong>{" "}
+          {ETHEREUM_MAINNET_MEMO
+            ? "Private swaps, and bringing money over into Ethereum (Ethereum stays a chain you can bring money over from)."
+            : "Private swaps, bringing money over into Ethereum (Ethereum stays a chain you can bring money over from), and the payment-message board: until it is deployed, a payment there goes by claim link or sealed code."}
         </li>
       </ul>
 
