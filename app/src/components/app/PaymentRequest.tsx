@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { getNetwork, type NetworkKey } from "@/lib/networks";
+import { getNetwork, networkName, type NetworkKey } from "@/lib/networks";
 import { amountTextError } from "@/lib/amountText";
 import {
   REQUEST_NAME_MAX,
@@ -414,13 +414,13 @@ export function PaymentRequestBanner({
 
       {wrongNet && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-panel px-3.5 py-2.5">
-          <p className="text-[13px] text-foreground">This request is for {wrongNet.label}.</p>
+          <p className="text-[13px] text-foreground">This request is for {networkName(wrongNet)}.</p>
           <button
             type="button"
             onClick={() => onSwitchNetwork(wrongNet.key)}
             className="btn btn-ink btn-sm"
           >
-            Switch to {wrongNet.label}
+            Switch to {networkName(wrongNet)}
           </button>
         </div>
       )}
