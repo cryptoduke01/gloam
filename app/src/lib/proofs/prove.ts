@@ -80,12 +80,12 @@ async function vaultTree(chainId: number, pool: Address): Promise<{ client: Publ
   if (net.chainId !== chainId || !net.pool || net.pool.toLowerCase() !== pool.toLowerCase()) {
     throw new Error(`Switch to ${networkForChain(chainId)?.label ?? "that network"} to prove with these balances.`);
   }
-  const [{ syncShieldTree }, { getRhPublicClient }] = await Promise.all([
+  const [{ syncShieldTree }, { publicClientFor }] = await Promise.all([
     import("@/lib/treeSync"),
     import("@/lib/rhClient"),
   ]);
-  const client = getRhPublicClient();
-  const tree = await syncShieldTree(client);
+  const client = publicClientFor(net);
+  const tree = await syncShieldTree(client, net);
   if (!tree || tree.scheme !== "poseidon") throw new Error("Could not read the vault. Try again.");
   return { client, tree };
 }

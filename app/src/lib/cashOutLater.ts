@@ -22,7 +22,7 @@ import { getActiveNetwork } from "./networks";
 import { getAllNotes } from "./noteVault";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
-import { getRhPublicClient } from "./rhClient";
+import { publicClientFor } from "./rhClient";
 import { shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
 import type { DelayWindow } from "./relay/scheduled";
 
@@ -259,6 +259,8 @@ export type CashOutEnv = {
 export function appCashOutEnv(): CashOutEnv {
   const net = getActiveNetwork();
   const pool = net.pool ?? null;
+  // every read of this pass goes to this network's chain, even if the page switches meanwhile
+  const client = publicClientFor(net);
   return {
     chainId: net.chainId,
     pool,
@@ -267,7 +269,7 @@ export function appCashOutEnv(): CashOutEnv {
     isSpent: async (nullifier) => {
       if (!pool) return null;
       try {
-        return (await getRhPublicClient().readContract({
+        return (await client.readContract({
           address: pool,
           abi: shieldPoolAbi,
           functionName: "isSpent",
@@ -279,7 +281,7 @@ export function appCashOutEnv(): CashOutEnv {
     },
     receipt: async (hash) => {
       try {
-        return (await getRhPublicClient().getTransactionReceipt({ hash })).status;
+        return (await client.getTransactionReceipt({ hash })).status;
       } catch {
         return null;
       }

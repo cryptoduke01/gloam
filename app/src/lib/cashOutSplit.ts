@@ -21,11 +21,11 @@ import { buildTransferWitness, type TransferWitness } from "./proverTransfer";
 import { fieldToBytes32, proveTransferInBrowser } from "./proveClient";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { relayTransfer, RelaySubmitError, waitForTx } from "./relay/client";
-import { getRhPublicClient } from "./rhClient";
+import { getRhPublicClient, publicClientFor } from "./rhClient";
 import { readDemo } from "./demoFlag";
 import { demoLeafIndex } from "./demo/store";
 import { getActiveNetwork } from "./networks";
-import { dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
+import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { surelyNotSent } from "./walletErrors";
 
@@ -60,8 +60,10 @@ export function roundDownToWhole(amountWei: bigint, decimals: number): bigint {
 
 /** The tree path for a note once it is in the vault, read fresh from the chain. */
 export async function freshPath(commitment: Hex): Promise<{ leafIndex: number; path: PoseidonMerklePath } | null> {
+  const net = getActiveNetwork();
+  const client = publicClientFor(net);
   for (let i = 0; i < 4; i++) {
-    const tree = await syncShieldTree(getRhPublicClient()).catch(() => null);
+    const tree = await syncShieldTree(client, net).catch(() => null);
     const idx = tree?.indexByCommitment.get(commitment.toLowerCase());
     if (tree && idx != null) {
       const path = (await tree.pathForLeaf(idx)) as PoseidonMerklePath | null;
@@ -162,6 +164,8 @@ export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; cha
   const { note, amount, owner } = args;
   const total = BigInt(note.amountWei);
   if (amount <= BigInt(0) || amount >= total) throw new Error("Pick an amount below this balance.");
+  // the path came from the active network's tree: only that network's notes split
+  assertNoteOnNetwork(note, getActiveNetwork());
 
   args.onStatus("Setting the amount aside privately, this takes 10 to 30 seconds…");
   const w = await buildTransferWitness({

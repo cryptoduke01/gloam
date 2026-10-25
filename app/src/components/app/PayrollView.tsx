@@ -552,9 +552,11 @@ export function PayrollView() {
       refreshNotes();
       return;
     }
+    // one chain for the whole run: its reads and receipts stay there if the page switches
+    const runClient = getRhPublicClient();
     try {
       const done = await runPayroll(batch, {
-        client: getRhPublicClient(),
+        client: runClient,
         submitTransfer: (a) =>
           useRelay
             ? relayTransfer({ chainId: network.chainId, ...a })
@@ -583,7 +585,7 @@ export function PayrollView() {
               return relayMemo({ chainId: network.chainId, ...m }).catch((e) => (useRelay ? Promise.reject(e) : fromWallet()));
             }
           : null,
-        waitForTx: (h: Hex) => waitForTx(h),
+        waitForTx: (h: Hex) => waitForTx(h, undefined, runClient),
         onUpdate: (b) => setActive(b),
         shouldStop: () => stopRef.current,
       });
