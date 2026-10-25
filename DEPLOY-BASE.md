@@ -113,6 +113,24 @@ Faucets for Base Sepolia (test funds):
   the nonce is not 0 the addresses differ, which is fine: paste back what the deploy
   prints.
 
+## Before you broadcast: check the chain's deploy gas
+
+Forge works out each transaction's gas limit from its own simulation, which uses the
+gas rules in `foundry.toml`, not the chain's. If a chain has repriced contract creation
+(Ethereum Sepolia did by October 2026: a deploy there costs about 6.7 times what it costs
+on Ethereum mainnet or Base), every deploy transaction runs out of gas and burns its
+nonce. So, once the settings are sourced, ask the chain what the smallest verifier costs:
+
+```bash
+cast estimate --rpc-url $RPC_URL --create $(forge inspect ShieldVerifierFinal bytecode)
+```
+
+About 390,000 (Ethereum mainnet, Base and Base Sepolia on 25 October 2026) means the
+broadcasts below work as written. Anything well above 500,000 means the chain charges
+more than forge expects: add `--gas-estimate-multiplier 1000` to every `--broadcast`
+command (you only pay for the gas used), and check the deployer can cover ten times
+the estimated cost.
+
 ## Base Sepolia
 
 Run every block in one terminal, from `contracts/`. The key is read without echo, so

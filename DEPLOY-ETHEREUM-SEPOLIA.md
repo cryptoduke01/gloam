@@ -10,6 +10,26 @@ nonce 0 (`contracts/test/fork/EthereumSepoliaFork.t.sol`, and steps 4, 5 and 7 b
 run as written against an anvil fork): every address and code hash matches Base Sepolia,
 the owner handoff works, and every asset went through the vault with final-key proofs.
 
+## Deployed on 25 October 2026
+
+| Contract | Address | Block |
+| --- | --- | --- |
+| ShieldPoolPayments (the vault) | `0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef` | 11992914 |
+| GloamPayMemo (memo board) | `0x8699D015087dE6D25d55d5ceB63b34b9d773f135` | 11992942 |
+| PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` | |
+
+The record is `contracts/deployments/ethereum-sepolia.json`. The owner wallet accepted
+ownership in `0xa7aed436658a85084349b79d0cb08eeb6f92e876ebd554f794251de8865ab3da`.
+
+The vault is not at `0x39e2…0194` here. Sepolia had repriced contract creation (about
+6.7 times Ethereum mainnet), so the first vault-run transaction (`ShieldVerifierFinal`,
+nonce 1) ran out of gas at forge's limit and used up its nonce. The next contract points
+at the nonce-1 address, so the run could not be resumed; it ran fresh from nonce 2 with
+`--gas-estimate-multiplier 1000` and every contract landed one nonce later. On Sepolia,
+`0x39e2…0194` is the run's DualProofVerifier, not a vault. The app and the SDK use the
+address above. See "Before you broadcast" in DEPLOY-ETHEREUM.md for the check that
+catches this before anything is sent.
+
 ## What lands where
 
 From the deployer `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` at nonce 0 (checked on
