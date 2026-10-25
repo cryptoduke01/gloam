@@ -116,7 +116,8 @@ test("request and payload shapes: build, parse, refuse", async () => {
 
   assert.throws(() => buildGloamChargeRequest({ amountWei: 1n, recipient: "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00" }), /receive tag/);
   assert.throws(() => buildGloamChargeRequest({ amountWei: 0n, recipient: payee.tag }), /positive/);
-  assert.throws(() => buildGloamChargeRequest({ amountWei: 1n, recipient: payee.tag, network: 1 }), /no Gloam pool/);
+  // Polygon: a chain Gloam does not run on (chain 1 gets a pool once Ethereum is live)
+  assert.throws(() => buildGloamChargeRequest({ amountWei: 1n, recipient: payee.tag, network: 137 }), /no Gloam pool/);
   for (const [bad, why] of [
     [{ ...r, amount: "1.5" }, /amount/],
     [{ ...r, amount: "-1" }, /amount/],

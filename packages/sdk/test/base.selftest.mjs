@@ -21,6 +21,7 @@ BASE_SEPOLIA_POOL.pool = TEST_POOL;
 BASE_SEPOLIA_POOL.deployBlock = 200n;
 
 const {
+  mainnetPoolFor,
   mainnetNetwork,
   testnetNetwork,
   gloamNetworks,
@@ -97,7 +98,9 @@ assert(baseSepoliaPool()?.pool === TEST_POOL, "baseSepoliaPool reads BASE_SEPOLI
 
 // ── lookups ──────────────────────────────────────────────────────────────────────
 const keys = gloamNetworks().map((n) => n.key);
-assert(keys.join() === "robinhood-mainnet,tempo-mainnet,base-mainnet,robinhood,tempo,base", `network order (${keys.join()})`);
+// Ethereum sits with the mainnets once MAINNET_POOLS[1] is filled in; nothing here needs editing then.
+const order = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", ...(mainnetPoolFor(1) ? ["ethereum-mainnet"] : []), "robinhood", "tempo", "base"];
+assert(keys.join() === order.join(), `network order (${keys.join()})`);
 assert(getGloamNetwork("base") === test && getGloamNetwork("base-mainnet") === main, "by key");
 assert(networkForChainId(84532) === test && networkForChainId(8453) === main, "by chain id");
 assert(poolForChainId(84532) === TEST_POOL && poolForChainId(8453) === MAIN_POOL, "pool by chain id");
