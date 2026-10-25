@@ -959,15 +959,16 @@ export function saveLocalNote(note: LocalNote): Promise<void> {
   return setAllNotes(kept);
 }
 
+/** Settles once the change is on disk; await it where a later read of the store must see it. */
 export function updateLocalNote(
   id: string,
   patch: Partial<
     Pick<LocalNote, "leafIndex" | "txHash" | "status" | "secured" | "sweepPending" | "unfunded" | "cashOut" | "cashOutPlan">
   >
-) {
-  if (typeof window === "undefined") return;
+): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
   const next = getAllNotes().map((n) => (n.id === id ? { ...n, ...patch } : n));
-  setAllNotes(next);
+  return setAllNotes(next);
 }
 
 /**
