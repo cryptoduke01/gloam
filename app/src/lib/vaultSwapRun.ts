@@ -32,7 +32,7 @@ import { prepareBridgeNote } from "./bridgePrivate";
 import { freshPath, splitForCashOut } from "./cashOutSplit";
 import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
 import { getRhPublicClient } from "./rhClient";
-import { dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
+import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
 import type { GloamNetwork } from "./networks";
 import {
   encodeRoute,
@@ -77,6 +77,7 @@ export async function runVaultSwap(args: {
 }): Promise<SwapResult> {
   const { network, note, amount, router } = args;
   if (!network.pool) throw new Error("This network has no vault yet.");
+  assertNoteOnNetwork(note, network);
   const noteWei = BigInt(note.amountWei);
   if (amount <= 0n || amount > noteWei) throw new Error("Pick an amount up to this balance.");
 

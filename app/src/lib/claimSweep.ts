@@ -30,13 +30,13 @@ import {
   type SweepChain,
   type SweepResult,
 } from "@gloamtrade/sdk";
-import type { Address, Hex } from "viem";
-import { getActiveNetwork } from "./networks";
+import type { Address, Hex, PublicClient } from "viem";
+import { getActiveNetwork, type GloamNetwork } from "./networks";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { proveTransferInBrowser } from "./proveClient";
 import { relayTransfer, waitForTx } from "./relay/client";
-import { getRhPublicClient } from "./rhClient";
+import { publicClientFor } from "./rhClient";
 import { getAllNotes } from "./noteVault";
 import { saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
@@ -103,8 +103,8 @@ export type ClaimEnv = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function readBool(pool: Address, fn: "isSpent" | "commitmentSeen", arg: Hex, blockNumber?: bigint): Promise<boolean> {
-  return getRhPublicClient().readContract({
+function readBool(client: PublicClient, pool: Address, fn: "isSpent" | "commitmentSeen", arg: Hex, blockNumber?: bigint): Promise<boolean> {
+  return client.readContract({
     address: pool,
     abi: shieldPoolAbi,
     functionName: fn,
@@ -114,20 +114,20 @@ function readBool(pool: Address, fn: "isSpent" | "commitmentSeen", arg: Hex, blo
 }
 
 /** Both reads at one block. A node without that block yet fails the read, which counts as unread. */
-async function readStateAt(pool: Address, nullifier: Hex | null, commitment: Hex) {
-  const block = await getRhPublicClient().getBlockNumber().catch(() => null);
+async function readStateAt(client: PublicClient, pool: Address, nullifier: Hex | null, commitment: Hex) {
+  const block = await client.getBlockNumber().catch(() => null);
   if (block === null) return { spent: null, seen: null, block: null };
   const [spent, seen] = await Promise.all([
-    nullifier ? readBool(pool, "isSpent", nullifier, block).catch(() => null) : Promise.resolve(null),
-    readBool(pool, "commitmentSeen", commitment, block).catch(() => null),
+    nullifier ? readBool(client, pool, "isSpent", nullifier, block).catch(() => null) : Promise.resolve(null),
+    readBool(client, pool, "commitmentSeen", commitment, block).catch(() => null),
   ]);
   return { spent, seen, block };
 }
 
 /** The vault tree, waiting a little for a commitment that only just landed. */
-async function findLeaf(commitment: Hex) {
+async function findLeaf(client: PublicClient, net: GloamNetwork, commitment: Hex) {
   for (let i = 0; i < 4; i++) {
-    const tree = await syncShieldTree(getRhPublicClient()).catch(() => null);
+    const tree = await syncShieldTree(client, net).catch(() => null);
     const idx = tree?.indexByCommitment.get(commitment.toLowerCase());
     if (tree && idx != null) return { tree, idx };
     if (i < 3) await sleep(1_250);
@@ -137,21 +137,25 @@ async function findLeaf(commitment: Hex) {
 
 /** The app's vault on the active network, read over its own RPC. */
 export function appClaimEnv(onStage?: (text: string) => void): ClaimEnv {
+  // One network for the whole claim: every read goes to its chain, even if the
+  // page switches halfway (the vaults share one address, so a read on another
+  // chain would answer for this one without failing).
   const net = getActiveNetwork();
   const pool = net.pool;
+  const client = publicClientFor(net);
   return {
     chainId: net.chainId,
     pool,
     chain: {
-      isSpent: (nullifier) => readBool(pool!, "isSpent", nullifier),
-      isCommitmentSeen: (commitment) => readBool(pool!, "commitmentSeen", commitment),
+      isSpent: (nullifier) => readBool(client, pool!, "isSpent", nullifier),
+      isCommitmentSeen: (commitment) => readBool(client, pool!, "commitmentSeen", commitment),
       pathForCommitment: async (commitment) => {
-        const found = await findLeaf(commitment);
+        const found = await findLeaf(client, net, commitment);
         return found ? ((await found.tree.pathForLeaf(found.idx)) as PoseidonMerklePath | null) : null;
       },
       waitForReceipt: async (hash) => {
         onStage?.("Waiting for it to land…");
-        return { status: await waitForTx(hash) };
+        return { status: await waitForTx(hash, undefined, client) };
       },
     },
     prove: async (input) => {
@@ -159,11 +163,11 @@ export function appClaimEnv(onStage?: (text: string) => void): ClaimEnv {
       return { proofBytes, publicSignals };
     },
     relay: relayTransfer,
-    leafIndexOf: async (commitment) => (await findLeaf(commitment))?.idx,
-    stateAt: (nullifier, commitment) => readStateAt(pool!, nullifier, commitment),
+    leafIndexOf: async (commitment) => (await findLeaf(client, net, commitment))?.idx,
+    stateAt: (nullifier, commitment) => readStateAt(client, pool!, nullifier, commitment),
     escrowWaiting: async (n, block) => {
       if (!n.vaultSwap || !n.sweptFrom) return false;
-      return escrowHolds(getRhPublicClient(), n.vaultSwap, n.sweptFrom.nullifier, n.commitment, BigInt(n.amountWei), block).catch(
+      return escrowHolds(client, n.vaultSwap, n.sweptFrom.nullifier, n.commitment, BigInt(n.amountWei), block).catch(
         () => null
       );
     },

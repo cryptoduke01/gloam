@@ -45,11 +45,14 @@ import { cleanPaymentNote } from "@/lib/paymentNote";
 import { keepPaidCodes, loadStoredRun, saveBatch } from "@/lib/payrollStore";
 import { markPrivatePaid } from "@/lib/firstPayment";
 import { countLinkCreated } from "@/lib/funnel";
+import { getActiveNetwork, getNetwork, NETWORK_KEYS, type GloamNetwork } from "@/lib/networks";
 import {
   activeSpendableNotes,
   assetDecimals,
   formatAssetAmount,
   loadLocalNotes,
+  noteNetworkProblem,
+  NOTE_OTHER_NETWORK_MESSAGE,
   parseAssetAmount,
   saveLocalNote,
   shieldPoolAbi,
@@ -296,9 +299,17 @@ export function draftTotal(rows: DraftRow[]): bigint {
 
 // ------------------------------------------------------------------ funding
 
-/** Spendable notes for this asset on the active network, with tree positions. */
-export function fundingNotes(address: string, asset: Address, tree: SyncedTree | null): LocalNote[] {
-  return activeSpendableNotes(loadLocalNotes(address))
+/**
+ * Spendable notes for this asset on the active network (or on `net`: a run
+ * passes its own chain and vault), with tree positions.
+ */
+export function fundingNotes(
+  address: string,
+  asset: Address,
+  tree: SyncedTree | null,
+  net?: { chainId: number; pool: Address | null }
+): LocalNote[] {
+  return activeSpendableNotes(loadLocalNotes(address, net))
     .filter((n) => n.asset.toLowerCase() === asset.toLowerCase() && n.scheme !== "keccak")
     .map((n) => {
       if (n.leafIndex != null) return n;
@@ -486,10 +497,23 @@ export class PayrollStop extends Error {}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function syncUntil(deps: PayrollEngineDeps, commitment?: string, tries = 8): Promise<SyncedTree | null> {
+/** The network a run pays on: its own chain and vault, whatever the page shows now. */
+function runNetwork(batch: Pick<PayrollBatch, "chainId" | "pool">): GloamNetwork | undefined {
+  return NETWORK_KEYS.map(getNetwork).find(
+    (n) => n.chainId === batch.chainId && n.pool?.toLowerCase() === batch.pool.toLowerCase()
+  );
+}
+
+async function syncUntil(
+  deps: PayrollEngineDeps,
+  batch: Pick<PayrollBatch, "chainId" | "pool">,
+  commitment?: string,
+  tries = 8
+): Promise<SyncedTree | null> {
   let tree: SyncedTree | null = null;
+  const net = runNetwork(batch);
   for (let i = 0; i < tries; i++) {
-    tree = await (deps.syncTree ? deps.syncTree() : syncShieldTree(deps.client));
+    tree = await (deps.syncTree ? deps.syncTree() : net ? syncShieldTree(deps.client, net) : Promise.resolve(null));
     if (!commitment || tree?.indexByCommitment.has(commitment.toLowerCase())) return tree;
     await sleep(1_250);
   }
@@ -755,7 +779,7 @@ async function samePaymentWitness(
   row: PayrollRow,
   tree: SyncedTree | null
 ): Promise<TransferWitness> {
-  const local = loadLocalNotes(batch.employer);
+  const local = loadLocalNotes(batch.employer, batch);
   const spent = local.find((n) => n.id === row.spendNoteId);
   const secret = row.spendSecret ?? spent?.secret;
   const amountIn = row.spendAmount ?? spent?.amountWei;
@@ -837,8 +861,17 @@ async function payRow(
     row.status = "preparing";
     row.error = undefined;
     await emit();
+    // A run pays from its own chain only: the tree, the notes and the keys below are
+    // the active network's, and several vaults share one address.
+    const wrongNetwork = noteNetworkProblem(batch, getActiveNetwork());
+    if (wrongNetwork) {
+      row.status = "queued";
+      row.error = wrongNetwork === NOTE_OTHER_NETWORK_MESSAGE ? "This run is on another network. Switch to it, then resume." : wrongNetwork;
+      await emit();
+      throw new PayrollStop();
+    }
 
-    const tree = await syncUntil(deps);
+    const tree = await syncUntil(deps, batch);
     // A payment already on record (sent before, maybe still landing) goes out
     // again exactly as it was. Otherwise a new one is built.
     let note: LocalNote | undefined;
@@ -846,7 +879,7 @@ async function payRow(
       note = await unspentNote(
         batch,
         deps.client,
-        fundingNotes(batch.employer, batch.asset, tree)
+        fundingNotes(batch.employer, batch.asset, tree, batch)
           .filter((n) => BigInt(n.amountWei) >= amount)
           .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1))
       );
@@ -1020,9 +1053,9 @@ async function finalizeTransfer(batch: PayrollBatch, row: PayrollRow, deps: Payr
   if (row.kind === "link") countLinkCreated();
   if (row.spendNoteId) updateLocalNote(row.spendNoteId, { status: "recovered", txHash: row.txHash });
   if (row.changeNoteId) {
-    const notes = loadLocalNotes(batch.employer);
+    const notes = loadLocalNotes(batch.employer, batch);
     const change = notes.find((n) => n.id === row.changeNoteId);
-    const tree = await syncUntil(deps, change?.commitment);
+    const tree = await syncUntil(deps, batch, change?.commitment);
     const idx = change ? tree?.indexByCommitment.get(change.commitment.toLowerCase()) : undefined;
     // landed: the change counts from now on
     updateLocalNote(row.changeNoteId, { leafIndex: idx, txHash: row.txHash, sweepPending: false });
@@ -1063,7 +1096,7 @@ export async function payrollProofNotes(
   if (batch.status !== "done") return { blocker: "Finish the run first. A total can only be proven once every payment is settled." };
   const paid = batch.rows.filter((r) => r.status === "paid");
   if (!paid.length) return { blocker: "Nobody was paid in this run, so there is no total to prove." };
-  const local = typeof window === "undefined" ? [] : loadLocalNotes(batch.employer);
+  const local = typeof window === "undefined" ? [] : loadLocalNotes(batch.employer, batch);
   const notes: PayrollNote[] = [];
   for (const r of paid) {
     if (!r.paymentCommitment || !r.spendNullifier) return { blocker: OLD_RUN };

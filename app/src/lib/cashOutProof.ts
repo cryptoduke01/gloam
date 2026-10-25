@@ -9,7 +9,8 @@ import type { Address, Hex } from "viem";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { fieldToBytes32, proveUnshieldInBrowser } from "./proveClient";
 import { buildPoseidonUnshieldWitness } from "./proverPoseidon";
-import type { LocalNote } from "./shield";
+import { getActiveNetwork } from "./networks";
+import { NOTE_OTHER_NETWORK_MESSAGE, noteNetworkProblem, type LocalNote } from "./shield";
 
 export type CashOutCall = {
   chainId: number;
@@ -23,6 +24,10 @@ export type CashOutCall = {
 
 /** Proves a cash out of all of `note` to `to`. Throws when the note does not open its commitment. */
 export async function proveCashOut(note: LocalNote, to: Address, path: PoseidonMerklePath, chainId: number): Promise<CashOutCall> {
+  // Only for the note's own chain, and only while the app reads that chain (its tree gave `path`).
+  const net = getActiveNetwork();
+  const problem = net.chainId === chainId ? noteNetworkProblem(note, net) : NOTE_OTHER_NETWORK_MESSAGE;
+  if (problem) throw new Error(problem);
   const w = await buildPoseidonUnshieldWitness({
     secretHex: note.secret,
     amount: BigInt(note.amountWei),

@@ -16,10 +16,9 @@ import { knownTokens, shieldTokensFor } from "@/lib/tokens";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { usePoolDeposited } from "@/hooks/usePoolDeposited";
 import { useShieldTree } from "@/hooks/useShieldTree";
-import { getRhPublicClient } from "@/lib/rhClient";
-import { HASH_SCHEME, dropUnsentNote, gasFor, SHIELD_GAS_LIMIT, TRANSFER_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, formatFeePercent, isNativeAsset, isShieldDeployed, loadLocalNotes, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote, withdrawFeeOf } from "@/lib/shield";
+import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
+import { HASH_SCHEME, dropUnsentNote, gasFor, noteNetworkProblem, SHIELD_GAS_LIMIT, TRANSFER_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, formatAssetAmount, formatAssetLabel, formatFeePercent, isNativeAsset, isShieldDeployed, loadLocalNotes, parseAssetAmount, saveLocalNote, shieldPoolAbi, updateLocalNote, withdrawFeeOf } from "@/lib/shield";
 import {
-  claimFunded,
   claimNoteId,
   isClaimedNote,
   isSecuredClaim,
@@ -929,6 +928,12 @@ export function MoveView() {
 
   async function onCashOut() {
     if (!selected || !address || !network.pool || !poseidonMode) return;
+    // never prove or send a balance of another chain (several vaults share one address)
+    const wrongNetwork = noteNetworkProblem(selected, network);
+    if (wrongNetwork) {
+      setError(wrongNetwork);
+      return;
+    }
     setError(null);
     setScheduledNotice(null);
     const later = cashOutWhen !== "now";
@@ -1104,6 +1109,12 @@ export function MoveView() {
    */
   async function onPrivateCashOut() {
     if (!selected || !address || !network.pool || !poseidonMode || !plan) return;
+    // never prove or send a balance of another chain (several vaults share one address)
+    const wrongNetwork = noteNetworkProblem(selected, network);
+    if (wrongNetwork) {
+      setError(wrongNetwork);
+      return;
+    }
     setError(null);
     setScheduledNotice(null);
     const amount = cashOutAmount;
@@ -1203,6 +1214,11 @@ export function MoveView() {
   async function scheduleLeftover(n: LocalNote) {
     const tag = n.cashOutPlan;
     if (!tag || !address) return;
+    const wrongNetwork = noteNetworkProblem(n, network);
+    if (wrongNetwork) {
+      setError(wrongNetwork);
+      return;
+    }
     setError(null);
     setScheduledNotice(null);
     if (!relayAvailable) {
@@ -1253,6 +1269,12 @@ export function MoveView() {
 
   async function onPrivateSend() {
     if (!selected || !address || !network.pool || !poseidonMode) return;
+    // never prove or send a balance of another chain (several vaults share one address)
+    const wrongNetwork = noteNetworkProblem(selected, network);
+    if (wrongNetwork) {
+      setError(wrongNetwork);
+      return;
+    }
     setError(null);
     setShareBlob(null);
     setBusy(true);
@@ -1471,10 +1493,13 @@ export function MoveView() {
       );
       return;
     }
+    // the board, the vault reads and the list below are all of the network shown
+    const scanKey = networkKey;
+    if (noteNetworkProblem({ chainId: network.chainId, pool: network.pool }, network)) return;
     setInboxStatus("Checking for payments to your Gloam address…");
     setInbox([]);
     try {
-      const client = getRhPublicClient();
+      const client = publicClientFor(network);
       const memos = await fetchPaymentMemos(client);
       const hits: { memo: ScannedMemo; label: string; ticket: string; note?: string }[] = [];
       const seen = new Set<string>();
@@ -1512,6 +1537,8 @@ export function MoveView() {
           /* not for us */
         }
       }
+      // switched while scanning: these were the other network's payments
+      if (shownNetworkKey.current !== scanKey) return;
       setInbox(hits);
       setInboxStatus(
         hits.length
@@ -1538,6 +1565,11 @@ export function MoveView() {
     if (report) {
       setError(null);
       setImportOk(null);
+    }
+    const wrongNetwork = noteNetworkProblem(note, network);
+    if (wrongNetwork) {
+      if (report) setError(wrongNetwork);
+      return "error";
     }
     setSecuringId(note.id);
     setBusy(true);
@@ -1642,11 +1674,18 @@ export function MoveView() {
     if (!network.pool || !address) {
       throw new Error("Connect a wallet first.");
     }
+    // the vault reads below must be of the network shown, where the claim is saved
+    const switching = noteNetworkProblem({ chainId: network.chainId, pool: network.pool }, network);
+    if (switching) throw new Error(switching);
     const pack = await decodeNotePackage(code, passphrase || undefined, {
       tryTagDecrypt: true,
     });
     const wrongNetwork = claimNetworkProblem(network, pack);
     if (wrongNetwork) throw new Error(wrongNetwork);
+    // A locked code takes a moment to open: still on the network shown, and every read below goes to it.
+    const stillSwitching = noteNetworkProblem({ chainId: network.chainId, pool: network.pool }, network);
+    if (stillSwitching) throw new Error(stillSwitching);
+    const claimClient = publicClientFor(network);
 
     const asset = pack.asset;
     const secret = pack.secret;
@@ -1680,7 +1719,7 @@ export function MoveView() {
     const moved =
       "This payment has already been claimed, so there is nothing left here. If you claimed it on another device, it is in your balance there. If not, check with the person who sent it.";
 
-    const known = loadLocalNotes(address).find(
+    const known = loadLocalNotes(address, network).find(
       (n) => n.commitment.toLowerCase() === commitment.toLowerCase()
     );
     if (known && !isUnsecuredClaim(known)) {
@@ -1689,7 +1728,7 @@ export function MoveView() {
     }
 
     if (!known && !demo) {
-      const spent = await getRhPublicClient()
+      const spent = await claimClient
         .readContract({
           address: network.pool,
           abi: shieldPoolAbi,
@@ -1700,11 +1739,17 @@ export function MoveView() {
       if (spent) throw new Error(moved);
     }
 
-    const tree = await syncShieldTree(getRhPublicClient()).catch(() => null);
+    const tree = await syncShieldTree(claimClient, network).catch(() => null);
     const idx = tree?.indexByCommitment.get(commitment.toLowerCase());
     // Not in the vault yet (still on its way, or a code nobody paid): kept, but
     // out of the balance until the vault shows it.
-    const unfunded = !demo && idx == null && !(await claimFunded(commitment));
+    const seenInVault =
+      demo || idx != null
+        ? true
+        : await claimClient
+            .readContract({ address: network.pool, abi: shieldPoolAbi, functionName: "commitmentSeen", args: [commitment] })
+            .catch(() => false);
+    const unfunded = !demo && idx == null && seenInVault !== true;
 
     const local: LocalNote = known ?? {
       id: claimNoteId(),
@@ -1792,12 +1837,21 @@ export function MoveView() {
     if (mode === "send") setContacts(loadContacts());
   }, [mode]);
 
-  // Auto-scan inbox when opening Receive (if memo board live)
+  // Payments found for one network are never listed on another: a switch clears the list.
+  const shownNetworkKey = useRef(networkKey);
+  useEffect(() => {
+    if (shownNetworkKey.current === networkKey) return;
+    shownNetworkKey.current = networkKey;
+    setInbox([]);
+    setInboxStatus(null);
+  }, [networkKey]);
+
+  // Auto-scan inbox when opening Receive (if memo board live), and again on a network switch
   useEffect(() => {
     if (mode !== "receive" || !isPayMemoLive()) return;
     void scanInbox();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-tab scan once per enter
-  }, [mode]);
+  }, [mode, networkKey]);
 
   // Live preview when pasting a ticket (amount only, not a full claim)
   useEffect(() => {
