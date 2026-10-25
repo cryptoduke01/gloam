@@ -91,6 +91,11 @@ Other rules the provider keeps:
   plus 5% to the evaluator, here the client).
 - A job it cannot pay in full is never submitted; it expires, the fee goes back,
   and the provider sends back what did not leave its float.
+- One quote per job: a second requirement for a job already quoted is ignored,
+  so a client cannot swap in a bigger list after funding the first price.
+- On a fund-transfer job it pays out at most what the client's `fund()`
+  actually moved to it: read from the funding transaction (the hook's log for
+  the job, matched by the token's Transfer), not from the job.funded event.
 - A journal (no secrets) records each payout before it is sent, then what came
   of it. A payout whose answer was lost is never sent again: on the next event
   or restart (or `provider.resume(session)`) the provider looks it up by its

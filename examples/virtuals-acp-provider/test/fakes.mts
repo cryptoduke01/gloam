@@ -4,6 +4,7 @@
  * payments and note store the test controls.
  */
 import { mkdtempSync } from "node:fs";
+import { encodeAbiParameters, pad, toHex, type Hex } from "viem";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BASE_SEPOLIA_USDC, openSealedTicket, type ReceiveKey } from "@gloamtrade/sdk";
@@ -20,11 +21,25 @@ export const PROVIDER = "0x00000000000000000000000000000000000000a1";
 /** jobs(jobId).status on the ACP contract (as the fork shows: 1 funded, 2 submitted, 3 completed, 4 rejected). */
 export const ACP_STATUS = { open: 0, funded: 1, submitted: 2, completed: 3, rejected: 4, expired: 5 } as const;
 
-type ChainJob = { client: string; status: number; provider: string; expiredAt: bigint; evaluator: string; hook: string; budget: bigint; description: string; funded: boolean };
+type ChainJob = { client: string; status: number; provider: string; expiredAt: bigint; evaluator: string; hook: string; budget: bigint; description: string; funded: boolean; request: bigint; fundTx?: Hex };
 
-/** The ACP contract's jobs(jobId) and JobFunded logs, as the provider reads them. */
+const JOB_FUNDED_TOPIC = "0xe3fbcc1ea1bdc559ec7f0347efde7655e58b5f45a30b0e4470a583c3ef5496b3";
+const HOOK_TOPIC = "0xad40084ca0b19b1b3abbe0e851c5d3e96bb2f9ca1fed724848b955ee83a95b07";
+const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const ACP_ADDRESS = "0x0b93793923CD5De81850aF8604a233f3f24d461e";
+
+/**
+ * The ACP contract and the chain around it, as the provider reads them: jobs(jobId),
+ * JobFunded logs, the funding transaction (the hook's log and the token's Transfer),
+ * and the token Transfers of refunds.
+ */
 export class FakeAcp {
   jobs = new Map<string, ChainJob>();
+  receipts = new Map<string, { logs: { address: string; topics: Hex[]; data: Hex }[] }>();
+  /** Token transfers on chain (refunds the provider sent). */
+  transfers: { from: string; to: string; value: bigint; transactionHash: Hex }[] = [];
+  /** When set, every getLogs call throws (an RPC that is down). */
+  logsDown = false;
   reads = 0;
   readContract = async ({ functionName, args }: { functionName: string; args?: unknown[] }) => {
     if (functionName !== "jobs") throw new Error(`fake ACP: no ${functionName}`);
@@ -33,13 +48,51 @@ export class FakeAcp {
     if (!j) return ["0x0000000000000000000000000000000000000000", 0, "0x0000000000000000000000000000000000000000", 0, NO_EVALUATOR, NO_EVALUATOR, 0n, ""];
     return [j.client, j.status, j.provider, j.expiredAt, j.evaluator, j.hook, j.budget, j.description];
   };
-  getLogs = async ({ args }: { args?: { jobId?: bigint } }) => (this.jobs.get(String(args?.jobId))?.funded ? [{ args }] : []);
+  getLogs = async ({ event, args }: { event?: { name?: string }; args?: { jobId?: bigint; from?: string; to?: string } }) => {
+    if (this.logsDown) throw new Error("HTTP request failed. Status: 429");
+    if (event?.name === "Transfer") {
+      return this.transfers
+        .filter((t) => t.from.toLowerCase() === String(args?.from).toLowerCase() && t.to.toLowerCase() === String(args?.to).toLowerCase())
+        .map((t) => ({ args: { from: t.from, to: t.to, value: t.value }, transactionHash: t.transactionHash }));
+    }
+    const j = this.jobs.get(String(args?.jobId));
+    return j?.funded ? [{ args, transactionHash: j.fundTx }] : [];
+  };
+  getTransactionReceipt = async ({ hash }: { hash: Hex }) => {
+    const r = this.receipts.get(hash);
+    if (!r) throw new Error("receipt not found");
+    return r;
+  };
   getBlockNumber = async () => 100n;
-  /** The client funds: on chain the job is Funded and JobFunded was emitted. */
-  fund(jobId: string) {
+  /**
+   * The client funds: on chain the job is Funded, JobFunded was emitted, and the hook moved `moved`
+   * (default: the fund request the provider set) from the client to the provider.
+   */
+  fund(jobId: string, moved?: bigint) {
     const j = this.jobs.get(jobId)!;
     j.status = ACP_STATUS.funded;
     j.funded = true;
+    const amount = moved ?? j.request;
+    const tx = `0x${(0xf00000 + Number(jobId)).toString(16).padStart(64, "0")}` as Hex;
+    j.fundTx = tx;
+    const addr = (a: string) => pad(a as Hex, { size: 32 });
+    this.receipts.set(tx, {
+      logs: [
+        { address: ACP_ADDRESS, topics: [JOB_FUNDED_TOPIC, toHex(BigInt(jobId), { size: 32 }), addr(j.client)], data: toHex(j.budget, { size: 32 }) },
+        { address: BASE_SEPOLIA_USDC, topics: [TRANSFER_TOPIC, addr(j.client), addr(j.provider)], data: toHex(amount, { size: 32 }) },
+        {
+          address: HOOK,
+          topics: [HOOK_TOPIC, toHex(BigInt(jobId), { size: 32 }), toHex(0x2en, { size: 32 })],
+          data: encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }], [j.client as Hex, j.provider as Hex, BASE_SEPOLIA_USDC, amount]),
+        },
+      ],
+    });
+  }
+  /** A refund that went out on chain. */
+  sent(from: string, to: string, value: bigint) {
+    const transactionHash = `0x${(0xe00000 + this.transfers.length).toString(16).padStart(64, "0")}` as Hex;
+    this.transfers.push({ from, to, value, transactionHash });
+    return transactionHash;
   }
   set(jobId: string, patch: Partial<ChainJob>) {
     Object.assign(this.jobs.get(jobId)!, patch);
@@ -48,7 +101,7 @@ export class FakeAcp {
 
 type Paid = { to: string; amount: string; note?: string; sealTo?: string; label?: string };
 type Outcome = Record<string, unknown> & { status: string };
-type FakeNote = { handle: string; label: string; origin: "payment" | "claim"; status: "pending" | "spent" | "unspent"; createdTx: string | null };
+type FakeNote = { handle: string; label: string; origin: "payment" | "claim"; status: "pending" | "spent" | "unspent"; createdTx: string | null; stale?: boolean };
 
 /**
  * A Gloam engine. `pay` and `payByClaimLink` record the payment and, unless the
@@ -58,6 +111,7 @@ type FakeNote = { handle: string; label: string; origin: "payment" | "claim"; st
 export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: bigint; failOn?: number; pay?: (a: Paid, n: number, w: { notes: FakeNote[] }) => Promise<Outcome>; publicBalance?: bigint } = {}) {
   const paid: Paid[] = [];
   const notes: FakeNote[] = [];
+  const cancelled: string[] = [];
   const adds: string[] = [];
   let calls = 0;
   const done = (a: Paid, origin: "payment" | "claim"): Outcome => {
@@ -78,8 +132,9 @@ export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: b
     walletAddress: PROVIDER,
     publicClient: {
       readContract: async (q: { functionName: string; args?: unknown[] }) => (q.functionName === "balanceOf" ? state.publicBalance : acp.readContract(q)),
-      getLogs: acp.getLogs,
-      getBlockNumber: acp.getBlockNumber,
+      getLogs: (q: never) => acp.getLogs(q),
+      getBlockNumber: () => acp.getBlockNumber(),
+      getTransactionReceipt: (q: { hash: Hex }) => acp.getTransactionReceipt(q),
     },
     openSealed: (s: string) => openSealedTicket(s, provider),
     largestPayment: () => opts.float ?? 40_000_000n,
@@ -97,7 +152,14 @@ export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: b
     refresh: async () => ({ updated: 0 }),
     findPayment: (label: string) => {
       const n = [...notes].reverse().find((x) => x.label === label);
-      return n ? { handle: n.handle, status: n.status, origin: n.origin, createdTx: n.createdTx, amount: "0", network: "base", asset: "USDC" } : null;
+      return n ? { handle: n.handle, status: n.status, origin: n.origin, createdTx: n.createdTx, amount: "0", network: "base", asset: "USDC", ...(n.stale && n.status === "pending" ? { stale: true } : {}) } : null;
+    },
+    /** Cancelling a stale payment spends its note back: here it never landed, so it is dropped. */
+    cancelPayment: async (handle: string) => {
+      cancelled.push(handle);
+      const i = notes.findIndex((x) => x.handle === handle && x.status === "pending" && x.stale);
+      if (i >= 0) notes.splice(i, 1);
+      return { status: "done", result: "cancelled" };
     },
     notes: () => [] as { origin: string; status: string; handle: string }[],
     claimLink: (handle: string) => ({ handle, link: `https://www.gloam.trade/claim?net=base#claim=gloam1=fake-${handle}` }),
@@ -106,7 +168,7 @@ export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: b
       return { status: "done", hash: `0x${"e".repeat(64)}` };
     },
   };
-  return { wallet: w as unknown as GloamAgent, paid, notes, adds, state, calls: () => calls };
+  return { wallet: w as unknown as GloamAgent, paid, notes, adds, state, cancelled, calls: () => calls };
 }
 
 export class FakeSession implements JobSessionLike {
@@ -135,7 +197,7 @@ export class FakeSession implements JobSessionLike {
       expiredAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
       hookAddress: hook,
     };
-    acp.jobs.set(jobId, { client: CLIENT, status: ACP_STATUS.open, provider: PROVIDER, expiredAt: this.job.expiredAt, evaluator, hook, budget: 0n, description, funded: false });
+    acp.jobs.set(jobId, { client: CLIENT, status: ACP_STATUS.open, provider: PROVIDER, expiredAt: this.job.expiredAt, evaluator, hook, budget: 0n, description, funded: false, request: 0n });
   }
   async setBudget(a: AssetTokenLike) {
     this.budget = a;
@@ -146,6 +208,7 @@ export class FakeSession implements JobSessionLike {
   async setBudgetWithFundRequest(a: AssetTokenLike, t: AssetTokenLike, destination: string) {
     this.transfer = { token: t, destination };
     await this.setBudget(a);
+    this.acp.set(this.jobId, { request: t.rawAmount });
   }
   async submit(d: string) {
     this.submitted = d;

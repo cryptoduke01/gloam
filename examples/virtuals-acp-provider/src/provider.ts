@@ -42,6 +42,10 @@
  *     Virtuals' ACP backend, which stores those messages, reads neither.
  *     replyTo itself (the client's Gloam address) is outside the seal.
  *
+ * One quote per job, and on a fund-transfer job the payouts are bounded by
+ * what the client's fund() actually moved to the provider, read from the
+ * funding transaction.
+ *
  * Crash safety: a small journal (no secrets) records each payout before it is
  * sent ("sending"), then what came of it. A payout whose answer was lost is
  * never sent again: the provider looks for it in its own note store and on
@@ -51,14 +55,17 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { formatUnits, parseUnits, type Address, type PublicClient } from "viem";
+import { decodeAbiParameters, formatUnits, parseEventLogs, parseUnits, type Address, type Hex, type PublicClient } from "viem";
 import { sealToReceiveTag } from "@gloamtrade/sdk";
 import { safeErrorMessage, type GloamAgent } from "@gloamtrade/game-plugin-gloam";
 import {
   ACP_ABI,
   ACP_CONTRACTS,
   ACP_STATUS,
+  ERC20_TRANSFER_EVENT,
+  FUND_TRANSFER_EVENT_TOPIC,
   FUND_TRANSFER_HOOKS,
+  JOB_FUNDED_TOPIC,
   NO_EVALUATOR,
   assetToken,
   type AssetTokenLike,
@@ -110,6 +117,8 @@ export type JournalJob = {
   transferRaw: string;
   /** Set once the job is funded on chain. */
   funded?: boolean;
+  /** What the client's fund() actually moved to this provider (raw), read from the funding transaction. */
+  receivedRaw?: string;
   /** The block the quote was made at (where a search for the funding starts). */
   quotedAtBlock?: string;
   /** The job's expiry (unix seconds). */
@@ -159,8 +168,8 @@ class Journal {
   }
 }
 
-/** The chain reads the provider makes: jobs(jobId), the JobFunded log, the block number. */
-export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber">;
+/** The chain reads the provider makes: jobs(jobId), the JobFunded log and its transaction, the block number. */
+export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber" | "getTransactionReceipt">;
 
 export interface PrivatePayoutProviderOptions {
   /** The provider's Gloam engine (its private float pays the payouts; its wallet receives the principal). */
@@ -211,6 +220,8 @@ export class PrivatePayoutProvider {
   private readonly journal: Journal;
   private readonly log: (m: string) => void;
   private readonly busy = new Map<string, Promise<void>>();
+  /** Jobs whose requirement is being quoted right now (one quote per job). */
+  private readonly quoting = new Set<string>();
 
   constructor(private readonly opts: PrivatePayoutProviderOptions) {
     this.journal = new Journal(opts.journalPath ?? null);
@@ -302,6 +313,23 @@ export class PrivatePayoutProvider {
   }
 
   private async onRequirement(session: JobSessionLike, content: string) {
+    const k = this.key(session);
+    // One quote per job. A second list could otherwise replace the first after the client funded the
+    // first price (the session can still read "open" before budget.set arrives).
+    if (this.quoting.has(k) || this.journal.get(k)) {
+      this.log(`job ${session.jobId}: a second requirement for a job already quoted; ignored`);
+      await session.sendMessage("This job already has a quote. A different payout list needs a new job.").catch(() => undefined);
+      return;
+    }
+    this.quoting.add(k);
+    try {
+      await this.quoteRequirement(session, content);
+    } finally {
+      this.quoting.delete(k);
+    }
+  }
+
+  private async quoteRequirement(session: JobSessionLike, content: string) {
     const job = session.job;
     if (!job) return;
     const evaluator = lower(job.evaluatorAddress || NO_EVALUATOR);
@@ -394,29 +422,72 @@ export class PrivatePayoutProvider {
     return { client: r[0], status: Number(r[1]), provider: r[2], expiredAt: BigInt(r[3]), evaluator: r[4], hook: r[5], budget: BigInt(r[6]), description: r[7] };
   }
 
-  /** Whether fund() ran for this job (its JobFunded log), searched from the quote's block. Null when the chain could not say. */
-  async fundedOnChain(chainId: number, jobId: string, fromBlock?: string): Promise<boolean | null> {
-    const acp = this.opts.acpAddress ?? ACP_CONTRACTS[chainId]?.acp;
-    if (!acp) return null;
-    const event = ACP_ABI.find((x) => x.type === "event" && x.name === "JobFunded")!;
+  /** Logs of `event` from `address`, from `fromBlock` to the head, in ranges the RPC accepts. */
+  private async logsSince(address: Address, event: unknown, args: Record<string, unknown>, fromBlock?: string) {
     const reader = this.reader();
-    const look = async (from: bigint, to: bigint, depth = 0): Promise<number> => {
+    const head = await reader.getBlockNumber();
+    const from = fromBlock ? BigInt(fromBlock) : head > 100_000n ? head - 100_000n : 0n;
+    const look = async (a: bigint, b: bigint, depth = 0): Promise<{ transactionHash: Hex | null; args?: Record<string, unknown> }[]> => {
       try {
-        const logs = await reader.getLogs({ address: acp, event: event as never, args: { jobId: BigInt(jobId) } as never, fromBlock: from, toBlock: to });
-        return logs.length;
+        return (await reader.getLogs({ address, event: event as never, args: args as never, fromBlock: a, toBlock: b })) as never;
       } catch (e) {
-        if (to <= from || depth >= 14) throw e;
-        const mid = from + (to - from) / 2n;
-        return (await look(from, mid, depth + 1)) + (await look(mid + 1n, to, depth + 1));
+        if (b <= a || depth >= 14) throw e;
+        const mid = a + (b - a) / 2n;
+        return [...(await look(a, mid, depth + 1)), ...(await look(mid + 1n, b, depth + 1))];
       }
     };
+    return look(from, head);
+  }
+
+  /**
+   * Whether fund() ran for this job (its JobFunded log, searched from the
+   * quote's block), and on a fund-transfer job what it moved to this provider:
+   * the hook's own log for this job, matched by the token's Transfer from the
+   * client in the same transaction. Null where the chain could not say.
+   */
+  async funding(chainId: number, j: Pick<JournalJob, "jobId" | "client" | "mode" | "quotedAtBlock">): Promise<{ funded: boolean | null; received: bigint | null; tx?: Hex }> {
+    const acp = this.opts.acpAddress ?? ACP_CONTRACTS[chainId]?.acp;
+    if (!acp) return { funded: null, received: null };
+    const event = ACP_ABI.find((x) => x.type === "event" && x.name === "JobFunded")!;
+    let tx: Hex | null | undefined;
     try {
-      const head = await reader.getBlockNumber();
-      const from = fromBlock ? BigInt(fromBlock) : head > 100_000n ? head - 100_000n : 0n;
-      return (await look(from, head)) > 0;
+      const logs = await this.logsSince(acp, event, { jobId: BigInt(j.jobId) }, j.quotedAtBlock);
+      if (!logs.length) return { funded: false, received: 0n };
+      tx = logs[logs.length - 1]!.transactionHash;
     } catch {
-      return null;
+      return { funded: null, received: null };
     }
+    if (j.mode !== "fund-transfer") return { funded: true, received: 0n, ...(tx ? { tx } : {}) };
+    if (!tx) return { funded: true, received: null };
+    const us = lower(this.opts.providerAddress ?? this.opts.wallet.walletAddress ?? "");
+    const token = lower(this.asset().address);
+    const client = lower(j.client);
+    try {
+      const receipt = await this.reader().getTransactionReceipt({ hash: tx });
+      const transfers = parseEventLogs({ abi: [ERC20_TRANSFER_EVENT], logs: receipt.logs as never }).filter(
+        (l) => lower(l.address) === token && lower(l.args.from) === client && lower(l.args.to) === us
+      );
+      const hook = lower(FUND_TRANSFER_HOOKS[chainId] ?? "");
+      const hookLog = receipt.logs.find(
+        (l) => lower(l.address) === hook && l.topics[0] === FUND_TRANSFER_EVENT_TOPIC && l.topics[1] !== undefined && BigInt(l.topics[1]) === BigInt(j.jobId)
+      );
+      if (hookLog) {
+        const [from, to, tok, amount] = decodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" }], hookLog.data);
+        const moved = lower(from) === client && lower(to) === us && lower(tok) === token && transfers.some((t) => t.args.value === amount);
+        return { funded: true, received: moved ? amount : 0n, tx };
+      }
+      // A hook that logs differently: the token's own transfers, when this transaction funds this job alone.
+      const funds = receipt.logs.filter((l) => lower(l.address) === lower(acp) && l.topics[0] === JOB_FUNDED_TOPIC);
+      if (funds.length !== 1) return { funded: true, received: null, tx };
+      return { funded: true, received: transfers.reduce((sum, t) => sum + t.args.value, 0n), tx };
+    } catch {
+      return { funded: true, received: null, tx };
+    }
+  }
+
+  /** Whether fund() ran for this job. Null when the chain could not say. */
+  async fundedOnChain(chainId: number, jobId: string, fromBlock?: string): Promise<boolean | null> {
+    return (await this.funding(chainId, { jobId, client: "", mode: "escrow", quotedAtBlock: fromBlock })).funded;
   }
 
   /** Why an on-chain job may not be paid out against this quote, or null when it may. */
@@ -479,7 +550,24 @@ export class PrivatePayoutProvider {
       this.log(`job ${session.jobId}: not paying: ${why}`);
       return;
     }
-    const jf: JournalJob = { ...j, funded: true, blocked: undefined };
+    // On a fund-transfer job, what the client's fund() moved to this provider bounds the payouts.
+    let received = j.receivedRaw !== undefined ? BigInt(j.receivedRaw) : null;
+    if (j.mode === "fund-transfer" && received === null) received = (await this.funding(session.chainId, j)).received;
+    if (j.mode === "fund-transfer" && received === null) {
+      this.journal.put(k, { ...j, funded: true, blocked: "could not read what the funding moved yet" });
+      this.log(`job ${session.jobId}: funded, but what the funding moved could not be read yet; not paying (tried again on the next event or resume)`);
+      return;
+    }
+    const a = this.asset();
+    const total = j.payouts.reduce((sum, p) => sum + parseUnits(p.amount, a.decimals), 0n);
+    if (j.mode === "fund-transfer" && received! < total) {
+      const why2 = `the client's funding moved ${formatUnits(received!, a.decimals)} ${a.symbol}, less than the ${formatUnits(total, a.decimals)} ${a.symbol} of payouts`;
+      this.journal.put(k, { ...j, funded: true, receivedRaw: received!.toString(), blocked: why2 });
+      await session.sendMessage(`Not paying: ${why2}. What arrived goes back when the job ends.`).catch(() => undefined);
+      this.log(`job ${session.jobId}: not paying: ${why2}`);
+      return;
+    }
+    const jf: JournalJob = { ...j, funded: true, ...(received !== null ? { receivedRaw: received.toString() } : {}), blocked: undefined };
     this.journal.put(k, jf);
     await this.payAll(session, jf);
   }

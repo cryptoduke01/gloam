@@ -93,6 +93,20 @@ export const FUND_TRANSFER_HOOKS: Record<number, Address> = {
   84532: "0xbbeC2c985F9483473B9e0Da0704395943034266B",
 };
 
+/**
+ * What FundTransferHook logs when fund() moves the transfer: topics (this, jobId,
+ * an id), data (from, to, token, amount). Read off the Base Sepolia hook on a fork
+ * (25 Oct 2026); the provider also checks the token's own Transfer in the same
+ * transaction, and falls back to that alone where the hook logs differently.
+ */
+export const FUND_TRANSFER_EVENT_TOPIC = "0xad40084ca0b19b1b3abbe0e851c5d3e96bb2f9ca1fed724848b955ee83a95b07" as const;
+
+/** JobFunded(uint256 indexed jobId, address indexed client, uint256 amount). */
+export const JOB_FUNDED_TOPIC = "0xe3fbcc1ea1bdc559ec7f0347efde7655e58b5f45a30b0e4470a583c3ef5496b3" as const;
+
+/** ERC-20 Transfer(from, to, value). */
+export const ERC20_TRANSFER_EVENT = { type: "event", name: "Transfer", inputs: [{ name: "from", type: "address", indexed: true }, { name: "to", type: "address", indexed: true }, { name: "value", type: "uint256", indexed: false }] } as const;
+
 /** The optParams of setBudget and fund on a fund-transfer job: (token, amount, destination). Same as acp-node-v2's hookEncoding.ts. */
 export function encodeFundTransfer(token: Address, amount: bigint, destination: Address): Hex {
   return encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "address" }], [token, amount, destination]);
