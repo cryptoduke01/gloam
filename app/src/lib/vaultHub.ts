@@ -159,3 +159,15 @@ export function pickAddAsset<T extends { amount: number; dollar: boolean }>(rows
   }
   return best;
 }
+
+/**
+ * One order for a list of balances, wherever the Vault shows one (the
+ * overview's private and wallet panes, the Add page's private balance):
+ * dollar stablecoins first, then the larger holding, then by name.
+ */
+export function compareHoldings(
+  a: { dollar: boolean; amount: number; symbol: string },
+  b: { dollar: boolean; amount: number; symbol: string }
+): number {
+  return Number(b.dollar) - Number(a.dollar) || b.amount - a.amount || a.symbol.localeCompare(b.symbol);
+}

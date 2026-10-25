@@ -30,7 +30,7 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { approvalSteps, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
-import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
+import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
@@ -47,7 +47,7 @@ import { BridgeInCard } from "./BridgeIn";
 import { RefreshIcon } from "./VaultHealth";
 import { BRIDGE_DESTINATIONS, bridgeVisible } from "@/lib/bridge";
 import { countPerson } from "@/lib/people";
-import { pickAddAsset, vaultActionSearch } from "@/lib/vaultHub";
+import { compareHoldings, pickAddAsset, vaultActionSearch } from "@/lib/vaultHub";
 import { faucetFor } from "@/lib/faucet";
 import { TempoFaucetButton } from "./TempoFaucetButton";
 
@@ -769,19 +769,25 @@ export function ShieldView() {
       ? formatUsd((Number(shieldedWei) / 1e18) * ethUsd)
       : null;
 
+  // The same order as the Vault overview (lib/vaultHub compareHoldings).
   const assetRows = useMemo(() => {
-    const rows: { asset: string; label: string; amount: bigint }[] = [];
+    const rows: { asset: string; label: string; amount: bigint; dollar: boolean; size: number }[] = [];
     byAsset.forEach((amount, asset) => {
       if (amount > BigInt(0)) {
-        rows.push({ asset, label: assetLabel(asset), amount });
+        const t = tokens.find((x) => x.address.toLowerCase() === asset.toLowerCase());
+        rows.push({
+          asset,
+          label: assetLabel(asset),
+          amount,
+          dollar: Boolean(t && isDollarStable(t)),
+          size: Number(formatUnits(amount, assetDecimals(asset))),
+        });
       }
     });
-    return rows.sort((a, b) => {
-      if (isNativeAsset(a.asset)) return -1;
-      if (isNativeAsset(b.asset)) return 1;
-      return a.label.localeCompare(b.label);
-    });
-  }, [byAsset]);
+    return rows.sort((a, b) =>
+      compareHoldings({ dollar: a.dollar, amount: a.size, symbol: a.label }, { dollar: b.dollar, amount: b.size, symbol: b.label })
+    );
+  }, [byAsset, tokens]);
 
   if (!deployed) {
     return (

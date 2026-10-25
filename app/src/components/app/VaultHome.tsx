@@ -22,6 +22,7 @@ import {
   pickAddAsset,
   vaultActionBlocked,
   vaultActionSearch,
+  compareHoldings,
   type VaultActionId,
   type VaultActionInfo,
 } from "@/lib/vaultHub";
@@ -86,7 +87,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
         dollar: false,
       });
     }
-    return rows.sort((a, b) => Number(b.dollar) - Number(a.dollar) || b.amount - a.amount);
+    return rows.sort(compareHoldings);
   }, [balancesVisible, tokens, tokenBals, nativeOk, nativeBal, network.primaryAsset.symbol]);
 
   // The private side: this browser's notes in this vault.
@@ -107,7 +108,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
         dollar: Boolean(t && isDollarStable(t)),
       });
     });
-    return rows.sort((a, b) => Number(b.dollar) - Number(a.dollar) || b.amount - a.amount);
+    return rows.sort(compareHoldings);
   }, [balancesVisible, byAsset, known]);
 
   const hasPrivate = privateRows.length > 0;
@@ -199,6 +200,9 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
 
   return (
     <div className="space-y-6">
+      {/* Phones: every money move on the first screen, before the balances. */}
+      <QuickRow actions={core} blockedFor={(a) => vaultActionBlocked(a, { known: privateKnown, hasPrivate })} />
+
       {/* Private next to public: two different things, and the move between them. */}
       <section className="gl-card overflow-hidden" aria-labelledby="vault-money-title">
         <div className="flex items-center justify-between gap-3 px-5 pt-5 sm:px-7 sm:pt-6">
@@ -363,6 +367,55 @@ function BalancePane({
         <p className="mt-3 text-[12.5px] leading-relaxed text-mute">{note}</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * On a phone the overview opens on its actions: Add, Pay, Receive and Cash out
+ * (and Swap where it exists) side by side, each its mark and short name, so
+ * none waits below the balances. One that needs a private balance first is
+ * shown but quiet; the list below says why. From a tablet up the list is near
+ * the top already, so this row is not drawn (globals.css .vault-quickrow).
+ */
+function QuickRow({
+  actions,
+  blockedFor,
+}: {
+  actions: readonly VaultActionInfo[];
+  blockedFor: (a: VaultActionInfo) => string | null;
+}) {
+  return (
+    <nav aria-label="Vault actions" className="vault-quickrow">
+      <ul
+        className={`grid gap-1 rounded-[20px] bg-surface-2 p-1 dark:bg-panel dark:ring-1 dark:ring-line ${
+          actions.length >= 5 ? "grid-cols-5" : "grid-cols-4"
+        }`}
+      >
+        {actions.map((a) => {
+          const blocked = blockedFor(a);
+          const cell =
+            "flex h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[16px] px-1 text-[12px] leading-tight";
+          return (
+            <li key={a.id} className="min-w-0">
+              {blocked ? (
+                <span aria-disabled="true" title={blocked} className={`${cell} text-faint`}>
+                  <VaultActionIcon id={a.id} size={18} />
+                  <span className="max-w-full truncate">{a.short}</span>
+                </span>
+              ) : (
+                <Link
+                  href={`/app/vault${vaultActionSearch(a.id, "")}`}
+                  className={`${cell} bg-panel text-foreground shadow-card transition-colors active:bg-surface dark:bg-surface-2`}
+                >
+                  <VaultActionIcon id={a.id} size={18} />
+                  <span className="max-w-full truncate">{a.short}</span>
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 

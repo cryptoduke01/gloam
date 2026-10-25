@@ -172,6 +172,12 @@ function ActionRow({
 }) {
   const row = useRef<HTMLDivElement>(null);
   const core = actions.filter((a) => !a.extra).length;
+  // On a phone only the main actions fit, so Trade and Public send are left
+  // out, except the one that is open: it takes a slot, so the row always
+  // marks where you are and keeps its tab stop.
+  const extraOpen = actions.some((a) => a.extra && a.id === current);
+  const phoneCols = core + (extraOpen ? 1 : 0);
+  const colsClass = phoneCols >= 6 ? "grid-cols-6" : phoneCols === 5 ? "grid-cols-5" : "grid-cols-4";
 
   function onKey(e: KeyboardEvent<HTMLButtonElement>) {
     const tabs = Array.from(row.current?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []).filter(
@@ -203,9 +209,7 @@ function ActionRow({
         ref={row}
         role="tablist"
         aria-label="Vault actions"
-        className={`grid w-full gap-1 rounded-[20px] bg-surface-2 p-1 sm:inline-flex sm:w-auto sm:max-w-full sm:rounded-full dark:bg-panel dark:ring-1 dark:ring-line ${
-          core >= 5 ? "grid-cols-5" : "grid-cols-4"
-        }`}
+        className={`grid w-full gap-1 rounded-[20px] bg-surface-2 p-1 sm:inline-flex sm:w-auto sm:max-w-full sm:rounded-full dark:bg-panel dark:ring-1 dark:ring-line ${colsClass}`}
       >
         {actions.map((a, i) => {
           const active = a.id === current;
@@ -223,7 +227,7 @@ function ActionRow({
               onClick={() => onSelect(a.id)}
               onKeyDown={onKey}
               className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-[12px] leading-tight transition-colors duration-200 max-sm:h-[60px] sm:h-10 sm:flex-row sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-[14px] ${
-                a.extra ? "max-sm:hidden" : ""
+                a.extra && !active ? "max-sm:hidden" : ""
               } ${extraStart ? "sm:ml-2" : ""} ${
                 active
                   ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
