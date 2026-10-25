@@ -261,4 +261,44 @@ await test("a payroll run of another chain is refused before anything is read, r
   assert.equal(reads, 0, "nothing was read on Base Sepolia for the Robinhood Chain run");
 });
 
+await test("one repair pass reopens ETH notes the old cleanup marked spent, only where the vault still holds them", async () => {
+  const { reopenGhostEthNotes } = await import("../src/lib/claimSweep");
+  const { noteNullifierPoseidon } = await import("../src/lib/notePoseidon");
+  const { fieldToHex, hexToField } = await import("../src/lib/poseidon");
+  nets.setShownNetworkKey("base");
+  const secret = (i: number) => fieldToHex(BigInt(1000 + i)) as Hex;
+  const mk = (id: string, i: number, extra: Partial<LocalNote> = {}) =>
+    note(84532, ETH, "10000000000000000", { id, secret: secret(i), commitment: fieldToHex(BigInt(5000 + i)) as Hex, nullifier: undefined, status: "recovered", ...extra });
+  const ghost = mk("ghost", 1); // unspent, in the vault: the bug's victim
+  const spent = mk("spent", 2); // really spent
+  const unseen = mk("unseen", 3); // never landed
+  const payeeRow = mk("pay-for-someone", 4); // a payment made for someone else: not this browser's money
+  const usdc = mk("usdc", 5, { asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address }); // only ETH was hit
+  const rh = { ...mk("rh", 6), chainId: 4663 }; // another chain
+  await vault.setAllNotes([...rhNotes, baseNote, ...futureNotes, ghost, spent, unseen, payeeRow, usdc, rh]);
+  const nf = async (n: LocalNote) => fieldToHex(await noteNullifierPoseidon(hexToField(n.secret), hexToField(n.commitment))).toLowerCase();
+  const spentSet = new Set([await nf(spent)]);
+  const seenSet = new Set([ghost, spent, payeeRow, usdc, rh].map((n) => n.commitment.toLowerCase()));
+  let reads = 0;
+  const env = {
+    chainId: BASE.chainId,
+    pool: BASE.pool as Address,
+    chain: {
+      isSpent: async (x: Hex) => (reads++, spentSet.has(x.toLowerCase())),
+      isCommitmentSeen: async (c: Hex) => (reads++, seenSet.has(c.toLowerCase())),
+    },
+  } as never;
+  assert.equal(await reopenGhostEthNotes(env), true);
+  const status = (id: string) => vault.getAllNotes().find((n) => n.id === id)?.status;
+  assert.equal(status("ghost"), "open", "the wrongly retired ETH note is back in the balance");
+  for (const id of ["spent", "unseen", "pay-for-someone", "usdc", "rh"]) assert.equal(status(id), "recovered", id);
+  // once per vault: a later sync reads nothing and changes nothing, even if a note is retired again
+  const before = reads;
+  await vault.setAllNotes(vault.getAllNotes().map((n) => (n.id === "ghost" ? { ...n, status: "recovered" as const } : n)));
+  assert.equal(await reopenGhostEthNotes(env), false);
+  assert.equal(reads, before);
+  // a vault that lists no ETH (Robinhood Chain mainnet) never runs it
+  assert.equal(await reopenGhostEthNotes({ ...(env as object), chainId: RH.chainId } as never), false);
+});
+
 console.log(`selftest-note-scope: ${passed} checks passed`);
