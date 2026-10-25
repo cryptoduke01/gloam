@@ -67,6 +67,8 @@ function VaultNavList({
   });
   const inVault = pathname === "/app/vault";
   const current: VaultActionId | null = inVault ? vaultActionFromParams(tab, mode, actions) : null;
+  // The Vault's overview (no action in the URL) is the Vault row itself.
+  const onOverview = inVault && current === null;
   const rowH = size === "sheet" ? "h-10" : "h-9";
 
   return (
@@ -75,8 +77,13 @@ function VaultNavList({
         id={`nav-vault-${size}`}
         href="/app/vault"
         onClick={onNavigate}
+        aria-current={onOverview ? "page" : undefined}
         className={`flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] transition-colors ${
-          inVault ? "font-medium text-foreground" : "text-mute hover:bg-surface/70 hover:text-foreground"
+          onOverview
+            ? `${navActiveFill(size)} font-medium text-foreground`
+            : inVault
+              ? "font-medium text-foreground"
+              : "text-mute hover:bg-surface/70 hover:text-foreground"
         }`}
       >
         {icon}
