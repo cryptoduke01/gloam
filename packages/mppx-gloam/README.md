@@ -116,6 +116,8 @@ The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official po
 
 Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, on the final keys) works with SDK 0.3.0, which has its pool. `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) is refused with a plain error until the SDK has its pool.
 
+Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH) is refused the same way until the SDK has its pool. Ethereum has no Gloam testnet.
+
 ## Status
 
 Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.

@@ -32,6 +32,12 @@ import {
   BASE_SEPOLIA_USDC,
   BASE_USDC,
   BASE_USDT,
+  ETHEREUM_EURC,
+  ETHEREUM_MAINNET_CHAIN_ID,
+  ETHEREUM_PYUSD,
+  ETHEREUM_USDC,
+  ETHEREUM_USDG,
+  ETHEREUM_USDT,
   GLOAM_TOKEN,
   NATIVE_ASSET,
   RH_MAINNET_CHAIN_ID,
@@ -58,7 +64,7 @@ export type GloamMode = "push" | "pull";
 export const GLOAM_MODES: readonly GloamMode[] = ["push", "pull"];
 
 export interface GloamChargeMethodDetails {
-  /** Chain the shielded pool lives on: Tempo 4217 or Robinhood Chain 4663 (mainnet), Tempo Moderato 42431 or Robinhood Chain testnet 46630; Base 8453 and Base Sepolia 84532 once their pools are in. */
+  /** Chain the shielded pool lives on: Tempo 4217 or Robinhood Chain 4663 (mainnet), Tempo Moderato 42431 or Robinhood Chain testnet 46630; Base 8453, Base Sepolia 84532 and Ethereum 1 once their pools are in. */
   chainId: number;
   /** The Gloam pool the transfer settles through. Clients and servers accept only the official pool for chainId. */
   pool: Address;
@@ -164,7 +170,24 @@ const UINT = /^(0|[1-9][0-9]*)$/;
 export function assetDecimals(currency: Address): number | undefined {
   const c = lc(currency);
   if (c === lc(NATIVE_ASSET) || c === lc(GLOAM_TOKEN)) return 18;
-  const sixes = [TEMPO_PATHUSD, TEMPO_OUSD, TEMPO_USDCE, TEMPO_USDT0, RH_USDG, RH_MAINNET_USDG, BASE_USDC, BASE_EURC, BASE_USDT, BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC];
+  const sixes = [
+    TEMPO_PATHUSD,
+    TEMPO_OUSD,
+    TEMPO_USDCE,
+    TEMPO_USDT0,
+    RH_USDG,
+    RH_MAINNET_USDG,
+    BASE_USDC,
+    BASE_EURC,
+    BASE_USDT,
+    BASE_SEPOLIA_USDC,
+    BASE_SEPOLIA_EURC,
+    ETHEREUM_USDC,
+    ETHEREUM_USDT,
+    ETHEREUM_USDG,
+    ETHEREUM_PYUSD,
+    ETHEREUM_EURC,
+  ];
   if (sixes.some((a) => c === lc(a))) return 6;
   return undefined;
 }
@@ -179,13 +202,15 @@ export function assetSymbol(chainId: number, currency: Address): string {
   if (c === lc(TEMPO_USDT0)) return "USDT0";
   if (c === lc(RH_USDG) || c === lc(RH_MAINNET_USDG)) return "USDG";
   if (c === lc(GLOAM_TOKEN)) return "GLOAM";
-  if (c === lc(BASE_USDC) || c === lc(BASE_SEPOLIA_USDC)) return "USDC";
-  if (c === lc(BASE_EURC) || c === lc(BASE_SEPOLIA_EURC)) return "EURC";
-  if (c === lc(BASE_USDT)) return "USDT";
+  if (c === lc(BASE_USDC) || c === lc(BASE_SEPOLIA_USDC) || c === lc(ETHEREUM_USDC)) return "USDC";
+  if (c === lc(BASE_EURC) || c === lc(BASE_SEPOLIA_EURC) || c === lc(ETHEREUM_EURC)) return "EURC";
+  if (c === lc(BASE_USDT) || c === lc(ETHEREUM_USDT)) return "USDT";
+  if (c === lc(ETHEREUM_USDG)) return "USDG";
+  if (c === lc(ETHEREUM_PYUSD)) return "PYUSD";
   return "TOKEN";
 }
 
-/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood", and "base-mainnet" / "base" once their pools are in. */
+/** The network names a charge takes: "tempo-mainnet", "robinhood-mainnet", "tempo", "robinhood", and "base-mainnet" / "base" / "ethereum-mainnet" once their pools are in. */
 export type GloamChargeNetwork = GloamNetworkKey;
 
 // ── building and parsing requests ─────────────────────────────────────────────
@@ -222,6 +247,7 @@ const PUBLISHED_POOL_CHAINS: Partial<Record<GloamNetworkKey, number>> = {
   "tempo-mainnet": TEMPO_MAINNET_CHAIN_ID,
   "base-mainnet": BASE_MAINNET_CHAIN_ID,
   base: BASE_SEPOLIA_CHAIN_ID,
+  "ethereum-mainnet": ETHEREUM_MAINNET_CHAIN_ID,
 };
 
 /** Resolve a network name or chain id to a chain id, plus that network's default asset. */
