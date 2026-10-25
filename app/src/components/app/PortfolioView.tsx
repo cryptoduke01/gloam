@@ -115,16 +115,17 @@ function SendIcon() {
     </svg>
   );
 }
-function MoveIcon() {
+function ReceiveIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 8h11m0 0l-3-3m3 3l-3 3M17 16H6m0 0l3-3m-3 3l3 3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M17 7L7 17M15 17H7V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function CashOutIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -480,17 +481,13 @@ export function PortfolioView() {
               <p className="mt-3 max-w-[52ch] text-[14px] leading-relaxed text-mute">{privateSub}</p>
             </div>
 
+            {/* The four money moves, the same names as the nav under Vault. A
+                public send stays under Vault, so Send here is never public. */}
             <div className="shrink-0 gap-2 max-sm:grid max-sm:grid-cols-2 sm:flex sm:flex-wrap">
-              <QuickAction
-                href="/app/shield"
-                label="Add privately"
-                icon={<AddIcon />}
-                primary
-                disabled={!shieldLive}
-                className="max-sm:col-span-2"
-              />
-              <QuickAction href="/app/send" label="Send" icon={<SendIcon />} />
-              <QuickAction href="/app/move" label="Move" icon={<MoveIcon />} disabled={!shieldLive} />
+              <QuickAction href="/app/vault?tab=shield" label="Add privately" icon={<AddIcon />} primary disabled={!shieldLive} />
+              <QuickAction href="/app/vault?tab=move" label="Pay privately" icon={<SendIcon />} disabled={!shieldLive} />
+              <QuickAction href="/app/vault?tab=move&mode=receive" label="Receive" icon={<ReceiveIcon />} />
+              <QuickAction href="/app/vault?tab=move&mode=cashout" label="Cash out" icon={<CashOutIcon />} disabled={!shieldLive} />
             </div>
           </div>
         </div>
@@ -659,8 +656,8 @@ export function PortfolioView() {
                           Trade
                         </Link>
                       )}
-                      <Link href="/app/move" className="btn btn-ghost btn-sm h-10">
-                        Move
+                      <Link href="/app/vault?tab=move" className="btn btn-ghost btn-sm h-10">
+                        Pay
                       </Link>
                     </div>
                   </li>
