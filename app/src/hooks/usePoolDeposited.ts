@@ -34,6 +34,7 @@ export function usePoolDeposited(asset: Address | undefined | null) {
   }, [asset]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- polls the vault's total; each read marks itself loading as it starts
     void refetch();
     // a hidden tab skips its turn; coming back reads at once
     const t = setInterval(() => {

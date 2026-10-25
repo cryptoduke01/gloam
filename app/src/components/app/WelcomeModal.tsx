@@ -42,6 +42,7 @@ export function WelcomeModal() {
     } catch {
       /* storage unavailable: show it */
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- takes over from the head-start script: whether to show depends on this browser's storage, read once after mount
     if (liveNow) setLive(true);
     // The head start may have unhidden it; React's own state takes over here.
     if (show) setOpen(true);

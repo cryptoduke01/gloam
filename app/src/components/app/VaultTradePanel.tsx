@@ -196,6 +196,7 @@ export function VaultTradePanel({
     eligible.find((n) => n.id === noteId) ?? eligible[0] ?? null;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pins the note in use, so a note saved meanwhile does not swap in mid-trade
     if (selected && selected.id !== noteId) setNoteId(selected.id);
   }, [selected, noteId]);
 

@@ -48,6 +48,7 @@ export function OnboardingCard() {
   // Load persisted state and auto-open once if there is unfinished setup.
   useEffect(() => {
     const s = loadOnboarding();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- setup progress lives in this browser; read once after mount, and open the card if steps remain
     setState(s);
     const remaining = ONBOARDING_STEPS.filter((x) => !s.done.includes(x.id));
     // A recording opens on a wallet that is already set up.

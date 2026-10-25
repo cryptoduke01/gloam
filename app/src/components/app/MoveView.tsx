@@ -419,6 +419,7 @@ export function MoveView() {
 
   useEffect(() => {
     let live = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- each network's relay is checked anew; the button waits until the answer comes back
     setRelayChecked(false);
     void relayFor(network.chainId).then((r) => {
       if (!live) return;
@@ -656,6 +657,7 @@ export function MoveView() {
     // and the code stay saved and settle once the chain shows them.
     if (pendingAction.current === "send" && surelyNotSent(writeError)) forgetUnsent();
     keptBeforeSend.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the wallet refused or the write failed: stop the spinner and clear what was kept for that send
     setBusy(false);
     setStatus(null);
     // Only their heads-up failed: the payment already landed, so its code
@@ -689,6 +691,7 @@ export function MoveView() {
     pendingLink.current = null;
     pendingClaimLink.current = false;
     spentNoteId.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the receipt wait gave up on a busy network: stop the spinner and say the payment may still land
     setBusy(false);
     setStatus(null);
     setError(
@@ -1833,6 +1836,7 @@ export function MoveView() {
     void getOrCreateReceiveIdentity().then(setMyIdentity).catch(() => {
       /* crypto unavailable */
     });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- saved contacts live in this browser; read again each time Send opens
     if (mode === "send") setContacts(loadContacts());
   }, [mode]);
 
@@ -1848,6 +1852,7 @@ export function MoveView() {
   // Auto-scan inbox when opening Receive (if memo board live), and again on a network switch
   useEffect(() => {
     if (mode !== "receive" || !isPayMemoLive()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening Receive scans the payment-message board, which marks the scan as running
     void scanInbox();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-tab scan once per enter
   }, [mode, networkKey]);
@@ -1856,6 +1861,7 @@ export function MoveView() {
   useEffect(() => {
     const t = importText.trim();
     if (!t || mode !== "receive") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no text to preview: drop the last preview before the debounced check below
       setClaimPreview(null);
       return;
     }
@@ -1908,6 +1914,9 @@ export function MoveView() {
   }, [importText, importPassphrase, mode]);
 
   const working = busy || isPending || confirming;
+  // What the spinner and the success note are about, read once per render.
+  // eslint-disable-next-line react-hooks/refs -- each handler sets it together with busy, so the render that shows the spinner reads it current
+  const busyAction = pendingAction.current;
   const connectedOk = isConnected && onProduct;
   const memoLive = isPayMemoLive();
 
@@ -2436,8 +2445,8 @@ export function MoveView() {
                       className="btn btn-ink btn-lg btn-block"
                     >
                       {working &&
-                      (pendingAction.current === "send" ||
-                        pendingAction.current === "memo") ? (
+                      (busyAction === "send" ||
+                        busyAction === "memo") ? (
                         <>
                           <Spinner />
                           <span className="truncate">{status || "Working…"}</span>
@@ -2873,7 +2882,7 @@ export function MoveView() {
                       onClick={() => void (planActive ? onPrivateCashOut() : onCashOut())}
                       className="btn btn-ink btn-lg btn-block"
                     >
-                      {working && pendingAction.current === "cashout" ? (
+                      {working && busyAction === "cashout" ? (
                         <>
                           <Spinner />
                           <span className="truncate">{status || "Working…"}</span>
@@ -3386,8 +3395,8 @@ export function MoveView() {
           ) : undefined
         }
         body={
-          pendingAction.current === "send" ||
-          pendingAction.current === "memo" ||
+          busyAction === "send" ||
+          busyAction === "memo" ||
           shareBlob ? (
             <>
               <p>
