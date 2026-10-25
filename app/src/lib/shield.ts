@@ -5,7 +5,7 @@
 
 import { formatUnits, parseUnits, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { knownTokens } from "./tokens";
-import { getActiveNetwork } from "./networks";
+import { getActiveNetwork, type GloamNetwork } from "./networks";
 import { makeBoundNote } from "./note";
 import { readAmountText } from "./amountText";
 import { dataKeyLocked, getAllNotes, setAllNotes, syncFromDisk, unlockNoteVault } from "./noteVault";
@@ -323,6 +323,82 @@ function inActiveScope(
   if (n.chainId !== scope.chainId) return false;
   if (scope.pool && n.pool && n.pool.toLowerCase() !== scope.pool) return false;
   return true;
+}
+
+/** A chain and its vault: a network, or anything that names one (a payroll run, a tree). */
+type NetScope = { chainId: number; pool: string | null };
+
+const scopeOf = (net: NetScope) => ({ chainId: net.chainId, pool: net.pool ? net.pool.toLowerCase() : null });
+
+/**
+ * A note is on a network only when both its chain and its vault match. The
+ * vault alone never tells: Robinhood Chain, Tempo and Base Sepolia (and Base
+ * mainnet after it) run the mainnet pool at one address, so a note matched on
+ * the vault would show, and offer itself, on every one of them.
+ */
+export function noteOnNetwork(n: Pick<LocalNote, "chainId" | "pool">, net: NetScope): boolean {
+  return inActiveScope(n, scopeOf(net));
+}
+
+/** The notes of `notes` that are on `net` (chain and vault). */
+export function notesOnNetwork<T extends Pick<LocalNote, "chainId" | "pool">>(notes: readonly T[], net: NetScope): T[] {
+  const scope = scopeOf(net);
+  return notes.filter((n) => inActiveScope(n, scope));
+}
+
+/**
+ * What a view of notes shows (hooks/useLocalShieldNotes): only notes on
+ * `network` (chain and vault), and none before the page knows its network.
+ * The view's state can still hold another chain's notes for a moment (read
+ * before a switch, or by a sync that started on the old network and finished
+ * after it), and the mainnet vaults and Base Sepolia share one address, so
+ * Robinhood Chain mainnet notes showed, and could be picked, on Base Sepolia.
+ */
+export function visibleNotes(
+  local: readonly LocalNote[],
+  chain: readonly LocalNote[],
+  network: NetScope,
+  settled: boolean
+): { local: LocalNote[]; chain: LocalNote[] } {
+  if (!settled) return { local: [], chain: [] };
+  return { local: notesOnNetwork(local, network), chain: notesOnNetwork(chain, network) };
+}
+
+/**
+ * The notes an empty ETH inventory retires (the "ghost ETH" cleanup after a
+ * sync): open ETH notes on `net` with no nullifier, which isSpent can't settle.
+ * A note with a nullifier is settled by isSpent alone, so a node that answers
+ * 0 for a brand new pool, or a read made on another chain, can never take it
+ * out of the balance.
+ */
+export function ghostEthNotes(notes: readonly LocalNote[], net: NetScope): LocalNote[] {
+  return notesOnNetwork(notes, net).filter(
+    (n) => n.status !== "recovered" && (!n.nullifier || n.nullifier === "0x") && isNativeAsset(n.asset)
+  );
+}
+
+export const NOTE_OTHER_NETWORK_MESSAGE = "This balance is on another network. Switch to that network to use it.";
+export const NETWORK_SWITCHING_MESSAGE = "The network is still switching. Wait a moment, then try again.";
+
+/**
+ * Why `note` can't be spent or proved on `net` right now, or null. Besides the
+ * note's own chain and vault, the network lib code reads (the tree, the
+ * proving keys, the relay's chain) must be `net` too: a proof is only ever
+ * built and sent for the chain the page shows.
+ */
+export function noteNetworkProblem(note: Pick<LocalNote, "chainId" | "pool">, net: NetScope): string | null {
+  if (!net.pool || note.chainId !== net.chainId || !note.pool || note.pool.toLowerCase() !== net.pool.toLowerCase()) {
+    return NOTE_OTHER_NETWORK_MESSAGE;
+  }
+  const active = activeScope();
+  if (active.chainId !== net.chainId || active.pool !== net.pool.toLowerCase()) return NETWORK_SWITCHING_MESSAGE;
+  return null;
+}
+
+/** Throws noteNetworkProblem's reason: call it before proving or sending anything that spends `note`. */
+export function assertNoteOnNetwork(note: Pick<LocalNote, "chainId" | "pool">, net: NetScope): void {
+  const problem = noteNetworkProblem(note, net);
+  if (problem) throw new Error(problem);
 }
 
 /** Listed tokens, the active network's first (an address can sit on two chains). */
@@ -835,9 +911,14 @@ export function markAllNotesRecovered(
   setAllNotes(next);
 }
 
-export function loadLocalNotes(address?: string | null): LocalNote[] {
+/**
+ * This browser's notes on the active network (chain and vault), or on `net`
+ * when given: a view passes the network it shows, so what it lists always
+ * matches its own label.
+ */
+export function loadLocalNotes(address?: string | null, net?: NetScope): LocalNote[] {
   if (typeof window === "undefined") return [];
-  const scope = activeScope();
+  const scope = net ? scopeOf(net) : activeScope();
   const filtered = getAllNotes().filter((n) => inActiveScope(n, scope));
   if (!address) return filtered;
   const lower = address.toLowerCase();
@@ -930,9 +1011,10 @@ export function mergeNotes(
 /** Pull Shielded events for a wallet (amounts public on deposit edge). */
 export async function fetchChainShieldNotes(
   client: PublicClient,
-  from: Address
+  from: Address,
+  /** The network `client` reads; the active one when left out. */
+  net: GloamNetwork = getActiveNetwork()
 ): Promise<LocalNote[]> {
-  const net = getActiveNetwork();
   const pool = net.pool;
   if (!pool) return [];
   const deployBlock = net.deployBlock ?? SHIELD_DEPLOY_BLOCK;

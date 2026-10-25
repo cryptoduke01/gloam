@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
-import { getRhPublicClient } from "@/lib/rhClient";
+import { publicClientFor } from "@/lib/rhClient";
 import { useDemoLive } from "@/lib/demo";
 import { readDemo } from "@/lib/demoFlag";
 import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
@@ -13,25 +13,29 @@ import {
   confirmedNotes,
   unfundedClaims,
   fetchChainShieldNotes,
+  ghostEthNotes,
   loadLocalNotes,
   markNoteRecovered,
   mergeNotes,
+  notesOnNetwork,
   purgeSenderPaymentNotes,
+  visibleNotes,
   shieldPoolAbi,
   sumByAsset,
   sumEthWei,
   type LocalNote,
 } from "@/lib/shield";
 import { useNetwork } from "@/components/app/NetworkProvider";
+import type { GloamNetwork } from "@/lib/networks";
 
 /**
  * Local notes + chain history. Balance only counts notes with a local secret
  * that are not spent on-chain.
  *
- * Uses dedicated RH RPC, not the wallet network.
+ * Reads over the shown network's own RPC, not the wallet's.
  */
 export function useLocalShieldNotes(address?: string | null) {
-  const { network } = useNetwork();
+  const { network, settled } = useNetwork();
   // Recording demo: the pretend wallet's notes are read on every render, so a
   // network switch or a change made in another view shows straight away.
   const demo = useDemoLive();
@@ -40,18 +44,28 @@ export function useLocalShieldNotes(address?: string | null) {
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const lastFocusSync = useRef(0);
+  // The network shown now, for async work to check it is still on the network it started on.
+  // Updated before the effects below run (effects run in order), so a sync started for the
+  // new network never sees the old key.
+  const shownKey = useRef(network.key);
+  useEffect(() => {
+    shownKey.current = network.key;
+  }, [network.key]);
 
+  // Read again on every network switch: the vault address can be the same on
+  // the new network, so the address alone never triggers it.
   const refreshLocal = useCallback(() => {
     purgeSenderPaymentNotes();
-    setLocal(loadLocalNotes(address));
+    setLocal(loadLocalNotes(address, network));
     setReady(true);
-  }, [address]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, network.key]);
 
   const reconcileSpent = useCallback(
-    async (notes: LocalNote[]) => {
-      if (!network.pool) return;
-      const publicClient = getRhPublicClient();
-      const candidates = notes.filter(
+    async (notes: LocalNote[], net: GloamNetwork) => {
+      if (!net.pool) return;
+      const publicClient = publicClientFor(net);
+      const candidates = notesOnNetwork(notes, net).filter(
         (n) =>
           n.nullifier &&
           n.nullifier !== "0x" &&
@@ -63,7 +77,7 @@ export function useLocalShieldNotes(address?: string | null) {
       for (const n of candidates) {
         try {
           const spent = (await publicClient.readContract({
-            address: network.pool,
+            address: net.pool,
             abi: shieldPoolAbi,
             functionName: "isSpent",
             args: [n.nullifier as Hex],
@@ -76,64 +90,67 @@ export function useLocalShieldNotes(address?: string | null) {
           /* ignore */
         }
       }
-      if (any) {
-        setLocal(loadLocalNotes(address));
+      if (any && shownKey.current === net.key) {
+        setLocal(loadLocalNotes(address, net));
       }
     },
-    [address, network.pool]
+    [address]
   );
 
   const syncChain = useCallback(async () => {
     // Recording demo: the pretend wallet has no chain history to merge in.
     if (!address || !network.pool || readDemo()) {
       setChain([]);
+      setSyncing(false);
       return;
     }
+    // the first render's network is a placeholder until this browser's choice is read
+    if (!settled) return;
+    // Everything below reads and writes this one network, even if the page
+    // switches while it runs; its results are only shown if it is still on it.
+    const net = network;
+    const pool = net.pool!;
+    const still = () => shownKey.current === net.key;
     setSyncing(true);
     try {
       // Claimed payments that reached the vault since, then secured claims and
       // cash-out splits whose move landed (or never can) since last time.
-      if (await reconcileUnfunded().catch(() => false)) setLocal(loadLocalNotes(address));
-      if (await reconcileClaims().catch(() => false)) setLocal(loadLocalNotes(address));
-      const publicClient = getRhPublicClient();
-      const rows = await fetchChainShieldNotes(
-        publicClient,
-        address as Address
-      );
+      if ((await reconcileUnfunded().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
+      if ((await reconcileClaims().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
+      const publicClient = publicClientFor(net);
+      const rows = await fetchChainShieldNotes(publicClient, address as Address, net);
+      if (!still()) return;
       setChain(rows);
-      const merged = mergeNotes(loadLocalNotes(address), rows);
-      await reconcileSpent(merged);
+      const merged = mergeNotes(loadLocalNotes(address, net), rows);
+      await reconcileSpent(merged, net);
       // Scheduled cash outs, after spent notes are retired: one that came back
       // unsent (and is unspent on its chain) makes its note spendable again.
-      if (await reconcileCashOuts().catch(() => false)) setLocal(loadLocalNotes(address));
-      // Ghost-note cleanup: only wipe local ETH if pool ETH inventory is zero
+      if ((await reconcileCashOuts().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
+      // Ghost-note cleanup for old notes with no nullifier (isSpent can't
+      // settle them): an empty ETH inventory means none of them is left. Read
+      // and applied on this sync's own network only, so a switch halfway
+      // through can't apply another chain's empty inventory to this one's notes.
       try {
         const ethInPool = (await publicClient.readContract({
-          address: network.pool,
+          address: pool,
           abi: shieldPoolAbi,
           functionName: "deposited",
           args: ["0x0000000000000000000000000000000000000000"],
         })) as bigint;
         if (ethInPool === BigInt(0)) {
-          const locals = loadLocalNotes(address);
-          for (const n of locals) {
-            if (
-              n.status !== "recovered" &&
-              (!n.asset ||
-                n.asset === "0x0000000000000000000000000000000000000000")
-            ) {
-              markNoteRecovered(n.id);
-            }
-          }
-          setLocal(loadLocalNotes(address));
+          const ghosts = ghostEthNotes(loadLocalNotes(address, net), net);
+          for (const n of ghosts) markNoteRecovered(n.id);
+          if (ghosts.length && still()) setLocal(loadLocalNotes(address, net));
         }
       } catch {
         /* ignore */
       }
     } finally {
-      setSyncing(false);
+      // a sync of a network no longer shown leaves the current one's flag alone
+      if (still()) setSyncing(false);
     }
-  }, [address, reconcileSpent, network.pool]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, reconcileSpent, network.key, settled]);
 
   const refresh = useCallback(() => {
     refreshLocal();
@@ -177,11 +194,13 @@ export function useLocalShieldNotes(address?: string | null) {
     };
   }, [refresh, refreshLocal]);
 
-  const demoLocal = demo ? loadLocalNotes(address) : null;
-  const merged = useMemo(
-    () => mergeNotes(demoLocal ?? local, chain),
-    [demoLocal, local, chain]
+  const demoLocal = demo ? loadLocalNotes(address, network) : null;
+  // Only this network's notes, whatever the state still holds from before a switch.
+  const shown = useMemo(
+    () => visibleNotes(demoLocal ?? local, chain, network, settled),
+    [demoLocal, local, chain, network, settled]
   );
+  const merged = useMemo(() => mergeNotes(shown.local, shown.chain), [shown]);
   const open = useMemo(
     () => activeSpendableNotes(merged),
     [merged]
@@ -193,8 +212,8 @@ export function useLocalShieldNotes(address?: string | null) {
   const shieldedWei = useMemo(() => sumEthWei(open), [open]);
 
   return {
-    local,
-    chain,
+    local: shown.local,
+    chain: shown.chain,
     merged,
     open,
     waiting,
