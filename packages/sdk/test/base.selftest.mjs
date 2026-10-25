@@ -97,8 +97,9 @@ assert(test.assets.map((a) => a.symbol).join() === "USDC,EURC,ETH", "Base Sepoli
 assert(baseSepoliaPool()?.pool === TEST_POOL, "baseSepoliaPool reads BASE_SEPOLIA_POOL");
 
 // ── lookups ──────────────────────────────────────────────────────────────────────
-const keys = gloamNetworks().map((n) => n.key);
-// Ethereum sits with the mainnets once MAINNET_POOLS[1] is filled in; nothing here needs editing then.
+// Ethereum sits with the mainnets once MAINNET_POOLS[1] is filled in, and Ethereum Sepolia after
+// Base Sepolia once its pool is in (ethereum-sepolia.selftest.mjs); nothing here needs editing then.
+const keys = gloamNetworks().map((n) => n.key).filter((k) => k !== "ethereum");
 const order = ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", ...(mainnetPoolFor(1) ? ["ethereum-mainnet"] : []), "robinhood", "tempo", "base"];
 assert(keys.join() === order.join(), `network order (${keys.join()})`);
 assert(getGloamNetwork("base") === test && getGloamNetwork("base-mainnet") === main, "by key");
