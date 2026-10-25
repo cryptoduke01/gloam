@@ -415,10 +415,12 @@ body {
   background: var(--surface);
   border-radius: 18px;
 }
+/* The glass rim around a panel: 8px of glass (p-2) around a 12px panel, so the
+   outer corner is 12 + 8 and the two curves stay concentric. */
 .gl-glass {
   background: var(--glass);
   border: 1px solid var(--glass-line);
-  border-radius: 16px;
+  border-radius: 20px;
   -webkit-backdrop-filter: blur(14px) saturate(1.1);
   backdrop-filter: blur(14px) saturate(1.1);
 }
@@ -1225,17 +1227,15 @@ html[data-theme="dark"],
   font-feature-settings: "tnum" 1;
 }
 
-/* Interactive elevation for clickable cards */
+/* Clickable cards: the edge firms up on hover. Cards stay put; no lift and no
+   shadow bloom, which read as a template. */
 .lift {
   transition:
-    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    background-color 0.2s ease;
 }
 .lift:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
-  box-shadow: 0 16px 36px -18px rgba(14, 15, 17, 0.18);
 }
 
 /* Editorial entrance for app views, staggered rise */
