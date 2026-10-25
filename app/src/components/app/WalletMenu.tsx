@@ -486,11 +486,11 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
               </MenuLink>
             )}
             <MenuLink
-              href="/app/move"
+              href="/app/vault?tab=move"
               onClick={() => setOpen(false)}
               icon={<SendGlyph />}
             >
-              Private send
+              Pay privately
             </MenuLink>
             <MenuLink
               href="/app/settings"
