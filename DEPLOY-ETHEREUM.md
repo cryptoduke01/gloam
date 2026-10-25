@@ -458,6 +458,12 @@ edit: the ones about Ethereum check the real vault and memo board once
 `MAINNET_POOLS[1]` is in. If you deployed Base the same day in the same tree, make this
 one PR for both (add `contracts/deployments/base-mainnet.json` too).
 
+The repo's Markdown does not switch on by itself. In the same PR, say Ethereum mainnet is
+live with its vault, block and memo board where these say it is next or not deployed:
+`README.md` (the opening line, the Ethereum section), `AGENTS.md`, `DEPLOY.md` (the mainnet
+table), `SECURITY.md` (the opening line), `contracts/README.md`, `contracts/ARCHITECTURE.md`
+and `contracts/PRODUCTION.md` (tick the Ethereum box).
+
 Before the PR is merged, check the relayer holds its 0.04 ETH. Later, when you want
 them: a release with the pool in, `@gloamtrade/sdk` 0.4.x, `@gloamtrade/mcp` 0.6.x and
 `@gloamtrade/mppx-gloam` 0.3.x (publish with pnpm).

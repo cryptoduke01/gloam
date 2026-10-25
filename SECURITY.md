@@ -1,6 +1,6 @@
 # Security notes (Gloam)
 
-Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software, with the testnets (`46630`, `42431`) next to them. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open); an external audit is planned, not done.
+Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software, with the testnets (`46630`, `42431`, Base Sepolia `84532` and Ethereum Sepolia `11155111`) next to them. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open); an external audit is planned, not done.
 
 ## Secrets policy
 
