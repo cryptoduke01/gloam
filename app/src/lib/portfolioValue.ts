@@ -1,3 +1,19 @@
+import { compareHoldings } from "./vaultHub";
+
+/**
+ * Dollars where every asset has a price, and the amounts of those that don't
+ * next to them ("$100", "+ 1,000 GLOAM"): never a silent $0 for an asset with
+ * no price, and no "$0" in front when nothing held is priced.
+ */
+function moneyParts(usd: number, unpriced: readonly string[], formatUsd: (n: number) => string): string[] {
+  if (!unpriced.length) return [formatUsd(usd)];
+  return [
+    ...(usd > 0 ? [formatUsd(usd)] : []),
+    ...unpriced.slice(0, 2),
+    ...(unpriced.length > 2 ? [`${unpriced.length - 2} more`] : []),
+  ];
+}
+
 /**
  * The Portfolio's private balance headline, worked out apart from the page so
  * it can be checked: dollars where every asset has a price, and the amounts of
@@ -16,10 +32,74 @@ export function privateHeadline(args: {
 }): string {
   const { showUsd, sealedUsd, unpriced, vaultValue, formatUsd } = args;
   if (!showUsd) return vaultValue;
-  if (!unpriced.length) return formatUsd(sealedUsd);
-  return [
-    ...(sealedUsd > 0 ? [formatUsd(sealedUsd)] : []),
-    ...unpriced.slice(0, 2),
-    ...(unpriced.length > 2 ? [`${unpriced.length - 2} more`] : []),
-  ].join(" + ");
+  return moneyParts(sealedUsd, unpriced, formatUsd).join(" + ");
+}
+
+/** One balance in the Portfolio's wallet card, as the order and the total read it. */
+export type WalletHolding = {
+  symbol: string;
+  /** Whole units: 0.0339 for 0.0339 ETH. */
+  amount: number;
+  /** Its value in dollars, or null where nothing prices it (EURC, ETH while the feed is down). */
+  usd: number | null;
+  /** A dollar stablecoin. */
+  dollar: boolean;
+  /** "20 EURC": how the total names it when it has no price. */
+  text: string;
+  /** Its price is still on its way (ETH or a stock before the first markets read). */
+  pending?: boolean;
+};
+
+/**
+ * The wallet card's order: what is held first, in the Vault's order (dollar
+ * stablecoins, then the larger value, lib/vaultHub compareHoldings), then the
+ * zero balances, which the card folds away so it leads with money. A holding
+ * with no dollar price is sized by its amount.
+ */
+export function splitWalletRows<T extends WalletHolding>(rows: readonly T[]): { held: T[]; empty: T[] } {
+  const key = (r: T) => ({ dollar: r.dollar, amount: r.usd ?? r.amount, symbol: r.symbol });
+  const sorted = [...rows].sort((a, b) => compareHoldings(key(a), key(b)));
+  return { held: sorted.filter((r) => r.amount > 0), empty: sorted.filter((r) => !(r.amount > 0)) };
+}
+
+/**
+ * A wallet row's second line: what the balance is worth, $0.00 for none.
+ * Never the price of one unit (a zero USDG row read "$1.00" beside "USDC 60,
+ * $60"). Nothing with dollars off, or where nothing prices the asset.
+ */
+export function walletRowValue(
+  row: Pick<WalletHolding, "usd">,
+  showUsd: boolean,
+  formatUsd: (n: number) => string
+): string | null {
+  return showUsd && row.usd != null ? formatUsd(row.usd) : null;
+}
+
+export type WalletTotal =
+  /** Dollars are off in Settings: the rows carry the amounts. */
+  | { state: "off" }
+  /** A balance or a price is still being read, so any figure would be wrong. */
+  | { state: "loading" }
+  /** "$140", and "+ 20 EURC" for what has no dollar price (or null). */
+  | { state: "ready"; figure: string; extra: string | null };
+
+/**
+ * The wallet card's total: the dollars of what the wallet holds, and what has
+ * no dollar price named beside it by amount, never added as $0. Nothing shows
+ * while a balance or a price it needs is still loading.
+ */
+export function walletTotal(args: {
+  showUsd: boolean;
+  /** A wallet balance is still being read. */
+  loading: boolean;
+  rows: readonly WalletHolding[];
+  formatUsd: (n: number) => string;
+}): WalletTotal {
+  if (!args.showUsd) return { state: "off" };
+  const { held } = splitWalletRows(args.rows);
+  if (args.loading || held.some((r) => r.pending)) return { state: "loading" };
+  const usd = held.reduce((s, r) => s + (r.usd ?? 0), 0);
+  const unpriced = held.filter((r) => r.usd == null).map((r) => r.text);
+  const [figure, ...rest] = moneyParts(usd, unpriced, args.formatUsd);
+  return { state: "ready", figure, extra: rest.length ? `+ ${rest.join(" + ")}` : null };
 }
