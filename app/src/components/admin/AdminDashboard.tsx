@@ -579,6 +579,9 @@ export function AdminDashboard() {
     .sort((a, b) => b.ts - a.ts || Number(b.block) - Number(a.block))
     .slice(0, 25);
   const money = isMain ? "mainnet" : "testnet";
+  // Assets this side moved with no dollar price (EURC): named next to the dollar figures, never priced at $1.
+  const noPrice = notInDollars(sideNets, nameOf);
+  const heldNoPrice = [...new Set(sideNets.flatMap((m) => (m.unpriced ?? []).map((sym) => `${sym} (${nameOf(m)})`)))].join(", ");
   // Bridge and swaps run on mainnet only.
   const shown: Tab = !isMain && tab === "relay" ? "overview" : tab;
   const sideTabs: [Tab, string][] = [
@@ -788,8 +791,9 @@ export function AdminDashboard() {
               />
               <p className="mt-4 text-[13px] leading-relaxed text-mute">
                 UTC days, {money}. Deposits rise above the line, cash-outs drop below it. Priced at today&apos;s prices:
-                stablecoins at $1, ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
-                {isMain ? ", $GLOAM from DEX Screener" : ""}.
+                dollar stablecoins at $1, ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
+                {isMain ? ", $GLOAM from DEX Screener" : ""}
+                {noPrice ? `. Not in dollars: ${noPrice}` : ""}.
               </p>
             </Panel>
 
@@ -889,7 +893,7 @@ export function AdminDashboard() {
                 empty="Nothing held or moved yet"
               />
               <p className="mt-4 text-[13px] leading-relaxed text-mute">
-                Stablecoins count as $1. ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "is not priced right now"};
+                Dollar stablecoins count as $1{heldNoPrice ? `; ${heldNoPrice} have no dollar price and are left out of dollar totals` : ""}. ETH {oc?.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "is not priced right now"};
                 stock tokens at live equity marks{oc?.prices.stocks === "live" ? "" : ", not available right now"}.
                 Counts in brackets.
               </p>
@@ -1347,6 +1351,11 @@ function PartnersPanel() {
   );
 }
 
+/** "EURC (Base)": what these networks moved with no dollar price, or "" when everything was priced. */
+function notInDollars(ms: NetworkMetrics[], name: (m: NetworkMetrics) => string): string {
+  return [...new Set(ms.flatMap((m) => (m.revenue?.unpriced ?? []).map((s) => `${s} (${name(m)})`)))].join(", ");
+}
+
 /**
  * Gloam's own revenue over the windows, in dollars: the vaults' cash-out fees.
  * $GLOAM creator fees are trading fees on the token's launchpad, not protocol
@@ -1390,6 +1399,7 @@ function RevenuePanel({
     );
   }
   const isMain = env === "mainnet";
+  const noPrice = notInDollars(nets, (m) => adminName(getNetwork(m.key)));
   const word = isMain ? "Revenue" : "Fees";
   const kept = isMain ? "fees kept" : "testnet, not revenue";
   const creatorErr = isMain ? (oc.creator && !("earnedEth" in oc.creator) ? oc.creator.error : (creator?.error ?? null)) : null;
@@ -1494,10 +1504,11 @@ function RevenuePanel({
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           {isMain
-            ? "Mainnet only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. Priced at today's prices: stablecoins at $1, "
-            : "Testnet fees from testing are not revenue. $GLOAM creator fees exist on mainnet only. Priced at today's prices: stablecoins at $1, "}
+            ? "Mainnet only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. Priced at today's prices: dollar stablecoins at $1, "
+            : "Testnet fees from testing are not revenue. $GLOAM creator fees exist on mainnet only. Priced at today's prices: dollar stablecoins at $1, "}
           ETH {oc.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
-          {isMain ? ", $GLOAM from DEX Screener" : ""}. Windows are the last 24 hours, 7 days and 30 days.
+          {isMain ? ", $GLOAM from DEX Screener" : ""}
+          {noPrice ? `. Not in dollars: ${noPrice}` : ""}. Windows are the last 24 hours, 7 days and 30 days.
         </p>
       </Panel>
 

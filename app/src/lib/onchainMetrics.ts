@@ -124,6 +124,12 @@ export type NetworkRevenue = {
   /** Transaction counts, not dollars. */
   txs: Windowed;
   daily: RevenueDay[];
+  /**
+   * Assets that moved but have no dollar price (EURC is a euro, never $1): left
+   * out of the dollar figures above, never counted as $0 without saying so.
+   * Absent on snapshots cached before it was added.
+   */
+  unpriced?: string[];
 };
 
 export type NetworkMetrics = {
@@ -731,9 +737,14 @@ function revenueOf(n: GloamNetwork, s: ScanState, prices: Prices, settings: FeeS
     if (!unit.has(a)) unit.set(a, usdOf(n, a, 1, assetInfo(n, a), prices));
     return unit.get(a)!;
   };
+  const unpriced = new Set<string>();
   const usd = (a: string, raw: bigint) => {
     const p = unitUsd(a);
-    return p == null ? 0 : Number(formatUnits(raw, assetInfo(n, a).decimals)) * p;
+    if (p == null) {
+      if (raw > 0n) unpriced.add(assetInfo(n, a).symbol);
+      return 0;
+    }
+    return Number(formatUnits(raw, assetInfo(n, a).decimals)) * p;
   };
 
   const fees = zero();
@@ -788,6 +799,7 @@ function revenueOf(n: GloamNetwork, s: ScanState, prices: Prices, settings: FeeS
     const p = unitUsd(a);
     const owedValue = owed == null || p == null ? null : Number(formatUnits(owed, info.decimals)) * p;
     if (owedValue) owedUsd += owedValue;
+    if (p == null && owed != null && owed > 0n) unpriced.add(info.symbol);
     return {
       asset: a,
       symbol: info.symbol,
@@ -813,6 +825,7 @@ function revenueOf(n: GloamNetwork, s: ScanState, prices: Prices, settings: FeeS
       const { wallets, ...rest } = byDay.get(d)!;
       return { ...rest, wallets: wallets.size };
     }),
+    unpriced: [...unpriced],
   };
 }
 
@@ -1001,6 +1014,7 @@ function combineRevenue(revs: NetworkRevenue[], allEvents: ChainEvent[][], days:
   }
   return {
     fees: sumW((r) => r.fees),
+    unpriced: [...new Set(revs.flatMap((r) => r.unpriced ?? []))],
     owedUsd: revs.reduce((a, r) => a + r.owedUsd, 0),
     depositVolume: sumW((r) => r.depositVolume),
     cashoutVolume: sumW((r) => r.cashoutVolume),
