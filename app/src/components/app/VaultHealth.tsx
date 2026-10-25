@@ -84,7 +84,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           <button
             type="button"
             onClick={recheck}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface hover:text-foreground"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface hover:text-foreground"
           >
             <RefreshIcon />
             Refresh
@@ -113,7 +113,7 @@ export function VaultHealth({ compact = false }: { compact?: boolean }) {
           <button
             type="button"
             onClick={recheck}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-mute transition-colors hover:bg-surface-2 hover:text-foreground"
           >
             <RefreshIcon />
             Refresh

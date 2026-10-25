@@ -277,11 +277,21 @@ export function PieceLeftover({
       <p className="text-foreground">
         {`A piece of your private cash out, ${formatAssetLabel(note.amountWei, note.asset)} to ${shortAddress(tag.to as Address)}, wasn't scheduled. It's safe in your private balance.`}
       </p>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-        <button type="button" disabled={busy} onClick={onSchedule} className="font-medium underline underline-offset-4 disabled:opacity-50">
+      <div className="mt-1 flex flex-wrap gap-x-5">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onSchedule}
+          className="inline-flex min-h-10 items-center font-medium underline underline-offset-4 disabled:opacity-50"
+        >
           {scheduling ? "Scheduling…" : `Schedule it over ${windowWords(tag.window)}`}
         </button>
-        <button type="button" disabled={busy} onClick={onKeep} className="text-mute underline underline-offset-4 hover:text-foreground disabled:opacity-50">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onKeep}
+          className="inline-flex min-h-10 items-center text-mute underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+        >
           Keep it in my balance
         </button>
       </div>
