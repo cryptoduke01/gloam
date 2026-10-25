@@ -495,14 +495,12 @@ export function PortfolioView() {
             {shieldLive && addSuggestion ? (
               // The same money, still in public: one step from private.
               <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-mute">
-                <span className="inline-flex items-center gap-1.5">
-                  <EyeIcon />
-                  <span>
-                    <span className="tnum text-foreground">
-                      {formatAssetAmount(addSuggestion.raw, addSuggestion.address)} {addSuggestion.symbol}
-                    </span>{" "}
-                    in your wallet, public
-                  </span>
+                <span>
+                  You have{" "}
+                  <span className="tnum text-foreground">
+                    {formatAssetAmount(addSuggestion.raw, addSuggestion.address)} {addSuggestion.symbol}
+                  </span>{" "}
+                  in your wallet.
                 </span>
                 <Link
                   href={addAssetHref(addSuggestion.id)}
@@ -586,7 +584,7 @@ export function PortfolioView() {
             <section className="gl-card overflow-hidden">
               <header className="flex items-center justify-between gap-3 max-sm:px-5 pb-3 pt-5 sm:px-6">
                 <div>
-                  <h2 className="text-[17px] text-foreground">In your vault</h2>
+                  <h2 className="text-[17px] text-foreground">Private balance</h2>
                   <p className="mt-0.5 text-[13px] text-mute">Only this browser can read these amounts</p>
                 </div>
               </header>
@@ -678,15 +676,27 @@ export function PortfolioView() {
                   </li>
                 ))}
               </ul>
+              {/* What a private balance is for, one tap from each. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line py-3 max-sm:px-5 sm:px-6">
+                <p className="text-[13px] text-mute">Pay from it privately, or cash out to any wallet.</p>
+                <div className="flex gap-1">
+                  <Link href="/app/vault?tab=move" className="btn btn-quiet btn-sm h-10">
+                    Pay privately
+                  </Link>
+                  <Link href="/app/vault?tab=move&mode=cashout" className="btn btn-quiet btn-sm h-10">
+                    Cash out
+                  </Link>
+                </div>
+              </div>
             </section>
           )}
 
-          {/* Holdings table */}
+          {/* In your wallet: the public side */}
           <section className="gl-card overflow-hidden">
             <header className="flex items-center justify-between gap-3 max-sm:px-5 pb-3 pt-5 sm:px-6">
               <div>
-                <h2 className="text-[17px] text-foreground">Holdings</h2>
-                <p className="mt-0.5 text-[13px] text-mute">Public tokens in your wallet</p>
+                <h2 className="text-[17px] text-foreground">In your wallet</h2>
+                <p className="mt-0.5 text-[13px] text-mute">Public: anyone can see these on the explorer</p>
               </div>
             </header>
             {!balancesVisible ? (
