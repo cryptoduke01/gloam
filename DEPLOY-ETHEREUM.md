@@ -17,8 +17,9 @@ Base, with native ETH listed.
 2. The final-key Groth16 verifiers (shield, cash out, private send), their adapters and
    the `DualProofVerifier`. No pool is created unless they accept final-key proofs and
    reject dev-key ones.
-3. `ShieldPoolPayments` (payments only, no swap code), with the shield verifier set,
-   deposit limits on, each asset listed, the 0.25% cash-out fee to the treasury, the
+3. `ShieldPoolPayments` (payments only, no swap code), with deposit limits on (before
+   the shield verifier, so no deposit can land unlimited), the shield verifier set, each
+   asset listed, the 0.25% cash-out fee to the treasury, the
    ownership handoff to the owner wallet started, and setup ended. Then every setting
    is read back and any mismatch fails the run.
 4. Optional, recommended: the payment-memo board (`GloamPayMemo`), so a recipient can
@@ -88,7 +89,7 @@ $2,354.93).
 | Deployer | `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` | 0 ETH, nonce 0 | **0.01 ETH** |
 | Owner (browser wallet) | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` | 0.00073 ETH | nothing more (accepting costs about 28,400 gas) |
 | Treasury (cash-out fees) | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` | | nothing |
-| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` | 0 ETH | **0.02 ETH** to start |
+| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` | 0 ETH | **0.04 ETH** to start |
 
 Measured on a local fork of Ethereum mainnet (below):
 
@@ -97,9 +98,9 @@ Measured on a local fork of Ethereum mainnet (below):
 | PoseidonT3 | 2,157,126 |
 | Verifiers, adapters, `DualProofVerifier` | 2,420,145 |
 | `ShieldPoolPayments` | 3,686,378 |
-| Setup calls (shield verifier, limits on, 6 assets, fee, owner handoff, end setup) | 510,428 |
+| Setup calls (limits on, shield verifier, 6 assets, fee, owner handoff, end setup) | 510,440 |
 | Memo board (optional) | 152,323 |
-| **Whole deploy, deployer** | **8,926,400** (8,774,077 without the memo board) |
+| **Whole deploy, deployer** | **8,926,412** (8,774,089 without the memo board) |
 | `acceptOwnership()`, owner | 28,358 |
 
 What that costs:
@@ -122,7 +123,7 @@ PoseidonT3 goes out through an ethers v5 script, which by default tips 1.5 gwei:
 0.0033 ETH on Ethereum, ten times the rest of the deploy on a quiet day. Set
 `PRIORITY_FEE_GWEI=0.01` (step 2) and it tips that instead.
 
-Why 0.02 ETH for the relayer: the relay pays the gas of every relayed private send and
+Why 0.04 ETH for the relayer: the relay pays the gas of every relayed private send and
 cash out. Measured on the fork with real final-key proofs:
 
 | Relayed call | Gas | At 0.035 gwei | At 1 gwei | At 3 gwei (the ceiling) |
@@ -132,9 +133,19 @@ cash out. Measured on the fork with real final-key proofs:
 | Cash out, ETH | about 0.68M | 0.000024 ETH | 0.00068 ETH | 0.0020 ETH |
 
 Deposits are paid by the person depositing (about 1.28M gas for USDT, 1.45M for ETH).
-0.02 ETH is about 300 private sends at today's gas, or 3 at the ceiling. The relay calls
-itself low below two sends' worth of gas (2 x 2.4M gas at the current price, never more
-than the ceiling), so top it up as it runs down.
+
+The relay calls itself low, and stops relaying, once its balance is under 4.8M gas times
+the gas price (never more than the 3 gwei ceiling): 0.0144 ETH at the ceiling, 0.00024
+ETH at 0.05 gwei. What it can spend is the balance above that line. With 0.04 ETH:
+
+| Gas price | Low below | Private sends of room |
+| --- | --- | --- |
+| 0.05 gwei (25 Oct) | 0.00024 ETH | about 420 |
+| 0.2 gwei | 0.00096 ETH | about 100 |
+| 1 gwei | 0.0048 ETH | about 18 |
+| 3 gwei (the ceiling) | 0.0144 ETH | about 4 to 5 |
+
+Top it up as it runs down; `/api/relay` shows `lowBalance` per chain.
 
 ## The relay's gas ceiling
 
@@ -195,7 +206,7 @@ cast wallet address --private-key "$DEPLOYER_PK"   # must print 0x891E74a11abC5D
 cast chain-id --rpc-url $RPC_URL                   # 1
 cast nonce 0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411 --rpc-url $RPC_URL   # 0 for the same addresses as the other chains
 cast balance 0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411 --rpc-url $RPC_URL --ether   # 0.01
-cast gas-price --rpc-url $RPC_URL | cast from-wei --unit gwei   # go on only under 0.5
+cast to-unit $(cast gas-price --rpc-url $RPC_URL) gwei   # go on only under 0.5
 ```
 
 ### Step 2: PoseidonT3
@@ -227,7 +238,58 @@ forge script $SCRIPT --rpc-url $RPC_URL --broadcast --slow --with-gas-price 1gwe
 
 `--slow` waits for each transaction before the next (about 12 seconds a block, so a few
 minutes for all 19). If gas jumps over 1 gwei mid-run the next transaction waits in the
-mempool; if forge gives up waiting, run the same command with `--resume` once it lands.
+mempool.
+
+#### If the broadcast stops partway
+
+Never run the step 3 broadcast fresh once any of its transactions has landed: a fresh run
+deploys a second set of verifiers and a second vault at later nonces, so the vault would
+not be at `0x39e28cde55cab798874746ac52cb4b5cc99a0194`, and it pays the deploy twice.
+Send nothing else from the deployer until the deploy is finished. First see where it
+stopped (a transaction still pending shows as a gap between the two nonces; wait for it):
+
+```bash
+DEPLOYER=0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411
+POOL=0x39e28cde55cab798874746ac52cb4b5cc99a0194   # or the address the run printed
+cast nonce $DEPLOYER --rpc-url $RPC_URL; cast nonce $DEPLOYER --block pending --rpc-url $RPC_URL
+cast code $POOL --rpc-url $RPC_URL | wc -c        # 3 means no code yet
+```
+
+- **The vault has no code yet:** only ever resume. It sends the rest of the same run,
+  from `broadcast/`, at the same nonces:
+
+  ```bash
+  forge script $SCRIPT --rpc-url $RPC_URL --resume --slow --with-gas-price 1gwei --priority-gas-price 0.01gwei
+  ```
+
+- **The vault has code:** finish the setup by hand, as the deployer. Read what is done:
+
+  ```bash
+  cast call $POOL 'setupMode()(bool)' --rpc-url $RPC_URL          # true until endSetup
+  cast call $POOL 'depositLimitsOn()(bool)' --rpc-url $RPC_URL
+  cast call $POOL 'shieldVerifier()(address)' --rpc-url $RPC_URL   # 0x0 until set
+  for a in ${LIMIT_ASSETS//,/ }; do echo "$a $(cast call $POOL 'depositLimit(address)(uint128,uint128)' $a --rpc-url $RPC_URL | tr '\n' ' ')"; done
+  cast call $POOL 'withdrawFeeBps()(uint16)' --rpc-url $RPC_URL; cast call $POOL 'feeRecipient()(address)' --rpc-url $RPC_URL
+  cast call $POOL 'pendingOwner()(address)' --rpc-url $RPC_URL
+  ```
+
+  Then send only the calls still missing, in this order, waiting for each one. The shield
+  verifier is the run's `ShieldIVerifierFinal` (`0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465`
+  from a deployer that started at nonce 0); the limits are the same pairs as in step 3:
+
+  ```bash
+  F="--private-key $DEPLOYER_PK --rpc-url $RPC_URL --gas-price 1gwei --priority-gas-price 0.01gwei"
+  cast send $POOL 'turnOnDepositLimits()' $F
+  cast send $POOL 'setShieldVerifier(address)' 0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465 $F
+  cast send $POOL 'setDepositLimit(address,uint128,uint128)' <asset> <perDeposit> <total> $F   # each asset still 0 0
+  cast send $POOL 'setWithdrawFee(uint16,address)' 25 0xB3900ac9350903218e4c7597bAb0f008F01B30B8 $F
+  cast send $POOL 'transferOwnership(address)' 0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8 $F
+  cast send $POOL 'endSetup()' $F   # last: it cannot be undone
+  ```
+
+  Then run the reads above again: `setupMode` false, `depositLimitsOn` true, the shield
+  verifier, every limit, 25 bps to the treasury and the owner wallet pending. If anything
+  does not match, do not announce the vault.
 
 Read back the vault and its deploy block:
 
@@ -288,7 +350,7 @@ cast call $POOL 'pendingOwner()(address)' --rpc-url $RPC_URL   # 0x0000000000000
 
 ### Step 7: fund the relayer
 
-Send 0.02 ETH to `0xb1E994586E62994648a0b866BF33F2EDd942512e` on Ethereum.
+Send 0.04 ETH to `0xb1E994586E62994648a0b866BF33F2EDd942512e` on Ethereum.
 
 ### What to paste back
 
@@ -306,7 +368,7 @@ Done on 25 October 2026 and repeatable:
 - **The runbook.** An anvil fork of Ethereum mainnet (`anvil --fork-url
   https://gateway.tenderly.co/public/mainnet`), a throwaway deployer funded on the fork,
   then steps 2, 3, 4 and 6 exactly as above: the PoseidonT3 code hash matched, the dry
-  run ended "All checks passed", the broadcast sent 19 transactions (8.77M gas), the memo
+  run ended "All checks passed", the broadcast sent 19 transactions (6.62M gas, 8.77M with PoseidonT3), the memo
   board 152k, and `acceptOwnership()` from the owner wallet (impersonated on the fork)
   left `owner` the owner wallet and `pendingOwner` empty, with setup ended, limits on and
   the fee 25 bps.
@@ -342,6 +404,11 @@ Paste the values back and the app, SDK and MCP get switched on in one change:
   `@gloamtrade/mppx-gloam` 0.3.x (publish with pnpm).
 - `contracts/deployments/mainnet.json`: the addresses, block and limits, as for the
   other chains.
+- Tests: none to edit. The ones that check Ethereum is hidden (`packages/sdk/test/ethereum.selftest.mjs`,
+  `base.selftest.mjs`, `app/scripts/selftest-ethereum.mts`, `selftest-base.mts`) read
+  `MAINNET_POOLS[1]` and check the live vault once it is in, and the ones that used chain 1
+  as "a chain with no Gloam pool" (`packages/mppx-gloam/test/charge.test.ts`,
+  `selftest-partners.mts`) use Polygon instead. Run them all after filling it in.
 
 ## Do not
 
