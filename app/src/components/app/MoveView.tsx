@@ -181,7 +181,6 @@ export function MoveView() {
     loading: treeLoading,
     error: treeError,
     matchesChain,
-    leafCount,
     pathForLeaf,
     leafIndexForCommitment,
     refresh: refreshTree,

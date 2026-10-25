@@ -74,7 +74,8 @@ export function TradeView() {
   const search = useSearchParams();
   const { settings } = useTradingSettings();
   const { data, isFetching, isError, refetch, isFetched } = useLiveMarkets();
-  const markets = data?.markets ?? [];
+  // one array per response, so the memos and effects below re-run only when it changes
+  const markets = useMemo(() => data?.markets ?? [], [data?.markets]);
   const ethUsd = data?.ethUsd ?? null;
   const liveCount = data?.meta?.liveCount ?? 0;
   const shieldLive = isShieldDeployed();
@@ -343,7 +344,7 @@ export function TradeView() {
       ],
       chainId: network.chainId,
     });
-  }, [allowance, sellAmountIn, quoteOut, token, address, writeContract]);
+  }, [allowance, sellAmountIn, quoteOut, token, address, writeContract, network.chainId]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
