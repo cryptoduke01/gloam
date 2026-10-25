@@ -239,6 +239,20 @@ function toRaw(value: string, decimals: number, what: string): bigint {
   return parseUnits(value, decimals);
 }
 
+/**
+ * Stablecoins Gloam lists (dollars, and EURC's euro): a unit of each is one unit
+ * of a currency, so one agent-wide number can cap them together. Never priced
+ * here, only counted.
+ */
+const STABLE_SYMBOLS = new Set(["usdg", "usdc", "usdt", "usdc.e", "usdt0", "pathusd", "ousd", "alphausd", "betausd", "thetausd", "eurc"]);
+
+/** What an asset's amounts count: currency units for the stablecoins, otherwise the asset itself (ETH, GLOAM, an unknown token). */
+function unitOf(symbol: string, address: Address, known: boolean): string {
+  const s = symbol.toLowerCase();
+  if (known && STABLE_SYMBOLS.has(s)) return "stablecoin";
+  return known ? s.toUpperCase() : address.toLowerCase();
+}
+
 function normalizeRecipient(r: string): string {
   const s = r.trim();
   return /^0x[0-9a-fA-F]{40}$/.test(s) ? s.toLowerCase() : s;
@@ -261,6 +275,8 @@ export function resolveAgent(agent: string, raw: AgentConfig, source: string): A
     : Object.entries(cfg.assets);
   if (!entries.length) throw new Error("List at least one asset the agent may spend.");
 
+  // Assets that take the agent-wide caps, and what their amounts count in.
+  const shared: { symbol: string; unit: string }[] = [];
   const assets = entries.map(([key, entry]): AssetLimit => {
     const k = key.trim();
     let known: KnownAsset | undefined;
@@ -294,6 +310,9 @@ export function resolveAgent(agent: string, raw: AgentConfig, source: string): A
     if (perPayment === undefined || perDay === undefined) {
       throw new Error(`${symbol} needs both maxPerPayment and maxPerDay (on the asset or the agent).`);
     }
+    if (entry.maxPerPayment === undefined || entry.maxPerDay === undefined) {
+      shared.push({ symbol, unit: unitOf(symbol, address, Boolean(known)) });
+    }
     return {
       symbol,
       address,
@@ -303,6 +322,16 @@ export function resolveAgent(agent: string, raw: AgentConfig, source: string): A
       maxPerDay: toRaw(perDay, decimals, `${symbol} maxPerDay`),
     };
   });
+
+  // One agent-wide number is counted in each asset's own units: "50" for USDC and ETH would
+  // allow 50 ETH. It may only cap assets that count alike (the stablecoins).
+  const units = [...new Set(shared.map((a) => a.unit))];
+  if (units.length > 1) {
+    const names = [...new Set(shared.map((a) => a.symbol))];
+    throw new Error(
+      `The agent-wide maxPerPayment and maxPerDay count in each asset's own units, so one number can't cap ${names.join(", ")} together: "${cfg.maxPerPayment ?? cfg.maxPerDay}" would mean that many of each. Set maxPerPayment and maxPerDay on each of them (GLOAM_LIMITS_FILE), or list assets of one kind only.`
+    );
+  }
 
   return {
     agent,

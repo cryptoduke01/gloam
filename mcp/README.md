@@ -262,7 +262,7 @@ Point `GLOAM_LIMITS_FILE` at a JSON file and pick the agent with `GLOAM_AGENT_ID
 }
 ```
 
-The array form of `assets` uses the agent-level `maxPerPayment` and `maxPerDay` for each asset; the object form can set them per asset, or leave them out to use the agent's (an asset entry may also take `network` and, for an unknown token address, `decimals`). In the example, `research-bot` and `ops-agent` spend on mainnet and `practice-bot` only on testnet. A config that does not parse, names an unknown asset, or leaves out a cap is treated as no permission: every spend is refused with the reason.
+The array form of `assets` uses the agent-level `maxPerPayment` and `maxPerDay` for each asset; the object form can set them per asset, or leave them out to use the agent's (an asset entry may also take `network` and, for an unknown token address, `decimals`). Agent-level caps count in each asset's own units, so they can only cover assets of one kind: the stablecoins together, or one other asset. An agent that may spend ETH or GLOAM next to stablecoins needs caps on that asset's own entry, or `"50"` would mean 50 ETH; a config that mixes them under one number is refused. In the example, `research-bot` and `ops-agent` spend on mainnet and `practice-bot` only on testnet. A config that does not parse, names an unknown asset, or leaves out a cap is treated as no permission: every spend is refused with the reason.
 
 ### Configure with environment variables (one agent)
 
@@ -277,7 +277,7 @@ GLOAM_LIMIT_EXPIRES=2026-12-31           # optional
 GLOAM_LIMIT_TOOLS=pay,shield             # optional
 ```
 
-Use the file or the variables, not both.
+Use the file or the variables, not both. The variables have one pair of caps for every asset listed, so list one kind of asset there (stablecoins, or a single other asset such as ETH); for ETH next to stablecoins, use the file.
 
 ### The spending log
 
