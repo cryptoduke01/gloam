@@ -648,11 +648,14 @@ export default function DocsNetworksPage() {
           use the final keys, not the dev keys of the older testnets.
         </li>
         <li>
-          <strong>Log reads.</strong> publicnode keeps only about the last
-          10,000 blocks of Sepolia (a day and a half), and rebuilding the vault
-          tree needs every log since the deploy block. Gloam reads Sepolia
-          through Tenderly&apos;s public gateway, which keeps the whole history,
-          with publicnode behind it; use your own RPC if you sync often.
+          <strong>Reads.</strong> publicnode is at the chain head but keeps
+          only about the last 10,000 blocks of Sepolia (a day and a half), and
+          rebuilding the vault tree needs every log since the deploy block.
+          Tenderly&apos;s public gateway keeps the whole history but can trail
+          the head by a minute or two. Gloam reads the head, receipts and
+          recent logs from publicnode and older logs and state from Tenderly;
+          the SDK&apos;s <code>gloamReadTransport(network)</code> splits reads
+          the same way. Use your own RPC if you sync often.
         </li>
         <li>
           <strong>EURC is a euro stablecoin.</strong> The app never counts it as

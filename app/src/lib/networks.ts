@@ -16,6 +16,7 @@
  * built on them (selector, API, relay, MCP, proofs), as if it did not exist.
  */
 import { defineChain, type Address, type Chain } from "viem";
+import { ETHEREUM_SEPOLIA_HISTORY_RPC, type HistoryRpc } from "@gloamtrade/sdk";
 import { base, baseSepolia, mainnet as ethereum, sepolia } from "viem/chains";
 import { robinhood, robinhoodTestnet } from "./chain";
 import type { CeremonyKind } from "./circuitArtifacts";
@@ -102,8 +103,18 @@ export interface GloamNetwork {
    * Tempo) run ShieldPoolPoseidon: anything can go in, no limits, no fee.
    */
   paymentsPool: boolean;
-  /** viem chain used for clients, wallet_addEthereumChain, etc. */
+  /**
+   * viem chain used for clients, wallet_addEthereumChain, etc. Its first RPC is
+   * at the chain head: receipts, balances, allowances and other fresh reads.
+   */
   chain: Chain;
+  /**
+   * Where reads about old blocks go when the chain's first RPC keeps only
+   * recent history (Ethereum Sepolia), or null where it keeps everything.
+   * Clients read through lib/readTransport, which sends logs, receipts and
+   * state older than `recentBlocks` here and everything else to the first RPC.
+   */
+  historyRpc: HistoryRpc | null;
   chainId: GloamChainId;
   /** Shielded pool address; null while a network is still `planned`. */
   pool: Address | null;
@@ -191,18 +202,21 @@ export const baseTestnet = defineChain({
 });
 
 /**
- * Ethereum Sepolia, Ethereum's testnet (gas in Sepolia ETH). The vault tree is
- * rebuilt from logs since the deploy block, so the default RPC is Tenderly's
- * public gateway, which keeps the whole history and answers wide eth_getLogs.
- * publicnode, second, keeps only about the last 10,000 blocks (a day and a
- * half), checked 2026-10-25. The server reads through GLOAM_RPC_URL_11155111
- * first once it is set (lib/serverRpc).
+ * Ethereum Sepolia, Ethereum's testnet (gas in Sepolia ETH). The default RPC is
+ * publicnode's, which is at the chain head: a mined approval or deposit shows
+ * up there about 3 s after its block. It keeps only about the last 10,000
+ * blocks of logs, receipts and state (a day and a half), so the vault tree's
+ * older logs come from Tenderly's public gateway (the network's historyRpc),
+ * which keeps everything but trails the head: measured 2026-10-25, a new
+ * receipt showed up there 25 s after its block at the median and over 2
+ * minutes at the 90th percentile. The server reads through
+ * GLOAM_RPC_URL_11155111 first once it is set (lib/serverRpc).
  */
 export const ethereumTestnet = defineChain({
   ...sepolia,
   name: "Ethereum Sepolia",
   rpcUrls: {
-    default: { http: ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"] },
+    default: { http: ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.gateway.tenderly.co"] },
   },
 });
 
@@ -220,9 +234,11 @@ export const baseMainnet = defineChain({
 /**
  * Ethereum mainnet. The default RPC is MEV Blocker's: it keeps old state and
  * answers eth_getLogs over 10,000 blocks (or any range under 10,000 logs), and
- * the vault tree is rebuilt from logs. publicnode, second, serves only the last
- * 10,000 blocks of logs and 128 blocks of state. Checked 2026-10-25. The server
- * reads through GLOAM_RPC_URL_1 first once it is set (lib/serverRpc).
+ * the vault tree is rebuilt from logs. It is also at the chain head (a new
+ * receipt shows up as soon as on publicnode, measured 2026-10-25), so one RPC
+ * serves both and there is no historyRpc. publicnode, second, serves only the
+ * last 10,000 blocks of logs and 128 blocks of state. The server reads through
+ * GLOAM_RPC_URL_1 first once it is set (lib/serverRpc).
  */
 export const ethereumMainnet = defineChain({
   ...ethereum,
@@ -257,6 +273,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: false,
     chain: robinhoodTestnet,
     chainId: robinhoodTestnet.id,
+    historyRpc: null,
     pool: TESTNET_POSEIDON_POOL,
     deployBlock: TESTNET_POSEIDON_DEPLOY_BLOCK,
     ceremony: "dev",
@@ -288,6 +305,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: false,
     chain: tempoTestnet,
     chainId: tempoTestnet.id,
+    historyRpc: null,
     // No-middlemen pool redeployed on Tempo Moderato 2026-09-29: no
     // emergencyWithdraw, setup ended, admin changes behind a public 3-day
     // timelock. Reuses the existing verifiers + Poseidon2. Superseded:
@@ -329,6 +347,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: baseTestnet,
     chainId: baseTestnet.id,
+    historyRpc: null,
     pool: BASE_SEPOLIA_POOL?.pool ?? null,
     deployBlock: BASE_SEPOLIA_POOL?.deployBlock ?? null,
     ceremony: "production",
@@ -357,10 +376,11 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: ethereumTestnet,
     chainId: ethereumTestnet.id,
+    historyRpc: ETHEREUM_SEPOLIA_HISTORY_RPC,
     pool: ETHEREUM_SEPOLIA_POOL?.pool ?? null,
     deployBlock: ETHEREUM_SEPOLIA_POOL?.deployBlock ?? null,
     ceremony: "production",
-    // Read in spans publicnode, the backup RPC, also takes: "exceed maximum block range: 50000"
+    // publicnode (the head) and Tenderly (history) both take it: "exceed maximum block range: 50000"
     logRange: 50_000n,
     hashScheme: "poseidon",
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
@@ -385,6 +405,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: robinhood,
     chainId: robinhood.id,
+    historyRpc: null,
     pool: RH_MAINNET_POOL?.pool ?? null,
     deployBlock: RH_MAINNET_POOL?.deployBlock ?? null,
     ceremony: "production",
@@ -408,6 +429,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: tempoMainnet,
     chainId: tempoMainnet.id,
+    historyRpc: null,
     pool: TEMPO_MAINNET_POOL?.pool ?? null,
     deployBlock: TEMPO_MAINNET_POOL?.deployBlock ?? null,
     ceremony: "production",
@@ -432,6 +454,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: baseMainnet,
     chainId: baseMainnet.id,
+    historyRpc: null,
     pool: BASE_MAINNET_POOL?.pool ?? null,
     deployBlock: BASE_MAINNET_POOL?.deployBlock ?? null,
     ceremony: "production",
@@ -457,6 +480,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     paymentsPool: true,
     chain: ethereumMainnet,
     chainId: ethereumMainnet.id,
+    historyRpc: null,
     pool: ETHEREUM_MAINNET_POOL?.pool ?? null,
     deployBlock: ETHEREUM_MAINNET_POOL?.deployBlock ?? null,
     ceremony: "production",
