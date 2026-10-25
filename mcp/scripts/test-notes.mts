@@ -1020,6 +1020,59 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received" && n.status === "unspent").length, 1);
   });
 
+  test("one payment presented many times at once, while its sweep is mined but its receipt unread, is served once", async () => {
+    const chain = mockChain();
+    let sweepHash: Hex | null = null;
+    let mined!: () => void;
+    const onChain = new Promise<void>((r) => (mined = r));
+    let readReceipt!: () => void;
+    const receiptHeld = new Promise<void>((r) => (readReceipt = r));
+    const payeeWallet = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        const h = await chain.walletClient.writeContract(call); // on chain at once
+        noteBroadcast(h);
+        if (call.functionName === "transfer" && !sweepHash) {
+          sweepHash = h;
+          mined();
+        }
+        return h;
+      },
+    };
+    // viem polls for a receipt, so the sweep is on chain a while before the verify that sent it reads it. Reads take 30ms.
+    const payeeView = {
+      ...chain.publicClient,
+      readContract: async (a: { functionName: string; args: [Hex] }) => {
+        await new Promise((r) => setTimeout(r, 30));
+        return chain.publicClient.readContract(a);
+      },
+      waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+        if (hash === sweepHash) await receiptHeld;
+        return chain.publicClient.waitForTransactionReceipt({ hash });
+      },
+    };
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: payeeWallet, publicClient: payeeView }) as unknown as Signer;
+    const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const first = S.call("gloam_verify_payment", args);
+    await onChain;
+    const replays = await Promise.all([1, 2, 3, 4, 5].map(() => S.call("gloam_verify_payment", args)));
+    readReceipt();
+    const all = [await first, ...replays, await S.call("gloam_verify_payment", args)];
+    const grants = all.filter((v) => v.grantAccess === true);
+    assert.equal(grants.length, 1, `one payment, served once: ${JSON.stringify(all.map((v) => v.status))}`);
+    assert.equal(grants[0].hash, sweepHash, "with the sweep's hash, whichever verify served it");
+    assert.deepEqual([...new Set(all.filter((v) => v.grantAccess !== true).map((v) => v.status))], ["already_settled"]);
+    const received = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+    assert.equal(received.length, 1);
+    assert.equal(received[0]!.status, "unspent");
+    assert.equal(received[0]!.served, true);
+    assert.equal(received[0]!.createdTx, sweepHash);
+  });
+
   test("a payee sweep whose relay answer is unclear keeps the fresh note, which lands later", async () => {
     const dir = tmp();
     const chain = mockChain();
