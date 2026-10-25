@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { Header } from "@/components/Header";
 import { FlowField } from "@/components/ui/FlowField";
 import { SealDots } from "@/components/ui/SealDots";
+
+// Its own tab title, and noindex alone (the root layout's index, follow would sit next to it).
+export const metadata: Metadata = {
+  title: "Page not found",
+  robots: { index: false, follow: true },
+};
 
 export default function NotFound() {
   return (
