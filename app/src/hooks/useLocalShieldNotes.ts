@@ -6,7 +6,7 @@ import { publicClientFor } from "@/lib/rhClient";
 import { useDemoLive } from "@/lib/demo";
 import { readDemo } from "@/lib/demoFlag";
 import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
-import { reconcileClaims, reconcileUnfunded } from "@/lib/claimSweep";
+import { reconcileClaims, reconcileUnfunded, reopenGhostEthNotes } from "@/lib/claimSweep";
 import { reconcileCashOuts } from "@/lib/cashOutLater";
 import {
   activeSpendableNotes,
@@ -117,6 +117,8 @@ export function useLocalShieldNotes(address?: string | null) {
       // cash-out splits whose move landed (or never can) since last time.
       if ((await reconcileUnfunded().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
       if ((await reconcileClaims().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
+      // once per vault: ETH notes an older sync wrongly marked spent, reopened while the vault still holds them
+      if ((await reopenGhostEthNotes().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
       const publicClient = publicClientFor(net);
       const rows = await fetchChainShieldNotes(publicClient, address as Address, net);
       if (!still()) return;

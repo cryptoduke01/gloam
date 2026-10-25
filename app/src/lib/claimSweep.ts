@@ -31,16 +31,17 @@ import {
   type SweepResult,
 } from "@gloamtrade/sdk";
 import type { Address, Hex, PublicClient } from "viem";
-import { getActiveNetwork, type GloamNetwork } from "./networks";
+import { NETWORK_KEYS, getActiveNetwork, getNetwork, type GloamNetwork } from "./networks";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { proveTransferInBrowser } from "./proveClient";
 import { relayTransfer, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
 import { getAllNotes } from "./noteVault";
-import { saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
+import { isNativeAsset, saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { escrowHolds } from "./vaultSwap";
+import { supportsNativeShield } from "./tokens";
 
 /** Claimed payments are saved under this id prefix (MoveView). */
 export const CLAIM_PREFIX = "imp-";
@@ -431,6 +432,71 @@ export async function reconcileUnfunded(env?: ClaimEnv): Promise<boolean> {
     if (seen === null || n.unfunded === !seen) continue;
     updateLocalNote(n.id, { unfunded: !seen });
     changed = true;
+  }
+  return changed;
+}
+
+const GHOST_REPAIR_KEY = "gloam.repair.ghostEth.v1";
+
+/**
+ * One pass per vault, once: reopen ETH notes an older sync marked spent by
+ * mistake. A sync begun on Robinhood Chain or Tempo mainnet (no ETH there, so
+ * its ETH inventory read 0) could finish after a switch and mark the new
+ * network's ETH notes spent. Only a note the vault still holds is reopened:
+ * its nullifier is unspent and the vault has seen its commitment. A payment
+ * this browser made for someone else (pay-), a secured claim and anything not
+ * on a payments vault that lists ETH are never touched. A pass where a read
+ * fails is tried again on the next sync.
+ */
+export async function reopenGhostEthNotes(env?: ClaimEnv): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const e = env ?? appClaimEnv();
+  const pool = e.pool;
+  if (!pool) return false;
+  const net = NETWORK_KEYS.map(getNetwork).find((n) => n.chainId === e.chainId && n.pool?.toLowerCase() === pool.toLowerCase());
+  if (!net?.paymentsPool || !supportsNativeShield(net.chainId)) return false;
+  const flag = `${GHOST_REPAIR_KEY}:${e.chainId}:${pool.toLowerCase()}`;
+  try {
+    if (window.localStorage.getItem(flag)) return false;
+  } catch {
+    /* storage blocked: the pass runs, reads only */
+  }
+  const candidates = getAllNotes().filter(
+    (n) =>
+      n.status === "recovered" &&
+      n.chainId === e.chainId &&
+      n.pool.toLowerCase() === pool.toLowerCase() &&
+      isNativeAsset(n.asset) &&
+      !n.id.startsWith("pay-") &&
+      !n.secured &&
+      Boolean(n.secret) &&
+      n.secret !== "0x" &&
+      n.secret.length > 10
+  );
+  let changed = false;
+  let unread = false;
+  for (const n of candidates) {
+    const nullifier = await nullifierOf(n).catch(() => null);
+    if (!nullifier) continue;
+    const [spent, seen] = await Promise.all([
+      e.chain.isSpent(nullifier).catch(() => null),
+      e.chain.isCommitmentSeen(n.commitment).catch(() => null),
+    ]);
+    if (spent === null || seen === null) {
+      unread = true;
+      continue;
+    }
+    if (!spent && seen) {
+      updateLocalNote(n.id, { status: "open" });
+      changed = true;
+    }
+  }
+  if (!unread) {
+    try {
+      window.localStorage.setItem(flag, String(Date.now()));
+    } catch {
+      /* next sync reads again; reopening is idempotent */
+    }
   }
   return changed;
 }
