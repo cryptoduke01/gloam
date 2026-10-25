@@ -46,20 +46,15 @@ export function DueBanner({
     <motion.section
       role="status"
       aria-live="polite"
-      initial={reduce ? false : { opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={reduce ? false : { y: -6 }}
+      animate={{ y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       className="gl-card flex gap-4 max-sm:flex-col max-sm:p-5 sm:items-center sm:p-6"
     >
       <div className="flex min-w-0 flex-1 items-start gap-4">
-        <span
-          aria-hidden
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-foreground text-background"
-        >
-          <ScheduleIcon name="calendar" className="h-5 w-5" />
-        </span>
+        <ScheduleIcon name="calendar" className="mt-0.5 h-5 w-5 shrink-0 text-foreground" />
         <div className="min-w-0">
-          <p className={`t-label ${st.status === "overdue" ? "text-warn!" : ""}`}>Payroll due</p>
+          <p className={`text-[13px] ${st.status === "overdue" ? "text-warn" : "text-mute"}`}>Payroll due</p>
           <p className="mt-1 text-balance text-[19px] leading-snug tracking-[-0.01em] text-foreground">{headline(s, st, today)}</p>
           <p className="tnum mt-1 flex flex-wrap items-center gap-x-1.5 text-[13.5px] text-mute">
             <span>{people(s.people.length)},</span>
