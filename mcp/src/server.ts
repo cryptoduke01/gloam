@@ -35,6 +35,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
 import {
+  approveNeedsReset,
   buildShieldBoundIntent,
   artifactProver,
   NATIVE_ASSET,
@@ -290,6 +291,12 @@ const LEGACY_WARNING =
   "GLOAM_EXPOSE_NOTE_SECRETS=1 is set: note secrets are passed to and from the agent. Anyone who reads a secret can spend that money, and spending limits cannot stop that. Turn it off unless you are migrating old notes.";
 
 /** Build a Gloam MCP server. Pass deps to test it without a chain. */
+/** ", 0.2 and 10 for ETH on Base and Ethereum" for the chains in this build that list ETH. */
+function ethNativeLimitText(): string {
+  const chains = [...new Set(allNetworks().filter((n) => n.family === "base" || n.family === "ethereum").map((n) => (n.family === "base" ? "Base" : "Ethereum")))];
+  return chains.length ? `, 0.2 and 10 for ETH on ${chains.join(" and ")}` : "";
+}
+
 export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServer {
   const deps: ServerDeps = { ...defaultDeps(overrides.env ?? process.env), ...overrides };
   const env = deps.env;
@@ -366,7 +373,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         defaultNetwork: defaultNet,
         mainnet:
           `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
-            allNetworks().some((n) => n.family === "base") ? ", 0.2 and 10 for ETH on Base" : ""
+            ethNativeLimitText()
           }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
@@ -526,7 +533,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .string()
           .optional()
           .describe(
-            "ERC-20 token address to shield; omit to use the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base, PathUSD on Tempo testnet, native ETH on Robinhood Chain testnet). On Base, the zero address shields ETH."
+            "ERC-20 token address to shield; omit to use the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base and Ethereum, PathUSD on Tempo testnet, native ETH on Robinhood Chain testnet). On Base and Ethereum, the zero address shields ETH."
           ),
         decimals: z
           .number()
@@ -604,6 +611,26 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         // the pool to pull the tokens before shieldBound; native shields carry value instead.
         let approveHash: Hex | undefined;
         if (!isNative) {
+          // USDT on Ethereum refuses to change one non-zero allowance into another:
+          // a stale one (a shield that never went through) goes to 0 first.
+          if (approveNeedsReset(net.chainId, assetAddr)) {
+            const allowance = await signer.publicClient.readContract({
+              address: assetAddr,
+              abi: erc20Abi,
+              functionName: "allowance",
+              args: [signer.account.address, net.pool],
+            });
+            if (allowance > 0n) {
+              const resetHash = await signer.walletClient.writeContract({
+                address: assetAddr,
+                abi: erc20Abi,
+                functionName: "approve",
+                args: [net.pool, 0n],
+              });
+              const reset = await signer.publicClient.waitForTransactionReceipt({ hash: resetHash });
+              if (reset.status !== "success") throw new Error(`Clearing the old approval reverted (${resetHash}). Nothing moved.`);
+            }
+          }
           approveHash = await signer.walletClient.writeContract({
             address: assetAddr,
             abi: erc20Abi,
@@ -826,7 +853,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           .string()
           .optional()
           .describe(
-            "Settlement token address; omit for the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base, PathUSD on Tempo testnet, ETH on Robinhood Chain testnet)."
+            "Settlement token address; omit for the network default (USDG on Robinhood Chain mainnet, USDC.e on Tempo mainnet, USDC on Base and Ethereum, PathUSD on Tempo testnet, ETH on Robinhood Chain testnet)."
           ),
         payTo: z
           .string()

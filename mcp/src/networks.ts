@@ -9,7 +9,8 @@
  * Robinhood Chain and Tempo, each on mainnet (the ceremony's final keys,
  * payments only, beta deposit limits) and testnet (dev keys), and Base: Base
  * Sepolia (a testnet on the mainnet pool and final keys) and,
- * once its pool is in, Base mainnet. A network with a pool to publish (every mainnet, Base
+ * once its pool is in, Base mainnet; and Ethereum mainnet once its pool is in.
+ * A network with a pool to publish (every mainnet, Base
  * Sepolia) only exists here once the SDK has its pool, so a build without it
  * never offers that network. The chains are separate deployments of the same
  * pool design, so the same execution code serves every network.
@@ -28,12 +29,19 @@ import {
   type GloamNetwork,
 } from "@gloamtrade/sdk";
 
-export type NetworkKey = "robinhood" | "tempo" | "base" | "robinhood-mainnet" | "tempo-mainnet" | "base-mainnet";
-export type ChainFamily = "robinhood" | "tempo" | "base";
+export type NetworkKey =
+  | "robinhood"
+  | "tempo"
+  | "base"
+  | "robinhood-mainnet"
+  | "tempo-mainnet"
+  | "base-mainnet"
+  | "ethereum-mainnet";
+export type ChainFamily = "robinhood" | "tempo" | "base" | "ethereum";
 
 export interface McpNetwork {
   key: NetworkKey;
-  /** Which chain: Robinhood Chain, Tempo or Base, testnet or mainnet. */
+  /** Which chain: Robinhood Chain, Tempo, Base or Ethereum, testnet or mainnet. */
   family: ChainFamily;
   /** Testnet (true) or mainnet (false). */
   testnet: boolean;
@@ -47,7 +55,7 @@ export interface McpNetwork {
   /** Block the pool was deployed at, for tree scans. */
   deployBlock: bigint;
   nativeCurrency: { name: string; symbol: string; decimals: number };
-  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base lists ETH). */
+  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base and Ethereum list ETH). */
   nativeShield: boolean;
   /** Default asset to shield: native ETH on Robinhood testnet, PathUSD on Tempo testnet, the first listed asset elsewhere (USDG, USDC.e, USDC). */
   defaultAsset: Address;
@@ -64,9 +72,10 @@ const NATIVE = {
   robinhood: { name: "Ether", symbol: "ETH", decimals: 18 },
   tempo: { name: "US Dollar", symbol: "USD", decimals: 18 },
   base: { name: "Ether", symbol: "ETH", decimals: 18 },
+  ethereum: { name: "Ether", symbol: "ETH", decimals: 18 },
 } as const;
 
-const CHAIN_NAMES: Record<ChainFamily, string> = { robinhood: "Robinhood Chain", tempo: "Tempo", base: "Base" };
+const CHAIN_NAMES: Record<ChainFamily, string> = { robinhood: "Robinhood Chain", tempo: "Tempo", base: "Base", ethereum: "Ethereum" };
 
 export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
   robinhood: {
@@ -108,7 +117,7 @@ export const MCP_NETWORKS: Record<"robinhood" | "tempo", McpNetwork> = {
 /** An SDK network with a published pool (a mainnet, or Base Sepolia), or null while it has none. */
 function fromSdk(n: GloamNetwork | null): McpNetwork | null {
   if (!n) return null;
-  // The first listed asset is the default: USDG on Robinhood Chain, USDC.e on Tempo, USDC on Base.
+  // The first listed asset is the default: USDG on Robinhood Chain, USDC.e on Tempo, USDC on Base and Ethereum.
   const first = n.assets[0]!;
   return {
     key: n.key,
@@ -134,6 +143,7 @@ export const MCP_MAINNETS: McpNetwork[] = [
   fromSdk(mainnetNetwork("robinhood")),
   fromSdk(mainnetNetwork("tempo")),
   fromSdk(mainnetNetwork("base")),
+  fromSdk(mainnetNetwork("ethereum")),
 ].filter((n): n is McpNetwork => n !== null);
 
 /** Base Sepolia, once the SDK has its pool; null before. */
@@ -149,6 +159,7 @@ export const ALL_NETWORK_KEYS: readonly NetworkKey[] = [
   "robinhood-mainnet",
   "tempo-mainnet",
   "base-mainnet",
+  "ethereum-mainnet",
   "robinhood",
   "tempo",
   "base",

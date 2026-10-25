@@ -28,6 +28,8 @@ On mainnet:
 
 **Base: testnet live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
 
+**Ethereum is next too, not live yet.** This version knows `ethereum-mainnet` (Ethereum, `1`: USDC, USDT, USDG, PYUSD, EURC and ETH, 500 per stablecoin and 0.2 ETH per deposit), but the SDK it ships with has no pool for it, so it is not offered and `GLOAM_NETWORK=ethereum-mainnet` stops the server at startup. Ethereum has no Gloam testnet; practise on Base Sepolia. Gas costs more there: the Gloam relay waits while Ethereum gas is above its ceiling (3 gwei by default) and answers `gas_high`. A USDT shield clears an old USDT approval first, since Tether's token refuses to change one non-zero approval into another. `GLOAM_RPC_URL_1` points it at your own RPC.
+
 ## Install
 
 One command per client. The server speaks MCP over stdio and needs Node.js 20 or newer.
@@ -202,10 +204,11 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 | `robinhood` (testnet) | `ETH`, `USDG` |
 | `base-mainnet`, once live | `USDC`, `EURC`, `USDT`, `ETH` |
 | `base` (Base Sepolia), once live | `USDC`, `EURC`, `ETH` |
+| `ethereum-mainnet`, once live | `USDC`, `USDT`, `USDG`, `PYUSD`, `EURC`, `ETH` |
 
 ### Mainnet assets in limits
 
-Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving mainnet assets by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base) name the mainnet asset directly.
+Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving mainnet assets by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`, `PYUSD`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base, every Ethereum token) name the mainnet asset directly. `USDT` alone is Base's; add `"network": "ethereum-mainnet"` for Ethereum's.
 
 ```json
 {
