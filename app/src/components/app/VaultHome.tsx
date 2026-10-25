@@ -229,7 +229,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
           <BalancePane
             sealed={false}
             title="In your wallet"
-            badge="Public"
+            badge={null}
             rows={wallet}
             loading={walletLoading}
             empty={balancesVisible ? "0" : null}
@@ -309,7 +309,8 @@ function BalancePane({
 }: {
   sealed: boolean;
   title: string;
-  badge: string;
+  /** The one privacy signal, on the private side only. */
+  badge: string | null;
   rows: Holding[];
   loading: boolean;
   /** What the amount reads with nothing in it; null when it can't be read (no wallet). */
@@ -325,14 +326,12 @@ function BalancePane({
       <div className="relative z-[1]">
         <div className="flex h-6 items-center justify-between gap-3">
           <span className="text-[13px] text-mute">{title}</span>
-          <span
-            className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium ${
-              sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-mute"
-            }`}
-          >
-            {sealed ? <LockGlyph /> : <EyeGlyph />}
-            {badge}
-          </span>
+          {badge && (
+            <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-sealed-soft px-2.5 text-[12px] font-medium text-sealed">
+              <LockGlyph />
+              {badge}
+            </span>
+          )}
         </div>
         <div className="mt-4 min-h-[40px]">
           {loading ? (
@@ -454,15 +453,6 @@ function LockGlyph() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
       <rect x="5" y="10.5" width="14" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function EyeGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="12" r="2.75" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
