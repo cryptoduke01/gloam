@@ -29,6 +29,10 @@
  *     anything is checked or sent (lib/screeningServer.ts), plus on Tempo the
  *     asset's TIP-403 issuer policy for the vault and `to`; private sends and
  *     memos carry no public address, so there is nothing to screen
+ *   - a gas ceiling per chain (lib/relay/gasCeiling: 3 gwei on Ethereum by
+ *     default, none on the L2s): above it nothing is sent and the request is
+ *     refused as gas_high, and a send under it never offers more than 1.5
+ *     times the ceiling per unit of gas
  *   - per-sender and per-network rate limits, shared across instances (the
  *     network cap counts only transactions actually sent), and a few relayed
  *     payment messages per payment: the payer's own (with the memo ticket the
@@ -73,6 +77,7 @@ import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, takeInflight } from "@/lib/relay/inflight";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
+import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
 
 const POOL_ERRORS = [
   "ZeroCommitment",
@@ -557,10 +562,12 @@ export async function fundedRelayAccounts(
 async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): Promise<Hex> {
   // Screen before anything else: a blocked call never reaches the chain.
   await screenCall(call, net);
+  const pub = relayPublicClient(net);
+  // Over the chain's gas ceiling nothing goes out (Ethereum: 3 gwei by default).
+  const ceiling = await assertGasUnderCeiling(net, pub);
   // only accounts that can still pay for a send take part
   const accounts = await fundedRelayAccounts(net);
   const account = accounts[0]!;
-  const pub = relayPublicClient(net);
   const pool = net.pool!;
 
   const estimate = (): Promise<bigint> => {
@@ -575,17 +582,18 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return pub.estimateContractGas({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, account });
     }
   };
+  let fees: FeeCap | undefined;
   const send = (gas: bigint, nonce: number, from: PrivateKeyAccount): Promise<Hex> => {
     const wallet = walletFor(net, from);
     switch (call.kind) {
       case "transfer":
-        return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "transfer", args: call.args, gas, nonce, chain: net.chain, account: from });
+        return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "transfer", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "unshield":
-        return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "unshield", args: call.args, gas, nonce, chain: net.chain, account: from });
+        return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "unshield", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "memo":
-        return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from });
+        return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "swap":
-        return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from });
+        return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
     }
   };
 
@@ -596,6 +604,7 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
   } catch (e) {
     throw explain(e, "Could not check this payment. Try again.", "check_failed");
   }
+  if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
   await takeNetworkSlot(net);
 
   // one send at a time per relay account and chain, each with the next nonce; with
@@ -634,6 +643,47 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
     }
   }
   throw new RelayError("The relay could not submit this payment.", 502, "rpc");
+}
+
+/** What a send under a gas ceiling may offer per unit of gas. */
+type FeeCap = { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+
+/**
+ * Refuses a send while gas on `net` is over the relay's ceiling, with code
+ * gas_high (nothing is sent). Returns the ceiling, or null on a chain with none.
+ */
+export async function assertGasUnderCeiling(net: GloamNetwork, pub: Pick<PublicClient, "getGasPrice"> = relayPublicClient(net)): Promise<bigint | null> {
+  const gas = await readGas(net.chainId, pub, { fresh: true });
+  if (gas.high) {
+    console.warn(
+      "gloam_relay_gas_high",
+      JSON.stringify({ chainId: net.chainId, gwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei), max: formatGwei(gas.ceilingWei!) })
+    );
+    throw new RelayError(gasHighMessage(net.label), 503, GAS_HIGH_CODE);
+  }
+  return gas.ceilingWei;
+}
+
+/** Whether gas on `net` is over the relay's ceiling right now (a scheduled cash out waits then). */
+export async function relayGasHigh(net: GloamNetwork): Promise<boolean> {
+  return (await readGas(net.chainId, relayPublicClient(net), { fresh: true })).high;
+}
+
+/**
+ * The node's fee suggestion, capped at 1.5 times the ceiling: room for the
+ * base fee to rise for a few blocks before the send lands, and never more.
+ */
+async function feeCap(net: GloamNetwork, pub: PublicClient, ceiling: bigint): Promise<FeeCap> {
+  let est: { maxFeePerGas: bigint; maxPriorityFeePerGas: bigint };
+  try {
+    est = await pub.estimateFeesPerGas({ chain: net.chain, type: "eip1559" });
+  } catch (e) {
+    throw explain(e, "Could not read the network fee. Try again shortly.", "check_failed");
+  }
+  const cap = maxFeeCapWei(ceiling);
+  const maxFeePerGas = est.maxFeePerGas < cap ? est.maxFeePerGas : cap;
+  const maxPriorityFeePerGas = est.maxPriorityFeePerGas < maxFeePerGas ? est.maxPriorityFeePerGas : maxFeePerGas;
+  return { maxFeePerGas, maxPriorityFeePerGas };
 }
 
 export const IN_FLIGHT_MESSAGE = "This payment is already being sent. Wait a moment and refresh.";
@@ -926,6 +976,12 @@ export type RelayNetworkStatus = {
   relayer: Address | null;
   memo: boolean;
   lowBalance: boolean;
+  /** Gas is over the relay's ceiling on this chain: sends wait, scheduled cash outs wait too. */
+  gasHigh: boolean;
+  /** The ceiling in gwei, or null on a chain with none. */
+  maxGasGwei: string | null;
+  /** The gas price in gwei when the chain has a ceiling, else null. */
+  gasGwei: string | null;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -959,8 +1015,12 @@ async function relayEmpty(net: GloamNetwork, account: PrivateKeyAccount): Promis
         return balance < TEMPO_FEE_RESERVE;
       }
       const [balance, gasPrice] = await Promise.all([client.getBalance({ address: account.address }), client.getGasPrice()]);
-      // can't pay for a couple more private transfers (about 1.8M gas each)
-      return balance < gasPrice * RELAY_RESERVE_GAS;
+      // Under a gas ceiling the relay never pays more than it, so a spike above
+      // it is "gas is high", not "the relay is empty".
+      const ceiling = maxGasPriceWeiFor(net.chainId);
+      const price = ceiling !== null && gasPrice > ceiling ? ceiling : gasPrice;
+      // can't pay for a couple more private transfers (about 1.9M gas each)
+      return balance < price * RELAY_RESERVE_GAS;
     };
     // a slow RPC must not hold up the status the app checks before every relayed send
     const empty = await Promise.race([
@@ -982,15 +1042,22 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
   return Promise.all(
     relayNetworks().map(async (net) => {
       // low = no account left that can pay for a send here
-      const empties = await Promise.all(accounts.map((a) => relayEmpty(net, a)));
+      const [empties, gas] = await Promise.all([
+        Promise.all(accounts.map((a) => relayEmpty(net, a))),
+        readGas(net.chainId, relayPublicClient(net)),
+      ]);
       const lowBalance = accounts.length > 0 && empties.every(Boolean);
       return {
         chainId: net.chainId,
         key: net.key,
+        // high gas leaves the relay on: a cash out for later can still be scheduled, and waits
         enabled: accounts.length > 0 && !lowBalance,
         relayer: account?.address ?? null,
         memo: Boolean(net.payMemo),
         lowBalance,
+        gasHigh: gas.high,
+        maxGasGwei: gas.ceilingWei === null ? null : formatGwei(gas.ceilingWei),
+        gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
       };
     })
   );

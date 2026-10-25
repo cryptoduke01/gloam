@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { webhookSecretOk } from "@/lib/telegramBot/rules";
 import { runDueJobs } from "@/lib/relay/scheduled";
 import { scheduledStore, scheduledStoreReady } from "@/lib/relay/scheduledStore";
-import { networkForChain, readSpendState, sendUnshieldNow } from "@/lib/relay/server";
+import { networkForChain, readSpendState, relayGasHigh, sendUnshieldNow } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,8 @@ export const maxDuration = 60;
 /**
  * Sends the scheduled cash outs that are due (lib/relay/scheduled). Vercel's
  * cron calls it every minute (vercel.json) with `Authorization: Bearer
- * <CRON_SECRET>`; without CRON_SECRET nothing gets in.
+ * <CRON_SECRET>`; without CRON_SECRET nothing gets in. A job due on a chain
+ * where gas is over the relay's ceiling (Ethereum) waits for it to come down.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET?.trim();
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
   const results = await runDueJobs(scheduledStore(), {
     now: () => Date.now(),
     readChain: (job) => readSpendState(networkForChain(job.chainId), job.root, job.nullifier),
+    gasHigh: (job) => relayGasHigh(networkForChain(job.chainId)),
     send: (job) =>
       sendUnshieldNow(networkForChain(job.chainId), {
         proof: job.proof,

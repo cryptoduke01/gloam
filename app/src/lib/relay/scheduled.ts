@@ -36,6 +36,13 @@
  * unspent, read at one block) or a refusal raised before anything reached
  * the node ends it.
  *
+ * Gas: the relay pays it, so above the relay's gas ceiling on a chain
+ * (lib/relay/gasCeiling: 3 gwei on Ethereum by default) a due job is not sent.
+ * It waits, still scheduled and still cancellable, and is looked at again
+ * every few minutes until gas comes back under the ceiling, for up to
+ * GAS_WAIT_MAX_MS past its send time. Waiting for gas never counts as a failed
+ * try and never uses up the give-up time.
+ *
  * This file is the logic and an in-memory store (for tests and local runs);
  * lib/relay/scheduledStore.ts keeps jobs in Redis in production.
  */
@@ -56,6 +63,13 @@ export const SENDING_STALE_MS = 5 * 60 * 1000;
 export const JOB_TTL_SEC = 3 * 24 * 60 * 60;
 /** How long a finished job is kept, without its proof, so the app can still read what happened. */
 export const JOB_DONE_TTL_SEC = 7 * 24 * 60 * 60;
+/** While gas is over the relay's ceiling, a due job is looked at again this often. */
+export const GAS_RECHECK_MS = 5 * 60 * 1000;
+/** The longest a job waits for gas past its send time before it gives up (nothing moves). */
+export const GAS_WAIT_MAX_MS = 3 * 24 * 60 * 60 * 1000;
+/** What a job waiting for gas says (public, like every reason). */
+export const GAS_WAIT_REASON = "Waiting for gas to come down: it goes out once gas is back under the relay's limit.";
+const GAS_GAVE_UP_REASON = "Gas stayed over the relay's limit for three days, so it did not go out. Nothing moved.";
 
 export type JobStatus =
   | "scheduled"
@@ -88,6 +102,8 @@ export type CashOutJob = {
   hash?: Hex;
   /** A send may have reached the node: from now on only the chain settles the job. */
   maybeSent?: boolean;
+  /** Waiting for gas: the runner looks at the job again no sooner than this (ms). */
+  notBefore?: number;
   /** A short, public reason when it failed (never a secret). */
   reason?: string;
 };
@@ -117,9 +133,12 @@ export function isLive(status: JobStatus): boolean {
   return status === "scheduled" || status === "sending";
 }
 
-/** When the runner next looks at a live job: its send time, or for one going out, once that send is stale. */
+/**
+ * When the runner next looks at a live job: its send time (or, while it waits
+ * for gas, its next look), or for one going out, once that send is stale.
+ */
 export function dueAt(job: CashOutJob): number {
-  return job.status === "sending" ? job.updatedAt + SENDING_STALE_MS : job.sendAfter;
+  return job.status === "sending" ? job.updatedAt + SENDING_STALE_MS : Math.max(job.sendAfter, job.notBefore ?? 0);
 }
 
 /** Whether a new request is the same cash out as a waiting job: same recipient, amount and asset. */
@@ -218,6 +237,11 @@ export type RunDeps = {
   readChain: (job: CashOutJob) => Promise<ChainView>;
   /** Sends the cash out through the relay; returns the hash, or throws a SendFailure-like error. */
   send: (job: CashOutJob) => Promise<Hex>;
+  /**
+   * Whether gas on the job's chain is over the relay's ceiling right now
+   * (lib/relay/server relayGasHigh). Left out: no chain has a ceiling.
+   */
+  gasHigh?: (job: CashOutJob) => Promise<boolean>;
 };
 
 /**
@@ -235,6 +259,7 @@ const REFUSED = new Set([
   "busy",
   "rate_limit",
   "check_failed",
+  "gas_high",
 ]);
 /** Of those, the ones that mean this cash out can never go out as it is. */
 const PERMANENT = new Set(["screened", "asset_policy", "vault_recipient", "bad_request", "network"]);
@@ -297,7 +322,7 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     await store.forget(id);
     return job.status;
   }
-  if (job.sendAfter > now) return "skipped";
+  if (job.sendAfter > now || (job.status === "scheduled" && (job.notBefore ?? 0) > now)) return "skipped";
   // Another run is sending it right now (its lock may have lapsed mid-send).
   if (job.status === "sending" && now - job.updatedAt < SENDING_STALE_MS) return "skipped";
   // A "sending" job found here may have gone out (the run died, or the node's answer was lost).
@@ -318,8 +343,21 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
   // Read at one block with the note unspent: no copy of this proof can ever land.
   if (!chain.knownRoot) return settle(store, job, "expired", now, { reason: EXPIRED_REASON });
 
+  // Gas over the relay's ceiling: nothing goes out now. One that may be out is
+  // read again later as before; any other waits, untouched and still cancellable.
+  if (await gasIsHigh(deps, job)) {
+    return mayBeOut ? settle(store, job, "sending", now, { maybeSent: true }) : waitForGas(store, job, now);
+  }
+
   // Marked before the send, so a crash after the send is read back from the chain, not sent again.
-  const sending: CashOutJob = { ...job, status: "sending", attempts: job.attempts + 1, updatedAt: now };
+  const sending: CashOutJob = {
+    ...job,
+    status: "sending",
+    attempts: job.attempts + 1,
+    updatedAt: now,
+    notBefore: undefined,
+    reason: job.reason === GAS_WAIT_REASON ? undefined : job.reason,
+  };
   await store.put(sending);
   try {
     const hash = await deps.send(job);
@@ -330,6 +368,9 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     const t = deps.now();
     // Spent by now: by an earlier try of this job, or by another spend.
     if (code === "AlreadySpent") return settle(store, sending, mayBeOut ? "sent" : "spent", t);
+    // Gas went over the ceiling between the check and the send: the relay sent
+    // nothing, so this try does not count. It waits like any other.
+    if (code === "gas_high" && !mayBeOut) return waitForGas(store, job, t);
     // Anything but a clear refusal may have reached the node (a timeout, a lost
     // reply, another request holding this spend): only the chain settles it now.
     // So does any refusal once an earlier try may have gone out.
@@ -343,6 +384,22 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     // A passing refusal (busy, out of gas for a moment, the vault short for now): again next pass.
     return settle(store, sending, "scheduled", t, { reason });
   }
+}
+
+/** Whether to hold a due job for gas. A check that fails holds it too: better late than paid blind. */
+async function gasIsHigh(deps: RunDeps, job: CashOutJob): Promise<boolean> {
+  if (!deps.gasHigh) return false;
+  try {
+    return await deps.gasHigh(job);
+  } catch {
+    return true;
+  }
+}
+
+/** A due job held for gas: looked at again in a few minutes, or given up after GAS_WAIT_MAX_MS (nothing moved). */
+function waitForGas(store: JobStore, job: CashOutJob, now: number): Promise<JobStatus> {
+  if (now - job.sendAfter > GAS_WAIT_MAX_MS) return settle(store, job, "failed", now, { reason: GAS_GAVE_UP_REASON, notBefore: undefined });
+  return settle(store, job, "scheduled", now, { notBefore: now + GAS_RECHECK_MS, reason: GAS_WAIT_REASON });
 }
 
 /**

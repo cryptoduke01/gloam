@@ -26,6 +26,7 @@ const ERRORS: [string, number | string, string][] = [
   ["vault_recipient", 400, "A cash out to the vault or the memo board itself. Pick a wallet address instead."],
   ["InvalidProof, InsufficientPoolBalance, ...", 422, "The dry run against the pool reverted, with the pool's own reason. Nothing was sent."],
   ["relay_off, relay_empty", 503, "The relay is not set up, or out of gas, on this network."],
+  ["gas_high", 503, "Gas on this chain is over the relay's ceiling (Ethereum mainnet: 3 gwei). Nothing was sent. Try again shortly, or submit the call yourself."],
   ["rpc", 502, "The network did not answer. Try again."],
   ["bad_tx, tx_not_found, tx_failed, not_a_deposit, too_old", "400 to 422", "Deposit attribution: the hash is malformed, not found, failed, not a deposit into Gloam's vault, or older than 24 hours."],
   ["already_attributed", 409, "That deposit is already counted to a partner."],
