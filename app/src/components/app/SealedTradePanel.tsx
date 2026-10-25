@@ -85,15 +85,27 @@ export function SealedTradePanel({
   const { data: marketsData } = useLiveMarkets();
 
   const [support, setSupport] = useState<Support>("checking");
-  const [dir, setDir] = useState<TradeDir>(initialDir);
-
-  useEffect(() => {
-    setDir(initialDir);
-  }, [initialDir]);
+  const [dir, setDirState] = useState<TradeDir>(initialDir);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Flipping buy/sell starts the form over: no note, no amount, no error.
+  function setDir(next: TradeDir) {
+    if (next === dir) return;
+    setDirState(next);
+    setNoteId(null);
+    setAmount("");
+    setError(null);
+  }
+  // A new direction from the parent (a ?side= link) wins, during render rather
+  // than in an effect, so the form never draws once with the old direction.
+  const [askedDir, setAskedDir] = useState<TradeDir>(initialDir);
+  if (askedDir !== initialDir) {
+    setAskedDir(initialDir);
+    setDir(initialDir);
+  }
   const [showSuccess, setShowSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
   /** max = amountOutMin = 1 on-chain (size privacy). Default on, our moat. */
@@ -131,6 +143,7 @@ export function SealedTradePanel({
   }, [shieldLive, poseidonMode]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the vault's sealed-trade support from the chain, marking it as checking first
     void checkVault();
   }, [checkVault]);
 
@@ -188,17 +201,11 @@ export function SealedTradePanel({
     if (support === "ready") void refreshTree();
   }, [support, refreshTree]);
 
-  // Reset note + amount when flipping buy/sell
-  useEffect(() => {
-    setNoteId(null);
-    setAmount("");
-    setError(null);
-  }, [dir]);
-
   const selected =
     spendNotes.find((n) => n.id === noteId) ?? spendNotes[0] ?? null;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- pins the note in use, so a note saved meanwhile does not swap in mid-trade
     if (selected && selected.id !== noteId) setNoteId(selected.id);
   }, [selected, noteId]);
 

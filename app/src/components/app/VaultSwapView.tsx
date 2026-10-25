@@ -178,6 +178,15 @@ function useUsdMarks(
   }, [assets, tokens, tick, stocks, marketData, mults, chainId]);
 }
 
+/** The note a swap of `amount` spends: an exact match first, else the smallest that covers it. */
+function pickSwapNote(notes: readonly LocalNote[] | undefined, amount: bigint | null): LocalNote | null {
+  if (!notes || amount === null) return null;
+  const exact = notes.find((n) => BigInt(n.amountWei) === amount);
+  if (exact) return exact;
+  const covering = notes.filter((n) => BigInt(n.amountWei) >= amount);
+  return covering.length ? covering[covering.length - 1]! : null;
+}
+
 export function VaultSwapView() {
   const { network } = useNetwork();
   const { address, isConnected } = useAppAccount();
@@ -270,13 +279,8 @@ export function VaultSwapView() {
   const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
 
   // The note this swap spends: an exact match first, else the smallest that covers it.
-  const note: LocalNote | null = useMemo(() => {
-    if (!held || amount === null) return null;
-    const exact = held.notes.find((n) => BigInt(n.amountWei) === amount);
-    if (exact) return exact;
-    const covering = held.notes.filter((n) => BigInt(n.amountWei) >= amount);
-    return covering.length ? covering[covering.length - 1]! : null;
-  }, [held, amount]);
+  // A scan of a few notes, so no memo: the note found is the same object each render.
+  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
 
   const { data: feeRead } = useReadContract({
     address: network.pool ?? undefined,

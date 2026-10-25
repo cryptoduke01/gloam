@@ -30,8 +30,8 @@ export function PaymentTicketShare({
   onSaved?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
+  // The QR made for one text; a QR for an earlier code never shows for a new one.
+  const [qr, setQr] = useState<{ text: string; url: string | null; error: string | null } | null>(null);
   const [shared, setShared] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const { networkKey } = useNetwork();
@@ -40,30 +40,32 @@ export function PaymentTicketShare({
   const origin = typeof window === "undefined" ? "https://www.gloam.trade" : window.location.origin;
   const link = isAddr ? null : isClaimLink(code) ? claimLinkFor(code, networkKey, origin) : `${origin}${appClaimPath(code, networkKey)}`;
 
+  const qrText = link ?? code;
+  const qrDataUrl = qr?.text === qrText ? qr.url : null;
+  const qrError = qr?.text === qrText ? qr.error : null;
+
   useEffect(() => {
     let cancelled = false;
-    setQrDataUrl(null);
-    setQrError(null);
     void (async () => {
       try {
         const QR = await import("qrcode");
-        const url = await QR.toDataURL(link ?? code, {
+        const url = await QR.toDataURL(qrText, {
           margin: 2,
           width: 240,
           errorCorrectionLevel: "M",
           color: { dark: "#0a0a0a", light: "#ffffff" },
         });
-        if (!cancelled) setQrDataUrl(url);
+        if (!cancelled) setQr({ text: qrText, url, error: null });
       } catch {
         if (!cancelled) {
-          setQrError("QR code not available. Copy the code instead.");
+          setQr({ text: qrText, url: null, error: "QR code not available. Copy the code instead." });
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [code, link]);
+  }, [qrText]);
 
   async function copyLink() {
     if (!link) return;
