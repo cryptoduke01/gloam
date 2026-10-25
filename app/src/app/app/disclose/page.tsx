@@ -23,8 +23,8 @@ function ProveSkeleton() {
 export default function DisclosePage() {
   return (
     <AppShell
-      title="Prove what you hold"
-      subtitle="Show a balance, a minimum you hold, or a payment you got, to someone you choose. They see only that, nobody else sees anything."
+      title="Prove"
+      subtitle="Show someone a balance, a minimum you hold or a payment you got. They see only that, and nobody else sees anything."
       actions={
         <Link href="/verify" className="btn btn-ghost btn-sm">
           Check a proof
