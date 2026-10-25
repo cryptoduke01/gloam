@@ -8,6 +8,8 @@ import {DeployBaseSepolia} from "../script/DeployBaseSepolia.s.sol";
 import {DeployBaseMainnet} from "../script/DeployBaseMainnet.s.sol";
 import {DeployEthereumMainnet} from "../script/DeployEthereumMainnet.s.sol";
 import {MockERC20} from "./MockERC20.sol";
+import {DeployEthereumSepolia} from "../script/DeployEthereumSepolia.s.sol";
+import {DeployGloamPayMemo} from "../script/DeployGloamPayMemo.s.sol";
 
 /**
  * The Base deploy scripts, run in a local EVM with the exact settings in
@@ -96,6 +98,7 @@ contract DeployBaseTest is Test {
     /// which tests running side by side would overwrite for each other. So the
     /// Ethereum deploy runs here too, not in a test file of its own.
     function test_deploys_with_runbook_settings() public {
+        _ethereumSepoliaDeploy();
         _sepoliaDeploy();
         _mainnetDeploy();
         _ethereumDeploy();
@@ -169,5 +172,88 @@ contract DeployBaseTest is Test {
             addr := create(0, add(bytecode, 0x20), mload(bytecode))
         }
         require(addr != address(0), "poseidon deploy failed");
+    }
+
+    // ---------------------------------------------------------------- Ethereum Sepolia
+
+    /// The real deployer: no key in this test, it runs as the address (script/DeployerBroadcast.sol).
+    address constant DEPLOYER = 0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411;
+    address constant ETH_SEPOLIA_USDC = 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238;
+    address constant ETH_SEPOLIA_USDG = 0xfBb2A78CceEb415b00300925e464C3E44E6e06b0;
+    address constant ETH_SEPOLIA_PYUSD = 0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9;
+    address constant ETH_SEPOLIA_EURC = 0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4;
+
+    function test_ethereum_sepolia_refuses_other_chains() public {
+        DeployEthereumSepolia s = new DeployEthereumSepolia();
+        vm.expectRevert(bytes("wrong chain for this script"));
+        s.run();
+        uint256[3] memory others = [uint256(1), 84532, 8453];
+        for (uint256 i = 0; i < others.length; i++) {
+            vm.chainId(others[i]);
+            vm.expectRevert(bytes("wrong chain for this script"));
+            s.run();
+        }
+    }
+
+    /// DEPLOY-ETHEREUM-SEPOLIA.md as written, from the real deployer at nonce 0: PoseidonT3,
+    /// the vault and its verifiers, and the memo board land where they did on the other
+    /// chains, with the runbook's assets, limits, fee and owner handoff.
+    function _ethereumSepoliaDeploy() internal {
+        vm.chainId(11155111);
+        assertEq(vm.getNonce(DEPLOYER), 0, "a fresh deployer, as on Sepolia");
+        address[4] memory stables = [ETH_SEPOLIA_USDC, ETH_SEPOLIA_USDG, ETH_SEPOLIA_PYUSD, ETH_SEPOLIA_EURC];
+        string memory assets;
+        for (uint256 i = 0; i < stables.length; i++) {
+            _token(stables[i]);
+            assets = string.concat(assets, vm.toString(stables[i]), ",");
+        }
+        _env(
+            string.concat(assets, "0x0000000000000000000000000000000000000000"),
+            "500000000,500000000,500000000,500000000,200000000000000000",
+            "25000000000,25000000000,25000000000,25000000000,10000000000000000000"
+        );
+        DeployEthereumSepolia s = new DeployEthereumSepolia();
+
+        // A key that is not the deployer's stops the run before anything is sent.
+        vm.setEnv("DEPLOYER", vm.toString(DEPLOYER));
+        vm.expectRevert(bytes("DEPLOYER_PK is not the key of DEPLOYER"));
+        s.run();
+
+        // Step 2: PoseidonT3 from the deployer's first transaction.
+        vm.prank(DEPLOYER);
+        address poseidon = _deployPoseidon();
+        assertEq(poseidon, 0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4, "PoseidonT3 where it is on the other chains");
+        assertEq(poseidon.codehash, 0x354b26999e434f8256d168395315e1f51fc15bf49bf2e6bb58fc549bd597e7da, "PoseidonT3 code");
+
+        // Step 3: the vault, sent as the deployer with no key in the environment.
+        vm.setEnv("DEPLOYER_PK", "");
+        vm.setEnv("POSEIDON2", vm.toString(poseidon));
+        s.run();
+        ShieldPoolPayments pool = ShieldPoolPayments(payable(0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194));
+        assertEq(address(pool.verifier()), 0x1421353d471dF6C847713aee391Db38978fE714a, "DualProofVerifier");
+        assertEq(address(pool.shieldVerifier()), 0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465, "shield verifier");
+        _checkCommon(pool);
+        for (uint256 i = 0; i < stables.length; i++) {
+            _checkLimit(pool, stables[i], 500e6, 25_000e6);
+        }
+        _checkLimit(pool, SEPOLIA_USDC, 0, 0);
+        assertEq(pool.owner(), DEPLOYER, "the deployer holds it until the owner wallet accepts");
+
+        // Step 4: the memo board, the deployer's next contract. On chain the ten setup
+        // calls (shield verifier, limits on, five limits, fee, handoff, endSetup) are
+        // transactions 9 to 18; a forge test counts only the deploys, so skip ahead.
+        assertEq(vm.getNonce(DEPLOYER), 9, "eight contracts after PoseidonT3");
+        vm.setNonce(DEPLOYER, 19);
+        new DeployGloamPayMemo().run();
+        assertGt(address(0x342E3745967FDB4223902E196Ceb792c15d8C1c4).code.length, 0, "memo board at nonce 19");
+        assertEq(vm.getNonce(DEPLOYER), 20);
+
+        // Step 6: the owner wallet accepts.
+        vm.prank(OWNER);
+        pool.acceptOwnership();
+        assertEq(pool.owner(), OWNER);
+        assertEq(pool.pendingOwner(), address(0));
+
+        vm.setEnv("DEPLOYER", "");
     }
 }
