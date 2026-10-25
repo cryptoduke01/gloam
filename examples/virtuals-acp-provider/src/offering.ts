@@ -20,7 +20,12 @@
  * Virtuals' ACP backend, which stores the requirement, never reads it.
  * `replyTo` is the client's Gloam address: the deliverable is sealed to it.
  * It is required whenever a payout is a claim link, since a claim link is the
- * money itself.
+ * money itself. replyTo sits outside the seal, so the backend sees the
+ * client's Gloam address (not what it is paid, or whom it pays).
+ *
+ * Every Gloam address is checked to be a real P-256 key (isReceiveTag) here,
+ * before any quote: a tag that only looks right would move money and then fail
+ * to seal to its payee.
  */
 import { isReceiveTag, sealToReceiveTag } from "@gloamtrade/sdk";
 
@@ -32,7 +37,7 @@ export const MAX_PAYOUTS = 20;
 export const PRIVATE_PAYOUT_OFFERING = {
   name: OFFERING_NAME,
   description:
-    "Private payout: name who to pay and how much; each one is paid privately through Gloam, and the deliverable is a proof of each payment (or a claim link sealed to you). The payout total reaches the provider when you fund (fund transfer) and the fee sits in escrow. Those legs are public; the payouts are not.",
+    "Private payout: name who to pay and how much; each one is paid privately through Gloam, and the deliverable is a proof of each payment (or a claim link sealed to you). A proof shows each payment was made, not who received it. The payout total reaches the provider when you fund (fund transfer) and the fee sits in escrow, so the job needs an evaluator (yourself). Those legs are public; the payouts are not.",
   requirements: {
     type: "object",
     additionalProperties: false,
@@ -53,7 +58,7 @@ export const PRIVATE_PAYOUT_OFFERING = {
         },
       },
       sealedPayouts: { type: "string", pattern: "^gloam2t\\." },
-      replyTo: { type: "string", pattern: "^gloamr1\\." },
+      replyTo: { type: "string", pattern: "^gloamr1\\.", description: "Your Gloam address: the deliverable is sealed to it. It is not itself sealed, so the ACP backend sees it." },
     },
   },
   deliverable: {

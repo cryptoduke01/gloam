@@ -24,7 +24,7 @@ function common(r: ScenarioReport, symbol: string) {
   assert.equal(r.deliverableSealed, true);
   assert.ok(!/gloamr1|claim|retainer|bounty/.test(r.backendSaw), "the ACP backend stores only the sealed deliverable");
   assert.deepEqual(r.transferLogFields, [["nullifier", "newCommitments"], ["nullifier", "newCommitments"]]);
-  assert.match(String(r.refusedJob?.reason), /fund-transfer jobs only/);
+  assert.match(String(r.refusedJob?.reason), /no evaluator/);
   assert.equal(r.rejectedAfterFunding?.acpStatus, 4, "the client rejected the funded job on chain");
   assert.equal(r.rejectedAfterFunding?.payoutsMade, 0, "nothing was paid out for a rejected job");
   assert.match(String(r.rejectedAfterFunding?.journal), /principal sent back/);

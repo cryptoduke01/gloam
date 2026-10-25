@@ -4,8 +4,9 @@
  * Lifecycle (acp-node-v2's seller flow, driven by `entry` events):
  *
  *   requirement message  check it, quote, setBudgetWithFundRequest()   (or reject: nothing is committed yet)
- *   job.funded           pay every payout privately, prove each one, submit(deliverable)
+ *   job.funded           read the job on chain, pay every payout privately, prove each one, submit(deliverable)
  *   job.completed        the escrow paid the fee: add received money to the private balance (EarningsSweeper)
+ *   job.rejected/expired send back the principal that did not leave the float
  *
  * Fund-transfer jobs only, by default. The provider pays out before it
  * submits, and an escrow can still go back to the client before then: a
@@ -17,13 +18,18 @@
  * escrowed. A client that rejects after funding gets the fee back, never the
  * principal. Plain escrow jobs are taken only from clients the owner trusts.
  *
- * The provider pays out from its private float as soon as the job is funded,
- * so the principal that arrived in public is not deposited as one matching
- * amount; the EarningsSweeper adds it later in round batches. It quotes only
- * when one private note covers the whole job. A fund-transfer job is evaluated
- * by the client itself (ACP's FundTransferHook needs an evaluator), which puts
- * no more than the fee at risk; a plain escrow job needs no evaluator or one
- * the owner trusts.
+ * Every job needs an evaluator. With none, ACP lets the client reject a funded
+ * job and take the whole escrow back, after the payouts have gone out. A
+ * fund-transfer job is evaluated by the client itself (ACP's FundTransferHook
+ * needs an evaluator), which puts no more than the fee at risk; a plain escrow
+ * job needs an evaluator the owner trusts.
+ *
+ * The provider pays out from its private float as soon as the job is funded
+ * on chain (it reads jobs(jobId) itself; the job.funded event alone is not
+ * trusted), so the principal that arrived in public is not deposited as one
+ * matching amount; the EarningsSweeper adds it later in round batches, leaving
+ * in the wallet whatever may still be owed back to a client. It quotes only
+ * when one private note covers the whole job.
  *
  * What is public, precisely:
  *   - The ACP leg: the job (client, provider, evaluator, expiry, the offering
@@ -31,19 +37,35 @@
  *     provider at funding, the deliverable's hash, and the escrow paying the
  *     fee and Virtuals' cut. ACP's escrow is a public contract.
  *   - Not public: who the payouts went to and how much each was. Each payout is
- *     a shielded transfer from the provider's private balance. The requirement
- *     (sealedPayouts) and the deliverable (replyTo) can be sealed so Virtuals'
- *     ACP backend, which stores those messages, reads neither.
+ *     a shielded transfer from the provider's private balance. The payout list
+ *     (sealedPayouts) and the deliverable (sealed to replyTo) can be sealed so
+ *     Virtuals' ACP backend, which stores those messages, reads neither.
+ *     replyTo itself (the client's Gloam address) is outside the seal.
  *
- * Crash safety: a small journal (no secrets) records each payout as it lands,
- * so a restart never pays a job twice.
+ * Crash safety: a small journal (no secrets) records each payout before it is
+ * sent ("sending"), then what came of it. A payout whose answer was lost is
+ * never sent again: the provider looks for it in its own note store and on
+ * chain (by the payout's label) and carries on only once it is settled. A
+ * refund counts what actually left the float: a payout that may have gone
+ * out is held back from the refund until it is settled.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { formatUnits, parseUnits, type Address } from "viem";
+import { formatUnits, parseUnits, type Address, type PublicClient } from "viem";
 import { sealToReceiveTag } from "@gloamtrade/sdk";
-import type { GloamAgent } from "@gloamtrade/game-plugin-gloam";
-import { FUND_TRANSFER_HOOKS, NO_EVALUATOR, assetToken, type AssetTokenLike, type JobRoomEntry, type JobSessionLike } from "./acp.js";
+import { safeErrorMessage, type GloamAgent } from "@gloamtrade/game-plugin-gloam";
+import {
+  ACP_ABI,
+  ACP_CONTRACTS,
+  ACP_STATUS,
+  FUND_TRANSFER_HOOKS,
+  NO_EVALUATOR,
+  assetToken,
+  type AssetTokenLike,
+  type JobRoomEntry,
+  type JobSessionLike,
+  type OnChainJob,
+} from "./acp.js";
 import type { EarningsSweeper } from "./earnings.js";
 import { OFFERING_NAME, RequirementError, parseRequirement, type PayoutLine } from "./offering.js";
 
@@ -52,7 +74,15 @@ export const DELIVERABLE_TYPE = "gloam.private_payout.v1";
 export interface PayoutResult {
   to: string;
   amount: string;
-  status: "paid" | "failed";
+  /**
+   * sending      written before pay() is called: it may be going out
+   * paid         it landed
+   * unconfirmed  it may have gone out; never sent again, settled from the chain
+   * failed       certainly not sent (safe to try again)
+   */
+  status: "sending" | "paid" | "unconfirmed" | "failed";
+  /** The label the payment carries in the provider's note store (how a lost answer is found again). */
+  label?: string;
   /** The payment's handle in the provider's store (kept out of the deliverable). */
   handle?: string;
   tx?: string;
@@ -61,6 +91,7 @@ export interface PayoutResult {
   /** For a claim-link payout: the link, sealed to the client's Gloam address. */
   sealedClaimLink?: string;
   error?: string;
+  startedAt?: string;
 }
 
 type JobMode = "fund-transfer" | "escrow";
@@ -69,19 +100,34 @@ export type JournalJob = {
   chainId: number;
   jobId: string;
   client: string;
+  /** The evaluator the quote was made for. */
+  evaluator?: string;
   mode: JobMode;
-  state: "quoted" | "paying" | "submitted" | "completed" | "rejected" | "expired" | "stuck";
+  state: "quoted" | "paying" | "unconfirmed" | "submitted" | "completed" | "rejected" | "expired" | "stuck";
   /** What sits in escrow (raw units of the ACP token). */
   budgetRaw: string;
   /** What the client sends the provider at funding, outside the escrow (fund-transfer jobs). */
   transferRaw: string;
-  /** Set once the job is funded. */
+  /** Set once the job is funded on chain. */
   funded?: boolean;
+  /** The block the quote was made at (where a search for the funding starts). */
+  quotedAtBlock?: string;
+  /** The job's expiry (unix seconds). */
+  expiredAt?: string;
+  /** Why a funded job was not paid out (the on-chain job did not match the quote). */
+  blocked?: string;
   payouts: PayoutLine[];
   replyTo: string | null;
   results: PayoutResult[];
-  /** Principal the provider holds but did not pay out, owed back to the client. */
+  /** Principal certainly not paid out, owed back to the client (raw), what was sent back, and what is held until a payout settles. */
+  refundDueRaw?: string;
+  refundedRaw?: string;
+  refundHeldRaw?: string;
+  refundTxs?: string[];
+  refundError?: string;
+  /** Principal still owed back to the client, in the asset's units. */
   refundOwed?: string;
+  /** The last refund transaction. */
   refundTx?: string;
   updatedAt: string;
 };
@@ -96,6 +142,9 @@ class Journal {
   get(key: string): JournalJob | undefined {
     return this.read()[key];
   }
+  all(): [string, JournalJob][] {
+    return Object.entries(this.read());
+  }
   put(key: string, job: JournalJob) {
     const all = this.read();
     all[key] = { ...job, updatedAt: new Date().toISOString() };
@@ -109,6 +158,9 @@ class Journal {
     renameSync(tmp, this.path);
   }
 }
+
+/** The chain reads the provider makes: jobs(jobId), the JobFunded log, the block number. */
+export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber">;
 
 export interface PrivatePayoutProviderOptions {
   /** The provider's Gloam engine (its private float pays the payouts; its wallet receives the principal). */
@@ -125,23 +177,35 @@ export interface PrivatePayoutProviderOptions {
   minFee?: string;
   /** The most one job may pay out, in the asset's units. Default "100". */
   maxPerJob?: string;
-  /** Evaluators whose jobs are taken. Default none: only jobs with no evaluator. */
+  /** Third-party evaluators whose jobs are taken. Default none: fund-transfer jobs the client evaluates itself. */
   trustedEvaluators?: string[];
-  /** Clients whose plain escrow jobs (no fund transfer) are taken. Default none. */
+  /** Clients whose plain escrow jobs (no fund transfer) are taken, with an evaluator from trustedEvaluators. Default none. */
   trustedClients?: string[];
   /** Least time left before the job expires for the provider to start paying. Default 10 minutes. */
   minSecondsLeft?: number;
   /** Where the journal lives (no secrets). Without it, the journal is in memory only. */
   journalPath?: string;
-  /** Sends unpaid principal back to a client whose job ended before it was paid out. Without it, the journal records what is owed. */
+  /**
+   * Sends unpaid principal back to a client whose job ended before it was paid
+   * out. Resolve with the transaction hash once it is broadcast, and throw only
+   * when nothing was sent: a refund that threw is tried again later. Without
+   * it, the journal records what is owed.
+   */
   refund?: (client: Address, token: Address, rawAmount: bigint) => Promise<string>;
-  /** Adds received money to the private balance once a job completes. */
+  /** Adds received money to the private balance once a job completes (never principal still owed to a client). */
   earnings?: EarningsSweeper;
+  /** The provider's address on ACP (the job's provider). Default: the Gloam engine's wallet. */
+  providerAddress?: Address;
+  /** The ACP contract. Default: ACP_CONTRACTS for the job's chain. */
+  acpAddress?: Address;
+  /** Reads the ACP contract. Default: the Gloam engine's public client (the same chain). */
+  chain?: AcpChainReader;
   log?: (msg: string) => void;
 }
 
 const short = (s: string) => (s.length > 24 ? `${s.slice(0, 14)}…${s.slice(-6)}` : s);
 const lower = (s: string) => s.toLowerCase();
+const ACTIVE = new Set<JournalJob["state"]>(["quoted", "paying", "unconfirmed", "stuck"]);
 
 export class PrivatePayoutProvider {
   private readonly journal: Journal;
@@ -153,12 +217,21 @@ export class PrivatePayoutProvider {
     this.log = opts.log ?? ((m) => console.log(`[private-payout] ${m}`));
   }
 
-  private key(session: JobSessionLike) {
+  private key(session: { chainId: number; jobId: string }) {
     return `${session.chainId}:${session.jobId}`;
   }
 
   private asset() {
     return this.opts.wallet.network.assets[0]!;
+  }
+
+  private reader(): AcpChainReader {
+    return this.opts.chain ?? this.opts.wallet.publicClient;
+  }
+
+  /** The label a payout carries in the provider's note store: unique per chain, job and payout. */
+  payoutLabel(chainId: number, jobId: string, index: number) {
+    return `acp ${chainId}:${jobId} payout ${index + 1}`;
   }
 
   /**
@@ -196,8 +269,11 @@ export class PrivatePayoutProvider {
         const j = this.journal.get(k);
         if (j) this.journal.put(k, { ...j, state: "completed" });
         this.log(`job ${session.jobId} completed; the escrow paid this provider`);
+        await this.retryRefunds();
         if (this.opts.earnings) {
-          const res = await this.opts.earnings.sweep().catch((e) => ({ status: "error", reason: String(e instanceof Error ? e.message : e) }));
+          const res = await this.opts.earnings
+            .sweep({ reserve: (token) => this.publicReserve(token) })
+            .catch((e) => ({ status: "error", reason: safeErrorMessage(e) }));
           this.log(`earnings: ${JSON.stringify(res)}`);
         }
         break;
@@ -217,9 +293,9 @@ export class PrivatePayoutProvider {
     await session.reject(tag);
   }
 
-  private modeOf(session: JobSessionLike): JobMode | null {
-    const hook = lower(session.job?.hookAddress || NO_EVALUATOR);
-    const fundHook = FUND_TRANSFER_HOOKS[session.chainId];
+  private modeOf(hookAddress: string | undefined, chainId: number): JobMode | null {
+    const hook = lower(hookAddress || NO_EVALUATOR);
+    const fundHook = FUND_TRANSFER_HOOKS[chainId];
     if (fundHook && hook === lower(fundHook)) return "fund-transfer";
     if (hook === NO_EVALUATOR) return "escrow";
     return null;
@@ -228,10 +304,19 @@ export class PrivatePayoutProvider {
   private async onRequirement(session: JobSessionLike, content: string) {
     const job = session.job;
     if (!job) return;
+    const evaluator = lower(job.evaluatorAddress || NO_EVALUATOR);
+    // Before anything else: with no evaluator ACP lets the client reject a funded job and take the
+    // escrow back, after the payouts have gone out. No mode is safe without one.
+    if (evaluator === NO_EVALUATOR) {
+      return this.refuse(
+        session,
+        "no evaluator",
+        "Name an evaluator: yourself on a fund-transfer job, or one this provider trusts. With no evaluator a client can reject a funded job and take the escrow back after the payouts have gone out."
+      );
+    }
     if (job.description !== OFFERING_NAME) return this.refuse(session, "unsupported offering", `This provider only offers "${OFFERING_NAME}".`);
-    const mode = this.modeOf(session);
+    const mode = this.modeOf(job.hookAddress, session.chainId);
     if (!mode) return this.refuse(session, "unsupported hook", "This provider takes fund-transfer jobs (ACP's FundTransferHook) only.");
-    const evaluator = lower(job.evaluatorAddress);
     const trustedEvaluator = (this.opts.trustedEvaluators ?? []).map(lower).includes(evaluator);
     if (mode === "fund-transfer") {
       // ACP's FundTransferHook needs an evaluator (submit reverts with EscrowRequiredWithoutEvaluator otherwise).
@@ -239,8 +324,9 @@ export class PrivatePayoutProvider {
       if (evaluator !== lower(job.clientAddress) && !trustedEvaluator) {
         return this.refuse(session, "evaluator", "Name yourself as the evaluator (self-evaluation), or an evaluator this provider trusts. Only the fee is in escrow.");
       }
-    } else if (evaluator !== NO_EVALUATOR && !trustedEvaluator) {
-      return this.refuse(session, "untrusted evaluator", "This provider pays out before the job completes, so it takes escrow jobs with no evaluator, or an evaluator its owner trusts.");
+    } else if (!trustedEvaluator) {
+      // The whole payout total sits in escrow and the payouts go out first: only an evaluator the owner trusts may decide it.
+      return this.refuse(session, "untrusted evaluator", "This provider pays out before the job completes, so on an escrow job the evaluator must be one its owner trusts.");
     }
     if (mode === "escrow" && !(this.opts.trustedClients ?? []).map(lower).includes(lower(job.clientAddress))) {
       return this.refuse(
@@ -263,18 +349,22 @@ export class PrivatePayoutProvider {
     if (this.opts.wallet.largestPayment() < q.total) {
       return this.refuse(session, "not enough float", `This provider cannot cover ${formatUnits(q.total, a.decimals)} ${a.symbol} right now. Try a smaller job or later.`);
     }
-    const destination = this.opts.wallet.walletAddress;
+    const destination = this.opts.providerAddress ?? this.opts.wallet.walletAddress;
     if (mode === "fund-transfer" && !destination) throw new Error("A fund-transfer job needs the provider's wallet as the destination.");
     const budget = this.opts.budgetToken(q.budget, session.chainId);
     if (budget.decimals !== a.decimals) throw new Error("The ACP token and the Gloam asset have different decimals; this provider prices them 1:1 only when they match.");
+    const quotedAtBlock = await this.reader().getBlockNumber().catch(() => null);
     this.journal.put(this.key(session), {
       chainId: session.chainId,
       jobId: session.jobId,
       client: job.clientAddress,
+      evaluator: job.evaluatorAddress,
       mode,
       state: "quoted",
       budgetRaw: q.budget.toString(),
       transferRaw: q.transfer.toString(),
+      ...(quotedAtBlock !== null ? { quotedAtBlock: quotedAtBlock.toString() } : {}),
+      expiredAt: job.expiredAt.toString(),
       payouts: parsed.payouts,
       replyTo: parsed.replyTo,
       results: [],
@@ -294,6 +384,60 @@ export class PrivatePayoutProvider {
     this.log(`job ${session.jobId}: ${msg}${parsed.sealed ? " The list arrived sealed." : ""}`);
   }
 
+  // ------------------------------------------------------------------ the chain
+
+  /** The job as the ACP contract holds it, or null when no ACP contract is known for its chain. */
+  async readJob(chainId: number, jobId: string): Promise<OnChainJob | null> {
+    const acp = this.opts.acpAddress ?? ACP_CONTRACTS[chainId]?.acp;
+    if (!acp) return null;
+    const r = (await this.reader().readContract({ address: acp, abi: ACP_ABI, functionName: "jobs", args: [BigInt(jobId)] })) as readonly [Address, number, Address, number | bigint, Address, Address, bigint, string];
+    return { client: r[0], status: Number(r[1]), provider: r[2], expiredAt: BigInt(r[3]), evaluator: r[4], hook: r[5], budget: BigInt(r[6]), description: r[7] };
+  }
+
+  /** Whether fund() ran for this job (its JobFunded log), searched from the quote's block. Null when the chain could not say. */
+  async fundedOnChain(chainId: number, jobId: string, fromBlock?: string): Promise<boolean | null> {
+    const acp = this.opts.acpAddress ?? ACP_CONTRACTS[chainId]?.acp;
+    if (!acp) return null;
+    const event = ACP_ABI.find((x) => x.type === "event" && x.name === "JobFunded")!;
+    const reader = this.reader();
+    const look = async (from: bigint, to: bigint, depth = 0): Promise<number> => {
+      try {
+        const logs = await reader.getLogs({ address: acp, event: event as never, args: { jobId: BigInt(jobId) } as never, fromBlock: from, toBlock: to });
+        return logs.length;
+      } catch (e) {
+        if (to <= from || depth >= 14) throw e;
+        const mid = from + (to - from) / 2n;
+        return (await look(from, mid, depth + 1)) + (await look(mid + 1n, to, depth + 1));
+      }
+    };
+    try {
+      const head = await reader.getBlockNumber();
+      const from = fromBlock ? BigInt(fromBlock) : head > 100_000n ? head - 100_000n : 0n;
+      return (await look(from, head)) > 0;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Why an on-chain job may not be paid out against this quote, or null when it may. */
+  private notPayable(chainId: number, j: JournalJob, c: OnChainJob): string | null {
+    if (c.status !== ACP_STATUS.funded) return `the job is not funded on chain (status ${c.status})`;
+    const us = this.opts.providerAddress ?? this.opts.wallet.walletAddress;
+    if (!us || lower(c.provider) !== lower(us)) return "the job's provider on chain is not this provider";
+    if (lower(c.client) !== lower(j.client)) return "the job's client on chain is not the one quoted";
+    if (c.description !== OFFERING_NAME) return "the job on chain is not for this offering";
+    const hook = j.mode === "fund-transfer" ? FUND_TRANSFER_HOOKS[chainId] : NO_EVALUATOR;
+    if (!hook || lower(c.hook) !== lower(hook)) return "the job's hook on chain is not the one quoted";
+    if (lower(c.evaluator) === NO_EVALUATOR) return "the job has no evaluator on chain";
+    if (j.evaluator && lower(c.evaluator) !== lower(j.evaluator)) return "the job's evaluator on chain is not the one quoted";
+    if (c.budget < BigInt(j.budgetRaw)) return "the job's budget on chain is less than the quote";
+    const left = Number(c.expiredAt) - Math.floor(Date.now() / 1000);
+    if (left < (this.opts.minSecondsLeft ?? 600)) return `the job is too close to expiry (${left}s left)`;
+    return null;
+  }
+
+  // ------------------------------------------------------------------ paying
+
   private async onFunded(session: JobSessionLike) {
     const k = this.key(session);
     if (this.busy.has(k)) return;
@@ -302,24 +446,8 @@ export class PrivatePayoutProvider {
       this.log(`job ${session.jobId} funded, but this provider has no quote for it; leaving it`);
       return;
     }
-    if (j.state !== "quoted" && j.state !== "paying" && j.state !== "stuck") return;
-    this.journal.put(k, { ...j, funded: true });
-    const job = session.job;
-    if (job && job.budget.rawAmount < BigInt(j.budgetRaw)) {
-      this.log(`job ${session.jobId}: funded with less than the quote; not paying`);
-      return;
-    }
-    // A fund-transfer job can only be funded if the hook moved the payout total to us in the same transaction.
-    if (j.mode === "fund-transfer" && this.modeOf(session) !== "fund-transfer") {
-      this.log(`job ${session.jobId}: not a fund-transfer job; not paying`);
-      return;
-    }
-    const left = job ? Number(job.expiredAt) - Math.floor(Date.now() / 1000) : Infinity;
-    if (left < (this.opts.minSecondsLeft ?? 600)) {
-      this.log(`job ${session.jobId}: too close to expiry (${left}s left); not paying`);
-      return;
-    }
-    const run = this.payAll(session, { ...j, funded: true });
+    if (!ACTIVE.has(j.state)) return;
+    const run = this.fundedRun(session, j);
     this.busy.set(k, run);
     try {
       await run;
@@ -328,37 +456,115 @@ export class PrivatePayoutProvider {
     }
   }
 
+  private async fundedRun(session: JobSessionLike, j: JournalJob) {
+    const k = this.key(session);
+    // The job.funded event is off chain: read what the contract says before any money moves.
+    let onChain: OnChainJob | null;
+    try {
+      onChain = await this.readJob(session.chainId, session.jobId);
+    } catch (e) {
+      this.log(`job ${session.jobId}: could not read the job on chain (${safeErrorMessage(e)}); not paying`);
+      return;
+    }
+    if (!onChain) {
+      this.log(`job ${session.jobId}: no ACP contract known for chain ${session.chainId}; not paying`);
+      return;
+    }
+    const why = this.notPayable(session.chainId, j, onChain);
+    if (why) {
+      // Funded, then rejected or expired before this ran: the principal arrived, and onEnded sends it back.
+      const ended = onChain.status === ACP_STATUS.rejected || onChain.status === ACP_STATUS.expired;
+      const funded = Boolean(j.funded) || (ended && j.mode === "fund-transfer" && (await this.fundedOnChain(session.chainId, session.jobId, j.quotedAtBlock)) === true);
+      this.journal.put(k, { ...j, funded, blocked: why });
+      this.log(`job ${session.jobId}: not paying: ${why}`);
+      return;
+    }
+    const jf: JournalJob = { ...j, funded: true, blocked: undefined };
+    this.journal.put(k, jf);
+    await this.payAll(session, jf);
+  }
+
+  /** Settle a payout whose answer was lost: find it by its label in the note store, after reading the chain. */
+  private async reconcile(j: JournalJob, r: PayoutResult): Promise<PayoutResult> {
+    if (r.status !== "sending" && r.status !== "unconfirmed") return r;
+    // A result written before labels: nothing to look it up by, so it is never sent again.
+    if (!r.label) return { ...r, status: "unconfirmed" };
+    const w = this.opts.wallet;
+    await w.refresh().catch(() => undefined);
+    const n = w.findPayment(r.label);
+    // The engine keeps a payment's note from before it is sent and drops it only when nothing went out.
+    if (!n) return { ...r, status: "failed", error: r.error ?? "It was not sent." };
+    if (n.status === "pending") return { ...r, status: "unconfirmed", handle: n.handle };
+    const out: PayoutResult = { ...r, status: "paid", handle: n.handle, ...(n.createdTx ? { tx: n.createdTx } : {}), error: undefined };
+    if (n.origin === "claim" && j.replyTo && !r.sealedClaimLink) {
+      out.sealedClaimLink = await sealToReceiveTag(w.claimLink(n.handle).link, j.replyTo);
+    }
+    return out;
+  }
+
+  private async reconcileAll(j: JournalJob): Promise<PayoutResult[]> {
+    const out: PayoutResult[] = [];
+    for (const r of j.results) out.push(await this.reconcile(j, r));
+    return out;
+  }
+
   private async payAll(session: JobSessionLike, j: JournalJob) {
     const k = this.key(session);
     const wallet = this.opts.wallet;
     const label = `ACP job ${session.jobId} client ${j.client}`.slice(0, 80);
-    // Payouts run in order and stop at the first failure, so a resume keeps the paid ones and retries the rest.
-    const results = j.results.filter((r) => r.status === "paid");
+    // A payout left unsure by an earlier run is settled first, and never sent again.
+    const results = await this.reconcileAll(j);
+    if (results.some((r) => r.status === "sending" || r.status === "unconfirmed")) {
+      this.journal.put(k, { ...j, state: "unconfirmed", results });
+      this.log(`job ${session.jobId}: a payout is still unconfirmed; waiting for it to settle before anything else`);
+      return;
+    }
     this.journal.put(k, { ...j, state: "paying", results });
-    for (let i = results.length; i < j.payouts.length; i++) {
+    // Payouts run in order and stop at the first that is not paid, so a resume keeps the paid ones.
+    for (let i = 0; i < j.payouts.length; i++) {
+      if (results[i]?.status === "paid") continue;
       if (session.status === "rejected" || session.status === "expired") {
         this.log(`job ${session.jobId}: ${session.status} before payout ${i + 1}; stopping`);
         return;
       }
       const p = j.payouts[i]!;
       const note = p.note ?? `ACP job ${session.jobId}`;
-      let r: PayoutResult = { to: p.to === "claim-link" ? "claim-link" : short(p.to), amount: p.amount, status: "failed" };
-      for (let attempt = 0; attempt < 2 && r.status !== "paid"; attempt++) {
+      const payLabel = this.payoutLabel(session.chainId, session.jobId, i);
+      const base = { to: p.to === "claim-link" ? "claim-link" : short(p.to), amount: p.amount, label: payLabel };
+      // The intent is written before pay() is called, so a crash in between is never read as "not sent".
+      results[i] = { ...base, status: "sending", startedAt: new Date().toISOString() };
+      this.journal.put(k, { ...j, state: "paying", results });
+      let r: PayoutResult;
+      try {
         const out =
           p.to === "claim-link"
-            ? await wallet.payByClaimLink({ amount: p.amount, note, sealTo: j.replyTo!, label: `job ${session.jobId} payout ${i + 1}` })
-            : await wallet.pay({ to: p.to, amount: p.amount, note, label: `job ${session.jobId} payout ${i + 1}` });
+            ? await wallet.payByClaimLink({ amount: p.amount, note, sealTo: j.replyTo!, label: payLabel })
+            : await wallet.pay({ to: p.to, amount: p.amount, note, label: payLabel });
+        const msg = String(out.message ?? out.code ?? out.status);
         if (out.status === "done") {
-          r = { ...r, status: "paid", handle: String(out.payment ?? out.claimHandle), tx: String(out.hash), ...(out.sealedLink ? { sealedClaimLink: String(out.sealedLink) } : {}) };
+          r = { ...base, status: "paid", handle: String(out.payment ?? out.claimHandle), tx: String(out.hash), ...(out.sealedLink ? { sealedClaimLink: String(out.sealedLink) } : {}) };
+        } else if (out.status === "unconfirmed" || out.check || out.code === "unconfirmed_payment") {
+          r = { ...base, status: "unconfirmed", error: msg };
         } else {
-          r = { ...r, error: String(out.message ?? out.code ?? out.status) };
-          if (out.status === "refused") break; // a limit will not change on a retry
+          // Refused or failed before anything went out (the engine drops a payment's notes only then).
+          r = { ...base, status: "failed", error: msg };
         }
+      } catch (e) {
+        r = { ...base, status: "unconfirmed", error: safeErrorMessage(e) };
       }
-      results.push(r);
-      this.journal.put(k, { ...j, state: "paying", results });
+      // An answer that was lost or never came: look before deciding anything.
+      if (r.status === "unconfirmed") r = await this.reconcile(j, r);
+      results[i] = r;
+      if (r.status === "unconfirmed") {
+        this.journal.put(k, { ...j, state: "unconfirmed", results });
+        await session
+          .sendMessage(`Payout ${i + 1} may have gone out (${r.error}). This provider never sends it twice: it reads the chain and carries on once that payout settles.`)
+          .catch(() => undefined);
+        this.log(`job ${session.jobId}: payout ${i + 1} unconfirmed: ${r.error}`);
+        return;
+      }
       if (r.status !== "paid") {
-        // With no evaluator a submit releases the escrow, so a job not paid in full is not submitted.
+        // Not paid in full: not submitted. The job expires and what did not leave the float goes back.
         this.journal.put(k, { ...j, state: "stuck", results });
         const after =
           j.mode === "fund-transfer"
@@ -368,17 +574,19 @@ export class PrivatePayoutProvider {
         this.log(`job ${session.jobId}: payout ${i + 1} failed: ${r.error}`);
         return;
       }
+      this.journal.put(k, { ...j, state: "paying", results });
       this.log(`job ${session.jobId}: payout ${i + 1}/${j.payouts.length} paid privately (${p.amount} to ${r.to})`);
     }
     for (const r of results) {
       if (!r.proof && r.handle) {
-        const pr: Record<string, unknown> = await wallet.provePayment({ handle: r.handle, for: label }).catch((e) => ({ status: "error", message: String(e) }));
+        const pr: Record<string, unknown> = await wallet.provePayment({ handle: r.handle, for: label }).catch((e) => ({ status: "error", message: safeErrorMessage(e) }));
         if (pr.status === "done") r.proof = String(pr.proof);
       }
     }
-    if (session.status === "rejected" || session.status === "expired") {
-      this.journal.put(k, { ...j, state: "paying", results });
-      this.log(`job ${session.jobId}: ${session.status} while paying; every payout went out, nothing to submit`);
+    this.journal.put(k, { ...j, state: "paying", results });
+    const still = await this.readJob(session.chainId, session.jobId).catch(() => null);
+    if (session.status === "rejected" || session.status === "expired" || (still && still.status !== ACP_STATUS.funded)) {
+      this.log(`job ${session.jobId}: no longer funded on chain; every payout went out, nothing to submit`);
       return;
     }
     const a = this.asset();
@@ -387,8 +595,8 @@ export class PrivatePayoutProvider {
       jobId: session.jobId,
       network: wallet.network.key,
       asset: a.symbol,
-      payouts: results.map(({ handle: _h, ...rest }) => rest),
-      verify: `Each proof checks out at gloam.trade/verify and was made for "${label}".`,
+      payouts: results.map(({ handle: _h, label: _l, startedAt: _s, ...rest }) => rest),
+      verify: `Each proof checks out at gloam.trade/verify and was made for "${label}". A proof shows that a private payment of that amount was made from this provider's notes. It does not show who received it: each recipient confirms receipt.`,
     };
     const deliverable = j.replyTo
       ? { type: DELIVERABLE_TYPE, jobId: session.jobId, sealed: await sealToReceiveTag(JSON.stringify(full), j.replyTo), summary: { payouts: results.length, paid: results.filter((r) => r.status === "paid").length } }
@@ -398,27 +606,117 @@ export class PrivatePayoutProvider {
     this.log(`job ${session.jobId}: submitted the deliverable (${j.replyTo ? "sealed to the client" : "plain"})`);
   }
 
-  /** A job rejected or expired before it was paid out in full: send back the principal that was not paid out. */
+  // ------------------------------------------------------------------ refunds
+
+  private paidRaw(results: PayoutResult[], status: PayoutResult["status"][]) {
+    const a = this.asset();
+    return results.filter((r) => status.includes(r.status)).reduce((s, r) => s + parseUnits(r.amount, a.decimals), 0n);
+  }
+
+  /** A job rejected or expired before it was paid out in full: send back the principal that did not leave the float. */
   private async onEnded(session: JobSessionLike, how: "rejected" | "expired") {
     const k = this.key(session);
     await this.busy.get(k)?.catch(() => undefined);
     const j = this.journal.get(k);
     this.log(`job ${session.jobId} ${how}${session.job ? ` (client ${short(session.job.clientAddress)})` : ""}`);
-    if (!j || j.state === "submitted" || j.state === "completed" || j.state === "rejected" || j.state === "expired") return;
+    if (!j || j.state === "submitted" || j.state === "completed") return;
+    if (j.state !== "rejected" && j.state !== "expired") {
+      let funded = Boolean(j.funded);
+      if (!funded && j.mode === "fund-transfer") funded = (await this.fundedOnChain(session.chainId, session.jobId, j.quotedAtBlock)) === true;
+      this.journal.put(k, { ...j, state: how, funded, refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] });
+    }
+    await this.retryRefunds([k]);
+  }
+
+  /**
+   * For every job that ended early: settle payouts that were unsure, work out
+   * what certainly did not leave the float, and send back what is still owed.
+   * Runs on each job end and before each earnings sweep; owner code can call it too.
+   */
+  async retryRefunds(keys?: string[]): Promise<void> {
     const a = this.asset();
-    const paid = j.results.filter((r) => r.status === "paid").reduce((s, r) => s + parseUnits(r.amount, a.decimals), 0n);
-    const owed = j.mode === "fund-transfer" && j.funded ? BigInt(j.transferRaw) - paid : 0n;
-    let refundTx: string | undefined;
-    if (owed > 0n && this.opts.refund) {
-      refundTx = await this.opts.refund(j.client as Address, a.address, owed).catch((e) => {
-        this.log(`job ${session.jobId}: refund failed: ${e instanceof Error ? e.message : String(e)}`);
-        return undefined;
+    for (const [k, j0] of this.journal.all()) {
+      if (keys && !keys.includes(k)) continue;
+      if ((j0.state !== "rejected" && j0.state !== "expired") || j0.mode !== "fund-transfer" || !j0.funded) continue;
+      const results = await this.reconcileAll(j0);
+      const transfer = BigInt(j0.transferRaw);
+      const paid = this.paidRaw(results, ["paid"]);
+      const held = this.paidRaw(results, ["sending", "unconfirmed"]);
+      const due = transfer > paid + held ? transfer - paid - held : 0n;
+      let refunded = BigInt(j0.refundedRaw ?? "0");
+      const txs = [...(j0.refundTxs ?? [])];
+      let refundError: string | undefined;
+      const owed = due > refunded ? due - refunded : 0n;
+      if (owed > 0n && this.opts.refund) {
+        try {
+          const tx = await this.opts.refund(j0.client as Address, a.address, owed);
+          refunded += owed;
+          txs.push(tx);
+          this.log(`job ${j0.jobId}: ${formatUnits(owed, a.decimals)} ${a.symbol} of the client's principal was not paid out; sent back (${tx})`);
+        } catch (e) {
+          refundError = safeErrorMessage(e);
+          this.log(`job ${j0.jobId}: refund failed (${refundError}); it is tried again later`);
+        }
+      } else if (owed > 0n) {
+        this.log(`job ${j0.jobId}: ${formatUnits(owed, a.decimals)} ${a.symbol} of the client's principal was not paid out; owed back to the client`);
+      }
+      if (held > 0n) this.log(`job ${j0.jobId}: ${formatUnits(held, a.decimals)} ${a.symbol} held until an unconfirmed payout settles`);
+      const left = due > refunded ? due - refunded : 0n;
+      this.journal.put(k, {
+        ...j0,
+        results,
+        refundDueRaw: due.toString(),
+        refundedRaw: refunded.toString(),
+        refundHeldRaw: held.toString(),
+        refundTxs: txs,
+        refundOwed: formatUnits(left, a.decimals),
+        ...(txs.length ? { refundTx: txs[txs.length - 1] } : {}),
+        refundError,
       });
     }
-    this.journal.put(k, { ...j, state: how, ...(owed > 0n ? { refundOwed: refundTx ? "0" : formatUnits(owed, a.decimals), ...(refundTx ? { refundTx } : {}) } : {}) });
-    if (owed > 0n) {
-      this.log(`job ${session.jobId}: ${formatUnits(owed, a.decimals)} ${a.symbol} of the client's principal was not paid out; ${refundTx ? `sent back (${refundTx})` : "owed back to the client"}`);
+  }
+
+  /**
+   * What of `token` in the provider's public wallet may still belong to
+   * clients: principal of funded jobs not yet paid out, principal of quoted
+   * jobs that may be funded any moment, and refunds owed or held. The earnings
+   * sweep leaves this much in the wallet.
+   */
+  publicReserve(token: Address): bigint {
+    const a = this.asset();
+    if (lower(token) !== lower(a.address)) return 0n;
+    const chainId = this.opts.wallet.network.chainId;
+    let sum = 0n;
+    for (const [, j] of this.journal.all()) {
+      if (j.mode !== "fund-transfer" || j.chainId !== chainId) continue;
+      const transfer = BigInt(j.transferRaw);
+      if (j.state === "submitted" || j.state === "completed") continue;
+      if (j.state === "rejected" || j.state === "expired") {
+        if (!j.funded) continue;
+        const due = BigInt(j.refundDueRaw ?? j.transferRaw);
+        const refunded = BigInt(j.refundedRaw ?? "0");
+        sum += (due > refunded ? due - refunded : 0n) + BigInt(j.refundHeldRaw ?? "0");
+        continue;
+      }
+      if (!j.funded) {
+        // Quoted: the transfer can arrive until the job expires.
+        if (j.expiredAt && Number(j.expiredAt) * 1000 < Date.now()) continue;
+        sum += transfer;
+        continue;
+      }
+      const paid = this.paidRaw(j.results, ["paid"]);
+      sum += transfer > paid ? transfer - paid : 0n;
     }
+    return sum;
+  }
+
+  /**
+   * Carry on with a funded job: settle a payout left unconfirmed, then pay the
+   * rest and submit. The next job.funded event does the same; owner code can
+   * call this on a timer for jobs whose state is "unconfirmed".
+   */
+  resume(session: JobSessionLike): Promise<void> {
+    return this.onFunded(session);
   }
 
   /** The journal entry for a job, for the owner (no secrets in it). */

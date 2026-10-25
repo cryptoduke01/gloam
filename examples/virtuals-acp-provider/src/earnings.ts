@@ -5,11 +5,19 @@
  * moves what has piled up there into the provider's Gloam balance, where it
  * funds the next payouts privately.
  *
+ * Not everything in the wallet is earnings. On a fund-transfer job the payout
+ * total reaches the wallet at funding, and until every payout has left the
+ * float some of it may still go back to the client. The provider passes
+ * `reserve` (PrivatePayoutProvider.publicReserve), and that much stays in the
+ * wallet: principal of jobs not yet paid out, of jobs quoted and not yet
+ * funded, and refunds owed or held. Only fees and settled principal are added.
+ *
  * A deposit into the vault is public too (the amount shows), so a deposit per
  * job would line up with each escrow payment. Instead earnings are added in
  * round amounts once at least `minBatch` has built up: the deposits stop
  * matching any single job. Anything under a round step stays in the wallet for
- * the next sweep.
+ * the next sweep. An add whose answer was lost is settled (refresh) before
+ * another one is made, so a deposit is never made twice.
  *
  * It adds only tokens the Gloam vault takes. ACP's escrow pays in USDC on Base
  * mainnet and USDG on Robinhood Chain mainnet, both of which it takes. On Base
@@ -23,6 +31,9 @@ import type { GloamAgent } from "@gloamtrade/game-plugin-gloam";
 const ERC20_BALANCE = [
   { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "a", type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
+
+/** How much of a token in the wallet is not the provider's to add (raw units). */
+export type Reserve = (token: Address) => bigint | Promise<bigint>;
 
 export interface EarningsSweeperOptions {
   wallet: GloamAgent;
@@ -38,27 +49,40 @@ export interface EarningsSweeperOptions {
   roundTo?: string;
   /** Leave this much in the wallet. Default "0". */
   keepPublic?: string;
+  /** What is still owed to clients. PrivatePayoutProvider passes its own on each sweep. */
+  reserve?: Reserve;
 }
 
-export type TokenSweep = { token: Address; status: "added" | "skipped" | "error"; reason?: string; added?: string; hashes?: string[] };
+export type TokenSweep = { token: Address; status: "added" | "skipped" | "error"; reason?: string; added?: string; reserved?: string; hashes?: string[] };
 export type SweepOutcome = { status: "added" | "skipped" | "error"; results: TokenSweep[] };
 
 export class EarningsSweeper {
   constructor(private readonly opts: EarningsSweeperOptions) {}
 
-  async sweep(): Promise<SweepOutcome> {
+  async sweep(run: { reserve?: Reserve } = {}): Promise<SweepOutcome> {
+    const w = this.opts.wallet;
+    // An add whose answer was lost may still land: settle it before adding again.
+    await w.refresh().catch(() => undefined);
+    const waiting = w.notes().filter((n) => n.origin === "shield" && n.status === "pending" && !("stale" in n && n.stale));
+    if (waiting.length) {
+      return {
+        status: "skipped",
+        results: this.opts.tokens.map((token) => ({ token, status: "skipped" as const, reason: `An earlier add (${waiting.map((n) => n.handle).join(", ")}) has not confirmed; nothing is added until it settles.` })),
+      };
+    }
+    const reserve = run.reserve ?? this.opts.reserve;
     const results: TokenSweep[] = [];
     const seen = new Set<string>();
     for (const t of this.opts.tokens) {
       if (seen.has(t.toLowerCase())) continue;
       seen.add(t.toLowerCase());
-      results.push(await this.sweepOne(t).catch((e) => ({ token: t, status: "error" as const, reason: String(e instanceof Error ? e.message : e) })));
+      results.push(await this.sweepOne(t, reserve).catch((e) => ({ token: t, status: "error" as const, reason: String(e instanceof Error ? e.message.split("\n")[0] : e) })));
     }
     const status = results.some((r) => r.status === "added") ? "added" : results.some((r) => r.status === "error") ? "error" : "skipped";
     return { status, results };
   }
 
-  private async sweepOne(token: Address): Promise<TokenSweep> {
+  private async sweepOne(token: Address, reserve: Reserve | undefined): Promise<TokenSweep> {
     const w = this.opts.wallet;
     const asset = w.network.assets.find((a) => a.address.toLowerCase() === token.toLowerCase());
     if (!asset) {
@@ -71,13 +95,20 @@ export class EarningsSweeper {
     const owner = w.walletAddress;
     if (!owner) return { token, status: "error", reason: "The provider's Gloam engine has no wallet." };
     const have = await w.publicClient.readContract({ address: asset.address, abi: ERC20_BALANCE, functionName: "balanceOf", args: [owner] });
-    const keep = parseUnits(this.opts.keepPublic ?? "0", asset.decimals);
+    const owed = reserve ? BigInt(await reserve(asset.address)) : 0n;
+    const keep = parseUnits(this.opts.keepPublic ?? "0", asset.decimals) + owed;
     const step = parseUnits(this.opts.roundTo ?? "5", asset.decimals);
     const min = parseUnits(this.opts.minBatch ?? "10", asset.decimals);
     const spare = have > keep ? have - keep : 0n;
     let amount = step > 0n ? (spare / step) * step : spare;
+    const reserved = owed > 0n ? { reserved: `${formatUnits(owed, asset.decimals)} ${asset.symbol}` } : {};
     if (amount < min) {
-      return { token, status: "skipped", reason: `${formatUnits(spare, asset.decimals)} ${asset.symbol} waiting; adds start at ${formatUnits(min, asset.decimals)}.` };
+      return {
+        token,
+        status: "skipped",
+        reason: `${formatUnits(spare, asset.decimals)} ${asset.symbol} waiting${owed > 0n ? ` (${formatUnits(owed, asset.decimals)} more is owed to clients and stays)` : ""}; adds start at ${formatUnits(min, asset.decimals)}.`,
+        ...reserved,
+      };
     }
     const cap = asset.depositLimit?.perDeposit ?? amount;
     const hashes: string[] = [];
@@ -86,12 +117,12 @@ export class EarningsSweeper {
       const part = amount > cap ? (cap / step) * step || cap : amount;
       const out = await w.add({ amount: formatUnits(part, asset.decimals), asset: asset.symbol, label: "ACP earnings" });
       if (out.status !== "done") {
-        return { token, status: added ? "added" : "error", reason: String(out.message ?? out.code ?? out.status), added: `${formatUnits(added, asset.decimals)} ${asset.symbol}`, hashes };
+        return { token, status: added ? "added" : "error", reason: String(out.message ?? out.code ?? out.status), added: `${formatUnits(added, asset.decimals)} ${asset.symbol}`, hashes, ...reserved };
       }
       hashes.push(String(out.hash));
       added += part;
       amount -= part;
     }
-    return { token, status: "added", added: `${formatUnits(added, asset.decimals)} ${asset.symbol}`, hashes };
+    return { token, status: "added", added: `${formatUnits(added, asset.decimals)} ${asset.symbol}`, hashes, ...reserved };
   }
 }
