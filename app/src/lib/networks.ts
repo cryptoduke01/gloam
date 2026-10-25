@@ -583,3 +583,12 @@ export function networkName(n: Pick<GloamNetwork, "label" | "testnet" | "family"
   if (n.testnet && n.family === "ethereum") return "Ethereum Sepolia";
   return n.testnet ? `${n.label} testnet` : n.label;
 }
+
+/**
+ * A testnet's own chain's mainnet, once its pool is in; null when that chain
+ * has no mainnet on yet. Never another chain's: Base Sepolia's has to be Base.
+ */
+export function mainnetOf(n: Pick<GloamNetwork, "family">): GloamNetwork | null {
+  const key = NETWORK_KEYS.find((k) => !NETWORKS[k].testnet && NETWORKS[k].family === n.family);
+  return key ? NETWORKS[key] : null;
+}

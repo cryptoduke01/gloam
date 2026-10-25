@@ -133,6 +133,12 @@ check("Base assets as checked on chain, with EURC never counted as a dollar", ()
   assert.equal(tokens.knownTokens(8453)[0]!.symbol, "USDC");
 });
 
+check("The testnet bar offers Base Sepolia only Base mainnet, never another chain's", () => {
+  assert.equal(nets.mainnetOf(nets.getNetwork("robinhood"))?.key, "robinhood-mainnet");
+  assert.equal(nets.mainnetOf(nets.getNetwork("tempo"))?.key, "tempo-mainnet");
+  assert.equal(nets.mainnetOf(nets.getNetwork("base"))?.key ?? null, CONFIGURED ? "base-mainnet" : null);
+});
+
 check("No bridge and no swaps on Base yet", () => {
   assert.equal(BRIDGE_DESTINATIONS.base, undefined);
   assert.equal(bridgeVisible(nets.getNetwork("base-mainnet")), false);
