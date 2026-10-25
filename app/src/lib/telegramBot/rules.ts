@@ -1127,8 +1127,16 @@ function wrongAddress(s: string, team: boolean, posted: Set<string>): boolean {
   const found = (s.match(ANY_EVM_ADDRESS) ?? []).map((a) => a.toLowerCase());
   if (found.some((a) => COPYCAT.has(a)) || SEND_TO_ADDRESS.test(s)) return true;
   if (team) return found.some((a) => a !== GLOAM_TOKEN.address.toLowerCase());
-  return found.some((a) => !ownAddress(a) && !posted.has(a));
+  // an address the asker posted may come back about their wallet, never in a line that calls it the token or a contract
+  return found.some((a) => !ownAddress(a) && (!posted.has(a) || TOKEN_TALK.test(s)));
 }
+
+/**
+ * A line about $GLOAM, a token, a contract or which address is the real one.
+ * An address the asker posted is never repeated in one: "is 0x... the new CA?"
+ * is how a fake contract gets a yes.
+ */
+const TOKEN_TALK = /\$gloam\b|\b(?:ca|contracts?|tokens?|addy|official|legit|genuine|verified|real one|right one|correct one)\b/i;
 
 /**
  * "Gloam is audited", "the contracts were fully audited": not true. Gloam had an
