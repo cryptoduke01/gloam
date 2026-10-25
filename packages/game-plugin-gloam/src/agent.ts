@@ -219,7 +219,7 @@ export class GloamAgent {
   constructor(opts: GloamAgentOptions = {}) {
     const env = opts.env ?? process.env;
     this.env = env;
-    this.network = resolveNetwork(opts.network ?? env.GLOAM_NETWORK?.trim() ?? "base", { rpc: opts.rpc ?? env.GLOAM_RPC_URL, env });
+    this.network = resolveNetwork(opts.network || env.GLOAM_NETWORK?.trim() || "base", { rpc: opts.rpc || env.GLOAM_RPC_URL, env });
     const chain: Chain = { ...this.network.chain, rpcUrls: { default: { http: [this.network.rpc] } } };
     this.publicClient = opts.publicClient ?? (createPublicClient({ chain, transport: http(this.network.rpc) }) as PublicClient);
     this.agentId = opts.agentId ?? envAgentId(env);
@@ -239,10 +239,10 @@ export class GloamAgent {
       this.sender = null;
     }
 
-    const submit = opts.submit ?? (env.GLOAM_SUBMIT?.trim() as "relay" | "wallet" | undefined) ?? "relay";
+    const submit = opts.submit || (env.GLOAM_SUBMIT?.trim() as "relay" | "wallet" | undefined) || "relay";
     if (submit !== "relay" && submit !== "wallet") throw new Error(`GLOAM_SUBMIT must be "relay" or "wallet", got "${submit}".`);
     this.submitMode = submit;
-    this.relayUrl = opts.relayUrl ?? env.GLOAM_RELAY_URL?.trim() ?? undefined;
+    this.relayUrl = opts.relayUrl || env.GLOAM_RELAY_URL?.trim() || undefined;
 
     const { key, source } = noteStoreKey(env);
     this.store = new NoteStore(noteStorePath(this.agentId, env), this.agentId, key, source);
@@ -250,7 +250,7 @@ export class GloamAgent {
     const rk = this.store.receiveKey();
     if (rk) registerSecret(rk.privateJwk.d);
 
-    const dataDir = opts.dataDir ?? env.GLOAM_DATA_DIR?.trim() ?? join(homedir(), ".gloam");
+    const dataDir = opts.dataDir || env.GLOAM_DATA_DIR?.trim() || join(homedir(), ".gloam");
     mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     this.spendLog = new SpendLog(env.GLOAM_SPEND_LOG?.trim() || join(dataDir, `game-spend-log.${this.agentId.replace(/[^\w.-]+/g, "_")}.json`));
     this.tree = new TreeSync(this.publicClient, this.network, { cacheDir: join(dataDir, "vault-cache"), chunk: opts.logChunk });

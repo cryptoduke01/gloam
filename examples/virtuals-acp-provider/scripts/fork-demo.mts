@@ -4,12 +4,11 @@
  *   BASE_SEPOLIA_RPC_URL=https://sepolia.base.org pnpm --filter gloam-virtuals-acp-provider-example demo:fork
  *   ROBINHOOD_RPC_URL=https://rpc.mainnet.chain.robinhood.com pnpm --filter gloam-virtuals-acp-provider-example demo:fork -- --network robinhood-mainnet
  *
- * Base Sepolia (a testnet) shows the whole job on Virtuals' ACP testnet
- * contract; its escrow pays in Virtuals' own test token, which Gloam's Base
- * Sepolia vault does not take, so the earnings step says so. The Robinhood
- * Chain run forks mainnet, where ACP pays in USDG and Gloam's vault takes USDG,
- * so the provider also adds its earnings privately. Both run only in a local
- * anvil fork with fresh keys: nothing is sent to a live network.
+ * Base Sepolia (a testnet) runs the job on Virtuals' ACP testnet contract; its
+ * escrow takes the fee in Virtuals' own test token (which Gloam's vault does
+ * not take), and the payout total moves in Circle's test USDC (which it does).
+ * The Robinhood Chain run forks mainnet, where both legs are USDG. Both run
+ * only in a local anvil fork with fresh keys: nothing is sent to a live network.
  */
 import { runScenario } from "./scenario.mts";
 
@@ -28,8 +27,9 @@ const t = Date.now();
 const r = await runScenario({ network, upstream, log: (m) => console.log(`  ${m}`) });
 console.log("\nResult");
 console.log(`  network                 ${r.network}`);
-console.log(`  ACP job                 ${r.jobId}, status ${r.acpStatus} (3 = completed), budget ${r.quoteBudget}`);
-console.log(`  escrow paid provider    ${r.providerEscrowIncome}`);
+console.log(`  ACP job                 ${r.jobId}, status ${r.acpStatus} (3 = completed), fee in escrow ${r.feeBudget}`);
+console.log(`  to provider at funding  ${r.principalToProvider} (fund transfer, outside the escrow)`);
+console.log(`  escrow paid provider    ${r.escrowPaidProvider}`);
 console.log(`  payouts                 ${r.payouts.map((p) => `${p.amount} to ${p.to}: ${p.status}`).join("; ")}`);
 console.log(`  proofs check out        ${r.proofsOk.join(", ")}`);
 console.log(`  recipient 1             ${r.recipientReceived}`);
@@ -37,7 +37,8 @@ console.log(`  recipient 2 (claim)     ${r.claimed}`);
 console.log(`  earnings                ${JSON.stringify(r.earnings)}`);
 console.log(`  deliverable sealed      ${r.deliverableSealed}`);
 console.log(`  ACP backend stores      ${r.backendSaw}`);
-console.log(`  refused job             ${r.refusedJob ? `${r.refusedJob.jobId}: "${r.refusedJob.reason}", ${r.refusedJob.detail}` : "none"}`);
+console.log(`  refused escrow job      ${r.refusedJob ? `${r.refusedJob.jobId}: "${r.refusedJob.reason}", ${r.refusedJob.detail}` : "none"}`);
+console.log(`  rejected after funding  ${r.rejectedAfterFunding ? `job ${r.rejectedAfterFunding.jobId} (status ${r.rejectedAfterFunding.acpStatus}): ${r.rejectedAfterFunding.payoutsMade} payouts, client's net change ${r.rejectedAfterFunding.clientNetChange}, ${r.rejectedAfterFunding.journal}` : "none"}`);
 console.log(`  payout event fields     ${JSON.stringify(r.transferLogFields)} (no amount, no sender, no recipient)`);
 console.log("\nWhat the chain shows");
 for (const x of r.publicTxs) console.log(`  ${x.hash}  ${x.what}`);

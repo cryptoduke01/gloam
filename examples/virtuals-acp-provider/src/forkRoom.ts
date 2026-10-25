@@ -27,8 +27,10 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import {
   ACP_ABI,
+  FUND_TRANSFER_HOOKS,
   NO_EVALUATOR,
   assetToken,
+  encodeFundTransfer,
   type AcpAgentLike,
   type AcpJobEvent,
   type AcpJobLike,
@@ -44,6 +46,9 @@ const ERC20_APPROVE = [
 
 type Handler = (session: JobSessionLike, entry: JobRoomEntry) => void | Promise<void>;
 
+/** The client's look at a submitted deliverable: true completes the job (releasing the fee), false rejects it. */
+export type ClientEvaluation = (jobId: string, deliverable: string) => Promise<boolean>;
+
 export interface ForkRoomOptions {
   client: PublicClient;
   rpc: string;
@@ -54,6 +59,8 @@ export interface ForkRoomOptions {
   tokenDecimals: number;
   providerKey: Hex;
   clientKey: Hex;
+  /** How the client evaluates a deliverable when it is the job's evaluator. Default: completes. */
+  evaluate?: ClientEvaluation;
   log?: (m: string) => void;
 }
 
@@ -85,8 +92,16 @@ class ForkSession implements JobSessionLike {
     return "open";
   }
 
+  /** The provider's fund request on a fund-transfer job, as set on chain. */
+  fundRequest: { token: AssetTokenLike; destination: Address } | null = null;
+  /** The client misbehaves: rejects the job right after funding it. */
+  clientRejectsAfterFunding = false;
+
   setBudget(amount: AssetTokenLike) {
     return this.room.providerSetBudget(this, amount);
+  }
+  setBudgetWithFundRequest(amount: AssetTokenLike, transferAmount: AssetTokenLike, destination: string) {
+    return this.room.providerSetBudget(this, amount, { token: transferAmount, destination: destination as Address });
   }
   submit(deliverable: string) {
     return this.room.providerSubmit(this, deliverable);
@@ -187,14 +202,25 @@ export class ForkAcpRoom implements AcpAgentLike {
   }
 
   /** Client: create the job on the ACP contract and send the requirement, as createJobFromOffering does. */
-  async clientCreateJob(args: { description: string; requirement: unknown; evaluator?: Address; expiresInSeconds?: number }): Promise<string> {
+  async clientCreateJob(args: {
+    description: string;
+    requirement: unknown;
+    evaluator?: Address;
+    expiresInSeconds?: number;
+    /** Create it with ACP's FundTransferHook, as createJobFromOffering does for an offering with requiredFunds. Default true. */
+    fundTransfer?: boolean;
+    /** Reject the job right after funding it (a client taking its money back). */
+    rejectAfterFunding?: boolean;
+  }): Promise<string> {
     const now = Number((await this.opts.client.getBlock()).timestamp);
     const expiredAt = BigInt(now + (args.expiresInSeconds ?? 3600));
-    const evaluator = args.evaluator ?? NO_EVALUATOR;
+    const hook = args.fundTransfer === false ? NO_EVALUATOR : FUND_TRANSFER_HOOKS[this.opts.chainId]!;
+    // A fund-transfer job is self-evaluated, as acp-node-v2's fund-transfer buyer does.
+    const evaluator = args.evaluator ?? (hook === NO_EVALUATOR ? NO_EVALUATOR : this.clientAccount.address);
     const hash = await this.send(
       this.clientWallet,
       this.opts.acp,
-      encodeFunctionData({ abi: ACP_ABI, functionName: "createJob", args: [this.provider.address, evaluator, expiredAt, args.description, NO_EVALUATOR] })
+      encodeFunctionData({ abi: ACP_ABI, functionName: "createJob", args: [this.provider.address, evaluator, expiredAt, args.description, hook] })
     );
     const receipt = await this.opts.client.getTransactionReceipt({ hash });
     let jobId: string | null = null;
@@ -208,11 +234,12 @@ export class ForkAcpRoom implements AcpAgentLike {
     }
     if (!jobId) throw new Error("No JobCreated event.");
     const session = new ForkSession(this, jobId, this.opts.chainId);
-    this.note(jobId, "createJob (client)", hash);
+    session.clientRejectsAfterFunding = Boolean(args.rejectAfterFunding);
+    this.note(jobId, `createJob (client${hook === NO_EVALUATOR ? "" : ", with the FundTransferHook"})`, hash);
     session.job = await this.readJob(jobId);
     this.sessions.set(jobId, session);
     this.log(`ACP job ${jobId} created on chain by the client (${hash})`);
-    this.system(session, { type: "job.created", jobId, client: this.clientAccount.address, provider: this.provider.address, evaluator, expiredAt: expiredAt.toString(), hook: NO_EVALUATOR });
+    this.system(session, { type: "job.created", jobId, client: this.clientAccount.address, provider: this.provider.address, evaluator, expiredAt: expiredAt.toString(), hook });
     this.emit(session, {
       kind: "message",
       onChainJobId: jobId,
@@ -225,12 +252,21 @@ export class ForkAcpRoom implements AcpAgentLike {
     return jobId;
   }
 
-  async providerSetBudget(session: ForkSession, amount: AssetTokenLike) {
-    const hash = await this.send(this.providerWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "setBudget", args: [BigInt(session.jobId), amount.rawAmount, "0x"] }));
-    this.note(session.jobId, "setBudget (provider)", hash);
+  async providerSetBudget(session: ForkSession, amount: AssetTokenLike, fundRequest?: { token: AssetTokenLike; destination: Address }) {
+    const opt = fundRequest ? encodeFundTransfer(fundRequest.token.address, fundRequest.token.rawAmount, fundRequest.destination) : "0x";
+    const hash = await this.send(this.providerWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "setBudget", args: [BigInt(session.jobId), amount.rawAmount, opt] }));
+    session.fundRequest = fundRequest ?? null;
+    this.note(session.jobId, fundRequest ? "setBudget with a fund request (provider)" : "setBudget (provider)", hash);
     session.job = await this.readJob(session.jobId);
-    this.log(`ACP job ${session.jobId}: provider set the budget to ${amount.amount} ${amount.symbol} (${hash})`);
-    this.system(session, { type: "budget.set", jobId: session.jobId, amount: amount.amount });
+    this.log(
+      `ACP job ${session.jobId}: provider set the budget to ${amount.amount} ${amount.symbol}${fundRequest ? ` and asked for ${fundRequest.token.amount} ${fundRequest.token.symbol} at funding` : ""} (${hash})`
+    );
+    this.system(session, {
+      type: "budget.set",
+      jobId: session.jobId,
+      amount: amount.amount,
+      ...(fundRequest ? { fundRequest: { amount: fundRequest.token.amount, tokenAddress: fundRequest.token.address, symbol: fundRequest.token.symbol, recipient: fundRequest.destination } } : {}),
+    });
     // The client funds the escrow once it sees the budget (after the provider's handler returns).
     this.queue = this.queue.then(() => this.clientFund(session, amount));
   }
@@ -238,11 +274,25 @@ export class ForkAcpRoom implements AcpAgentLike {
   private async clientFund(session: ForkSession, amount: AssetTokenLike) {
     try {
       await this.send(this.clientWallet, this.opts.paymentToken, encodeFunctionData({ abi: ERC20_APPROVE, functionName: "approve", args: [this.opts.acp, amount.rawAmount] }));
-      const fundHash = await this.send(this.clientWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "fund", args: [BigInt(session.jobId), amount.rawAmount, "0x"] }));
-      this.note(session.jobId, "fund: client into the escrow", fundHash);
+      const fr = session.fundRequest;
+      let opt: Hex = "0x";
+      if (fr) {
+        // As acp-node-v2's internalFundWithTransfer: approve the hook for the transfer, and name what is expected.
+        await this.send(this.clientWallet, fr.token.address, encodeFunctionData({ abi: ERC20_APPROVE, functionName: "approve", args: [FUND_TRANSFER_HOOKS[this.opts.chainId]!, fr.token.rawAmount] }));
+        opt = encodeFundTransfer(fr.token.address, fr.token.rawAmount, fr.destination);
+      }
+      const fundHash = await this.send(this.clientWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "fund", args: [BigInt(session.jobId), amount.rawAmount, opt] }));
+      this.note(session.jobId, fr ? `fund: the fee into the escrow, ${fr.token.amount} ${fr.token.symbol} from client to provider` : "fund: client into the escrow", fundHash);
       session.job = await this.readJob(session.jobId);
-      this.log(`ACP job ${session.jobId}: client funded the escrow with ${amount.amount} ${amount.symbol} (${fundHash})`);
+      this.log(`ACP job ${session.jobId}: client funded ${amount.amount} ${amount.symbol} into the escrow${fr ? ` and ${fr.token.amount} ${fr.token.symbol} to the provider` : ""} (${fundHash})`);
       this.system(session, { type: "job.funded", jobId: session.jobId, client: this.clientAccount.address, amount: amount.amount });
+      if (session.clientRejectsAfterFunding) {
+        const rejectHash = await this.send(this.clientWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "reject", args: [BigInt(session.jobId), keccak256(toHex("changed my mind")), "0x"] }));
+        this.note(session.jobId, "reject (client, after funding)", rejectHash);
+        session.job = await this.readJob(session.jobId);
+        this.log(`ACP job ${session.jobId}: the client rejected the funded job on chain and got the escrow back (${rejectHash})`);
+        this.system(session, { type: "job.rejected", jobId: session.jobId, rejector: this.clientAccount.address, reason: "changed my mind" });
+      }
     } catch (e) {
       this.log(`ACP job ${session.jobId}: client could not fund: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
     }
@@ -251,13 +301,29 @@ export class ForkAcpRoom implements AcpAgentLike {
   async providerSubmit(session: ForkSession, deliverable: string) {
     const hash = await this.send(this.providerWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: "submit", args: [BigInt(session.jobId), keccak256(toHex(deliverable)), "0x"] }));
     this.deliverables.set(session.jobId, deliverable);
-    this.note(session.jobId, "submit (provider): deliverable hash, and with no evaluator the escrow pays out", hash);
     const job = await this.readJob(session.jobId);
+    this.note(session.jobId, job.onChainStatus === 3 ? "submit (provider): the deliverable hash; with no evaluator the escrow pays out" : "submit (provider): the deliverable hash", hash);
     session.job = job;
     this.log(`ACP job ${session.jobId}: provider submitted the deliverable hash (${hash}); on-chain status ${job.onChainStatus}`);
     this.system(session, { type: "job.submitted", jobId: session.jobId, provider: this.provider.address, deliverableHash: keccak256(toHex(deliverable)), deliverable });
     // With no evaluator, submit completes the job and releases the escrow (status 3).
-    if (job.onChainStatus === 3) this.system(session, { type: "job.completed", jobId: session.jobId, evaluator: NO_EVALUATOR, reason: "no evaluator" });
+    if (job.onChainStatus === 3) {
+      this.system(session, { type: "job.completed", jobId: session.jobId, evaluator: NO_EVALUATOR, reason: "no evaluator" });
+    } else if (job.evaluatorAddress.toLowerCase() === this.clientAccount.address.toLowerCase()) {
+      this.queue = this.queue.then(() => this.clientEvaluate(session, deliverable));
+    }
+  }
+
+  private async clientEvaluate(session: ForkSession, deliverable: string) {
+    const ok = await (this.opts.evaluate ?? (async () => true))(session.jobId, deliverable).catch(() => false);
+    const reason = keccak256(toHex(ok ? "deliverable checked" : "deliverable did not check out"));
+    const fn = ok ? "complete" : "reject";
+    const hash = await this.send(this.clientWallet, this.opts.acp, encodeFunctionData({ abi: ACP_ABI, functionName: fn, args: [BigInt(session.jobId), reason, "0x"] }));
+    this.note(session.jobId, `${fn} (client, as its own evaluator): the escrow ${ok ? "pays the provider" : "goes back to the client"}`, hash);
+    session.job = await this.readJob(session.jobId);
+    this.log(`ACP job ${session.jobId}: the client checked the deliverable and called ${fn} (${hash})`);
+    if (ok) this.system(session, { type: "job.completed", jobId: session.jobId, evaluator: this.clientAccount.address, reason: "deliverable checked" });
+    else this.system(session, { type: "job.rejected", jobId: session.jobId, rejector: this.clientAccount.address, reason: "deliverable did not check out" });
   }
 
   async providerReject(session: ForkSession, reason: string) {

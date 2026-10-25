@@ -1,0 +1,23 @@
+# General Information
+plugin_name: "Gloam Plugin"
+author: "Gloam"
+logo_url: "https://gloam.trade/favicon.png"
+release_date: "2026-10"
+
+# Description
+short_description: "Private stablecoin payments for GAME agents: a private balance, private payments, cash outs and proofs of funds on Base and Robinhood Chain, under per-asset spending limits."
+detailed_description: "Gives a GAME agent a private balance in Gloam's shielded vault on Base or Robinhood Chain. The agent can add funds privately, pay a Gloam address, a payment request or a claim link without the amount or the parties going on chain, pick up payments sent to it, cash out to a public address, prove it holds at least an amount for one named reader, and check proofs others send it. Every payment is checked against limits the owner sets per asset (per payment and per rolling day, recipients, expiry), and no key, note secret or claim link ever reaches the planner. Works for ACP providers too: an ACP agent's smart wallet can be the sender, so its earnings go straight into its private balance."
+
+# Media & Assets
+plugin_logo_url: "https://gloam.trade/favicon.png"
+screenshots:
+  - ""
+  - ""
+demo_video_url: ""
+documentation_url: "https://gloam.trade/docs/agents"
+changelog_url: ""
+
+# Contact & Support
+x_account_handle: "@gloamtrade"
+support_contact: "https://gloam.trade"
+community_url: "https://x.com/gloamtrade"

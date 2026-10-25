@@ -3,8 +3,10 @@
  *
  * A client agent names who to pay and how much. The provider pays each one
  * privately from its Gloam balance and delivers proof of each payment (or a
- * claim link, for someone with no Gloam address). The client pays the job
- * through ACP's escrow as usual.
+ * claim link, for someone with no Gloam address). The offering sets
+ * requiredFunds, so acp-node-v2 creates the job with ACP's FundTransferHook:
+ * the payout total goes to the provider when the client funds, and only the
+ * provider's fee sits in ACP's escrow.
  *
  * Requirement (what the client sends with the job), either form:
  *
@@ -30,7 +32,7 @@ export const MAX_PAYOUTS = 20;
 export const PRIVATE_PAYOUT_OFFERING = {
   name: OFFERING_NAME,
   description:
-    "Private payout: name who to pay and how much; each one is paid privately through Gloam, and the deliverable is a proof of each payment (or a claim link sealed to you). The escrow payment for this job is public, the payouts are not.",
+    "Private payout: name who to pay and how much; each one is paid privately through Gloam, and the deliverable is a proof of each payment (or a claim link sealed to you). The payout total reaches the provider when you fund (fund transfer) and the fee sits in escrow. Those legs are public; the payouts are not.",
   requirements: {
     type: "object",
     additionalProperties: false,
@@ -64,7 +66,7 @@ export const PRIVATE_PAYOUT_OFFERING = {
   },
   slaMinutes: 30,
   priceType: "fixed",
-  requiredFunds: false,
+  requiredFunds: true,
   isHidden: false,
   isPrivate: false,
 } as const;
