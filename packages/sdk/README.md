@@ -387,6 +387,8 @@ if (result.grantAccess) serve(); // result.freshNote is the payment, in a note o
 // not_settled (not in the pool yet), rejected, failed or unconfirmed.
 ```
 
+A `submit` of your own that cannot tell whether its send went out (a timeout, a reply lost after the node took it) should throw an error with `maybeSent: true`, and `hash` when it knows it. The sweep then comes back `unconfirmed` with the fresh note to keep, never `failed`.
+
 The sealed ticket is the same format the Gloam app uses for paying a receive tag (`gloam2t.…`, ECDH P-256 + HKDF-SHA256 + AES-256-GCM over a `gloam1.` note package), so a payment sealed by an agent opens in the app, and a tag made in the app works as `payTo`.
 
 **Upgrading from 0.0.5.** `payTo` must now be a receive tag, in `buildGloamPaymentRequirements` and `buildGloamPayment` (pass `legacyUnsealed: true` to pay an old server anyway; the note then travels in plain text, readable by anyone who sees the header). A sealed payment must be opened before `verifyGloamPayment` can read it (`openGloamPaymentNote`, then pass `note`); `settleGloamPayment` does all of this and the sweep.
