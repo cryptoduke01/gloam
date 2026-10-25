@@ -4,6 +4,7 @@ import { AppLink } from "./AppLink";
 import { Mark } from "./Logo";
 import { MainnetCopy } from "./MainnetCountdown";
 import { ThemeSegmented } from "./ThemeToggle";
+import { POSTS, postHref } from "@/lib/posts";
 
 const groups: {
   title: string;
@@ -39,10 +40,7 @@ const groups: {
       { href: "/brand#downloads", label: "Brand kit" },
       { href: "/transparency", label: "Transparency" },
       { href: "/research", label: "Research" },
-      { href: "/blog/live-on-mainnet", label: "Live on mainnet" },
-      { href: "/blog/live-on-tempo", label: "Live on Tempo" },
-      { href: "/blog/privacy-without-an-operator", label: "Privacy without an operator" },
-      { href: "/blog/private-agent-payments", label: "Private agent payments" },
+      ...POSTS.map((p) => ({ href: postHref(p), label: p.short })),
       { href: "/pitch", label: "Pitch" },
     ],
   },
