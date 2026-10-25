@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
@@ -18,7 +18,9 @@ import {
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
-import { isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { isDollarStable, knownTokens, shieldTokensFor, supportsNativeShield, type OnchainToken } from "@/lib/tokens";
+import { useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
+import { privateHeadline } from "@/lib/portfolioValue";
 import {
   assetLabel,
   formatAssetAmount,
@@ -177,6 +179,26 @@ export function PortfolioView() {
   // chain's own symbol rather than a hardcoded "ETH".
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
+  // $GLOAM and the swap tokens on Robinhood Chain mainnet, priced like Transparency does.
+  const geckoMarks = useCoingeckoMarks(network.chainId === 4663);
+  /**
+   * What one unit of a token is worth in dollars, or null when nothing here
+   * prices it (EURC is a euro and never $1; a token with no feed): a dollar
+   * stablecoin is $1, WETH is ETH's price, a stock its live mark, $GLOAM and
+   * the swap tokens CoinGecko's.
+   */
+  const unitUsd = useCallback(
+    (t: OnchainToken): number | null => {
+      if (isDollarStable(t)) return 1;
+      if (t.id === "weth") return ethUsd;
+      const m = markets.find((x) => x.id === t.id);
+      if (m?.mark) return m.mark;
+      return geckoMarks.get(t.address.toLowerCase()) ?? null;
+    },
+    [ethUsd, markets, geckoMarks]
+  );
+  // Every token this network can hold, its own first (a swap leaves tokens the pool list doesn't name).
+  const knownHere = useMemo(() => knownTokens(network.chainId), [network.chainId]);
   const {
     open: shieldNotes,
     waiting: waitingClaims,
@@ -226,8 +248,9 @@ export function PortfolioView() {
       .map((t, i) => {
         const raw = tokenBals[i] ?? BigInt(0);
         const m = markets.find((x) => x.id === t.id);
-        // Dollar stablecoins are worth $1; equities use their live mark (EURC has none: no USD shown).
-        const mark = isDollarStable(t) ? 1 : (m?.mark ?? 0);
+        // unitUsd: $1 a dollar stablecoin, a live mark, CoinGecko for $GLOAM; null (EURC): no USD shown
+        const unit = unitUsd(t);
+        const mark = unit ?? 0;
         const amount = Number(raw) / 10 ** t.decimals;
         const usd = amount * mark;
         return {
@@ -235,6 +258,7 @@ export function PortfolioView() {
           raw,
           amount,
           mark,
+          priced: unit != null,
           usd,
           change24h: m?.change24h ?? 0,
           spark: m?.spark ?? [],
@@ -242,7 +266,7 @@ export function PortfolioView() {
         };
       })
       .filter((p) => (settings.hideZeroBalances ? p.raw > BigInt(0) : true));
-  }, [tokenSet, tokenBals, markets, settings.hideZeroBalances]);
+  }, [tokenSet, tokenBals, markets, unitUsd, settings.hideZeroBalances]);
 
   // The public balance to point at the vault: a dollar stablecoin first.
   const addSuggestion = useMemo(
@@ -269,18 +293,9 @@ export function PortfolioView() {
       if (isNativeAsset(asset) && nativeUsdRate != null) {
         usd = (Number(amount) / 1e18) * nativeUsdRate;
       } else {
-        const tok = tokenSet.find(
-          (t) => t.address.toLowerCase() === asset.toLowerCase()
-        );
-        if (tok) {
-          const dec = tok.decimals;
-          if (isDollarStable(tok)) {
-            usd = Number(amount) / 10 ** dec; // $1 each
-          } else {
-            const m = markets.find((x) => x.id === tok.id);
-            if (m?.mark) usd = (Number(amount) / 10 ** dec) * m.mark;
-          }
-        }
+        const tok = knownHere.find((t) => t.address.toLowerCase() === asset.toLowerCase());
+        const unit = tok ? unitUsd(tok) : null;
+        if (tok && unit != null) usd = (Number(amount) / 10 ** tok.decimals) * unit;
       }
       rows.push({ asset, label, amount, usd });
     });
@@ -289,7 +304,7 @@ export function PortfolioView() {
       if (isNativeAsset(b.asset)) return 1;
       return a.label.localeCompare(b.label);
     });
-  }, [byAsset, nativeUsdRate, markets, tokenSet]);
+  }, [byAsset, nativeUsdRate, knownHere, unitUsd]);
 
   // Tempo has no native coin: its nodes answer a wallet's native balance with a
   // huge placeholder, so on Tempo the wallet's public money is its stablecoins.
@@ -314,10 +329,12 @@ export function PortfolioView() {
   const hasShield = shieldRows.length > 0;
   const stockCount = positions.filter((p) => p.raw > BigInt(0)).length;
 
-  // Held but with no dollar price here (EURC is a euro, never $1; a stock whose feed is down):
-  // left out of the dollar figures, and said so, never counted as $0.
-  const shieldUnpriced = shieldRows.filter((r) => r.usd == null).map((r) => r.label);
-  const publicUnpriced = positions.filter((p) => p.raw > BigInt(0) && p.mark <= 0).map((p) => p.symbol);
+  // Held but with no dollar price here (EURC is a euro, never $1; ETH while its price loads or
+  // the feed is down): left out of the dollar figures on both sides, and said so, never $0.
+  const unpricedRows = shieldRows.filter((r) => r.usd == null);
+  const shieldUnpriced = unpricedRows.map((r) => r.label);
+  const tokensUnpriced = positions.filter((p) => p.raw > BigInt(0) && !p.priced).map((p) => p.symbol);
+  const publicUnpriced = [...(!isTempo && nativeWei > BigInt(0) && nativeUsdRate == null ? [nativeSymbol] : []), ...tokensUnpriced];
   const unpriced = [...new Set([...shieldUnpriced, ...publicUnpriced])];
 
   // Public (wallet + tokens) vs sealed (vault) split, the whole point.
@@ -369,14 +386,21 @@ export function PortfolioView() {
           } ${shieldRows[0].label}`
         : `${shieldRows.length} assets`;
 
-  // The hero number: what sits in the vault, only readable in this browser.
+  // The hero number: what sits in the vault, only readable in this browser. What the
+  // dollars leave out is shown by amount: "$100 + 1,000 GLOAM" rather than "2 assets".
+  const amountOfRow = (r: (typeof shieldRows)[number]) =>
+    `${isNativeAsset(r.asset) ? formatEth(r.amount) : formatAssetAmount(r.amount, r.asset)} ${r.label}`;
   const privateDisplay = !balancesVisible
     ? settings.showUsd
       ? formatUsd(0)
       : "0"
-    : settings.showUsd && shieldUnpriced.length === 0 && (sealedUsd > 0 || !hasShield)
-      ? formatUsdCompact(sealedUsd)
-      : vaultValue;
+    : privateHeadline({
+        showUsd: settings.showUsd,
+        sealedUsd,
+        unpriced: unpricedRows.map(amountOfRow),
+        vaultValue,
+        formatUsd: formatUsdCompact,
+      });
   const privateSub = !isConnected
     ? "Connect a wallet to see your private balance."
     : !onProduct
@@ -397,7 +421,7 @@ export function PortfolioView() {
     ? settings.showUsd
       ? formatUsd(0)
       : "0 tokens"
-    : settings.showUsd && stocksUsd > 0 && publicUnpriced.length === 0
+    : settings.showUsd && stocksUsd > 0 && tokensUnpriced.length === 0
       ? formatUsdCompact(stocksUsd)
       : `${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
