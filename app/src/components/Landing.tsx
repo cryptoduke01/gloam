@@ -245,6 +245,9 @@ export function Landing() {
           </div>
         </section>
 
+        {/* partners already live on Gloam, right under the hero */}
+        <LivePartnersStrip />
+
         {/* what Gloam is: one product you use, build on and can check */}
         <section aria-labelledby="what-gloam-is" className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-7 sm:pt-24">
           <h2 id="what-gloam-is" className="sr-only">What Gloam is</h2>
@@ -267,9 +270,6 @@ export function Landing() {
             })}
           </div>
         </section>
-
-        {/* partners already live on Gloam */}
-        <LivePartnersStrip />
 
         {/* thesis + signature */}
         <section id="how" className="scroll-mt-20 pb-6 pt-24 sm:pt-36">

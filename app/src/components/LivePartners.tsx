@@ -59,39 +59,41 @@ export const LIVE_PARTNERS: Partner[] = [
   { name: "Agent Wormhole", href: "https://agentwormhole.com", line: "Agent payments checked before they go", Mark: AgentWormholeMark },
 ];
 
-function PartnerLink({ p, withLine = false }: { p: Partner; withLine?: boolean }) {
+function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {
   return (
     <a
       href={p.href}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-lg text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-4"
+      className="flex min-h-11 items-center gap-3 rounded-lg text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-4"
     >
-      <p.Mark size={32} />
+      <p.Mark size={size} />
       <span>
-        <span className="block text-[17px] leading-tight tracking-[-0.01em]">{p.name}</span>
+        <span className={`block leading-tight tracking-[-0.01em] ${size > 32 ? "text-[19px]" : "text-[17px]"}`}>{p.name}</span>
         {withLine && <span className="mt-0.5 block text-[13px] text-mute">{p.line}</span>}
       </span>
     </a>
   );
 }
 
-/** Landing page: a plain labelled row of partner logos. */
+/**
+ * Landing page, right under the hero: who already runs on Gloam. A quiet line
+ * and the real marks, centred on the page, so two partners sit balanced and a
+ * longer list wraps into centred rows the same way.
+ */
 export function LivePartnersStrip() {
   return (
-    <section aria-labelledby="partners" className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-7 sm:pt-20">
-      <div className="flex flex-col gap-5 border-t border-line pt-6 sm:flex-row sm:items-center sm:gap-12">
-        <h2 id="partners" className="t-label text-mute">
-          Partners
-        </h2>
-        <ul className="flex flex-wrap items-center gap-x-10 gap-y-4">
-          {LIVE_PARTNERS.map((p) => (
-            <li key={p.name}>
-              <PartnerLink p={p} />
-            </li>
-          ))}
-        </ul>
-      </div>
+    <section aria-labelledby="partners" className="mx-auto max-w-[1400px] px-4 pt-16 sm:px-7 sm:pt-24">
+      <h2 id="partners" className="text-center text-[14px] text-mute">
+        Live with Gloam
+      </h2>
+      <ul className="mx-auto mt-6 flex max-w-[960px] flex-wrap items-center justify-center gap-x-12 gap-y-6 sm:mt-8 sm:gap-x-20">
+        {LIVE_PARTNERS.map((p) => (
+          <li key={p.name}>
+            <PartnerLink p={p} size={40} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -100,7 +102,7 @@ export function LivePartnersStrip() {
 export function LivePartnersSection() {
   return (
     <section aria-labelledby="already-live" className="mx-auto max-w-[1240px] px-6 pt-20 sm:pt-28">
-      <h2 id="already-live" className="t-label text-mute">
+      <h2 id="already-live" className="text-[14px] text-mute">
         Already live with Gloam
       </h2>
       <ul className="mt-5 flex flex-wrap items-center gap-x-12 gap-y-5">
