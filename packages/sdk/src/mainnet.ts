@@ -8,7 +8,7 @@
  * returns null, gloamNetworks() leaves it out, and the builders refuse its
  * chain id instead of guessing a pool.
  *
- * Base Sepolia (BASE_SEPOLIA_POOL) is the practice network for Base. It runs
+ * Base Sepolia (BASE_SEPOLIA_POOL) is Base's testnet. It runs
  * the mainnet pool on the mainnet keys with test funds, so its address is kept
  * here too and is filled in the same way after its deploy.
  *

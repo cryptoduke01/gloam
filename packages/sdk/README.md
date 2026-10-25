@@ -73,7 +73,7 @@ That scaffolds a Next.js app already wired to the SDK. See [create-gloam-app](ht
 
 ## Networks: mainnet and testnet
 
-Gloam runs on two chains, each with a mainnet (real money) and a testnet (free practice). They are separate pools of the same design, not a bridge.
+Gloam runs on two chains, each with a mainnet and a testnet. They are separate pools of the same design, not a bridge.
 
 | Network | Key | Chain id | Pool | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- | --- |
@@ -103,16 +103,16 @@ What is different on mainnet:
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
 
-### Base: practice network live, mainnet next
+### Base: testnet live, mainnet next
 
-Base is the third chain. Base Sepolia, the practice network, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys with test funds. Base mainnet is not deployed yet, so `mainnetNetwork("base")` returns `null` and the builders refuse chain id `8453` until an SDK release has its pool.
+Base is the third chain. Base Sepolia, the testnet, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys. Base mainnet is not deployed yet, so `mainnetNetwork("base")` returns `null` and the builders refuse chain id `8453` until an SDK release has its pool.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is play money, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so practising there is practising the real thing. Both Base pools take native ETH. Base Sepolia has a payment-message board (`payMemoBoardFor(84532)`); Base mainnet gets one at its deploy, and until then a payee there gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH. Base Sepolia has a payment-message board (`payMemoBoardFor(84532)`); Base mainnet gets one at its deploy, and until then a payee there gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
 
 ## Quickstart: shield your first note
 
@@ -129,7 +129,7 @@ import {
 import { createWalletClient, createPublicClient, http, erc20Abi, parseUnits } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-const net = mainnetNetwork("tempo");          // Tempo mainnet: real money
+const net = mainnetNetwork("tempo");          // Tempo mainnet
 if (!net) throw new Error("This SDK version has no Tempo mainnet pool yet.");
 
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
@@ -601,9 +601,9 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 ## Guardrails and honesty
 
-- **Mainnet is beta, with real money.** Robinhood Chain (`4663`) and Tempo (`4217`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
+- **Mainnet is beta.** Robinhood Chain (`4663`) and Tempo (`4217`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
-- **Testnet is free practice.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys and test funds that have no value. Base Sepolia (`84532`), once its pool is in, is test funds too, on the final keys.
+- **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) is a testnet too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
 - **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on both mainnets; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
 - **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.

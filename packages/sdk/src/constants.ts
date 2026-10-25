@@ -21,7 +21,7 @@ export const TEMPO_MAINNET_CHAIN_ID = 4217;
 
 /** Base mainnet (an OP Stack L2, gas in ETH). */
 export const BASE_MAINNET_CHAIN_ID = 8453;
-/** Base Sepolia: the practice network for Base. Test funds, but the mainnet pool and keys. */
+/** Base Sepolia: Base's testnet, on the mainnet pool and keys. */
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 /** Contracts of record (RH testnet 46630). */
@@ -270,7 +270,7 @@ export interface GloamNetwork {
   nativeShield: boolean;
   /** Which chain this is, testnet or mainnet. */
   family: GloamChainFamily;
-  /** Test funds (true) or real money (false). */
+  /** Testnet (true) or mainnet (false). */
   testnet: boolean;
   /** The key set this network's verifiers hold; prove with the same set. */
   ceremony: CeremonyKind;
@@ -380,8 +380,8 @@ const MAINNETS: Record<GloamChainFamily, GloamNetwork | null> = {
 };
 
 /**
- * Base Sepolia, or null while BASE_SEPOLIA_POOL is not filled in. Test funds,
- * but the mainnet pool: ShieldPoolPayments on the final keys, payments only,
+ * Base Sepolia, or null while BASE_SEPOLIA_POOL is not filled in. A testnet,
+ * but on the mainnet pool: ShieldPoolPayments on the final keys, payments only,
  * the same listed assets and beta limits as Base mainnet, the cash-out fee.
  */
 const BASE_TESTNET: GloamNetwork | null = (() => {
@@ -406,7 +406,7 @@ const BASE_TESTNET: GloamNetwork | null = (() => {
 })();
 
 /**
- * A chain's MAINNET network (real money), or null while its pool is not in
+ * A chain's MAINNET network, or null while its pool is not in
  * this SDK version. Mainnet pools are ShieldPoolPayments: payments only, beta
  * deposit limits, the ceremony's final keys, a 0.25% cash-out fee.
  */
@@ -415,7 +415,7 @@ export function mainnetNetwork(family: GloamChainFamily): GloamNetwork | null {
 }
 
 /**
- * A chain's TESTNET network (test funds), or null while its pool is not in this
+ * A chain's TESTNET network, or null while its pool is not in this
  * SDK version: GLOAM_NETWORKS.robinhood and .tempo, and Base Sepolia once its
  * pool is filled in.
  */

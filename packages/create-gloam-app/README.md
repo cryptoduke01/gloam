@@ -2,7 +2,7 @@
 
 Scaffold a private payments app on **Robinhood Chain** in one command, powered by
 [`@gloamtrade/sdk`](https://gloam.trade/docs/sdk): private stablecoin payments,
-live on mainnet (beta) with testnet for free practice.
+live on mainnet (beta) and testnet.
 
 ```bash
 npm create gloam-app@latest my-private-app
@@ -21,12 +21,12 @@ npm run dev
 Open http://localhost:3000, connect a wallet, and shield your first private USDG.
 
 - **Mainnet** (default once the SDK has the mainnet pool): Robinhood Chain,
-  chain id `4663`. Real money: you need USDG and a little ETH for gas. Gloam is
+  chain id `4663`. You need USDG and a little ETH for gas. Gloam is
   beta software, with deposit limits of 500 USDG per deposit and 25,000 USDG
   across the pool for now. Deposits and private payments are free; cashing out
   costs 0.25%. Proofs use the final keys from the trusted setup.
-- **Testnet** (free practice): Robinhood Chain testnet, chain id `46630`, test
-  funds with no value. Run with `NEXT_PUBLIC_GLOAM_NETWORK=robinhood`. Get test
+- **Testnet**: Robinhood Chain testnet, chain id `46630`, on the dev keys.
+  Run with `NEXT_PUBLIC_GLOAM_NETWORK=robinhood`. Get test
   ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com/)
   and test USDG from the [Paxos faucet](https://faucet.paxos.com/).
 

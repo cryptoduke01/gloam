@@ -15,13 +15,13 @@ MCP server: the public chain sees a shielded transfer, not who paid whom or how 
 
 Each chain has a mainnet and a testnet, and tools take a `network`:
 
-- `tempo-mainnet` and `robinhood-mainnet` are **real money** (beta). Deposits are capped at 500 of
+- `tempo-mainnet` and `robinhood-mainnet` are **mainnet** (beta). Deposits are capped at 500 of
   a stablecoin (25,000 GLOAM) per deposit during the beta. Deposits and private payments are free;
   cashing out costs 0.25%.
-- `tempo` and `robinhood` are the testnets: test funds with no value, for practice.
+- `tempo` and `robinhood` are the testnets.
 
 `gloam_info` lists the networks this server has and its default. Always say which network a payment
-is on, and say plainly when it is real money.
+is on, and say plainly when it is mainnet.
 
 The server holds the money. Note secrets stay in its encrypted store and the agent works with note
 handles such as `n-k3x9p2qw7m`. Every tool that moves money checks the owner's limits first, and with
@@ -33,7 +33,7 @@ a Tempo access key the protocol enforces the owner's onchain cap as well.
    amounts are allowed, how much is left in the last 24 hours, and when limits expire.
 2. Tell the user what you are about to pay: amount, asset, network (mainnet or testnet), recipient
    and what for. Wait for a clear yes, unless the user already gave a budget that covers this
-   payment. On mainnet this is real money.
+   payment.
 3. Make the payment with one execute tool. Do not repeat a payment whose result is unclear (see
    below).
 

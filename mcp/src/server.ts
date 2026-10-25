@@ -2,8 +2,8 @@
  * The Gloam MCP tools.
  *
  * Gives an AI agent private payment tools across Gloam's networks: Robinhood
- * Chain and Tempo, each on mainnet (real money, the ceremony's final keys, beta
- * deposit limits, payments only) and testnet (test funds, dev keys). Tools take
+ * Chain and Tempo, each on mainnet (the ceremony's final keys, beta deposit
+ * limits, payments only) and testnet (dev keys). Tools take
  * a `network` (default: GLOAM_NETWORK, else Robinhood Chain testnet), and the
  * 402 payment tools settle on whatever network the price names. Private trading
  * is not live on any network; the market and trade tools only plan.
@@ -303,7 +303,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       .enum(NETWORK_KEYS)
       .default(defaultNet)
       .describe(
-        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are real money (beta deposit limits); ${testnetKeys} are the testnets (test funds). Default here: "${defaultNet}".`
+        `${what} ${NETWORK_KEYS.map((k) => `"${k}"`).join(", ")}. The -mainnet ones are the mainnets (beta deposit limits); ${testnetKeys} are the testnets. Default here: "${defaultNet}".`
       );
   /** Old behavior: secrets in tool results and arguments. Read once; restart to change. */
   const legacy = env.GLOAM_EXPOSE_NOTE_SECRETS?.trim() === "1";
@@ -365,7 +365,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta and moves real money. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
+          `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
             allNetworks().some((n) => n.family === "base") ? ", 0.2 and 10 for ETH on Base" : ""
           }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.`,
         tools: [
@@ -515,7 +515,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Execute a private shield",
       description:
-        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). On mainnet (real money) the pool takes USDG or GLOAM on Robinhood Chain and USDC.e, pathUSD, USDT0 or OUSD on Tempo, at most 500 of a stablecoin (25,000 GLOAM) per deposit during the beta; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). On mainnet the pool takes USDG or GLOAM on Robinhood Chain and USDC.e, pathUSD, USDT0 or OUSD on Tempo, at most 500 of a stablecoin (25,000 GLOAM) per deposit during the beta; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
       inputSchema: {
         amount: z
           .number()

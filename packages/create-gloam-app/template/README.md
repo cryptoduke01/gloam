@@ -21,8 +21,8 @@ http://localhost:3000.
 
 | Network | How | Chain id | What you need |
 | --- | --- | --- | --- |
-| Robinhood Chain mainnet (real money) | default once the SDK has the mainnet pool, or `NEXT_PUBLIC_GLOAM_NETWORK=robinhood-mainnet` | `4663` | USDG, and a little ETH for gas |
-| Robinhood Chain testnet (free practice) | `NEXT_PUBLIC_GLOAM_NETWORK=robinhood npm run dev` | `46630` | Test ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com/), test USDG from the [Paxos faucet](https://faucet.paxos.com/) |
+| Robinhood Chain mainnet | default once the SDK has the mainnet pool, or `NEXT_PUBLIC_GLOAM_NETWORK=robinhood-mainnet` | `4663` | USDG, and a little ETH for gas |
+| Robinhood Chain testnet | `NEXT_PUBLIC_GLOAM_NETWORK=robinhood npm run dev` | `46630` | Test ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com/), test USDG from the [Paxos faucet](https://faucet.paxos.com/) |
 
 On mainnet, Gloam is beta software: at most 500 USDG per deposit and 25,000 USDG
 across the pool for now. Deposits and private payments are free; cashing out
@@ -43,7 +43,7 @@ costs 0.25%. Start with small amounts.
 - Mainnet proofs use the final keys from the trusted setup (13 contributors);
   testnet proofs use the dev keys. `circuitArtifactUrls` picks the right one.
 - The note secret is the only spend authority. `localStorage` is per-browser; a
-  real app, and anything holding real money, must back it up.
+  real app, and anything on mainnet, must back it up.
 - Artifacts are fetched from `https://www.gloam.trade/circuits` by default (the
   final keys under `/final`). Point `GLOAM_ARTIFACTS_SOURCE` (build-time
   download) or `NEXT_PUBLIC_GLOAM_ARTIFACTS` (browser fetch, needs CORS, same

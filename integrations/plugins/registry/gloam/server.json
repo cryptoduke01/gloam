@@ -27,7 +27,7 @@
       "environmentVariables": [
         {
           "name": "GLOAM_NETWORK",
-          "description": "Default network for tools: tempo-mainnet or robinhood-mainnet (real money), tempo or robinhood (testnet, the default when unset).",
+          "description": "Default network for tools: tempo-mainnet or robinhood-mainnet (mainnet), tempo or robinhood (testnet, the default when unset).",
           "isRequired": false,
           "isSecret": false,
           "format": "string"

@@ -3,8 +3,8 @@
  * Gloam MCP server, over stdio. Also the `gloam-mcp` command line.
  *
  * Private payment tools for AI agents across Gloam's networks: private
- * stablecoin payments on Tempo and Robinhood Chain, on mainnet (real money,
- * beta) and testnet (free practice). The tools live in src/server.ts; this file
+ * stablecoin payments on Tempo and Robinhood Chain, on mainnet (beta) and
+ * testnet. The tools live in src/server.ts; this file
  * loads settings and connects them to stdio.
  *
  * Money-moving tools pass the owner's spending limits first (src/policy.ts,

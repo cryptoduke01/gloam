@@ -1,7 +1,7 @@
 # Gloam plugins
 
 Agent plugins for [Gloam](https://gloam.trade): private stablecoin payments for AI agents on Tempo
-and Robinhood Chain, live on mainnet (beta) with the testnets for free practice, under spending
+and Robinhood Chain, live on mainnet (beta) and on the testnets, under spending
 limits the agent cannot lift. The layout mirrors
 [tempoxyz/plugins](https://github.com/tempoxyz/plugins), so the same marketplace works in Claude
 Code, Codex and Cursor.
@@ -126,7 +126,7 @@ registry/gloam/server.json          Official MCP Registry entry (npm package, st
    - Claude directory: submit the plugin folder (`plugins/gloam`) as a plugin bundle, and the hosted
      server (`https://www.gloam.trade/mcp`) as an MCP connector, at `https://claude.ai/directory/manage`.
    - Cursor: submit the repository URL at `https://cursor.com/marketplace/publish`. Disclose that the
-     plugin can sign transactions and move real funds on mainnet (or test funds on testnet) once a
+     plugin can sign transactions and move funds on mainnet or testnet once a
      key is configured.
    - MCP Registry: `registry/gloam/server.json` matches `mcpName` in the npm package. Authenticate the
      `io.github.cryptoduke01` namespace with GitHub and run `mcp-publisher publish` from `registry/gloam`.

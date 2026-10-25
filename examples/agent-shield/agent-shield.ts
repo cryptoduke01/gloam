@@ -4,11 +4,11 @@
  * the zero-knowledge shield proof, and deposits via shieldBound(). This is the
  * smallest end-to-end example of an app or agent plugging into Gloam.
  *
- *   # mainnet, real money: 1 USDG on Robinhood Chain (or 1 USDC.e on Tempo)
+ *   # mainnet: 1 USDG on Robinhood Chain (or 1 USDC.e on Tempo)
  *   GLOAM_NETWORK=robinhood-mainnet GLOAM_AGENT_PRIVATE_KEY=0x... \
  *     npx tsx examples/agent-shield/agent-shield.ts
  *
- *   # testnet, test funds (the default): 0.001 test ETH on Robinhood Chain testnet
+ *   # testnet (the default): 0.001 test ETH on Robinhood Chain testnet
  *   GLOAM_AGENT_PRIVATE_KEY=0x... npx tsx examples/agent-shield/agent-shield.ts
  *
  * GLOAM_NETWORK is robinhood-mainnet, tempo-mainnet, robinhood or tempo (the
@@ -83,9 +83,9 @@ function pickNetwork(fallback: GloamNetworkKey = "robinhood"): GloamNetwork {
     );
   }
   if (net.testnet) {
-    console.log(`${networkName(net.chainId)} (test funds). Set GLOAM_NETWORK=${net.family}-mainnet to use real money.`);
+    console.log(`${networkName(net.chainId)}. Set GLOAM_NETWORK=${net.family}-mainnet to use mainnet.`);
   } else {
-    console.log(`${net.label} mainnet. This moves REAL MONEY. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
+    console.log(`${net.label} mainnet. Gloam is beta software: at most 500 per stablecoin deposit for now.`);
   }
   return net;
 }

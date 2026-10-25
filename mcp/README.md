@@ -2,7 +2,7 @@
 
 Private stablecoin payments for AI agents on Tempo and Robinhood Chain, powered by [`@gloamtrade/sdk`](../packages/sdk). The agent pays x402 and MPP resources, holds a shielded balance and gets paid, within spending limits it cannot lift: off-chain limits this server checks, and on Tempo an access key whose cap the protocol enforces.
 
-Live on mainnet (beta, real money) on Tempo (`4217`) and Robinhood Chain (`4663`). Robinhood gives agents an MCP server for **public** trading. Gloam gives them one for **private** payments, so who an agent pays, and how much, stays off the public chain.
+Live on mainnet (beta) on Tempo (`4217`) and Robinhood Chain (`4663`). Robinhood gives agents an MCP server for **public** trading. Gloam gives them one for **private** payments, so who an agent pays, and how much, stays off the public chain.
 
 ## Mainnet or testnet
 
@@ -10,12 +10,12 @@ Every tool that touches a chain takes a `network`:
 
 | `network` | What it is | Assets | Keys |
 | --- | --- | --- | --- |
-| `tempo-mainnet` | Tempo mainnet, real money | USDC.e, pathUSD, USDT0, OUSD | Final ceremony keys |
-| `robinhood-mainnet` | Robinhood Chain mainnet, real money | USDG, GLOAM | Final ceremony keys |
-| `tempo` | Tempo testnet (Moderato), test funds | PathUSD and other test stablecoins | Dev keys |
-| `robinhood` | Robinhood Chain testnet, test funds | Test ETH, test USDG | Dev keys |
+| `tempo-mainnet` | Tempo mainnet | USDC.e, pathUSD, USDT0, OUSD | Final ceremony keys |
+| `robinhood-mainnet` | Robinhood Chain mainnet | USDG, GLOAM | Final ceremony keys |
+| `tempo` | Tempo testnet (Moderato) | PathUSD and other test stablecoins | Dev keys |
+| `robinhood` | Robinhood Chain testnet | Test ETH, test USDG | Dev keys |
 
-`GLOAM_NETWORK` sets the network a tool uses when the agent names none. Unset, it is `robinhood` (testnet), as in earlier versions, so an existing setup never starts moving real money by itself. For mainnet, set `GLOAM_NETWORK=tempo-mainnet` (or `robinhood-mainnet`) and give the agent mainnet limits (see [Mainnet assets in limits](#mainnet-assets-in-limits)). A price an agent pays names its own network, and the server pays there only if that network is one it has a pool for.
+`GLOAM_NETWORK` sets the network a tool uses when the agent names none. Unset, it is `robinhood` (testnet), as in earlier versions, so an existing setup never moves to mainnet by itself. For mainnet, set `GLOAM_NETWORK=tempo-mainnet` (or `robinhood-mainnet`) and give the agent mainnet limits (see [Mainnet assets in limits](#mainnet-assets-in-limits)). A price an agent pays names its own network, and the server pays there only if that network is one it has a pool for.
 
 On mainnet:
 
@@ -26,7 +26,7 @@ On mainnet:
 - **Pools come with the version.** A mainnet appears here once the SDK this package ships with has its pool. If `GLOAM_NETWORK` names a mainnet this version lacks, the server stops at startup and says so.
 - **Your own RPC.** `GLOAM_RPC_URL_4217` and `GLOAM_RPC_URL_4663` point Tempo and Robinhood Chain mainnet at another RPC (any chain id works the same way).
 
-**Base: practice network live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
+**Base: testnet live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
 
 ## Install
 
@@ -62,7 +62,7 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 
 | Setting | Meaning |
 | --- | --- |
-| `GLOAM_NETWORK` | Default network for tools: `tempo-mainnet`, `robinhood-mainnet` (real money), `tempo` or `robinhood` (testnet). Default `robinhood`. A mainnet here also puts the Tempo access key on Tempo mainnet |
+| `GLOAM_NETWORK` | Default network for tools: `tempo-mainnet`, `robinhood-mainnet` (mainnet), `tempo` or `robinhood` (testnet). Default `robinhood`. A mainnet here also puts the Tempo access key on Tempo mainnet |
 | `GLOAM_AGENT_PRIVATE_KEY` | The agent's key. Without it the execute tools return plans |
 | `GLOAM_TEMPO_ACCOUNT` | The owner's Tempo account. With it, the key is a Tempo access key acting for that account |
 | `GLOAM_TEMPO_FEE_TOKEN` | Token to pay Tempo fees in, in access-key mode. Default: the protocol's choice |
@@ -205,7 +205,7 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 
 ### Mainnet assets in limits
 
-Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving real money by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base) name the mainnet asset directly.
+Mainnet and testnet are different chains, so each limit is for one of them. A symbol on both sides (`USDG`, `pathUSD`, `OUSD`, and Base's `USDC`, `EURC` and `ETH`), or a token address on both (pathUSD and OUSD use the same address on Tempo mainnet and testnet), means the **testnet** asset unless the entry names a network. `ETH` or the zero address alone is Robinhood Chain testnet ETH. That way a config written for testnet never starts approving mainnet assets by itself. Mainnet-only symbols (`USDC.e`, `USDT0`, `GLOAM`, `USDT`) and mainnet-only addresses (USDG on Robinhood Chain, USDC on Base) name the mainnet asset directly.
 
 ```json
 {
@@ -257,7 +257,7 @@ Point `GLOAM_LIMITS_FILE` at a JSON file and pick the agent with `GLOAM_AGENT_ID
 }
 ```
 
-The array form of `assets` uses the agent-level `maxPerPayment` and `maxPerDay` for each asset; the object form can set them per asset, or leave them out to use the agent's (an asset entry may also take `network` and, for an unknown token address, `decimals`). In the example, `research-bot` and `ops-agent` spend real money and `practice-bot` only test funds. A config that does not parse, names an unknown asset, or leaves out a cap is treated as no permission: every spend is refused with the reason.
+The array form of `assets` uses the agent-level `maxPerPayment` and `maxPerDay` for each asset; the object form can set them per asset, or leave them out to use the agent's (an asset entry may also take `network` and, for an unknown token address, `decimals`). In the example, `research-bot` and `ops-agent` spend on mainnet and `practice-bot` only on testnet. A config that does not parse, names an unknown asset, or leaves out a cap is treated as no permission: every spend is refused with the reason.
 
 ### Configure with environment variables (one agent)
 
@@ -298,7 +298,7 @@ The server then signs Tempo transactions for the owner's account with that key, 
    npx -y @gloamtrade/mcp authorize-access-key --network tempo-mainnet --owner 0xOWNER --generate --limit 25 --period 1d --expires 30d
    ```
 
-   `--network` is `tempo-mainnet` (real money) or `tempo` (testnet). An access key is authorized on one chain, so a key made on testnet does nothing on mainnet. Left out, it is Tempo mainnet when `GLOAM_NETWORK` names a mainnet, else Tempo testnet. `--generate` writes the new key, `GLOAM_TEMPO_ACCOUNT`, a note-store key and matching off-chain limits to `~/.gloam/agent.env` (mode 600), keeping anything already there; on mainnet it also writes `GLOAM_NETWORK` and `GLOAM_LIMIT_NETWORK`. To authorize a key you already have, use `--key <address>` or leave both out to use `GLOAM_AGENT_PRIVATE_KEY`. `--limit 25` is in the network's default stablecoin (USDC.e on mainnet, PathUSD on testnet); repeat `--limit USDT0=10` for more stablecoins, use `--period once` for a total that never resets, and `--json` for machine-readable output. From a checkout: `pnpm --filter @gloamtrade/mcp authorize-access-key --owner ...`.
+   `--network` is `tempo-mainnet` (mainnet) or `tempo` (testnet). An access key is authorized on one chain, so a key made on testnet does nothing on mainnet. Left out, it is Tempo mainnet when `GLOAM_NETWORK` names a mainnet, else Tempo testnet. `--generate` writes the new key, `GLOAM_TEMPO_ACCOUNT`, a note-store key and matching off-chain limits to `~/.gloam/agent.env` (mode 600), keeping anything already there; on mainnet it also writes `GLOAM_NETWORK` and `GLOAM_LIMIT_NETWORK`. To authorize a key you already have, use `--key <address>` or leave both out to use `GLOAM_AGENT_PRIVATE_KEY`. `--limit 25` is in the network's default stablecoin (USDC.e on mainnet, PathUSD on testnet); repeat `--limit USDT0=10` for more stablecoins, use `--period once` for a total that never resets, and `--json` for machine-readable output. From a checkout: `pnpm --filter @gloamtrade/mcp authorize-access-key --owner ...`.
 
 2. The owner authorizes it from their own wallet, with one of the three printed options:
    - Tempo Wallet or any Tempo Accounts SDK provider: the printed `wallet_authorizeAccessKey` request (passkey accounts).
@@ -389,7 +389,7 @@ Then the agent can shield into a private balance, pay for x402 and MPP resources
 
 ## Status
 
-- **Mainnet (beta, real money):** Tempo and Robinhood Chain, payments only, beta deposit limits, the trusted setup's final keys. Reviewed internally before launch and independently on 23 October; an external audit is planned, not done.
-- **Testnet (free practice):** Tempo Moderato and Robinhood Chain testnet, dev keys, test funds with no value.
+- **Mainnet (beta):** Tempo and Robinhood Chain, payments only, beta deposit limits, the trusted setup's final keys. Reviewed internally before launch and independently on 23 October; an external audit is planned, not done.
+- **Testnet:** Tempo Moderato and Robinhood Chain testnet, dev keys.
 - **Circuit files** are fetched from `https://www.gloam.trade/circuits` (final keys under `/final`) on first use, checked against pinned SHA-256 and cached locally (`GLOAM_ARTIFACTS_DIR`).
 - **Swaps.** Private swaps are live in the Gloam app on both mainnets, with who swapped kept private and the amounts public ([docs](https://gloam.trade/docs/private-swaps)). This server does not swap: its market and trade tools only plan, for the retired sealed trade. See the [agent docs](https://gloam.trade/docs/agents).

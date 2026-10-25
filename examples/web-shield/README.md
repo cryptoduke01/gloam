@@ -8,7 +8,7 @@ the pool.
 
 A minimal Next.js (App Router) app. Copy the pattern into your own dapp.
 
-## Run on mainnet (real money)
+## Run on mainnet
 
 ```bash
 pnpm install            # from the repo root (workspace)
@@ -25,15 +25,15 @@ The network comes from `NEXT_PUBLIC_GLOAM_NETWORK`:
 
 | Value | Network |
 | --- | --- |
-| `robinhood-mainnet` | Robinhood Chain mainnet, real money. |
-| `robinhood` | Robinhood Chain testnet, test funds. |
+| `robinhood-mainnet` | Robinhood Chain mainnet. |
+| `robinhood` | Robinhood Chain testnet. |
 | unset | Robinhood Chain mainnet when your SDK version has its pool, else the testnet. |
 
 If you ask for `robinhood-mainnet` and your SDK version has no mainnet pool yet,
 the page says so and does not connect. Update `@gloamtrade/sdk` once the pool is
 published.
 
-What to know before you use real money:
+What to know before you use mainnet:
 
 - **Beta.** Gloam is beta software. Deposits are capped at 500 USDG per deposit
   and 25,000 USDG in total for now. The SDK checks the per-deposit limit before
@@ -55,8 +55,8 @@ NEXT_PUBLIC_GLOAM_NETWORK=robinhood npm run dev
 
 Connect a wallet on Robinhood Chain testnet (chain id `46630`). Get test ETH for
 gas from the [Robinhood Chain faucet](https://faucet.testnet.chain.robinhood.com/)
-and test USDG from the [Paxos faucet](https://faucet.paxos.com/). Test funds have
-no real value, and the testnet uses the dev keys.
+and test USDG from the [Paxos faucet](https://faucet.paxos.com/). The testnet uses
+the dev keys.
 
 ## Circuit files
 

@@ -24,7 +24,7 @@ export { packageVersion };
 type Env = Record<string, string | undefined>;
 
 export const HELP = `gloam-mcp {version}: Gloam's MCP server for AI agents. Private stablecoin payments on Tempo and
-Robinhood Chain (x402 and MPP), with spending limits. Mainnet (real money, beta) and testnet (free practice).
+Robinhood Chain (x402 and MPP), with spending limits. Mainnet (beta) and testnet.
 
 Usage
   gloam-mcp                         Start the MCP server on stdio. This is what MCP clients run.
@@ -38,7 +38,7 @@ Settings
   environment wins. Only GLOAM_* lines are read from the file.
 
   GLOAM_NETWORK             The network tools use when the agent names none: tempo-mainnet or
-                            robinhood-mainnet (real money), tempo or robinhood (testnet, the default).
+                            robinhood-mainnet (mainnet), tempo or robinhood (testnet, the default).
                             base-mainnet and base (Base Sepolia) work once a release has their pools.
                             A mainnet here also puts the Tempo access key on Tempo mainnet.
   GLOAM_AGENT_PRIVATE_KEY   The agent's key. Without it, tools read and plan but never execute.
@@ -65,7 +65,7 @@ Usage
   gloam-mcp authorize-access-key --check --owner <address> --key <address>
 
 Options
-  --network <name>      tempo-mainnet (real money) or tempo (testnet). Default: Tempo mainnet when
+  --network <name>      tempo-mainnet (mainnet) or tempo (testnet). Default: Tempo mainnet when
                         GLOAM_NETWORK names a mainnet, else Tempo testnet. A key authorized on one
                         does nothing on the other.
   --owner <address>     The owner's Tempo account (default: GLOAM_TEMPO_ACCOUNT)
@@ -186,7 +186,7 @@ function offchainLimitsFor(plan: AccessKeyPlan, net: McpNetwork) {
   const [amount] = amounts;
   return [
     { key: "GLOAM_LIMIT_ASSETS", value: plan.limits.map((l) => l.symbol).join(","), comment: "Off-chain limits, checked by the server before it signs. The onchain cap is the hard one." },
-    ...(net.testnet ? [] : [{ key: "GLOAM_LIMIT_NETWORK", value: net.key, comment: "The assets above are the mainnet ones (real money)." }]),
+    ...(net.testnet ? [] : [{ key: "GLOAM_LIMIT_NETWORK", value: net.key, comment: "The assets above are the mainnet ones." }]),
     { key: "GLOAM_LIMIT_MAX_PER_PAYMENT", value: amount },
     { key: "GLOAM_LIMIT_MAX_PER_DAY", value: amount },
     { key: "GLOAM_LIMIT_RECIPIENTS", value: "any", comment: "Narrow this to the receive tags the agent should pay." },
@@ -254,7 +254,7 @@ export async function runAuthorizeAccessKey(
     const entries: { key: string; value: string; comment?: string }[] = [
       { key: "GLOAM_AGENT_PRIVATE_KEY", value: generated.privateKey, comment: "Agent access key. Holds no funds; acts for GLOAM_TEMPO_ACCOUNT within the owner's onchain limits." },
       { key: "GLOAM_TEMPO_ACCOUNT", value: owner },
-      ...(net.testnet ? [] : [{ key: "GLOAM_NETWORK", value: net.key, comment: "Real money: tools default to Tempo mainnet, and the access key is checked there." }]),
+      ...(net.testnet ? [] : [{ key: "GLOAM_NETWORK", value: net.key, comment: "Mainnet: tools default to Tempo mainnet, and the access key is checked there." }]),
     ];
     if (!env.GLOAM_NOTE_KEY?.trim()) {
       entries.push({ key: "GLOAM_NOTE_KEY", value: generated.noteKey, comment: "Encrypts the note store. Back it up with the store: without it the private balance cannot be opened." });
@@ -273,7 +273,7 @@ export async function runAuthorizeAccessKey(
     notes.push(`After the owner authorizes the key, set GLOAM_TEMPO_ACCOUNT=${owner} for the server (in ${defaultEnvFilePath(env)} or its MCP config) and restart it.`);
   }
   if (!generated && !net.testnet && env.GLOAM_NETWORK?.trim() !== net.key) {
-    notes.push(`This key is for ${net.name} (real money). Set GLOAM_NETWORK=${net.key} for the server so it checks the key there.`);
+    notes.push(`This key is for ${net.name}. Set GLOAM_NETWORK=${net.key} for the server so it checks the key there.`);
   }
 
   if (f.json) {
