@@ -10,7 +10,8 @@
  *  - with a placeholder pool put into MAINNET_POOLS[1] before anything else
  *    loads (a child process of this one): Ethereum shows up with the mainnets,
  *    with its chain, keys, assets and limits; the relay serves chain 1; the
- *    bridge into it, swaps and the payment-memo board stay off; claim codes
+ *    bridge into it and swaps stay off, and so does the payment-memo board
+ *    until the real deploy fills it in next to the vault; claim codes
  *    from another network are refused; and Glim and the remote MCP name
  *    Ethereum, its gas ceiling, and never count it in the 21 October launch.
  *
@@ -100,7 +101,14 @@ check("the Ethereum entry is always defined, on the mainnet pool and final keys"
   assert.equal(n.stocks, false);
   assert.equal(n.primaryAsset.symbol, "ETH");
   assert.equal(n.logRange, 10_000n);
-  assert.equal(n.payMemo, null);
+  // The memo board comes in with the real vault (ethereum-mainnet-after-deploy.sh writes both).
+  if (LIVE) {
+    assert.match(n.payMemo?.address ?? "", /^0x[0-9a-fA-F]{40}$/);
+    assert.ok(n.payMemo!.deployBlock >= LIVE.deployBlock, "the board is deployed after the vault");
+    assert.equal(n.payMemo!.emitsPoster, false);
+  } else {
+    assert.equal(n.payMemo, null);
+  }
   assert.equal(new URL(n.chain.rpcUrls.default.http[0]!).host, "rpc.mevblocker.io");
   assert.equal(n.explorerTx("0xab"), "https://etherscan.io/tx/0xab");
   assert.equal(n.explorerAddress("0xcd"), "https://etherscan.io/address/0xcd");
@@ -136,7 +144,7 @@ check("Ethereum assets as checked on chain, EURC never a dollar, USDT approvals 
   assert.equal(tokens.knownTokens(1)[0]!.symbol, "USDC");
 });
 
-check("still a bridge origin, but no bridge into Ethereum, no swaps, no memo board", () => {
+check("still a bridge origin, but no bridge into Ethereum and no swaps", () => {
   assert.equal(BRIDGE_DESTINATIONS.ethereum, undefined);
   assert.equal(bridgeVisible(nets.getNetwork("ethereum-mainnet")), false);
   const origin = bridgeChain(1);

@@ -15,6 +15,11 @@
  *    network are refused; and Glim and the remote MCP name Base without ever
  *    counting it in the 21 October launch.
  *
+ * Once MAINNET_POOLS[8453] holds the real vault (base-mainnet-after-deploy.sh
+ * fills it in, with the memo board next to it), the run as committed is the
+ * configured one, against that vault and board, so switching Base mainnet on
+ * needs no edit here.
+ *
  * The placeholder pool is not a contract; nothing reaches any host (fetch
  * fails the run if anything tries).
  *
@@ -31,16 +36,19 @@ globalThis.fetch = (async (url: unknown) => {
   throw new Error(`selftest-base: no network calls allowed (${String(url)})`);
 }) as typeof fetch;
 
-const CONFIGURED = process.env.GLOAM_SELFTEST_BASE === "configured";
 /** Base Sepolia as deployed (contracts/deployments/base-sepolia.json). */
 const SEPOLIA_POOL = "0x39e28cde55cab798874746ac52cb4b5cc99a0194";
 const SEPOLIA_MEMO = "0x01B3172d9900Cb26d57E986429b9b23854c74598";
-const MAINNET_POOL = "0x00000000000000000000000000000000000BA5E2";
 
 const mainnet = await import("../src/lib/mainnet");
-if (CONFIGURED) {
+/** Base mainnet's real vault, once MAINNET_POOLS[8453] is filled in after the deploy. */
+const LIVE = mainnet.mainnetPool(8453);
+const CONFIGURED = process.env.GLOAM_SELFTEST_BASE === "configured" || LIVE !== null;
+const MAINNET_POOL = LIVE?.pool ?? "0x00000000000000000000000000000000000BA5E2";
+const MAINNET_BLOCK = LIVE?.deployBlock ?? 2_000_000n;
+if (CONFIGURED && !LIVE) {
   // Filled in the way DEPLOY-BASE.md says, before networks.ts reads it.
-  mainnet.MAINNET_POOLS[8453] = { pool: MAINNET_POOL, deployBlock: 2_000_000n };
+  mainnet.MAINNET_POOLS[8453] = { pool: MAINNET_POOL, deployBlock: MAINNET_BLOCK };
 }
 
 const nets = await import("../src/lib/networks");
@@ -178,7 +186,15 @@ check("Base Sepolia: the deployed vault, its block and its memo board", () => {
   assert.equal(testnetKeys[testnetKeys.length - 1], "base");
   assert.match(nets.networkKeyChoices(), /"base"/);
   assert.equal(nets.networkName(sepolia), "Base testnet");
-  assert.equal(nets.getNetwork("base-mainnet").payMemo, null);
+  // Base mainnet's board comes in with its vault (base-mainnet-after-deploy.sh writes both).
+  const mainMemo = nets.getNetwork("base-mainnet").payMemo;
+  if (LIVE) {
+    assert.match(mainMemo?.address ?? "", /^0x[0-9a-fA-F]{40}$/);
+    assert.ok(mainMemo!.deployBlock >= LIVE.deployBlock, "the board is deployed after the vault");
+    assert.equal(mainMemo!.emitsPoster, false);
+  } else {
+    assert.equal(mainMemo, null);
+  }
 });
 
 check("Base Sepolia: the relay serves it with the same relay key", () => {
@@ -289,7 +305,7 @@ if (CONFIGURED) {
     assert.equal(nets.isNetworkKey("base-mainnet"), true);
     assert.match(nets.networkKeyChoices(), /"base-mainnet"/);
     assert.equal(nets.getNetwork("base-mainnet").pool, MAINNET_POOL);
-    assert.equal(nets.getNetwork("base-mainnet").deployBlock, 2_000_000n);
+    assert.equal(nets.getNetwork("base-mainnet").deployBlock, MAINNET_BLOCK);
     assert.equal(nets.networkName(nets.getNetwork("base-mainnet")), "Base");
     assert.match(mainnet.liveMainnetNames(), /^Robinhood Chain, Tempo(, Base and Ethereum| and Base)$/);
   });

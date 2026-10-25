@@ -56,9 +56,10 @@ export interface PayMemoBoard {
 /**
  * The boards Gloam runs, by chain id: Robinhood Chain and Tempo, testnet and
  * mainnet, Base Sepolia, and Ethereum Sepolia once its board is filled in.
- * Base mainnet and Ethereum mainnet have none yet. On a chain with no
- * board, payments to a Gloam address are handed over as a sealed code
- * (openIncomingPayment).
+ * Base mainnet's and Ethereum mainnet's are added here by their deploy
+ * (contracts/base-mainnet-after-deploy.sh, ethereum-mainnet-after-deploy.sh).
+ * On a chain with no board, payments to a Gloam address are handed over as a
+ * sealed code (openIncomingPayment).
  */
 export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
   [RH_TESTNET_CHAIN_ID]: { address: GLOAM_PAY_MEMO, deployBlock: 90_421_567n, emitsPoster: true },
