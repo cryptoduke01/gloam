@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { formatUnits, type Address } from "viem";
 import { TokenLogo } from "../TokenLogo";
-import { assetDecimals, formatAssetAmount, parseAssetAmount } from "@/lib/shield";
+import { assetDecimals, formatAssetAmount, parseAssetAmount, summaryDecimals } from "@/lib/shield";
 import { amountTextError } from "@/lib/amountText";
 import { useModalFocus } from "@/hooks/useModalFocus";
 import { PAYROLL_TEMPLATE, draftTotal, parsePayrollCsv } from "@/lib/payroll";
@@ -141,7 +141,7 @@ export function ScheduleEditor({
             : cap == null || cap <= 0n
               ? "Set a cap above zero."
               : over > 0n
-                ? `The list is ${formatAssetAmount(over, asset, 2)} ${symbol} over the cap. Raise the cap or trim the list.`
+                ? `The list is ${formatAssetAmount(over, asset, summaryDecimals(asset))} ${symbol} over the cap. Raise the cap or trim the list.`
                 : paydays.length === 0
                   ? "With these dates there is no payday left. Pick a later date."
                   : null;
@@ -351,7 +351,7 @@ export function ScheduleEditor({
                 total > 0n && cap != null && cap > 0n
                   ? over > 0n
                     ? <span className="text-warn">The list is over the cap, so a run would be blocked.</span>
-                    : `This list is ${formatAssetAmount(total, asset, 2)} ${symbol}.`
+                    : `This list is ${formatAssetAmount(total, asset, summaryDecimals(asset))} ${symbol}.`
                   : "A run above this is blocked before anything is sent."
               }
             >
@@ -408,7 +408,7 @@ export function ScheduleEditor({
                 {bad > 0 && <span className="text-warn">, {bad} to fix</span>}
               </span>
               <span className="tnum shrink-0 text-foreground">
-                {formatAssetAmount(total, asset, 2)} <span className="text-mute">{symbol}</span>
+                {formatAssetAmount(total, asset, summaryDecimals(asset))} <span className="text-mute">{symbol}</span>
               </span>
             </div>
             <AnimatePresence initial={false}>

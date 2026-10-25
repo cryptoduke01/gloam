@@ -594,4 +594,18 @@ for (const locks of [true, false]) {
   });
 }
 
+await test("an ETH run asks for the ETH it needs, not 0.01 ETH steps, and its totals keep their decimals", async () => {
+  const { fundingPlan } = await import("../src/lib/payroll");
+  const { assetDecimals, formatAssetAmount, summaryDecimals } = await import("../src/lib/shield");
+  const ETH = "0x0000000000000000000000000000000000000000";
+  const units = (s: string) => BigInt(Math.round(Number(s) * 1e6)) * 10n ** 12n;
+  const step = 10n ** BigInt(assetDecimals(ETH) - summaryDecimals(ETH));
+  // 0.0123 + 0.0087 ETH with nothing private: add 0.021 ETH, not 0.03
+  assert.equal(fundingPlan([units("0.0123"), units("0.0087")], [], step).shortfall, units("0.021"));
+  assert.equal(summaryDecimals(ETH), 6);
+  assert.equal(formatAssetAmount(units("0.004"), ETH, summaryDecimals(ETH)), "0.004");
+  // a 6-decimal stablecoin (USDC on Base) still rounds to cents
+  assert.equal(summaryDecimals("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), 2);
+});
+
 console.log(`\n${passed} payroll checks passed`);

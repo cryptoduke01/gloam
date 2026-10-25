@@ -441,6 +441,16 @@ export function formatAssetAmount(raw: bigint | string, asset: string, maxFrac =
 }
 
 /**
+ * Decimal places for a total or a balance in a summary (payroll runs, caps,
+ * schedules): cents for the 6-decimal stablecoins, 6 places for an 18-decimal
+ * coin such as ETH, where 0.01 is already a real amount (0.004 ETH read
+ * "<0.01").
+ */
+export function summaryDecimals(asset: string): number {
+  return assetDecimals(asset) > 6 ? 6 : 2;
+}
+
+/**
  * A raw amount with every unit kept ("1,250.5", "0.004"), never rounded, for
  * amounts someone acts on or files: a deposit to make, an invoice line, a run
  * total. `minFrac` pads the decimals, so an invoice reads "1,250.50".

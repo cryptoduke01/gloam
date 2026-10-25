@@ -34,6 +34,7 @@ import {
   formatAssetAmountExact,
   gasFor,
   shieldPoolAbi,
+  summaryDecimals,
 } from "@/lib/shield";
 import { MEMO_GAS_LIMIT, isPayMemoLive, payMemoAbi, payMemoAddress } from "@/lib/payMemo";
 import {
@@ -399,13 +400,14 @@ export function PayrollView() {
   const badCount = parsed.rows.length - validRows.length;
   const total = draftTotal(parsed.rows);
   const directCount = validRows.filter((r) => r.kind === "gloam").length;
-  // The deposit to add is rounded up to whole cents, so it can be typed as shown.
+  // The deposit to add is rounded up to what the summary shows (whole cents for a
+  // stablecoin, 0.000001 ETH), so it can be typed as shown; 0.01 ETH steps asked for too much.
   const plan = useMemo(
     () =>
       fundingPlan(
         validRows.map((r) => r.amount!),
         bal.entries,
-        10n ** BigInt(Math.max(assetDecimals(asset) - 2, 0))
+        10n ** BigInt(Math.max(assetDecimals(asset) - summaryDecimals(asset), 0))
       ),
     [validRows, bal.entries, asset]
   );
@@ -896,7 +898,7 @@ export function PayrollView() {
 
             <p className="mt-4 flex items-center gap-2.5 text-foreground">
               <span className="tnum text-[34px] font-light leading-none tracking-[-0.02em]">
-                {formatAssetAmount(paidTotal, b.asset, 2)}
+                {formatAssetAmount(paidTotal, b.asset, summaryDecimals(b.asset))}
               </span>
               <TokenLogo id={opt.logoId} symbol={opt.symbol} size={22} />
             </p>
@@ -1076,7 +1078,7 @@ export function PayrollView() {
                     <span className="min-w-0">
                       <span className="block text-[14px] font-medium leading-tight text-foreground">{o.symbol}</span>
                       <span className="tnum mt-0.5 block text-[12px] leading-tight text-mute">
-                        {b > 0n ? `${formatAssetAmount(b, o.address, 2)} private` : "No private balance"}
+                        {b > 0n ? `${formatAssetAmount(b, o.address, summaryDecimals(o.address))} private` : "No private balance"}
                       </span>
                     </span>
                   </button>
@@ -1453,7 +1455,7 @@ export function PayrollView() {
                 <div className="mt-3.5 flex items-center justify-between gap-3 text-[13px]">
                   <span className="text-mute">Cap per run</span>
                   <span className="tnum text-foreground">
-                    {formatAssetAmount(loaded.cap, loaded.asset, 2)} {loadedSymbol}
+                    {formatAssetAmount(loaded.cap, loaded.asset, summaryDecimals(loaded.asset))} {loadedSymbol}
                   </span>
                 </div>
                 <div className="mt-3">
@@ -1468,7 +1470,7 @@ export function PayrollView() {
                     ? `This schedule pays in ${loadedSymbol}.`
                     : capOver > 0n
                       ? `${formatAssetAmountExact(capOver, asset)} ${token.symbol} over the cap. This run is blocked.`
-                      : `${formatAssetAmount(BigInt(loaded.cap) - total, asset, 2)} ${token.symbol} under the cap.`}
+                      : `${formatAssetAmount(BigInt(loaded.cap) - total, asset, summaryDecimals(asset))} ${token.symbol} under the cap.`}
                 </p>
               </div>
             )}
@@ -1477,7 +1479,7 @@ export function PayrollView() {
               <div className="flex items-center justify-between gap-3 text-[13px]">
                 <span className="text-mute">Private balance</span>
                 <span className="tnum text-foreground">
-                  {formatAssetAmount(bal.total, asset, 2)} {token.symbol}
+                  {formatAssetAmount(bal.total, asset, summaryDecimals(asset))} {token.symbol}
                 </span>
               </div>
               <div className="mt-3">
@@ -1598,7 +1600,7 @@ export function PayrollView() {
                         <span className="min-w-0">
                           <span className="block truncate text-[14px] text-foreground">{b.title}</span>
                           <span className="tnum mt-0.5 block truncate text-[12px] text-mute">
-                            {paid.length} of {b.rows.length} paid, {formatAssetAmount(sum, b.asset, 2)} {opt?.symbol ?? ""}
+                            {paid.length} of {b.rows.length} paid, {formatAssetAmount(sum, b.asset, summaryDecimals(b.asset))} {opt?.symbol ?? ""}
                           </span>
                         </span>
                       </button>
