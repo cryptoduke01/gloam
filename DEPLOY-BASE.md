@@ -1,9 +1,10 @@
 # Deploy Gloam to Base
 
 The runbook for bringing the Gloam vault to Base. You run this with your own keys;
-no agent and no CI deploys it. Base Sepolia (`84532`) goes first as the
-testnet. Base mainnet (`8453`) follows on the same scripts once Base Sepolia has been
-tested end to end.
+no agent and no CI deploys it. Base Sepolia (`84532`), the testnet, went first and is
+live since 24 October 2026. Base mainnet (`8453`) follows on the same scripts: its
+step list is [Base mainnet](#base-mainnet) below, about ten minutes once the wallets
+are funded.
 
 Both chains get the mainnet contract, `ShieldPoolPayments`, through the shared
 `contracts/script/MainnetDeploy.sol`, the same deploy as Robinhood Chain and Tempo.
@@ -71,12 +72,13 @@ deposit and 10 in total: about $467 and $23,400 at Chainlink's ETH/USD on Base t
 
 | Role | Address | Needs |
 | --- | --- | --- |
-| Deployer | `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` | 0.01 ETH on each chain |
+| Deployer | `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` | 0.004 ETH on Base mainnet (step 1 below), 0.01 test ETH on Base Sepolia |
 | Owner (browser wallet) | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` | 0.001 ETH on each chain, for `acceptOwnership()` |
 | Treasury (cash-out fees) | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8` | nothing |
-| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` | 0.02 test ETH on Base Sepolia, 0.01 ETH on Base mainnet to start |
+| Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` | 0.005 ETH on Base mainnet to start, 0.02 test ETH on Base Sepolia |
 
-Why these amounts: the whole deploy (PoseidonT3, the pool with its verifiers and
+Base mainnet's amounts are worked out from the fork rehearsal in its step 1. Base
+Sepolia's, for the record: the whole deploy (PoseidonT3, the pool with its verifiers and
 setup calls, and the memo board) uses about 8.8M gas. At Base's gas price on 24
 October 2026 (0.006 gwei) the forge part is about 0.00004 ETH, plus an L1 data fee
 under 0.0000001 ETH. The PoseidonT3 step costs more than the rest together, about
@@ -99,7 +101,8 @@ Faucets for Base Sepolia (test funds):
 
 - Foundry and Node, run from `contracts/`. `contracts/lib/forge-std` checked out
   (`git submodule update --init contracts/lib/forge-std`) and
-  `contracts/circuits/node_modules` installed (circomlibjs, ethers).
+  `contracts/circuits/node_modules` installed (circomlibjs, ethers:
+  `(cd contracts/circuits && npm install)`).
 - The deployer funded on the chain you deploy to.
 - For the same addresses as Robinhood Chain and Tempo, the deployer must have sent
   nothing yet on that chain (`cast nonce` shows 0). Then PoseidonT3 lands at
@@ -109,9 +112,9 @@ Faucets for Base Sepolia (test funds):
   `0x39e28cde55cab798874746ac52cb4b5cc99a0194`. The memo board comes next: at
   `0x01B3172d9900Cb26d57E986429b9b23854c74598` on Base Sepolia (nonce 17) and
   `0xfCa1887e77f738ef9C5751974b3f3873d029F2DC` on Base mainnet (nonce 18, one more
-  setup call for USDT). Each of these addresses is empty on both Base chains today. If
-  the nonce is not 0 the addresses differ, which is fine: paste back what the deploy
-  prints.
+  setup call for USDT). Each was empty on Base mainnet on 25 October 2026. If
+  the nonce is not 0 the addresses differ, which is fine: on Base mainnet the
+  after-deploy script reads them from the run.
 
 ## Before you broadcast: check the chain's deploy gas
 
@@ -129,9 +132,12 @@ About 390,000 (Ethereum mainnet, Base and Base Sepolia on 25 October 2026) means
 broadcasts below work as written. Anything well above 500,000 means the chain charges
 more than forge expects: add `--gas-estimate-multiplier 1000` to every `--broadcast`
 command (you only pay for the gas used), and check the deployer can cover ten times
-the estimated cost.
+the estimated cost. On Base mainnet, `base-mainnet-env.sh` (step 2) runs this check
+and prints STOP when it is over 500,000.
 
 ## Base Sepolia
+
+Done on 24 October 2026 (`contracts/deployments/base-sepolia.json`). The steps as run:
 
 Run every block in one terminal, from `contracts/`. The key is read without echo, so
 it lands in no file and no shell history.
@@ -259,39 +265,287 @@ owner accepted: yes/no   relayer funded: yes/no
 
 ## Base mainnet
 
-Only after Base Sepolia has been tested end to end in the app (deposit, private send,
-cash out, payroll, a payment request and a proof). Same steps with these changes:
+About ten minutes once the wallets are funded. Run every block in one terminal, from
+`contracts/` in a clean checkout of `main` (for example a fresh worktree): the
+after-deploy script in step 7 writes the switch-on into `app/` and `packages/` there.
+
+Rehearsed on 25 October 2026 on an anvil fork of Base mainnet, as the real deployer at
+nonce 0 with no key (the deployer and the owner impersonated): steps 3 to 7 as written.
+Every address and code hash matched the other chains, the after-deploy script stopped
+before ownership was accepted and wrote nothing, then passed every check and switched
+Base on, and refused to run a second time.
+
+### What lands where
+
+From the deployer `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` at nonce 0 (checked on
+25 October 2026: nonce 0, every address below empty on Base):
+
+| Nonce | Contract | Address |
+| --- | --- | --- |
+| 0 | PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
+| 2 | ShieldIVerifierFinal (the shield verifier) | `0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465` |
+| 7 | DualProofVerifier | `0x1421353d471dF6C847713aee391Db38978fE714a` |
+| 8 | ShieldPoolPayments (the vault) | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` |
+| 18 | GloamPayMemo (memo board, after the 9 setup calls) | `0xfCa1887e77f738ef9C5751974b3f3873d029F2DC` |
+
+If the nonce is not 0 the addresses differ. That is fine; the after-deploy script reads
+them from the run.
+
+### Step 1: fund the wallets
+
+Send ETH on Base (chain 8453) from any wallet or exchange that holds ETH there. Send
+nothing from the deployer itself: its first transaction must be PoseidonT3.
+
+| Wallet | Has (25 Oct) | Send |
+| --- | --- | --- |
+| Deployer `0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411` | 0 | **0.004 ETH** |
+| Owner `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` | 0 | **0.001 ETH** |
+| Relayer `0xb1E994586E62994648a0b866BF33F2EDd942512e` | 0 | **0.005 ETH** |
+
+0.01 ETH in all, about $23.50 at 25 October's $2,348. Measured on the fork, priced at
+Base's gas on 25 October (0.006 gwei):
+
+| What | Gas | At 0.006 gwei |
+| --- | --- | --- |
+| PoseidonT3 (1 tx) | 2,157,126 | 0.000013 ETH |
+| Vault, verifiers and setup (17 txs) | 6,515,529 | 0.000039 ETH |
+| Memo board (1 tx) | 152,323 | 0.000001 ETH |
+| L1 data fee, all 19 deploy txs | | 0.0000001 ETH |
+| acceptOwnership (owner) | 28,358 | 0.0000002 ETH |
+| A relayed private send with its message | about 1,960,000 | 0.000012 ETH |
+| A relayed cash out | 436,000 to 663,000 | 0.000004 ETH |
+
+- Deployer, 0.004: the deploy is 8,824,978 gas, 0.000053 ETH today. 0.004 covers it
+  at 75 times today's gas, and covers PoseidonT3 even if `PRIORITY_FEE_GWEI` is left off
+  (ethers then tips 1.5 gwei: 0.0033 ETH).
+- Owner, 0.001: accepting costs under 0.000001 ETH; the rest is for later owner calls
+  (lowering a limit, the timelock).
+- Relayer, 0.005: about 400 relayed private sends at today's gas, or 40 at ten times
+  it. The relay calls itself low below 4.8M gas times the gas price (0.00003 ETH today).
+
+Check them:
 
 ```bash
-export RPC_URL=https://mainnet.base.org CHAIN=8453
-export LIMIT_ASSETS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42,0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2,0x0000000000000000000000000000000000000000
-export LIMIT_PER_DEPOSIT=500000000,500000000,500000000,200000000000000000
-export LIMIT_TOTAL=25000000000,25000000000,25000000000,10000000000000000000
-SCRIPT=script/DeployBaseMainnet.s.sol:DeployBaseMainnet
-RUN=broadcast/DeployBaseMainnet.s.sol/$CHAIN/run-latest.json
+for a in 0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411 0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8 0xb1E994586E62994648a0b866BF33F2EDd942512e; do
+  echo "$a $(cast balance $a --rpc-url https://mainnet.base.org --ether)"; done
 ```
 
-Accept ownership on basescan.org, and fund the relayer with 0.01 ETH on Base. This is
-mainnet: if the dry run or the read-back fails, do not announce the vault; deploy a
-fresh one.
+### Step 2: settings
 
-## After the deploy
+```bash
+cd contracts
+source base-mainnet-env.sh
+```
 
-Paste the values back and the app, SDK and MCP get switched on in one change:
+It reads the deployer key hidden (no file, no shell history), then prints each value
+next to what it must be: the chain (8453), the deployer (`0x891E…F411`), its nonce (0),
+its balance (0.004), the gas price (about 0.006 gwei; go on under 0.1), each asset's
+symbol and decimals (USDC 6, EURC 6, USDT 6, ETH) and the deploy-gas check (what Base
+charges to create `ShieldVerifierFinal`, about 389,744). It ends with "Ready for step 3".
 
-- `BASE_SEPOLIA_POOL` (84532) and `MAINNET_POOLS[8453]` in `app/src/lib/mainnet.ts` and
-  `packages/sdk/src/mainnet.ts`: the vault and its deploy block. Until both are in, that
-  Base network stays hidden everywhere (app, API, relay, MCP, Glim, proofs).
-- The memo board address and block in the Base network entries, if deployed.
-- Vercel server env: `GLOAM_RPC_URL_84532` and `GLOAM_RPC_URL_8453`, a private RPC each
-  (never `NEXT_PUBLIC_`). The relay serves Base with the same relayer key.
-- `contracts/deployments/`: the addresses, blocks and limits, as for the other chains.
+If it prints **STOP** instead, Base is charging more to create a contract than forge
+expects (see "Before you broadcast" above). Add `--gas-estimate-multiplier 1000` to every
+`--broadcast` and `--resume` command below and make sure the deployer holds ten times
+the deploy's cost. If it stopped because there was no estimate at all, the RPC did not
+answer: source the file again.
+
+### Step 3: PoseidonT3
+
+```bash
+POSEIDON_T3_ONLY=1 PRIORITY_FEE_GWEI=0.002 node circuits/scripts/deploy-poseidon.mjs
+# prints: chainId 8453 deployer 0x891E… nonce 0, then "Poseidon2 0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4"
+export POSEIDON2=0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4   # or the address it printed
+cast code $POSEIDON2 --rpc-url $RPC_URL | cast keccak
+# must print 0x354b26999e434f8256d168395315e1f51fc15bf49bf2e6bb58fc549bd597e7da
+```
+
+`PRIORITY_FEE_GWEI=0.002` tips 0.002 gwei instead of ethers' 1.5, so this step costs
+about 0.00002 ETH instead of 0.0033.
+
+### Step 4: the vault
+
+```bash
+forge script $SCRIPT --rpc-url $RPC_URL                      # dry run: must end with "All checks passed"
+forge script $SCRIPT --rpc-url $RPC_URL --broadcast --slow   # 17 transactions
+```
+
+`--slow` waits for each transaction before the next. Base makes a block every 2
+seconds, so all 17 take under a minute. The run ends with "All checks passed" again,
+read back from the chain.
+
+### If it stops partway
+
+The same rules as every chain: never start a step again fresh once one of its
+transactions has landed, and send nothing else from the deployer until step 5 is done.
+
+- **PoseidonT3 (step 3) errored.** Run `cast nonce $DEPLOYER --rpc-url $RPC_URL`. If it
+  is 1 and the code hash above matches, PoseidonT3 landed: go on to step 4. If it is 0,
+  nothing landed: run step 3 again. Never run step 3 once the nonce is 1: a second
+  PoseidonT3 moves every address after it.
+- **The vault broadcast (step 4) stopped.** A fresh run deploys a second set of verifiers
+  and a second vault at later nonces, so the vault would not be at
+  `0x39e28cde55cab798874746ac52cb4b5cc99a0194` and the memo board would move too. First
+  see where it stopped (a transaction still pending shows as a gap between the two
+  nonces; wait for it):
+
+  ```bash
+  POOL=0x39e28cde55cab798874746ac52cb4b5cc99a0194   # or the address the run printed
+  cast nonce $DEPLOYER --rpc-url $RPC_URL; cast nonce $DEPLOYER --block pending --rpc-url $RPC_URL
+  cast code $POOL --rpc-url $RPC_URL | wc -c        # 3 means no code yet
+  ```
+
+  - **The vault has no code yet:** only ever resume. It sends the rest of the same run,
+    from `broadcast/`, at the same nonces:
+
+    ```bash
+    forge script $SCRIPT --rpc-url $RPC_URL --resume --slow
+    ```
+
+  - **The vault has code:** finish the setup by hand, as the deployer. Read what is done:
+
+    ```bash
+    cast call $POOL 'setupMode()(bool)' --rpc-url $RPC_URL          # true until endSetup
+    cast call $POOL 'depositLimitsOn()(bool)' --rpc-url $RPC_URL
+    cast call $POOL 'shieldVerifier()(address)' --rpc-url $RPC_URL   # 0x0 until set
+    for a in $(echo $LIMIT_ASSETS | tr ',' ' '); do echo "$a $(cast call $POOL 'depositLimit(address)(uint128,uint128)' $a --rpc-url $RPC_URL | tr '\n' ' ')"; done
+    cast call $POOL 'withdrawFeeBps()(uint16)' --rpc-url $RPC_URL; cast call $POOL 'feeRecipient()(address)' --rpc-url $RPC_URL
+    cast call $POOL 'pendingOwner()(address)' --rpc-url $RPC_URL
+    ```
+
+    Then send only the calls still missing, in this order, waiting for each one. The
+    shield verifier is the run's `ShieldIVerifierFinal` (`0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465`
+    from a deployer that started at nonce 0); the limits are the pairs in
+    `base-mainnet-env.sh`:
+
+    ```bash
+    F="--private-key $DEPLOYER_PK --rpc-url $RPC_URL"
+    cast send $POOL 'turnOnDepositLimits()' $F
+    cast send $POOL 'setShieldVerifier(address)' 0x69Fa6d2De0A66dA718DF022cEe98485AfDb03465 $F
+    cast send $POOL 'setDepositLimit(address,uint128,uint128)' <asset> <perDeposit> <total> $F   # each asset still 0 0
+    cast send $POOL 'setWithdrawFee(uint16,address)' 25 0xB3900ac9350903218e4c7597bAb0f008F01B30B8 $F
+    cast send $POOL 'transferOwnership(address)' 0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8 $F
+    cast send $POOL 'endSetup()' $F   # last: it cannot be undone
+    ```
+
+    The after-deploy script in step 7 then checks every setting the same way as for a
+    run that went through in one go.
+- **The memo board (step 5) stopped** before the board has code: resume it
+  (`forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_URL --resume --slow`),
+  never a fresh broadcast.
+- **Accepting ownership (step 6) failed:** nothing changed. Press the button again.
+- **The after-deploy script (step 7) printed STOP:** it wrote nothing. Read the line. If
+  ownership is not accepted yet, do step 6 and run it again. If a setting is off, do not
+  announce the vault and tell the team before anything else is sent.
+
+### Step 5: the memo board
+
+```bash
+forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_URL
+forge script script/DeployGloamPayMemo.s.sol:DeployGloamPayMemo --rpc-url $RPC_URL --broadcast --slow
+# prints GloamPayMemo 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC
+```
+
+No owner, holds nothing. After the vault, so it does not move the vault's address.
+
+### Step 6: accept ownership
+
+Open `http://127.0.0.1:4730` with the owner wallet and press **Accept on Base**. The page
+checks the vault is waiting for your wallet, switches the wallet to Base, sends
+`acceptOwnership()` and waits until the owner reads back as yours. It moves no funds.
+Copy the transaction hash it shows.
+
+### Step 7: read back, record, switch on
+
+```bash
+ACCEPT_TX=0x...   ./base-mainnet-after-deploy.sh
+```
+
+It sends nothing and needs no key. It reads the deploy back and stops at the first
+thing that is off: every transaction of both runs succeeded and came from the deployer;
+owner `0x76b7…D4D8` with nothing pending; setup ended and limits on; 0.25% to the
+treasury; the vault's verifiers are the run's, their code is the final-key verifiers',
+and they accept final-key proofs and refuse dev-key ones
+(`script/CheckCeremonyKeys.s.sol`, reads only); each asset's symbol, decimals and
+limit; and PoseidonT3, the memo board, the verifiers and the vault byte for byte the
+other chains'. It prints the relayer's balance and says so if it is under 0.005 ETH.
+
+Then it writes `contracts/deployments/base-mainnet.json` and makes the switch-on:
+
+```diff
+--- app/src/lib/mainnet.ts and packages/sdk/src/mainnet.ts
+-  8453: { pool: null, deployBlock: null },
++  8453: { pool: "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194", deployBlock: <vault block> },   (<vault block>n in the SDK)
+--- app/src/lib/networks.ts (the base-mainnet entry)
+-    payMemo: null,
++    payMemo: { address: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", deployBlock: <memo block>n, emitsPoster: false },
+--- packages/sdk/src/constants.ts (Base's mainnet spec)
+-  base: { ..., payMemo: null, ...
++  base: { ..., payMemo: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", ...
+--- packages/sdk/src/incoming.ts (PAY_MEMO_BOARDS)
++  8453: { address: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", deployBlock: <memo block>n, emitsPoster: false },
+```
+
+That is all the app, API, relay, remote MCP, Glim, docs, SDK, local MCP and
+mppx-gloam read. Run it a second time and it refuses: the files no longer read as
+before the switch-on.
+
+### Step 8: verify the source
+
+On Basescan, with an Etherscan API V2 key (one key covers every Etherscan chain), and on
+Sourcify, which needs no key:
+
+```bash
+read -rsp "Etherscan API key (hidden): " ETHERSCAN_API_KEY; echo; export ETHERSCAN_API_KEY
+RUN=broadcast/DeployBaseMainnet.s.sol/$CHAIN/run-latest.json
+jq -r '.transactions[] | select(.transactionType=="CREATE") | "\(.contractAddress) \(.contractName)"' $RUN |
+while read -r addr name; do
+  src=$(grep -rlE --include='*.sol' "^contract $name( |\{)" src | head -1)
+  forge verify-contract "$addr" "$src:$name" --chain $CHAIN --verifier etherscan --rpc-url $RPC_URL --guess-constructor-args --watch
+  forge verify-contract "$addr" "$src:$name" --chain $CHAIN --verifier sourcify --watch
+done
+for v in "etherscan --rpc-url $RPC_URL" sourcify; do
+  forge verify-contract 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC src/GloamPayMemo.sol:GloamPayMemo --chain $CHAIN --verifier $v --watch
+done
+```
+
+PoseidonT3 is raw circomlibjs bytecode with no Solidity source; its code hash in step 3
+stands in for verification.
+
+### Step 9: the switch-on PR
+
+From the repo root, with step 7's changes in the tree:
+
+```bash
+cd ..
+(cd packages/sdk && npm test) && (cd mcp && npm test) && (cd packages/mppx-gloam && npm test)
+(cd app && npx tsc --noEmit && ls scripts/selftest-*.mts | xargs -P 6 -n 1 sh -c '../mcp/node_modules/.bin/tsx "$0" > /dev/null 2>&1 || echo "FAIL $0"')
+git checkout -b base-mainnet-on
+git add contracts/deployments/base-mainnet.json app/src/lib/mainnet.ts app/src/lib/networks.ts \
+  packages/sdk/src/mainnet.ts packages/sdk/src/constants.ts packages/sdk/src/incoming.ts
+git commit -m "Base mainnet on: its vault and memo board in the app and the SDK"
+git push -u origin base-mainnet-on
+gh pr create --base main --fill
+```
+
+The app self-tests print nothing when they all pass (about a minute). The tests need no edit: the ones
+about Base mainnet check the real vault and memo board once `MAINNET_POOLS[8453]` is in.
+If you deploy Ethereum the same day, run its step 7 in the same tree and make this one
+PR for both (add `contracts/deployments/ethereum-mainnet.json` too).
+
+Before the PR is merged: set `GLOAM_RPC_URL_8453` on Vercel to a private Base RPC
+(server env, never `NEXT_PUBLIC_`; Base's own RPC refuses `eth_getLogs`), and check the
+relayer holds its 0.005 ETH. Later, when you want them: publish `@gloamtrade/sdk` with
+the pool in, then `@gloamtrade/mppx-gloam` and `@gloamtrade/mcp` (with pnpm).
 
 ## Do not
 
 - Run `DeployBaseMainnet` before Base Sepolia has been tested end to end.
+- Run step 3 or step 4 of Base mainnet a second time from the start once anything has
+  landed: see "If it stops partway".
+- Run the after-deploy script before accepting ownership: it stops, and nothing is
+  switched on.
 - Deploy with dev keys, or point a Base vault at a dev-key verifier. The script refuses.
 - List a rebasing or fee-on-transfer token. Listing a new asset or raising a limit later
   takes the 3-day timelock; lowering one (down to 0 to close deposits) is immediate.
-- Lose `broadcast/` before the addresses are pasted back: it is gitignored and holds the
-  only local record of the run.
+- Lose `contracts/broadcast/` before the after-deploy script has run: it is gitignored
+  and holds the only local record of the run.
