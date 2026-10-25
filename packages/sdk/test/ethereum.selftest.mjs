@@ -1,0 +1,172 @@
+/**
+ * SDK self-test: Ethereum mainnet, before and after its pool is filled in.
+ *
+ * Ethereum (1) stays hidden until its pool address is written into
+ * MAINNET_POOLS[1]. This file checks that state, then runs itself again in a
+ * child process with a placeholder pool put in before the SDK loads, so the
+ * rest of the SDK can be checked against it: the final keys, payments only, the
+ * five listed stablecoins and ETH with their beta limits, no testnet, no memo
+ * board. USDT's approve rule is checked in both.
+ *
+ * Run after build:  node test/ethereum.selftest.mjs
+ */
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const FILLED = process.env.GLOAM_SELFTEST_ETHEREUM === "filled";
+const POOL = "0x00000000000000000000000000000000000000e1";
+const { MAINNET_POOLS } = await import("../dist/mainnet.js");
+// Before constants.js loads: the networks are built from this when it does.
+if (FILLED) MAINNET_POOLS[1] = { pool: POOL, deployBlock: 21_000_000n };
+const sdk = await import("../dist/index.js");
+
+let checks = 0;
+function assert(cond, msg) {
+  if (!cond) {
+    console.error("FAIL:", msg);
+    process.exit(1);
+  }
+  checks++;
+}
+function throws(fn, re, msg) {
+  try {
+    fn();
+  } catch (e) {
+    assert(re.test(String(e?.message ?? e)), `${msg}: wrong error "${e?.message}"`);
+    return;
+  }
+  assert(false, `${msg}: did not throw`);
+}
+async function throwsAsync(fn, re, msg) {
+  try {
+    await fn();
+  } catch (e) {
+    assert(re.test(String(e?.message ?? e)), `${msg}: wrong error "${e?.message}"`);
+    return;
+  }
+  assert(false, `${msg}: did not throw`);
+}
+
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+const USDG = "0xe343167631d89B6Ffc58B88d6b7fB0228795491D";
+const PYUSD = "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8";
+const EURC = "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+
+// ── before the pool is in ────────────────────────────────────────────────────────
+if (!FILLED) {
+  assert(sdk.MAINNET_POOLS[1].pool === null && sdk.MAINNET_POOLS[1].deployBlock === null, "MAINNET_POOLS[1] is empty until the deploy");
+  assert(sdk.mainnetNetwork("ethereum") === null && sdk.getGloamNetwork("ethereum-mainnet") === null, "no Ethereum network without its pool");
+  assert(sdk.networkForChainId(1) === undefined, "chain 1 resolves to nothing");
+  assert(!sdk.gloamNetworks().some((n) => n.family === "ethereum"), "gloamNetworks leaves Ethereum out");
+  throws(() => sdk.poolForChainId(1), /Ethereum mainnet is not in this version/, "builders refuse chain 1 instead of guessing a pool");
+  await throwsAsync(
+    () => sdk.buildShieldBoundIntent({ chainId: 1, asset: USDC, amountWei: 1n, prover: async () => ({ proofBytes: "0x", publicSignals: [] }) }),
+    /not in this version/,
+    "no deposit intent on chain 1"
+  );
+  assert(sdk.isMainnetChainId(1) && sdk.isPaymentsPoolChainId(1), "chain 1 is a mainnet on the payments pool, pool or not");
+  assert(sdk.ceremonyForChainId(1) === "production", "Ethereum proves with the final keys, pool or not");
+  assert(sdk.circuitArtifactUrls("transfer", 1).zkey.endsWith("/final/transfer_final.zkey"), "final-key artifacts for chain 1");
+  assert(sdk.networkName(1) === "Ethereum", "name");
+  assert(sdk.testnetNetwork("ethereum") === null, "Ethereum has no testnet");
+  assert(sdk.payMemoBoardFor(1) === null, "no memo board on Ethereum");
+  assert(sdk.ETHEREUM_MAINNET_CHAIN_ID === 1 && sdk.ETHEREUM_MAINNET_CHAIN.id === 1, "chain id and viem chain");
+  assert(new URL(sdk.ETHEREUM_MAINNET_CHAIN.rpcUrls.default.http[0]).host === "rpc.mevblocker.io", "default RPC keeps old state and logs");
+  assert(sdk.ETHEREUM_MAINNET_CHAIN.blockExplorers.default.url === "https://etherscan.io", "Etherscan");
+}
+
+// ── USDT's approve rule ──────────────────────────────────────────────────────────
+{
+  const { approvalSteps, approveNeedsReset } = sdk;
+  assert(approveNeedsReset(1, USDT) && approveNeedsReset(1, USDT.toLowerCase()), "USDT on Ethereum resets first");
+  assert(!approveNeedsReset(1, USDC) && !approveNeedsReset(8453, "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"), "USDC, and Base's bridged USDT, approve straight");
+  const steps = (...a) => approvalSteps(...a).map(String).join(",");
+  assert(steps(1, USDT, 0n, 100n) === "100", "no allowance: one exact approve");
+  assert(steps(1, USDT, 30n, 100n) === "0,100", "a stale USDT allowance goes to 0 first");
+  assert(steps(1, USDT, 100n, 100n) === "" && steps(1, USDT, 150n, 100n) === "", "an allowance that covers it: nothing to approve");
+  assert(steps(1, USDC, 30n, 100n) === "100", "USDC changes its allowance in one step");
+  throws(() => approvalSteps(1, USDT, 0n, 0n), /positive/, "zero deposit refused");
+}
+
+// ── with the pool filled in ──────────────────────────────────────────────────────
+const {
+  mainnetNetwork,
+  gloamNetworks,
+  getGloamNetwork,
+  networkForChainId,
+  poolForChainId,
+  assertDepositAllowed,
+  buildShieldBoundIntent,
+  buildShieldIntent,
+  buildPrivateTradeIntent,
+  buildGloamPaymentRequirements,
+  buildPaymentRequestLink,
+  parsePaymentRequestLink,
+  payMemoBoardFor,
+  generateReceiveKey,
+  NATIVE_ASSET,
+  ETHEREUM_MAINNET_ASSETS,
+} = sdk;
+if (FILLED) {
+  const net = mainnetNetwork("ethereum");
+  assert(net && net.key === "ethereum-mainnet" && net.chainId === 1 && net.pool === POOL && net.deployBlock === 21_000_000n, "Ethereum entry");
+  assert(net.label === "Ethereum" && net.family === "ethereum" && net.testnet === false, "label, family, mainnet");
+  assert(net.ceremony === "production" && net.nativeShield === true && net.payMemo === null, "final keys, ETH listed, no memo board yet");
+  assert(net.explorerUrl === "https://etherscan.io" && net.rpcUrl === "https://rpc.mevblocker.io", "explorer and RPC");
+  assert(net.assets.map((a) => a.symbol).join() === "USDC,USDT,USDG,PYUSD,EURC,ETH", "assets in the deploy's order");
+  assert(net.assets.map((a) => a.address).join() === [USDC, USDT, USDG, PYUSD, EURC, NATIVE_ASSET].join(), "asset addresses as checked on chain");
+  for (const a of ETHEREUM_MAINNET_ASSETS) {
+    if (a.symbol === "ETH") {
+      assert(a.decimals === 18 && a.depositLimit.perDeposit === 2n * 10n ** 17n && a.depositLimit.total === 10n * 10n ** 18n, "ETH: 0.2 per deposit, 10 in total");
+    } else {
+      assert(a.decimals === 6 && a.depositLimit.perDeposit === 500_000_000n && a.depositLimit.total === 25_000_000_000n, `${a.symbol}: 500 per deposit, 25,000 in total`);
+    }
+  }
+  const keys = gloamNetworks().map((n) => n.key);
+  assert(keys.indexOf("ethereum-mainnet") > keys.indexOf("tempo-mainnet") && keys.indexOf("ethereum-mainnet") < keys.indexOf("robinhood"), `Ethereum with the mainnets, before the testnets (${keys.join()})`);
+  assert(getGloamNetwork("ethereum-mainnet") === net && networkForChainId(1) === net && poolForChainId(1) === POOL, "lookups");
+
+  // deposits
+  assertDepositAllowed(1, USDT, 500_000_000n);
+  assertDepositAllowed(1, PYUSD, 1n);
+  assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n);
+  throws(() => assertDepositAllowed(1, USDG, 500_000_001n), /at most 500 USDG per deposit/, "USDG over 500 refused");
+  throws(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n), /at most 0\.2 ETH per deposit/, "ETH over 0.2 refused");
+  throws(() => assertDepositAllowed(1, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 1n), /does not list/, "Base's USDC is not listed on Ethereum");
+
+  // builders
+  const prover = async () => ({ proofBytes: "0x" + "ab".repeat(256), publicSignals: [] });
+  const i = await buildShieldBoundIntent({ chainId: 1, asset: USDT, amountWei: 100_000_000n, prover });
+  assert(i.exec.poolAddress === POOL && i.exec.fn === "shieldBound" && i.exec.valueWei === 0n, "USDT deposit goes to the Ethereum pool with no value");
+  const e = await buildShieldBoundIntent({ chainId: 1, asset: NATIVE_ASSET, amountWei: 10n ** 16n, prover });
+  assert(e.exec.valueWei === 10n ** 16n, "ETH deposit carries its value");
+  await throwsAsync(() => buildShieldIntent({ chainId: 1, amountWei: 1n }), /Plain shield\(\) is off/, "no plain shield on Ethereum");
+  await throwsAsync(
+    () => buildPrivateTradeIntent({ chainId: 1, secretHex: "0x01", amountInWei: 1n, amountSwapWei: 1n, assetOut: USDC, amountOutMinWei: 1n, rateIn: 1n, rateOut: 1n, path: {}, prove: prover }),
+    /payments only/,
+    "no private trading on Ethereum"
+  );
+
+  // payments, requests, boards
+  const payee = await generateReceiveKey();
+  const req = buildGloamPaymentRequirements({ amountWei: 10n, asset: USDC, payTo: payee.tag, resource: "r", network: 1 });
+  assert(req.poolAddress === POOL, "x402 requirements on Ethereum name its pool");
+  const link = buildPaymentRequestLink({ payTo: payee.tag, network: "ethereum-mainnet", asset: "pyusd", amount: "12.5" });
+  const read = parsePaymentRequestLink(link);
+  assert(read.networkKey === "ethereum-mainnet" && read.asset === PYUSD && read.amount === "12.5", "request link on Ethereum");
+  assert(parsePaymentRequestLink(buildPaymentRequestLink({ payTo: payee.tag, network: 1, asset: "ETH" })).asset === NATIVE_ASSET, "request for ETH on Ethereum");
+  assert(payMemoBoardFor(1) === null, "no memo board on Ethereum yet");
+}
+
+if (!FILLED) {
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], {
+    env: { ...process.env, GLOAM_SELFTEST_ETHEREUM: "filled" },
+    encoding: "utf8",
+  });
+  process.stdout.write(child.stdout);
+  process.stderr.write(child.stderr);
+  assert(child.status === 0, "the run with the pool filled in failed");
+}
+
+console.log(`ethereum selftest${FILLED ? " (pool filled in)" : ""}: ${checks} checks passed`);

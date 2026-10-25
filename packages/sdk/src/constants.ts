@@ -1,5 +1,5 @@
 import { defineChain, formatUnits, zeroAddress, type Address, type Chain } from "viem";
-import { base, baseSepolia } from "viem/chains";
+import { base, baseSepolia, mainnet as ethereum } from "viem/chains";
 import { baseSepoliaPool, mainnetPoolFor, type MainnetChainId } from "./mainnet.js";
 
 /** Native ETH is represented as the zero address across the vault. */
@@ -23,6 +23,9 @@ export const TEMPO_MAINNET_CHAIN_ID = 4217;
 export const BASE_MAINNET_CHAIN_ID = 8453;
 /** Base Sepolia: Base's testnet, on the mainnet pool and keys. */
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
+
+/** Ethereum mainnet. No practice network of its own: Base Sepolia rehearses the same pool. */
+export const ETHEREUM_MAINNET_CHAIN_ID = 1;
 
 /** Contracts of record (RH testnet 46630). */
 // No-middlemen Poseidon pool (shieldVerifier enforced, no emergencyWithdraw,
@@ -94,7 +97,27 @@ export const BASE_SEPOLIA_USDC: Address =
 export const BASE_SEPOLIA_EURC: Address =
   "0x808456652fdb597867f38412077A9182bf77359F";
 
-/** PoseidonT3 (circomlib, 2 inputs) the mainnet pools hash with, same address on both mainnets. */
+/** Circle's USDC on Ethereum, 6 decimals. */
+export const ETHEREUM_USDC: Address =
+  "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+/**
+ * Tether's USDT on Ethereum, 6 decimals. Its approve() and transfer() return
+ * nothing, and approve() refuses to change one non-zero allowance into another:
+ * see approvalSteps.
+ */
+export const ETHEREUM_USDT: Address =
+  "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+/** Paxos Global Dollar (USDG) on Ethereum, 6 decimals. */
+export const ETHEREUM_USDG: Address =
+  "0xe343167631d89B6Ffc58B88d6b7fB0228795491D";
+/** PayPal USD (PYUSD, issued by Paxos) on Ethereum, 6 decimals. */
+export const ETHEREUM_PYUSD: Address =
+  "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8";
+/** Circle's EURC on Ethereum, 6 decimals. A euro stablecoin, never a dollar. */
+export const ETHEREUM_EURC: Address =
+  "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+
+/** PoseidonT3 (circomlib, 2 inputs) the mainnet pools hash with, same address on every mainnet. */
 export const MAINNET_POSEIDON_T3: Address =
   "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
 
@@ -118,7 +141,7 @@ export function cashOutFee(amount: bigint, bps: number = CASH_OUT_FEE_BPS): bigi
 
 /**
  * Which trusted-setup keys a network's verifiers hold. The Robinhood Chain and
- * Tempo testnets use the single-party dev keys. Mainnet, and Base Sepolia (which
+ * Tempo testnets use the single-party dev keys. Every mainnet, and Base Sepolia (which
  * runs the mainnet pool), use the final keys of the 13-contributor ceremony
  * (drand round 6561386, release ceremony-final). A proof made with one set never
  * verifies against the other.
@@ -147,10 +170,11 @@ export type GloamNetworkKey =
   | "base"
   | "robinhood-mainnet"
   | "tempo-mainnet"
-  | "base-mainnet";
+  | "base-mainnet"
+  | "ethereum-mainnet";
 
-/** The chain a network runs on, testnet or mainnet. */
-export type GloamChainFamily = "robinhood" | "tempo" | "base";
+/** The chain a network runs on, testnet or mainnet. Ethereum has a mainnet only. */
+export type GloamChainFamily = "robinhood" | "tempo" | "base" | "ethereum";
 
 /** Robinhood Chain mainnet (4663). */
 export const RH_MAINNET_CHAIN: Chain = defineChain({
@@ -214,6 +238,17 @@ export const BASE_SEPOLIA_CHAIN: Chain = defineChain({
   rpcUrls: { default: { http: ["https://base-sepolia-rpc.publicnode.com", "https://sepolia.base.org"] } },
 });
 
+/**
+ * Ethereum mainnet (1), from viem's definition. The default RPC is MEV Blocker's:
+ * it keeps old state and answers eth_getLogs over 10,000 blocks (any range under
+ * 10,000 logs), which rebuilding the pool tree needs. publicnode, second, serves
+ * only the last 10,000 blocks of logs and 128 blocks of state.
+ */
+export const ETHEREUM_MAINNET_CHAIN: Chain = defineChain({
+  ...ethereum,
+  rpcUrls: { default: { http: ["https://rpc.mevblocker.io", "https://ethereum-rpc.publicnode.com"] } },
+});
+
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
@@ -242,6 +277,16 @@ export const BASE_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
 ];
 
+/** Ethereum mainnet pool assets and their beta deposit limits: five stablecoins, and ETH with Base's limit. */
+export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
+  { symbol: "USDC", address: ETHEREUM_USDC, decimals: 6, depositLimit: stableLimit },
+  { symbol: "USDT", address: ETHEREUM_USDT, decimals: 6, depositLimit: stableLimit },
+  { symbol: "USDG", address: ETHEREUM_USDG, decimals: 6, depositLimit: stableLimit },
+  { symbol: "PYUSD", address: ETHEREUM_PYUSD, decimals: 6, depositLimit: stableLimit },
+  { symbol: "EURC", address: ETHEREUM_EURC, decimals: 6, depositLimit: stableLimit },
+  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+];
+
 /** Base Sepolia pool assets: Circle's test USDC and EURC, and ETH, with the same limits as Base mainnet. No USDT there. */
 export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: BASE_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
@@ -250,23 +295,24 @@ export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
 ];
 
 /**
- * The networks Gloam's private core runs on. Robinhood Chain, Tempo and Base
- * are separate deployments of the same shielded-pool design (not a bridge, not
- * one cross-chain pool), each with a mainnet and a testnet. An app or agent
- * picks one and points the builders at that network's pool and chain id.
+ * The networks Gloam's private core runs on. Robinhood Chain, Tempo, Base and
+ * Ethereum are separate deployments of the same shielded-pool design (not a
+ * bridge, not one cross-chain pool), each with a mainnet and all but Ethereum
+ * with a testnet. An app or agent picks one and points the builders at that
+ * network's pool and chain id.
  */
 export interface GloamNetwork {
   key: GloamNetworkKey;
-  /** The chain's name, the same for its mainnet and testnet ("Robinhood Chain", "Tempo", "Base"). */
+  /** The chain's name, the same for its mainnet and testnet ("Robinhood Chain", "Tempo", "Base", "Ethereum"). */
   label: string;
   chainId: number;
   /** Shielded pool address. */
   pool: Address;
   /** Block the pool was deployed at (start of tree scans). */
   deployBlock: bigint;
-  /** Encrypted payment-message board for this network, or null where there is none (Base so far). */
+  /** Encrypted payment-message board for this network, or null where there is none (Base and Ethereum so far). */
   payMemo: Address | null;
-  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base lists ETH). */
+  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base and Ethereum list ETH). */
   nativeShield: boolean;
   /** Which chain this is, testnet or mainnet. */
   family: GloamChainFamily;
@@ -349,6 +395,8 @@ const MAINNET_SPECS: Record<
   tempo: { chainId: 4217, key: "tempo-mainnet", label: "Tempo", chain: TEMPO_MAINNET_CHAIN, payMemo: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", nativeShield: false, assets: TEMPO_MAINNET_ASSETS },
   // No board on Base yet: payments to a Gloam address there are handed over as a sealed code.
   base: { chainId: 8453, key: "base-mainnet", label: "Base", chain: BASE_MAINNET_CHAIN, payMemo: null, nativeShield: true, assets: BASE_MAINNET_ASSETS },
+  // No board on Ethereum yet either: payments to a Gloam address are handed over as a sealed code.
+  ethereum: { chainId: 1, key: "ethereum-mainnet", label: "Ethereum", chain: ETHEREUM_MAINNET_CHAIN, payMemo: null, nativeShield: true, assets: ETHEREUM_MAINNET_ASSETS },
 };
 
 function buildMainnet(family: GloamChainFamily): GloamNetwork | null {
@@ -377,6 +425,7 @@ const MAINNETS: Record<GloamChainFamily, GloamNetwork | null> = {
   robinhood: buildMainnet("robinhood"),
   tempo: buildMainnet("tempo"),
   base: buildMainnet("base"),
+  ethereum: buildMainnet("ethereum"),
 };
 
 /**
@@ -417,15 +466,17 @@ export function mainnetNetwork(family: GloamChainFamily): GloamNetwork | null {
 /**
  * A chain's TESTNET network, or null while its pool is not in this
  * SDK version: GLOAM_NETWORKS.robinhood and .tempo, and Base Sepolia once its
- * pool is filled in.
+ * pool is filled in. Always null for Ethereum, which has no Gloam testnet.
  */
 export function testnetNetwork(family: GloamChainFamily): GloamNetwork | null {
-  return family === "base" ? BASE_TESTNET : GLOAM_NETWORKS[family];
+  if (family === "base") return BASE_TESTNET;
+  if (family === "ethereum") return null;
+  return GLOAM_NETWORKS[family];
 }
 
 /** Every network Gloam runs on right now: mainnets with a pool first, then the testnets. */
 export function gloamNetworks(): GloamNetwork[] {
-  const live = [MAINNETS.robinhood, MAINNETS.tempo, MAINNETS.base].filter((n): n is GloamNetwork => n !== null);
+  const live = [MAINNETS.robinhood, MAINNETS.tempo, MAINNETS.base, MAINNETS.ethereum].filter((n): n is GloamNetwork => n !== null);
   return [...live, GLOAM_NETWORKS.robinhood, GLOAM_NETWORKS.tempo, ...(BASE_TESTNET ? [BASE_TESTNET] : [])];
 }
 
@@ -439,9 +490,14 @@ export function networkForChainId(chainId: number): GloamNetwork | undefined {
   return gloamNetworks().find((n) => n.chainId === chainId);
 }
 
-/** True for Robinhood Chain (4663), Tempo (4217) and Base (8453) mainnet, pool or not. */
+/** True for Robinhood Chain (4663), Tempo (4217), Base (8453) and Ethereum (1) mainnet, pool or not. */
 export function isMainnetChainId(chainId: number): boolean {
-  return chainId === RH_MAINNET_CHAIN_ID || chainId === TEMPO_MAINNET_CHAIN_ID || chainId === BASE_MAINNET_CHAIN_ID;
+  return (
+    chainId === RH_MAINNET_CHAIN_ID ||
+    chainId === TEMPO_MAINNET_CHAIN_ID ||
+    chainId === BASE_MAINNET_CHAIN_ID ||
+    chainId === ETHEREUM_MAINNET_CHAIN_ID
+  );
 }
 
 /**
@@ -467,6 +523,7 @@ export function networkName(chainId: number): string {
   if (chainId === RH_MAINNET_CHAIN_ID) return "Robinhood Chain";
   if (chainId === TEMPO_MAINNET_CHAIN_ID) return "Tempo";
   if (chainId === BASE_MAINNET_CHAIN_ID) return "Base";
+  if (chainId === ETHEREUM_MAINNET_CHAIN_ID) return "Ethereum";
   if (chainId === RH_TESTNET_CHAIN_ID) return "Robinhood Chain testnet";
   if (chainId === TEMPO_TESTNET_CHAIN_ID) return "Tempo testnet";
   if (chainId === BASE_SEPOLIA_CHAIN_ID) return "Base testnet";
@@ -514,6 +571,34 @@ export function assertDepositAllowed(chainId: number, asset: Address, amount: bi
     const cap = BigInt(whole).toLocaleString("en-US") + (frac ? `.${frac}` : "");
     throw new Error(`Over the beta limit on ${where}: at most ${cap} ${listed.symbol} per deposit.`);
   }
+}
+
+/** Tokens whose approve() refuses to change one non-zero allowance into another, by chain. */
+const APPROVE_RESET_FIRST: Record<number, Address[]> = {
+  [ETHEREUM_MAINNET_CHAIN_ID]: [ETHEREUM_USDT],
+};
+
+/**
+ * True for a token whose approve() reverts when it would change one non-zero
+ * allowance into another (Tether's USDT on Ethereum): it must go to 0 first.
+ */
+export function approveNeedsReset(chainId: number, token: Address): boolean {
+  return (APPROVE_RESET_FIRST[chainId] ?? []).some((t) => t.toLowerCase() === token.toLowerCase());
+}
+
+/**
+ * The approve(pool, value) calls a deposit of `amount` needs, in order, given
+ * the allowance the pool has now: none when it already covers the deposit;
+ * [0, amount] for a token that refuses to go from one non-zero allowance to
+ * another (a stale allowance left by a deposit that never went through);
+ * otherwise [amount]. Always exact amounts, never an open-ended allowance.
+ * Send each one and wait for it to land before the next, then the deposit.
+ */
+export function approvalSteps(chainId: number, token: Address, allowance: bigint, amount: bigint): bigint[] {
+  if (amount <= 0n) throw new Error("amount must be positive");
+  if (allowance >= amount) return [];
+  if (allowance > 0n && approveNeedsReset(chainId, token)) return [0n, amount];
+  return [amount];
 }
 
 // ── Circuit artifacts ─────────────────────────────────────────────────────────
