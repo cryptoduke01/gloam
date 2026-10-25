@@ -386,7 +386,7 @@ export const NETWORK_SWITCHING_MESSAGE = "The network is still switching. Wait a
  * proving keys, the relay's chain) must be `net` too: a proof is only ever
  * built and sent for the chain the page shows.
  */
-export function noteNetworkProblem(note: Pick<LocalNote, "chainId" | "pool">, net: NetScope): string | null {
+export function noteNetworkProblem(note: { chainId: number; pool?: string | null }, net: NetScope): string | null {
   if (!net.pool || note.chainId !== net.chainId || !note.pool || note.pool.toLowerCase() !== net.pool.toLowerCase()) {
     return NOTE_OTHER_NETWORK_MESSAGE;
   }
@@ -396,7 +396,7 @@ export function noteNetworkProblem(note: Pick<LocalNote, "chainId" | "pool">, ne
 }
 
 /** Throws noteNetworkProblem's reason: call it before proving or sending anything that spends `note`. */
-export function assertNoteOnNetwork(note: Pick<LocalNote, "chainId" | "pool">, net: NetScope): void {
+export function assertNoteOnNetwork(note: { chainId: number; pool?: string | null }, net: NetScope): void {
   const problem = noteNetworkProblem(note, net);
   if (problem) throw new Error(problem);
 }
