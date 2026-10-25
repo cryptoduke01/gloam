@@ -457,13 +457,13 @@ export default function VerifyPage() {
               <button
                 type="button"
                 onClick={checkAnother}
-                className="t-label inline-flex min-h-10 items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                className="gl-arrowlink min-h-10"
               >
                 Check a different proof <span aria-hidden>→</span>
               </button>
               <Link
                 href="/docs/proofs"
-                className="t-label inline-flex min-h-10 items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                className="gl-arrowlink min-h-10"
               >
                 How proofs work <span aria-hidden>→</span>
               </Link>
@@ -485,12 +485,12 @@ export default function VerifyPage() {
                     shared with you, and the contracts that hold the money. No
                     wallet, no account.
                   </p>
-                  <div className="mt-8 flex flex-wrap gap-2">
+                  <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
                     <a href="#proof" className="btn btn-ink btn-lg">
                       Verify a proof
                     </a>
-                    <a href="#contracts" className="btn btn-ghost btn-lg">
-                      See the contracts
+                    <a href="#contracts" className="gl-arrowlink">
+                      See the contracts <span aria-hidden>→</span>
                     </a>
                   </div>
                 </div>
@@ -552,13 +552,13 @@ export default function VerifyPage() {
                 <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3">
                   <AppLink
                     href="/app/disclose"
-                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink"
                   >
                     Make a proof of your own <span aria-hidden>→</span>
                   </AppLink>
                   <Link
                     href="/docs/proofs"
-                    className="t-label inline-flex items-center gap-1.5 text-foreground transition-colors hover:text-sealed"
+                    className="gl-arrowlink"
                   >
                     How proofs work <span aria-hidden>→</span>
                   </Link>
