@@ -32,7 +32,7 @@ function test(name: string, fn: () => void) {
   console.log(`ok  ${name}`);
 }
 
-const ALL = VAULT_ACTIONS.map((a) => a.id);
+const ALL = VAULT_ACTIONS;
 const ids = (o: Parameters<typeof vaultActionsFor>[0]) => vaultActionsFor(o).map((a) => a.id);
 
 test("the five main actions come first, in the order money moves", () => {
@@ -64,8 +64,11 @@ test("a URL opens its action, and the bare Vault opens the overview", () => {
   assert.equal(at("send"), "send");
   assert.equal(at("trade"), "trade");
   assert.equal(at("nonsense"), null);
-  assert.equal(at(null, "cashout"), "cashout", "a link naming only a mode opens that part of Pay");
-  assert.equal(at(null, "whatever"), null);
+  assert.equal(at(null, "cashout"), null, "no tab is the overview, whatever the mode");
+});
+
+test("the Vault and the app nav give each action the same name and link", () => {
+  for (const a of VAULT_ACTIONS) assert.equal(`/app/vault${vaultActionSearch(a.id, "")}`, a.href, a.id);
 });
 
 test("claim links open Receive, old ones without a mode too", () => {
@@ -77,7 +80,7 @@ test("claim links open Receive, old ones without a mode too", () => {
 });
 
 test("a tab this network does not have opens the overview, not a blank page", () => {
-  const tempo = ids({ swap: false, stocks: false, native: false });
+  const tempo = vaultActionsFor({ swap: false, stocks: false, native: false });
   assert.equal(vaultActionFromUrl("swap", null, "", tempo), null);
   assert.equal(vaultActionFromUrl("send", null, "", tempo), null);
   assert.equal(vaultActionFromUrl("move", "cashout", "", tempo), "cashout");
@@ -93,7 +96,7 @@ test("each action writes the deep link the app already serves", () => {
     trade: "?tab=trade",
     send: "?tab=send",
   };
-  for (const id of ALL) {
+  for (const { id } of ALL) {
     assert.equal(vaultActionSearch(id, ""), want[id], id);
     // and it reads back as the same action
     const p = new URLSearchParams(want[id]);

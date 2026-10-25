@@ -101,22 +101,13 @@ export function VaultHub() {
   }, []);
 
   const tab = sp.get("tab");
-  const action = vaultActionFromUrl(
-    tab,
-    sp.get("mode"),
-    hash,
-    actions.map((a) => a.id)
-  );
+  // Pay follows ?mode= and writes its own changes back (a claim opening
+  // Receive, say), so the row always marks what is on screen.
+  const action = vaultActionFromUrl(tab, sp.get("mode"), hash, actions);
   const current = actions.find((a) => a.id === action) ?? null;
 
-  // Pay reads ?mode= when it opens. Until it follows a change of ?mode= on its
-  // own, moving between Pay privately, Receive and Cash out opens it afresh.
-  const [payKey, setPayKey] = useState(0);
-
   function select(id: VaultActionId) {
-    const next = actions.find((a) => a.id === id);
-    if (!next || id === action) return;
-    if (next.tab === "move" && current?.tab === "move") setPayKey((k) => k + 1);
+    if (id === action || !actions.some((a) => a.id === id)) return;
     setHash("");
     router.replace(`/app/vault${vaultActionSearch(id, window.location.search)}`, { scroll: false });
   }
@@ -140,20 +131,13 @@ export function VaultHub() {
     <div className="space-y-6">
       <ActionRow actions={actions} current={current.id} onSelect={select} />
 
-      {/* Pay keeps its own Send / Receive / Cash out row for other pages; here
-          the row above names those, so Pay's is left out. */}
-      <div
-        id="vault-panel"
-        role="tabpanel"
-        aria-labelledby={`vault-tab-${current.id}`}
-        className="min-w-0 [&_[role=tablist][aria-label=Pay]]:hidden [&_[role=tablist][aria-label=Pay]+*]:mt-0"
-      >
+      <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${current.id}`} className="min-w-0">
         <Suspense fallback={<PanelSkeleton />}>
           {current.id === "shield" && <ShieldView />}
           {current.id === "trade" && <TradeView />}
           {current.id === "swap" && <VaultSwapView />}
           {current.id === "send" && <SendView />}
-          {current.tab === "move" && <MoveView key={payKey} />}
+          {current.tab === "move" && <MoveView />}
         </Suspense>
       </div>
     </div>

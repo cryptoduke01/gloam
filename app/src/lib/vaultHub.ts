@@ -1,133 +1,100 @@
 /**
- * The Vault's landing and its action row (components/app/VaultHub): each
- * action's name, its short name for the phone row, one plain line about what
- * it does, the deep link that opens it (the links the app already serves:
- * /app/vault?tab=…&mode=…), which action a URL opens (none is the overview),
- * why one can't be used yet, and which wallet balance to suggest adding
- * first. Pure, so scripts/selftest-vault-hub.mts can hold it.
+ * The Vault's overview and its action row (components/app/VaultHome,
+ * components/app/VaultHub), on top of the app nav's list of Vault actions
+ * (lib/vaultNav: ids, names, deep links, which networks have them). This adds
+ * what the Vault page itself needs: a short name for the phone row, one plain
+ * line about what each action does, which ones spend the private balance (so
+ * they wait until there is one), which action a URL opens (none is the
+ * overview), and which wallet balance to suggest adding first. Pure, so
+ * scripts/selftest-vault-hub.mts can hold it.
  *
  * What each line says about privacy follows /docs/privacy-model: adding and
  * cashing out are public transfers, a private payment hides who paid whom and
  * how much, and a swap hides who swapped but not its tokens or amounts.
  */
+import {
+  VAULT_ACTIONS as NAV_ACTIONS,
+  vaultActionFromParams,
+  vaultActionsFor as navActionsFor,
+  type VaultAction,
+  type VaultActionId,
+} from "./vaultNav";
 
-export type VaultActionId = "shield" | "pay" | "receive" | "swap" | "cashout" | "trade" | "send";
+export type { VaultActionId };
 
-export type VaultActionInfo = {
-  id: VaultActionId;
-  label: string;
+export type VaultActionInfo = VaultAction & {
   /** The phone row's name, where five sit side by side. */
   short: string;
   /** One plain line: what it does, and what shows. */
   line: string;
+  /** The Vault tab it opens (?tab=), and Pay's part (?mode=) for Receive and Cash out. */
   tab: "shield" | "move" | "swap" | "trade" | "send";
-  /** Pay's mode (components/app/MoveView); Send leaves it out. */
   mode?: "receive" | "cashout";
   /** Spends the private balance, so it waits until there is one. */
   spends?: boolean;
-  /** Not one of the main actions: listed after them where the network has it. */
+  /** Not one of the five main actions: listed after them where the network has it. */
   extra?: boolean;
-  /** Only where a vault swap router is deployed and open to this wallet (lib/vaultSwap). */
-  swapOnly?: boolean;
-  /** Only where tokenized stocks trade (Robinhood Chain testnet). */
-  stocksOnly?: boolean;
-  /** Sends the chain's native coin, which Tempo does not have. */
-  nativeOnly?: boolean;
 };
 
-/** In the order money moves: in, around, out. */
-export const VAULT_ACTIONS: readonly VaultActionInfo[] = [
-  {
-    id: "shield",
-    label: "Add privately",
-    short: "Add",
-    tab: "shield",
-    line: "Move money from your wallet into your private balance.",
-  },
-  {
-    id: "pay",
-    label: "Pay privately",
+const COPY: Record<VaultActionId, Pick<VaultActionInfo, "short" | "line" | "spends" | "extra">> = {
+  shield: { short: "Add", line: "Move money from your wallet into your private balance." },
+  pay: {
     short: "Pay",
-    tab: "move",
     spends: true,
     line: "Send from your private balance. The amount and the link between you stay sealed.",
   },
-  {
-    id: "receive",
-    label: "Receive",
-    short: "Receive",
-    tab: "move",
-    mode: "receive",
-    line: "Share your Gloam address, or claim a payment someone sent you.",
-  },
-  {
-    id: "swap",
-    label: "Swap",
+  receive: { short: "Receive", line: "Share your Gloam address, or claim a payment someone sent you." },
+  swap: {
     short: "Swap",
-    tab: "swap",
     spends: true,
-    swapOnly: true,
     line: "Change tokens inside your private balance. Who swapped stays private; the amounts show.",
   },
-  {
-    id: "cashout",
-    label: "Cash out",
+  cashout: {
     short: "Cash out",
-    tab: "move",
-    mode: "cashout",
     spends: true,
     line: "Back to any public wallet. The cash out itself shows on the explorer.",
   },
-  {
-    id: "trade",
-    label: "Trade",
-    short: "Trade",
-    tab: "trade",
-    extra: true,
-    stocksOnly: true,
-    line: "Tokenized stocks, on the Robinhood Chain testnet.",
-  },
-  {
-    id: "send",
-    label: "Public send",
-    short: "Public send",
-    tab: "send",
-    extra: true,
-    nativeOnly: true,
-    line: "A regular transfer from your wallet. It shows on the explorer.",
-  },
-];
+  trade: { short: "Trade", extra: true, line: "Tokenized stocks, on the Robinhood Chain testnet." },
+  send: { short: "Public send", extra: true, line: "A regular transfer from your wallet. It shows on the explorer." },
+};
+
+function withCopy(a: VaultAction): VaultActionInfo {
+  const q = new URLSearchParams(a.href.split("?")[1] ?? "");
+  const mode = q.get("mode");
+  return {
+    ...a,
+    ...COPY[a.id],
+    tab: (q.get("tab") ?? "shield") as VaultActionInfo["tab"],
+    mode: mode === "receive" || mode === "cashout" ? mode : undefined,
+  };
+}
+
+/** In the order money moves: in, around, out; then Trade and Public send. */
+export const VAULT_ACTIONS: readonly VaultActionInfo[] = NAV_ACTIONS.map(withCopy);
+
+/** The actions this network and wallet have, the same as the app nav lists. */
+export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: boolean }): VaultActionInfo[] {
+  return navActionsFor(opts).map(withCopy);
+}
 
 /** Why a spending action waits, in the words the Vault uses everywhere. */
 export const ADD_FIRST = "Add something privately first";
 
-/** The actions this network and wallet have. */
-export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: boolean }): VaultActionInfo[] {
-  return VAULT_ACTIONS.filter(
-    (a) => !(a.swapOnly && !opts.swap) && !(a.stocksOnly && !opts.stocks) && !(a.nativeOnly && !opts.native)
-  );
-}
-
 /**
- * The action a Vault URL opens, or null for the overview. A claim link's
- * fragment opens Receive (older links name no mode), and a link that names
- * only a mode opens that part of Pay. A tab this network does not have opens
- * the overview, which lists what it does have.
+ * The action a Vault URL opens, or null for the overview: the nav's reading of
+ * ?tab= and ?mode= (lib/vaultNav), plus a claim link's fragment, which opens
+ * Receive (older claim links name no mode; Pay reads the code and clears it).
  */
 export function vaultActionFromUrl(
   tab: string | null,
   mode: string | null,
   hash: string,
-  available: readonly VaultActionId[]
+  available: readonly VaultActionInfo[]
 ): VaultActionId | null {
-  const claim = hash.startsWith("#claim=");
-  const payPart = mode === "receive" ? "receive" : mode === "cashout" ? "cashout" : "pay";
-  let id: VaultActionId | null = null;
-  if ((tab === "move" || tab === null) && claim) id = "receive";
-  else if (tab === "move") id = payPart;
-  else if (tab === null) id = mode === "receive" || mode === "cashout" || mode === "pay" || mode === "send" ? payPart : null;
-  else if (tab === "shield" || tab === "swap" || tab === "trade" || tab === "send") id = tab;
-  return id !== null && available.includes(id) ? id : null;
+  if ((tab === "move" || tab === null) && hash.startsWith("#claim=") && available.some((a) => a.id === "receive")) {
+    return "receive";
+  }
+  return vaultActionFromParams(tab, mode, available);
 }
 
 /**
@@ -137,16 +104,13 @@ export function vaultActionFromUrl(
  */
 export function vaultActionSearch(id: VaultActionId, search: string): string {
   const a = VAULT_ACTIONS.find((x) => x.id === id);
-  const params = new URLSearchParams(search);
-  params.delete("mode");
-  params.delete("asset");
-  if (!a) return params.toString() ? `?${params.toString()}` : "";
-  params.delete("tab");
-  const head = new URLSearchParams();
-  head.set("tab", a.tab);
-  if (a.mode) head.set("mode", a.mode);
-  const rest = params.toString();
-  return `?${head.toString()}${rest ? `&${rest}` : ""}`;
+  const rest = new URLSearchParams(search);
+  rest.delete("tab");
+  rest.delete("mode");
+  rest.delete("asset");
+  const head = new URLSearchParams(a ? (a.href.split("?")[1] ?? "") : "");
+  const tail = rest.toString();
+  return `?${head.toString()}${tail ? `&${tail}` : ""}`;
 }
 
 /** The link to Add with one asset picked (a token id, or "eth"). */
@@ -176,11 +140,7 @@ export function pickAddAsset<T extends { amount: number; dollar: boolean }>(rows
   let best: T | null = null;
   for (const r of rows) {
     if (!(r.amount > 0)) continue;
-    if (
-      best === null ||
-      (r.dollar && !best.dollar) ||
-      (r.dollar === best.dollar && r.amount > best.amount)
-    ) {
+    if (best === null || (r.dollar && !best.dollar) || (r.dollar === best.dollar && r.amount > best.amount)) {
       best = r;
     }
   }

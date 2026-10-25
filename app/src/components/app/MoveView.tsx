@@ -2041,39 +2041,11 @@ export function MoveView() {
   return (
     <>
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div id="pay-card" className="gl-card min-w-0 scroll-mt-24 p-5 sm:p-7">
+        {/* Send, Receive and Cash out are picked in the Vault's own row
+            (VaultHub: Pay privately, Receive, Cash out) through ?mode=, so
+            the card has no row of its own; the first block sits at the top. */}
+        <div id="pay-card" className="gl-card min-w-0 scroll-mt-24 p-5 sm:p-7 [&>*:first-child]:mt-0">
           <DevKeysBanner compact />
-
-          {/* Mode tabs */}
-          <div
-            role="tablist"
-            aria-label="Pay"
-            className="flex rounded-full bg-surface p-1"
-          >
-            {(
-              [
-                ["send", "Send privately", "Send"],
-                ["receive", "Receive", "Receive"],
-                ["cashout", "Cash out", "Cash out"],
-              ] as const
-            ).map(([id, label, short]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={mode === id}
-                onClick={() => selectMode(id)}
-                className={`h-10 flex-1 whitespace-nowrap rounded-full px-3 text-[14px] transition-colors duration-200 ${
-                  mode === id
-                    ? "bg-panel font-medium text-foreground shadow-card dark:bg-surface-2"
-                    : "text-mute hover:text-foreground"
-                }`}
-              >
-                <span className="max-sm:hidden">{label}</span>
-                <span className="sm:hidden">{short}</span>
-              </button>
-            ))}
-          </div>
 
           {!poseidonMode && (
             <p className="mt-5 rounded-xl bg-warn-soft px-4 py-3 text-[13.5px] leading-relaxed text-warn">
@@ -2357,7 +2329,7 @@ export function MoveView() {
                     ) : (
                       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                         Like sending to an address, but private. They find their
-                        Gloam address under Pay, Receive.
+                        Gloam address under Receive.
                       </p>
                     )}
                     {(contacts.length > 0 || recipientTag.trim().startsWith("gloamr1.")) && (
