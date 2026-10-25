@@ -700,7 +700,6 @@ export function PortfolioView() {
                         : "Your tokens show up here once you connect."
                       : `Your wallet is on another network. Switch it to ${network.label} to see your tokens.`
                   }
-                  action={<WalletMenu />}
                 />
               </div>
             ) : positions.length === 0 && nativeWei === BigInt(0) ? (
