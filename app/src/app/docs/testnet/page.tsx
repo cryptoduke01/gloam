@@ -4,12 +4,16 @@ import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
-import { baseSepoliaPool } from "@/lib/mainnet";
+import { baseSepoliaPool, ethereumSepoliaPool } from "@/lib/mainnet";
 import { CIRCLE_FAUCET_URL, PAXOS_FAUCET_URL } from "@/lib/tokens";
 
 /** Base Sepolia shows in the app once its pool is filled in (lib/mainnet.ts). */
 const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
 const CDP_FAUCET_URL = "https://portal.cdp.coinbase.com/products/faucet";
+/** Ethereum Sepolia shows in the app once its pool is filled in (lib/mainnet.ts). */
+const ETHEREUM_SEPOLIA_LIVE = ethereumSepoliaPool() !== null;
+const GOOGLE_SEPOLIA_FAUCET_URL = "https://cloud.google.com/application/web3/faucet/ethereum/sepolia";
+const POW_SEPOLIA_FAUCET_URL = "https://sepolia-faucet.pk910.de/";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 
 export const metadata: Metadata = {
@@ -236,6 +240,57 @@ export default function DocsTestnetPage() {
             Coinbase&apos;s
           </a>
           . A little is enough: Base gas costs a fraction of a cent.
+        </li>
+      </ul>
+
+      <h3 id="ethereum">Ethereum Sepolia</h3>
+      <p>
+        {ETHEREUM_SEPOLIA_LIVE
+          ? "Gloam also runs on Ethereum Sepolia (chain ID 11155111), Ethereum's testnet."
+          : "Ethereum Sepolia (chain ID 11155111), Ethereum's testnet, is next. It is not in the app yet; this is how it will work."}{" "}
+        Like Base Sepolia it runs the mainnet vault: the final keys, the
+        mainnet deposit limits (500 of each stablecoin per deposit and 25,000
+        in total, 0.2 ETH per deposit and 10 in total) and the 0.25% cash-out
+        fee. It takes test USDC, USDG, PYUSD, EURC and ETH; Tether issues no
+        USDT on Sepolia.
+      </p>
+      <ul>
+        <li>
+          <strong>RPC</strong>, <code>https://ethereum-sepolia-rpc.publicnode.com</code>{" "}
+          (most wallets list Sepolia already)
+        </li>
+        <li>
+          <strong>Explorer</strong>,{" "}
+          <a href="https://sepolia.etherscan.io" target="_blank" rel="noreferrer">
+            sepolia.etherscan.io
+          </a>
+        </li>
+        <li>
+          <strong>Sepolia ETH for gas</strong>, from{" "}
+          <a href={GOOGLE_SEPOLIA_FAUCET_URL} target="_blank" rel="noreferrer">
+            Google Cloud&apos;s Web3 faucet
+          </a>{" "}
+          (sign in with a Google account) or the{" "}
+          <a href={POW_SEPOLIA_FAUCET_URL} target="_blank" rel="noreferrer">
+            Sepolia PoW faucet
+          </a>{" "}
+          (your browser mines for a few minutes, no account). Neither asks you
+          to hold ETH on Ethereum mainnet first. Gas on Sepolia costs a tiny
+          fraction of a cent, so a little lasts a long time.
+        </li>
+        <li>
+          <strong>Test USDC and EURC</strong>, from{" "}
+          <a href={CIRCLE_FAUCET_URL} target="_blank" rel="noreferrer">
+            Circle&apos;s faucet
+          </a>
+          : pick Ethereum Sepolia and paste the address you use in Gloam.
+        </li>
+        <li>
+          <strong>Test PYUSD and USDG</strong>, from{" "}
+          <a href={PAXOS_FAUCET_URL} target="_blank" rel="noreferrer">
+            Paxos&apos;s faucet
+          </a>
+          , on Ethereum Sepolia.
         </li>
       </ul>
 

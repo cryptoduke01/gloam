@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
-import { baseSepoliaPool, mainnetPool, type MainnetChainId } from "@/lib/mainnet";
-import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
+import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPool, type MainnetChainId } from "@/lib/mainnet";
+import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, ETHEREUM_SEPOLIA_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS } from "@/lib/tokens";
 import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
 import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
 
@@ -34,6 +34,10 @@ const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
 const BASE_MAINNET_LIVE = mainnetPool(8453) !== null;
 /** Ethereum's pool is in once MAINNET_POOLS[1] is filled in (lib/mainnet.ts). */
 const ETHEREUM_LIVE = mainnetPool(1) !== null;
+
+/** Ethereum Sepolia's pool and memo board, once filled in after its deploy (lib/mainnet.ts). */
+const ETHEREUM_SEPOLIA = ethereumSepoliaPool();
+const ETHEREUM_SEPOLIA_MEMO = ethereumSepoliaPayMemo();
 
 const MAINNET_POSEIDON_T3 = "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
 const MAINNET_OWNER = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
@@ -506,9 +510,8 @@ export default function DocsNetworksPage() {
       <p>
         Gloam on Ethereum mainnet is the same vault as on the other mainnets:{" "}
         <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
-        deposit limits and the 0.25% cash-out fee. Ethereum has no Gloam
-        testnet; Base Sepolia runs the same contract and keys, so practise
-        there.{" "}
+        deposit limits and the 0.25% cash-out fee. Its testnet is
+        Ethereum Sepolia, below, on the same contract and keys.{" "}
         {ETHEREUM_LIVE
           ? "Ethereum mainnet is live as beta software."
           : "It is not deployed yet, so the app does not offer it. This section is what to expect."}
@@ -571,6 +574,77 @@ export default function DocsNetworksPage() {
           over into Ethereum (Ethereum stays a chain you can bring money over
           from), and the payment-message board: until it is deployed, a payment
           there goes by claim link or sealed code.
+        </li>
+      </ul>
+
+      <h2 id="ethereum-sepolia">Ethereum Sepolia</h2>
+      <p>
+        Ethereum Sepolia is Ethereum&apos;s testnet. Gloam runs it like Base
+        Sepolia: the mainnet vault (<code>ShieldPoolPayments</code>, the
+        ceremony&apos;s final keys, beta deposit limits and the 0.25% cash-out
+        fee), deployed from the same address and nonce as the other chains,
+        so the vault sits at the same address.{" "}
+        {ETHEREUM_SEPOLIA
+          ? "It is live in the app under Testnet."
+          : "It is not deployed yet, so the app does not offer it. This section is what to expect."}
+      </p>
+      <ul>
+        <li>
+          <strong>Chain ID</strong>, 11155111
+        </li>
+        <li>
+          <strong>RPC</strong>, <code>https://ethereum-sepolia-rpc.publicnode.com</code>
+        </li>
+        <li>
+          <strong>Explorer</strong>, <code>https://sepolia.etherscan.io</code>
+        </li>
+        <li>
+          <strong>Pool</strong>,{" "}
+          {ETHEREUM_SEPOLIA ? (
+            <>
+              <code>{ETHEREUM_SEPOLIA.pool}</code>, deploy block <code>{ETHEREUM_SEPOLIA.deployBlock.toString()}</code>
+            </>
+          ) : (
+            <>Not deployed yet</>
+          )}
+        </li>
+        <li>
+          <strong>Payment-message board</strong>,{" "}
+          {ETHEREUM_SEPOLIA_MEMO ? <code>{ETHEREUM_SEPOLIA_MEMO.pool}</code> : <>Not deployed yet</>}
+        </li>
+        <li>
+          <strong>Assets</strong>, Circle&apos;s test USDC and EURC, Paxos&apos;s
+          test USDG and PYUSD ({ETHEREUM_SEPOLIA_TOKENS.map((t) => t.symbol).join(", ")},
+          6 decimals each) and Sepolia ETH. Tether issues no USDT on Sepolia.
+          Faucets are in the <Link href="/docs/testnet#ethereum">testnet guide</Link>.
+        </li>
+        <li>
+          <strong>Beta limits</strong>, each stablecoin 500 per deposit and
+          25,000 in total; ETH 0.2 per deposit and 10 in total
+        </li>
+      </ul>
+
+      <h3>Integration notes for Ethereum Sepolia</h3>
+      <ul>
+        <li>
+          <strong>It runs the mainnet keys.</strong> Proofs for chain 11155111
+          use the final keys, not the dev keys of the older testnets.
+        </li>
+        <li>
+          <strong>Log reads.</strong> publicnode keeps only about the last
+          10,000 blocks of Sepolia (a day and a half), and rebuilding the vault
+          tree needs every log since the deploy block. Gloam reads Sepolia
+          through Tenderly&apos;s public gateway, which keeps the whole history,
+          with publicnode behind it; use your own RPC if you sync often.
+        </li>
+        <li>
+          <strong>EURC is a euro stablecoin.</strong> The app never counts it as
+          a dollar.
+        </li>
+        <li>
+          <strong>Not on Ethereum Sepolia.</strong> Private swaps and bringing
+          money over from another chain. Payments, payroll, payment requests,
+          claim links and proofs work as on the other chains.
         </li>
       </ul>
 
