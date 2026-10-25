@@ -100,6 +100,49 @@ await check("errors keep this app's viem classes through the split (the relay te
   assert.equal(Object.getPrototypeOf(split), Object.getPrototypeOf(plain), "the same HttpRequestError class as the app's http");
 });
 
+await check("relay on Sepolia with a private RPC: a send it took and dropped is maybe_sent, never handed to the public split", async () => {
+  // GLOAM_RPC_URL_11155111 set: the relay sends through fallback([private, public split]),
+  // and the public side excludes raw sends. The split must carry that exclusion, or
+  // fallback hands the send on and its MethodNotSupported error hides the dropped one,
+  // so the relay would call it a plain RPC error and let the proof be sent again.
+  const { sendFailure } = await import("../src/lib/relay/server");
+  const PRIVATE = "https://private.selftest.invalid/rpc";
+  const before = globalThis.fetch;
+  for (const key of ["ethereum", "base"] as const) {
+    const net = nets.getNetwork(key);
+    const sends: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const body = JSON.parse(String(init?.body ?? "{}")) as { id: number; method: string };
+      const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { headers: { "content-type": "application/json" } });
+      if (body.method === "eth_chainId") return reply(toHex(net.chainId));
+      if (body.method === "eth_sendRawTransaction") {
+        sends.push(url.startsWith(PRIVATE) ? "private" : new URL(url).host);
+        if (url.startsWith(PRIVATE)) throw new TypeError("fetch failed"); // took it, then the connection dropped
+        return reply(`0x${"ee".repeat(32)}`);
+      }
+      throw new Error(`selftest-read-transport: unexpected ${body.method} to ${url}`);
+    }) as typeof fetch;
+    process.env[`GLOAM_RPC_URL_${net.chainId}`] = PRIVATE;
+    try {
+      const t = serverTransport(net, { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+      const err = await t.request({ method: "eth_sendRawTransaction", params: [`0x${"02".repeat(100)}`] }).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(err, `${key}: the dropped send fails`);
+      assert.equal(sendFailure(err).code, "maybe_sent", `${key}: reported maybe_sent, so the proof is not sent again`);
+      assert.deepEqual(sends, ["private"], `${key}: the raw send went to the private RPC only`);
+    } finally {
+      delete process.env[`GLOAM_RPC_URL_${net.chainId}`];
+      globalThis.fetch = before;
+    }
+  }
+  // what fallback reads to skip a transport: the split keeps the fresh RPC's exclusion
+  const backup = readTransport(nets.getNetwork("ethereum"), { methods: { exclude: ["eth_sendRawTransaction"] } })({});
+  assert.deepEqual(backup.config.methods, { exclude: ["eth_sendRawTransaction"] });
+});
+
 await check("wagmi reads every network's chain through readTransport and polls Ethereum every 2 s", () => {
   const wagmi = readFileSync(new URL("../src/lib/wagmi.ts", import.meta.url), "utf8");
   for (const key of ["base", "base-mainnet", "ethereum-mainnet", "ethereum"]) {
