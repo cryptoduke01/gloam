@@ -77,7 +77,7 @@ test("add privately, pay a Gloam address, receive, pay a request and a claim lin
   let t = Date.now();
   const added = await alice.add({ amount: "40" });
   assert.equal(added.status, "done", JSON.stringify(added));
-  log(`add 40 USDC: ${added.hash} (${Date.now() - t} ms, includes the first read of the vault)`);
+  log(`add 40 USDC: ${added.hash} (${Date.now() - t} ms: the deposit proof and two transactions)`);
   let bal = await alice.balance();
   assert.deepEqual((bal.privateBalance as { asset: string; spendable: string }[]).map((b) => [b.asset, b.spendable]), [["USDC", "40"]]);
 
@@ -87,7 +87,7 @@ test("add privately, pay a Gloam address, receive, pay a request and a claim lin
   const paid = await alice.pay({ to: bobTag, amount: "7", note: "job 1" });
   assert.equal(paid.status, "done", JSON.stringify(paid));
   assert.match(String(paid.delivered), /payment-message board/);
-  log(`pay 7 USDC to bob's Gloam address: ${paid.hash} (${Date.now() - t} ms)`);
+  log(`pay 7 USDC to bob's Gloam address: ${paid.hash} (${Date.now() - t} ms, includes the first read of the vault)`);
 
   // 3. Bob finds it on the board and secures it into a note only he knows.
   const got = await bob.checkIncoming();
