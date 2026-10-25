@@ -32,6 +32,7 @@ import { formatUsd } from "@/lib/markets";
 import { approvalsBeforeDeposit, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
+import { createTxLog, depositAfterLostApproval, depositCall } from "@/lib/depositFlow";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
 import { IssuerPolicyRow } from "./IssuerPolicyRow";
@@ -333,6 +334,14 @@ export function ShieldView() {
   });
 
   const handledHash = useRef<string | null>(null);
+  /** Which of this form's transactions each hash is: only the deposit's lost receipt says "your deposit was sent". */
+  const [txLog] = useState(createTxLog);
+  /** A click is being checked and prepared: a second one waits for it. */
+  const submitting = useRef(false);
+  // Declared before the effects that read it, so it is current when they run.
+  useEffect(() => {
+    txLog.handed(hash);
+  }, [hash, txLog]);
 
   const walletBalance = selectedToken
     ? (tokenBal as bigint | undefined)
@@ -381,6 +390,7 @@ export function ShieldView() {
       const nextApproval = queued?.values.shift();
       if (queued && nextApproval !== undefined && pending && network.pool && autoShieldAfterApprove.current) {
         setClearingAllowance(false);
+        txLog.writing("approve");
         writeContract({
           address: queued.token,
           abi: erc20Abi,
@@ -565,8 +575,17 @@ export function ShieldView() {
   }
 
   async function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
-    if (!network.pool) return;
-    const asset = selectedToken ? selectedToken.address : NATIVE_ASSET;
+    // The deposit is the note's: its chain, vault and asset, whatever the form
+    // shows by now (lib/depositFlow depositCall).
+    if (!depositCall(note, network, null)) {
+      setFormError("The network changed before your deposit went out, so nothing was deposited. Switch back and try again.");
+      setPendingKind(null);
+      setPendingNote(null);
+      setApproved(false);
+      pendingShieldArgs.current = null;
+      depositProof.current = null;
+      return;
+    }
     setPendingNote(note);
     setPendingKind("shield");
     // The note's secret is the money: keep it in the browser before anything is
@@ -579,18 +598,18 @@ export function ShieldView() {
     // pools (shieldVerifier unset) plain shield() still works, unchanged.
     if (shieldVerifierLive) {
       try {
-        const proofBytes = await proveDeposit(value, note, commitment, asset);
+        const proofBytes = await proveDeposit(value, note, commitment, note.asset);
         // stored and read back before the wallet is asked: a refused write stops here
         await keepUntilLanded();
+        const call = depositCall(note, network, proofBytes);
+        if (!call) throw new Error("The network changed before your deposit went out, so nothing was deposited. Switch back and try again.");
+        txLog.writing("shield");
         writeContract({
-          address: network.pool,
+          ...call,
           abi: shieldPoolAbi,
-          functionName: "shieldBound",
-          args: [asset, value, commitment, proofBytes],
-          value: selectedToken ? undefined : value,
           gas: gasFor(network.chainId, SHIELD_BOUND_GAS_LIMIT),
           chainId: network.chainId,
-        });
+        } as Parameters<typeof writeContract>[0]);
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Could not prepare your private deposit. Try again."
@@ -611,26 +630,15 @@ export function ShieldView() {
       setPendingNote(null);
       return;
     }
-    if (selectedToken) {
-      writeContract({
-        address: network.pool,
-        abi: shieldPoolAbi,
-        functionName: "shield",
-        args: [selectedToken.address, value, commitment],
-        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
-        chainId: network.chainId,
-      });
-    } else {
-      writeContract({
-        address: network.pool,
-        abi: shieldPoolAbi,
-        functionName: "shield",
-        args: [NATIVE_ASSET, value, commitment],
-        value,
-        gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
-        chainId: network.chainId,
-      });
-    }
+    const call = depositCall(note, network, null);
+    if (!call) return;
+    txLog.writing("shield");
+    writeContract({
+      ...call,
+      abi: shieldPoolAbi,
+      gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
+      chainId: network.chainId,
+    } as Parameters<typeof writeContract>[0]);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -652,6 +660,55 @@ export function ShieldView() {
       return;
     }
 
+    // "Checking…" holds from the click until the approvals are worked out, so a
+    // second click cannot start a second note and approval meanwhile.
+    if (submitting.current) return;
+    submitting.current = true;
+    setChecking(true);
+    let ready: { note: LocalNote; commitment: Hex; steps: bigint[] } | null = null;
+    try {
+      ready = await prepareDeposit(value, network.pool, address);
+    } finally {
+      submitting.current = false;
+      setChecking(false);
+    }
+    if (!ready) return;
+    const { note, commitment, steps } = ready;
+
+    setFormError(null);
+    reset();
+    setShowSuccess(false);
+    setApproved(false);
+    handledHash.current = null;
+    txLog.clear();
+    setSentLabel(`${amount} ${symbol}`);
+    pendingShieldArgs.current = { value, commitment, note };
+    // Proved while any approval is mined, so the deposit goes out as soon as it lands.
+    if (shieldVerifierLive) void proveDeposit(value, note, commitment, note.asset);
+
+    if (selectedToken && steps.length) {
+      autoShieldAfterApprove.current = true;
+      approvalsLeft.current = { token: selectedToken.address, values: steps.slice(1) };
+      setClearingAllowance(steps.length > 1);
+      setPendingKind("approve");
+      setPendingNote(note);
+      sendApprove(selectedToken.address, steps[0]!);
+      return;
+    }
+
+    await executeShield(value, note, commitment);
+  }
+
+  /**
+   * Everything between the click and the first wallet prompt: screening, the
+   * note, and the approvals it needs from an allowance read now. Null when
+   * something stops the deposit (said in the form).
+   */
+  async function prepareDeposit(
+    value: bigint,
+    pool: Address,
+    address: Address
+  ): Promise<{ note: LocalNote; commitment: Hex; steps: bigint[] } | null> {
     // The allowance as the chain has it now, read alongside the screening: the
     // cached one can be from before an approval that already landed, and
     // approving again would cost a wallet prompt and a block for nothing.
@@ -665,20 +722,19 @@ export function ShieldView() {
 
     // Screen the depositing wallet on the server before the wallet signs (on
     // Tempo, also the asset's TIP-403 issuer policy for this deposit).
-    setChecking(true);
     const { allowed, scope, message } = await screenWallets([address], {
       chainId: network.chainId,
       asset: assetAddress,
       flow: "deposit",
-    }).finally(() => setChecking(false));
+    });
     if (!allowed && scope === "asset") {
       setFormError(message ?? SCREEN_BLOCKED_MESSAGE);
-      return;
+      return null;
     }
     if (!allowed) {
       setBlockedAddr(address);
       setFormError(null);
-      return;
+      return null;
     }
 
     let secret: `0x${string}`;
@@ -700,7 +756,7 @@ export function ShieldView() {
     const note: LocalNote = {
       id: `${now}-${commitment.slice(0, 10)}`,
       chainId: network.chainId,
-      pool: network.pool,
+      pool,
       asset: assetAddress,
       amountWei: value.toString(),
       commitment,
@@ -721,36 +777,14 @@ export function ShieldView() {
     const steps = selectedToken ? approvalsBeforeDeposit(selectedToken, await allowanceNow, value) : [];
     if (steps === null) {
       setFormError(`Could not read your ${symbol} approval for the vault. Try again in a moment.`);
-      return;
+      return null;
     }
-
-    setFormError(null);
-    reset();
-    setShowSuccess(false);
-    setApproved(false);
-    handledHash.current = null;
-    setSentLabel(`${amount} ${symbol}`);
-    pendingShieldArgs.current = { value, commitment, note };
-    // Proved while any approval is mined, so the deposit goes out as soon as it lands.
-    if (shieldVerifierLive) void proveDeposit(value, note, commitment, assetAddress);
-
-    if (selectedToken) {
-      if (steps.length) {
-        autoShieldAfterApprove.current = true;
-        approvalsLeft.current = { token: selectedToken.address, values: steps.slice(1) };
-        setClearingAllowance(steps.length > 1);
-        setPendingKind("approve");
-        setPendingNote(note);
-        sendApprove(selectedToken.address, steps[0]!);
-        return;
-      }
-    }
-
-    await executeShield(value, note, commitment);
+    return { note, commitment, steps };
   }
 
   function sendApprove(token: `0x${string}`, value: bigint) {
     if (!network.pool) return;
+    txLog.writing("approve");
     writeContract({
       address: token,
       abi: erc20Abi,
@@ -783,7 +817,8 @@ export function ShieldView() {
   // The receipt wait gave up (a busy network). The deposit may still land: its
   // note is already saved and settles on its own, so stop the spinner and say so.
   useEffect(() => {
-    if (!receiptLost || !hash || pendingKind !== "shield") return;
+    // Only the deposit's own receipt: an approval's lost receipt is handled below.
+    if (!receiptLost || !txLog.isDeposit(hash) || pendingKind !== "shield") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the receipt wait gave up on a busy network: stop waiting and say the deposit may still land
     setPendingNote(null);
     setPendingKind(null);
@@ -795,7 +830,7 @@ export function ShieldView() {
     );
     const t = window.setTimeout(() => refreshNotes(), 15_000);
     return () => window.clearTimeout(t);
-  }, [receiptLost, hash, pendingKind, refreshNotes]);
+  }, [receiptLost, hash, pendingKind, refreshNotes, txLog]);
 
   // The wait for an approval's receipt gave up (a busy RPC). It may have landed
   // anyway: read the allowance and go on to the deposit when it covers it,
@@ -811,13 +846,21 @@ export function ShieldView() {
     void refetchAllow().then((r) => {
       setChecking(false);
       if (!live) return;
-      const read = r.isSuccess ? (r.data as bigint) : undefined;
-      const carryOn = autoShieldAfterApprove.current && pending && more === 0 && read !== undefined && read >= pending.value;
+      const carryOn =
+        pending !== null &&
+        depositAfterLostApproval({
+          depositWanted: autoShieldAfterApprove.current,
+          amount: pending.value,
+          approvalsLeft: more,
+          allowance: r.isSuccess ? (r.data as bigint) : undefined,
+        });
       autoShieldAfterApprove.current = false;
       approvalsLeft.current = null;
       setClearingAllowance(false);
       setPendingKind(null);
-      if (carryOn) {
+      if (carryOn && pending) {
+        // Drop the approval's hash and lost wait first: the deposit gets its own.
+        reset();
         setApproved(true);
         void executeShield(pending.value, pending.note, pending.commitment);
         return;
@@ -1046,6 +1089,8 @@ export function ShieldView() {
                   className="shrink-0"
                   label="Asset to add"
                   value={assetChoice}
+                  // the deposit under way is for the asset it started with
+                  disabled={working || pendingKind !== null}
                   onChange={(v) => {
                     setPickedOn(network.chainId);
                     setAssetChoice(v);
