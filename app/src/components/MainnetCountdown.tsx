@@ -140,7 +140,7 @@ export function MainnetHeadline() {
 export function MainnetLiveNote() {
   return (
     <div className="flex flex-col gap-3">
-      <p className="t-display-l max-w-[22ch]">Private payments, with real money.</p>
+      <p className="t-display-l max-w-[22ch]">Private payments, on mainnet.</p>
       <p className="max-w-[46ch] text-[16px] leading-relaxed text-soft">Live on {liveMainnetNames()}.</p>
     </div>
   );
@@ -173,8 +173,8 @@ export function MainnetTestnetLine() {
   return (
     <p className="max-w-[46ch] text-[15px] leading-relaxed text-soft">
       {live
-        ? "The testnet stays open with play money, for trying things first."
-        : "Until then, everything works on testnet with play money."}
+        ? "The testnet stays open for trying things first."
+        : "Until then, everything works on testnet."}
     </p>
   );
 }

@@ -55,7 +55,7 @@ type MetricsPayload = {
 
 type Tab = "overview" | "revenue" | "relay" | "users" | "events" | "partners" | "testers" | "bugs";
 
-/** The two views: real money, or the testnets' play money. Never mixed. */
+/** The two views: mainnet or the testnets. Never mixed. */
 type Env = "mainnet" | "testnet";
 const ENV_KEY = "gloam.admin.env";
 
@@ -565,7 +565,7 @@ export function AdminDashboard() {
   // Only this side's networks, everywhere below.
   const sideNets = nets.filter((m) => isTest(m) !== isMain);
   const rev = agg?.revenue;
-  // $GLOAM creator fees are real money on Robinhood Chain mainnet; the testnets have none.
+  // $GLOAM creator fees exist on Robinhood Chain mainnet only; the testnets have none.
   const creator = isMain && oc?.creator && "earnedEth" in oc.creator ? oc.creator : null;
   const revenue = rev ? revenueTotals(rev) : null;
   const byNetwork = (
@@ -578,8 +578,8 @@ export function AdminDashboard() {
     .flatMap((m) => m.recent)
     .sort((a, b) => b.ts - a.ts || Number(b.block) - Number(a.block))
     .slice(0, 25);
-  const money = isMain ? "real money" : "play money";
-  // Bridge and swaps move real money only.
+  const money = isMain ? "mainnet" : "testnet";
+  // Bridge and swaps run on mainnet only.
   const shown: Tab = !isMain && tab === "relay" ? "overview" : tab;
   const sideTabs: [Tab, string][] = [
     ["overview", "Overview"],
@@ -669,13 +669,13 @@ export function AdminDashboard() {
                   isMain ? "bg-sealed-soft text-sealed" : "bg-warn-soft text-warn"
                 }`}
               >
-                {isMain ? "Mainnet, real money" : "Testnet, play money"}
+                {isMain ? "Mainnet" : "Testnet"}
               </span>
             </div>
             <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-mute">
               {isMain
                 ? `${chainsOn("mainnet")} mainnet: money people really moved, what it earned, and the product funnel.`
-                : `${chainsOn("testnet")} testnets: play money from testing. None of it counts toward mainnet.`}
+                : `${chainsOn("testnet")} testnets: activity from testing. None of it counts toward mainnet.`}
             </p>
           </div>
           <EnvSwitch env={env} onChange={setEnv} />
@@ -691,7 +691,7 @@ export function AdminDashboard() {
 
         {!isMain && (
           <p className="rounded-xl bg-warn-soft px-4 py-3 text-[14px] leading-relaxed text-warn">
-            You are looking at the testnets. Everything here is play money from testing; switch to Mainnet for real numbers.
+            You are looking at the testnets. Everything here is from testing; switch to Mainnet for the mainnet numbers.
           </p>
         )}
 
@@ -768,7 +768,7 @@ export function AdminDashboard() {
                 sub={`${n(todayTransfers)} today (UTC). Counted, never summed: amounts stay hidden`}
               />
               <Stat
-                label={isMain ? "Fees earned" : "Fees, play money"}
+                label={isMain ? "Fees earned" : "Testnet fees"}
                 value={revenue ? fmtUsd(revenue.total.all) : null}
                 sub={rev ? `${isMain ? "since launch" : "all time"}, ${fmtUsd(rev.owedUsd)} to collect` : "after the next chain read"}
               />
@@ -1391,7 +1391,7 @@ function RevenuePanel({
   }
   const isMain = env === "mainnet";
   const word = isMain ? "Revenue" : "Fees";
-  const kept = isMain ? "fees kept, real money" : "play money, not revenue";
+  const kept = isMain ? "fees kept" : "testnet, not revenue";
   const creatorErr = isMain ? (oc.creator && !("earnedEth" in oc.creator) ? oc.creator.error : (creator?.error ?? null)) : null;
   const bpsOf = (m: NetworkMetrics) => m.revenue?.feeBps;
   const feeLine = nets
@@ -1494,8 +1494,8 @@ function RevenuePanel({
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           {isMain
-            ? "Real money only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. Priced at today's prices: stablecoins at $1, "
-            : "Play money from testing: these fees are not revenue. $GLOAM creator fees exist on mainnet only. Priced at today's prices: stablecoins at $1, "}
+            ? "Mainnet only, counted from the mainnet launch (21 Oct 2026, 13:00 UTC). $GLOAM creator fees are trading fees on the token's launchpad, not Gloam revenue, so they are shown on their own below. Priced at today's prices: stablecoins at $1, "
+            : "Testnet fees from testing are not revenue. $GLOAM creator fees exist on mainnet only. Priced at today's prices: stablecoins at $1, "}
           ETH {oc.prices.ethUsd ? `at ${fmtUsd(oc.prices.ethUsd)}` : "not priced right now"}
           {isMain ? ", $GLOAM from DEX Screener" : ""}. Windows are the last 24 hours, 7 days and 30 days.
         </p>

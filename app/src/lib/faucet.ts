@@ -39,7 +39,7 @@ const FAUCETS: Partial<Record<NetworkKey, FaucetInfo>> = {
   base: {
     title: "Free test USDC, EURC and ETH",
     blurb:
-      "Test USDC and EURC from Circle's faucet (pick Base Sepolia), and test ETH for gas from a Base Sepolia faucet. Play money only.",
+      "Test USDC and EURC from Circle's faucet (pick Base Sepolia), and test ETH for gas from a Base Sepolia faucet.",
     url: "/docs/testnet#base",
     cta: "Faucet guide →",
     assets: "USDC · EURC · ETH",

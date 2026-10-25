@@ -8,7 +8,7 @@ import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
 export const metadata: Metadata = {
   title: "Networks",
   description:
-    "Gloam runs one private core on two chains, Robinhood Chain and Tempo: mainnet with real money, and a testnet on each for free practice. Chain IDs, RPCs, pools, assets, beta limits, and the Tempo integration details.",
+    "Gloam runs one private core on two chains, Robinhood Chain and Tempo, each with a mainnet and a testnet. Chain IDs, RPCs, pools, assets, beta limits, and the Tempo integration details.",
 };
 
 /** A mainnet pool address, or a placeholder until it is filled in on deploy day. */
@@ -47,7 +47,7 @@ export default function DocsNetworksPage() {
   return (
     <DocsLayout
       title="Networks"
-      lede="One private core, two chains. Robinhood Chain and Tempo, each on mainnet with real money, and each with a testnet for free practice."
+      lede="One private core, two chains. Robinhood Chain and Tempo, each with a mainnet and a testnet."
       glance={[
         { label: "Robinhood mainnet", value: "4663" },
         { label: "Tempo mainnet", value: "4217" },
@@ -70,7 +70,7 @@ export default function DocsNetworksPage() {
       <h2 id="mainnet">Mainnet</h2>
       <p>
         Gloam went live on Robinhood Chain and Tempo mainnet on 21 October 2026,
-        13:00 UTC. This is real money and beta software. The mainnet pools
+        13:00 UTC. This is beta software. The mainnet pools
         (<code>ShieldPoolPayments</code>) take shield, private send, cash out
         and proofs, and have no swap code.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link>{" "}
@@ -405,12 +405,12 @@ export default function DocsNetworksPage() {
         Gloam on Base is the same vault as on the other mainnets:{" "}
         <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
         deposit limits and the 0.25% cash-out fee. Base Sepolia comes first as
-        the practice network, then Base mainnet on the same code once it is
+        the testnet, then Base mainnet on the same code once it is
         tested end to end.{" "}
         {BASE_MAINNET_LIVE
-          ? "Both are live: Base mainnet is real money and beta software, Base Sepolia is play money."
+          ? "Both are live: Base mainnet is beta software, Base Sepolia is its testnet."
           : BASE_SEPOLIA_LIVE
-            ? "Base Sepolia is live with test funds (play money). Base mainnet is not deployed yet, so the app does not offer it."
+            ? "Base Sepolia is live as a testnet. Base mainnet is not deployed yet, so the app does not offer it."
             : "Neither is deployed yet, so the app does not offer Base. This section is what to expect."}
       </p>
       <ul>
@@ -467,7 +467,7 @@ export default function DocsNetworksPage() {
       <h3>Integration notes for Base</h3>
       <ul>
         <li>
-          <strong>Base Sepolia runs the mainnet keys.</strong> It is play money,
+          <strong>Base Sepolia runs the mainnet keys.</strong> It is a testnet,
           but the same contract, keys, limits and cash-out fee as Base mainnet,
           so proofs for chain 84532 use the final keys, not the dev keys the
           other testnets use.
@@ -502,8 +502,7 @@ export default function DocsNetworksPage() {
       <h2>Switching networks in the app</h2>
       <p>
         The network selector in the app header lists every Gloam network and
-        marks each one Mainnet or Testnet. Mainnet is real money; a testnet
-        shows test funds. The selector points the app at that chain&apos;s
+        marks each one Mainnet or Testnet. The selector points the app at that chain&apos;s
         pool, explorer and, on a testnet, its faucet. The registry lives in one
         place (<code>networks.ts</code>) so the same shield, private send, cash
         out, and selective-disclosure flows run against whichever chain is
@@ -512,7 +511,7 @@ export default function DocsNetworksPage() {
 
       <h2>Honest status</h2>
       <p>
-        Mainnet on both chains is beta software handling real money. It uses
+        Mainnet on both chains is beta software. It uses
         the final keys from the multi-party ceremony that closed on 17 October
         with 13 contributors, and beta deposit limits cap what the pools take.
         The code was reviewed internally before launch; that review finished on

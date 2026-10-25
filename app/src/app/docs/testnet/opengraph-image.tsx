@@ -2,7 +2,7 @@ import { docsCard } from "@/lib/docsCard";
 import { DropArt } from "@/lib/docsCardArt";
 
 const title = "Practice on testnet";
-const subtitle = "Try every step for free before real money.";
+const subtitle = "Try every step on testnet before mainnet.";
 
 export const alt = `Gloam docs: ${title}. ${subtitle}`;
 export { size, contentType } from "@/lib/docsCard";

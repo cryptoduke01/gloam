@@ -45,7 +45,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/testnet": {
     description: "Practice for free with test funds: wallet setup, faucet, adding funds privately, paying and cashing out.",
-    keywords: ["testnet", "practice", "faucet", "test money", "test funds", "wallet", "metamask", "usdg", "pathusd", "troubleshooting", "demo", "46630", "base sepolia", "84532", "circle faucet", "eurc"],
+    keywords: ["testnet", "practice", "faucet", "test funds", "wallet", "metamask", "usdg", "pathusd", "troubleshooting", "demo", "46630", "base sepolia", "84532", "circle faucet", "eurc"],
     headings: [
       "Demo video",
       "What you can do on testnet",
@@ -235,7 +235,7 @@ const PAGE_META: Record<string, PageMeta> = {
       "Private from the public, not from an operator",
       "What is new and what is not",
       "Security and compliance",
-      "Before you put real money in",
+      "Before you use mainnet",
     ],
   },
   "/docs/compare": {
@@ -291,7 +291,7 @@ const PAGE_META: Record<string, PageMeta> = {
     ],
   },
   "/docs/production": {
-    description: "What was in place before mainnet took real money, and what is still ahead.",
+    description: "What mainnet cleared before launch, and what is still ahead.",
     keywords: ["mainnet", "launch", "ceremony", "keys", "security", "audit", "review", "multisig", "beta limits", "timelock", "checklist"],
     headings: [
       "Why this page exists",

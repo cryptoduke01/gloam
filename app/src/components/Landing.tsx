@@ -306,7 +306,7 @@ export function Landing() {
                 Add money privately, pay anyone, and prove what you hold without
                 showing the number.{" "}
                 <MainnetCopy
-                  live="Real money on mainnet, and a free testnet to practice on first."
+                  live="Live on mainnet, with a testnet to try things first."
                   before="On testnet today, with real contracts."
                 />
               </p>

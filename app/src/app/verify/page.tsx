@@ -282,8 +282,8 @@ function MakeYourOwn({ from }: { from: "link" | "page" }) {
       </AppLink>
       <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
         {live
-          ? "Add money privately, then prove only what you choose. The testnet is free for practice."
-          : "Free on testnet: add some test money privately, then prove only what you choose."}
+          ? "Add money privately, then prove only what you choose. You can try it on testnet first."
+          : "On testnet: add money privately, then prove only what you choose."}
       </p>
     </div>
   );
@@ -655,13 +655,13 @@ export default function VerifyPage() {
                   <>
                     Mainnet proofs use the final keys from the trusted setup, which
                     closed on 17 October with 13 contributors. The testnet keeps
-                    development keys and play money. Gloam was reviewed internally
+                    development keys. Gloam was reviewed internally
                     before launch, and an external audit is planned. It is beta
-                    software handling real money.
+                    software.
                   </>
                 ) : (
                   <>
-                    Testnet with play money, so testnet proofs still use development
+                    Testnet proofs still use development
                     keys. The production trusted setup closed on 17 October with 13
                     contributors, and mainnet uses its final keys. It was reviewed
                     internally before launch, and an external audit is planned.

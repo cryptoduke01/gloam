@@ -46,7 +46,7 @@ cd my-private-app && npm install && npm run dev`}</code>
           TypeScript source, transpiled by your bundler.
         </li>
         <li>
-          <strong>For mainnet (real money):</strong> USDG on Robinhood Chain
+          <strong>For mainnet:</strong> USDG on Robinhood Chain
           (chain id <code>4663</code>) plus a little ETH for gas, or USDC.e,
           pathUSD, USDT0 or OUSD on Tempo (<code>4217</code>), where gas is paid
           in stablecoins. Beta limits cap each stablecoin deposit at 500. See{" "}
@@ -118,7 +118,7 @@ circuitArtifactUrls("shield", 46630);  // dev keys, Robinhood Chain testnet`}</c
 import { createWalletClient, createPublicClient, http, parseUnits, erc20Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-// Robinhood Chain mainnet: real money. null until the pool is published.
+// Robinhood Chain mainnet. null until the pool is published.
 const net = mainnetNetwork("robinhood");
 if (!net) throw new Error("Robinhood Chain mainnet pool not published yet");
 
@@ -271,7 +271,7 @@ await wallet.writeContract({
 
       <h2>Honesty</h2>
       <p>
-        Mainnet is beta software handling real money. It runs on the final keys
+        Mainnet is beta software. It runs on the final keys
         from the 13-contributor ceremony, under beta deposit limits, after an
         internal review; an external audit is planned. The testnets run on
         dev-ceremony keys with test funds. Everything here is real: real proofs,

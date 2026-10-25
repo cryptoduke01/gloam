@@ -9,9 +9,8 @@ export default function CookiesPage() {
     <LegalLayout title="Cookie Policy" updated="October 23, 2026">
       <p>
         This Cookie Policy explains what Gloam keeps on your device and which
-        usage counts it collects on gloam.trade. Gloam runs on mainnet with
-        real money, from its mainnet launch on 21 October 2026, and on
-        testnets with play money.
+        usage counts it collects on gloam.trade. Gloam runs on mainnet
+        (live since 21 October 2026) and on testnets.
       </p>
       <p>
         The short version: we set no advertising or tracking cookies. The only

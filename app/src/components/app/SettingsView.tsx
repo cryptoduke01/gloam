@@ -547,7 +547,7 @@ export function SettingsView() {
                 {faucet ? (
                   <>Test funds: {faucet.assets}</>
                 ) : (
-                  <>Real money: {shieldTokensFor(network.chainId).map((t) => t.symbol).join(" · ")}</>
+                  <>Assets: {shieldTokensFor(network.chainId).map((t) => t.symbol).join(" · ")}</>
                 )}
               </p>
             </div>
@@ -793,8 +793,8 @@ export function SettingsView() {
           <>
             Your browser builds private payments with these files.{" "}
             {network.ceremony === "dev"
-              ? "This network uses test keys, not for real money."
-              : "This network uses the final keys from Gloam's trusted setup, made for real money."}
+              ? "This network uses test keys, for testnet only."
+              : "This network uses the final keys from Gloam's trusted setup."}
           </>
         }
       >

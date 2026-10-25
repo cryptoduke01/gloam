@@ -75,10 +75,8 @@ export function NetworkSelector() {
             {!settled
               ? "\u00a0"
               : network.testnet
-                ? MAINNET_ENABLED
-                  ? "Testnet · test funds"
-                  : "Testnet"
-                : "Mainnet · real money"}
+                ? "Testnet"
+                : "Mainnet"}
           </span>
         </span>
         <svg
@@ -107,8 +105,8 @@ export function NetworkSelector() {
         >
           {(MAINNET_ENABLED
             ? [
-                { title: "Mainnet", hint: "Real money", list: nets.filter((n) => !n.testnet) },
-                { title: "Testnet", hint: "Play money", list: nets.filter((n) => n.testnet) },
+                { title: "Mainnet", hint: "", list: nets.filter((n) => !n.testnet) },
+                { title: "Testnet", hint: "", list: nets.filter((n) => n.testnet) },
               ]
             : [{ title: "Network", hint: "", list: nets }]
           ).map((group, gi) => (

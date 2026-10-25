@@ -182,7 +182,7 @@ const hash = await wallet.writeContract({
 // persist intent.note.secret in the agent's note store, keyed by commitment`}</code>
       </pre>
       <p>
-        That snippet runs on the free testnet, the SDK default. For real money,
+        That snippet runs on the testnet, the SDK default. For mainnet,
         pass a mainnet network (<code>mainnetNetwork(&quot;tempo&quot;)</code> or{" "}
         <code>&quot;robinhood&quot;</code>), its stablecoin as <code>asset</code>,
         and prove with <code>circuitArtifactUrls(&quot;shield&quot;, net.chainId)</code>{" "}
@@ -428,7 +428,7 @@ const hash = await wallet.writeContract({
       <h2>Policy and key custody</h2>
       <p>
         Signing keys live <strong>server-side only</strong> and never enter a
-        model context or a log. Before an agent holds real money on mainnet,
+        model context or a log. Before an agent runs on mainnet,
         swap the test key for a Turnkey server wallet with policy the agent
         cannot override: spend caps, an
         allow-list of contracts and markets, and size privacy always on. An
@@ -446,7 +446,7 @@ const hash = await wallet.writeContract({
         live and proof-gated. Mainnet uses the final keys from the 13-contributor
         ceremony; testnet runs on dev-ceremony keys. The code was reviewed
         internally before launch, and an external audit is planned. Mainnet is
-        beta software with real money, so start an agent on small limits.
+        beta software, so start an agent on small limits.
       </p>
     </DocsLayout>
   );

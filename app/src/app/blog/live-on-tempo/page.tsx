@@ -28,7 +28,7 @@ const GLANCE = [
   { k: "Network", v: "Tempo Moderato testnet" },
   { k: "Asset", v: "PathUSD" },
   { k: "Live today", v: "Add privately, pay, cash out, prove" },
-  { k: "Status", v: "Testnet, play money" },
+  { k: "Status", v: "Testnet" },
 ];
 
 export default function LiveOnTempoPost() {
@@ -91,7 +91,7 @@ export default function LiveOnTempoPost() {
 
       <h2>Honest status</h2>
       <p>
-        This is Tempo&apos;s Moderato testnet, with play money. The proving
+        This is Tempo&apos;s Moderato testnet. The proving
         keys are a development ceremony, so a production multi-party
         ceremony and an external audit are the gate before any mainnet. We
         self-reviewed the contracts across two multi-agent audit passes,

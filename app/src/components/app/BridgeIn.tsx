@@ -831,12 +831,12 @@ function BridgeSheet({
           <p className="mt-4 rounded-2xl bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-soft">
             {MAINNET_ENABLED ? (
               <>
-                Preview. This moves real money to {dest.chain} mainnet, not to this testnet. Switch to {dest.chain} mainnet
+                Preview. This bridges to {dest.chain} mainnet, not to this testnet. Switch to {dest.chain} mainnet
                 to add it privately.
               </>
             ) : (
               <>
-                Preview. This moves real money to {dest.chain} mainnet. The private balance there opens when Gloam goes to
+                Preview. This bridges to {dest.chain} mainnet. The private balance there opens when Gloam goes to
                 mainnet.
               </>
             )}

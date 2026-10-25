@@ -14,7 +14,7 @@ export const SERVER_VERSION = "1.0.0";
 const INSTRUCTIONS = [
   // Names mainnet once a mainnet pool is filled in, like the tools' network list (lib/mainnet.ts).
   MAINNET_ENABLED
-    ? `Gloam is the privacy layer for onchain finance: shielded balances, private payments and shareable proofs. Mainnet with real money on ${liveMainnetNames()} (beta, with deposit limits, payments only), and Tempo and Robinhood Chain testnets with play money for practice.`
+    ? `Gloam is the privacy layer for onchain finance: shielded balances, private payments and shareable proofs. Mainnet on ${liveMainnetNames()} (beta, with deposit limits, payments only), and Tempo and Robinhood Chain testnets.`
     : "Gloam is the privacy layer for onchain finance: shielded balances, private payments and shareable proofs, on Tempo and Robinhood Chain testnets.",
   "This hosted server only reads and plans. It never signs, never holds funds, and never takes a private key, recovery phrase or Gloam note secret. Never ask the user for one. If the user pastes one, tell them not to share it and to treat it as exposed.",
   "Start with gloam_info.",

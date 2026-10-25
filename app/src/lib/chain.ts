@@ -67,7 +67,7 @@ export function formatEth(wei: bigint, digits = 4) {
   if (!Number.isFinite(whole)) return "0";
   if (whole === 0) return "0";
   if (whole < 0.0001) return "<0.0001";
-  // Testnet faucets hand out play-money balances that can run to 1e30+; compact
+  // Testnet faucets hand out balances that can run to 1e30+; compact
   // them so a wallet card never wraps. Precise below a million, K/M/B suffixes,
   // and a clean "1T+" cap above a trillion (nothing real reaches it).
   if (whole >= 1_000_000) {

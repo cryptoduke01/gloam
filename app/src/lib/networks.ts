@@ -84,7 +84,7 @@ export interface GloamNetwork {
   /** The chain's name, the same for its testnet and its mainnet ("Robinhood Chain", "Tempo"). */
   label: string;
   family: ChainFamily;
-  /** Test funds (true) or real money (false). */
+  /** Testnet (true) or mainnet (false). */
   testnet: boolean;
   /**
    * Tokenized stocks: the Markets page, stock holdings and private trade. Only
@@ -175,7 +175,7 @@ export const tempoMainnet = defineChain({
 });
 
 /**
- * Base Sepolia, Base's practice network (an OP Stack L2, gas in ETH). The
+ * Base Sepolia, Base's testnet (an OP Stack L2, gas in ETH). The
  * default RPC is publicnode's: sepolia.base.org caps eth_getLogs at 200 blocks,
  * and the vault tree is rebuilt from logs (publicnode takes 50,000). The
  * official RPC stays second, for wallets that add the chain.
@@ -271,7 +271,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     explorerAddress: (addr) =>
       `${tempoTestnet.blockExplorers.default.url}/address/${addr}`,
   },
-  // Base Sepolia: the practice network for Base, with test funds but the
+  // Base Sepolia: the testnet for Base, with test funds but the
   // mainnet pool (ShieldPoolPayments on the ceremony's final keys, payments
   // only, the same assets and beta deposit limits as Base mainnet, the cash-out
   // fee), so Base mainnet ships on code proven here. Pool from BASE_SEPOLIA_POOL
@@ -296,7 +296,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     status: "live",
     // GloamPayMemo, deployed 2026-10-24 after the vault (no owner, holds nothing, never logs the poster)
     payMemo: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 49_804_175n, emitsPoster: false },
-    note: "Practice network on Base Sepolia, test funds: private USDC, EURC and ETH payments on the mainnet vault.",
+    note: "Testnet on Base Sepolia: private USDC, EURC and ETH payments on the mainnet vault.",
     explorerTx: (hash) => `${baseTestnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseTestnet.blockExplorers.default.url}/address/${addr}`,
   },
@@ -321,7 +321,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     status: "live",
     // GloamPayMemo, deployed 2026-10-23 (no owner, holds nothing, never logs the poster)
     payMemo: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 95_494_392n, emitsPoster: false },
-    note: "Mainnet, real money: private USDG payments, and $GLOAM held privately.",
+    note: "Mainnet: private USDG payments, and $GLOAM held privately.",
     explorerTx: (hash) => `${robinhood.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${robinhood.blockExplorers.default.url}/address/${addr}`,
   },
@@ -344,7 +344,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     status: "live",
     // GloamPayMemo, deployed 2026-10-23 (no owner, holds nothing, never logs the poster)
     payMemo: { address: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", deployBlock: 45_417_629n, emitsPoster: false },
-    note: "Mainnet, real money: private stablecoin payments (USDC.e, pathUSD, USDT0, OUSD).",
+    note: "Mainnet: private stablecoin payments (USDC.e, pathUSD, USDT0, OUSD).",
     explorerTx: (hash) => `${tempoMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${tempoMainnet.blockExplorers.default.url}/address/${addr}`,
   },
@@ -367,7 +367,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     stableAssets: [],
     status: "live",
     payMemo: null,
-    note: "Mainnet, real money: private USDC, EURC, USDT and ETH payments.",
+    note: "Mainnet: private USDC, EURC, USDT and ETH payments.",
     explorerTx: (hash) => `${baseMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseMainnet.blockExplorers.default.url}/address/${addr}`,
   },
@@ -381,7 +381,7 @@ const MAINNET_KEYS: NetworkKey[] = (["robinhood-mainnet", "tempo-mainnet", "base
 /** The testnets: Robinhood Chain and Tempo, and Base Sepolia once its pool is filled in. */
 const TESTNET_KEYS: NetworkKey[] = ["robinhood", "tempo", ...(hasPool("base") ? (["base"] as const) : [])];
 
-/** True once at least one mainnet pool is filled in: the app then labels real money and test funds. */
+/** True once at least one mainnet pool is filled in: the app then labels mainnet and testnet. */
 export const MAINNET_ENABLED = MAINNET_KEYS.length > 0;
 
 /** The network a visitor starts on before mainnet is live (and on the server, always). */

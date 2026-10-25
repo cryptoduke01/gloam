@@ -6,7 +6,7 @@
  * a chain has both, that mainnet is hidden everywhere: the app, the API, the
  * relay, the MCP server, Glim and proofs all act as if it does not exist.
  *
- * BASE_SEPOLIA_POOL is the same for Base Sepolia, Base's practice network: it
+ * BASE_SEPOLIA_POOL is the same for Base Sepolia, Base's testnet: it
  * runs the mainnet pool (ShieldPoolPayments, final keys, beta limits) with test
  * funds, so it is filled in the same way after its deploy (DEPLOY-BASE.md) and
  * hidden until then.

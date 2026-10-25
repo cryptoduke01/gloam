@@ -138,7 +138,7 @@ export default function DocsProductPage() {
         <li>No fake “private success” screens</li>
         <li>No claims past what the contracts actually do</li>
         <li>
-          Real money only on the final ceremony keys, under beta limits, and
+          Mainnet only on the final ceremony keys, under beta limits, and
           with what is still ahead said plainly
         </li>
       </ul>

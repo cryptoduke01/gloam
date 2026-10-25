@@ -55,7 +55,7 @@ export const ONBOARDING_STEPS = [
   {
     id: "faucet",
     title: "Get test funds",
-    body: "Claim free test funds to try everything. It's play money, not real.",
+    body: "Claim free test funds to try everything.",
     href: "external:faucet",
   },
   {

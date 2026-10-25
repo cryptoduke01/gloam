@@ -110,7 +110,7 @@ export const SWAP_SOURCES: Partial<Record<ChainFamily, BridgeChain>> = {
   },
 };
 
-/** The swap on this network's own chain, when it has one: mainnet only, since Relay swaps real money. */
+/** The swap on this network's own chain, when it has one: mainnet only, since Relay only swaps on mainnets. */
 export function swapSource(network: Pick<GloamNetwork, "family" | "chainId">): BridgeChain | null {
   const s = SWAP_SOURCES[network.family];
   return s && s.id === network.chainId ? s : null;

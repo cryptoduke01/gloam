@@ -15,14 +15,14 @@ import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 export const metadata: Metadata = {
   title: "Practice on testnet",
   description:
-    "Practice with Gloam for free on testnet before you use real money on mainnet: wallet setup, faucet, shield, private pay, cash out, demo video, and troubleshooting on Robinhood Chain testnet and Tempo Moderato.",
+    "Practice with Gloam on testnet before you use mainnet: wallet setup, faucet, shield, private pay, cash out, demo video, and troubleshooting on Robinhood Chain testnet and Tempo Moderato.",
 };
 
 export default function DocsTestnetPage() {
   return (
     <DocsLayout
       title="Practice on testnet"
-      lede="Testnet is Gloam's free practice network. Same app and same steps as mainnet, with test funds that have no real value. Try a deposit, a private payment and a cash out here first."
+      lede="Testnet runs the same app and the same steps as mainnet. Try a deposit, a private payment and a cash out here first."
       glance={[
         { label: "App", value: "/app" },
         { label: "Chain ID", value: "46630" },
@@ -41,8 +41,7 @@ export default function DocsTestnetPage() {
       ]}
     >
       <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
-        Testnet is for practice. Its assets have no real-world value, and its
-        proofs use development keys. For real money, pick Robinhood Chain or
+        Testnet proofs use development keys. For mainnet, pick Robinhood Chain or
         Tempo mainnet in the app&apos;s network selector; mainnet uses the final
         keys from the 13-contributor ceremony. Test funds never move to
         mainnet. Network details:{" "}
@@ -153,7 +152,7 @@ export default function DocsTestnetPage() {
         selector, click <strong>Connect wallet</strong>, then use{" "}
         <strong>Switch to Robinhood Chain</strong> if the wallet is on the wrong
         chain. A wallet set to &quot;Robinhood Chain&quot; is often on mainnet
-        (4663), which is real money. The testnet is:
+        (4663). The testnet is:
       </p>
       <ul>
         <li>
@@ -177,7 +176,7 @@ export default function DocsTestnetPage() {
           </a>
         </li>
         <li>
-          <strong>Native currency</strong>, test ETH (no real value)
+          <strong>Native currency</strong>, test ETH
         </li>
       </ul>
       <p>
@@ -206,9 +205,9 @@ export default function DocsTestnetPage() {
       <h3 id="base">Base Sepolia</h3>
       <p>
         {BASE_SEPOLIA_LIVE
-          ? "Gloam also runs on Base Sepolia (chain ID 84532), with play money."
+          ? "Gloam also runs on Base Sepolia (chain ID 84532)."
           : "Base Sepolia (chain ID 84532) is next. It is not in the app yet; this is how it will work."}{" "}
-        It is the practice network for Base, and it runs the mainnet vault: the
+        It is the testnet for Base, and it runs the mainnet vault: the
         final keys, the same deposit limits as Base mainnet (500 USDC or EURC
         per deposit and 25,000 in total, 0.2 ETH per deposit and 10 in total)
         and the 0.25% cash-out fee, all on test funds. It takes test USDC, EURC
@@ -375,7 +374,7 @@ export default function DocsTestnetPage() {
       <h2 id="private-swaps">7b. Private swaps (mainnet)</h2>
       <p>
         Swapping from a private balance runs on Robinhood Chain and Tempo
-        mainnet, under Vault &gt; Swap, with real money. Who swapped stays
+        mainnet, under Vault &gt; Swap. Who swapped stays
         private; the tokens and amounts are public. How it works, what it costs
         and what shows: <Link href="/docs/private-swaps">private swaps</Link>.
       </p>
@@ -406,7 +405,7 @@ export default function DocsTestnetPage() {
         <li>Optional: cash out dust once (public amount, intentional)</li>
         <li>Export note backup (Settings)</li>
         <li>
-          Ready for real money? Pick a mainnet in the network selector and start
+          Ready for mainnet? Pick one in the network selector and start
           small. Beta limits cap each deposit (see{" "}
           <Link href="/docs/chain#mainnet">Networks</Link>).
         </li>
@@ -459,7 +458,7 @@ export default function DocsTestnetPage() {
 
       <h2 id="safety">Safety & non-claims</h2>
       <ul>
-        <li>Testnet holds no real funds. No investment advice.</li>
+        <li>No investment advice.</li>
         <li>
           Privacy tools reduce public visibility; they do not make you invisible
           to law enforcement or fix bad OPSEC.

@@ -62,7 +62,7 @@ export default async function TestersPage() {
               ))}
             </ul>
             <p className="mt-9 text-[13px] text-mute">
-              {live ? "Testing happens on the testnet, with play money." : "Testnet only. You test with play money."}
+              {live ? "Testing happens on the testnet." : "Testnet only."}
             </p>
           </div>
 
