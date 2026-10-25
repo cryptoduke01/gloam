@@ -1,0 +1,191 @@
+/* SDK playground. Three panes on one surface: the app, the code and what a
+   block explorer shows. Phones stack them app, explorer, code, so the
+   explorer sits right above the button that changes it. */
+
+.stage {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "app"
+    "explorer"
+    "code";
+}
+@media (min-width: 768px) {
+  .stage {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    grid-template-areas:
+      "app explorer"
+      "code code";
+    align-items: start;
+  }
+}
+@media (min-width: 1280px) {
+  .stage {
+    grid-template-columns: minmax(240px, 270px) minmax(0, 1fr) minmax(320px, 360px);
+    grid-template-areas: "app code explorer";
+  }
+}
+.app {
+  grid-area: app;
+}
+.code {
+  grid-area: code;
+}
+.explorer {
+  grid-area: explorer;
+}
+
+/* ---------- code ---------- */
+
+.codeBody {
+  max-height: 460px;
+  overflow: auto;
+  padding: 14px 0 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  tab-size: 1.5em;
+  -moz-tab-size: 1.5em;
+}
+@media (min-width: 1280px) {
+  .codeBody {
+    max-height: 560px;
+  }
+}
+.codeBody:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A line collapses to nothing while it is not part of the file on screen, and
+   opens when it is. The row's own height animates, never its opacity. */
+.line {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 380ms var(--ease-out) calc(var(--i, 0) * 16ms),
+    background-color 300ms ease;
+}
+.line > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.collapsed {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows 260ms var(--ease-out),
+    visibility 0s linear 260ms;
+}
+/* Every line as wide as the widest, so a tint runs the full scroll width. */
+.lines {
+  width: max-content;
+  min-width: 100%;
+}
+.row {
+  display: flex;
+  padding-right: 20px;
+  white-space: pre;
+}
+/* Phones wrap long lines instead of scrolling them sideways. */
+@media (max-width: 639.98px) {
+  .lines {
+    width: auto;
+  }
+  .row {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding-right: 16px;
+  }
+}
+.sign {
+  flex: none;
+  width: 28px;
+  padding-left: 12px;
+  color: var(--faint);
+  user-select: none;
+}
+.add {
+  background: var(--sealed-soft);
+}
+.add .sign {
+  color: var(--sealed);
+}
+.del {
+  background: var(--surface);
+}
+.del code,
+.del code :global(*) {
+  color: var(--faint);
+}
+
+/* ---------- explorer ---------- */
+
+.glow {
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+.glowOn {
+  opacity: 1;
+}
+
+/* A value that just changed settles in from a touch below. It starts dimmed,
+   never hidden, and the newest value is the one at rest. */
+.swap {
+  animation: pg-swap 460ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+@keyframes pg-swap {
+  from {
+    opacity: 0.25;
+    transform: translateY(3px);
+  }
+}
+.flashPrivate {
+  animation: pg-flash-private 1600ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+@keyframes pg-flash-private {
+  from {
+    background-color: var(--sealed-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.flashPublic {
+  animation: pg-flash-public 1600ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+@keyframes pg-flash-public {
+  from {
+    background-color: var(--surface);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+/* ---------- steps ---------- */
+
+.spin {
+  animation: pg-spin 900ms linear infinite;
+}
+@keyframes pg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line,
+  .collapsed,
+  .glow {
+    transition: none;
+  }
+  .swap,
+  .flashPrivate,
+  .flashPublic,
+  .spin {
+    animation: none;
+  }
+}
