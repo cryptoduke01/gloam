@@ -244,6 +244,11 @@ if (on) {
     assert.equal(one.isError, false);
     assert.match(one.text, /"chainId": 11155111/);
     assert.match(one.text, /"symbol": "PYUSD"/);
+    // the head RPC, and where to read old blocks
+    assert.match(one.text, /"rpc": "https:\/\/ethereum-sepolia-rpc\.publicnode\.com"/);
+    assert.match(one.text, /"historyRpc": \{\s*"url": "https:\/\/sepolia\.gateway\.tenderly\.co",\s*"recentBlocks": 9000/);
+    const base = await toolJson("gloam_networks", { network: "base" });
+    assert.doesNotMatch(base.text, /historyRpc/, "one RPC keeps everything elsewhere");
     if (memo) assert.match(one.text, new RegExp(`"paymentMessageBoard": "${memo}"`));
     const mpp = await toolJson("gloam_mpp_how_to", { network: "ethereum" });
     assert.equal(mpp.isError, false);

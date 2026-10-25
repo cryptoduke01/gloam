@@ -346,6 +346,11 @@ function networkView(key: NetworkKey, origin: string) {
     status: n.status,
     note: n.note,
     rpc: n.chain.rpcUrls.default.http[0] ?? null,
+    // Where the RPC above keeps only recent blocks (Ethereum Sepolia): read logs and
+    // state older than recentBlocks from historyRpc, and everything else from rpc.
+    ...(n.historyRpc
+      ? { historyRpc: { url: n.historyRpc.url, recentBlocks: Number(n.historyRpc.recentBlocks), use: "Logs, receipts and state older than recentBlocks below the head (the vault tree from deployBlock). It keeps everything but can trail the head by a minute or two, so wait for receipts on rpc." } }
+      : {}),
     explorer: n.chain.blockExplorers?.default.url ?? null,
     pool: n.pool,
     poolExplorer: n.pool ? n.explorerAddress(n.pool) : null,
