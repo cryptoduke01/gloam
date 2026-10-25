@@ -46,6 +46,18 @@ test("the prefix alone, junk after it, or a cut-off address is refused", () => {
   assert.equal(isValidReceiveTag(RECEIVE_TAG_PREFIX + "A".repeat(122)), false);
 });
 
+test("a key with the right header and length but a point off the curve is refused", () => {
+  // one bit of y flipped: it used to pass, and sealing a payment to it failed with "Invalid keyData" after the proof
+  const spki = Buffer.from(good.slice(RECEIVE_TAG_PREFIX.length), "base64url");
+  spki[90]! ^= 1;
+  const offCurve = RECEIVE_TAG_PREFIX + spki.toString("base64url");
+  assert.equal(offCurve.length, good.length);
+  assert.equal(isValidReceiveTag(offCurve), false);
+  assert.equal(isValidRequestTag(offCurve), false);
+  const { rows } = parsePayrollCsv(`name,gloam_address,amount\nAda,${offCurve},10`, USDG);
+  assert.match(rows[0]!.error ?? "", /incomplete or mistyped/);
+});
+
 test("payroll rows with a broken Gloam address are errors in the preview", () => {
   const csv = `name,gloam_address,amount\nAda,gloamr1.invalid,10\nBola,gloamr1.,10\nChi,${good},10\nDayo,${other},5\nEke,,3`;
   const { rows } = parsePayrollCsv(csv, USDG);

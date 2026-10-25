@@ -175,6 +175,26 @@ await rejects(
   "the payer refuses a payTo that is not a receive tag"
 );
 assert(proved === 0, "refused before any proving");
+// The right header and length, but a point off P-256 (one bit of y flipped): it
+// used to pass as a tag and only fail at the seal ("Invalid keyData"), after the
+// proof. Now it is no tag at all, and nothing is proven for it.
+const spki = Buffer.from(payee.tag.slice(RECEIVE_TAG_PREFIX.length).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+spki[90] ^= 1;
+const offCurve = RECEIVE_TAG_PREFIX + b64url(spki);
+assert(offCurve.length === payee.tag.length && offCurve !== payee.tag, "the off-curve tag has a real tag's shape");
+assert(!isReceiveTag(offCurve), "a tag whose key is off the curve is not a receive tag");
+await rejects(() => sealToReceiveTag("x", offCurve), /must be a Gloam receive tag/, "sealing to it is refused plainly, not with a WebCrypto DataError");
+await rejects(
+  async () => buildGloamPaymentRequirements({ amountWei: PRICE, asset: STABLE, payTo: offCurve, resource: "r" }),
+  /payTo must be a Gloam receive tag/,
+  "requirements refuse an off-curve payTo"
+);
+await rejects(
+  () => buildGloamPayment({ requirements: { ...legacyReq, payTo: offCurve }, senderSecretHex: fieldToHex(SECRET), senderNoteAmountWei: NOTE_AMOUNT, path, prove: countingProve }),
+  /requirements\.payTo must be a Gloam receive tag/,
+  "the payer refuses an off-curve payTo"
+);
+assert(proved === 0, "nothing proven for an off-curve payTo");
 // The explicit legacy escape hatch: plain note in the header (unsafe, documented).
 const legacy = await buildGloamPayment({ requirements: legacyReq, senderSecretHex: fieldToHex(SECRET), senderNoteAmountWei: NOTE_AMOUNT, path, prove: countingProve, legacyUnsealed: true });
 assert(legacy.sealed === false && legacy.payload.payload.paymentNote.startsWith("gloamnote1:"), "legacyUnsealed sends a plain note");
