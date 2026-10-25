@@ -81,7 +81,8 @@ Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 ## 2c. Ethereum (ready to deploy, not deployed)
 
 - [x] `script/DeployEthereumMainnet.s.sol` (`1`) on the shared `script/MainnetDeploy.sol`, native
-      ETH allowed, final keys; no testnet of its own (Base Sepolia runs the same path)
+      ETH allowed, final keys; its testnet is Ethereum Sepolia (`script/DeployEthereumSepolia.s.sol`,
+      `11155111`, runbook `DEPLOY-ETHEREUM-SEPOLIA.md`), rehearsed on a fork as the real deployer
 - [x] Assets checked on chain: USDC, USDT, USDG, PYUSD and EURC (6 decimals each) and ETH. 500 /
       25,000 per stablecoin; 0.2 / 10 ETH
 - [x] Fork rehearsal of the whole runbook ends "All checks passed", owner accepts; 8.93M gas
