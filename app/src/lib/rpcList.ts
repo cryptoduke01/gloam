@@ -17,8 +17,10 @@
  * more passes are made only while every failure was a node failure.
  *
  * A URL in NO_LOG_RPCS (lib/networks) is never asked for eth_getLogs: those
- * public RPCs refuse or cap log reads, and a log walk that fell back to one
- * would split itself into hundreds of tiny reads.
+ * public RPCs refuse or cap log reads (a log walk that fell back to one would
+ * split itself into hundreds of tiny reads), or trail the head (the newest
+ * logs would be missing). A URL in NO_SEND_RPCS (one trailing the head) never
+ * takes a send, even while every other RPC in the list is resting.
  *
  * Sends: with `sendTo: "one"` a signed transaction goes to exactly one RPC,
  * the first that is not resting, and never on to another. A copy of a send
@@ -36,7 +38,7 @@ import {
   type HttpTransportConfig,
   type Transport,
 } from "viem";
-import { NO_LOG_RPCS } from "./networks";
+import { NO_LOG_RPCS, NO_SEND_RPCS } from "./networks";
 
 /** How long an RPC that failed as a node is passed over. */
 export const REST_MS = 30_000;
@@ -101,7 +103,8 @@ export type RpcListOptions = {
 /** The RPCs a request may go to, in the order they are asked. */
 export function rpcOrder(list: readonly string[], method: string, now = Date.now()): number[] {
   const all = list.map((_, i) => i);
-  const able = method === "eth_getLogs" ? all.filter((i) => !NO_LOG_RPCS.has(list[i]!)) : all;
+  const barred = method === "eth_getLogs" ? NO_LOG_RPCS : SEND_METHODS.includes(method) ? NO_SEND_RPCS : null;
+  const able = barred ? all.filter((i) => !barred.has(list[i]!)) : all;
   const pool = able.length ? able : all;
   const awake = pool.filter((i) => !isResting(list[i]!, now));
   return awake.length ? awake : pool;

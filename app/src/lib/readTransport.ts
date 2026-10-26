@@ -5,7 +5,8 @@
  *
  * The head side is the chain's public RPCs as one list (lib/rpcList): in
  * order, one that is down passed over for a while, a send to one RPC only with
- * `sendTo: "one"`, no log reads to an RPC in NO_LOG_RPCS. Where the first RPC
+ * `sendTo: "one"`, no log reads to an RPC in NO_LOG_RPCS and no sends to one in
+ * NO_SEND_RPCS (a history RPC is in both: it trails the head). Where the first RPC
  * keeps only recent history (Ethereum Sepolia's publicnode, about 10,000
  * blocks), the network names a historyRpc, and logs, receipts and state older
  * than its `recentBlocks` are read there instead, through one plain `http`:

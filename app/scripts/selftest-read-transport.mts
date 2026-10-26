@@ -31,7 +31,7 @@ const nets = await import("../src/lib/networks");
 const { readTransport, BLOCK_POLL_MS } = await import("../src/lib/readTransport");
 const { publicClientFor } = await import("../src/lib/rhClient");
 const { serverTransport, resetRpcChecks } = await import("../src/lib/serverRpc");
-const { resetRpcRest } = await import("../src/lib/rpcList");
+const { resetRpcRest, restRpc, isResting } = await import("../src/lib/rpcList");
 
 let n = 0;
 function check(name: string, fn: () => void | Promise<void>) {
@@ -228,6 +228,41 @@ await check("the relay's sends with no private RPC: exactly one head RPC, never 
     const t = serverTransport(nets.getNetwork("ethereum"), { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: nets.getNetwork("ethereum").chain });
     await assert.rejects(t.request({ method: "eth_sendRawTransaction", params: [`0x${"02".repeat(100)}`] }));
     assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc"], "a failed send is never sent again elsewhere");
+  });
+});
+
+await check("publicnode resting: sends and recent logs still never go to Tenderly, which trails the head", async () => {
+  const net = nets.getNetwork("ethereum");
+  // every history RPC is barred from list sends and list log reads
+  for (const n of ALL.map((k) => nets.getNetwork(k))) {
+    if (!n.historyRpc) continue;
+    assert.ok(nets.NO_SEND_RPCS.has(n.historyRpc.url) && nets.NO_LOG_RPCS.has(n.historyRpc.url), n.key);
+  }
+  // a send that failed rests publicnode for 30 s; the next send still goes to it, never to Tenderly
+  await withSepoliaRpcs(new Set([PUBLICNODE]), async (asked) => {
+    const t = serverTransport(net, { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+    await assert.rejects(t.request({ method: "eth_sendRawTransaction", params: [`0x${"02".repeat(100)}`] }));
+    assert.ok(isResting(PUBLICNODE), "publicnode rests after failing");
+    await assert.rejects(t.request({ method: "eth_sendRawTransaction", params: [`0x${"03".repeat(100)}`] }));
+    assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc", "ethereum-sepolia-rpc"]);
+  });
+  // publicnode resting but up again: the send goes to it, and so does a recent log read; the head may come from Tenderly
+  await withSepoliaRpcs(new Set(), async (asked) => {
+    restRpc(PUBLICNODE);
+    const t = serverTransport(net, { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+    await t.request({ method: "eth_sendRawTransaction", params: [`0x${"04".repeat(100)}`] });
+    const c = sepoliaClient();
+    await c.getBlockNumber({ cacheTime: 0 });
+    await c.getLogs({ address: "0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef", fromBlock: HEAD_BN - 100n, toBlock: "latest" });
+    assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc"], "the send");
+    assert.deepEqual(asked.filter((a) => a.method === "eth_getLogs").map((a) => a.host), ["ethereum-sepolia-rpc"], "the recent log read");
+    assert.deepEqual(asked.filter((a) => a.method === "eth_blockNumber").map((a) => a.host), ["sepolia"], "a head read may go down the list");
+  });
+  // the browser's vault client too (wagmi and lib/rhClient read through the same list)
+  await withSepoliaRpcs(new Set(), async (asked) => {
+    restRpc(PUBLICNODE);
+    await sepoliaClient().request({ method: "eth_sendRawTransaction", params: [`0x${"05".repeat(100)}`] });
+    assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc"]);
   });
 });
 

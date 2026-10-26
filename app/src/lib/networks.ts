@@ -248,12 +248,29 @@ export const ethereumMainnet = defineChain({
 });
 
 /**
- * Public RPCs above that refuse or cap eth_getLogs (sepolia.base.org takes 200
- * blocks a read, mainnet.base.org none from public callers). They stay in the
- * lists for every other read, and for wallets that add the chain, but a log
- * read never goes to them (lib/rpcList).
+ * Public RPCs above that trail the chain head: a network's history RPC (Ethereum
+ * Sepolia's Tenderly gateway), which keeps every block but showed a new
+ * receipt minutes late. It stays in its chain's list as the last head RPC to
+ * ask, and reads old blocks through lib/readTransport on its own, but never
+ * takes a send or a log read from the list (below).
  */
-export const NO_LOG_RPCS: ReadonlySet<string> = new Set(["https://sepolia.base.org", "https://mainnet.base.org"]);
+const TRAILING_RPCS: readonly string[] = [ETHEREUM_SEPOLIA_HISTORY_RPC.url];
+
+/**
+ * Public RPCs above that a log read from a chain's list never goes to (lib/rpcList):
+ * ones that refuse or cap eth_getLogs (sepolia.base.org takes 200 blocks a read,
+ * mainnet.base.org none from public callers), and ones that trail the head,
+ * where the newest logs would be missing. They stay in the lists for every
+ * other read, and for wallets that add the chain.
+ */
+export const NO_LOG_RPCS: ReadonlySet<string> = new Set(["https://sepolia.base.org", "https://mainnet.base.org", ...TRAILING_RPCS]);
+
+/**
+ * Public RPCs a signed transaction from a chain's list never goes to, even when
+ * every other one is resting: ones that trail the head, where a send would be
+ * seen late or checked against stale state (lib/rpcList).
+ */
+export const NO_SEND_RPCS: ReadonlySet<string> = new Set(TRAILING_RPCS);
 
 const RH_MAINNET_POOL = mainnetPool(4663);
 const TEMPO_MAINNET_POOL = mainnetPool(4217);
