@@ -45,6 +45,9 @@ export interface BridgeChain {
 export const BRIDGE_CHAINS: BridgeChain[] = [
   { id: 1, name: "Ethereum", kind: "evm", tokens: [{ symbol: "USDC", address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", decimals: 6, logo: "/brand/tokens/usdc.png", stable: true }, { symbol: "USDT", address: "0xdac17f958d2ee523a2206206994597c13d831ec7", decimals: 6, logo: "/brand/tokens/usdt.png", stable: true }, { symbol: "USDG", address: "0xe343167631d89b6ffc58b88d6b7fb0228795491d", decimals: 6, logo: "/brand/tokens/usdg.png", stable: true }, { symbol: "PYUSD", address: "0x6c3ea9036406852006290770bedfcaba0e23a0e8", decimals: 6, logo: "/brand/tokens/pyusd.png", stable: true }, { symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }] },
   { id: 8453, name: "Base", kind: "evm", tokens: [{ symbol: "USDC", address: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", decimals: 6, logo: "/brand/tokens/usdc.png", stable: true }, { symbol: "USDT", address: "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2", decimals: 6, logo: "/brand/tokens/usdt.png", stable: true }, { symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }] },
+  // Gloam's own mainnets, so money moves between them: Robinhood Chain into Base, Tempo into Ethereum
+  { id: 4663, name: "Robinhood Chain", kind: "evm", tokens: [{ symbol: "USDG", address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6, logo: "/brand/tokens/usdg.png", stable: true }, { symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }] },
+  { id: 4217, name: "Tempo", kind: "evm", tokens: [{ symbol: "USDC.e", address: "0x20c000000000000000000000b9537d11c60e8b50", decimals: 6, logo: "/brand/tokens/usdc.png", stable: true }] },
   { id: 792703809, name: "Solana", kind: "svm", needsKey: true, tokens: [{ symbol: "USDC", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, logo: "/brand/tokens/usdc.png", stable: true }, { symbol: "USDT", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6, logo: "/brand/tokens/usdt.png", stable: true }, { symbol: "USDG", address: "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH", decimals: 6, logo: "/brand/tokens/usdg.png", stable: true }, { symbol: "PYUSD", address: "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", decimals: 6, logo: "/brand/tokens/pyusd.png", stable: true }, { symbol: "SOL", address: "11111111111111111111111111111111", decimals: 9, logo: "/brand/tokens/sol.png" }] },
   { id: 56, name: "BNB Chain", kind: "evm", tokens: [{ symbol: "USDC", address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", decimals: 18, logo: "/brand/tokens/usdc.png", stable: true }, { symbol: "USDT", address: "0x55d398326f99059ff775485246999027b3197955", decimals: 18, logo: "/brand/tokens/usdt.png", stable: true }, { symbol: "BNB", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/bnb.png" }] },
   { id: 8253038, name: "Bitcoin", kind: "bvm", tokens: [{ symbol: "BTC", address: "bc1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqmql8k8", decimals: 8, logo: "/brand/tokens/btc.png" }] },
@@ -119,6 +122,21 @@ export const SWAP_SOURCES: Partial<Record<ChainFamily, BridgeChain>> = {
   robinhood: {
     id: 4663,
     name: "Robinhood Chain",
+    kind: "evm",
+    swap: true,
+    tokens: [{ symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }],
+  },
+  // ETH to USDC on the same chain (live quotes 2026-10-26: 0.002 ETH gave about 4.64 USDC on both)
+  base: {
+    id: 8453,
+    name: "Base",
+    kind: "evm",
+    swap: true,
+    tokens: [{ symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }],
+  },
+  ethereum: {
+    id: 1,
+    name: "Ethereum",
     kind: "evm",
     swap: true,
     tokens: [{ symbol: "ETH", address: "0x0000000000000000000000000000000000000000", decimals: 18, logo: "/brand/tokens/eth.png" }],
