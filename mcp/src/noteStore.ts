@@ -97,8 +97,8 @@ type StoreData = {
   receiveKey: ReceiveKey | null;
   /** MPP pull payments whose payer's transfer this server submitted: payment nullifier (lowercase) to challenge id. */
   pulls?: Record<string, string>;
-  /** Payments a verify is settling right now, in any process: payment nullifier (lowercase) to when it started. */
-  settling?: Record<string, string>;
+  /** Payments a verify is settling right now, in any process: payment nullifier (lowercase) to when and by whom ("pid:server"). */
+  settling?: Record<string, { at: string; by: string }>;
 };
 
 type StoreFile = {
@@ -347,15 +347,16 @@ export class NoteStore {
   }
 
   /**
-   * Take a payment for settling, under the lock: false while another verify (in this process or another
-   * sharing the store) settles it, unless that one started more than `staleMs` ago (a crash).
+   * Take a payment for settling, under the lock, as `by` ("pid:server"): false while another verify (in
+   * this process or another sharing the store) settles it. A claim is taken back when it is `by`'s own
+   * (left behind by a release that could not be written), its process is gone, or it is `staleMs` old.
    */
-  claimSettle(paymentNullifier: Hex, staleMs: number): boolean {
+  claimSettle(paymentNullifier: Hex, staleMs: number, by: string): boolean {
     const key = paymentNullifier.toLowerCase();
     return this.mutate((d) => {
-      const since = d.settling?.[key];
-      if (since && Date.now() - Date.parse(since) < staleMs) return false;
-      (d.settling ??= {})[key] = new Date().toISOString();
+      const held = d.settling?.[key];
+      if (held && held.by !== by && processAlive(held.by) && Date.now() - Date.parse(held.at) < staleMs) return false;
+      (d.settling ??= {})[key] = { at: new Date(Date.now()).toISOString(), by };
       return true;
     });
   }
@@ -383,6 +384,19 @@ export class NoteStore {
 /** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */
 export function servedPayment(n: StoredNote): boolean {
   return n.served === true || (n.served === undefined && (n.status === "unspent" || n.status === "spent"));
+}
+
+/** Whether the process named in a "pid:server" claim still runs on this machine (unreadable: assume it does). */
+function processAlive(by: string): boolean {
+  const pid = Number(by.split(":")[0]);
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code !== "ESRCH";
+  }
 }
 
 const DEAD_CHECK_MIN_MS = 60 * 1000;
