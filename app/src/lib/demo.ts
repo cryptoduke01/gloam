@@ -204,14 +204,19 @@ function useWalletOnChain() {
       if (want === undefined || walletChain === undefined || walletChain === want) return then();
       setSwitching(true);
       switchChainAsync({ chainId: want as GloamChainId })
-        .then(then, () => setError(new Error(`Switch your wallet to ${nameOf(want)} and try again.`)))
+        // named a chain mismatch: nothing was sent, so what was kept ahead of the send can go (lib/walletErrors)
+        .then(then, () => setError(Object.assign(new Error(`Switch your wallet to ${nameOf(want)} and try again.`), { name: "ChainMismatchError" })))
         .finally(() => setSwitching(false));
     },
     [walletChain, switchChainAsync, nameOf]
   );
   const explain = useCallback(
     (e: Error | null) =>
-      e && CHAIN_MISMATCH.test(e.message) ? new Error(`Your wallet is on another network. Switch it to ${network.chain.name} and try again.`) : e,
+      e && CHAIN_MISMATCH.test(e.message)
+        ? Object.assign(new Error(`Your wallet is on another network. Switch it to ${network.chain.name} and try again.`, { cause: e }), {
+            name: "ChainMismatchError",
+          })
+        : e,
     [network.chain.name]
   );
   const reset = useCallback(() => setError(null), []);

@@ -182,6 +182,13 @@ check("a wallet error after the deposit may have gone out keeps its note; only a
   assert.equal(surelyNotSent({ name: "TimeoutError", message: "The request took too long to respond." }), false);
   assert.equal(surelyNotSent({ name: "Error", message: "Request expired. Please try again." }), false);
   assert.equal(surelyNotSent({ name: "HttpRequestError", message: "HTTP request failed. Status: 502" }), false);
+  // viem wraps a wallet's -32603 internal error as a revert: that can follow a send, so not sure
+  assert.equal(surelyNotSent({ name: "ContractFunctionExecutionError", cause: { name: "ContractFunctionRevertedError", cause: { name: "InternalRpcError", code: -32603 } } }), false);
+  assert.equal(surelyNotSent({ name: "ContractFunctionExecutionError", cause: { name: "ContractFunctionRevertedError" } }), true);
+  // the app's own chain-switch errors (lib/demo) are named so a declined switch still drops the note
+  const demoSrc = readFileSync(new URL("../src/lib/demo.ts", import.meta.url), "utf8");
+  assert.equal((demoSrc.match(/name: "ChainMismatchError"/g) ?? []).length, 2);
+  assert.equal(surelyNotSent(Object.assign(new Error("Switch your wallet to Base and try again."), { name: "ChainMismatchError" })), true);
   // the view drops the deposit's note only under that sure no, and says so otherwise
   const effect = view.slice(view.indexOf("if (!writeError) return;"), view.indexOf("// The receipt wait gave up"));
   assert.ok(effect.length > 0);
