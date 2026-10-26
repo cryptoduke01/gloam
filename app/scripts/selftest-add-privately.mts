@@ -171,4 +171,22 @@ check("Checking… holds until the approvals are worked out, and the asset is fi
   assert.ok(/label="Asset to add"[\s\S]{0,200}disabled=\{working \|\| pendingKind !== null\}/.test(view));
 });
 
+const { surelyNotSent } = await import("../src/lib/walletErrors");
+
+check("a wallet error after the deposit may have gone out keeps its note; only a sure no drops it", () => {
+  // sure: the person said no, or it failed before anything reached the network
+  assert.equal(surelyNotSent({ name: "UserRejectedRequestError" }), true);
+  assert.equal(surelyNotSent({ code: 4001, message: "User rejected the request." }), true);
+  assert.equal(surelyNotSent({ name: "ContractFunctionExecutionError", cause: { name: "ChainMismatchError" } }), true);
+  // not sure: a timeout or a lost reply can come after the wallet sent it
+  assert.equal(surelyNotSent({ name: "TimeoutError", message: "The request took too long to respond." }), false);
+  assert.equal(surelyNotSent({ name: "Error", message: "Request expired. Please try again." }), false);
+  assert.equal(surelyNotSent({ name: "HttpRequestError", message: "HTTP request failed. Status: 502" }), false);
+  // the view drops the deposit's note only under that sure no, and says so otherwise
+  const effect = view.slice(view.indexOf("if (!writeError) return;"), view.indexOf("// The receipt wait gave up"));
+  assert.ok(effect.length > 0);
+  assert.ok(/if \(surelyNotSent\(writeError\)\) dropUnsentNote\(pendingNote\.id\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*else setFormError\(DEPOSIT_MAYBE_SENT\);/.test(effect), "note dropped only on a sure no");
+  assert.equal((effect.match(/dropUnsentNote\(/g) ?? []).length, 1, "no other drop in the write-error effect");
+});
+
 console.log(`add-privately: ${n} passed`);
