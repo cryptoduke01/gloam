@@ -289,7 +289,7 @@ importers:
   packages/game-plugin-gloam:
     dependencies:
       '@gloamtrade/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../sdk
       '@virtuals-protocol/game':
         specifier: ^0.1.14
