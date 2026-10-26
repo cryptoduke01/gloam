@@ -278,3 +278,23 @@ test("a note a failed cash out had tagged is not mistaken for that cash out once
   const got = await fork.client.readContract({ address: BASE_SEPOLIA_USDC, abi: ERC20, functionName: "balanceOf", args: [carol] });
   assert.equal(formatUnits(got, 6), "4.9875");
 });
+
+test("two different payments to the same payee and amount (no label, different notes): the second is never answered with the first's handle", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: alice, state } = await agentWith("retry-invoices", "40");
+  const { agent: bob } = await agentWith("retry-invoices-bob");
+  const bobTag = await bob.address();
+  assert.equal((await alice.add({ amount: "20" })).status, "done");
+  state.armed = true;
+  const first = await alice.pay({ to: bobTag, amount: "3", note: "invoice 1" });
+  assert.equal(first.status, "unconfirmed");
+  assert.equal((await alice.pay({ to: bobTag, amount: "3", note: "invoice 2" })).code, "unconfirmed_payment", "held while invoice 1 may land");
+  await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  const second = await alice.pay({ to: bobTag, amount: "3", note: "invoice 2" });
+  assert.ok(!(second.status === "done" && second.payment === first.payment), JSON.stringify(second));
+  assert.equal(second.code, "earlier_payment_landed", JSON.stringify(second));
+  const third = await alice.pay({ to: bobTag, amount: "3", note: "invoice 2" });
+  assert.equal(third.status, "done", JSON.stringify(third));
+  assert.notEqual(third.payment, first.payment);
+  const got = (await bob.checkIncoming()).received as { amount: string; note: string }[];
+  assert.deepEqual(got.map((g) => g.note).sort(), ["invoice 1", "invoice 2"]);
+});

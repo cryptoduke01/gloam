@@ -969,7 +969,7 @@ export class GloamAgent {
 
     // A payment like this one whose answer was lost may still land: never pay it twice.
     const requestKey = this.requestKeyOf(payTo, asset, amountWei, args.label);
-    const plan = await this.retryPlan(requestKey, amountWei, (n) => ({
+    const plan = await this.retryPlan(requestKey, amountWei, memo || undefined, (n) => ({
       status: "done",
       action: "pay",
       alreadyPaid: true,
@@ -1081,6 +1081,7 @@ export class GloamAgent {
   private async retryPlan(
     requestKey: string,
     amountWei: bigint,
+    memo: string | null | undefined,
     landed: (n: StoredNote) => Outcome | Promise<Outcome>
   ): Promise<{ kind: "new" } | { kind: "same"; input: StoredNote } | { kind: "answer"; outcome: Outcome }> {
     const prior = () =>
@@ -1092,7 +1093,21 @@ export class GloamAgent {
     if (!first) return { kind: "new" };
     await this.refresh().catch(() => undefined);
     const now = this.store.get(first.handle);
-    if (now && now.status !== "pending") return { kind: "answer", outcome: await landed(now) };
+    if (now && now.status !== "pending") {
+      // The earlier one landed. It is this payment only if it carries this note; another payment of the same
+      // amount to the same payee (another invoice) is never answered with it. It is not sent this time either:
+      // asked again, it goes out (the earlier one is settled now).
+      if ((now.memo ?? "") === (memo ?? "")) return { kind: "answer", outcome: await landed(now) };
+      return {
+        kind: "answer",
+        outcome: {
+          status: "refused",
+          code: "earlier_payment_landed",
+          message: `An earlier payment of the same amount to the same payee (${now.handle}${now.memo ? `, note "${now.memo}"` : ""}) has just landed. This one${memo ? ` (note "${memo}")` : ""} was not sent: ask again to send it.`,
+          payment: now.handle,
+        },
+      };
+    }
     const p = now ?? prior();
     if (!p) return { kind: "new" };
     const input = p.spendsHandle ? this.store.get(p.spendsHandle) : undefined;
@@ -1127,7 +1142,7 @@ export class GloamAgent {
     // A link sealed to an address is a payment to that address: the same one is never sent twice while it may land.
     const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, args.label) : undefined;
     const plan = requestKey
-      ? await this.retryPlan(requestKey, amountWei, async (n) => ({
+      ? await this.retryPlan(requestKey, amountWei, memo || undefined, async (n) => ({
           status: "done",
           action: "pay_by_claim_link",
           alreadyPaid: true,
