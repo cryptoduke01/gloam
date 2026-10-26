@@ -7,6 +7,7 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { generateReceiveKey, BASE_SEPOLIA_USDC } from "@gloamtrade/sdk";
+import { NotSentError } from "@gloamtrade/game-plugin-gloam";
 import { pad, toHex, type Hex } from "viem";
 import { ACP_STATUS, CLIENT, PROVIDER, FakeAcp, FakeSession, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
 
@@ -336,5 +337,30 @@ test("a refund callback that never answers does not hold up the provider; its la
   await within(p.retryRefunds(), 2000, "a later round");
   assert.equal(p.status(84532, "70")!.refundOwed, "0");
   assert.equal(calls, 1);
+  assert.equal(toClient(acp), 7_000_000n);
+});
+
+test("a refund call that ran out of time and then says nothing was sent is sent again, once", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp, { pay: noNote });
+  let calls = 0;
+  let fail!: (e: Error) => void;
+  const p = providerFor(f.wallet, {
+    refundTimeoutMs: 50,
+    refund: (to, _t, raw) => {
+      calls++;
+      if (calls === 1) return new Promise<string>((_, reject) => (fail = reject));
+      return Promise.resolve(acp.sent(PROVIDER, to, raw));
+    },
+  });
+  await within(stuckThenRejected(p, acp, "72", r1.tag), 2000, "the rejected job's refund round");
+  assert.ok(p.status(84532, "72")!.refundPending?.lost);
+  fail(new NotSentError("The bundler refused the operation."));
+  await sleep(5);
+  await within(p.retryRefunds(), 2000, "a later round");
+  assert.equal(calls, 2);
+  assert.equal(p.status(84532, "72")!.refundOwed, "0");
   assert.equal(toClient(acp), 7_000_000n);
 });
