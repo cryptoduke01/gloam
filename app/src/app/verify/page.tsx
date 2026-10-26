@@ -133,7 +133,7 @@ const SERVER_HOLDS: { title: string; body: string }[] = [
   },
   {
     title: "The relay",
-    body: "Your IP address and when it sends for you. It never gets a note secret.",
+    body: "Sees your IP address and when it sends for you. It never gets a note secret.",
   },
   {
     title: "Agents",
@@ -497,7 +497,7 @@ export default function VerifyPage() {
                     closed on 17 October with 13 contributors, and Base Sepolia and
                     Ethereum Sepolia use them too. The Robinhood Chain and Tempo
                     testnets keep development keys. Gloam was reviewed internally
-                    before launch, and an external audit is planned. It is beta
+                    before launch, and an external audit is in progress. It is beta
                     software.
                   </>
                 ) : (
