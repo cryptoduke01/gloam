@@ -66,11 +66,13 @@ import {
   ACP_IMPLEMENTATIONS,
   ACP_STATUS,
   EIP1967_IMPLEMENTATION_SLOT,
+  ENTRYPOINT_ABI,
   ERC20_TRANSFER_EVENT,
   FUND_TRANSFER_EVENT_TOPIC,
   FUND_TRANSFER_HOOKS,
   JOB_FUNDED_TOPIC,
   NO_EVALUATOR,
+  USER_OPERATION_EVENT,
   assetToken,
   type AssetTokenLike,
   type JobRoomEntry,
@@ -145,9 +147,11 @@ export type JournalJob = {
    * only once that transaction is on chain with the provider's own transfer to
    * the client in it; until then its amount stays reserved. One whose answer was
    * lost (no hash) is never sent again on its own: `needsOwner` says why, and
-   * the owner settles it with resolveRefund().
+   * the owner settles it with resolveRefund(). `atBlock` is the block it was
+   * sent at; `pin` is what the refund callback said pins it on chain before it
+   * was broadcast (see RefundPin), so its fate can be read back from the chain.
    */
-  refundPending?: { raw: string; at: string; tx?: string; lost?: boolean };
+  refundPending?: { raw: string; at: string; atBlock?: string; tx?: string; lost?: boolean; pin?: JournalPin };
   /** Why a refund waits for the owner (its answer was lost, or it has not landed in an hour). */
   needsOwner?: string;
   /** Principal still owed back to the client, in the asset's units. */
@@ -184,8 +188,59 @@ class Journal {
   }
 }
 
-/** The chain reads the provider makes: jobs(jobId), the JobFunded log and its transaction, the block number. */
-export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber" | "getTransactionReceipt" | "getStorageAt">;
+/**
+ * The chain reads the provider makes: jobs(jobId), the JobFunded log and its
+ * transaction, the block number, and for refunds the transaction, the sender's
+ * nonce and the EntryPoint.
+ */
+export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber" | "getTransactionReceipt" | "getStorageAt" | "getTransaction" | "getTransactionCount">;
+
+/**
+ * What pins a refund on chain, handed over before it is broadcast, so that a
+ * refund whose answer is lost can still be settled from the chain:
+ *
+ *   - `userOp`: a user operation of the provider's smart account: its
+ *     EntryPoint, sender and full nonce (key << 64 | sequence). Give each
+ *     refund a nonce key of its own. Only one operation can ever run with that
+ *     nonce, so the provider reads the EntryPoint: once it ran, its
+ *     UserOperationEvent says whether its calls succeeded and the bundle
+ *     transaction shows the transfer, so it counts or is sent again; until then
+ *     it is held, never sent twice.
+ *   - `eoa`: a transaction from the provider's own address, with its nonce.
+ *     Once the account's nonce moves past it and this transaction was not
+ *     mined, it can never land, and the owner can settle it (resolveRefund).
+ *
+ * The sender must be the provider's address, or the pin is ignored.
+ */
+export type RefundPin = { userOp: { entryPoint: Address; sender: Address; nonce: bigint } } | { eoa: { from: Address; nonce: number } };
+
+/** Handed to the refund callback. */
+export interface RefundContext {
+  /** Call once, after the refund is signed and before it is broadcast, with what pins it on chain. */
+  sending(pin: RefundPin): void;
+}
+
+type JournalPin = { kind: "userOp"; entryPoint: string; sender: string; nonce: string } | { kind: "eoa"; from: string; nonce: string };
+
+/** What became of a refund that was sent: counted with the transaction that moved it, failed (nothing moved), dead (it can never land as sent), or null (the chain cannot say yet). */
+type RefundFate = { kind: "landed"; tx: string } | { kind: "failed"; why: string } | { kind: "dead"; why: string } | null;
+
+/** The refund callback did not answer in time. Its refund may still go out, so this is a lost answer, never "not sent". */
+class RefundTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`The refund call did not answer within ${ms} ms. It may still send the refund.`);
+    this.name = "RefundTimeoutError";
+  }
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expire = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new RefundTimeoutError(ms)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([p, expire]).finally(() => clearTimeout(timer));
+}
 
 export interface PrivatePayoutProviderOptions {
   /** The provider's Gloam engine (its private float pays the payouts; its wallet receives the principal). */
@@ -217,9 +272,17 @@ export interface PrivatePayoutProviderOptions {
    * provider's own transfer to the client in it (its amount stays reserved until
    * then). One that throws is never sent again on its own, unless the error says
    * nothing was sent (NotSentError, or `notSent: true`): it waits for the owner
-   * (refundsNeedingOwner, resolveRefund). Without it, the journal records what is owed.
+   * (refundsNeedingOwner, resolveRefund). Call `ctx.sending(pin)` before it is
+   * broadcast (see RefundPin): then a lost answer is settled from the chain.
+   * Without it, the journal records what is owed.
    */
-  refund?: (client: Address, token: Address, rawAmount: bigint) => Promise<string>;
+  refund?: (client: Address, token: Address, rawAmount: bigint, ctx: RefundContext) => Promise<string>;
+  /**
+   * How long one refund call may take before it counts as a lost answer, so a
+   * call that never answers cannot hold up the provider (its late answer is
+   * still recorded). Default 120 seconds.
+   */
+  refundTimeoutMs?: number;
   /** Adds received money to the private balance once a job completes (never principal still owed to a client). */
   earnings?: EarningsSweeper;
   /** The provider's address on ACP (the job's provider). Default: the Gloam engine's wallet. */
@@ -247,6 +310,8 @@ export class PrivatePayoutProvider {
   private readonly quoting = new Set<string>();
   /** Refund rounds run one at a time, so two can never both send the same refund. */
   private refunds: Promise<void> = Promise.resolve();
+  /** Refund calls that have not answered yet (`key@at`), also after their time ran out. */
+  private readonly refundCalls = new Set<string>();
 
   constructor(private readonly opts: PrivatePayoutProviderOptions) {
     this.journal = new Journal(opts.journalPath ?? null);
@@ -665,6 +730,21 @@ export class PrivatePayoutProvider {
     }
     const jf = await this.mutate(k, (cur) => ({ ...cur, funded: true, fundingUnknown: undefined, ...(received !== null ? { receivedRaw: received.toString() } : {}), blocked: undefined }));
     if (!jf || !ACTIVE.has(jf.state)) return;
+    // That write waited its turn behind any refund round, which can take minutes: read the job again
+    // (its status, and the time left) right before the money moves.
+    let fresh: OnChainJob | null;
+    try {
+      fresh = await this.readJob(session.chainId, session.jobId);
+    } catch (e) {
+      this.log(`job ${session.jobId}: could not read the job on chain again (${safeErrorMessage(e)}); not paying`);
+      return;
+    }
+    const late = fresh ? this.notPayable(session.chainId, jf, fresh) : "the job could not be read on chain again";
+    if (late) {
+      await this.mutate(k, (cur) => ({ ...cur, blocked: late }));
+      this.log(`job ${session.jobId}: not paying: ${late}`);
+      return;
+    }
     await this.payAll(session, jf);
   }
 
@@ -882,6 +962,108 @@ export class PrivatePayoutProvider {
     return moved ? "landed" : "failed";
   }
 
+  /** Whether a transaction is counted as a refund for any job. */
+  private countedAnywhere(tx: string) {
+    return this.journal.all().some(([, o]) => (o.refundTxs ?? []).some((t) => lower(t) === lower(tx)));
+  }
+
+  /** Another job whose refund was sent as this transaction (recorded, not counted yet). */
+  private recordedElsewhere(k: string, tx: string): JournalJob | undefined {
+    return this.journal
+      .all()
+      .find(([key, o]) => key !== k && o.refundPending?.tx && lower(o.refundPending.tx) === lower(tx))?.[1];
+  }
+
+  /** A pin from the refund callback, kept only when its sender is this provider. */
+  private pinFrom(pin: RefundPin): JournalPin | null {
+    const us = lower(this.opts.providerAddress ?? this.opts.wallet.walletAddress ?? "");
+    if ("userOp" in pin) {
+      const u = pin.userOp;
+      if (!us || lower(u.sender) !== us || typeof u.nonce !== "bigint" || u.nonce < 0n) return null;
+      return { kind: "userOp", entryPoint: u.entryPoint, sender: u.sender, nonce: u.nonce.toString() };
+    }
+    const e = pin.eoa;
+    if (!us || lower(e.from) !== us || !Number.isSafeInteger(e.nonce) || e.nonce < 0) return null;
+    return { kind: "eoa", from: e.from, nonce: String(e.nonce) };
+  }
+
+  /** The nonce of a refund transaction sent from the provider's own address (never a bundler's), when the node knows it. */
+  private async eoaPinOf(tx: string): Promise<JournalPin | undefined> {
+    const us = lower(this.opts.providerAddress ?? this.opts.wallet.walletAddress ?? "");
+    try {
+      const t = await this.reader().getTransaction({ hash: tx as Hex });
+      if (!us || lower(t.from) !== us) return undefined;
+      return { kind: "eoa", from: t.from, nonce: String(t.nonce) };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Change the refund in flight (`at`), only while it is still the one waiting. */
+  private patchPending(cur: JournalJob, at: string, patch: Partial<NonNullable<JournalJob["refundPending"]>>): JournalJob | null {
+    if (cur.refundPending?.at !== at) return null;
+    return { ...cur, refundPending: { ...cur.refundPending, ...patch } };
+  }
+
+  /**
+   * What became of a refund that was sent, read from the chain: its own
+   * transaction; else the user operation it was pinned to (EntryPoint nonce,
+   * then its UserOperationEvent and bundle transaction); else, for an EOA
+   * transaction, whether its nonce was used by another transaction.
+   */
+  private async refundFate(j: JournalJob, p: NonNullable<JournalJob["refundPending"]>): Promise<RefundFate> {
+    const raw = BigInt(p.raw);
+    if (p.tx) {
+      const r = await this.refundLanded(j, raw, p.tx);
+      if (r === "landed") return { kind: "landed", tx: p.tx };
+      if (r === "failed") return { kind: "failed", why: `the refund ${p.tx} is on chain without the transfer to the client` };
+    }
+    const pin = p.pin;
+    if (!pin) return null;
+    const reader = this.reader();
+    const fromBlock = BigInt(p.atBlock ?? j.quotedAtBlock ?? "0");
+    try {
+      if (pin.kind === "userOp") {
+        const nonce = BigInt(pin.nonce);
+        const SEQ = (1n << 64n) - 1n;
+        const next = (await reader.readContract({ address: pin.entryPoint as Address, abi: ENTRYPOINT_ABI, functionName: "getNonce", args: [pin.sender as Address, nonce >> 64n] })) as bigint;
+        if ((next & SEQ) <= (nonce & SEQ)) return null; // not run yet: it may still
+        const logs = await reader.getLogs({ address: pin.entryPoint as Address, event: USER_OPERATION_EVENT, args: { sender: pin.sender as Address }, fromBlock, toBlock: "latest" });
+        const ran = logs.find((l) => l.args.nonce === nonce);
+        if (!ran) return null;
+        if (!ran.args.success) return { kind: "failed", why: `the refund's user operation ran in ${ran.transactionHash} and reverted` };
+        const r = await this.refundLanded(j, raw, ran.transactionHash);
+        if (r === "landed") return { kind: "landed", tx: ran.transactionHash };
+        if (r === "failed") return { kind: "failed", why: `the refund's user operation ran in ${ran.transactionHash} without the transfer to the client` };
+        return null;
+      }
+      if (p.tx) {
+        const t = await reader.getTransaction({ hash: p.tx as Hex }).catch(() => null);
+        if (t && t.blockNumber !== null && t.blockNumber !== undefined) return null; // mined: its receipt will say
+      }
+      const next = await reader.getTransactionCount({ address: pin.from as Address, blockTag: "latest" });
+      if (next <= Number(pin.nonce)) return null; // nothing used its nonce yet: it can still be broadcast and land
+      return {
+        kind: "dead",
+        why: p.tx ? `nonce ${pin.nonce} of ${pin.from} was used by another transaction` : `nonce ${pin.nonce} of ${pin.from} has been used`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The provider's transfers of the asset to the client since `fromBlock` that no job counts. Null when the chain cannot say. */
+  private async uncountedTransfersSince(j: JournalJob, fromBlock: bigint): Promise<string[] | null> {
+    const us = this.opts.providerAddress ?? this.opts.wallet.walletAddress;
+    if (!us) return null;
+    try {
+      const logs = await this.reader().getLogs({ address: this.asset().address, event: ERC20_TRANSFER_EVENT, args: { from: us, to: j.client as Address }, fromBlock, toBlock: "latest" });
+      return [...new Set(logs.map((l) => l.transactionHash as string))].filter((t) => !this.countedAnywhere(t));
+    } catch {
+      return null;
+    }
+  }
+
   private async refundRound(keys?: string[]): Promise<void> {
     const a = this.asset();
     for (const [k, j0] of this.journal.all()) {
@@ -911,34 +1093,73 @@ export class PrivatePayoutProvider {
       let refundError = j.refundError;
       let pending = j.refundPending;
       let needsOwner = j.needsOwner;
-      // A refund sent before: it counts only once its own transaction shows the transfer to the client.
-      if (pending?.tx) {
-        const r = await this.refundLanded(j, BigInt(pending.raw), pending.tx);
-        if (r === "landed") {
-          refunded += BigInt(pending.raw);
-          txs.push(pending.tx);
-          this.log(`job ${j.jobId}: the refund ${pending.tx} is on chain`);
+      // A refund sent before: it counts only once the chain shows its transfer to the client.
+      if (pending && (pending.tx || pending.pin)) {
+        const fate = await this.refundFate(j, pending);
+        if (fate?.kind === "landed") {
+          if (this.countedAnywhere(fate.tx) || this.recordedElsewhere(k, fate.tx)) {
+            needsOwner = `The refund's transaction ${fate.tx} is also recorded for another job, so it is not counted here. Check it, then call resolveRefund.`;
+          } else {
+            refunded += BigInt(pending.raw);
+            txs.push(fate.tx);
+            this.log(`job ${j.jobId}: the refund ${fate.tx} is on chain`);
+            pending = undefined;
+            needsOwner = undefined;
+          }
+        } else if (fate?.kind === "failed") {
+          this.log(`job ${j.jobId}: ${fate.why}; nothing moved, so it is sent again`);
           pending = undefined;
           needsOwner = undefined;
-        } else if (r === "failed") {
-          this.log(`job ${j.jobId}: the refund ${pending.tx} is on chain without the transfer to the client; nothing moved, so it is sent again`);
-          pending = undefined;
-          needsOwner = undefined;
+        } else if (fate?.kind === "dead") {
+          needsOwner = `The refund${pending.tx ? ` ${pending.tx}` : ""} can no longer land as sent: ${fate.why}. If the transaction that used that nonce sent the refund, hand it in with resolveRefund({ tx }); if nothing sent it, call resolveRefund({ notSent: true }).`;
         } else if (Date.now() - Date.parse(pending.at) > HOUR_MS) {
-          needsOwner = `The refund ${pending.tx} has not shown up on chain in an hour. It is not sent again: check it, then call resolveRefund.`;
+          needsOwner =
+            pending.pin?.kind === "userOp"
+              ? `The refund's user operation (nonce ${pending.pin.nonce}) has not run in an hour. It is not sent again, and it is counted on its own if it runs.`
+              : pending.tx
+                ? `The refund ${pending.tx} has not shown up on chain in an hour. It is not sent again: check it, then call resolveRefund.`
+                : "The refund's answer was lost and its transaction has not shown up in an hour. It is not sent again: check the wallet's history, then call resolveRefund.";
         }
       } else if (pending?.lost) {
         needsOwner ??= "The refund's answer was lost, so it may or may not have gone out. It is not sent again: check the wallet's history, then call resolveRefund.";
       }
       const owed = due > refunded ? due - refunded : 0n;
       if (owed > 0n && !pending && this.opts.refund) {
-        const started = { raw: owed.toString(), at: new Date().toISOString() };
+        const atBlock = await this.reader()
+          .getBlockNumber()
+          .then((b) => b.toString(), () => undefined);
+        const started = { raw: owed.toString(), at: new Date().toISOString(), ...(atBlock ? { atBlock } : {}) };
         pending = started;
         // Written down before it is sent, so a lost answer is never read as "not sent".
         this.journal.put(k, { ...j, results, refundPending: pending });
+        const call_ = `${k}@${started.at}`;
+        // The pin is written as soon as it is handed over: while this round waits, directly (the round
+        // holds the queue); after the call ran out of time, in turn with the queue.
+        const attempt: { pin?: JournalPin; waiting: boolean } = { waiting: true };
+        const ctx: RefundContext = {
+          sending: (pin) => {
+            if (attempt.pin) return;
+            const jp = this.pinFrom(pin);
+            if (!jp) {
+              this.log(`job ${j.jobId}: the refund's pin is not from this provider's address; ignored`);
+              return;
+            }
+            attempt.pin = jp;
+            if (attempt.waiting) {
+              const cur = this.journal.get(k);
+              const next = cur && this.patchPending(cur, started.at, { pin: jp });
+              if (next) this.journal.put(k, next);
+            } else void this.mutate(k, (cur) => this.patchPending(cur, started.at, { pin: jp }));
+          },
+        };
+        this.refundCalls.add(call_);
+        const call = Promise.resolve().then(() => this.opts.refund!(j.client as Address, a.address, owed, ctx));
         try {
-          const tx = await this.opts.refund(j.client as Address, a.address, owed);
-          pending = { ...started, tx };
+          const tx = String(await withTimeout(call, this.opts.refundTimeoutMs ?? 120_000));
+          attempt.waiting = false;
+          this.refundCalls.delete(call_);
+          const pin = attempt.pin ?? (await this.eoaPinOf(tx));
+          pending = { ...started, ...(pin ? { pin } : {}), tx };
           refundError = undefined;
           this.journal.put(k, { ...j, results, refundPending: pending });
           const r = await this.refundLanded(j, owed, tx);
@@ -955,14 +1176,33 @@ export class PrivatePayoutProvider {
             this.log(`job ${j.jobId}: the refund ${tx} is sent; it counts once it shows up on chain`);
           }
         } catch (e) {
+          attempt.waiting = false;
           refundError = safeErrorMessage(e);
+          if (e instanceof RefundTimeoutError) {
+            // It may still answer: a hash is recorded, a "not sent" clears it; until then nobody may call it unsent.
+            call.then(
+              (tx) =>
+                this.mutate(k, (cur) => {
+                  // A hash after all: the next round reads it from the chain (and says so again if it never shows up).
+                  const next = this.patchPending(cur, started.at, { tx: String(tx), lost: undefined, ...(attempt.pin ? { pin: attempt.pin } : {}) });
+                  return next && { ...next, needsOwner: undefined };
+                }),
+              (late) => (isNotSent(late) ? this.mutate(k, (cur) => (cur.refundPending?.at === started.at && !cur.refundPending.tx ? { ...cur, refundPending: undefined, needsOwner: undefined } : null)) : undefined)
+            )
+              .catch(() => undefined)
+              .finally(() => this.refundCalls.delete(call_));
+          } else this.refundCalls.delete(call_);
           if (isNotSent(e)) {
             pending = undefined; // certainly not sent: tried again on the next round
             this.log(`job ${j.jobId}: the refund was not sent (${refundError}); it is tried again on the next round`);
           } else {
-            pending = { ...started, lost: true };
-            needsOwner = "The refund's answer was lost, so it may or may not have gone out. It is not sent again: check the wallet's history, then call resolveRefund.";
-            this.log(`job ${j.jobId}: the refund's answer was lost (${refundError}); held for the owner, not sent again`);
+            pending = { ...started, ...(attempt.pin ? { pin: attempt.pin } : {}), lost: true };
+            if (attempt.pin) {
+              this.log(`job ${j.jobId}: the refund's answer was lost (${refundError}); it is settled from the chain, never sent again blindly`);
+            } else {
+              needsOwner = "The refund's answer was lost, so it may or may not have gone out. It is not sent again: check the wallet's history, then call resolveRefund.";
+              this.log(`job ${j.jobId}: the refund's answer was lost (${refundError}); held for the owner, not sent again`);
+            }
           }
         }
       } else if (owed > 0n && !this.opts.refund) {
@@ -990,35 +1230,63 @@ export class PrivatePayoutProvider {
    * Settle a refund that waits for the owner.
    *
    * `tx`: a transaction the owner found that sent it. It counts only if it shows
-   * the provider's transfer of that amount to the client, is not already counted
-   * for any job, and, when this refund's own transaction was recorded, is that
-   * transaction.
+   * the provider's transfer of that amount to the client and is not counted for
+   * any job or recorded as another job's refund. When this refund's own
+   * transaction or user operation is known, only that settles it, unless the
+   * chain shows it can no longer land as sent (its EOA nonce was used by another
+   * transaction): then a transaction from after the refund was sent may.
    *
    * `notSent`: the owner is sure nothing went out, and the next round sends it.
-   * Refused while a transaction is recorded for this refund, unless the chain
-   * shows that transaction final without the transfer. acp-node-v2 signs each
-   * user operation with a random nonce key, so an operation that was handed to a
-   * bundler can still land later and nobody can prove it was not sent: use
-   * `notSent` only for a refund whose answer was lost before any transaction
-   * came back, and only when the wallet's history shows nothing.
+   * Refused while the refund call may still answer, and while what was sent may
+   * still land: it is accepted for a refund whose answer was lost with nothing
+   * recorded, for one the chain shows final without the transfer, and for an
+   * EOA refund whose nonce another transaction used, when no uncounted transfer
+   * to the client went out since it was sent. A user operation that has not run
+   * yet can still run, so it is never marked not sent: it is counted, or sent
+   * again, once the EntryPoint shows it ran.
    */
   async resolveRefund(chainId: number, jobId: string, how: { tx: Hex } | { notSent: true }): Promise<JournalJob> {
     const run = this.refunds.then(async () => {
       const k = `${chainId}:${jobId}`;
       const j = this.journal.get(k);
       if (!j?.refundPending) throw new Error(`Job ${jobId} has no refund waiting.`);
-      const raw = BigInt(j.refundPending.raw);
-      const recorded = j.refundPending.tx;
+      const p = j.refundPending;
+      const raw = BigInt(p.raw);
+      const recorded = p.tx;
+      if (this.refundCalls.has(`${k}@${p.at}`)) throw new Error(`The refund call for job ${jobId} is still running and may still send it. Wait for it to answer.`);
+      const fate = recorded || p.pin ? await this.refundFate(j, p) : null;
       if ("notSent" in how) {
-        if (recorded && (await this.refundLanded(j, raw, recorded)) !== "failed") {
-          throw new Error(`The refund was sent as ${recorded}, and the chain does not show it final without the transfer. It may still land, so it is not sent again.`);
+        if (fate?.kind === "landed") throw new Error(`The refund landed in ${fate.tx}; it is counted on the next round.`);
+        if (fate?.kind === "dead") {
+          const since = await this.uncountedTransfersSince(j, BigInt(p.atBlock ?? j.quotedAtBlock ?? "0"));
+          if (since === null) throw new Error("Could not read the transfers to the client since the refund was sent. Try again.");
+          if (since.length) throw new Error(`A transfer to the client went out since the refund was sent (${since.join(", ")}). If it is the refund, hand it in with resolveRefund({ tx }).`);
+        } else if (fate?.kind !== "failed") {
+          if (p.pin?.kind === "userOp") {
+            throw new Error(`The refund's user operation (nonce ${p.pin.nonce}) has not run yet and may still. It is not sent again; it is counted, or sent again, once it runs.`);
+          }
+          if (recorded || p.pin) {
+            throw new Error(`The refund was sent as ${recorded ?? `nonce ${p.pin!.nonce}`}, and the chain does not show it final without the transfer. It may still land, so it is not sent again.`);
+          }
         }
         this.journal.put(k, { ...j, refundPending: undefined, needsOwner: undefined });
         return;
       }
-      const counted = this.journal.all().some(([, other]) => (other.refundTxs ?? []).some((t) => lower(t) === lower(how.tx)));
-      if (counted) throw new Error(`${how.tx} is already counted as a refund.`);
-      if (recorded && lower(recorded) !== lower(how.tx)) throw new Error(`This refund was sent as ${recorded}; only that transaction settles it.`);
+      if (this.countedAnywhere(how.tx)) throw new Error(`${how.tx} is already counted as a refund.`);
+      const other = this.recordedElsewhere(k, how.tx);
+      if (other) throw new Error(`${how.tx} is the refund recorded for job ${other.jobId}; it settles that refund, not this one.`);
+      if (fate?.kind === "landed" && lower(fate.tx) !== lower(how.tx)) throw new Error(`This refund landed in ${fate.tx}; only that transaction settles it.`);
+      if (fate === null) {
+        if (recorded && lower(recorded) !== lower(how.tx)) throw new Error(`This refund was sent as ${recorded}; only that transaction settles it, unless the chain shows it can no longer land.`);
+        if (p.pin?.kind === "userOp") throw new Error(`The refund's user operation (nonce ${p.pin.nonce}) has not run yet and may still; only it settles this refund.`);
+      }
+      // What was sent moved nothing or can never land: the owner's own refund must come after it.
+      if ((fate?.kind === "dead" || fate?.kind === "failed") && p.atBlock) {
+        const r = await this.reader()
+          .getTransactionReceipt({ hash: how.tx })
+          .catch(() => null);
+        if (!r || r.blockNumber < BigInt(p.atBlock)) throw new Error(`${how.tx} is not on chain after the refund was sent.`);
+      }
       if ((await this.refundLanded(j, raw, how.tx)) !== "landed") throw new Error(`${how.tx} does not show this provider sending ${raw} to the client.`);
       const refunded = BigInt(j.refundedRaw ?? "0") + raw;
       const due = BigInt(j.refundDueRaw ?? "0");

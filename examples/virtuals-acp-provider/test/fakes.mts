@@ -35,25 +35,50 @@ const ACP_ADDRESS = "0x0b93793923CD5De81850aF8604a233f3f24d461e";
  */
 export class FakeAcp {
   jobs = new Map<string, ChainJob>();
-  receipts = new Map<string, { logs: { address: string; topics: Hex[]; data: Hex }[] }>();
-  /** Token transfers on chain (refunds the provider sent). */
-  transfers: { from: string; to: string; value: bigint; transactionHash: Hex }[] = [];
+  receipts = new Map<string, { logs: { address: string; topics: Hex[]; data: Hex }[]; blockNumber?: bigint }>();
+  /** Token transfers on chain (refunds the provider sent), with the block they landed in (default 100). */
+  transfers: { from: string; to: string; value: bigint; transactionHash: Hex; blockNumber?: bigint }[] = [];
+  /** The latest block: transfers, transactions and user operations made from here on land in it. */
+  head = 100n;
+  /** Transactions the node knows: their sender, nonce, and block once mined (null while pending). */
+  txs = new Map<string, { from: string; nonce: number; blockNumber: bigint | null }>();
+  /** Each account's next nonce at the latest block. */
+  nonces = new Map<string, number>();
+  /** User operations the EntryPoint ran: sender, full nonce, whether its calls succeeded, its bundle transaction. */
+  userOps: { sender: string; nonce: bigint; success: boolean; transactionHash: Hex; blockNumber: bigint }[] = [];
   /** When set, every getLogs call throws (an RPC that is down). */
   logsDown = false;
   reads = 0;
   readContract = async ({ functionName, args }: { functionName: string; args?: unknown[] }) => {
+    if (functionName === "getNonce") {
+      // EntryPoint.getNonce(sender, key): the key and the next sequence number for it.
+      const [sender, key] = args as [string, bigint];
+      const used = this.userOps.filter((u) => u.sender.toLowerCase() === sender.toLowerCase() && u.nonce >> 64n === key).map((u) => u.nonce & (2n ** 64n - 1n));
+      const next = used.length ? used.reduce((a, b) => (a > b ? a : b)) + 1n : 0n;
+      return (key << 64n) | next;
+    }
     if (functionName !== "jobs") throw new Error(`fake ACP: no ${functionName}`);
     this.reads++;
     const j = this.jobs.get(String(args![0]));
     if (!j) return ["0x0000000000000000000000000000000000000000", 0, "0x0000000000000000000000000000000000000000", 0, NO_EVALUATOR, NO_EVALUATOR, 0n, ""];
     return [j.client, j.status, j.provider, j.expiredAt, j.evaluator, j.hook, j.budget, j.description];
   };
-  getLogs = async ({ event, args }: { event?: { name?: string }; args?: { jobId?: bigint; from?: string; to?: string } }) => {
+  getLogs = async ({ event, args, fromBlock }: { event?: { name?: string }; args?: { jobId?: bigint; from?: string; to?: string; sender?: string }; fromBlock?: bigint }) => {
     if (this.logsDown) throw new Error("HTTP request failed. Status: 429");
+    const since = (b: bigint | undefined) => fromBlock === undefined || (b ?? 100n) >= fromBlock;
     if (event?.name === "Transfer") {
       return this.transfers
-        .filter((t) => t.from.toLowerCase() === String(args?.from).toLowerCase() && t.to.toLowerCase() === String(args?.to).toLowerCase())
-        .map((t) => ({ args: { from: t.from, to: t.to, value: t.value }, transactionHash: t.transactionHash }));
+        .filter((t) => t.from.toLowerCase() === String(args?.from).toLowerCase() && t.to.toLowerCase() === String(args?.to).toLowerCase() && since(t.blockNumber))
+        .map((t) => ({ args: { from: t.from, to: t.to, value: t.value }, transactionHash: t.transactionHash, blockNumber: t.blockNumber ?? 100n }));
+    }
+    if (event?.name === "UserOperationEvent") {
+      return this.userOps
+        .filter((u) => u.sender.toLowerCase() === String(args?.sender).toLowerCase() && since(u.blockNumber))
+        .map((u) => ({
+          args: { userOpHash: pad(toHex(u.nonce & 0xffffn), { size: 32 }), sender: u.sender, paymaster: NO_EVALUATOR, nonce: u.nonce, success: u.success, actualGasCost: 0n, actualGasUsed: 0n },
+          transactionHash: u.transactionHash,
+          blockNumber: u.blockNumber,
+        }));
     }
     const j = this.jobs.get(String(args?.jobId));
     return j?.funded ? [{ args, transactionHash: j.fundTx }] : [];
@@ -61,9 +86,15 @@ export class FakeAcp {
   getTransactionReceipt = async ({ hash }: { hash: Hex }) => {
     const r = this.receipts.get(hash);
     if (!r) throw new Error("receipt not found");
-    return { status: "success" as const, blockNumber: 100n, ...r };
+    return { status: "success" as const, ...r, blockNumber: r.blockNumber ?? 100n };
   };
-  getBlockNumber = async () => 100n;
+  getBlockNumber = async () => this.head;
+  getTransaction = async ({ hash }: { hash: Hex }) => {
+    const t = this.txs.get(hash);
+    if (!t) throw new Error(`Transaction with hash "${hash}" could not be found.`);
+    return { hash, from: t.from, nonce: t.nonce, blockNumber: t.blockNumber };
+  };
+  getTransactionCount = async ({ address }: { address: string }) => this.nonces.get(address.toLowerCase()) ?? 0;
   /**
    * The client funds: on chain the job is Funded, JobFunded was emitted, and the hook moved `moved`
    * (default: the fund request the provider set) from the client to the provider.
@@ -91,9 +122,32 @@ export class FakeAcp {
   /** A refund that went out on chain: the token's Transfer, in its own transaction. */
   sent(from: string, to: string, value: bigint) {
     const transactionHash = `0x${(0xe00000 + this.transfers.length).toString(16).padStart(64, "0")}` as Hex;
-    this.transfers.push({ from, to, value, transactionHash });
+    this.transfers.push({ from, to, value, transactionHash, blockNumber: this.head });
     const addr = (a: string) => pad(a as Hex, { size: 32 });
-    this.receipts.set(transactionHash, { logs: [{ address: BASE_SEPOLIA_USDC, topics: [TRANSFER_TOPIC, addr(from), addr(to)], data: toHex(value, { size: 32 }) }] });
+    this.receipts.set(transactionHash, { logs: [{ address: BASE_SEPOLIA_USDC, topics: [TRANSFER_TOPIC, addr(from), addr(to)], data: toHex(value, { size: 32 }) }], blockNumber: this.head });
+    return transactionHash;
+  }
+  /** A transfer sent from an EOA with this nonce, mined in the latest block (the account's nonce moves past it). */
+  sentWithNonce(from: string, to: string, value: bigint, nonce: number) {
+    const hash = this.sent(from, to, value);
+    this.txs.set(hash, { from, nonce, blockNumber: this.head });
+    this.nonces.set(from.toLowerCase(), Math.max(nonce + 1, this.nonces.get(from.toLowerCase()) ?? 0));
+    return hash;
+  }
+  /**
+   * The EntryPoint runs a user operation of `sender` with this full nonce, in its own bundle transaction.
+   * With `transfer` and success, the operation moved that much of the asset from the sender.
+   */
+  ranUserOp(sender: string, nonce: bigint, success: boolean, transfer?: { to: string; value: bigint }) {
+    const transactionHash = `0x${(0xb00000 + this.userOps.length).toString(16).padStart(64, "0")}` as Hex;
+    const addr = (a: string) => pad(a as Hex, { size: 32 });
+    const logs: { address: string; topics: Hex[]; data: Hex }[] = [];
+    if (success && transfer) {
+      this.transfers.push({ from: sender, to: transfer.to, value: transfer.value, transactionHash, blockNumber: this.head });
+      logs.push({ address: BASE_SEPOLIA_USDC, topics: [TRANSFER_TOPIC, addr(sender), addr(transfer.to)], data: toHex(transfer.value, { size: 32 }) });
+    }
+    this.receipts.set(transactionHash, { logs, blockNumber: this.head });
+    this.userOps.push({ sender, nonce, success, transactionHash, blockNumber: this.head });
     return transactionHash;
   }
   /** The ACP proxy's EIP-1967 implementation slot (the audited implementation unless a test upgrades it). */
@@ -140,6 +194,8 @@ export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: b
       getLogs: (q: never) => acp.getLogs(q),
       getBlockNumber: () => acp.getBlockNumber(),
       getTransactionReceipt: (q: { hash: Hex }) => acp.getTransactionReceipt(q),
+      getTransaction: (q: { hash: Hex }) => acp.getTransaction(q),
+      getTransactionCount: (q: { address: string }) => acp.getTransactionCount(q),
       getStorageAt: () => acp.getStorageAt(),
     },
     openSealed: (s: string) => openSealedTicket(s, provider),

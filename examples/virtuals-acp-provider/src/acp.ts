@@ -121,6 +121,29 @@ export const JOB_FUNDED_TOPIC = "0xe3fbcc1ea1bdc559ec7f0347efde7655e58b5f45a30b0
 /** ERC-20 Transfer(from, to, value). */
 export const ERC20_TRANSFER_EVENT = { type: "event", name: "Transfer", inputs: [{ name: "from", type: "address", indexed: true }, { name: "to", type: "address", indexed: true }, { name: "value", type: "uint256", indexed: false }] } as const;
 
+/** The ERC-4337 EntryPoint v0.7 (the ACP smart wallet's user operations run through it). */
+export const ENTRYPOINT_V07: Address = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
+
+/** EntryPoint.getNonce(sender, key): the key and the next sequence number for it (key << 64 | seq). */
+export const ENTRYPOINT_ABI = [
+  { type: "function", name: "getNonce", stateMutability: "view", inputs: [{ name: "sender", type: "address" }, { name: "key", type: "uint192" }], outputs: [{ name: "nonce", type: "uint256" }] },
+] as const;
+
+/** UserOperationEvent: one per user operation the EntryPoint ran, with its full nonce and whether its calls succeeded. */
+export const USER_OPERATION_EVENT = {
+  type: "event",
+  name: "UserOperationEvent",
+  inputs: [
+    { name: "userOpHash", type: "bytes32", indexed: true },
+    { name: "sender", type: "address", indexed: true },
+    { name: "paymaster", type: "address", indexed: true },
+    { name: "nonce", type: "uint256", indexed: false },
+    { name: "success", type: "bool", indexed: false },
+    { name: "actualGasCost", type: "uint256", indexed: false },
+    { name: "actualGasUsed", type: "uint256", indexed: false },
+  ],
+} as const;
+
 /** The optParams of setBudget and fund on a fund-transfer job: (token, amount, destination). Same as acp-node-v2's hookEncoding.ts. */
 export function encodeFundTransfer(token: Address, amount: bigint, destination: Address): Hex {
   return encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "address" }], [token, amount, destination]);
