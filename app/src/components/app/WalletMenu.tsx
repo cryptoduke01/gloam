@@ -30,12 +30,14 @@ import { WALLETCONNECT_ID, prefersWalletConnect } from "@/lib/walletConnect";
 import { useNetwork } from "./NetworkProvider";
 import { TURNKEY_ENABLED } from "./TurnkeyEmbeddedProvider";
 import { ClientOnly } from "./ClientOnly";
-import { WalletConnectSheet } from "./WalletConnectSheet";
 
 // Passkey sign-in ships only when Turnkey is switched on.
 const TurnkeyHeaderSignIn = dynamic(() =>
   import("./TurnkeyHeaderSignIn").then((m) => m.TurnkeyHeaderSignIn),
 );
+
+// The wallet-app sheet (and its animation library) loads the first time it opens, not with every app page.
+const WalletConnectSheet = dynamic(() => import("./WalletConnectSheet").then((m) => m.WalletConnectSheet), { ssr: false });
 
 /**
  * Where the wallet control sits, which sets its shape:
@@ -80,6 +82,8 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
     { mounted: false, auto: "inline", wc: false }
   );
   const [wcOpen, setWcOpen] = useState(false);
+  // mounted from its first opening on, so it can animate out when it closes
+  const [wcShown, setWcShown] = useState(false);
   const closeWc = useCallback(() => setWcOpen(false), []);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -120,10 +124,13 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   const canUseWallet = wc || Boolean(walletConnector);
   // A browser wallet connects in place; with none here, a wallet app does.
   function openWallet() {
-    if (wc) setWcOpen(true);
+    if (wc) {
+      setWcShown(true);
+      setWcOpen(true);
+    }
     else if (walletConnector) connect({ connector: walletConnector });
   }
-  const sheet = wc ? <WalletConnectSheet open={wcOpen} onClose={closeWc} /> : null;
+  const sheet = wc && wcShown ? <WalletConnectSheet open={wcOpen} onClose={closeWc} /> : null;
   // Passkey sign-in (Tempo Wallet) is offered on Tempo, where it lives.
   const passkeyConnector =
     network.key === "tempo" ? connectors.find((c) => isTempoWallet(c)) : undefined;
