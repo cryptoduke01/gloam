@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   );
   if (!rate.allowed) return fail(429, "Too many tries. Wait a minute.", { "Retry-After": String(rate.retryAfterSec) });
 
-  if (typeof body.network !== "string" || !isNetworkKey(body.network)) return fail(400, "Pick Robinhood Chain or Tempo.");
+  if (typeof body.network !== "string" || !isNetworkKey(body.network)) return fail(400, "Pick a Gloam network.");
   const network = getNetwork(body.network);
   const dest = BRIDGE_DESTINATIONS[network.family];
   if (!dest) return fail(400, `Bringing money over isn't on ${network.label} yet.`);
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
   const chain = swap && Number(body.chainId) === swap.id ? swap : bridgeChain(Number(body.chainId));
   const token = chain && typeof body.symbol === "string" ? bridgeToken(chain, body.symbol) : null;
   if (!chain || !token) return fail(400, "Pick where the money is coming from.");
+  if (!chain.swap && chain.id === dest.chainId) return fail(400, `The money is already on ${dest.chain}. Add it privately from your wallet.`);
 
   const recipient = typeof body.recipient === "string" ? body.recipient : "";
   if (!isAddress(recipient)) return fail(400, "Connect a wallet to receive the money.");
