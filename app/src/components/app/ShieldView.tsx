@@ -30,6 +30,7 @@ import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
 import { approvalsBeforeDeposit, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { surelyNotSent } from "@/lib/walletErrors";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { createTxLog, depositAfterLostApproval, depositCall, networkMovedMessage, type DepositCall } from "@/lib/depositFlow";
@@ -54,6 +55,10 @@ import { TempoFaucetButton } from "./TempoFaucetButton";
 
 type TxKind = "shield" | "approve" | "pull" | null;
 type AssetChoice = "eth" | string; // eth | token id
+
+/** A wallet error that may have come after the deposit went out (a timeout, a lost reply): the note is kept. */
+export const DEPOSIT_MAYBE_SENT =
+  "Your wallet answered with an error, but the deposit may still have gone out. It's saved in this browser and shows in your private balance if it lands. Check your wallet's activity before trying again.";
 
 export function ShieldView() {
   const { address, isConnected, chainId, demo } = useAppAccount();
@@ -836,9 +841,15 @@ export function ShieldView() {
   // Clear in-memory pending on wallet reject / failed write
   useEffect(() => {
     if (!writeError) return;
-    if (pendingKind === "shield" && pendingNote) dropUnsentNote(pendingNote.id);
+    // The deposit's note goes only when the wallet surely never sent it (lib/walletErrors).
+    // A timeout or a lost reply can come after the wallet already sent it: then the note
+    // stays saved and settles once the chain shows it (lib/claimSweep).
+    if (pendingKind === "shield" && pendingNote) {
+      if (surelyNotSent(writeError)) dropUnsentNote(pendingNote.id);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the wallet answered with an error after the deposit may have gone out: say the note is kept
+      else setFormError(DEPOSIT_MAYBE_SENT);
+    }
     if (pendingKind === "shield" || pendingKind === "approve") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- the wallet refused or the write failed: drop the unsent note and stop waiting
       setPendingNote(null);
       setPendingKind(null);
       setApproved(false);
