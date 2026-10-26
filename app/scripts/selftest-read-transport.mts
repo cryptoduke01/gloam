@@ -30,7 +30,8 @@ globalThis.fetch = (async (url: unknown) => {
 const nets = await import("../src/lib/networks");
 const { readTransport, BLOCK_POLL_MS } = await import("../src/lib/readTransport");
 const { publicClientFor } = await import("../src/lib/rhClient");
-const { serverTransport } = await import("../src/lib/serverRpc");
+const { serverTransport, resetRpcChecks } = await import("../src/lib/serverRpc");
+const { resetRpcRest } = await import("../src/lib/rpcList");
 
 let n = 0;
 function check(name: string, fn: () => void | Promise<void>) {
@@ -64,7 +65,7 @@ await check("Ethereum Sepolia: publicnode at the head, Tenderly for blocks older
   assert.equal(readTransport(s)({}).config.type, "gloamRead");
 });
 
-await check("every other network: one RPC, read as before", () => {
+await check("every other network: its public RPC list alone, as before", () => {
   for (const key of ALL.filter((k) => k !== "ethereum")) {
     const net = nets.getNetwork(key);
     assert.equal(net.historyRpc, null, key);
@@ -143,12 +144,100 @@ await check("relay on Sepolia with a private RPC: a send it took and dropped is 
   assert.deepEqual(backup.config.methods, { exclude: ["eth_sendRawTransaction"] });
 });
 
-await check("wagmi reads every network's chain through readTransport and polls Ethereum every 2 s", () => {
-  const wagmi = readFileSync(new URL("../src/lib/wagmi.ts", import.meta.url), "utf8");
-  for (const key of ["base", "base-mainnet", "ethereum-mainnet", "ethereum"]) {
-    assert.ok(wagmi.includes(`readTransport(getNetwork("${key}"), { batch: { wait: 16 } })`), key);
+// ------------------------------------------------------------------ the real transports, fetch stubbed
+
+const PUBLICNODE = "https://ethereum-sepolia-rpc.publicnode.com";
+const TENDERLY = "https://sepolia.gateway.tenderly.co";
+const HEAD_BN = 12_100_000n;
+type Asked = { host: string; method: string; from?: bigint; to?: string };
+async function withSepoliaRpcs(down: Set<string>, fn: (asked: Asked[]) => Promise<void>) {
+  const asked: Asked[] = [];
+  const before = globalThis.fetch;
+  resetRpcRest();
+  resetRpcChecks();
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = (typeof input === "string" ? input : input instanceof URL ? input.href : input.url).replace(/\/$/, "");
+    const body = JSON.parse(String(init?.body ?? "{}")) as { id: number; method: string; params?: unknown[] } | { id: number; method: string; params?: unknown[] }[];
+    const list = Array.isArray(body) ? body : [body];
+    for (const r of list) {
+      const f = r.params?.[0] as { fromBlock?: string; toBlock?: string } | undefined;
+      asked.push({ host: new URL(url).host.split(".")[0]!, method: r.method, ...(r.method === "eth_getLogs" ? { from: BigInt(f!.fromBlock!), to: f!.toBlock } : {}) });
+    }
+    if (down.has(url)) return new Response("busy", { status: 503 });
+    const out = list.map((r) => {
+      const result =
+        r.method === "eth_chainId" ? toHex(11155111) :
+        r.method === "eth_blockNumber" ? toHex(url === TENDERLY ? HEAD_BN - 8n : HEAD_BN) :
+        r.method === "eth_getLogs" ? [] :
+        r.method === "eth_sendRawTransaction" ? `0x${"ee".repeat(32)}` :
+        null;
+      return { jsonrpc: "2.0", id: r.id, result };
+    });
+    return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fn(asked);
+  } finally {
+    globalThis.fetch = before;
+    resetRpcRest();
+    resetRpcChecks();
   }
-  assert.ok(!/http\((ethereum|base)(Testnet|Mainnet)\.rpcUrls/.test(wagmi), "no chain read past readTransport");
+}
+const sepoliaClient = () =>
+  createPublicClient({ chain: nets.getNetwork("ethereum").chain, transport: readTransport(nets.getNetwork("ethereum"), { retryCount: 0 }) });
+
+await check("Sepolia's head side is its public list: publicnode down, the head comes from the next RPC", async () => {
+  await withSepoliaRpcs(new Set([PUBLICNODE]), async (asked) => {
+    const c = sepoliaClient();
+    assert.equal(await c.getBlockNumber({ cacheTime: 0 }), HEAD_BN - 8n, "the list's next RPC answered");
+    assert.deepEqual(asked.map((a) => `${a.host}:${a.method}`), ["ethereum-sepolia-rpc:eth_blockNumber", "sepolia:eth_blockNumber"]);
+  });
+});
+
+await check("old logs go to the one history RPC, a range across the line is split, recent logs stay on the list", async () => {
+  await withSepoliaRpcs(new Set(), async (asked) => {
+    const c = sepoliaClient();
+    await c.getBlockNumber({ cacheTime: 0 }); // places the line
+    const line = HEAD_BN - 9_000n;
+    asked.length = 0;
+    await c.getLogs({ address: "0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef", fromBlock: 11_992_914n, toBlock: "latest" });
+    const logs = asked.filter((a) => a.method === "eth_getLogs");
+    assert.deepEqual(logs.map((a) => a.host).sort(), ["ethereum-sepolia-rpc", "sepolia"]);
+    assert.equal(logs.find((a) => a.host === "sepolia")!.from, 11_992_914n, "Tenderly from the deploy block");
+    assert.equal(logs.find((a) => a.host === "ethereum-sepolia-rpc")!.from, line, "publicnode from the line");
+  });
+});
+
+await check("history is one RPC: Tenderly down, old logs fail rather than read from publicnode, which no longer has them", async () => {
+  await withSepoliaRpcs(new Set([TENDERLY]), async (asked) => {
+    const c = sepoliaClient();
+    await c.getBlockNumber({ cacheTime: 0 });
+    asked.length = 0;
+    await assert.rejects(c.getLogs({ address: "0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef", fromBlock: 11_992_914n, toBlock: 11_995_000n }));
+    assert.deepEqual([...new Set(asked.map((a) => a.host))], ["sepolia"], "never handed to publicnode");
+  });
+});
+
+await check("the relay's sends with no private RPC: exactly one head RPC, never Tenderly", async () => {
+  await withSepoliaRpcs(new Set(), async (asked) => {
+    const t = serverTransport(nets.getNetwork("ethereum"), { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: nets.getNetwork("ethereum").chain });
+    await t.request({ method: "eth_sendRawTransaction", params: [`0x${"02".repeat(100)}`] });
+    assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc"]);
+  });
+  await withSepoliaRpcs(new Set([PUBLICNODE]), async (asked) => {
+    const t = serverTransport(nets.getNetwork("ethereum"), { timeout: 30_000, retryCount: 0 }, { sendOnce: true })({ chain: nets.getNetwork("ethereum").chain });
+    await assert.rejects(t.request({ method: "eth_sendRawTransaction", params: [`0x${"02".repeat(100)}`] }));
+    assert.deepEqual(asked.filter((a) => a.method === "eth_sendRawTransaction").map((a) => a.host), ["ethereum-sepolia-rpc"], "a failed send is never sent again elsewhere");
+  });
+});
+
+await check("wagmi: Sepolia through readTransport, every other chain through its list, Ethereum polled every 2 s", () => {
+  const wagmi = readFileSync(new URL("../src/lib/wagmi.ts", import.meta.url), "utf8");
+  assert.ok(wagmi.includes('[ethereumTestnet.id]: readTransport(getNetwork("ethereum"), { batch: { wait: 16 }, retryCount: 2 })'));
+  for (const c of ["baseTestnet", "baseMainnet", "ethereumMainnet", "robinhoodTestnet", "robinhood", "tempoTestnet", "tempoMainnet"]) {
+    assert.ok(new RegExp(`\\[${c}\\.id\\]: rpcListTransport\\(${c}\\.rpcUrls\\.default\\.http`).test(wagmi), c);
+  }
+  assert.ok(!/http\((ethereum|base)(Testnet|Mainnet)\.rpcUrls/.test(wagmi), "no chain read past its list");
   assert.ok(wagmi.includes("BLOCK_POLL_MS[c.id]") && wagmi.includes("pollingInterval"), "per-chain polling");
   assert.equal(BLOCK_POLL_MS[1], 2_000);
   assert.equal(BLOCK_POLL_MS[11155111], 2_000);
