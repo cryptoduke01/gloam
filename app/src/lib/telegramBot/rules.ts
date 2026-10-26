@@ -572,6 +572,25 @@ const TX_PULL =
   /\b(?:send|share|drop|post|dm|pm|give|submit)\s+(?:me\s+|us\s+)?(?:your\s+|ur\s+|any\s+|the\s+)?(?:tx|txn|transaction)s?(?:\s*(?:hash|id)s?)?\b|\b(?:tx|txn|transaction)\s*(?:hash|id)\b[^.!?\n]{0,30}\b(?:dm|pm|inbox|to\s+register)\b/i;
 /** ... for an airdrop, a refund or a snapshot: what the fake drop promises. A claim is not one (people claim payments here). */
 const DROP_PROMISE = /\b(?:airdrop\w*|snapshot\w*|compensat\w*|reimburs\w*|refund\w*|whitelist\w*|allocation\w*)/i;
+/**
+ * "All holders DM me", said outright. Not when the ask goes on with "if" or
+ * "when" ("holders, the docs are updated. dm me if you get stuck"): that is a
+ * member offering a hand, even read together with an earlier line.
+ */
+function lures(text: string): boolean {
+  for (const m of text.matchAll(new RegExp(DM_LURE.source, "gi"))) {
+    if (negated(text, m.index, m[0]) || asked(text, m.index, m[0].length) || askingForHelp(text, m as RegExpExecArray)) continue;
+    if (/^\W*(?:if|when)\b/i.test(text.slice(m.index + m[0].length))) continue;
+    return true;
+  }
+  return false;
+}
+
+/** One message that announces the fake migration on its own: a redeploy or a new contract, and a drop or a snapshot. */
+export function announcesMigration(raw: string): boolean {
+  return spellings(scorable(raw)).some((t) => says(MIGRATION, t) && says(DROP, t));
+}
+
 /** A drop pitch: "airdrop", "presale", "allocation". Claims, rewards and snapshots are everyday talk here. */
 const DROP_WORDS = /\b(?:airdrop|giveaway|whitelist|presale|allocation)\w*/i;
 
@@ -629,8 +648,7 @@ function wordsReason(text: string, written: string): ScamReason | null {
       return "dm_support";
     }
   }
-  const lure = DM_LURE.exec(text);
-  if (lure && !negated(text, lure.index, lure[0]) && !askingForHelp(text, lure)) return "dm_support";
+  if (lures(text)) return "dm_support";
   const shill = SHILL_FOLLOW.exec(text);
   if (shill && !negated(text, shill.index, shill[0])) return "promo_spam";
   // a shilling service that wants a private chat
@@ -660,7 +678,7 @@ function wordsReason(text: string, written: string): ScamReason | null {
  * The only thing a role in a name gets someone removed for.
  */
 function realPull(text: string): boolean {
-  if (says(SECRET_REQUEST, text) || says(FUNDS_PULL, text) || says(DM_LURE, text)) return true;
+  if (says(SECRET_REQUEST, text) || says(FUNDS_PULL, text) || lures(text)) return true;
   if (says(WALLET_PULL, text) && !/\bgloam\.trade\b/i.test(text)) return true;
   return says(TX_PULL, text) && DROP_PROMISE.test(text);
 }

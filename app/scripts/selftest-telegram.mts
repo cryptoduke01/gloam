@@ -3441,9 +3441,10 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
     ["funds missing? message t.me/recovery_helpdesk for help, they fixed mine", "scam"],
     ["for support join t.me/gloam_support_desk", "impersonation"],
     ["Gloam help is at t.me/gloamhelpdesk", "impersonation"],
-    ["Relay support is at t.me/relaysupport, they fixed mine", "scam"],
-    ["join t.me/tempo_community, they sorted mine fast", "scam"],
     ["ask the admins at t.me/admin_desk_official", "scam"],
+    ["Coinbase support is at t.me/coinbasesupport", "scam"],
+    ["Binance help: t.me/binance_official_help, they fixed mine", "scam"],
+    ["MetaMask support t.me/metamask_care", "scam"],
   ] as const) {
     reset();
     const m = inTopic(TOPIC.help, text, user(id++, "Helper"));
@@ -3453,16 +3454,23 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
     assert.equal(groupSends().length, 0, text);
     assert.equal((await recentModeration(1))[0]!.category, category, text);
   }
-  // a real project's own group, named in the message, with no testimonial: the link goes, nothing is held against them
+  // a real project's own group (checked before the testimonial): the link goes, nothing is held against them
   reset();
-  for (const text of ["Relay support is at t.me/relaysupport", "join t.me/tempo_community for Tempo questions"]) {
+  for (const text of [
+    "Relay support is at t.me/relaysupport",
+    "join t.me/tempo_community for Tempo questions",
+    "asked in t.me/tempo_community, they helped me find the faucet",
+    "Relay support is at t.me/relaysupport, they answered me fast",
+  ]) {
     await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Pia"))));
   }
-  assert.equal(deletes().length, 2);
+  assert.equal(deletes().length, 4);
   assert.equal(bans().length + mutes().length + groupSends().length, 0);
   // a scam split over two lines, from one person, is read as the sentence it is
   for (const [a, b] of [
     ["ALL HOLDERS", "DM ME NOW"],
+    ["ALL HOLDERS", "DM ME"],
+    ["Gloam holders", "inbox me for the airdrop"],
     ["Gloam airdrop is live for all holders", "dm me to claim yours"],
   ]) {
     reset();
@@ -3474,6 +3482,52 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
     assert.deepEqual(deletes().map((x) => x.body.message_id).sort(), [first.message_id, second.message_id].sort(), `${a} / ${b}`);
     assert.equal(bans().length, 1, `${a} / ${b}`);
   }
+  // two harmless lines from one member, read together, are still two harmless lines
+  for (const [a, b] of [
+    ["all holders should read the docs", "dm me if you get stuck"],
+    ["gm holders", "dm me if you want to pair up for testing"],
+    ["whales are buying today", "dm me if you have questions about the app"],
+    ["Big news for holders today", "contact me if you need the link"],
+    ["holders, the docs page is updated", "text me if anything is unclear"],
+    ["buyers on the dip got lucky", "inbox me if you want to compare entries"],
+  ]) {
+    reset();
+    const who = user(id++, "Pair");
+    await handleUpdate(upd(inTopic(TOPIC.general, a, who)));
+    await handleUpdate(upd(inTopic(TOPIC.general, b, who)));
+    assert.equal(deletes().length + bans().length + mutes().length, 0, `${a} / ${b}`);
+  }
+  // the fake migration needs one message that announces it; spread over a chat it is not one
+  reset();
+  const chatty = user(id++, "Chat");
+  for (const t of ["heard the v2 contract is coming soon", "I claimed my link fine", "share your tx hash, I'll look"]) {
+    await handleUpdate(upd(inTopic(TOPIC.general, t, chatty)));
+  }
+  assert.equal(bans().length + mutes().length, 0);
+  // a link right after someone's own problem: the link goes, they stay, and the owner gets a look
+  resetMemoryKv();
+  reset();
+  await handleUpdate(upd(dm(OWNER, "hi")));
+  reset();
+  classifierReply = "NO";
+  const victim = user(id++, "Vic");
+  await handleUpdate(upd(inTopic(TOPIC.help, "my wallet shows 0 after deposit", victim)));
+  const link = inTopic(TOPIC.help, "I followed this guide https://someblog.xyz/gloam-guide", victim);
+  await handleUpdate(upd(link));
+  assert.deepEqual(deletes().map((x) => x.body.message_id), [link.message_id], "only the link");
+  assert.equal(bans().length + mutes().length, 0);
+  const note = String(sends().filter((x) => x.body.chat_id === OWNER.id).pop()?.body.text ?? "");
+  assert.ok(note.includes("described a problem in Help, then shared a link"), note);
+  const [offences] = await kv([["LRANGE", `gloam:tg:v1:offences:${victim.id}`, 0, -1]]);
+  assert.deepEqual(offences, []);
+  // a real split phishing scam (no problem first) is still the scam
+  reset();
+  const fisher = user(id++, "Fish");
+  await handleUpdate(upd(inTopic(TOPIC.general, "Claim your GLOAM airdrop before it ends", fisher)));
+  assert.equal(bans().length, 0, "harmless alone");
+  await handleUpdate(upd(inTopic(TOPIC.general, "https://bit.ly/3xYzAbC", fisher)));
+  assert.equal(bans().length, 1);
+  assert.equal(deletes().length, 2, "both parts come down");
 });
 
 await test("Announcements: impostors, pasted seed phrases and scams are still dealt with; nothing else there is screened or answered", async () => {
