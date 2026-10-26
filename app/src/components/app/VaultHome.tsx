@@ -41,7 +41,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   const { address, isConnected, chainId } = useAppAccount();
   const onNetwork = chainId === network.chainId;
   const live = isShieldDeployed() && Boolean(network.pool);
-  const { byAsset, ready, syncing } = useLocalShieldNotes(address);
+  const { byAsset, ready, balanceSyncing } = useLocalShieldNotes(address);
 
   // The public side: what this wallet holds of what the vault takes.
   const tokens = useMemo(() => shieldTokensFor(network.chainId), [network.chainId]);
@@ -112,8 +112,8 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   }, [balancesVisible, byAsset, known]);
 
   const hasPrivate = privateRows.length > 0;
-  const privateLoading = balancesVisible && (!ready || (syncing && !hasPrivate));
-  const privateKnown = balancesVisible && ready && !syncing;
+  const privateLoading = balancesVisible && (!ready || (balanceSyncing && !hasPrivate));
+  const privateKnown = balancesVisible && ready && !balanceSyncing;
   const suggest = pickAddAsset(wallet);
   const core = actions.filter((a) => !a.extra);
   const extras = actions.filter((a) => a.extra);

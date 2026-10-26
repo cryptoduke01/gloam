@@ -227,6 +227,7 @@ export function PortfolioView() {
     shieldedWei,
     byAsset,
     syncing,
+    balanceSyncing,
     refresh: refreshVault,
   } = useLocalShieldNotes(address);
   // Claimed payments the vault hasn't shown yet are listed after the balance, never counted in it.
@@ -475,7 +476,7 @@ export function PortfolioView() {
     ? "Connect a wallet to see your private balance."
     : !onProduct
       ? `Switch your wallet to ${network.label} to see balances.`
-      : syncing
+      : balanceSyncing
         ? "Syncing your vault…"
         : !hasShield
           ? shieldLive

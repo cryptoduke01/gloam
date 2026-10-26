@@ -43,6 +43,8 @@ export function useLocalShieldNotes(address?: string | null) {
   const [chain, setChain] = useState<LocalNote[]>([]);
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // the note store has been decrypted: `local` is every note this browser holds here
+  const [unlocked, setUnlocked] = useState(false);
   const lastFocusSync = useRef(0);
   // The network shown now, for async work to check it is still on the network it started on.
   // Updated before the effects below run (effects run in order), so a sync started for the
@@ -145,7 +147,9 @@ export function useLocalShieldNotes(address?: string | null) {
     // Show any legacy plaintext immediately, then decrypt the vault and re-read.
     refreshLocal();
     void unlockNoteVault().then(() => {
-      if (!cancelled) refreshLocal();
+      if (cancelled) return;
+      refreshLocal();
+      setUnlocked(true);
     });
     return () => {
       cancelled = true;
@@ -193,6 +197,10 @@ export function useLocalShieldNotes(address?: string | null) {
   const confirmed = useMemo(() => confirmedNotes(merged), [merged]);
   const byAsset = useMemo(() => sumByAsset(open), [open]);
   const shieldedWei = useMemo(() => sumEthWei(open), [open]);
+  // Only a note with a secret here counts, and chain rows never carry one, so
+  // with no notes on this network the balance is zero whatever the sync finds:
+  // nothing to wait for. With notes, the sync can still retire a spent one.
+  const balanceSyncing = syncing && !(unlocked && shown.local.length === 0);
 
   return {
     local: shown.local,
@@ -205,6 +213,8 @@ export function useLocalShieldNotes(address?: string | null) {
     shieldedWei,
     ready,
     syncing,
+    /** Syncing, and the sync can still change the private balance. */
+    balanceSyncing,
     refresh,
     refreshLocal,
   };
