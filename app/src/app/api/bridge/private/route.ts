@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     return fail(400, "Send the details as JSON.");
   }
 
-  if (typeof body.network !== "string" || !isNetworkKey(body.network)) return fail(400, "Pick Robinhood Chain or Tempo.");
+  if (typeof body.network !== "string" || !isNetworkKey(body.network)) return fail(400, "Pick a Gloam network.");
   const network = getNetwork(body.network);
   if (network.chain.testnet || !network.pool) return fail(400, "Bringing money in privately works on mainnet.");
   const dest = BRIDGE_DESTINATIONS[network.family];
@@ -125,6 +125,7 @@ export async function POST(req: Request) {
   const chain = swap && Number(body.chainId) === swap.id ? swap : bridgeChain(Number(body.chainId));
   const token = chain && typeof body.symbol === "string" ? bridgeToken(chain, body.symbol) : null;
   if (!chain || !token || !privateBridgeable(chain)) return fail(400, "Pick where the money is coming from.");
+  if (!chain.swap && chain.id === dest.chainId) return fail(400, `The money is already on ${dest.chain}. Add it privately from your wallet.`);
   const sameChain = Boolean(chain.swap);
   const evm = chain.kind === "evm";
   const evmChain: Chain | null = sameChain ? network.chain : evm ? originChain(chain.id) : null;
