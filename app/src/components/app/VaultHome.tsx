@@ -253,7 +253,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
 
       {/* Every action, named, with one line. */}
       <section aria-labelledby="vault-actions-title">
-        <h2 id="vault-actions-title" className="t-label mb-3 px-1">
+        <h2 id="vault-actions-title" className="t-eyebrow mb-3 px-1">
           What you can do
         </h2>
         <ul
@@ -271,7 +271,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
 
       {extras.length > 0 && (
         <section aria-labelledby="vault-more-title">
-          <h2 id="vault-more-title" className="t-label mb-3 px-1">
+          <h2 id="vault-more-title" className="t-eyebrow mb-3 px-1">
             Also on {network.label}
           </h2>
           <ul
