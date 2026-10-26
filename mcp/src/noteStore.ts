@@ -95,8 +95,8 @@ export type NewNote = Omit<StoredNote, "handle" | "createdAt" | "updatedAt">;
 type StoreData = {
   notes: StoredNote[];
   receiveKey: ReceiveKey | null;
-  /** MPP pull payments whose payer's transfer this server submitted: payment nullifier (lowercase) to challenge id. */
-  pulls?: Record<string, string>;
+  /** MPP pull payments whose payer's transfer this server submitted, until served: payment nullifier (lowercase) to challenge id and when. */
+  pulls?: Record<string, { challenge: string; at: string }>;
   /** Payments a verify is settling right now, in any process: payment nullifier (lowercase) to when and by whom ("pid:server"). */
   settling?: Record<string, { at: string; by: string }>;
 };
@@ -337,15 +337,24 @@ export class NoteStore {
     });
   }
 
-  /** MPP pull payments this server submitted the payer's transfer for: payment nullifier (lowercase) to challenge id. */
-  pulls(): Record<string, string> {
+  /** MPP pull payments this server submitted the payer's transfer for and has not served yet, by payment nullifier (lowercase). */
+  pulls(): Record<string, { challenge: string; at: string }> {
     return this.read().pulls ?? {};
   }
 
-  /** Record, before it is submitted, that the payer's transfer for this payment and challenge goes out. */
+  /** Record, before it is submitted, that the payer's transfer for this payment and challenge goes out. Records over 30 days old go. */
   markPull(paymentNullifier: Hex, challengeId: string) {
     this.mutate((d) => {
-      (d.pulls ??= {})[paymentNullifier.toLowerCase()] = challengeId;
+      const pulls = (d.pulls ??= {});
+      for (const [k, v] of Object.entries(pulls)) if (Date.now() - Date.parse(v.at) > PULL_KEEP_MS) delete pulls[k];
+      pulls[paymentNullifier.toLowerCase()] = { challenge: challengeId, at: stamp() };
+    });
+  }
+
+  /** The payment was served: its pull record is no longer needed. */
+  dropPull(paymentNullifier: Hex) {
+    this.mutate((d) => {
+      if (d.pulls) delete d.pulls[paymentNullifier.toLowerCase()];
     });
   }
 
@@ -403,6 +412,7 @@ function processAlive(by: string): boolean {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PULL_KEEP_MS = 30 * DAY_MS;
 const DEAD_CHECK_MIN_MS = 60 * 1000;
 const DEAD_CHECK_MAX_MS = 7 * DAY_MS;
 
