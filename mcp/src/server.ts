@@ -2064,7 +2064,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
     // A challenge settles one payment: another payment for a challenge already used is refused before it is swept.
     const challengeTag = `(mpp ${ch.id})`;
-    const label = `${ch.description ?? ch.realm} ${challengeTag}`;
+    // From the signed terms only: the challenge's own description is not covered by its id, so a payer could put
+    // any text there, and the label is shown to this server's agent.
+    const label = `${request.description ?? ch.realm} ${challengeTag}`;
     const mppRef = { challengeId: ch.id, ...(request.externalId !== undefined ? { externalId: request.externalId } : {}) };
     // Swept by this server already? Ask before the chain checks, which would only see a spent note.
     let early: { note: NoteExport; nullifier: Hex; mode: "push" | "pull" } | null = null;
