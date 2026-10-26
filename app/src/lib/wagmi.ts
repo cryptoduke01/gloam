@@ -9,6 +9,7 @@ import { turnkeyConnector } from "./turnkeyConnector";
 import { tempoFeeAware } from "./feeSponsor";
 import { tempoWalletConnector } from "./tempoWallet";
 import { lazyWalletConnect } from "./walletConnect";
+import { rpcListTransport } from "./rpcList";
 
 const walletConnectFn = lazyWalletConnect();
 
@@ -75,18 +76,20 @@ export const wagmiConfig = createConfig({
     tempoWalletConnector(),
     ...(walletConnectFn ? [tempoFeeAware(walletConnectFn)] : []),
   ],
+  // Each chain's public RPCs in order (lib/rpcList): one that is down is passed
+  // over for a while instead of failing every read.
   transports: {
     // Robinhood Chain's public RPC answers JSON-RPC batches: the reads after a wallet
     // connects (balances, allowances, vault state) go out together instead of one by one.
-    [robinhoodTestnet.id]: http("https://rpc.testnet.chain.robinhood.com", { batch: { wait: 16 } }),
-    [tempoTestnet.id]: http("https://rpc.moderato.tempo.xyz"),
-    [robinhood.id]: http("https://rpc.mainnet.chain.robinhood.com", { batch: { wait: 16 } }),
-    [tempoMainnet.id]: http("https://rpc.tempo.xyz"),
-    [baseTestnet.id]: http(baseTestnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
-    [baseMainnet.id]: http(baseMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
+    [robinhoodTestnet.id]: rpcListTransport(robinhoodTestnet.rpcUrls.default.http, { batch: { wait: 16 } }),
+    [tempoTestnet.id]: rpcListTransport(tempoTestnet.rpcUrls.default.http),
+    [robinhood.id]: rpcListTransport(robinhood.rpcUrls.default.http, { batch: { wait: 16 } }),
+    [tempoMainnet.id]: rpcListTransport(tempoMainnet.rpcUrls.default.http),
+    [baseTestnet.id]: rpcListTransport(baseTestnet.rpcUrls.default.http, { batch: { wait: 16 } }),
+    [baseMainnet.id]: rpcListTransport(baseMainnet.rpcUrls.default.http, { batch: { wait: 16 } }),
     // Until Ethereum is a Gloam network, the origin-chain entry below replaces this one.
-    [ethereumMainnet.id]: http(ethereumMainnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
-    [ethereumTestnet.id]: http(ethereumTestnet.rpcUrls.default.http[0], { batch: { wait: 16 } }),
+    [ethereumMainnet.id]: rpcListTransport(ethereumMainnet.rpcUrls.default.http, { batch: { wait: 16 } }),
+    [ethereumTestnet.id]: rpcListTransport(ethereumTestnet.rpcUrls.default.http, { batch: { wait: 16 } }),
     ...Object.fromEntries(originChains.map((c) => [c.id, http()])),
   },
   ssr: true,

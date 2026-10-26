@@ -6,8 +6,9 @@
  * caches one client per chain.
  */
 
-import { createPublicClient, http, type PublicClient } from "viem";
+import { createPublicClient, type PublicClient } from "viem";
 import { getActiveNetwork, type GloamNetwork } from "./networks";
+import { rpcListTransport } from "./rpcList";
 
 const cache = new Map<number, PublicClient>();
 
@@ -23,7 +24,8 @@ export function publicClientFor(net: Pick<GloamNetwork, "chainId" | "chain">): P
   if (existing) return existing;
   const client = createPublicClient({
     chain: net.chain,
-    transport: http(net.chain.rpcUrls.default.http[0], {
+    // the chain's public RPCs in order: one that is down is passed over for a while (lib/rpcList)
+    transport: rpcListTransport(net.chain.rpcUrls.default.http, {
       timeout: 25_000,
       retryCount: 2,
     }),

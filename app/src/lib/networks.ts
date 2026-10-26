@@ -231,6 +231,14 @@ export const ethereumMainnet = defineChain({
   },
 });
 
+/**
+ * Public RPCs above that refuse or cap eth_getLogs (sepolia.base.org takes 200
+ * blocks a read, mainnet.base.org none from public callers). They stay in the
+ * lists for every other read, and for wallets that add the chain, but a log
+ * read never goes to them (lib/rpcList).
+ */
+export const NO_LOG_RPCS: ReadonlySet<string> = new Set(["https://sepolia.base.org", "https://mainnet.base.org"]);
+
 const RH_MAINNET_POOL = mainnetPool(4663);
 const TEMPO_MAINNET_POOL = mainnetPool(4217);
 const BASE_MAINNET_POOL = mainnetPool(8453);
