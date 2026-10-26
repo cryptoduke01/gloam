@@ -282,7 +282,7 @@ export default function DocsComparePage() {
         and the user docs are
         short and plain. <strong>Where Gloam differs:</strong> the keys and the
         proofs stay on your device, so there is no operator that can read a
-        balance, and the vault cannot be upgraded or paused.
+        balance, the vault cannot be upgraded, and nobody can pause withdrawals.
       </p>
       <p>Checked on 25 and 26 October 2026, from Nullmask&apos;s own pages and its audit report.</p>
       <div className="overflow-x-auto">
