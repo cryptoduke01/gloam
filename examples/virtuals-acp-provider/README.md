@@ -101,9 +101,12 @@ Other rules the provider keeps:
   or restart (or `provider.resume(session)`) the provider looks it up by its
   label in its note store, after reading the chain, and carries on only once it
   has settled.
-- A refund counts only what certainly did not leave the float. A payout that
-  may have gone out is held back from the refund until it settles. A refund
-  that fails is tried again on the next job end and before each earnings sweep.
+- A refund counts what arrived minus what certainly left the float. A payout
+  that may have gone out is held back from the refund until it settles. Each
+  refund is written down before it is sent; one whose answer is lost is looked
+  for on chain (the token's Transfer to the client) and sent again only an hour
+  later with nothing found. Refund rounds run one at a time, on each job end
+  and before each earnings sweep.
 - The earnings sweep adds only fees and settled principal: it leaves in the
   wallet the principal of jobs not yet paid out, of jobs quoted but not yet
   funded, and refunds owed or held (`publicReserve`).
