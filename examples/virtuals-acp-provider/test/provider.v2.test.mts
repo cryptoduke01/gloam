@@ -14,10 +14,10 @@ import type { AssetTokenLike } from "../src/acp.ts";
 import { ACP_STATUS, FakeAcp, FakeSession, PROVIDER, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
 
 const realNow = Date.now.bind(Date);
-void realNow;
-void PROVIDER;
-void rejected;
-void ACP_STATUS;
+
+
+
+
 void (null as unknown as GloamAgent);
 
 test("one quote per job: a second requirement does not replace the list the client funded", async () => {
@@ -58,4 +58,74 @@ test("payouts are bounded by what the client's funding moved to the provider, re
   assert.equal(f.paid.length, 0);
   assert.match(String(p.status(84532, "2")?.blocked), /less than/);
   assert.equal(p.status(84532, "2")?.receivedRaw, "1000000");
+});
+
+/** A job whose one payout failed for good, then rejected: its whole principal is owed back. */
+async function owedJob(id: string, refund: (to: string, token: string, raw: bigint) => Promise<string>) {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp, { pay: async () => ({ status: "error", message: "rpc down" }) });
+  const p = providerFor(f.wallet, { refund: refund as never });
+  const s = new FakeSession(id, acp);
+  await p.onEntry(s, requirementEntry(id, { payouts: [{ to: r1.tag, amount: "10" }] }));
+  s.fund();
+  await p.onEntry(s, funded(id));
+  acp.set(id, { status: ACP_STATUS.rejected });
+  s.status = "rejected";
+  return { p, s, acp, f };
+}
+
+test("two refund rounds at once send one refund", async () => {
+  const refunds: bigint[] = [];
+  const { p, s } = await owedJob("3", async (_c, _t, raw) => {
+    refunds.push(raw);
+    await new Promise((r) => setTimeout(r, 200)); // the transfer is out; its answer takes a moment
+    return `0x${String(refunds.length).padStart(64, "0")}`;
+  });
+  const ended = p.onEntry(s, rejected("3"));
+  await new Promise((r) => setTimeout(r, 50));
+  await Promise.all([ended, p.retryRefunds()]);
+  assert.deepEqual(refunds, [10_000_000n]);
+  assert.equal(p.status(84532, "3")?.refundedRaw, "10000000");
+});
+
+test("a refund that went out and then threw is found on chain and not sent again", async () => {
+  let acpRef: FakeAcp | null = null;
+  const refunds: bigint[] = [];
+  const { p, s, acp } = await owedJob("4", async (to, _t, raw) => {
+    refunds.push(raw);
+    acpRef!.sent(PROVIDER, to, raw); // the transfer lands
+    throw new Error("HTTP request failed. Status: 429 (waiting for the user operation)");
+  });
+  acpRef = acp;
+  await p.onEntry(s, rejected("4"));
+  await p.retryRefunds();
+  await p.retryRefunds();
+  assert.deepEqual(refunds, [10_000_000n], "sent once");
+  assert.equal(p.status(84532, "4")?.refundedRaw, "10000000");
+  assert.equal(p.status(84532, "4")?.refundOwed, "0");
+  assert.ok(p.status(84532, "4")?.refundTx, "the refund found on chain is recorded");
+});
+
+test("a refund that threw with nothing on chain is sent again only an hour on", async () => {
+  const refunds: bigint[] = [];
+  let fail = true;
+  const { p, s } = await owedJob("5", async (_c, _t, raw) => {
+    refunds.push(raw);
+    if (fail) throw new Error("The ACP wallet did not answer in time.");
+    return `0x${"5".repeat(64)}`;
+  });
+  try {
+    await p.onEntry(s, rejected("5"));
+    await p.retryRefunds();
+    assert.equal(refunds.length, 1, "not sent again while it may still land");
+    fail = false;
+    Date.now = () => realNow() + 61 * 60_000;
+    await p.retryRefunds();
+    assert.equal(refunds.length, 2, "an hour on with nothing on chain: sent again");
+    assert.equal(p.status(84532, "5")?.refundOwed, "0");
+  } finally {
+    Date.now = realNow;
+  }
 });

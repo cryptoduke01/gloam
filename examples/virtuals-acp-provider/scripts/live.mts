@@ -91,14 +91,17 @@ const service = new PrivatePayoutProvider({
     return platform + evaluator;
   },
   journalPath: process.env.PAYOUT_JOURNAL ?? "./payout-jobs.json",
-  // Unpaid principal of a job that ends early goes back to the client from the ACP wallet.
-  // A refund that throws is tried again later, so this must throw only when nothing was sent.
-  refund: async (to, token, raw) =>
-    String(
-      await evmProvider.sendCalls(chainId, [
-        { to: token, data: encodeFunctionData({ abi: ERC20_TRANSFER, functionName: "transfer", args: [to, raw] }), value: 0n },
-      ])
-    ),
+  // Unpaid principal of a job that ends early goes back to the client from the ACP wallet. The provider
+  // writes each refund down before sending it; one whose answer is lost (this throws) is looked for on chain
+  // (the token's Transfer to the client) and sent again only an hour later with nothing found.
+  refund: async (to, token, raw) => {
+    const out = await evmProvider.sendCalls(chainId, [
+      { to: token, data: encodeFunctionData({ abi: ERC20_TRANSFER, functionName: "transfer", args: [to, raw] }), value: 0n },
+    ]);
+    const hash = Array.isArray(out) ? out[out.length - 1] : out;
+    if (!hash) throw new Error("The ACP wallet returned no transaction hash for the refund. It may still land.");
+    return String(hash);
+  },
   earnings: new EarningsSweeper({ wallet, tokens: [acp.paymentToken, wallet.network.assets[0]!.address], minBatch: "25", roundTo: "5" }),
 });
 

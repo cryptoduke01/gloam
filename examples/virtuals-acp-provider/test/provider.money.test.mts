@@ -218,7 +218,8 @@ test("the earnings sweep leaves principal still owed to clients, and retries a r
   const p = providerFor(f.wallet, {
     earnings: sweeper,
     refund: async (_c, _t, raw) => {
-      if (!refundWorks) throw new Error("insufficient balance");
+      // Refused before sending (the transfer would revert): certainly not sent, so tried again next round.
+      if (!refundWorks) throw Object.assign(new Error("insufficient balance"), { notSent: true });
       refunds.push(raw);
       return "0xrefund";
     },
