@@ -8,7 +8,7 @@ import { liveMainnetNames } from "@/lib/mainnet";
 /** The mainnets with a pool in, as words: Base and Ethereum join once theirs are (lib/mainnet.ts). */
 const MAINNETS = liveMainnetNames();
 
-/** Nullmask's own pages, checked on 25 October 2026. */
+/** Nullmask's own pages and audit report, checked on 25 and 26 October 2026. */
 const NM = {
   privacyPolicy: "https://app.nullmask.io/privacy",
   terms: "https://app.nullmask.io/terms",
@@ -278,13 +278,13 @@ export default function DocsComparePage() {
       </p>
       <p>
         <strong>Where they win:</strong> signing one message restores the
-        account on any device, with nothing to back up (
-        <Src href={NM.docsStart}>getting started</Src>), and the user docs are
+        account on any device (<Src href={NM.docsStart}>getting started</Src>),
+        and the user docs are
         short and plain. <strong>Where Gloam differs:</strong> the keys and the
         proofs stay on your device, so there is no operator that can read a
         balance, and the vault cannot be upgraded or paused.
       </p>
-      <p>Checked on 25 October 2026, from Nullmask&apos;s own pages.</p>
+      <p>Checked on 25 and 26 October 2026, from Nullmask&apos;s own pages and its audit report.</p>
       <div className="overflow-x-auto">
         <table className="min-w-[720px] [&_th]:whitespace-normal">
           <thead>
