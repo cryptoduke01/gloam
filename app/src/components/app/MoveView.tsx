@@ -143,7 +143,7 @@ import {
   aboutTime,
   scheduledLine,
 } from "./PrivateCashOut";
-import { cashOutPrivacyWarnings, depositWallets, presetAmounts } from "@/lib/cashOutPrivacy";
+import { cashOutPrivacyWarnings, cashOutSender, depositWallets, presetAmounts } from "@/lib/cashOutPrivacy";
 import { CashOutAmountChips, CashOutPrivacyLine, CashOutWarnings } from "./CashOutPrivacy";
 import { countLinkClaimed, countLinkCreated, countLinkOpened, countSendAfterClaim } from "@/lib/funnel";
 import { codeFromHash } from "@/lib/claimLink";
@@ -798,7 +798,8 @@ export function MoveView() {
     cashOutDest === "mine" ? ((address as Address | undefined) ?? null) : isAddress(otherToClean) ? (otherToClean as Address) : null;
   // Every wallet's notes in this browser on this chain and vault (allLocal holds only the
   // signed-in wallet's), for the privacy kit's depositing-wallet check (lib/cashOutPrivacy).
-  // Read again whenever this wallet's notes change.
+  // Read again whenever this wallet's notes change. Deposits read from the chain are left
+  // out: they are only ever the signed-in wallet's, which its own warning already names.
   const browserNotes = useMemo(
     () => (allLocal.length ? loadLocalNotes(null, network) : []),
     [allLocal, network]
@@ -946,6 +947,10 @@ export function MoveView() {
   }, [sweepKey]);
   const sweepNow = sweepKey ? (sweepResults[sweepKey] ?? null) : null;
   const sweepHold = Boolean(sweepNow?.swept) && sweepOkFor !== sweepKey;
+
+  /** What Round it starts from and gives: the amount (or the whole balance) down to whole units. */
+  const roundFrom = cashOutAmountInvalid ? noteWei : cashOutAmount;
+  const roundsTo = selected ? roundDownToWhole(roundFrom, assetDecimals(selected.asset)) : 0n;
 
   /** Round it: the amount down to whole units, so odd cents stay in the private balance. */
   function roundCashOut() {
@@ -2043,6 +2048,8 @@ export function MoveView() {
     if (id === "cashout" && claimed) {
       const pick = notes.find((n) => n.id === claimed || n.sweptFrom?.id === claimed);
       if (pick) setSelectedId(pick.id);
+      // a fresh cash out of it: no amount typed earlier carries over
+      setCashOutInput("");
     }
     selectMode(id);
     window.setTimeout(() => {
@@ -2638,15 +2645,31 @@ export function MoveView() {
                         onMax={() => setCashOutInput("")}
                         disabled={working}
                         extra={
-                          // only where there are whole units to round down to
-                          roundDownToWhole(noteWei, assetDecimals(selected.asset)) > 0n ? (
+                          // only where it changes something: there are cents to drop and whole units left
+                          roundsTo > 0n && roundsTo !== roundFrom ? (
                             <button type="button" className="gl-chip min-h-10" disabled={working} onClick={roundCashOut}>
                               Round it
                             </button>
                           ) : null
                         }
                       />
-                      <CashOutWarnings warnings={amountWarnings} scope={selected.id} />
+                      <CashOutWarnings
+                        warnings={amountWarnings}
+                        scope={selected.id}
+                        disabled={working}
+                        amountAction={
+                          planOffered && !privatePref ? (
+                            <button
+                              type="button"
+                              disabled={working}
+                              onClick={() => choosePrivately(true)}
+                              className="-my-1.5 inline-flex min-h-10 items-center font-medium underline underline-offset-4 disabled:opacity-50"
+                            >
+                              Cash out privately instead
+                            </button>
+                          ) : null
+                        }
+                      />
                       {/* the broader note (close amounts, payments received, timing) when the exact-deposit warning has not said it */}
                       {cashOutLink && amountWarnings.length === 0 && (
                         <CashOutLinkNote
@@ -2763,7 +2786,9 @@ export function MoveView() {
                         )}
                       </>
                     )}
-                    {selected && <CashOutWarnings warnings={addressWarnings} scope={selected.id} onElsewhere={cashOutElsewhere} />}
+                    {selected && (
+                      <CashOutWarnings warnings={addressWarnings} scope={selected.id} onElsewhere={cashOutElsewhere} disabled={working} />
+                    )}
                     {addressWarnings.length === 0 && cashOutDest === "other" && cashOutTo ? (
                       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                         For privacy, a fresh wallet that never added money to Gloam is best.
@@ -2921,7 +2946,7 @@ export function MoveView() {
                   {selected && (
                     <CashOutPrivacyLine
                       pieces={planActive}
-                      sentByWallet={!relayOn && !planActive && cashOutWhen === "now"}
+                      sender={cashOutSender({ relayOn, pieces: planActive, later: cashOutWhen !== "now", partial: cashOutPartial })}
                     />
                   )}
                   {!connectedOk ? (
