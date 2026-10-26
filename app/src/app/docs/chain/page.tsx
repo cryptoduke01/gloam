@@ -6,6 +6,7 @@ import { BASE_MAINNET_TOKENS, BASE_SEPOLIA_TOKENS, ETHEREUM_MAINNET_TOKENS, ETHE
 import { DEFAULT_MAX_GAS_GWEI } from "@/lib/relay/gasCeiling";
 import { getNetwork } from "@/lib/networks";
 import { VAULT_SWAP_ROUTERS } from "@/lib/vaultSwap";
+import { GLOAM_OWNER, GLOAM_RELAYERS, GLOAM_TREASURY, MAINNET_POSEIDON_T3 } from "@/lib/contractDirectory";
 
 export const metadata: Metadata = {
   title: "Networks",
@@ -43,10 +44,6 @@ const ETHEREUM_MAINNET_MEMO = getNetwork("ethereum-mainnet").payMemo;
 const ETHEREUM_SEPOLIA = ethereumSepoliaPool();
 const ETHEREUM_SEPOLIA_MEMO = ethereumSepoliaPayMemo();
 
-const MAINNET_POSEIDON_T3 = "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4";
-const MAINNET_OWNER = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
-const MAINNET_RELAYER = "0xb1E994586E62994648a0b866BF33F2EDd942512e";
-const SWAP_TREASURY = "0xB3900ac9350903218e4c7597bAb0f008F01B30B8";
 
 /** A mainnet swap router, or "Not deployed" where there is none. */
 function SwapRouterAddress({ chainId }: { chainId: MainnetChainId }) {
@@ -239,27 +236,34 @@ export default function DocsNetworksPage() {
           >
             ceremony-final
           </a>
-          ). Mainnet proofs must use them; the testnets keep the dev keys.
+          ). Mainnet proofs must use them; the Robinhood Chain and Tempo
+          testnets keep the dev keys.
         </li>
         <li>
           <strong>PoseidonT3</strong> (both chains), <code>{MAINNET_POSEIDON_T3}</code>
         </li>
         <li>
-          <strong>Owner and treasury</strong>, <code>{MAINNET_OWNER}</code>. One
-          wallet at launch; a multisig is planned. It cannot withdraw pooled
-          funds: there is no admin withdraw.
+          <strong>Owner</strong>, <code>{GLOAM_OWNER}</code>. One wallet at
+          launch; a multisig is planned. It cannot withdraw pooled funds: there
+          is no admin withdraw.
         </li>
         <li>
-          <strong>Relayer</strong>, <code>{MAINNET_RELAYER}</code>. Run by the
+          <strong>Treasury</strong>, <code>{GLOAM_TREASURY}</code>. Cash-out
+          fees go here since 24 October. Both swap routers also send what a swap
+          does not use here; that address is fixed in each router and cannot
+          change. The routers have no owner, no admin and no upgrade.
+        </li>
+        <li>
+          <strong>Relayer</strong>, <code>{GLOAM_RELAYERS[0]}</code>. Run by the
           Gloam team. It only submits already-proven transactions and pays the
           gas; it cannot move or redirect money.
         </li>
-        <li>
-          <strong>Swap treasury</strong>, <code>{SWAP_TREASURY}</code>. Both swap
-          routers send what a swap does not use here. It is fixed in each router
-          and cannot change. The routers have no owner, no admin and no upgrade.
-        </li>
       </ul>
+      <p>
+        Every address on every network, with what each vault reads on chain
+        right now and a CSV download, is on{" "}
+        <Link href="/verify#contracts">Verify</Link>.
+      </p>
 
       <h2>Robinhood Chain</h2>
       <p>
