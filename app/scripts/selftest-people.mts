@@ -317,34 +317,42 @@ await test("browser: a connect goes out once a day with only the wallet, the sid
 });
 
 await test("browser: actions wait minutes and go out together, once a day each", async () => {
-  beacons.length = 0;
-  timers.length = 0;
-  local.clear();
-  const w = wallet(12);
-  people.countPerson("claim", w, false);
-  people.countPerson("send", w, false);
-  people.countPerson("send", w, false);
-  await flush();
-  assert.equal(beacons.length, 0, "nothing goes out with the payment");
-  assert.equal(timers.length, 1, "one wait");
-  assert.ok(timers[0]!.ms >= 2 * 60_000 && timers[0]!.ms <= 10 * 60_000, `waits ${timers[0]!.ms}ms`);
-  const held = JSON.parse(local.get("gloam.people.v1")!);
-  assert.deepEqual(held.queue[0].a, ["claim", "send"]);
-  // the wait ends
+  // A midday clock: the wait below moves it 11 minutes on, which must stay on the same UTC day
+  // (run from 23:49 UTC on, the real clock crossed midnight and the last check failed).
   const realNow = Date.now;
-  Date.now = () => realNow() + 11 * 60_000;
+  const noon = Date.UTC(2026, 9, 26, 12);
+  Date.now = () => noon;
   try {
-    timers[0]!.fn();
+    beacons.length = 0;
+    timers.length = 0;
+    local.clear();
+    const w = wallet(12);
+    people.countPerson("claim", w, false);
+    people.countPerson("send", w, false);
+    people.countPerson("send", w, false);
+    await flush();
+    assert.equal(beacons.length, 0, "nothing goes out with the payment");
+    assert.equal(timers.length, 1, "one wait");
+    assert.ok(timers[0]!.ms >= 2 * 60_000 && timers[0]!.ms <= 10 * 60_000, `waits ${timers[0]!.ms}ms`);
+    const held = JSON.parse(local.get("gloam.people.v1")!);
+    assert.deepEqual(held.queue[0].a, ["claim", "send"]);
+    // the wait ends
+    Date.now = () => noon + 11 * 60_000;
+    try {
+      timers[0]!.fn();
+    } finally {
+      Date.now = () => noon;
+    }
+    await flush();
+    assert.equal(beacons.length, 1);
+    assert.deepEqual(JSON.parse(beacons[0]!), { w: w.toLowerCase(), env: "mainnet", a: ["claim", "send"] });
+    assert.equal(JSON.parse(local.get("gloam.people.v1")!).queue.length, 0, "sent and gone");
+    people.countPerson("send", w, false);
+    await flush();
+    assert.equal(timers.length, 1, "the same action the same day waits for nothing");
   } finally {
     Date.now = realNow;
   }
-  await flush();
-  assert.equal(beacons.length, 1);
-  assert.deepEqual(JSON.parse(beacons[0]!), { w: w.toLowerCase(), env: "mainnet", a: ["claim", "send"] });
-  assert.equal(JSON.parse(local.get("gloam.people.v1")!).queue.length, 0, "sent and gone");
-  people.countPerson("send", w, false);
-  await flush();
-  assert.equal(timers.length, 1, "the same action the same day waits for nothing");
 });
 
 await test("browser: something left from an earlier visit goes out a little after the next one opens", async () => {
