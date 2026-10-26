@@ -350,6 +350,32 @@ function BridgeSheet({
   }, [pricing]);
   const live = preview && preview.amount === amount ? preview : null;
 
+  // In a private swap the amount is the USDC that lands, paid in the wallet's ETH. This
+  // prices the most that ETH buys (fees kept back), for Max and an "about X ETH" line.
+  const swapMaxWei = gasCoin != null && gasCoin.value > SWAP_GAS_RESERVE_WEI ? gasCoin.value - SWAP_GAS_RESERVE_WEI : BigInt(0);
+  const [maxOut, setMaxOut] = useState<{ wei: bigint; out: number } | null>(null);
+  const pricingMax = open && swapping && privately && stage.kind === "form" && swapMaxWei > BigInt(0);
+  useEffect(() => {
+    if (!pricingMax) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch("/api/bridge/quote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ chainId: chain.id, symbol: token.symbol, network: network.key, amount: formatUnits(swapMaxWei, token.decimals), recipient }),
+          signal: ctrl.signal,
+        });
+        const json = (await res.json()) as { ok: boolean; data?: BridgeQuote };
+        const out = json.ok && json.data ? Number(json.data.receive.minimum) : NaN;
+        if (Number.isFinite(out) && out > 0) setMaxOut({ wei: swapMaxWei, out });
+      } catch {
+        // no price: no Max, the form still works
+      }
+    })();
+    return () => ctrl.abort();
+  }, [pricingMax, swapMaxWei, chain.id, token.symbol, token.decimals, network.key, recipient]);
+
 
   useEffect(() => {
     if (!open) return;
@@ -969,7 +995,7 @@ function BridgeSheet({
             {privately ? (
               <div>
                 <label htmlFor="bridge-amount" className="text-[13px] text-mute">
-                  Add privately
+                  {swapping ? `${dest.token.symbol} to add privately` : "Add privately"}
                 </label>
                 <div className="gl-inputwrap mt-1.5 flex h-12 items-center gap-2 px-3.5">
                   <input
@@ -985,7 +1011,24 @@ function BridgeSheet({
                   <span className="text-[14px] text-mute">{dest.token.symbol}</span>
                 </div>
                 <AmountProblem value={amount} decimals={2} />
+                {swapping && maxOut && (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="tnum text-[12px] text-mute">
+                      {amountNum > 0 && /^\d+(\.\d+)?$/.test(amount)
+                        ? `About ${trimAmount(formatUnits((maxOut.wei * BigInt(Math.round(amountNum * 100))) / BigInt(Math.max(1, Math.round(maxOut.out * 100))), token.decimals))} ${token.symbol}`
+                        : `Your ${token.symbol} buys up to about ${Math.floor(maxOut.out * 100) / 100} ${dest.token.symbol}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAmount(String(Math.floor(maxOut.out * 0.98 * 100) / 100))}
+                      className="h-9 rounded-full border border-line px-3 text-[12.5px] text-soft transition-colors hover:bg-surface hover:text-foreground"
+                    >
+                      Max
+                    </button>
+                  </div>
+                )}
                 <p className="mt-1.5 text-[12px] text-mute">
+                  {swapping && `Type the ${dest.token.symbol} you want to add, not the ${token.symbol}. `}
                   Paid in {token.symbol}{" "}
                   {solWallet ? `from ${solWallet.name}` : swapping ? "from this wallet" : `from this wallet on ${chain.name}`}.
                   {swapping && gasCoin != null && ` You hold ${trimAmount(formatUnits(gasCoin.value, token.decimals))} ${token.symbol}.`} You
