@@ -210,6 +210,10 @@ function memCommand(cmd: KvCommand): unknown {
       const e = live(a[0]!);
       return e && isSet(e.v) ? e.v.size : 0;
     }
+    case "SISMEMBER": {
+      const e = live(a[0]!);
+      return e && isSet(e.v) && e.v.has(a[1]!) ? 1 : 0;
+    }
     case "PFADD": {
       // a HyperLogLog kept as a string of registers (lib/hll); the items are never kept
       const e = live(a[0]!);

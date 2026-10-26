@@ -23,9 +23,14 @@
  *    messages is read whole, and the group's admin list for five minutes
  *  - the buy alerts' place in the chain, the transactions already posted
  *    (three days), and any wait Telegram asked for
+ *  - moderation: every action Glim takes (a week), each member's offences (a
+ *    week), when Glim first saw them talk and how often (30 days), when they
+ *    joined (24 hours), whom an admin let back in (30 days), recent joins
+ *    (to spot a raid) and whether Telegram refused a moderation right
  */
 import { randomUUID } from "crypto";
 import { hashNumbers, jsonOf, kv } from "@/lib/partnersKv";
+import type { Offence, SpamCategory, Standing } from "./moderation";
 import type { ChatLine, Joiner } from "./rules";
 
 const PREFIX = "gloam:tg:v1:";
@@ -90,18 +95,50 @@ export async function remember(chatId: number, topic: number, line: ChatLine): P
   ]);
 }
 
-/** Queues new members for the next welcome. Someone who joins twice in a day is welcomed once. */
-export async function queueJoiners(joiners: Joiner[]): Promise<number> {
-  if (joiners.length === 0) return 0;
-  const claims = await kv(joiners.map((j) => ["SET", `${PREFIX}welcomed:${j.id}`, "1", "EX", WELCOMED_TTL_SEC, "NX"]));
-  const fresh = joiners.filter((_, i) => claims[i] !== null);
-  if (fresh.length === 0) return 0;
+/** More joins than this inside JOIN_BURST_MIN minutes is a burst (a raid, usually): no welcome then. */
+export const JOIN_BURST = 5;
+export const JOIN_BURST_MIN = 10;
+/** A burst holds welcomes off this long after its last join. */
+const BURST_HOLD_SEC = 30 * 60;
+const BURST = `${PREFIX}welcome:burst`;
+const joinsKey = (minute: number) => `${PREFIX}joins:${minute}`;
+const joinedKey = (userId: number) => `${PREFIX}joined:${userId}`;
+const goneKey = (userId: number) => `${PREFIX}gone:${userId}`;
+
+/**
+ * Notes when new members joined (for the newcomer check) and queues them for
+ * the next welcome. Someone who joins twice in a day is welcomed once. In a
+ * burst of joins (more than JOIN_BURST in JOIN_BURST_MIN minutes) nobody is
+ * queued and the waiting list is dropped, so a raid is never tagged.
+ */
+export async function queueJoiners(joiners: Joiner[], now = Date.now()): Promise<{ queued: number; burst: boolean }> {
+  if (joiners.length === 0) return { queued: 0, burst: false };
+  const minute = Math.floor(now / 60_000);
+  const res = await kv([
+    ...joiners.map((j) => ["SET", joinedKey(j.id), String(now), "EX", WELCOMED_TTL_SEC, "NX"]),
+    ...joiners.map((j) => ["SET", `${PREFIX}welcomed:${j.id}`, "1", "EX", WELCOMED_TTL_SEC, "NX"]),
+  ]);
+  const fresh = joiners.filter((_, i) => res[joiners.length + i] !== null);
+  if (fresh.length === 0) return { queued: 0, burst: false };
+  const counts = await kv([
+    ["INCRBY", joinsKey(minute), fresh.length],
+    ["EXPIRE", joinsKey(minute), (JOIN_BURST_MIN + 5) * 60],
+    ...Array.from({ length: JOIN_BURST_MIN - 1 }, (_, i) => ["GET", joinsKey(minute - 1 - i)]),
+  ]);
+  const recent = [counts[0], ...counts.slice(2)].reduce<number>((n, v) => n + (Number(v) || 0), 0);
+  if (recent > JOIN_BURST) {
+    await kv([
+      ["SET", BURST, "1", "EX", BURST_HOLD_SEC],
+      ["DEL", PENDING],
+    ]);
+    return { queued: 0, burst: true };
+  }
   await kv([
     ...fresh.map((j) => ["LPUSH", PENDING, JSON.stringify(j)]),
     ["LTRIM", PENDING, 0, PENDING_MAX - 1],
     ["EXPIRE", PENDING, WELCOMED_TTL_SEC],
   ]);
-  return fresh.length;
+  return { queued: fresh.length, burst: false };
 }
 
 /**
@@ -110,6 +147,12 @@ export async function queueJoiners(joiners: Joiner[]): Promise<number> {
  * hour.
  */
 export async function takeWelcomeBatch(): Promise<Joiner[] | null> {
+  // a burst of joins is going on: nobody from it is welcomed
+  const [burst] = await kv([["EXISTS", BURST]]);
+  if (Number(burst) > 0) {
+    await kv([["DEL", PENDING]]);
+    return null;
+  }
   const [slot] = await kv([["SET", COOLDOWN, "1", "EX", WELCOME_EVERY_SEC, "NX"]]);
   if (slot === null) return null;
   const [raw] = await kv([["LRANGE", PENDING, 0, -1]]);
@@ -120,10 +163,18 @@ export async function takeWelcomeBatch(): Promise<Joiner[] | null> {
   }
   // drop exactly what was read; anyone queued meanwhile sits at the head and waits for the next batch
   await kv([["LTRIM", PENDING, 0, -(items.length + 1)]]);
-  return items
+  const joiners = items
     .map((r) => jsonOf<Joiner>(r))
     .filter((j): j is Joiner => Boolean(j && typeof j.id === "number"))
     .reverse();
+  // anyone who left or was removed since they joined is not tagged
+  const gone = joiners.length ? await kv(joiners.map((j) => ["EXISTS", goneKey(j.id)])) : [];
+  const stay = joiners.filter((_, i) => !(Number(gone[i]) > 0));
+  if (stay.length === 0) {
+    await kv([["DEL", COOLDOWN]]);
+    return null;
+  }
+  return stay;
 }
 
 export type BugReport = {
@@ -177,8 +228,19 @@ const statsKey = (hour: number) => `${PREFIX}stats:${hour}`;
 const peopleKey = (kind: "active" | "joins" | "leaves", hour: number) => `${PREFIX}${kind}:${hour}`;
 const questionsKey = (day: number) => `${PREFIX}questions:${day}`;
 
-/** Things the helper does, counted per hour. */
-export type Counter = "answered" | "images" | "welcomes" | "scams" | "scamsMissed" | "secrets" | "secretsMissed";
+/** Things the helper does, counted per hour. The mod* counters are moderation actions by outcome. */
+export type Counter =
+  | "answered"
+  | "images"
+  | "welcomes"
+  | "scams"
+  | "scamsMissed"
+  | "secrets"
+  | "secretsMissed"
+  | "modBanned"
+  | "modMuted"
+  | "modDeleted"
+  | "modFailed";
 
 export async function bump(counter: Counter, now = Date.now()): Promise<void> {
   const key = statsKey(hourOf(now));
@@ -188,7 +250,12 @@ export async function bump(counter: Counter, now = Date.now()): Promise<void> {
   ]);
 }
 
-/** One message seen in the group: the total, its topic, and who sent it. */
+/** How long Glim remembers that a member talked (their count and when it first saw them), from their last message. */
+const MEMBER_TTL_SEC = 30 * 24 * 60 * 60;
+const memberMsgsKey = (userId: number) => `${PREFIX}member:msgs:${userId}`;
+const memberFirstKey = (userId: number) => `${PREFIX}member:first:${userId}`;
+
+/** One message seen in the group: the total, its topic, and who sent it (also their own count, for moderation). */
 export async function countMessage(topic: number, userId: number, now = Date.now()): Promise<void> {
   const hour = hourOf(now);
   const key = statsKey(hour);
@@ -199,16 +266,21 @@ export async function countMessage(topic: number, userId: number, now = Date.now
     ["EXPIRE", key, STATS_TTL_SEC],
     ["SADD", active, userId],
     ["EXPIRE", active, STATS_TTL_SEC],
+    ["INCR", memberMsgsKey(userId)],
+    ["EXPIRE", memberMsgsKey(userId), MEMBER_TTL_SEC],
+    ["SET", memberFirstKey(userId), String(now), "NX", "EX", MEMBER_TTL_SEC],
+    ["EXPIRE", memberFirstKey(userId), MEMBER_TTL_SEC],
   ]);
 }
 
-/** People who joined or left. A set, so a join seen twice counts once. */
+/** People who joined or left. A set, so a join seen twice counts once. Someone who left is not tagged in a welcome. */
 export async function countMembers(kind: "joins" | "leaves", userIds: number[], now = Date.now()): Promise<void> {
   if (userIds.length === 0) return;
   const key = peopleKey(kind, hourOf(now));
   await kv([
     ["SADD", key, ...userIds],
     ["EXPIRE", key, STATS_TTL_SEC],
+    ...(kind === "leaves" ? userIds.map((id) => ["SET", goneKey(id), "1", "EX", WELCOMED_TTL_SEC]) : []),
   ]);
 }
 
@@ -584,4 +656,127 @@ export async function cachedChatAdmins(chatId: number): Promise<number[] | null>
 
 export async function cacheChatAdmins(chatId: number, ids: number[]): Promise<void> {
   await kv([["SET", `${PREFIX}admins:${chatId}`, JSON.stringify(ids), "EX", CHAT_ADMINS_TTL_SEC]]);
+}
+
+// ---------------------------------------------------------------- moderation
+
+/** What one moderation action came to. "failed" is when Telegram refused even the delete. */
+export type ModOutcome = "banned" | "muted" | "deleted" | "failed" | "unbanned" | "unmuted";
+
+/** One moderation action, for /modlog and the report. The excerpt is defanged and at most 120 characters. */
+export type ModEntry = {
+  at: number;
+  uid: number;
+  name: string;
+  username?: string;
+  /** What it was: a spam category, or "report"/"admin" for a member's /spam and the team's own asks. */
+  category: SpamCategory | "secret" | "admin" | "report";
+  /** Who decided: a fixed rule, the model, the team, or a member's report. */
+  source: "rule" | "model" | "team" | "report";
+  rule: string;
+  confidence?: number;
+  excerpt: string;
+  action: ModOutcome;
+  topic: string;
+  link?: string | null;
+  /** The team member who asked, for the team's own actions and /unban. */
+  by?: string;
+};
+
+/** Moderation rights Telegram can refuse: Delete messages, and Ban users (bans and mutes). */
+export type ModRight = "delete" | "ban" | "restrict";
+
+const MODLOG = `${PREFIX}modlog`;
+const MODLOG_MAX = 200;
+/** How long the moderation log and each member's offences are kept. */
+export const MODLOG_TTL_SEC = 7 * 24 * 60 * 60;
+const RIGHTS = `${PREFIX}rights`;
+const VOUCH_TTL_SEC = 30 * 24 * 60 * 60;
+const offencesKey = (userId: number) => `${PREFIX}offences:${userId}`;
+const vouchKey = (userId: number) => `${PREFIX}vouch:${userId}`;
+const OUTCOME_COUNTER: Partial<Record<ModOutcome, Counter>> = { banned: "modBanned", muted: "modMuted", deleted: "modDeleted", failed: "modFailed" };
+
+/**
+ * Logs a moderation action, in one round trip: the entry (kept a week), the
+ * hour's counter for the report, the offence against the member when it is
+ * one, the rights Telegram granted or refused this time, and, for a removal,
+ * that the member is gone (so a pending welcome does not tag them).
+ */
+export async function logModeration(
+  e: ModEntry,
+  o: { offence?: Offence | null; rights?: Partial<Record<ModRight, boolean>>; gone?: boolean } = {},
+): Promise<void> {
+  const counter = OUTCOME_COUNTER[e.action];
+  const stats = statsKey(hourOf(e.at));
+  const cmds: (string | number)[][] = [
+    ["LPUSH", MODLOG, JSON.stringify(e)],
+    ["LTRIM", MODLOG, 0, MODLOG_MAX - 1],
+    ["EXPIRE", MODLOG, MODLOG_TTL_SEC],
+  ];
+  if (counter) cmds.push(["HINCRBY", stats, counter, 1], ["EXPIRE", stats, STATS_TTL_SEC]);
+  if (o.offence) {
+    cmds.push(["LPUSH", offencesKey(e.uid), JSON.stringify(o.offence)], ["LTRIM", offencesKey(e.uid), 0, 19], ["EXPIRE", offencesKey(e.uid), MODLOG_TTL_SEC]);
+  }
+  for (const [right, ok] of Object.entries(o.rights ?? {})) cmds.push(["HSET", RIGHTS, `${right}:${ok ? "ok" : "fail"}`, String(e.at)]);
+  if (o.gone) cmds.push(["SET", goneKey(e.uid), "1", "EX", WELCOMED_TTL_SEC]);
+  await kv(cmds);
+}
+
+/** The latest moderation actions, newest first. */
+export async function recentModeration(limit = 20): Promise<ModEntry[]> {
+  const [raw] = await kv([["LRANGE", MODLOG, 0, Math.max(0, limit - 1)]]);
+  return (Array.isArray(raw) ? raw : []).map((r) => jsonOf<ModEntry>(r)).filter((e): e is ModEntry => Boolean(e && typeof e.uid === "number"));
+}
+
+/**
+ * What Glim knows about a member before it acts, in one round trip: their
+ * message count and when it first saw them (this message included), when they
+ * joined, their offences this week, whether an admin vouched for them, and the
+ * clock hours a day to three days ago they talked in (the activity counters,
+ * which also cover members from before this record existed).
+ */
+export async function memberStanding(userId: number, now = Date.now(), counted = true): Promise<Standing> {
+  const hour = hourOf(now);
+  const old = Array.from({ length: 49 }, (_, i) => hour - 24 - i);
+  const res = await kv([
+    ["GET", memberMsgsKey(userId)],
+    ["GET", memberFirstKey(userId)],
+    ["GET", joinedKey(userId)],
+    ["LRANGE", offencesKey(userId), 0, 19],
+    ["EXISTS", vouchKey(userId)],
+    ...old.map((h) => ["SISMEMBER", peopleKey("active", h), userId]),
+  ]);
+  const num = (v: unknown) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
+  const msgs = num(res[0]) ?? 0;
+  const offences = (Array.isArray(res[3]) ? res[3] : []).map((r) => jsonOf<Offence>(r)).filter((x): x is Offence => Boolean(x && typeof x.at === "number"));
+  return {
+    priorMsgs: Math.max(0, msgs - (counted ? 1 : 0)),
+    firstSeen: num(res[1]),
+    joinedAt: num(res[2]),
+    offences,
+    vouched: Number(res[4]) > 0,
+    oldActiveHours: res.slice(5).filter((v) => Number(v) > 0).length,
+  };
+}
+
+/**
+ * An admin let someone back in (/unban): their offences are cleared and, for
+ * 30 days, Glim's own guesses (the model check, the newcomer check) leave them
+ * alone. A fixed rule still deletes, as for any member Glim knows.
+ */
+export async function vouchFor(userId: number): Promise<void> {
+  await kv([
+    ["SET", vouchKey(userId), "1", "EX", VOUCH_TTL_SEC],
+    ["DEL", offencesKey(userId)],
+    ["DEL", goneKey(userId)],
+  ]);
+}
+
+/** The rights Telegram refused at the last try, with when: a right that failed after its last success. */
+export async function missingRights(): Promise<{ right: ModRight; at: number }[]> {
+  const [raw] = await kv([["HGETALL", RIGHTS]]);
+  const h = hashNumbers(raw);
+  return (["delete", "ban", "restrict"] as const)
+    .filter((r) => (h[`${r}:fail`] ?? 0) > (h[`${r}:ok`] ?? 0))
+    .map((r) => ({ right: r, at: h[`${r}:fail`]! }));
 }

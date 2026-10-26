@@ -16,7 +16,18 @@ import { summarizeQuestions } from "./answer";
 import { TOPIC, cleanName, topicName, type ChatLine } from "./rules";
 import { readFunnel, sumFunnel } from "@/lib/funnelStore";
 import type { FunnelEvent } from "@/lib/funnel";
-import { listBugReports, readLast24h, recentThreads, type Answered, type BugReport, type Escalation, type Unanswered } from "./store";
+import {
+  listBugReports,
+  missingRights,
+  readLast24h,
+  recentThreads,
+  type Answered,
+  type BugReport,
+  type Escalation,
+  type ModEntry,
+  type ModRight,
+  type Unanswered,
+} from "./store";
 import { getChatMemberCount } from "./telegram";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -60,7 +71,33 @@ export type ReportData = {
   summary: string | null;
   /** Claim-link totals for the last 7 days (lib/funnel), or null when they could not be read. */
   claimLinks?: Record<FunnelEvent, number> | null;
+  /** Moderation actions in the last 24 hours, by outcome. */
+  moderation?: { banned: number; muted: number; deleted: number; failed: number };
+  /** Moderation rights Telegram refused at the last try, with when. */
+  rightsMissing?: { right: ModRight; at: number }[];
 };
+
+const RIGHT_WORD: Record<ModRight, string> = { delete: "delete messages", ban: "ban", restrict: "mute" };
+
+/** "Moderation: 9 actions (6 removed, 1 muted for 24 hours, 2 deleted only)." Null with nothing to say. */
+function moderationLine(d: Pick<ReportData, "moderation">): string | null {
+  const m = d.moderation;
+  if (!m) return null;
+  const total = m.banned + m.muted + m.deleted + m.failed;
+  if (total === 0) return null;
+  const parts = [`${num(m.banned)} removed`, `${num(m.muted)} muted for 24 hours`, `${num(m.deleted)} deleted only`];
+  if (m.failed) parts.push(`${num(m.failed)} Telegram refused`);
+  return `Moderation: ${plural(total, "action")} (${parts.join(", ")}). /modlog lists the last 20.`;
+}
+
+/** The rights warning, or null when Telegram took every moderation call lately. */
+function rightsLine(d: Pick<ReportData, "rightsMissing" | "persona">): string | null {
+  const r = d.rightsMissing ?? [];
+  if (!r.length) return null;
+  const what = r.map((x) => RIGHT_WORD[x.right]).join(", ");
+  const last = Math.max(...r.map((x) => x.at));
+  return `Rights: Telegram would not let ${d.persona} ${what} (last at ${watTime(last)}). Give ${d.persona} the Delete messages and Ban users rights in the group's admin settings (Ban users covers mutes too).`;
+}
 
 /** "12 made, 9 opened, 7 claimed, 2 claimers then paid someone" */
 function claimLine(c: Record<FunnelEvent, number>): string {
@@ -125,6 +162,10 @@ export function formatReport(d: ReportData): string {
   lines.push(`${plural(d.scams, "scam message")} deleted, ${plural(d.secrets, "leaked secret")} deleted.`);
   const missed = d.scamsMissed + d.secretsMissed;
   if (missed > 0) lines.push(`${plural(missed, "more message")} flagged but not deleted. Check the bot can delete messages.`);
+  const mod = moderationLine(d);
+  if (mod) lines.push(mod);
+  const rights = rightsLine(d);
+  if (rights) lines.push(rights);
   if (d.escalations.length === 0) {
     lines.push("Nothing handed to an admin.");
   } else {
@@ -175,11 +216,12 @@ type Activity = {
 
 /** Reads the counters, the member count and the bug list. No model calls. */
 async function readActivity(groupId: number, persona: string, now: number): Promise<Activity> {
-  const [stats, members, bugs, funnel] = await Promise.all([
+  const [stats, members, bugs, funnel, rights] = await Promise.all([
     readLast24h(now).catch(() => null),
     getChatMemberCount(groupId),
     listBugReports(50).catch(() => [] as BugReport[]),
     readFunnel(7, now).catch(() => null),
+    missingRights().catch(() => []),
   ]);
   const counts = stats?.counts ?? {};
   const topics: Record<number, number> = {};
@@ -206,6 +248,8 @@ async function readActivity(groupId: number, persona: string, now: number): Prom
       bugs: bugs.filter((b) => b.createdAt > now - DAY_MS),
       questions: questions.length,
       claimLinks: funnel ? sumFunnel(funnel) : null,
+      moderation: { banned: counts.modBanned ?? 0, muted: counts.modMuted ?? 0, deleted: counts.modDeleted ?? 0, failed: counts.modFailed ?? 0 },
+      rightsMissing: rights,
     },
     questions,
     latestBugs: bugs,
@@ -300,6 +344,10 @@ export function formatTeamContext(d: TeamContextData): string {
   );
   const missed = d.scamsMissed + d.secretsMissed;
   if (missed > 0) lines.push(`- ${plural(missed, "more message")} flagged but not deleted (the bot may lack the Delete messages right).`);
+  const mod = moderationLine(d);
+  if (mod) lines.push(`- ${mod.replace(" /modlog lists the last 20.", " The team can see each one with /modlog.")}`);
+  const rights = rightsLine(d);
+  if (rights) lines.push(`- ${rights}`);
   lines.push(`- Questions seen: ${num(d.questions)}.`);
   if (d.claimLinks) {
     const any = Object.values(d.claimLinks).some((v) => v > 0);
@@ -369,4 +417,44 @@ export async function teamContext(groupId: number, persona: string, who: string,
     answeredLog: a.answeredLog,
     threads: CONTEXT_TOPICS.map((t) => ({ topic: topicName(t), lines: threads.get(t) ?? [] })),
   });
+}
+
+// ---------------------------------------------------------------- moderation log
+
+const OUTCOME_WORD: Record<ModEntry["action"], string> = {
+  banned: "removed",
+  muted: "muted 24h",
+  deleted: "deleted",
+  failed: "Telegram refused",
+  unbanned: "let back in",
+  unmuted: "unmuted",
+};
+
+/**
+ * The last moderation actions for the team's private chat (/modlog), newest
+ * first, in messages under Telegram's 4096-character limit. Each line has the
+ * time, who (with the number /unban takes), what it was, which rule or the
+ * model, the outcome and the defanged excerpt.
+ */
+export function formatModlog(entries: ModEntry[], persona: string): string[] {
+  if (entries.length === 0) return [`No moderation actions on record. ${persona} keeps them for 7 days.`];
+  const lines = entries.map((e) => {
+    const who = `${cleanName(e.name, "an account")}${e.username ? ` (@${e.username})` : ""} ${e.uid}`;
+    const how = e.source === "model" ? `model, ${Math.round((e.confidence ?? 0) * 100)}% sure` : e.source === "rule" ? `rule ${e.rule}` : e.by ? `${e.source}, ${cleanName(e.by)}` : e.source;
+    const what = e.excerpt ? `\n  "${e.excerpt}"` : "";
+    return `- ${watDayTime(e.at)}, ${who}: ${e.category}, ${how}. ${OUTCOME_WORD[e.action]} in ${e.topic}.${what}`;
+  });
+  const head = `Last ${plural(entries.length, "moderation action")}, newest first. /unban and the number lets someone back.`;
+  const out: string[] = [];
+  let cur = head;
+  for (const l of lines) {
+    if (cur.length + l.length + 1 > 3900) {
+      out.push(cur);
+      cur = l;
+    } else {
+      cur = `${cur}\n${l}`;
+    }
+  }
+  out.push(cur);
+  return out;
 }
