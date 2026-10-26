@@ -26,7 +26,7 @@ export default function DocsSdkPage() {
       title="SDK"
       lede={`The privacy layer for ${MAINNETS}, as a package. Give any app or agent shielded balances, private payments, and selective disclosure, without building a proving stack from scratch.`}
       glance={[
-        { label: "Package", value: "@gloamtrade/sdk 0.2.2" },
+        { label: "Package", value: "@gloamtrade/sdk" },
         { label: "Runtime", value: "browser + node" },
         { label: "Chains", value: `Mainnet ${MAINNET_CHAIN_IDS}, testnet 46630 · 42431 · 84532 · 11155111` },
         { label: "Proofs", value: "Groth16 + Poseidon" },
