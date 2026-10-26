@@ -169,7 +169,9 @@ forgets a note once a send has started:
   `~/.gloam/game-notes.<agent>.json`), named to the planner only by handle.
 - Every text a function returns, and every log line, is checked for known
   secrets and claim codes before it leaves, also when they are URL-encoded,
-  wrapped in base64 or written in decimal. Errors reach the planner as one short
+  wrapped in base64 or hex, written in decimal, as raw bytes or as a byte
+  array; a note package written out as JSON loses its secret even when the
+  plugin never saw it. A public RPC URL named in a message is left as is. Errors reach the planner as one short
   line, never with the RPC URL (which may carry an API key) or the request body.
 - The GAME planner is Virtuals' hosted LLM: it sees amounts, handles, hashes,
   Gloam addresses and proofs. Balances stay out of the environment it reads

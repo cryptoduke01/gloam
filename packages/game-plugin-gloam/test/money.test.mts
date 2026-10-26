@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { BASE_SEPOLIA_USDC, encodeNotePackage, generateReceiveKey, makeBoundNotePoseidon } from "@gloamtrade/sdk";
 import type { Address, Hex, PublicClient } from "viem";
-import GloamPlugin, { GloamAgent, claimLinkFor, redact, registerSecret, shutdownProver, walletCallSender, type CallSender } from "../src/index.ts";
+import GloamPlugin, { GloamAgent, claimLinkFor, redact, registerSecret, registerUrlSecret, shutdownProver, walletCallSender, type CallSender } from "../src/index.ts";
 
 const CIRCUITS = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "app", "public", "circuits");
 const POOL = "0x39e28cde55cab798874746ac52cb4b5cc99a0194" as Address;
@@ -262,4 +262,41 @@ test("GAME hears an unconfirmed send as done with an instruction not to send it 
   const res = await plugin.cashOutFunction.execute({ amount: { value: "5" }, to: { value: "0x00000000000000000000000000000000000000c1" } } as never, () => undefined);
   assert.equal(res.status, "done");
   assert.match(res.feedback, /Do not send it again/);
+});
+
+test("the redactor also catches a secret as raw bytes, as a byte array or in spaced hex, a claim code in hex, and a note package's JSON with a secret nobody registered", async () => {
+  const FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+  const fe = () => ("0x" + (BigInt("0x" + randomBytes(32).toString("hex")) % FIELD).toString(16).padStart(64, "0")) as Hex;
+  const secret = fe();
+  registerSecret(secret);
+  const raw = Buffer.from(secret.slice(2), "hex");
+  const code = encodeNotePackage({ pool: POOL, chainId: 84532, asset: BASE_SEPOLIA_USDC, amountWei: "1000000", secret, commitment: fe() });
+  const unregistered = fe();
+  const pack = JSON.stringify({ v: 1, t: "gloam-private-note", s: "poseidon", p: POOL, a: BASE_SEPOLIA_USDC, w: "1000000", k: unregistered, c: fe() });
+  const cases: Record<string, [string, string]> = {
+    "raw bytes, base64": [raw.toString("base64"), raw.toString("base64")],
+    "raw bytes, base64url": [raw.toString("base64url"), raw.toString("base64url")],
+    "byte array": [JSON.stringify([...raw]), JSON.stringify([...raw])],
+    "byte array with spaces": [`[${[...raw].join(", ")}]`, [...raw].join(", ")],
+    "hex split by spaces": [secret.slice(2).replace(/(.{8})/g, "$1 ").trim(), secret.slice(2, 10)],
+    "claim code in hex": [Buffer.from(code).toString("hex"), Buffer.from(code).toString("hex")],
+    "note package JSON, unregistered secret": [pack, unregistered.slice(2)],
+    "the same, escaped inside JSON": [JSON.stringify({ text: pack }), unregistered.slice(2)],
+  };
+  for (const [what, [v, mustGo]] of Object.entries(cases)) {
+    const out = redact(`x ${v} y`);
+    assert.ok(!out.includes(mustGo), `${what} leaks: ${out.slice(0, 160)}`);
+  }
+  // A public RPC named in a message still reads; a key in an RPC URL does not.
+  registerUrlSecret("https://sepolia.base.org");
+  assert.equal(redact("fetch failed: https://sepolia.base.org is rate limited"), "fetch failed: https://sepolia.base.org is rate limited");
+  registerUrlSecret("https://base-sepolia.g.alchemy.com/v2/AbCdEfGhIjKlMnOpQrSt12");
+  assert.equal(redact("URL: https://base-sepolia.g.alchemy.com/v2/AbCdEfGhIjKlMnOpQrSt12"), "URL: https://base-sepolia.g.alchemy.com/v2/[redacted]");
+  // Public things still pass, and many known secrets keep it quick.
+  for (let i = 0; i < 3000; i++) registerSecret(fe());
+  const proof = "gloamfunds1:" + Buffer.from(JSON.stringify({ v: 1, kind: "funds", nullifiers: [fe(), fe()], publicSignals: Array.from({ length: 12 }, () => BigInt(fe()).toString()) })).toString("base64");
+  const big = JSON.stringify({ status: "done", proof, deliverable: "gloam2t." + randomBytes(12000).toString("base64url"), tx: `0x${randomBytes(32).toString("hex")}` });
+  const t = performance.now();
+  assert.equal(redact(big), big);
+  assert.ok(performance.now() - t < 2000, `redact took ${performance.now() - t} ms`);
 });

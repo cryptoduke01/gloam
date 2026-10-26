@@ -18,7 +18,7 @@ const realNow = Date.now.bind(Date);
 
 
 
-void (null as unknown as GloamAgent);
+
 
 test("one quote per job: a second requirement does not replace the list the client funded", async () => {
   const pk = await generateReceiveKey();
@@ -203,4 +203,17 @@ test("a job funded on chain but blocked from paying keeps its principal reserved
   } finally {
     Date.now = realNow;
   }
+});
+
+test("a job on a chain other than the provider's is refused", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp);
+  const other = { ...(f.wallet as unknown as Record<string, unknown>), network: { ...f.wallet.network, chainId: 4663 } } as unknown as GloamAgent;
+  const p = providerFor(other);
+  const s = new FakeSession("9", acp);
+  await p.onEntry(s, requirementEntry("9", { payouts: [{ to: r1.tag, amount: "1" }] }));
+  assert.match(String(s.rejected), /chain/);
+  assert.equal(s.budget, null);
 });
