@@ -122,7 +122,9 @@ forgets a note once a send has started:
   may reword) is refused while it may land. A second payment of the same
   amount to the same payee with no label waits until the first settles; if the
   first then turns out to carry another note, the second is not answered with
-  it (`earlier_payment_landed`), and asked again it goes out. Each new note records which note its
+  it and nothing is sent (`earlier_payment_landed`: "If this is the same
+  payment, it is already paid; ask again only for a different payment"). Asked
+  again, it goes out. Each new note records which note its
   spend spends. After an hour with nothing on chain the same payment may be
   sent again, but only from that same note, so at most one of the two can
   land; a cash out keeps its note held for that same cash out. A retry that
