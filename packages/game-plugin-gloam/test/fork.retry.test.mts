@@ -12,12 +12,12 @@
  */
 import { after, afterEach, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BASE_SEPOLIA_USDC, POOL_TRANSFER_ABI } from "@gloamtrade/sdk";
-import { createWalletClient, formatUnits, http, parseUnits, toFunctionSelector, type Address, type Hex } from "viem";
+import { BASE_SEPOLIA_USDC, POOL_STATE_ABI, POOL_TRANSFER_ABI } from "@gloamtrade/sdk";
+import { createWalletClient, encodeFunctionData, formatUnits, http, parseUnits, toFunctionSelector, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { GloamAgent, shutdownProver, walletCallSender, type Call, type CallSender, type LimitsConfig } from "../src/index.ts";
 import { ERC20, findAnvil, startFork, type Fork } from "./fork/harness.mts";
@@ -69,7 +69,7 @@ function relayLike(agentKey: Hex, r1: Hex, r2: Hex) {
   return { sender, state };
 }
 
-async function agentWith(name: string, usdc?: string) {
+async function agentWith(name: string, usdc?: string, senderFor?: (key: Hex) => CallSender) {
   const k = await fork.newKey();
   const r1 = await fork.newKey();
   const r2 = await fork.newKey();
@@ -85,7 +85,7 @@ async function agentWith(name: string, usdc?: string) {
     env: { GLOAM_AGENT_PRIVATE_KEY: k.key, GLOAM_NOTE_STORE: join(dir, "notes.json"), GLOAM_SPEND_LOG: join(dir, "spend.json") },
     artifacts: { dir: CIRCUITS, url: "http://127.0.0.1:1/never" },
     limits: LIMITS,
-    sender,
+    sender: senderFor ? senderFor(k.key) : sender,
   });
   return { agent, state };
 }
@@ -189,4 +189,53 @@ test("a sweep that never lands keeps the scan on its payment, and is tried again
   assert.equal(third[0]?.status, "swept", JSON.stringify(third));
   await bob.refresh();
   assert.equal(await spendable(bob), "2");
+});
+
+test("two jobs paying the same payee, amount and note are two payments: the second is not answered with the first's handle", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: alice, state } = await agentWith("retry-twojobs", "40");
+  const { agent: bob } = await agentWith("retry-twojobs-bob");
+  const bobTag = await bob.address();
+  assert.equal((await alice.add({ amount: "20" })).status, "done");
+  state.armed = true;
+  const first = await alice.pay({ to: bobTag, amount: "3", note: "inv-9", label: "acp 84532:500 payout 1" });
+  assert.equal(first.status, "unconfirmed");
+  await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  const second = await alice.pay({ to: bobTag, amount: "3", note: "inv-9", label: "acp 84532:501 payout 1" });
+  assert.equal(second.status, "done", JSON.stringify(second));
+  assert.notEqual(second.payment, first.payment, "job 501 has its own payment");
+  assert.ok(!second.alreadyPaid);
+  const got = (await bob.checkIncoming()).received as { amount: string }[];
+  assert.deepEqual(got.map((g) => g.amount), ["3 USDC", "3 USDC"], "bob is paid for both jobs");
+});
+
+test("a deposit through a smart account whose inner call reverted (outer transaction succeeds) is not counted", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const runtime = `0x${readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fork", "SmartAccountLike.runtime.hex"), "utf8").trim()}` as Hex;
+  const account = (await fork.newKey()).address;
+  await fork.rpc("anvil_setCode", [account, runtime]);
+  await fork.sendFromHolder(BASE_SEPOLIA_USDC, HOLDER, account, parseUnits("10", 6));
+  const sink = (await fork.newKey(0n)).address;
+  const EXEC = [{ type: "function", name: "execute", stateMutability: "payable", inputs: [{ name: "calls", type: "tuple[]", components: [{ name: "to", type: "address" }, { name: "value", type: "uint256" }, { name: "data", type: "bytes" }] }], outputs: [] }] as const;
+  const { agent } = await agentWith("retry-aa", undefined, (k) => {
+    const bundler = createWalletClient({ account: privateKeyToAccount(k), chain, transport: http(fork.url) });
+    return {
+      address: account,
+      async sendCalls(calls: Call[]) {
+        // Another operation from the same account spends the tokens first; the bundle transaction succeeds
+        // while the operation inside it reverts.
+        const bal = await fork.client.readContract({ address: BASE_SEPOLIA_USDC, abi: ERC20, functionName: "balanceOf", args: [account] });
+        await fork.sendAs(account, BASE_SEPOLIA_USDC, encodeFunctionData({ abi: ERC20, functionName: "transfer", args: [sink, bal] }));
+        return bundler.sendTransaction({ account: bundler.account, chain, to: account, data: encodeFunctionData({ abi: EXEC, functionName: "execute", args: [calls.map((c) => ({ to: c.to, value: c.value ?? 0n, data: c.data }))] }) });
+      },
+    };
+  });
+  const out = await agent.add({ amount: "5" });
+  assert.notEqual(out.status, "done", JSON.stringify(out));
+  const stored = agent.store.list();
+  for (const n of stored) {
+    const seen = await fork.client.readContract({ address: agent.network.pool, abi: POOL_STATE_ABI, functionName: "commitmentSeen", args: [n.commitment] });
+    assert.ok(n.status !== "unspent" || seen, "no note counts as spendable unless it is in the vault");
+  }
+  await agent.refresh();
+  assert.equal(await spendable(agent), "0");
+  assert.equal(agent.largestPayment(), 0n);
 });

@@ -419,6 +419,22 @@ export class GloamAgent {
     return !(err instanceof GloamRelayError) || RELAY_MAYBE_SENT.includes(err.code);
   }
 
+  /**
+   * Whether a transaction that succeeded did what it was sent to do, read at its
+   * own block. A smart account's bundle transaction (ERC-4337) succeeds even when
+   * the operation inside it reverts, so a successful receipt alone proves nothing:
+   * the commitments it should have added must be in the vault and the nullifiers
+   * it should have spent must read spent.
+   */
+  private async didLand(blockNumber: bigint, expect: { seen?: Hex[]; spent?: Hex[] }): Promise<boolean> {
+    const pool = this.network.pool;
+    const reads = [
+      ...(expect.seen ?? []).map((c) => this.publicClient.readContract({ address: pool, abi: POOL_STATE_ABI, functionName: "commitmentSeen", args: [c], blockNumber })),
+      ...(expect.spent ?? []).map((n) => this.publicClient.readContract({ address: pool, abi: POOL_STATE_ABI, functionName: "isSpent", args: [n], blockNumber })),
+    ];
+    return (await Promise.all(reads)).every(Boolean);
+  }
+
   private keep(note: NewNote): StoredNote {
     registerSecret(note.secret);
     return this.store.add(note);
@@ -542,6 +558,10 @@ export class GloamAgent {
       this.store.update(payment.handle, { createdTx: sent });
       const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw Object.assign(new Error(`The transfer reverted (${hash}).`), { reverted: true });
+      const outputs = [intent.paymentNote.commitment, ...(change ? [change.commitment] : [])];
+      if (!(await this.didLand(receipt.blockNumber, { seen: outputs, spent: [input.nullifier] }))) {
+        throw Object.assign(new Error(`The transaction ${hash} succeeded, but the transfer inside it did not happen (an operation that reverted inside a smart account).`), { reverted: true });
+      }
       this.store.update(input.handle, { status: "spent", spentTx: sent });
       const changeDone = change ? this.store.update(change.handle, { status: "unspent", createdTx: sent }) ?? null : null;
       // A payment note is the payee's money once it lands; a claim note stays open until someone claims it.
@@ -630,8 +650,16 @@ export class GloamAgent {
   async refresh(): Promise<{ updated: number }> {
     let updated = 0;
     const pool = this.network.pool;
-    const receiptStatus = async (hash: Hex | null | undefined) =>
-      hash ? ((await this.publicClient.getTransactionReceipt({ hash }).catch(() => null))?.status ?? null) : null;
+    // A transaction's final word on a note: "reverted" also when it succeeded without doing its part
+    // (an operation that reverted inside a smart account), read at its own block.
+    const outcome = async (hash: Hex | null | undefined, expect: { seen?: Hex[]; spent?: Hex[] }) => {
+      if (!hash) return null;
+      const r = await this.publicClient.getTransactionReceipt({ hash }).catch(() => null);
+      if (!r) return null;
+      if (r.status !== "success") return "reverted" as const;
+      const done = await this.didLand(r.blockNumber, expect).catch(() => null);
+      return done === null ? null : done ? ("success" as const) : ("reverted" as const);
+    };
     // Whether a spend that would create a note can still land is read at one block, so two RPC
     // nodes at different heights can never make a note that landed look dead.
     const head = await this.publicClient.getBlockNumber({ cacheTime: 0 }).catch(() => null);
@@ -660,7 +688,7 @@ export class GloamAgent {
         this.store.update(n.handle, { status: n.origin === "payment" ? "spent" : "unspent", stale: undefined });
         updated++;
       } else if (n.status === "pending" && n.pending === "create") {
-        if ((await receiptStatus(n.createdTx)) === "reverted" || (await deadAt(n))) {
+        if ((await outcome(n.createdTx, { seen: [n.commitment] })) === "reverted" || (await deadAt(n))) {
           // The transaction that would make it reverted, or the note it spends went another way: it can never land.
           this.store.remove(n.handle);
           updated++;
@@ -670,7 +698,7 @@ export class GloamAgent {
           updated++;
         }
       } else if (n.status === "pending" && n.pending === "spend") {
-        const tx = await receiptStatus(n.spentTx);
+        const tx = await outcome(n.spentTx, { spent: [n.nullifier] });
         const age = Date.now() - Date.parse(n.spendStarted ?? n.updatedAt);
         // Free it when its transaction reverted, when nothing was ever sent (ten minutes on), or when a send
         // has not landed in an hour. Freed, it can be spent again; a payment still waiting on it is then
@@ -849,10 +877,16 @@ export class GloamAgent {
       const sentHash = hash;
       this.store.update(held.handle, { createdTx: sentHash });
       const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") {
+      if (receipt.status !== "success" || !(await this.didLand(receipt.blockNumber, { seen: [held.commitment] }))) {
         this.settle(gate.id, "reverted", { hash });
         this.store.remove(held.handle);
-        return { status: "error", message: `The deposit reverted (${hash}). Nothing moved.` };
+        return {
+          status: "error",
+          message:
+            receipt.status !== "success"
+              ? `The deposit reverted (${hash}). Nothing moved.`
+              : `The transaction ${hash} succeeded, but the deposit inside it did not happen (an operation that reverted inside a smart account). Nothing moved into the vault.`,
+        };
       }
       this.settle(gate.id, "sent", { hash });
       const stored = this.store.update(held.handle, { status: "unspent", createdTx: hash }) ?? held;
@@ -1258,6 +1292,18 @@ export class GloamAgent {
     // The SDK reads "failed" when the chain shows nothing yet; a sweep still in the mempool reads the same.
     let status: string = res.status;
     let reason = res.reason;
+    // A successful receipt can hide an operation that reverted inside a smart account: the fresh note must be in the vault.
+    if (status === "swept" && res.hash && res.freshNote) {
+      const r = await this.publicClient.getTransactionReceipt({ hash: res.hash }).catch(() => null);
+      const done = r ? await this.didLand(r.blockNumber, { seen: [res.freshNote.commitment] }).catch(() => null) : null;
+      if (done === false) {
+        status = "failed";
+        reason = `The transaction ${res.hash} succeeded, but the sweep inside it did not happen. It can be retried.`;
+      } else if (done === null) {
+        status = "unconfirmed";
+        reason = "The sweep's transaction could not be read back yet. refresh() settles it.";
+      }
+    }
     if (status === "failed" && started && sendError && this.mayHaveSent(sendError)) {
       status = "unconfirmed";
       reason = `The sweep was sent, but its answer was lost (${errMsg(sendError)}). The fresh note is kept; refresh() settles it.`;
@@ -1489,6 +1535,9 @@ export class GloamAgent {
       this.store.update(exact.handle, { spentTx: hash });
       const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw Object.assign(new Error(`The cash out reverted (${hash}).`), { reverted: true });
+      if (!(await this.didLand(receipt.blockNumber, { spent: [exact.nullifier] }))) {
+        throw Object.assign(new Error(`The transaction ${hash} succeeded, but the cash out inside it did not happen (an operation that reverted inside a smart account).`), { reverted: true });
+      }
       this.store.update(exact.handle, { status: "spent", spentTx: hash });
       settle("sent", { hash });
       const fee = isPaymentsPoolChainId(this.network.chainId) ? cashOutFee(amountWei, CASH_OUT_FEE_BPS) : 0n;
