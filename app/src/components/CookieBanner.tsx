@@ -1,29 +1,47 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { getConsent, setConsent, subscribeConsent, type ConsentValue } from "@/lib/consent";
+import { CONSENT_KEY, getConsent, setConsent, subscribeConsent, type ConsentValue } from "@/lib/consent";
 import { readDemo } from "@/lib/demoFlag";
 
 const noopSubscribe = () => () => {};
 
+/**
+ * The banner is in the server HTML with `hidden`, and this script right after
+ * it shows it when this browser has made no choice yet (and is not recording
+ * the demo), so it appears with the first paint instead of after the app's
+ * JavaScript runs: on an app page it was the slowest paint, about 4 s on a
+ * throttled phone. React takes over from there.
+ */
+const REVEAL_SCRIPT = `(function(){try{var v=localStorage.getItem('${CONSENT_KEY}');if(v==='all'||v==='essential')return;if(/[?&]demo=1/.test(location.search)||sessionStorage.getItem('gloam_demo')==='1')return;var el=document.getElementById('gl-cookie');if(el)el.hidden=false}catch(e){}})()`;
+
 export function CookieBanner() {
-  // The server has no choice to read, so it renders nothing ("set").
+  // The server has no choice to read, so it renders the banner hidden ("set").
   const consent = useSyncExternalStore<ConsentValue | "set" | null>(subscribeConsent, getConsent, () => "set");
   // Stays out of the way while recording the demo.
   const demo = useSyncExternalStore(noopSubscribe, readDemo, () => false);
   // Closes at once even where storage refuses the write (private mode).
   const [closed, setClosed] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const hide = consent !== null || demo || closed;
+  // The head start may have shown it; React's state decides from here.
+  useEffect(() => {
+    if (ref.current) ref.current.hidden = hide;
+  }, [hide]);
 
   const accept = (value: ConsentValue) => {
     setConsent(value);
     setClosed(true);
   };
 
-  if (consent !== null || demo || closed) return null;
-
   return (
+    <>
     <div
+      ref={ref}
+      id="gl-cookie"
+      hidden={hide}
+      suppressHydrationWarning
       role="dialog"
       aria-label="Cookie consent"
       className="gl-cookie fixed bottom-3 left-3 right-3 z-50 sm:left-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
@@ -72,5 +90,7 @@ export function CookieBanner() {
         </div>
       </div>
     </div>
+    <script dangerouslySetInnerHTML={{ __html: REVEAL_SCRIPT }} />
+    </>
   );
 }
