@@ -74,8 +74,21 @@ export type StoredNote = {
   spendStarted?: string;
   /** A payment: the sealed payment message, until it is posted for the payee (sealed, so not a secret). */
   deliver?: string;
-  /** A payment: what identifies it (payee, asset, amount, note), so a second one is refused while it confirms. */
+  /**
+   * A payment, claim link or cash out: what identifies it (payee or address,
+   * asset, amount, note), so the same one is never sent twice while it may land.
+   * On a cash out it sits on the note being cashed out.
+   */
   requestKey?: string;
+  /**
+   * A note a spend creates (change, payment, claim, split, swept): the nullifier
+   * of the note that spend spends, and that note's handle. Once that nullifier is
+   * spent and this note is not in the vault, the spend that would make it can
+   * never land, and it is dropped. A retry of the same payment spends that same
+   * note, so at most one of them can land.
+   */
+  spends?: Hex;
+  spendsHandle?: string;
   /**
    * Pending for over an hour with nothing on chain: most likely never landed.
    * Still checked on every refresh (it settles if it lands after all), but no
