@@ -992,9 +992,10 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(v4.status, "already_settled", "served once");
     assert.equal(v4.grantAccess, false);
     const l = await later(HOUR, () => S.call("gloam_list_notes", { refresh: true }));
-    assert.ok(l.refreshed.some((x: string) => x.includes("removed, its payment was taken by another transaction")), JSON.stringify(l.refreshed));
+    assert.ok(l.refreshed.some((x: string) => x.includes("dead, its payment was taken by another transaction")), JSON.stringify(l.refreshed));
     assert.equal(l.balances[0].spendable, "3");
-    assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").length, 1, "one note for the payment");
+    const received = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+    assert.deepEqual(received.map((n) => n.status).sort(), ["dead", "unspent"], "one note for the payment, and the first sweep's kept as dead");
   });
 
   test("a sweep that confirms after its verify said unconfirmed serves the payer on the next verify, once", async () => {
@@ -1071,6 +1072,61 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(received[0]!.status, "unspent");
     assert.equal(received[0]!.served, true);
     assert.equal(received[0]!.createdTx, sweepHash);
+  });
+
+  test("a stale read never deletes a received note: it is marked dead, comes back when it shows up, and serves once", async () => {
+    const chain = mockChain();
+    // From the sweep on, the reads come from a node behind the one that mined it (the spend read from one that is not).
+    let lag = false;
+    const payeeWallet = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        const h = await chain.apply("transfer", call.args); // mined
+        noteBroadcast(h);
+        lag = true;
+        throw new Error("HTTP request failed.\n\nStatus: 504"); // and the reply lost
+      },
+    };
+    let block = 1000n;
+    const view = {
+      ...chain.publicClient,
+      getBlockNumber: async () => block++,
+      getTransaction: async ({ hash }: { hash: Hex }) => {
+        if (lag) throw new TransactionNotFoundError({ hash });
+        return { hash };
+      },
+      getTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+        if (lag) throw new Error(`Transaction receipt with hash "${hash}" could not be found.`);
+        return chain.publicClient.getTransactionReceipt({ hash });
+      },
+      readContract: async (a: { functionName: string; args: [Hex] }) => (lag && a.functionName === "commitmentSeen" ? false : chain.publicClient.readContract(a)),
+    };
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: payeeWallet, publicClient: view }) as unknown as Signer;
+    const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const v1 = await S.call("gloam_verify_payment", args);
+    assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+    const [fresh] = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+    const l1 = await later(HOUR, () => S.call("gloam_list_notes", { refresh: true }));
+    assert.ok(l1.refreshed.some((x: string) => x.includes(`${fresh!.handle}: dead`)), JSON.stringify(l1.refreshed));
+    const kept = openNoteStore(payeeEnv).get(fresh!.handle);
+    assert.equal(kept?.status, "dead", "the note is kept, not deleted");
+    assert.equal(kept?.secret, fresh!.secret, "with its secret");
+    assert.equal((await later(HOUR, () => S.call("gloam_verify_payment", args))).grantAccess, false, "not served on those reads");
+
+    lag = false; // the node catches up
+    const l2 = await later(HOUR, () => S.call("gloam_list_notes", { refresh: true }));
+    assert.ok(l2.refreshed.some((x: string) => x.includes(`${fresh!.handle}: confirmed`)), JSON.stringify(l2.refreshed));
+    assert.equal(l2.balances[0].spendable, "3", "the payee holds the payment");
+    const v2 = await S.call("gloam_verify_payment", args);
+    assert.equal(v2.status, "settled", JSON.stringify(v2));
+    assert.equal(v2.grantAccess, true);
+    const v3 = await S.call("gloam_verify_payment", args);
+    assert.equal(v3.status, "already_settled");
   });
 
   test("a payee sweep whose relay answer is unclear keeps the fresh note, which lands later", async () => {
