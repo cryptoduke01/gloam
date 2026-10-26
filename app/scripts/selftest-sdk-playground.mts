@@ -238,8 +238,9 @@ await test("the relay and the vault are Gloam's real addresses", () => {
   for (const id of [sdk.RH_MAINNET_CHAIN_ID, sdk.TEMPO_MAINNET_CHAIN_ID] as const) {
     assert.equal(sdk.mainnetPoolFor(id)?.pool.toLowerCase(), GLOAM_VAULT.toLowerCase(), `vault on ${id}`);
   }
-  const chainDocs = readFileSync(join(appDir, "src/app/docs/chain/page.tsx"), "utf8");
-  assert.ok(chainDocs.toLowerCase().includes(GLOAM_RELAYER.toLowerCase()), "the relayer the docs list");
+  // The docs and /verify name the relayer from lib/contractDirectory.
+  const listed = readFileSync(join(appDir, "src/lib/contractDirectory.ts"), "utf8");
+  assert.ok(listed.toLowerCase().includes(GLOAM_RELAYER.toLowerCase()), "the relayer the docs list");
   assert.equal(relayPage().address, shortAddress(GLOAM_RELAYER));
   assert.equal(vaultPage("USDG").address, shortAddress(GLOAM_VAULT));
   assert.equal(shortAddress(GLOAM_VAULT), "0x39e2…0194");
