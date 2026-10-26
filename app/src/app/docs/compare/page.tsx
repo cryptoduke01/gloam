@@ -286,7 +286,7 @@ export default function DocsComparePage() {
       </p>
       <p>Checked on 25 and 26 October 2026, from Nullmask&apos;s own pages and its audit report.</p>
       <div className="overflow-x-auto">
-        <table className="min-w-[720px] [&_th]:whitespace-normal">
+        <table className="md:min-w-[720px] [&_th]:whitespace-normal">
           <thead>
             <tr>
               <th />
