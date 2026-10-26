@@ -112,6 +112,7 @@ import {
   validateGloamCharge,
   verifyChallengeId,
   GloamChargeError,
+  type GloamChargePayload,
   type GloamChargeReceipt,
   type GloamChargeRequest,
   type PaymentChallenge,
@@ -1879,6 +1880,13 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     // MPP pull: the payer handed over its proven transfer; it has to land before the note can be swept.
     let paymentHash: Hex | null = null;
     if (args.pull) {
+      // Recorded before it goes out: if it lands while every read lags, a later verify (even past the
+      // challenge's expiry) still finds this payment and serves it, once.
+      try {
+        if (args.mpp) notes.markPull(paymentNullifier, args.mpp.challengeId);
+      } catch (e) {
+        return text({ status: "error", grantAccess: false, final: false, error: `Could not record the payer's transfer before sending it (${errMsg(e)}). Nothing was sent; verify again.` });
+      }
       let landed = false;
       // Sent, or maybe sent, without a confirmation yet: it may still land.
       let inFlight = false;
@@ -2069,36 +2077,46 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     const label = `${request.description ?? ch.realm} ${challengeTag}`;
     const mppRef = { challengeId: ch.id, ...(request.externalId !== undefined ? { externalId: request.externalId } : {}) };
     // Swept by this server already? Ask before the chain checks, which would only see a spent note.
-    let early: { note: NoteExport; nullifier: Hex; mode: "push" | "pull" } | null = null;
+    let early: { note: NoteExport; nullifier: Hex; payload: GloamChargePayload } | null = null;
     try {
       const payload = parseGloamChargePayload(cred.payload);
       const note = await openGloamPaymentNote(payload.ticket, receiveKey);
       const nullifier = fieldToHex(await noteNullifierPoseidon(hexToField(note.secret), hexToField(note.commitment)));
-      early = { note, nullifier, mode: payload.type === "hash" ? "push" : "pull" };
+      early = { note, nullifier, payload };
     } catch {
       // The full check below explains what is wrong with it.
     }
+    const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
+    const pulls = notes.pulls();
     const recorded = early ? notes.list().filter((n) => n.sweptFrom?.toLowerCase() === early!.nullifier.toLowerCase()) : [];
-    if (early && recorded.length) {
-      // A payment this server took for this challenge: settled from its record whatever the challenge's age, so a
-      // sweep that confirms late, or one swept again after ten minutes, still serves the payer, once.
-      if (!recorded.some((n) => n.label?.endsWith(challengeTag))) {
+    const pulledFor = early ? pulls[early.nullifier.toLowerCase()] : undefined;
+    if (early && (recorded.length || pulledFor)) {
+      // A payment this server took for this challenge (swept, or its pull transfer submitted): settled from its
+      // record whatever the challenge's age, so a transfer or sweep that confirms late, or a sweep sent again
+      // after ten minutes, still serves the payer, once.
+      if (!recorded.some((n) => n.label?.endsWith(challengeTag)) && pulledFor !== ch.id) {
         return reject("This payment was made for another challenge from this server, and settles only under that one.", { problem: "invalid-challenge" });
       }
       if (!(await verifyPaymentNoteBinding(early.note))) return reject("The payment note's amount does not bind to its commitment.");
-      const { note, nullifier, mode } = early;
-      const verifyView = { ok: true, reason: null, sealed: true, amountWei: note.amountWei, asset: note.asset, mode };
-      return settleReceived({ net, notes, note, paymentNullifier: nullifier, label, sealed: true, verifyView, mpp: mppRef });
+      const { note, nullifier, payload } = early;
+      // A pull transfer that is not in the pool yet goes to the settle again (it lands once at most).
+      let pull: ValidatedGloamCharge["transfer"] | undefined;
+      if (!recorded.length && payload.type === "transfer" && payload.transfer.newCommitments[0].toLowerCase() === note.commitment.toLowerCase()) {
+        if (!(await sweepChain(client, net).isCommitmentSeen(note.commitment).catch(() => false))) pull = payload.transfer;
+      }
+      const verifyView = { ok: true, reason: null, sealed: true, amountWei: note.amountWei, asset: note.asset, mode: payload.type === "hash" ? "push" : "pull" };
+      return settleReceived({ net, notes, note, paymentNullifier: nullifier, label, sealed: true, verifyView, ...(pull ? { pull } : {}), mpp: mppRef });
     }
     // No payment recorded for it: an expired challenge is refused.
     if (isExpired(ch)) return reject("The challenge has expired.", { problem: "payment-expired" });
-    const usedBy = notes.list().find((n) => n.origin === "received" && n.label?.endsWith(challengeTag));
+    const usedBy =
+      notes.list().find((n) => n.origin === "received" && n.label?.endsWith(challengeTag))?.handle ??
+      (Object.values(pulls).includes(ch.id) ? "a payer's transfer this server submitted" : undefined);
     if (usedBy) {
-      return reject(`This challenge was already paid and used (${usedBy.handle}). The payer should request the resource again for a fresh challenge.`, {
+      return reject(`This challenge was already paid and used (${usedBy}). The payer should request the resource again for a fresh challenge.`, {
         problem: "invalid-challenge",
       });
     }
-    const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
     const notUsed = async (): Promise<never> => {
       throw new Error("not used while validating");
     };

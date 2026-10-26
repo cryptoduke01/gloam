@@ -565,6 +565,62 @@ test("an MPP sweep that never reached the node is swept again after ten minutes 
   assertNoSecrets([payerEnv, payeeEnv]);
 });
 
+test("an MPP pull payment whose transfer lands while the reads lag is served once, even after the challenge expired", async () => {
+  const { chain, payeeEnv } = await setup();
+  // The payer's transfer is mined, but its receipt read fails and the commitment read comes from a node behind.
+  let lag = true;
+  const view = {
+    ...chain.publicClient,
+    waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+      if (lag) throw Object.assign(new Error("HTTP request failed. Status: 429"), { code: 429 });
+      return chain.publicClient.waitForTransactionReceipt({ hash });
+    },
+    readContract: async (a: { functionName: string; args: [Hex] }) => (lag && a.functionName === "commitmentSeen" ? false : chain.publicClient.readContract(a)),
+  };
+  const signer = (net: unknown) => ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+  const S = await connect(makeDeps(chain, payeeEnv, { signer: signer as ServerDeps["signer"], publicClient: () => view as unknown as Signer["publicClient"] }).deps);
+  const ch = parsePaymentChallenges((await price(S, 1)).mpp.wwwAuthenticate)[0]!;
+  const secret = 424_242n;
+  const c = fieldToHex(await noteCommitmentPoseidon(secret, 1_000_000n, TEMPO_PATHUSD));
+  await chain.insert(c);
+  const pulled = await createGloamChargeCredential({ challenge: ch, note: { secret: fieldToHex(secret), amountWei: 1_000_000n, path: await chain.path(c) }, prove: stub, mode: "pull" });
+  const v1 = await S("gloam_verify_payment", { payment: pulled.authorization });
+  assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+  assert.deepEqual(chain.calls, ["transfer"], "the payer's transfer was submitted, and it is mined");
+  lag = false;
+  const v2 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }));
+  assert.equal(v2.status, "settled", `the payer paid and the payee can sweep it: served, past expiry (${JSON.stringify(v2)})`);
+  assert.equal(v2.grantAccess, true);
+  assert.deepEqual(chain.calls, ["transfer", "transfer"], "the payer's transfer was not sent again, only the sweep");
+  const v3 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }));
+  assert.equal(v3.status, "already_settled", JSON.stringify(v3));
+});
+
+test("a second payment for a challenge whose pull payment is in flight is refused", async () => {
+  const { chain, payeeEnv } = await setup();
+  const view = {
+    ...chain.publicClient,
+    waitForTransactionReceipt: async () => {
+      throw Object.assign(new Error("HTTP request failed. Status: 429"), { code: 429 });
+    },
+    readContract: async (a: { functionName: string; args: [Hex] }) => (a.functionName === "commitmentSeen" ? false : chain.publicClient.readContract(a)),
+  };
+  const signer = (net: unknown) => ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+  const S = await connect(makeDeps(chain, payeeEnv, { signer: signer as ServerDeps["signer"], publicClient: () => view as unknown as Signer["publicClient"] }).deps);
+  const ch = parsePaymentChallenges((await price(S, 1)).mpp.wwwAuthenticate)[0]!;
+  const pull = async (secret: bigint) => {
+    const c = fieldToHex(await noteCommitmentPoseidon(secret, 1_000_000n, TEMPO_PATHUSD));
+    await chain.insert(c);
+    return createGloamChargeCredential({ challenge: ch, note: { secret: fieldToHex(secret), amountWei: 1_000_000n, path: await chain.path(c) }, prove: stub, mode: "pull" });
+  };
+  const first = await S("gloam_verify_payment", { payment: (await pull(515_151n)).authorization });
+  assert.equal(first.status, "unconfirmed", JSON.stringify(first));
+  const second = await S("gloam_verify_payment", { payment: (await pull(626_262n)).authorization });
+  assert.equal(second.status, "rejected", JSON.stringify(second));
+  assert.match(second.message, /already paid/);
+  assert.deepEqual(chain.calls, ["transfer"], "the second payer's transfer was never submitted");
+});
+
 test("an MPP note's label comes from the challenge's signed terms, never from text the payer can change", async () => {
   const { chain, payeeEnv, payerEnv } = await setup();
   const S = await connect(makeDeps(chain, payeeEnv).deps);
