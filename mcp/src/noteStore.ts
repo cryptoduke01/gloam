@@ -18,8 +18,10 @@
  * decrypt is never overwritten: it holds the only copy of the money.
  *
  * Each note is unspent, pending (being created, or the input of a spend in
- * flight) or spent. The server also keeps its receive key here, the private half
- * of the gloamr1. tag that x402 payments to this server are sealed to.
+ * flight), spent, or dead: the chain says its transaction can never land. A dead
+ * note keeps its secret, in case that read was wrong, and a refresh brings it
+ * back if it shows up. The server also keeps its receive key here, the private
+ * half of the gloamr1. tag that x402 payments to this server are sealed to.
  */
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -32,7 +34,7 @@ import type { NetworkKey } from "./networks.js";
 
 type Env = Record<string, string | undefined>;
 
-export type NoteStatus = "unspent" | "pending" | "spent";
+export type NoteStatus = "unspent" | "pending" | "spent" | "dead";
 /**
  * Where the note came from: a shield, the change of a payment, or a payment this
  * server received and swept. "payment" is a payment this server sent: the
@@ -255,7 +257,8 @@ export class NoteStore {
       const note = d.notes[i];
       if (!note) throw new Error(`There is no note "${handle}". Call gloam_list_notes for this agent's notes.`);
       if (note.status !== "unspent") {
-        throw new Error(`Note ${handle} is ${note.status === "pending" ? "in use by a transaction that has not confirmed" : "already spent"}.`);
+        const why = { pending: "in use by a transaction that has not confirmed", spent: "already spent", dead: "dead: its transaction never landed" }[note.status];
+        throw new Error(`Note ${handle} is ${why}.`);
       }
       const why = check(note);
       if (why) throw new Error(why);
@@ -303,7 +306,7 @@ export class NoteStore {
 
 /** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */
 export function servedPayment(n: StoredNote): boolean {
-  return n.served === true || (n.served === undefined && n.status !== "pending");
+  return n.served === true || (n.served === undefined && (n.status === "unspent" || n.status === "spent"));
 }
 
 /** Open this agent's note store (throws with a plain reason when there is no usable key). */
@@ -338,7 +341,7 @@ export function noteView(n: StoredNote) {
 export function balances(notes: StoredNote[]) {
   const by = new Map<string, { network: string; asset: Address; symbol: string; decimals: number; unspent: bigint; pending: bigint; notes: number }>();
   for (const n of notes) {
-    if (n.status === "spent" || n.origin === "payment") continue;
+    if (n.status === "spent" || n.status === "dead" || n.origin === "payment") continue;
     if (n.status === "pending" && n.pending === "spend") continue;
     const k = `${n.chainId}:${n.asset.toLowerCase()}`;
     const cur = by.get(k) ?? { network: n.network, asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, notes: 0 };

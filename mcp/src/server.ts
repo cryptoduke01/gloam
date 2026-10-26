@@ -800,10 +800,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Private notes and balance",
       description:
-        "This server's private notes as handles, with network, asset, amount, status (unspent, pending, spent) and the transaction that created each one, plus the spendable private balance per asset. Never shows a secret. Pass refresh to check pending notes against the chain.",
+        "This server's private notes as handles, with network, asset, amount, status (unspent, pending, spent, or dead when its transaction can never land) and the transaction that created each one, plus the spendable private balance per asset. Never shows a secret. Pass refresh to check pending notes against the chain.",
       inputSchema: {
         network: z.enum(NETWORK_KEYS).optional().describe("Only this network."),
-        includeSpent: z.boolean().default(false).describe("Also list spent notes."),
+        includeSpent: z.boolean().default(false).describe("Also list spent and dead notes."),
         refresh: z.boolean().default(false).describe("Check pending notes on chain first (read-only calls)."),
       },
     },
@@ -813,8 +813,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
-        // Pending notes, and notes made spendable again whose old spend may have landed since.
-        for (const n of notes.list().filter((x) => x.status === "pending" || (x.status === "unspent" && x.recheck))) {
+        // Pending notes, dead ones (in case a read was wrong), and notes made spendable again whose old spend may have landed since.
+        for (const n of notes.list().filter((x) => x.status === "pending" || x.status === "dead" || (x.status === "unspent" && x.recheck))) {
           const net = networkByChainId(n.chainId);
           if (!net) continue;
           try {
@@ -841,9 +841,12 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               }
             } else if (await chain.isCommitmentSeen(n.commitment)) {
               // A payment this server sent is the payee's once it lands, never this server's balance.
+              // (A dead note that shows up after all comes back here too.)
               const sent = n.origin === "payment";
               notes.update(n.handle, { status: sent ? "spent" : "unspent" });
               refreshed.push(`${n.handle}: ${sent ? "payment landed" : "confirmed"}`);
+            } else if (n.status === "dead") {
+              // Still not on chain: it stays dead, secret kept.
             } else if (await tx.reverted(n.createdTx)) {
               // Its creating transaction reverted, so the note never existed.
               notes.remove(n.handle);
@@ -857,9 +860,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               !(await chain.isCommitmentSeen(n.commitment))
             ) {
               // Its sweep never showed up, and the payment it was to take is spent by another
-              // transaction (a later sweep of it, or the payer): this note can never exist.
-              notes.remove(n.handle);
-              refreshed.push(`${n.handle}: removed, its payment was taken by another transaction`);
+              // transaction (a later sweep of it, or the payer): this note can never exist. Those
+              // reads may come from nodes at different heights, so it is marked dead, never deleted.
+              notes.update(n.handle, { status: "dead" });
+              refreshed.push(`${n.handle}: dead, its payment was taken by another transaction`);
             }
           } catch (e) {
             refreshed.push(`${n.handle}: could not check (${errMsg(e)})`);
@@ -869,7 +873,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const all = notes.list().filter((n) => !network || n.network === network);
       return text({
         balances: balances(all),
-        notes: all.filter((n) => includeSpent || n.status !== "spent").map(noteView),
+        notes: all.filter((n) => includeSpent || (n.status !== "spent" && n.status !== "dead")).map(noteView),
         ...(refresh ? { refreshed } : {}),
         ...(legacy ? { warning: LEGACY_WARNING } : {}),
         secrets: "Kept encrypted inside this server. Pay with a handle; nobody needs the secret.",
@@ -1789,7 +1793,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     /** One of the earlier sweeps is on chain now: serve it, once. */
     const serveEarlier = async (): Promise<ReturnType<typeof text> | null> => {
       const chain = sweepChain(client, net);
-      let landed = earlier.find((n) => n.status !== "pending");
+      let landed = earlier.find((n) => n.status === "unspent" || n.status === "spent");
       if (!landed) {
         for (const n of earlier) {
           if (await chain.isCommitmentSeen(n.commitment).catch(() => false)) {
@@ -1799,7 +1803,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         }
       }
       if (!landed) return null;
-      return serveOnce(landed, { status: landed.status === "pending" ? "unspent" : landed.status }, { sweptBy: "an earlier sweep of this payment" });
+      return serveOnce(landed, { status: landed.status === "spent" ? "spent" : "unspent" }, { sweptBy: "an earlier sweep of this payment" });
     };
     if (earlier.length) {
       const served = earlier.find(servedPayment);
@@ -1816,7 +1820,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       let waiting = false;
       for (const n of earlier) {
         const stuck = Date.now() - Date.parse(n.updatedAt) > STUCK_MS;
-        const dead = (await tx.reverted(n.createdTx)) || (stuck && (!n.createdTx || (await tx.unknown(n.createdTx))));
+        const dead = n.status === "dead" || (await tx.reverted(n.createdTx)) || (stuck && (!n.createdTx || (await tx.unknown(n.createdTx))));
         if (!dead) waiting = true;
       }
       if (waiting || spent === null) {
