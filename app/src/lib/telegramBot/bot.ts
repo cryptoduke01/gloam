@@ -1204,6 +1204,8 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   // tagged on another member's message: that message is the question, and the answer goes to its author
   const target = tagged && !toBot && replied && otherMembers(replied, from, me) ? replied : null;
   const targetText = target ? scanCodes(messageText(target)).masked : "";
+  // tagged on a pitch, a contact ask or a shill: answering it would be replying to spam (members report it with /spam)
+  if (target?.from && !isTrusted(target.from, c) && screen(screenInput(target, target.from, targetText, c, me)).quiet) return;
   // a payment, claim link or address shared for others (the app's own share text included) needs no reply
   const share = isShare(text);
   // their next message right after the helper answered them
