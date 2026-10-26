@@ -484,12 +484,15 @@ export class GloamAgent {
         `No single private note holds ${this.fmt(amount, asset)} (the largest holds ${this.fmt(largest, asset)}). A payment spends one note; add more privately first.`
       );
     }
-    return this.store.reserveForSpend(pick.handle);
+    // A note picked for something else is no longer kept for a cash out it was split for.
+    const reserved = this.store.reserveForSpend(pick.handle);
+    return reserved.requestKey ? this.store.update(reserved.handle, { requestKey: undefined }) ?? reserved : reserved;
   }
 
+  /** Free a note whose spend certainly did not go out (and drop a cash out's tag: that cash out did not happen). */
   private release(handle: string) {
     try {
-      this.store.update(handle, { status: "unspent" });
+      this.store.update(handle, { status: "unspent", requestKey: undefined });
     } catch {
       /* keep going: the note is still in the store */
     }
@@ -965,7 +968,7 @@ export class GloamAgent {
     }
 
     // A payment like this one whose answer was lost may still land: never pay it twice.
-    const requestKey = this.requestKeyOf(payTo, asset, amountWei, memo, args.label);
+    const requestKey = this.requestKeyOf(payTo, asset, amountWei, args.label);
     const plan = await this.retryPlan(requestKey, amountWei, (n) => ({
       status: "done",
       action: "pay",
@@ -1052,12 +1055,16 @@ export class GloamAgent {
   }
 
   /**
-   * What makes two payments the same one: payee, asset, amount and note, and the
-   * caller's label when it gives one (two ACP jobs paying the same payee the same
-   * amount carry different labels, so they are two payments). Hashed; none of it secret.
+   * What makes two payments the same one: payee, asset and amount, and the
+   * caller's label when it gives one (two ACP jobs paying the same payee the
+   * same amount carry different labels, so they are two payments). The note is
+   * left out on purpose: a planner that rewords the note on a retry is still
+   * asking for the same payment. So a second payment of the same amount to the
+   * same payee, with no label, waits until the first one settles. Hashed; none
+   * of it secret.
    */
-  private requestKeyOf(payTo: string, asset: GloamAsset, amountWei: bigint, memo: string | null | undefined, label?: string): string {
-    const parts = [this.network.chainId, payTo.trim(), asset.address.toLowerCase(), amountWei, memo ?? "", ...(label ? [`label:${label}`] : [])];
+  private requestKeyOf(payTo: string, asset: GloamAsset, amountWei: bigint, label?: string): string {
+    const parts = [this.network.chainId, payTo.trim(), asset.address.toLowerCase(), amountWei, ...(label ? [`label:${label}`] : [])];
     return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 32);
   }
 
@@ -1118,7 +1125,7 @@ export class GloamAgent {
     const memo = cleanPaymentNote(args.note);
     if (args.sealTo && !isReceiveTag(args.sealTo)) throw new Error("sealTo must be a Gloam address (gloamr1.…) whose key is a real P-256 point.");
     // A link sealed to an address is a payment to that address: the same one is never sent twice while it may land.
-    const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, memo, args.label) : undefined;
+    const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, args.label) : undefined;
     const plan = requestKey
       ? await this.retryPlan(requestKey, amountWei, async (n) => ({
           status: "done",
@@ -1429,7 +1436,7 @@ export class GloamAgent {
     if (to.toLowerCase() === this.network.pool.toLowerCase()) throw new Error("That address is the vault itself. Cash out to a wallet.");
     // The same cash out (address, asset, amount) whose answer was lost may still land: it is never paid twice.
     // Its notes carry this key: the split that makes the exact note, and the note being cashed out.
-    const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei, null);
+    const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei);
     const carrying = () => this.store.list().filter((x) => x.requestKey === requestKey && x.chainId === this.network.chainId && x.status !== "spent");
     const unconfirmedCashOut = (n: StoredNote): Outcome => ({
       status: "refused",

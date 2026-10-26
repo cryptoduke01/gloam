@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { BASE_SEPOLIA_USDC, POOL_STATE_ABI, POOL_TRANSFER_ABI } from "@gloamtrade/sdk";
 import { createWalletClient, encodeFunctionData, formatUnits, http, parseUnits, toFunctionSelector, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { GloamAgent, shutdownProver, walletCallSender, type Call, type CallSender, type LimitsConfig } from "../src/index.ts";
+import { GloamAgent, NotSentError, shutdownProver, walletCallSender, type Call, type CallSender, type LimitsConfig } from "../src/index.ts";
 import { ERC20, findAnvil, startFork, type Fork } from "./fork/harness.mts";
 
 const UPSTREAM = process.env.BASE_SEPOLIA_RPC_URL?.trim();
@@ -45,7 +45,7 @@ function relayLike(agentKey: Hex, r1: Hex, r2: Hex) {
   const own = createWalletClient({ account: privateKeyToAccount(agentKey), chain, transport: http(fork.url) });
   const honest = walletCallSender(own as never, fork.client);
   const rel = [r1, r2].map((k) => createWalletClient({ account: privateKeyToAccount(k), chain, transport: http(fork.url) }));
-  const state = { armed: false, held: [] as Hex[], sent: [] as Hex[] };
+  const state = { armed: false, refuseNext: false, held: [] as Hex[], sent: [] as Hex[] };
   const sender: CallSender = {
     address: own.account.address,
     async sendCalls(calls: Call[]) {
@@ -53,6 +53,10 @@ function relayLike(agentKey: Hex, r1: Hex, r2: Hex) {
       const sel = c.data.slice(0, 10).toLowerCase();
       const isPrivate = calls.length === 1 && (sel === TRANSFER_SELECTOR.toLowerCase() || sel === UNSHIELD_SELECTOR.toLowerCase());
       if (!isPrivate) return honest.sendCalls(calls);
+      if (state.refuseNext) {
+        state.refuseNext = false;
+        throw new NotSentError("The relay refused it before sending.");
+      }
       if (state.armed) {
         state.armed = false;
         const w = rel[0]!;
@@ -238,4 +242,38 @@ test("a deposit through a smart account whose inner call reverted (outer transac
   await agent.refresh();
   assert.equal(await spendable(agent), "0");
   assert.equal(agent.largestPayment(), 0n);
+});
+
+test("a payment asked again with its note reworded is still the same payment while the first may land", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: alice, state } = await agentWith("retry-reword", "20");
+  const { agent: bob } = await agentWith("retry-reword-bob");
+  const bobTag = await bob.address();
+  assert.equal((await alice.add({ amount: "5" })).status, "done");
+  assert.equal((await alice.add({ amount: "5" })).status, "done");
+  state.armed = true;
+  assert.equal((await alice.pay({ to: bobTag, amount: "3", note: "inv-9" })).status, "unconfirmed");
+  const again = await alice.pay({ to: bobTag, amount: "3", note: "invoice 9" });
+  assert.equal(again.code, "unconfirmed_payment", JSON.stringify(again));
+  assert.equal(state.sent.length, 0, "nothing else went out");
+});
+
+test("a note a failed cash out had tagged is not mistaken for that cash out once something else spends it", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: a, state } = await agentWith("retry-tag", "20");
+  const { agent: bob } = await agentWith("retry-tag-bob");
+  const carol = (await fork.newKey(0n)).address;
+  assert.equal((await a.add({ amount: "5" })).status, "done");
+  // The cash out fails before anything is sent.
+  state.refuseNext = true;
+  assert.equal((await a.cashOut({ amount: "5", to: carol })).status, "error");
+  // A payment then spends that same note; its answer is lost, and it lands.
+  state.armed = true;
+  assert.equal((await a.pay({ to: await bob.address(), amount: "5" })).status, "unconfirmed");
+  await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  // The same cash out again: nothing was cashed out, so it must not say it was.
+  assert.equal((await a.add({ amount: "5" })).status, "done");
+  const out = await a.cashOut({ amount: "5", to: carol });
+  assert.ok(!out.alreadyCashedOut, JSON.stringify(out));
+  assert.equal(out.status, "done", JSON.stringify(out));
+  const got = await fork.client.readContract({ address: BASE_SEPOLIA_USDC, abi: ERC20, functionName: "balanceOf", args: [carol] });
+  assert.equal(formatUnits(got, 6), "4.9875");
 });
