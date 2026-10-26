@@ -1074,6 +1074,45 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(received[0]!.createdTx, sweepHash);
   });
 
+  test("the change and payment of a send that never reached the node are dead once its note is spendable again, and never count", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let n = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName === "transfer" && ++n === 1) {
+          noteBroadcast(`0x${"77".repeat(32)}`); // sent, the reply lost, and the node never got it
+          throw new Error("HTTP request failed.\n\nStatus: 504");
+        }
+        return call.functionName === "transfer" ? lands(chain, known, call.args) : chain.walletClient.writeContract(call);
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    const s = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const p1 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(p1.status, "error", JSON.stringify(p1));
+    const outputs = () => openNoteStore(payerEnv).list().filter((x) => x.createdTx === p1.hash);
+    assert.deepEqual(outputs().map((x) => x.status), ["pending", "pending"], "kept while the send may land");
+    const freed = await later(11 * 60 * 1000, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.ok(freed.refreshed.some((x: string) => x.includes(`${s.note.handle}: spendable again`)), JSON.stringify(freed.refreshed));
+    assert.deepEqual(
+      freed.balances.map((b: { spendable: string; confirming: string }) => [b.spendable, b.confirming]),
+      [["10", "0"]],
+      "the 10 once, not the 10 and a confirming 7 from a send that can no longer land"
+    );
+    assert.deepEqual(outputs().map((x) => x.status), ["dead", "dead"], JSON.stringify(freed.refreshed));
+    const p2 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded, note: s.note.handle });
+    assert.equal(p2.status, "paid", JSON.stringify(p2));
+    const l = await later(30 * 24 * HOUR, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.deepEqual(l.balances.map((b: { spendable: string; confirming: string }) => [b.spendable, b.confirming]), [["7", "0"]], JSON.stringify(l.balances));
+    assert.ok(outputs().every((x) => x.status === "dead" && x.secret), "kept with their secrets, never counted");
+    const dead = new Set(outputs().map((x) => x.handle));
+    assert.ok(!l.notes.some((x: { handle: string }) => dead.has(x.handle)), "and listed only when asked");
+    const all = await P.call("gloam_list_notes", { includeSpent: true });
+    assert.equal(all.notes.filter((x: { handle: string }) => dead.has(x.handle)).length, 2);
+  });
+
   test("a stale read never deletes a received note: it is marked dead, comes back when it shows up, and serves once", async () => {
     const chain = mockChain();
     // From the sweep on, the reads come from a node behind the one that mined it (the spend read from one that is not).
