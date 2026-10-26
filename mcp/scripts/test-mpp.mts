@@ -637,3 +637,35 @@ test("an MPP note's label comes from the challenge's signed terms, never from te
   assert.ok(!labels.some((l) => /IGNORE/.test(l)), JSON.stringify(labels));
   assert.deepEqual(labels, [`${priced.requirements.description} (mpp ${cred.challenge.id})`]);
 });
+
+test("an MPP pull payment presented again while the commitment read lags is not refused once its transfer is spent", async () => {
+  const { chain, payeeEnv } = await setup();
+  let lagReceipt = true;
+  let lagCommit = true;
+  const view = {
+    ...chain.publicClient,
+    waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+      if (lagReceipt) throw Object.assign(new Error("HTTP request failed. Status: 429"), { code: 429 });
+      return chain.publicClient.waitForTransactionReceipt({ hash });
+    },
+    readContract: async (a: { functionName: string; args: [Hex] }) => (lagCommit && a.functionName === "commitmentSeen" ? false : chain.publicClient.readContract(a)),
+  };
+  const signer = (net: unknown) => ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+  const S = await connect(makeDeps(chain, payeeEnv, { signer: signer as ServerDeps["signer"], publicClient: () => view as unknown as Signer["publicClient"] }).deps);
+  const ch = parsePaymentChallenges((await price(S, 1)).mpp.wwwAuthenticate)[0]!;
+  const secret = 737_373n;
+  const c = fieldToHex(await noteCommitmentPoseidon(secret, 1_000_000n, TEMPO_PATHUSD));
+  await chain.insert(c);
+  const pulled = await createGloamChargeCredential({ challenge: ch, note: { secret: fieldToHex(secret), amountWei: 1_000_000n, path: await chain.path(c) }, prove: stub, mode: "pull" });
+  const v1 = await S("gloam_verify_payment", { payment: pulled.authorization });
+  assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+  lagReceipt = false; // receipts read again; the commitment read still lags
+  const v2 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }));
+  assert.equal(v2.status, "unconfirmed", `the transfer landed, so it is not "nothing was paid" (${JSON.stringify(v2)})`);
+  assert.deepEqual(chain.calls, ["transfer"], "and it is not sent again");
+  lagCommit = false;
+  const v3 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }));
+  assert.equal(v3.status, "settled", JSON.stringify(v3));
+  assert.equal((await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }))).status, "already_settled");
+  assert.deepEqual(Object.keys(openNoteStore(payeeEnv).pulls()), [], "its pull record goes once it is served");
+});

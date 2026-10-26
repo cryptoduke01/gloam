@@ -1864,6 +1864,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         });
       }
       if (!claim.claimed) return alreadySettled(claim.servedBy);
+      if (args.mpp) tryStore(() => notes.dropPull(paymentNullifier));
       return settled(noteView(claim.note), claim.note.createdTx, extra);
     };
 
@@ -2176,7 +2177,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     const client = deps.signer(net)?.publicClient ?? deps.publicClient(net);
     const pulls = notes.pulls();
     const recorded = early ? notes.list().filter((n) => n.sweptFrom?.toLowerCase() === early!.nullifier.toLowerCase()) : [];
-    const pulledFor = early ? pulls[early.nullifier.toLowerCase()] : undefined;
+    const pulledFor = early ? pulls[early.nullifier.toLowerCase()]?.challenge : undefined;
     if (early && (recorded.length || pulledFor)) {
       // A payment this server took for this challenge (swept, or its pull transfer submitted): settled from its
       // record whatever the challenge's age, so a transfer or sweep that confirms late, or a sweep sent again
@@ -2186,10 +2187,22 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       }
       if (!(await verifyPaymentNoteBinding(early.note))) return reject("The payment note's amount does not bind to its commitment.");
       const { note, nullifier, payload } = early;
-      // A pull transfer that is not in the pool yet goes to the settle again (it lands once at most).
+      // A pull transfer that is not in the pool yet goes to the settle again (it lands once at most), unless its
+      // note reads spent: then it landed and the commitment read lags (or its note went elsewhere), so wait.
       let pull: ValidatedGloamCharge["transfer"] | undefined;
       if (!recorded.length && payload.type === "transfer" && payload.transfer.newCommitments[0].toLowerCase() === note.commitment.toLowerCase()) {
-        if (!(await sweepChain(client, net).isCommitmentSeen(note.commitment).catch(() => false))) pull = payload.transfer;
+        const chain = sweepChain(client, net);
+        if (!(await chain.isCommitmentSeen(note.commitment).catch(() => false))) {
+          if ((await chain.isSpent(payload.transfer.nullifier).catch(() => null)) !== false) {
+            return text({
+              status: "unconfirmed",
+              grantAccess: false,
+              final: false,
+              message: "The payer's transfer may already be on chain (its note reads spent, or could not be read), but its payment does not show yet. Verify the same credential again shortly; do not serve until it says settled.",
+            });
+          }
+          pull = payload.transfer;
+        }
       }
       const verifyView = { ok: true, reason: null, sealed: true, amountWei: note.amountWei, asset: note.asset, mode: payload.type === "hash" ? "push" : "pull" };
       return settleReceived({ net, notes, note, paymentNullifier: nullifier, label, sealed: true, verifyView, ...(pull ? { pull } : {}), mpp: mppRef });
@@ -2198,7 +2211,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     if (isExpired(ch)) return reject("The challenge has expired.", { problem: "payment-expired" });
     const usedBy =
       notes.list().find((n) => n.origin === "received" && n.label?.endsWith(challengeTag))?.handle ??
-      (Object.values(pulls).includes(ch.id) ? "a payer's transfer this server submitted" : undefined);
+      (Object.values(pulls).some((p) => p.challenge === ch.id) ? "a payer's transfer this server submitted" : undefined);
     if (usedBy) {
       return reject(`This challenge was already paid and used (${usedBy}). The payer should request the resource again for a fresh challenge.`, {
         problem: "invalid-challenge",
