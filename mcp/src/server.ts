@@ -94,7 +94,7 @@ import {
 } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
-import { balances, noteView, openNoteStore, servedPayment, type NoteStore, type StoredNote } from "./noteStore.js";
+import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type NoteStore, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
@@ -817,8 +817,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
-        // Pending notes, dead ones (in case a read was wrong), and notes made spendable again whose old spend may have landed since.
-        for (const n of notes.list().filter((x) => x.status === "pending" || x.status === "dead" || (x.status === "unspent" && x.recheck))) {
+        // Pending notes and notes made spendable again whose old spend may have landed since; then dead ones (in
+        // case a read was wrong) when a look is due, or all of them once this pass sees a late send land.
+        const listed = notes.list();
+        let woke = false;
+        for (const n of [
+          ...listed.filter((x) => x.status === "pending" || (x.status === "unspent" && x.recheck)),
+          ...listed.filter((x) => x.status === "dead"),
+        ]) {
+          if (n.status === "dead" && !woke && !deadCheckDue(n)) continue;
           const net = networkByChainId(n.chainId);
           if (!net) continue;
           try {
@@ -830,6 +837,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               if (await chain.isSpent(n.nullifier)) {
                 notes.update(n.handle, { status: "spent", recheck: false });
                 refreshed.push(`${n.handle}: spent, an earlier send of it landed`);
+                // The change and payment that send made may be dead notes now: look at them all.
+                notes.wakeDead();
+                woke = true;
               }
             } else if (n.pending === "spend") {
               if (await chain.isSpent(n.nullifier)) {
@@ -850,7 +860,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               notes.update(n.handle, { status: sent ? "spent" : "unspent" });
               refreshed.push(`${n.handle}: ${sent ? "payment landed" : "confirmed"}`);
             } else if (n.status === "dead") {
-              // Still not on chain: it stays dead, secret kept.
+              // Still not on chain: it stays dead, secret kept, and is looked at again later.
+              const now = new Date(Date.now()).toISOString(); // the clock deadCheckDue reads
+              notes.update(n.handle, { checkedAt: now, ...(n.deadAt ? {} : { deadAt: now }) });
             } else if (await tx.reverted(n.createdTx)) {
               // Its creating transaction reverted. Through the relay that may be a resend whose first copy
               // landed, read here by a node behind, so the note is marked dead, never deleted.
@@ -1183,7 +1195,13 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // all) is never picked: it is marked spent. An unreadable answer leaves the note to the send.
       const spentOnChain = async (n: StoredNote) => {
         const spent = await (async () => sweepChain(signer.publicClient, net).isSpent(n.nullifier))().catch(() => false);
-        if (spent) tryStore(() => notes.update(n.handle, { status: "spent", recheck: false }));
+        if (spent) {
+          tryStore(() => {
+            notes.update(n.handle, { status: "spent", recheck: false });
+            // A note made spendable again whose old send landed: the change and payment it made may be dead notes now.
+            if (n.recheck) notes.wakeDead();
+          });
+        }
         return spent;
       };
       if (opts.handle) {
