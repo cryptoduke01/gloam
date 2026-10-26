@@ -155,7 +155,8 @@ USDC.
 `.env.example` to `.env`. It runs on ACP's testnet only for now:
 `ACP_MAINNET=1` is refused until refunds through the ACP smart wallet are
 settled from the chain end to end. The agent's wallet policy must allow the Gloam vault and the
-token's approve for received money to go into its private balance. Limits come
+token's approve for received money to go into its private balance, and the
+token's `transfer` for refunds of principal that was not paid out. Limits come
 from `GLOAM_LIMITS_FILE`, else `limits.example.json` (USDC, Base Sepolia) or
 `limits.robinhood-mainnet.example.json` (USDG); the script stops if they cannot
 be used.

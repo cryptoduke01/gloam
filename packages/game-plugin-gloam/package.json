@@ -55,21 +55,23 @@
     "src",
     "LICENSE",
     "README.md",
-    "plugin_metadata.yml"
+    "plugin_metadata.yml",
+    "limits.example.json",
+    ".env.example"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-vkeys.mjs",
-    "prepublishOnly": "npm run typecheck && npm run build",
+    "prepack": "npm run typecheck && npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "tsc --noEmit -p tsconfig.test.json && tsx --test test/*.test.mts",
     "test:fork": "tsx --test --test-concurrency=1 test/fork.test.mts test/fork.money.test.mts test/fork.retry.test.mts",
     "example": "tsx src/example.ts"
   },
   "dependencies": {
-    "@gloamtrade/sdk": "workspace:*",
+    "@gloamtrade/sdk": "workspace:^",
     "@virtuals-protocol/game": "^0.1.14",
     "circomlibjs": "0.1.7",
     "snarkjs": "^0.7.5",
