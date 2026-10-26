@@ -80,7 +80,7 @@ export type StoredNote = {
   recheck?: boolean;
   /**
    * Dead notes: when the note was marked dead, and when a refresh last looked for it on chain. The gap
-   * between looks doubles, and a refresh stops looking after seven days unless something new is seen.
+   * between looks doubles up to a week, and something new seen wakes them all.
    */
   deadAt?: string;
   checkedAt?: string;
@@ -402,19 +402,19 @@ function processAlive(by: string): boolean {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
 const DEAD_CHECK_MIN_MS = 60 * 1000;
-const DEAD_CHECK_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+const DEAD_CHECK_MAX_MS = 7 * DAY_MS;
 
 /**
  * Whether a refresh should look for a dead note on chain now: a minute after it died, then each time after
- * as long again as it has been dead at the last look, never after seven days, and always once woken.
+ * as long again as it had been dead at the last look, but at least once a week for good, and always once woken.
  */
 export function deadCheckDue(n: StoredNote, now = Date.now()): boolean {
   if (!n.checkedAt) return true;
   const last = Date.parse(n.checkedAt);
   const died = Date.parse(n.deadAt ?? n.checkedAt);
-  if (now - died > DEAD_CHECK_FOR_MS) return false;
-  return now - last >= Math.max(DEAD_CHECK_MIN_MS, last - died);
+  return now - last >= Math.min(DEAD_CHECK_MAX_MS, Math.max(DEAD_CHECK_MIN_MS, last - died));
 }
 
 /** Open this agent's note store (throws with a plain reason when there is no usable key). */

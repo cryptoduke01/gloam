@@ -1421,7 +1421,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal((await later(30 * 24 * 60 * MIN, () => S.call("gloam_verify_payment", args))).status, "already_settled");
   });
 
-  test("dead notes are checked again less and less often, and not after seven days unless something new is seen", async () => {
+  test("dead notes are checked again less and less often, at least once a week, and all at once when something new is seen", async () => {
     const chain = mockChain();
     const known = new Set<string>();
     let n = 0;
@@ -1462,14 +1462,18 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(readsOf(), base + 2, "read again once the wait is up");
     await later(t0 + 3 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
     assert.equal(readsOf(), base + 2, "and the wait doubles");
-    await later(t0 + 8 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    const DAY = 24 * 60 * MIN;
+    await later(t0 + 8 * DAY, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base + 4, "a week on, it is still looked at");
+    await later(t0 + 9 * DAY, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base + 4, "but the gap is a week at most, not every refresh");
+    await later(t0 + 15 * DAY + MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base + 6, "and again a week later");
     const after7d = readsOf();
-    await later(t0 + 9 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
-    assert.equal(readsOf(), after7d, "not after seven days");
 
     // Something new: the old send lands after all. The refresh that sees its note spent looks at every dead note.
     await chain.apply("transfer", held);
-    const woke = await later(t0 + 10 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    const woke = await later(t0 + 16 * DAY, () => P.call("gloam_list_notes", { refresh: true }));
     assert.ok(readsOf() > after7d, JSON.stringify(woke.refreshed));
     assert.deepEqual(
       dead.map((x) => openNoteStore(payerEnv).get(x.handle)?.status).sort(),
@@ -1525,6 +1529,67 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const l2 = await later(2 * 60 * 1000, () => P.call("gloam_list_notes", { refresh: true })); // a dead note is looked at again after a minute
     assert.ok(l2.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(l2.refreshed));
     assert.equal(l2.balances[0].spendable, "7");
+  });
+
+  test("a dead note whose commitment is in the pool comes back however long after the stale read", async () => {
+    for (const days of [3, 8, 40]) {
+      const chain = mockChain();
+      const env = partyEnv("payer", tmp(), PAYER_LIMITS);
+      let lag = true;
+      const view = {
+        ...chain.publicClient,
+        readContract: async (a: { functionName: string; args: [Hex] }) => (lag && a.functionName === "commitmentSeen" ? false : chain.publicClient.readContract(a)),
+      };
+      const signer = (net: unknown) =>
+        ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+      const P = await connect(makeDeps(chain, env, { signer: signer as ServerDeps["signer"], publicClient: () => view as unknown as Signer["publicClient"] }).deps);
+      // A change note from a relay send: its first copy landed (the commitment is in the pool), the relay answered with a resend that reverted.
+      const c = `0x${"0c".repeat(32)}` as Hex;
+      await chain.apply("shieldBound", [null, null, c]);
+      const n = openNoteStore(env).add(sampleNote({ commitment: c, status: "pending", pending: "create", origin: "change", createdTx: `0x${"ab".repeat(32)}` as Hex }));
+      const first = await P.call("gloam_list_notes", { refresh: true });
+      assert.ok(first.refreshed.some((x: string) => x.includes(`${n.handle}: dead`)), JSON.stringify(first.refreshed));
+      lag = false;
+      const back = await later(days * 24 * 60 * 60 * 1000, () => P.call("gloam_list_notes", { refresh: true }));
+      assert.equal(openNoteStore(env).get(n.handle)?.status, "unspent", `${days} days on: ${JSON.stringify(back.refreshed)}`);
+    }
+  });
+
+  test("a refresh that sees a reserved note's spend land looks at the dead notes at once", async () => {
+    const chain = mockChain();
+    const dir = tmp();
+    const payerEnv = partyEnv("payer", dir, { ...PAYER_LIMITS, GLOAM_USE_RELAY: "1" });
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const r = relayResend(chain);
+    r.state.lag = false;
+    let spendUnreadable = false;
+    const view = {
+      ...r.view,
+      readContract: async (a: { functionName: string; args: [Hex] }) => {
+        if (spendUnreadable && a.functionName === "isSpent") throw new Error("HTTP request failed.\n\nStatus: 503");
+        return r.view.readContract(a);
+      },
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+    const P = await connect(makeDeps(chain, payerEnv, { relay: r.relay, signer: signer as ServerDeps["signer"], publicClient: () => view as unknown as Signer["publicClient"] }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    spendUnreadable = true; // after the returned resend reverts, the spend cannot be read: everything stays pending
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.match(paid.error, /could not be read/, JSON.stringify(paid));
+    r.state.lag = true; // and a refresh on a node behind reads the change unseen and its transaction reverted
+    await P.call("gloam_list_notes", { refresh: true });
+    const [change] = openNoteStore(payerEnv).list().filter((n) => n.origin === "change");
+    assert.equal(change?.status, "dead");
+    assert.equal(openNoteStore(payerEnv).get(shield.note.handle)?.status, "pending", "the note stays reserved");
+    spendUnreadable = false;
+    r.state.lag = false;
+    const l = await P.call("gloam_list_notes", { refresh: true });
+    assert.ok(l.refreshed.some((x: string) => x.includes(`${shield.note.handle}: spent`)), JSON.stringify(l.refreshed));
+    assert.ok(l.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), `in the same refresh: ${JSON.stringify(l.refreshed)}`);
+    assert.equal(l.balances[0].spendable, "7");
   });
 
   test("a pay whose returned resend reverted, on a lagging spend read, keeps its change and payment as dead and rechecks the note", async () => {
