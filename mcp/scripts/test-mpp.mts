@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { Address, Hex } from "viem";
+import { TransactionNotFoundError, type Address, type Hex } from "viem";
 import {
   IncrementalMerkleTreePoseidon,
   fieldToHex,
@@ -44,6 +44,7 @@ import { createGloamServer, type ServerDeps } from "../src/server.js";
 import type { Signer } from "../src/signer.js";
 import { openNoteStore } from "../src/noteStore.js";
 import { mppSecret } from "../src/mpp.js";
+import { noteBroadcast } from "../src/walletSend.js";
 
 type Env = Record<string, string | undefined>;
 const TEMPO = GLOAM_NETWORKS.tempo;
@@ -446,4 +447,120 @@ test("the MCP refuses MPP challenges it cannot honor, before proving or spending
   assert.match(r5.error, /not a gloam\/charge/);
 
   assert.equal(proofs.count, proofsBefore, "nothing was proved for any refused challenge");
+});
+
+// ------------------------------------------------ a sweep that does not confirm at once
+
+const realNow = Date.now;
+/** Run `fn` as if `ms` had passed (past the challenge's expiry and the ten-minute release window, say). */
+async function later<T>(ms: number, fn: () => Promise<T>): Promise<T> {
+  Date.now = () => realNow() + ms;
+  try {
+    return await fn();
+  } finally {
+    Date.now = realNow;
+  }
+}
+const MINUTE = 60 * 1000;
+
+/**
+ * A payee wallet whose first sweep is noted and then loses its reply (HTTP 504).
+ * With reachNode the node has it (it may still be mined); without, the node never
+ * heard of it. `held` keeps its arguments, to mine it later.
+ */
+function lossyPayee(chain: Chain, reachNode: boolean) {
+  const held: (readonly unknown[])[] = [];
+  const lost = `0x${"66".repeat(32)}` as Hex;
+  const known = new Set<string>(reachNode ? [lost] : []);
+  let first = true;
+  const walletClient = {
+    ...chain.walletClient,
+    writeContract: async (call: { functionName: string; args: readonly unknown[]; address: Address }) => {
+      if (call.functionName === "transfer" && first) {
+        first = false;
+        held.push(call.args);
+        noteBroadcast(lost);
+        throw new Error("HTTP request failed.\n\nStatus: 504");
+      }
+      const h = await chain.walletClient.writeContract(call);
+      noteBroadcast(h);
+      known.add(h);
+      return h;
+    },
+  };
+  let block = 10n;
+  const publicClient = {
+    ...chain.publicClient,
+    getBlockNumber: async () => block++,
+    getTransaction: async ({ hash }: { hash: Hex }) => {
+      if (known.has(hash)) return { hash };
+      throw new TransactionNotFoundError({ hash });
+    },
+  };
+  const signer = (net: unknown) => ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient }) as unknown as Signer;
+  return { signer: signer as ServerDeps["signer"], held, lost };
+}
+
+test("an MPP sweep left unconfirmed that lands later serves the payer once, even after the challenge expired", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const lossy = lossyPayee(chain, true);
+  const S = await connect(makeDeps(chain, payeeEnv, { signer: lossy.signer }).deps);
+  const P = await connect(makeDeps(chain, payerEnv).deps);
+  await P("gloam_execute_shield", { amount: 10, network: "tempo" });
+  const priced = await price(S, 2);
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  const v1 = await S("gloam_verify_payment", { payment: paid.authorization });
+  assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+  assert.equal(v1.grantAccess, false);
+  await chain.apply("transfer", lossy.held[0]!); // the sweep is mined after all
+  const v2 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: paid.authorization }));
+  assert.equal(v2.status, "settled", JSON.stringify(v2));
+  assert.equal(v2.grantAccess, true, "the payee holds the money, so the payer is served");
+  const receipt = parseReceipt(v2.paymentReceipt);
+  assert.equal(receipt.challengeId, parseCredential(paid.authorization).challenge.id);
+  assert.equal(receipt.reference, lossy.lost, "the receipt names the sweep");
+  const v3 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: paid.authorization }));
+  assert.equal(v3.status, "already_settled", JSON.stringify(v3));
+  assert.equal(v3.grantAccess, false, "and only once");
+  const received = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+  assert.deepEqual(received.map((n) => [n.status, n.served]), [["unspent", true]]);
+});
+
+test("an MPP sweep that never reached the node is swept again after ten minutes and serves once; expired challenges stay refused", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const lossy = lossyPayee(chain, false);
+  const S = await connect(makeDeps(chain, payeeEnv, { signer: lossy.signer }).deps);
+  const P = await connect(makeDeps(chain, payerEnv).deps);
+  await P("gloam_execute_shield", { amount: 10, network: "tempo" });
+  const priced = await price(S, 2);
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  const v1 = await S("gloam_verify_payment", { payment: paid.authorization });
+  assert.equal(v1.status, "unconfirmed", JSON.stringify(v1));
+  const v2 = await S("gloam_verify_payment", { payment: paid.authorization });
+  assert.equal(v2.status, "unconfirmed", "inside the release window it waits for the first sweep");
+
+  // The same payment lifted onto another challenge from this server is not served, and sweeps nothing.
+  const other = parsePaymentChallenges((await price(S, 2)).mpp.wwwAuthenticate)[0]!;
+  const lifted = await S("gloam_verify_payment", { payment: serializeCredential({ challenge: other, payload: parseCredential(paid.authorization).payload }) });
+  assert.equal(lifted.grantAccess, false, JSON.stringify(lifted));
+  assert.equal(lifted.problem, "invalid-challenge");
+
+  const swept = chain.calls.length;
+  const v3 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: paid.authorization }));
+  assert.equal(v3.status, "settled", `the first sweep never showed up and the payment is unspent: swept again (${JSON.stringify(v3)})`);
+  assert.equal(v3.grantAccess, true);
+  assert.equal(chain.calls.length, swept + 1, "one more sweep");
+  const v4 = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: paid.authorization }));
+  assert.equal(v4.status, "already_settled", JSON.stringify(v4));
+  assert.equal(v4.grantAccess, false);
+
+  // A payment with no record, for a challenge that expired, is still refused.
+  const fresh = await price(S, 1);
+  const paid2 = await P("gloam_execute_private_pay", { requirements: fresh.mpp.wwwAuthenticate });
+  assert.equal(paid2.status, "paid", JSON.stringify(paid2));
+  const late = await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: paid2.authorization }));
+  assert.equal(late.status, "rejected", JSON.stringify(late));
+  assert.equal(late.problem, "payment-expired");
+  assertNoSecrets([payerEnv, payeeEnv]);
 });
