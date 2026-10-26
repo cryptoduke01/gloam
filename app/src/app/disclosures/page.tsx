@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "Disclosures" };
 
 export default function DisclosuresPage() {
   return (
-    <LegalLayout title="Disclosures" updated="October 21, 2026">
+    <LegalLayout title="Disclosures" updated="October 26, 2026">
       <p>
         Please read these disclosures carefully before using Gloam or any related
         interface.
@@ -38,8 +38,9 @@ export default function DisclosuresPage() {
         amount.
       </p>
       <p>
-        At launch the owner and treasury is a single wallet (a multisig is
-        planned), and the Gloam team runs the relay. The relay only submits
+        The owner is a single wallet (a multisig is planned), cash-out fees go
+        to a separate treasury wallet since 24 October 2026, and the Gloam team
+        runs the relay. The relay only submits
         transactions that are already proven and pays their network fee; it
         cannot move or redirect money. No function lets the team take pooled
         funds. Raising limits, adding assets or changing verifiers waits a
@@ -47,8 +48,9 @@ export default function DisclosuresPage() {
         deposits at once.
       </p>
       <p>
-        The testnets (Robinhood Chain testnet and Tempo Moderato) use test
-        tokens and single-party development keys.
+        The Robinhood Chain and Tempo testnets use test tokens and
+        single-party development keys. Base Sepolia and Ethereum Sepolia use
+        test tokens and the final keys.
         Mainnet uses the final keys from the 13-contributor trusted setup.
       </p>
       <h2>Privacy is not absolute</h2>

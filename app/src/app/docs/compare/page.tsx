@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
+import { liveMainnetNames } from "@/lib/mainnet";
+
+/** The mainnets with a pool in, as words: Base and Ethereum join once theirs are (lib/mainnet.ts). */
+const MAINNETS = liveMainnetNames();
 
 export const metadata: Metadata = {
   title: "How Gloam compares",
@@ -181,7 +185,7 @@ export default function DocsComparePage() {
       <p>
         <strong>Where they win:</strong> private shared state on Solana.{" "}
         <strong>Where Gloam differs:</strong> no cluster to trust, and it runs on
-        Tempo and Robinhood Chain.
+        {MAINNETS}.
       </p>
 
       <h3>Tempo Zones</h3>
@@ -218,7 +222,7 @@ export default function DocsComparePage() {
         <strong>Where they win:</strong> years live, a far bigger crowd of
         notes, and external audits. <strong>Where Gloam differs:</strong>{" "}
         proofs for one reader that expire, payroll total proofs, agent payments,
-        and Tempo and Robinhood Chain.
+        and {MAINNETS}.
       </p>
 
       <h3>Others worth knowing</h3>
