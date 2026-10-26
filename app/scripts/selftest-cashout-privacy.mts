@@ -330,7 +330,7 @@ test("address and amount together: the address line first, then the amount; keys
 test("the copy stays plain: no em dashes, no promises the chain can't keep", () => {
   const lines = [OWN_WALLET_TEXT, DEPOSIT_WALLET_TEXT, sameAmountText(NOW - DAY, NOW)];
   for (const l of lines) {
-    assert.doesNotMatch(l, /—/);
+    assert.doesNotMatch(l, /\u2014/);
     assert.doesNotMatch(l, /anonymous|untraceable|hides how much/i);
   }
 });
