@@ -9,6 +9,8 @@ import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 const MAINNETS = liveMainnetNames();
 const BASE_LIVE = mainnetPool(8453) !== null;
 const ETHEREUM_LIVE = mainnetPool(1) !== null;
+/** The mainnets still to come: "Base and Ethereum" until their pools are in. */
+const NEXT_MAINNETS = [BASE_LIVE ? null : "Base", ETHEREUM_LIVE ? null : "Ethereum"].filter(Boolean).join(" and ");
 
 export const metadata: Metadata = {
   title: "Docs",
@@ -166,7 +168,7 @@ export default function DocsOverviewPage() {
           <Link href="/docs/production">An external audit and a multisig owner</Link>{" "}
           (both planned)
         </li>
-        <li>Ethereum expansion (roadmap)</li>
+        {NEXT_MAINNETS ? <li>{NEXT_MAINNETS} mainnet, next (their testnets are live)</li> : null}
       </ul>
 
       <h2 id="read-next">Read next</h2>
