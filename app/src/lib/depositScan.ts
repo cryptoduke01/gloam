@@ -7,7 +7,8 @@
  *
  * The saved part ends `RESCAN_OVERLAP` blocks below the head it was read at,
  * so the newest blocks are always read again (a reorganised block can't leave
- * a deposit behind). It is kept per chain, vault and wallet, in memory and in
+ * a deposit behind). A long first walk is saved in parts as it goes, so a
+ * reload halfway resumes. It is kept per chain, vault and wallet, in memory and in
  * sessionStorage, like the wallet's public activity (lib/walletActivity): the
  * same public logs anyone can read for this address, and gone with the tab.
  * A saved copy that does not parse, or is for another chain, vault or wallet,
@@ -34,6 +35,8 @@ type Saved = { v: 1; toBlock: string; rows: DepositRow[] };
 const PREFIX = "gloam.deposits.v1:";
 /** Blocks below the head that are read again on every load. */
 export const RESCAN_OVERLAP = 128n;
+/** A first walk is saved every this many rounds of reads (rounds of `parallel` spans). */
+const PART_ROUNDS = 3;
 
 const SHIELDED = {
   type: "event",
@@ -151,32 +154,44 @@ async function scan(
   const start = savedTo !== null && savedTo >= deploy ? savedTo + 1n : deploy;
   const prior = savedTo !== null && savedTo >= deploy ? saved!.rows : [];
   const latest = await client.getBlockNumber();
-  // this wallet's deposits only, in the chain's widest ranges and a few at a time
-  // (lib/leafIndex): a handful of calls on Robinhood Chain instead of one per 100k blocks
-  const logs = (await walkLogs(client as PublicClient, pool, start, latest, walkTuning(net.chainId, net.logRange), {
-    event: SHIELDED as never,
-    args: { from },
-  })) as unknown as {
-    args?: { commitment?: Hex; asset?: Address; amount?: bigint; leafIndex?: bigint };
-    transactionHash?: Hex | null;
-    blockNumber?: bigint | null;
-  }[];
-  const fresh: DepositRow[] = logs.map((log) => {
-    const a = log.args ?? {};
-    return {
-      commitment: (a.commitment ?? `0x${"0".repeat(64)}`) as Hex,
-      asset: (a.asset ?? "0x0000000000000000000000000000000000000000") as Address,
-      amount: (a.amount ?? 0n).toString(),
-      leafIndex: a.leafIndex != null ? Number(a.leafIndex) : null,
-      txHash: log.transactionHash ?? null,
-      bn: (log.blockNumber ?? latest).toString(),
-    };
-  });
-  const rows = prior.concat(fresh);
+  const tuning = walkTuning(net.chainId, net.logRange);
   // keep what is RESCAN_OVERLAP below the head; the newest blocks are read again next time
   const keepTo = latest - RESCAN_OVERLAP;
-  if (keepTo >= deploy && (savedTo === null || keepTo > savedTo)) {
-    save(k, { v: 1, toBlock: keepTo.toString(), rows: rows.filter((r) => BigInt(r.bn) <= keepTo) });
+  let rows = prior;
+  let kept = savedTo;
+  // A long first walk goes in parts, each saved as it ends, so a reload halfway
+  // starts where it stopped instead of at the deploy block again.
+  const part = tuning.span * BigInt(tuning.parallel * PART_ROUNDS);
+  for (let a = start; a <= latest; a += part) {
+    const b = a + part - 1n < latest ? a + part - 1n : latest;
+    // this wallet's deposits only, in the chain's widest ranges and a few at a time
+    // (lib/leafIndex): a handful of calls on Robinhood Chain instead of one per 100k blocks
+    const logs = (await walkLogs(client as PublicClient, pool, a, b, tuning, {
+      event: SHIELDED as never,
+      args: { from },
+    })) as unknown as {
+      args?: { commitment?: Hex; asset?: Address; amount?: bigint; leafIndex?: bigint };
+      transactionHash?: Hex | null;
+      blockNumber?: bigint | null;
+    }[];
+    rows = rows.concat(
+      logs.map((log) => {
+        const x = log.args ?? {};
+        return {
+          commitment: (x.commitment ?? `0x${"0".repeat(64)}`) as Hex,
+          asset: (x.asset ?? "0x0000000000000000000000000000000000000000") as Address,
+          amount: (x.amount ?? 0n).toString(),
+          leafIndex: x.leafIndex != null ? Number(x.leafIndex) : null,
+          txHash: log.transactionHash ?? null,
+          bn: (log.blockNumber ?? b).toString(),
+        };
+      })
+    );
+    const upTo = b < keepTo ? b : keepTo;
+    if (upTo >= deploy && (kept === null || upTo > kept)) {
+      save(k, { v: 1, toBlock: upTo.toString(), rows: rows.filter((r) => BigInt(r.bn) <= upTo) });
+      kept = upTo;
+    }
   }
   return rows;
 }
