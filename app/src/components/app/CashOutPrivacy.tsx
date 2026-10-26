@@ -136,7 +136,7 @@ export function CashOutWarnings({
 export function CashOutPrivacyLine({ sentByWallet = false, pieces = false }: { sentByWallet?: boolean; pieces?: boolean }) {
   const what = pieces ? "Each piece's amount, where it goes and when" : "The amount, where it goes and when";
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-[14px] border border-line px-4 py-3 text-[12.5px] leading-relaxed">
+    <dl className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1.5 rounded-[14px] border border-line px-4 py-3 text-[12.5px] leading-relaxed">
       <dt className="text-foreground">Public</dt>
       <dd className="text-soft">{sentByWallet ? `${what}, and your wallet, which sends it.` : `${what}.`}</dd>
       <dt className="flex items-center gap-1.5 text-sealed">

@@ -2638,14 +2638,12 @@ export function MoveView() {
                         onMax={() => setCashOutInput("")}
                         disabled={working}
                         extra={
-                          <button
-                            type="button"
-                            className="gl-chip min-h-10"
-                            disabled={working || roundDownToWhole(noteWei, assetDecimals(selected.asset)) <= 0n}
-                            onClick={roundCashOut}
-                          >
-                            Round it
-                          </button>
+                          // only where there are whole units to round down to
+                          roundDownToWhole(noteWei, assetDecimals(selected.asset)) > 0n ? (
+                            <button type="button" className="gl-chip min-h-10" disabled={working} onClick={roundCashOut}>
+                              Round it
+                            </button>
+                          ) : null
                         }
                       />
                       <CashOutWarnings warnings={amountWarnings} scope={selected.id} />
