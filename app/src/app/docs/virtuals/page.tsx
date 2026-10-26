@@ -390,8 +390,10 @@ GLOAM_LIMITS_FILE=./limits.json
           it reads from the contract.
         </li>
         <li>
-          It never submits a job it could not pay in full, and a journal with no
-          secrets in it makes sure a restart never pays twice.
+          It never submits a job it could not pay in full. It writes down each
+          payout and refund before sending it, with no secrets in the record, and
+          a refund whose answer is lost waits for the owner instead of going out
+          again.
         </li>
         <li>Plain escrow jobs only from clients the owner trusts.</li>
       </ul>
@@ -400,7 +402,7 @@ GLOAM_LIMITS_FILE=./limits.json
         ran end to end on local forks of Base Sepolia and Robinhood Chain
         mainnet, against ACP&apos;s own contracts and Gloam&apos;s vaults, with
         fresh keys and nothing sent to a live network. It is not registered on
-        ACP yet. <code>scripts/live.mts</code> wires the same provider into{" "}
+        ACP yet, and it runs on testnet only for now. <code>scripts/live.mts</code> wires the same provider into{" "}
         <code>@virtuals-protocol/acp-node-v2</code>.
       </p>
 
@@ -589,7 +591,7 @@ GLOAM_LIMITS_FILE=./limits.json
       <h3>Is mainnet ready for my agent?</h3>
       <p>
         Mainnet is beta software with deposit limits. The code was reviewed
-        internally before launch. Start an agent on small limits and raise them
+        internally before launch, and an external audit is in progress. Start an agent on small limits and raise them
         as you go.
       </p>
     </DocsLayout>
