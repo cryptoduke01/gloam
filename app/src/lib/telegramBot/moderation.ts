@@ -51,7 +51,20 @@ export type SpamCategory = "scam" | "impersonation" | "link_spam" | "contact_spa
  * "model:<why it asked>". `sure`: the wording is unambiguous scam or promotion,
  * the only kind of rule verdict that bans someone with no history.
  */
-export type Verdict = { category: SpamCategory; confidence: number; rule: string; source: "rule" | "model"; sure?: boolean };
+export type Verdict = {
+  category: SpamCategory;
+  confidence: number;
+  rule: string;
+  source: "rule" | "model";
+  sure?: boolean;
+  /**
+   * A fixed outcome instead of the usual plan. "delete": the message goes and
+   * nothing is held against them (someone pointing people at another project's
+   * group or support). "soft": a generic "I can help, dm me" from someone Glim
+   * doesn't know is a day's mute; from a member it knows, only the delete.
+   */
+  outcome?: "delete" | "soft";
+};
 
 /** Deleted and the sender banned (sure) or muted for a day; a member Glim knows gets the mute either way on a first offence. */
 export const BAN_CATEGORIES: ReadonlySet<SpamCategory> = new Set<SpamCategory>(["scam", "impersonation", "link_spam", "contact_spam", "promo"]);
@@ -86,6 +99,19 @@ const REQUEST = /\b(?:pls|plz|please|abeg|kindly|make|can|could|would|help)\b/i;
 /** A help OFFER, which is how the support scam goes: "I can fix it", "your wallet". */
 const SUPPORT_OFFER =
   /\b(?:i|we)\s*(?:can|will|'ll|could)\s+(?:fix|help|solve|resolve|recover|assist|sort|restore|unlock|retrieve)|\b(?:can|will)\s+(?:fix|solve|resolve|recover|restore|unlock|retrieve)\b|\b(?:your|ur)\s+(?:deposit|wallet|funds|issue|problem|balance|account|tokens?|money|transaction|tx)\b/i;
+/** "dm me your wallet / seed / keys / phrase": always the scam. */
+const SECRET_PULL = /\b(?:your|ur)\s+(?:wallet|seed|keys?|phrase|private\s+key|recovery|mnemonic|secret)\b/i;
+/** A help offer that names someone's funds or a fix: the support scam. A generic "I can help, dm me" is not this. */
+const SUPPORT_SCAM =
+  /\b(?:can|will|'ll|could)\s+(?:fix|solve|resolve|recover|restore|unlock|retrieve)\b|\b(?:your|ur)\s+(?:deposit|wallet|funds|issue|problem|balance|account|tokens?|money|transaction|tx)\b/i;
+/** An invitation to feature the team: an AMA, a Space, a podcast, "have the Gloam team on". A lead for Duke. */
+const INVITE =
+  /\b(?:love|like|want|invite|inviting|have|feature|host|hosting|bring)\b[^.!?\n]{0,40}\b(?:gloam|glim|the\s+team|duke|you\s+guys|your\s+team|your\s+founder)\b[^.!?\n]{0,30}\b(?:on|onto|as\s+(?:a\s+)?guests?|for\s+an?\s+(?:ama|space|podcast|interview|episode|stream|panel))\b|\b(?:amas?|spaces?|podcast|interview|episode|show|stream|panel)\b[^.!?\n]{0,60}\b(?:have|invite|feature|host|bring)\b[^.!?\n]{0,30}\b(?:gloam|glim|the\s+team|duke|your\s+team)\b/i;
+/** "I offer to build a Gloam plugin", "we'd like to make an integration": building for Gloam is a lead, not a sale. */
+const BUILD_FOR =
+  /\b(?:i|we)\s*(?:'d\s+like\s+to|would\s+like\s+to|want\s+to|offer\s+to|can|could|will|'ll)\s+(?:build|make|create|develop|write|ship)\b[^.!?\n]{0,40}\b(?:gloam|glim|integration|plugin|sdk|extension|connector)\b/i;
+/** A t.me link given as where to ask: "join t.me/x for Tempo questions". Deleted, never held against them. */
+const TG_POINTER = /\bfor\s+(?:\w+\s+){0,3}(?:questions?|help|support|issues?|updates?|news|docs)\b|\b(?:support|help(?:desk)?)\s+is\s+(?:at|on)\b|\bthey\s+(?:fixed|helped|answered|sorted)\b/i;
 /** "Check my bio", "link in bio", "see my profile". */
 const BIO = /\b(?:check|see|visit|look\s+at|in|on)\s+(?:my|our)\s+(?:bio|profile|channel|page)\b|\blink\s+in\s+(?:my\s+|the\s+)?bio\b|\bbio\s+(?:for|has)\b/i;
 const WHATSAPP = /\bwa\.me\/|\bchat\.whatsapp\.com\/|\bwhats\s?app\s+(?:me|us|\+?\d)|\b(?:signal|telegram|tg|whatsapp)\s*(?:me|:)\s*@?\w{4,}/i;
@@ -162,7 +188,7 @@ const EVM_ADDRESS = /\b0x[0-9a-f]{40}\b/gi;
 /** A Solana-style mint ("...pump" on pump.fun, or base58 next to CA). */
 const SOL_ADDRESS = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g;
 /** What makes a t.me link a pitch rather than a link someone shared. */
-const TG_PITCH = /\b(?:signals?|calls?|gems?|alpha|vip|free|join|pumps?|\d{2,5}\s?x|earn|profits?|promot\w+|listing|marketing|airdrop\w*|giveaway\w*)\b/i;
+const TG_PITCH = /\b(?:signals?|calls?|gems?|alpha|vip|free|pumps?|\d{2,5}\s?x|earn|profits?|promot\w+|listing|marketing|airdrop\w*|giveaway\w*)\b/i;
 
 const BRAND = String.raw`(?:gloam|glim)`;
 const STAFF_ROLE = String.raw`(?:support(?:\s+team)?|team|admins?|mods?|moderators?|official|help\s*desk|customer\s+(?:care|service|support)|staff|devs?|developers?|founders?|co-?founders?|ceo|cto|management|security(?:\s+team)?|tech(?:nical)?\s+(?:team|support)|helpline|agents?|representatives?)`;
@@ -194,6 +220,16 @@ const PROMO_NAME =
   /\b(?:promot\w*|marketing|marketer|kols?|listings?|agency|callers?|calls|shill\w*|pumps?|influencer|ads|advert\w*|cmc|coingecko|trending|volume|signals?|forex|investments?|recovery|crypto\s+ceo|web3\s+(?:marketing|growth|agency))\b/i;
 
 // ---------------------------------------------------------------- links and handles
+
+/**
+ * Partners' and the chains' own accounts, which members point each other to
+ * ("contact @relayprotocol", "follow @raetoai"). The partners on the site are in
+ * components/LivePartners.tsx; keep this list next to it.
+ */
+export const PARTNER_HANDLES = [
+  "raetoai", "raeto", "agentwormhole", "relayprotocol", "relaylink", "tempo", "tempoxyz", "base", "buildonbase", "ethereum",
+  "virtualsprotocol", "virtuals_io", "robinhood", "robinhoodapp", "kannaudits", "kann_audits", "orynth", "dexscreener", "coingecko", "circle", "paxos",
+];
 
 /** A t.me link to anywhere but this group, its message links, Glim's stickers or Glim. */
 function foreignTelegram(host: string, path: string): boolean {
@@ -238,7 +274,8 @@ function linksOf(text: string, entities: TgEntity[] = []): string[] {
 }
 
 function handlesOf(text: string): string[] {
-  return [...text.replace(EMAIL_RE, " ").matchAll(/(?<![\w@.])@([a-z0-9_]{4,32})\b/gi)].map((m) => m[1]!.toLowerCase());
+  const bare = text.replace(EMAIL_RE, " ").replace(LINK_RE, " ");
+  return [...bare.matchAll(/(?<![\w@./])@([a-z0-9_]{4,32})\b/gi)].map((m) => m[1]!.toLowerCase());
 }
 
 type Contact = {
@@ -271,7 +308,8 @@ function contactAsk(t: string): Contact {
     }
     out.any = true;
     const near = `${t.slice(Math.max(0, m.index - 60), m.index)} ${after.split(/[.!?\n]/)[0] ?? ""}`;
-    if (PURPOSE_SURE.test(near) || offer) out.sure = true;
+    // a business or money purpose, or the support scam's shape (a fix, someone's funds, their keys); a generic "I can help" is not sure
+    if (PURPOSE_SURE.test(near) || SUPPORT_SCAM.test(t) || SECRET_PULL.test(t)) out.sure = true;
     else if (PURPOSE_SOFT.test(near)) out.soft = true;
   }
   return out;
@@ -313,7 +351,8 @@ export function screen(i: ScreenInput): Screen {
     if (linkAllowed(l) || ["t.me", "telegram.me", "telegram.dog"].includes(h.host)) return false;
     return !SAFE_HOSTS.some((s) => onHost(h.host, s));
   });
-  const handles = handlesOf(raw).filter((h) => !i.okHandles.includes(h));
+  const okHandles = [...i.okHandles, ...PARTNER_HANDLES];
+  const handles = handlesOf(raw).filter((h) => !okHandles.includes(h));
   const question = raw.includes("?") || looksLikeQuestion(raw);
   // a problem report ("my deposit is stuck", "proof fails"); "I can help your project" is an offer, not a problem
   const problem = (PROBLEM_HINT.test(norm(raw)) && !OFFER_VERB.test(norm(raw))) || BUG_WORDS.test(norm(raw));
@@ -323,8 +362,11 @@ export function screen(i: ScreenInput): Screen {
   const words = wordCount(norm(raw));
 
   const hits: Verdict[] = [];
-  const add = (category: SpamCategory, confidence: number, rule: string, sure: boolean) => hits.push({ category, confidence, rule, source: "rule", sure });
+  const add = (category: SpamCategory, confidence: number, rule: string, sure: boolean, outcome?: Verdict["outcome"]) =>
+    hits.push({ category, confidence, rule, source: "rule", sure, ...(outcome ? { outcome } : {}) });
   let lead: Verdict | null = null;
+  /** An AMA, podcast or "have the team on" invite, or an offer to build for Gloam: a lead even when it reads like a pitch. */
+  let invite: Verdict | null = null;
   let contact: Contact = { any: false, support: false, sure: false, soft: false };
   let tickers: string[] = [];
   let pitch = false;
@@ -361,15 +403,18 @@ export function screen(i: ScreenInput): Screen {
     // bait, money schemes, and the support offer that ends in a DM
     if (says(DROP_OFFER, t) && says(DROP_CTA, t)) add("scam", 0.9, "drop_bait", true);
     if (says(MONEY_PITCH, t) && (reach || offsite.length)) add("scam", 0.9, "money_pitch", true);
-    if (c.any && SUPPORT_OFFER.test(t) && !SELF_PROBLEM.test(t)) add("scam", 0.92, "support_offer", true);
+    if (c.any && SECRET_PULL.test(t)) add("scam", 0.95, "secret_pull", true);
+    else if (c.any && SUPPORT_SCAM.test(t) && !SELF_PROBLEM.test(t)) add("scam", 0.92, "support_offer", true);
+    else if (c.any && SUPPORT_OFFER.test(t) && !SELF_PROBLEM.test(t)) add("scam", 0.88, "help_offer", false, "soft");
 
     // contact and link spam
-    if (tgLinks.length) add("link_spam", 0.95, "telegram_link", TG_PITCH.test(t) || strong);
+    if (tgLinks.length && !TG_PITCH.test(t) && !strong && TG_POINTER.test(t)) add("link_spam", 0.9, "telegram_pointer", false, "delete");
+    else if (tgLinks.length) add("link_spam", 0.95, "telegram_link", TG_PITCH.test(t) || strong);
     if (whatsapp) add("contact_spam", 0.95, "whatsapp", strong || MONEY_PITCH.test(t) || c.sure);
     if (bio) add("contact_spam", 0.95, "bio_link", strong || NEED_ROLE.test(t) || Boolean(selfRole));
     for (const m of t.matchAll(CONTACT_HANDLE)) {
       const h = (m[1] ?? m[2] ?? "").toLowerCase();
-      if (h && !i.okHandles.includes(h) && !negated(t, m.index, m[0])) add("contact_spam", 0.92, "contact_handle", strong || OTC.test(t));
+      if (h && !okHandles.includes(h) && !negated(t, m.index, m[0])) add("contact_spam", 0.92, "contact_handle", strong || OTC.test(t));
     }
     if (c.sure) add("contact_spam", 0.9, "contact_purpose", true);
     else if (c.soft) add("contact_spam", 0.88, "contact_purpose", false);
@@ -393,9 +438,9 @@ export function screen(i: ScreenInput): Screen {
 
     // OTC buying and selling
     const trade = TRADE_OFFER.test(t) || WHO_TRADES.test(t);
-    if (OTC.test(t) && (trade || reach || OTC_TERMS.test(t))) add("otc", 0.95, "otc_offer", true);
+    if (OTC.test(t) && (reach || (!question && (trade || OTC_TERMS.test(t))))) add("otc", 0.95, "otc_offer", true);
     else if (trade && reach) add("otc", 0.92, "trade_contact", true);
-    else if (TRADE_OFFER.test(t) && OTC_TERMS.test(t)) add("otc", 0.88, "trade_terms", true);
+    else if (!question && TRADE_OFFER.test(t) && OTC_TERMS.test(t)) add("otc", 0.88, "trade_terms", true);
 
     // another token's shill
     if (others.length && PUMP.test(t)) add("shill", 0.92, "ticker_shill", true);
@@ -408,11 +453,18 @@ export function screen(i: ScreenInput): Screen {
     // business leads: for Duke, never a ban
     if (!lead && says(PARTNER_PITCH, t)) lead = { category: "promo", confidence: 0.88, rule: "partnership_pitch", source: "rule", sure: false };
     if (!lead && TALK_TO_TEAM.test(t) && (BUSINESS.test(t) || promoName)) lead = { category: "promo", confidence: 0.88, rule: "talk_to_team", source: "rule", sure: false };
+    if (INVITE.test(t)) invite = { category: "promo", confidence: 0.88, rule: "invite", source: "rule", sure: false };
+    else if (BUILD_FOR.test(t) && !SECOND_PERSON.test(t) && !PROMO_STRONG.test(t)) invite ??= { category: "promo", confidence: 0.88, rule: "build_offer", source: "rule", sure: false };
   }
 
   // the strongest hit; a sure one, then a ban category, wins a tie
   const rank = (v: Verdict) => v.confidence + (v.sure ? 0.001 : 0) + (BAN_CATEGORIES.has(v.category) ? 0.0001 : 0);
-  const verdict = hits.sort((a, b) => rank(b) - rank(a))[0] ?? null;
+  let verdict: Verdict | null = hits.sort((a, b) => rank(b) - rank(a))[0] ?? null;
+  // an invite to feature the team, or to build for Gloam, goes to Duke even if it uses a pitch's words; scams and links still don't
+  if (invite && (!verdict || (verdict.category === "promo" && !tgLinks.length && !offsite.length))) {
+    verdict = null;
+    lead = invite;
+  }
   if (verdict) lead = null;
 
   let unclear: string | null = null;
@@ -448,8 +500,8 @@ export function screen(i: ScreenInput): Screen {
 
 // ---------------------------------------------------------------- what happens to the sender
 
-/** A past offence, kept a week. */
-export type Offence = { at: number; category: SpamCategory };
+/** A past offence, kept a week. `sure` when a sure rule caught it: only those make a repeat a ban. */
+export type Offence = { at: number; category: SpamCategory; sure?: boolean };
 
 /** What Glim knows about a member when it is about to act. */
 export type Standing = {
@@ -489,29 +541,36 @@ const DELETE: Plan = { ban: false, muteSec: 0, why: "" };
 /**
  * What happens after the message is deleted.
  *  - A ban needs a sure rule (unambiguous scam or promotion wording) and a
- *    sender with no history, or a repeat offence within the week. On launch day
- *    almost everyone has no history, so anything less sure, a model verdict and
- *    the newcomer check are a 24-hour mute on a first offence.
+ *    sender with no history, or a repeat within the week where this offence or
+ *    an earlier one was a sure rule. On launch day almost everyone has no
+ *    history, so anything less sure, a model verdict and the newcomer check are
+ *    a 24-hour mute, as many times as it takes, never a ban on their own.
  *  - A member Glim knows gets the mute on a first offence, whatever the rule.
- *  - OTC offers and shills: a delete, then a mute, then a ban.
+ *  - OTC offers and shills: a delete, then a mute, then (sure ones) a ban.
+ *  - A verdict with a fixed outcome: "delete" only deletes; "soft" mutes
+ *    someone Glim doesn't know and only deletes for a member it knows.
  *  - With no standing (the store is down) Glim fails safe: only a sure rule
  *    bans, everything else is only deleted.
  */
 export function planFor(v: Verdict, s: Standing | null, now: number, gate = false): Plan {
   const sure = v.source === "rule" && v.sure === true;
   const ladder = LADDER_CATEGORIES.has(v.category);
+  if (v.outcome === "delete") return { ...DELETE, why: "pointing somewhere else, not held against them" };
   if (!s) return !ladder && sure ? { ...BAN, why: "sure rule, store down" } : { ...DELETE, why: "store down" };
-  const week = s.offences.filter((o) => o.at > now - WEEK_MS).length;
+  const week = s.offences.filter((o) => o.at > now - WEEK_MS);
   const day = s.offences.filter((o) => o.at > now - DAY_MS).length;
+  const sureBefore = sure || week.some((o) => o.sure === true);
   if (ladder) {
-    if (week >= 2) return { ...BAN, why: "third offence this week" };
-    if (day >= 1) return { ...MUTE, why: "second offence in 24 hours" };
+    if (week.length >= 2 && sureBefore) return { ...BAN, why: "third offence this week" };
+    if (day >= 1 || week.length >= 2) return { ...MUTE, why: "a repeat in 24 hours" };
     return { ...DELETE, why: "first offence" };
   }
-  if (week >= 1) return { ...BAN, why: "second offence this week" };
+  const known = established(s, now);
+  if (v.outcome === "soft") return known ? { ...DELETE, why: "a member Glim knows" } : { ...MUTE, why: "someone Glim doesn't know" };
+  if (week.length >= 1 && sureBefore) return { ...BAN, why: "a repeat this week, a sure rule among them" };
   if (gate) return { ...MUTE, why: "newcomer's first messages" };
-  if (established(s, now)) return { ...MUTE, why: "known member, first offence" };
-  return sure ? { ...BAN, why: "sure rule, no history" } : { ...MUTE, why: "not sure enough to ban, no history" };
+  if (known) return { ...MUTE, why: "known member, first offence" };
+  return sure ? { ...BAN, why: "sure rule, no history" } : { ...MUTE, why: "not sure enough to ban" };
 }
 
 // ---------------------------------------------------------------- the model check

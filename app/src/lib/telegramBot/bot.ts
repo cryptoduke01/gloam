@@ -71,6 +71,7 @@ import {
   wantsGroupAnswer,
   cleanReply,
   defanged,
+  escapeHtml,
   explicitReply,
   forwardedCall,
   handsToAdmin,
@@ -496,6 +497,7 @@ const REASON_CATEGORY: Record<ScamReason, SpamCategory> = {
   secret_request: "scam",
   dm_support: "scam",
   dm_lure: "contact_spam",
+  support_at: "contact_spam",
   wallet_fix: "scam",
   phishing_link: "scam",
   promo_spam: "promo",
@@ -585,7 +587,15 @@ async function enforce(x: Enforcement): Promise<ModOutcome> {
       link: messageLink(x.msg),
       ...(x.by ? { by: x.by } : {}),
     },
-    { offence: x.offence === false ? null : { at: now, category: x.verdict.category }, rights, gone: Boolean(ban?.ok) },
+    {
+      // a fixed "delete", or a soft one that only deleted, is never held against them
+      offence:
+        x.offence === false || x.verdict.outcome === "delete" || (x.verdict.outcome === "soft" && !ban?.ok && !mute?.ok)
+          ? null
+          : { at: now, category: x.verdict.category, sure: x.verdict.source === "rule" && x.verdict.sure === true },
+      rights,
+      gone: Boolean(ban?.ok),
+    },
   ).catch(() => {});
   if (ban?.ok) {
     const why = x.why ?? (x.verdict.rule === "new_member_gate" ? "new_member" : x.verdict.category);
@@ -626,12 +636,14 @@ async function onLead(msg: TgMessage, from: TgUser, c: BotConfig, topic: number,
   }
   if (!known) await enforce({ c, msg, from, topic, text, verdict: lead, plan: { ban: false, muteSec: 0, why: "a business lead" }, offence: false });
   if (!(await hitRateLimit("tg:lead-notes", "tg-ban-notes", LEAD_NOTES_PER_MIN)).allowed) return known ? "quiet" : "acted";
-  const who = `${cleanName(from.first_name, "someone")}${from.username ? ` (@${from.username})` : ` (no username, id ${from.id})`}`;
+  const name = escapeHtml(cleanName(from.first_name, "someone"));
+  // no username: their name as a link to their profile, so Duke can still reach them
+  const who = from.username ? `${name} (@${escapeHtml(from.username)})` : `<a href="tg://user?id=${Math.trunc(from.id)}">${name}</a> (no username, id ${from.id})`;
   const what = defanged(text, 300);
   const link = messageLink(msg);
-  const where = known ? `It's still up${link ? `: ${link}` : "."}` : "I took it down so it isn't pitched in public, so reply to them directly if it's worth it.";
+  const where = known ? `It's still up${link ? `: ${escapeHtml(link)}` : "."}` : "I took it down so it isn't pitched in public, so reply to them directly if it's worth it.";
   for (const o of await ownerChats().catch(() => [])) {
-    await sendMessage(o.chatId, `A business ask in ${topicName(topic)} from ${who}:${what ? `\n"${what}"` : ""}\n\n${where}`);
+    await sendMessage(o.chatId, `A business ask in ${topicName(topic)} from ${who}:${what ? `\n"${escapeHtml(what)}"` : ""}\n\n${where}`, { parseMode: "HTML" });
   }
   return known ? "quiet" : "acted";
 }
@@ -657,13 +669,20 @@ async function screenMessage(msg: TgMessage, from: TgUser, c: BotConfig, topic: 
   const known = standing ? established(standing, now) : false;
   // a business lead goes to Duke, whoever sent it and however new they are
   if (!s.verdict && s.lead) return onLead(msg, from, c, topic, text, s.lead, known);
-  const gate = Boolean(standing && s.gate && newcomer(standing, now));
+  const gate = Boolean(standing && s.gate && !known && newcomer(standing, now));
   let v: Verdict | null = s.verdict;
+  let ask = s.unclear;
+  // a rule that isn't sure never acts on its own: a member Glim knows is left alone, anyone else is the model's call
+  if (v && v.source === "rule" && !v.sure && !v.outcome) {
+    if (known) return "quiet";
+    ask = `rule ${v.rule}`;
+    v = null;
+  }
   if (!v && gate) v = { category: s.gate!, confidence: 0.9, rule: "new_member_gate", source: "rule", sure: false };
-  if (!v && s.unclear && !known && !standing?.vouched && (await hitRateLimit("tg:classify", "tg-classify", CLASSIFY_PER_MIN)).allowed) {
+  if (!v && ask && !known && !standing?.vouched && (await hitRateLimit("tg:classify", "tg-classify", CLASSIFY_PER_MIN)).allowed) {
     const name = [from.first_name, from.last_name].filter(Boolean).join(" ");
     const r = await spamCheck({ text, name, newcomer: standing ? newcomer(standing, now) : null });
-    if (r?.spam && r.category && r.confidence >= MODEL_ACT_AT) v = { category: r.category, confidence: r.confidence, rule: `model:${s.unclear}`, source: "model", sure: false };
+    if (r?.spam && r.category && r.confidence >= MODEL_ACT_AT) v = { category: r.category, confidence: r.confidence, rule: `model:${ask}`, source: "model", sure: false };
   }
   if (!v) return s.quiet ? "quiet" : "clear";
   await enforce({ c, msg, from, topic, text, verdict: v, plan: planFor(v, standing, now, gate && !s.verdict) });
@@ -1019,7 +1038,7 @@ async function onReport(msg: TgMessage, from: TgUser, target: TgMessage | null, 
         : WARN_ONLY.has(why)
           ? { ban: false, muteSec: 0, why: "words members say too" }
           : planFor(verdict, await standingOf(who.id, true), Date.now());
-    const action = await enforce({ c, msg: target, from: who, topic, text: targetText, verdict, plan, source: "report", by: name, why });
+    const action = await enforce({ c, msg: target, from: who, topic, text: targetText, verdict, plan, source: "report", by: name, why, offence: why === "impostor" || !WARN_ONLY.has(why) });
     await say(
       action === "banned"
         ? `Thanks ${name}. That was a scam, so it's gone, and so is the account.`
@@ -1099,7 +1118,8 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   if (!trusted && earlier.length && (!reason || WARN_ONLY.has(reason))) {
     const joined = [...earlier.map((e) => e.t), text].join("\n");
     const whole = memberScam(from, joined);
-    if (whole && (!reason || !WARN_ONLY.has(whole))) {
+    // only a real scam split over messages; words members say too, read with their next harmless line, are not one
+    if (whole && !WARN_ONLY.has(whole)) {
       reason = whole;
       scored = joined;
     }
@@ -1118,7 +1138,8 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
         const s = screen(screenInput(msg, from, scored, c, me));
         const standing = await standingOf(from.id, edited);
         const gate = Boolean(standing && s.gate && newcomer(standing, now));
-        const v: Verdict | null = s.verdict ?? (gate ? { category: s.gate!, confidence: 0.9, rule: "new_member_gate", source: "rule", sure: false } : null);
+        const sure = s.verdict && (s.verdict.sure || s.verdict.outcome) ? s.verdict : null;
+        const v: Verdict | null = sure ?? (gate ? { category: s.gate!, confidence: 0.9, rule: "new_member_gate", source: "rule", sure: false } : null);
         if (v) {
           await enforce({ c, msg, from, topic, text: scored, verdict: v, plan: planFor(v, standing, now, gate && !s.verdict), extraIds: parts });
           return;
@@ -1142,11 +1163,12 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
           topic: topicName(topic),
           link: messageLink(msg),
         },
-        // a warn-only line still counts against them for a week; calling a scam out never does
-        { offence: pointing ? null : { at: now, category: REASON_CATEGORY[reason!] } },
+        // words members say too, or calling a scam out: never held against them, and they stay a member Glim knows
+        { offence: null },
       ).catch(() => {});
-      // the member stays, so they hear why their words went (to them, never to a spammer)
-      if ((await hitRateLimit(`tg:${chatId}:${topic}`, "tg-warn", WARN_PER_MIN)).allowed) {
+      // the member stays, so they hear why their words went (to them, never to a spammer); pointing at
+      // another project's support ("Relay support is at t.me/...") just goes, with no note
+      if (reason !== "support_at" && (await hitRateLimit(`tg:${chatId}:${topic}`, "tg-warn", WARN_PER_MIN)).allowed) {
         await sendMessage(chatId, pointing ? pointedWarning(name, removed) : warnOnlyWarning(name, removed), {
           threadId,
           replyTo: removed ? undefined : msg.message_id,

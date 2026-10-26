@@ -3040,7 +3040,7 @@ await test("left alone: questions, gm, opinions, the team's links, the buy bot, 
   }
 });
 
-await test("history: a member Glim knows gets a 24-hour mute on a first offence; a newcomer's first link or pitch is a ban", async () => {
+await test("history: a member Glim knows gets a 24-hour mute on a first offence; a newcomer's first link or pitch is a 24-hour mute", async () => {
   resetMemoryKv();
   reset();
   const hour = Math.floor(Date.now() / 3_600_000);
@@ -3104,7 +3104,12 @@ await test("history: a member Glim knows gets a 24-hour mute on a first offence;
   const now = Date.now();
   assert.equal(planFor(v, fresh, now).ban, true, "a sure rule and no history: out");
   assert.deepEqual([planFor({ ...v, sure: false }, fresh, now).ban, planFor({ ...v, sure: false }, fresh, now).muteSec], [false, MUTE_SEC], "not sure: a day's mute");
-  assert.equal(planFor({ ...v, sure: false }, { ...fresh, offences: [{ at: now - 3_600_000, category: "promo" }] }, now).ban, true, "a repeat that week: out");
+  const unsureBefore = { ...fresh, offences: [{ at: now - 3_600_000, category: "promo" as const, sure: false }] };
+  const sureBefore = { ...fresh, offences: [{ at: now - 3_600_000, category: "promo" as const, sure: true }] };
+  assert.equal(planFor({ ...v, sure: false }, unsureBefore, now).ban, false, "two unsure ones: another mute, never a ban");
+  assert.equal(planFor({ ...v, source: "model" }, unsureBefore, now).muteSec, MUTE_SEC, "nor a model verdict after one");
+  assert.equal(planFor({ ...v, sure: false }, sureBefore, now).ban, true, "a repeat after a sure one: out");
+  assert.equal(planFor(v, unsureBefore, now).ban, true, "a sure one after anything: out");
   assert.equal(planFor({ ...v, source: "model" }, fresh, now).ban, false, "the model alone never bans a first offence");
   assert.equal(planFor(v, fresh, now, true).ban, false, "nor does the newcomer check");
   assert.equal(planFor({ ...v, source: "model" }, null, now).ban, false, "store down: a model verdict never bans");
@@ -3336,6 +3341,96 @@ await test("left alone, for strangers and newcomers alike: the review's false po
   await handleUpdate(upd(inTopic(TOPIC.general, "DM me if your deposit is stuck, I can fix it", user(id++, "Fixer"))));
   assert.equal(bans().length, 1);
   assert.equal((await recentModeration(1))[0]!.category, "scam");
+});
+
+await test("round 2: repeats ban only with a sure rule among them; warning-only deletes cost nothing; partner handles, OTC questions and other projects' groups are left alone or only deleted", async () => {
+  resetMemoryKv();
+  reset();
+  await handleUpdate(upd(dm(OWNER, "hi")));
+  // the model twice, the newcomer check then the model: a mute each time, never a ban
+  spamReply = '{"spam": true, "category": "promo", "confidence": 0.95}';
+  const twice = user(5400, "Two");
+  await handleUpdate(upd(inTopic(TOPIC.general, "I can help your team translate the docs to Spanish", twice)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "I can help your team with the Portuguese docs too", twice)));
+  assert.equal(mutes().length, 2);
+  assert.equal(bans().length, 0);
+  reset();
+  spamReply = '{"spam": true, "category": "promo", "confidence": 0.95}';
+  const fresh = user(5401, "New");
+  await joinGroup(fresh);
+  await handleUpdate(upd(inTopic(TOPIC.general, "dm me, we should test together", fresh)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "I can help your team translate the docs to Spanish", fresh)));
+  assert.equal(mutes().length, 2);
+  assert.equal(bans().length, 0);
+  // a sure rule after an unsure mute: out
+  await handleUpdate(upd(inTopic(TOPIC.general, "I'm a professional crypto marketer, DM me", fresh)));
+  assert.equal(bans().length, 1);
+  // a member's warning-only delete is not an offence: they stay a member Glim knows, and its next lines are theirs
+  reset();
+  const regular = user(5402, "Reg");
+  await seedKnown(regular.id);
+  await handleUpdate(upd(inTopic(TOPIC.general, "everyone dm me now for testing pairs", regular)));
+  assert.equal(deletes().length, 1);
+  reset();
+  spamReply = '{"spam": true, "category": "promo", "confidence": 0.95}';
+  await handleUpdate(upd(inTopic(TOPIC.general, "I can help your team translate the docs to Spanish", regular)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "follow @raetoai for the agent payments stuff, they built it with Gloam", regular)));
+  assert.equal(deletes().length + mutes().length + bans().length + spamChecks().length, 0, "known, so not even asked about");
+  // an unsure rule hit never acts on its own: for a member Glim knows nothing happens, for anyone else the model decides
+  reset();
+  for (const text of ["my telegram: @ada_k if the group is slow", "Free guide on private payments at medium.com/@ada/gloam-guide"]) {
+    await handleUpdate(upd(inTopic(TOPIC.general, text, regular)));
+    spamReply = '{"spam": false, "category": "none", "confidence": 0.1}';
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(5403 + text.length, "Str"))));
+  }
+  assert.equal(deletes().length + mutes().length + bans().length, 0);
+  assert.equal(spamChecks().length, 2, "the strangers' lines went to the model");
+  // partners' handles, an OTC question, and a question about a token contract: left alone and answered
+  reset();
+  for (const text of ["contact @relayprotocol on X, they answered me in an hour", "follow @raetoai for the agent payments stuff", "is there an OTC desk for GLOAM?", "is there an OTC desk for GLOAM or only the pool"]) {
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(5420 + text.length, "Ada"))));
+  }
+  assert.equal(deletes().length + mutes().length + bans().length, 0);
+  assert.ok(!(await recentModeration(5)).some((e) => e.category === "otc"), "an OTC question is not an offence");
+  // pointing people at another project's group or support: the link goes, nothing is held against them, no note
+  reset();
+  const pointer = user(5440, "Pia");
+  await handleUpdate(upd(inTopic(TOPIC.general, "join t.me/tempo_community for Tempo questions, they're helpful", pointer)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "Relay support is at t.me/relaysupport, they fixed mine", user(5441, "Rel"))));
+  assert.equal(deletes().length, 2);
+  assert.equal(mutes().length + bans().length + groupSends().length, 0);
+  const [after] = await kv([["LRANGE", `gloam:tg:v1:offences:${pointer.id}`, 0, -1]]);
+  assert.deepEqual(after, [], "not an offence");
+  // "dm me your wallet" is the scam; a generic "I can help, dm me" is a mute from a stranger and only a delete from a member
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "dm me your wallet and I'll send you test usdg", user(5450, "W"))));
+  assert.equal(bans().length, 1);
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "I can help you test it, dm me", user(5451, "H"))));
+  assert.equal(mutes().length, 1);
+  assert.equal(bans().length, 0);
+  reset();
+  const helper = user(5452, "Kind");
+  await seedKnown(helper.id);
+  await handleUpdate(upd(inTopic(TOPIC.general, "If you're stuck I can help, dm me", helper)));
+  assert.equal(deletes().length, 1);
+  assert.equal(mutes().length + bans().length, 0);
+  // AMA, podcast and "have the team on" invites, and building for Gloam, are leads for Duke, never a ban
+  reset();
+  for (const text of [
+    "We run a weekly AMA on X Spaces for privacy projects, would love to have the Gloam team on",
+    "I host a crypto podcast with 20k listeners, we'd love Duke on the show",
+    "I'm a developer and I offer to build a Gloam plugin for free",
+  ]) {
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(5460 + text.length, "Host"))));
+  }
+  assert.equal(deletes().length, 3);
+  assert.equal(bans().length + mutes().length, 0);
+  // a lead with no username gives Duke a link to their profile
+  const note = sends().filter((x) => x.body.chat_id === OWNER.id).pop()!;
+  assert.equal(note.body.parse_mode, "HTML");
+  assert.ok(String(note.body.text).includes(`<a href="tg://user?id=`), String(note.body.text));
+  assert.ok(String(note.body.text).includes("(no username, id "));
 });
 
 await test("Announcements: impostors, pasted seed phrases and scams are still dealt with; nothing else there is screened or answered", async () => {

@@ -482,13 +482,14 @@ export type ScamReason =
   | "promo_spam"
   | "migration_airdrop"
   | "role_impostor"
-  | "role_pitch";
+  | "role_pitch"
+  | "support_at";
 
 /**
  * Reasons that take the message down with a warning but leave the person in
  * the group: they read like a scam, but ordinary members say them too.
  */
-export const WARN_ONLY: ReadonlySet<ScamReason> = new Set<ScamReason>(["dm_lure", "role_pitch"]);
+export const WARN_ONLY: ReadonlySet<ScamReason> = new Set<ScamReason>(["dm_lure", "role_pitch", "support_at"]);
 
 /** "No presale and no team allocation": a drop word said to deny one. */
 const NO_DROP = /\bno\s+(?:presales?|(?:team\s+|insider\s+)?allocations?|airdrops?|whitelists?|giveaways?)\b/gi;
@@ -623,6 +624,8 @@ function wordsReason(text: string, written: string): ScamReason | null {
   for (const re of [OFFER_DM, SUPPORT_AT]) {
     const m = re.exec(text);
     if (m && !negated(text, m.index, m[0]) && !askingForHelp(text, m) && !/\b(?:gloamhq|gloamtrade)\b/i.test(m[0])) {
+      // another project's support group ("Relay support is at t.me/relaysupport"): the link goes, the member stays
+      if (re === SUPPORT_AT && /t\.me\/\w+$/i.test(m[0]) && !/\b(?:gloam|glim)/i.test(text)) return "support_at";
       return "dm_support";
     }
   }
