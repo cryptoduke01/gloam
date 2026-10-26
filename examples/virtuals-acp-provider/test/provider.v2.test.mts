@@ -157,3 +157,50 @@ test("a payout left unconfirmed for an hour is cancelled on chain, so its princi
   assert.deepEqual(refunds, [7_000_000n]);
   assert.equal(p.status(84532, "6")?.refundHeldRaw, "0");
 });
+
+test("a funding lookup that fails at job end is asked again, and the principal stays reserved meanwhile", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const refunds: bigint[] = [];
+  const f = fakeWallet(pk, acp, { pay: async () => ({ status: "error", message: "rpc down" }) });
+  const p = providerFor(f.wallet, { refund: async (_c, _t, raw) => (refunds.push(raw), `0x${"c".repeat(64)}`) });
+  const s = new FakeSession("7", acp);
+  await p.onEntry(s, requirementEntry("7", { payouts: [{ to: r1.tag, amount: "10" }] }));
+  // The client funds and rejects at once; the provider's lookups of the funding fail.
+  acp.fund("7");
+  acp.set("7", { status: ACP_STATUS.rejected });
+  acp.logsDown = true;
+  s.status = "funded";
+  await p.onEntry(s, funded("7"));
+  s.status = "rejected";
+  await p.onEntry(s, rejected("7"));
+  const token = f.wallet.network.assets[0]!.address;
+  assert.equal(p.publicReserve(token), 10_000_000n, "held while the chain cannot say");
+  acp.logsDown = false;
+  await p.retryRefunds();
+  assert.deepEqual(refunds, [10_000_000n]);
+  assert.equal(p.status(84532, "7")?.funded, true);
+});
+
+test("a job funded on chain but blocked from paying keeps its principal reserved after its expiry", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp);
+  const p = providerFor(f.wallet);
+  const token = f.wallet.network.assets[0]!.address;
+  const s = new FakeSession("8", acp);
+  await p.onEntry(s, requirementEntry("8", { payouts: [{ to: r1.tag, amount: "6" }] }));
+  s.fund();
+  acp.set("8", { expiredAt: BigInt(Math.floor(Date.now() / 1000) + 60) });
+  await p.onEntry(s, funded("8"));
+  assert.match(String(p.status(84532, "8")?.blocked), /expiry/);
+  assert.equal(p.status(84532, "8")?.funded, true, "funded on chain, even though blocked");
+  try {
+    Date.now = () => realNow() + 2 * 60 * 60_000; // its expiry passes before job.expired is handled
+    assert.equal(p.publicReserve(token), 6_000_000n);
+  } finally {
+    Date.now = realNow;
+  }
+});
