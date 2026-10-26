@@ -3,6 +3,12 @@ import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
+import { mainnetPool } from "@/lib/mainnet";
+
+/** Base and Ethereum mainnet show as live once their pools are in (lib/mainnet.ts). */
+const BASE_LIVE = mainnetPool(8453) !== null;
+const ETHEREUM_LIVE = mainnetPool(1) !== null;
+const LATER = [BASE_LIVE ? "Base" : null, ETHEREUM_LIVE ? "Ethereum" : null].filter(Boolean).join(" and ");
 
 export const metadata: Metadata = {
   title: "What ships when",
@@ -58,7 +64,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Mainnet",
-            body: "Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC, on the final ceremony keys and under beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%.",
+            body: `Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC, on the final ceremony keys and under beta deposit limits.${LATER ? ` ${LATER} joined later, on the same keys and limits.` : ""} Deposits and private payments are free; a cash out costs 0.25%.`,
           },
           {
             n: "●",
@@ -68,7 +74,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Shield",
-            body: "Mainnet: USDG and $GLOAM on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.",
+            body: `Mainnet: USDG and $GLOAM on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
           },
           {
             n: "●",
@@ -126,9 +132,9 @@ export default function DocsProductPage() {
             body: "Reviewed internally before launch, with no Critical or High findings open on 20 October. An external audit is planned, and the owner moves from one wallet to a multisig.",
           },
           {
-            n: "○",
-            title: "Ethereum expansion",
-            body: "Same private rails on Ethereum once the mainnet rails are solid.",
+            n: BASE_LIVE && ETHEREUM_LIVE ? "●" : "○",
+            title: "Base and Ethereum",
+            body: `The mainnet vault and final keys, on Base and Ethereum. Their testnets, Base Sepolia (since 24 October) and Ethereum Sepolia (since 25 October), are live.${BASE_LIVE && ETHEREUM_LIVE ? " Base and Ethereum mainnet are live too." : LATER ? ` ${LATER} mainnet is live too; the other is next.` : " Base and Ethereum mainnet are next."}`,
           },
         ]}
       />

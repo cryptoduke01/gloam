@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { mainnetPool } from "@/lib/mainnet";
+
+/** Mainnets whose pool is not in yet (lib/mainnet.ts): "Base mainnet and Ethereum" until their deploys. */
+const NOT_YET = [mainnetPool(8453) ? null : "Base mainnet", mainnetPool(1) ? null : "Ethereum"].filter(Boolean).join(" and ");
 
 export const metadata: Metadata = {
   title: "API reference",
@@ -73,7 +77,7 @@ export default function DocsSdkReferencePage() {
                 <code>&quot;tempo&quot;</code>, <code>&quot;base&quot;</code>{" "}
                 (0.3.0) or <code>&quot;ethereum&quot;</code> (0.4.0). A mainnet{" "}
                 <code>GloamNetwork</code>, or <code>null</code> until its pool is
-                published (Base mainnet and Ethereum: not yet)
+                published{NOT_YET ? ` (${NOT_YET}: not yet)` : ""}
               </td>
             </tr>
             <tr>
@@ -83,8 +87,8 @@ export default function DocsSdkReferencePage() {
               <td>
                 0.3.0. A chain&apos;s testnet: the Robinhood Chain and Tempo
                 testnets, or Base Sepolia, which runs the mainnet pool and keys.
-                0.4.0 adds <code>&quot;ethereum&quot;</code>, Ethereum Sepolia, null
-                until its pool is published
+                0.4.0 adds <code>&quot;ethereum&quot;</code>, Ethereum Sepolia, with
+                its pool
               </td>
             </tr>
             <tr>
@@ -99,8 +103,10 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 One network by key: <code>&quot;robinhood-mainnet&quot;</code>,{" "}
-                <code>&quot;tempo-mainnet&quot;</code>, <code>&quot;robinhood&quot;</code>{" "}
-                or <code>&quot;tempo&quot;</code>
+                <code>&quot;tempo-mainnet&quot;</code>, <code>&quot;base-mainnet&quot;</code>,{" "}
+                <code>&quot;ethereum-mainnet&quot;</code>, <code>&quot;robinhood&quot;</code>,{" "}
+                <code>&quot;tempo&quot;</code>, <code>&quot;base&quot;</code> or{" "}
+                <code>&quot;ethereum&quot;</code>; null while its pool is not in
               </td>
             </tr>
             <tr>
@@ -184,7 +190,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.3.0. Base mainnet and Base Sepolia pool assets, 6 decimals each;
-                native ETH is listed on both (Base mainnet is not deployed yet)
+                native ETH is listed on both{mainnetPool(8453) ? "" : " (Base mainnet is not deployed yet)"}
               </td>
             </tr>
             <tr>
@@ -195,7 +201,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.4.0. Ethereum mainnet pool assets, 6 decimals each; native ETH
-                is listed too (not deployed yet)
+                is listed too{mainnetPool(1) ? "" : " (not deployed yet)"}
               </td>
             </tr>
             <tr>
@@ -216,7 +222,7 @@ export default function DocsSdkReferencePage() {
               </td>
               <td>
                 0.4.0. Ethereum Sepolia pool assets, 6 decimals each; native ETH is
-                listed too (not deployed yet)
+                listed too
               </td>
             </tr>
             <tr>
@@ -713,10 +719,14 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
 
       <h2>Guardrails</h2>
       <p>
-        Mainnet (<code>4663</code>, <code>4217</code>) is beta software,
+        Mainnet (<code>4663</code>, <code>4217</code>
+        {mainnetPool(8453) ? <>, <code>8453</code></> : null}
+        {mainnetPool(1) ? <>, <code>1</code></> : null}) is beta software,
         on the final ceremony keys, with beta deposit limits and a
-        0.25% cash-out fee. The testnets (<code>46630</code>, <code>42431</code>)
-        run on dev-ceremony keys with test funds. Real proofs only, never a mock.
+        0.25% cash-out fee. The Robinhood Chain and Tempo testnets (
+        <code>46630</code>, <code>42431</code>) run on dev-ceremony keys with
+        test funds; Base Sepolia (<code>84532</code>) and Ethereum Sepolia (
+        <code>11155111</code>) run the final keys with test funds. Real proofs only, never a mock.
         Note secrets are the sole spend authority: persist and protect them. See
         the <Link href="/docs/quickstart">quickstart</Link> to put this together,
         or <Link href="/docs/production">the production gate</Link> for what is

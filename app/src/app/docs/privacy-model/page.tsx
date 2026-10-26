@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
+import { liveMainnetNames } from "@/lib/mainnet";
 import { SCREEN_LIST_INFO } from "@/lib/screening";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default function DocsPrivacyPage() {
   return (
     <DocsLayout
       title="What stays private"
-      lede="Robinhood Chain and Tempo are public ledgers. Gloam adds a shielded pool on top. Privacy here means unlinkability and hidden holdings, not that transactions vanish from the explorer. Here is exactly what that does and does not hide."
+      lede={`${liveMainnetNames()} are public ledgers. Gloam adds a shielded pool on top. Privacy here means unlinkability and hidden holdings, not that transactions vanish from the explorer. Here is exactly what that does and does not hide.`}
       glance={[
         { label: "Hidden", value: "the link, the bag" },
         { label: "Public", value: "deposits + exits" },
@@ -424,7 +425,8 @@ export default function DocsPrivacyPage() {
         <li>
           <strong>Final keys on mainnet, dev keys on testnet.</strong> The
           multi-party trusted setup closed on 17 October with 13 contributors,
-          and mainnet uses its final keys. The testnet setup had a single
+          and mainnet uses its final keys, as do Base Sepolia and Ethereum
+          Sepolia. The Robinhood Chain and Tempo testnet setup had a single
           contributor, so testnet is for practice only.
         </li>
         <li>

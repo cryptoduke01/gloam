@@ -1,22 +1,34 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+
+const MAINNETS = liveMainnetNames();
+
+/** Mainnet chain ids as the guardrails list them, Base and Ethereum once their pools are in (lib/mainnet.ts). */
+const MAINNET_IDS = [
+  "Robinhood Chain 4663",
+  "Tempo 4217",
+  ...(mainnetPool(8453) ? ["Base 8453"] : []),
+  ...(mainnetPool(1) ? ["Ethereum 1"] : []),
+].join(", ");
+const MAINNET_CHAIN_IDS = [4663, 4217, ...(mainnetPool(8453) ? [8453] : []), ...(mainnetPool(1) ? [1] : [])].join(" · ");
 
 export const metadata: Metadata = {
   title: "SDK",
   description:
-    "@gloamtrade/sdk: add private balances, private payments, and selective disclosure to any Robinhood Chain or Tempo app or agent, on mainnet or testnet. The privacy layer as a package.",
+    `@gloamtrade/sdk: add private balances, private payments, and selective disclosure to any app or agent on ${MAINNETS}, on mainnet or testnet. The privacy layer as a package.`,
 };
 
 export default function DocsSdkPage() {
   return (
     <DocsLayout
       title="SDK"
-      lede="The privacy layer for Robinhood Chain and Tempo, as a package. Give any app or agent shielded balances, private payments, and selective disclosure, without building a proving stack from scratch."
+      lede={`The privacy layer for ${MAINNETS}, as a package. Give any app or agent shielded balances, private payments, and selective disclosure, without building a proving stack from scratch.`}
       glance={[
-        { label: "Package", value: "@gloamtrade/sdk 0.2.0" },
+        { label: "Package", value: "@gloamtrade/sdk 0.2.2" },
         { label: "Runtime", value: "browser + node" },
-        { label: "Chains", value: "Mainnet 4663 · 4217, testnet 46630 · 42431" },
+        { label: "Chains", value: `Mainnet ${MAINNET_CHAIN_IDS}, testnet 46630 · 42431 · 84532 · 11155111` },
         { label: "Proofs", value: "Groth16 + Poseidon" },
       ]}
       quickLinks={[
@@ -28,7 +40,7 @@ export default function DocsSdkPage() {
     >
       <h2>What Gloam gives your app</h2>
       <p>
-        Robinhood Chain and Tempo are public: every balance, size, and move is
+        {MAINNETS} are public: every balance, size, and move is
         visible. Gloam is the shielded chamber on top of them, and{" "}
         <code>@gloamtrade/sdk</code> is that chamber as a dependency. The Gloam
         vault app is the reference implementation, not a special case: the same
@@ -69,19 +81,22 @@ npm install snarkjs   # optional peer, for proving`}</code>
 
       <h2 id="networks">Mainnet and testnet</h2>
       <p>
-        From 0.1.0 the SDK knows both mainnets and both testnets. The builders
-        still default to Robinhood Chain testnet so older code keeps working,
-        so pass a mainnet network explicitly.
+        From 0.1.0 the SDK knows the Robinhood Chain and Tempo mainnets and
+        testnets; 0.3.0 adds Base and Base Sepolia, and 0.4.0 Ethereum and
+        Ethereum Sepolia. The builders still default to Robinhood Chain testnet
+        so older code keeps working, so pass a mainnet network explicitly.
       </p>
       <ul>
         <li>
-          <code>mainnetNetwork(&quot;robinhood&quot; | &quot;tempo&quot;)</code>{" "}
+          <code>mainnetNetwork(&quot;robinhood&quot; | &quot;tempo&quot; | &quot;base&quot; | &quot;ethereum&quot;)</code>{" "}
           returns a mainnet <code>GloamNetwork</code>, or <code>null</code> until
           its pool is published. <code>gloamNetworks()</code> lists every network
           Gloam runs on right now, mainnets first. <code>getGloamNetwork(key)</code>{" "}
           takes <code>&quot;robinhood-mainnet&quot;</code>,{" "}
-          <code>&quot;tempo-mainnet&quot;</code>, <code>&quot;robinhood&quot;</code>{" "}
-          or <code>&quot;tempo&quot;</code>.
+          <code>&quot;tempo-mainnet&quot;</code>, <code>&quot;base-mainnet&quot;</code>,{" "}
+          <code>&quot;ethereum-mainnet&quot;</code>, <code>&quot;robinhood&quot;</code>,{" "}
+          <code>&quot;tempo&quot;</code>, <code>&quot;base&quot;</code> (Base Sepolia) or{" "}
+          <code>&quot;ethereum&quot;</code> (Ethereum Sepolia).
         </li>
         <li>
           <code>GLOAM_NETWORKS.robinhood</code> and <code>.tempo</code> stay the
@@ -412,15 +427,16 @@ for (const p of payments) {
 
       <h2>Guardrails</h2>
       <p>
-        Mainnet (Robinhood Chain <code>4663</code>, Tempo <code>4217</code>) is
-        beta software: final ceremony keys, beta deposit
-        limits, a 0.25% cash-out fee. It was reviewed internally before launch;
-        an external audit is planned. The testnets (<code>46630</code>,{" "}
-        <code>42431</code>) run on dev-ceremony keys with test funds. Real
+        Mainnet ({MAINNET_IDS}) is beta software: final ceremony keys, beta
+        deposit limits, a 0.25% cash-out fee. It was reviewed internally before
+        launch; an external audit is planned. The Robinhood Chain and Tempo
+        testnets (<code>46630</code>, <code>42431</code>) run on dev-ceremony
+        keys with test funds; Base Sepolia (<code>84532</code>) and Ethereum
+        Sepolia (<code>11155111</code>) run the final keys with test funds. Real
         privacy only, never a mock success. Note secrets are the sole spend
         authority: persist and protect them. The old sealed trade is retired.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link> run in the app on
-        both mainnets; the SDK does not build them yet. See{" "}
+        Robinhood Chain and Tempo mainnet; the SDK does not build them yet. See{" "}
         <Link href="/docs/production">the production gate</Link>.
       </p>
     </DocsLayout>

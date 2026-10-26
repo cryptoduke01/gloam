@@ -3,11 +3,17 @@ import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
+import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+
+/** The mainnets with a pool in, as words: "Robinhood Chain and Tempo" until Base and Ethereum are in. */
+const MAINNETS = liveMainnetNames();
+const BASE_LIVE = mainnetPool(8453) !== null;
+const ETHEREUM_LIVE = mainnetPool(1) !== null;
 
 export const metadata: Metadata = {
   title: "Docs",
   description:
-    "Gloam docs: private money on public chains, on Robinhood Chain and Tempo, explained simply. Private balances, payments, payroll, on mainnet and on the free testnet.",
+    `Gloam docs: private money on public chains, on ${MAINNETS}, explained simply. Private balances, payments, payroll, on mainnet and on the free testnet.`,
 };
 
 export default function DocsOverviewPage() {
@@ -24,8 +30,9 @@ export default function DocsOverviewPage() {
         default, provable on demand.
       </p>
       <p>
-        It runs on <strong>Tempo</strong> and <strong>Robinhood Chain</strong>{" "}
-        mainnet, and on their testnets. You
+        It runs on <strong>{MAINNETS}</strong> mainnet, and on four testnets:
+        Robinhood Chain testnet, Tempo Moderato, Base Sepolia and Ethereum
+        Sepolia. You
         put money into a shared vault (“shield”), pay privately inside it, and
         cash out with a real proof. Proofs are made on your device, and nobody
         else holds a key. See{" "}
@@ -36,8 +43,9 @@ export default function DocsOverviewPage() {
         the final keys from a 13-contributor trusted setup, and beta deposit
         limits cap what goes in. The code was reviewed internally before
         launch; an external audit is planned. Deposits and private payments are
-        free, and cashing out costs 0.25%. The testnets keep{" "}
-        <strong>development proving keys</strong>. Details: <Link href="/docs/chain">Networks</Link>.
+        free, and cashing out costs 0.25%. The Robinhood Chain and Tempo
+        testnets keep <strong>development proving keys</strong>; Base Sepolia
+        and Ethereum Sepolia run the final keys. Details: <Link href="/docs/chain">Networks</Link>.
       </p>
 
       <PoolPicture title="One picture" />
@@ -53,8 +61,8 @@ export default function DocsOverviewPage() {
       <ol>
         <li>
           Open <AppLink href="/app">/app</AppLink>, connect a wallet, and pick a
-          network: Robinhood Chain or Tempo mainnet, or a testnet
-          to practice first.
+          network: a mainnet ({MAINNETS}), or a testnet to practice
+          first.
         </li>
         <li>
           <AppLink href="/app/vault?tab=shield">Shield</AppLink> a small amount.
@@ -91,8 +99,8 @@ export default function DocsOverviewPage() {
       <ul>
         <li>Connect wallet, portfolio, markets</li>
         <li>
-          Mainnet on Robinhood Chain and Tempo, with the final ceremony keys and
-          beta deposit limits
+          Mainnet on {MAINNETS}, with the final ceremony keys and beta deposit
+          limits
         </li>
         <li>
           Send public balances (stablecoins and ETH, plus stock tokens on
@@ -100,8 +108,10 @@ export default function DocsOverviewPage() {
         </li>
         <li>
           Shield into the vault: USDG and $GLOAM on Robinhood Chain mainnet;
-          USDC.e, pathUSD, USDT0 and OUSD on Tempo mainnet; test ETH, stock
-          tokens and stablecoins on the testnets
+          USDC.e, pathUSD, USDT0 and OUSD on Tempo mainnet;
+          {BASE_LIVE ? " USDC, EURC, USDT and ETH on Base mainnet;" : ""}
+          {ETHEREUM_LIVE ? " USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum mainnet;" : ""} test
+          ETH, stock tokens and stablecoins on the testnets
         </li>
         <li>
           Private send to a Gloam address, or by claim link with an optional

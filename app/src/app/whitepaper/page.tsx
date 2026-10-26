@@ -3,6 +3,13 @@ import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram, PoolPicture } from "@/components/docs/FlowDiagram";
+import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+
+/** Base and Ethereum mainnet join the lists once their pools are in (lib/mainnet.ts). */
+const BASE_LIVE = mainnetPool(8453) !== null;
+const ETHEREUM_LIVE = mainnetPool(1) !== null;
+const LATER = [BASE_LIVE ? "Base" : null, ETHEREUM_LIVE ? "Ethereum" : null].filter(Boolean).join(" and ");
+const MAINNET_IDS = ["RH 4663", "Tempo 4217", ...(BASE_LIVE ? ["Base 8453"] : []), ...(ETHEREUM_LIVE ? ["Ethereum 1"] : [])].join(" · ");
 
 export const metadata: Metadata = {
   title: "Whitepaper",
@@ -19,7 +26,7 @@ export default function WhitepaperPage() {
       glance={[
         { label: "Version", value: "0.5" },
         { label: "Status", value: "Public draft" },
-        { label: "Networks", value: "Mainnet RH 4663 · Tempo 4217; testnet 46630 · 42431" },
+        { label: "Networks", value: `Mainnet ${MAINNET_IDS}; testnet 46630 · 42431 · 84532 · 11155111` },
         { label: "Live", value: "Shield · pay · payroll · proofs · swaps" },
         { label: "Private swaps", value: "Mainnet; amounts public" },
         { label: "Mainnet", value: "Live since 21 Oct 2026, beta" },
@@ -325,7 +332,7 @@ export default function WhitepaperPage() {
           {
             n: "1",
             title: "Connect",
-            body: "Wallet on Robinhood Chain (4663) or Tempo (4217) mainnet, or on a testnet (46630, 42431) to practice.",
+            body: `Wallet on a mainnet (Robinhood Chain 4663, Tempo 4217${BASE_LIVE ? ", Base 8453" : ""}${ETHEREUM_LIVE ? ", Ethereum 1" : ""}), or on a testnet (46630, 42431, 84532, 11155111) to practice.`,
           },
           {
             n: "2",
@@ -563,8 +570,9 @@ export default function WhitepaperPage() {
       </p>
       <ul>
         <li>
-          Wallet connection to Robinhood Chain and Tempo mainnet, and to
-          Robinhood Chain testnet and Tempo Moderato for practice
+          Wallet connection to {liveMainnetNames()} mainnet, and to Robinhood
+          Chain testnet, Tempo Moderato, Base Sepolia and Ethereum Sepolia for
+          practice
         </li>
         <li>Portfolio with wallet balances, shielded balances, and faucet stocks on testnet</li>
         <li>
@@ -613,8 +621,10 @@ export default function WhitepaperPage() {
           funds, payment, and payroll totals, private agent payments, beta
           deposit limits, and pools with no admin withdraw and timelocked rule
           changes. Private swaps from the private balance run on both, through
-          a router per chain. The testnets add encrypted memos and stock tokens
-          held and sent privately, with test funds.
+          a router per chain. Encrypted payment memos run on every network, and
+          the Robinhood Chain testnet adds stock tokens held and sent
+          privately, with test funds.
+          {LATER ? ` ${LATER} mainnet joined later, on the same vault and keys.` : ""}
         </li>
         <li>
           <strong>Retired:</strong> the first sealed-swap path (circuit,
@@ -647,7 +657,7 @@ export default function WhitepaperPage() {
           Smart contract and circuit bugs: reviews so far are internal, with no
           external audit yet
         </li>
-        <li>Testnet runs on development proving keys from a single-contributor dev ceremony (mainnet uses the 13-contributor keys)</li>
+        <li>The Robinhood Chain and Tempo testnets run on development proving keys from a single-contributor dev ceremony (mainnet, Base Sepolia and Ethereum Sepolia use the 13-contributor keys)</li>
         <li>
           Rule changes, including verifier swaps, by a single owner wallet,
           limited by a public 3-day delay
