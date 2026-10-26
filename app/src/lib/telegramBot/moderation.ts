@@ -116,6 +116,18 @@ const TG_POINTER = /\bfor\s+(?:\w+\s+){0,3}(?:questions?|help|support|issues?|up
 const TESTIMONIAL = /\bthey\s+(?:fixed|helped|answered|sorted|solved|resolved|recovered|refunded|unlocked|restored)\b/i;
 /** A t.me group named like support, a help desk, a fix or recovery service, or an admin. */
 const SUPPORT_PATH = /support|help|desk|fix|recover|admin/i;
+/** Names no real project's group has: recovery, a fix, a refund, a claim. */
+const FAKE_NAME = /recover|refund|claim|fix/i;
+/** A support, help, desk or admin name: a real project's only if nothing around it reads like the scam. */
+const SUPPORT_NAME = /support|help|desk|admin/i;
+/** Talk of lost funds: what the fake-support scam answers. */
+const LOST_FUNDS = /\b(?:lost|missing|stolen|drained|hacked|scammed|recover\w*|refund\w*|funds?\s+(?:gone|missing|stuck))\b/i;
+/** Any DM ask, to the sender or to someone else there: "dm the admin", "message them". */
+const DM_ANY = /\b(?:d\.?\s?m|p\.?\s?m|inbox|message|text|contact)\s+(?:me|us|them|him|her|the\s+(?:admins?|mods?|support|team|agents?|owner)|an?\s+(?:admin|mod|agent))\b/i;
+/** "This fixed it", "fixed mine": a link vouched for, the scammer's script. */
+const LINK_TESTIMONIAL = /\b(?:this|it|that|they)\s+(?:fixed|solved|sorted|worked|helped|recovered|restored|unlocked)\b|\bfixed\s+(?:it|mine)\b/i;
+/** A member asking whether a link is real: "got this link in DM, legit?". A victim, not the scam. */
+const ASKS_ABOUT = /\b(?:legit|real|safe|scam|fake|trust\w*|official|genuine|phishing|is\s+(?:this|it|that)|anyone\s+(?:know|seen|tried|else)|should\s+i)\b/i;
 /**
  * Real projects whose own Telegram groups members point to ("Relay support is
  * at t.me/relaysupport", "asked in t.me/tempo_community"). None of their groups
@@ -247,6 +259,28 @@ export const PARTNER_HANDLES = [
   "virtualsprotocol", "virtuals_io", "robinhood", "robinhoodapp", "kannaudits", "kann_audits", "orynth", "dexscreener", "coingecko", "circle", "paxos",
 ];
 
+/** A host that carries the brand: "gloam" anywhere, "glim" as its own word or with a staff word ("glimbot", "glim-support"). */
+function brandDomain(host: string): boolean {
+  return /gloam/.test(host) || /(?:^|[.-])glim(?:[.-]|bot|support|help|official|app|admin)/.test(host);
+}
+
+/**
+ * A member asking whether a link is real ("got this link in DM, legit?"), or
+ * sharing one right after their own problem without vouching for it: a likely
+ * victim. The link comes down and the owner is told; nobody is removed. A
+ * link vouched for ("this fixed it") or posted as a statement is not this.
+ */
+export function asksAboutLink(raw: string): boolean {
+  const t = norm(raw);
+  return t.includes("?") && ASKS_ABOUT.test(t) && !LINK_TESTIMONIAL.test(t);
+}
+
+/** A link vouched for, or on a domain that carries the brand: never the victim's own report. */
+export function vouchedOrBranded(raw: string): boolean {
+  const t = norm(raw);
+  return LINK_TESTIMONIAL.test(t) || linksOf(t).some((l) => !linkAllowed(l) && brandDomain(hostOf(l).host));
+}
+
 /** A t.me link to anywhere but this group, its message links, Glim's stickers or Glim. */
 function foreignTelegram(host: string, path: string): boolean {
   if (!["t.me", "telegram.me", "telegram.dog"].includes(host)) return false;
@@ -369,6 +403,7 @@ export function screen(i: ScreenInput): Screen {
   });
   const okHandles = [...i.okHandles, ...PARTNER_HANDLES];
   const handles = handlesOf(raw).filter((h) => !okHandles.includes(h));
+  const brandHosts = offsite.map(hostOf).filter((h) => brandDomain(h.host));
   const question = raw.includes("?") || looksLikeQuestion(raw);
   // a problem report ("my deposit is stuck", "proof fails"); "I can help your project" is an offer, not a problem
   const problem = (PROBLEM_HINT.test(norm(raw)) && !OFFER_VERB.test(norm(raw))) || BUG_WORDS.test(norm(raw));
@@ -416,6 +451,9 @@ export function screen(i: ScreenInput): Screen {
     const pull = c.any || bio || whatsapp || handles.length > 0 || offsite.length > 0 || tgLinks.length > 0;
     if (says(IMPOSTOR_CLAIM, t) && pull) add("impersonation", 0.95, "support_impostor", true);
 
+    // a domain off the allowed list that carries the brand: gloam-support.xyz, claim-gloam.xyz, glim-bot.app
+    if (brandHosts.length) add("impersonation", 0.97, "brand_domain", true);
+
     // bait, money schemes, and the support offer that ends in a DM
     if (says(DROP_OFFER, t) && says(DROP_CTA, t)) add("scam", 0.9, "drop_bait", true);
     if (says(MONEY_PITCH, t) && (reach || offsite.length)) add("scam", 0.9, "money_pitch", true);
@@ -430,8 +468,14 @@ export function screen(i: ScreenInput): Screen {
     const realProject = (n: string) => REAL_PROJECTS.some((r) => n.startsWith(r)) && !NO_TELEGRAM_SUPPORT.test(n);
     if (tgNames.some((n) => /gloam|glim/.test(n))) add("impersonation", 0.97, "brand_telegram", true);
     else if (tgNames.some((n) => NO_TELEGRAM_SUPPORT.test(n))) add("scam", 0.97, "support_telegram", true);
-    // a real project's own group, checked before the testimonial: "asked in t.me/tempo_community, they helped me"
-    else if (tgNames.length && tgNames.every(realProject) && !TG_PITCH.test(t) && !strong) add("link_spam", 0.9, "telegram_pointer", false, "delete");
+    // recovery, a fix, a refund or a claim: no real project's group, whatever it starts with ("t.me/base_recovery_help")
+    else if (tgNames.some((n) => FAKE_NAME.test(n))) add("scam", 0.97, "support_telegram", true);
+    // a real project's own group, checked before the testimonial: "asked in t.me/tempo_community, they helped me".
+    // A support, help, desk or admin name only passes with nothing around it that reads like the scam
+    else if (tgNames.length && tgNames.every(realProject) && !TG_PITCH.test(t) && !strong) {
+      if (tgNames.some((n) => SUPPORT_NAME.test(n)) && (TESTIMONIAL.test(t) || LOST_FUNDS.test(t) || DM_ANY.test(t))) add("scam", 0.9, "support_telegram", false, "soft");
+      else add("link_spam", 0.9, "telegram_pointer", false, "delete");
+    }
     else if (tgLinks.length && TESTIMONIAL.test(t)) add("scam", 0.95, "support_telegram", true);
     else if (tgNames.some((n) => SUPPORT_PATH.test(n))) add("scam", 0.95, "support_telegram", true);
     else if (tgLinks.length && !TG_PITCH.test(t) && !strong && TG_POINTER.test(t)) add("link_spam", 0.9, "telegram_pointer", false, "delete");

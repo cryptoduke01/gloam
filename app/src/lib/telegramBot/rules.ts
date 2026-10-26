@@ -572,15 +572,21 @@ const TX_PULL =
   /\b(?:send|share|drop|post|dm|pm|give|submit)\s+(?:me\s+|us\s+)?(?:your\s+|ur\s+|any\s+|the\s+)?(?:tx|txn|transaction)s?(?:\s*(?:hash|id)s?)?\b|\b(?:tx|txn|transaction)\s*(?:hash|id)\b[^.!?\n]{0,30}\b(?:dm|pm|inbox|to\s+register)\b/i;
 /** ... for an airdrop, a refund or a snapshot: what the fake drop promises. A claim is not one (people claim payments here). */
 const DROP_PROMISE = /\b(?:airdrop\w*|snapshot\w*|compensat\w*|reimburs\w*|refund\w*|whitelist\w*|allocation\w*)/i;
+/** What makes an "if you want ..." the lure itself: doubling, early access, loading up, profit, free tokens, 10x. */
+const PITCH_IF = /\b(?:double|bags?|early\s+access|load\s+up|profits?|free|\d+\s?x|airdrop\w*|allocation\w*|presale|whitelist\w*|returns?|invest\w*|signals?|gems?|pumps?|bonus\w*|rewards?|claim\w*)\b/i;
+
 /**
- * "All holders DM me", said outright. Not when the ask goes on with "if" or
- * "when" ("holders, the docs are updated. dm me if you get stuck"): that is a
- * member offering a hand, even read together with an earlier line.
+ * "All holders DM me", said outright. In one message always, "if you want to
+ * double your bag" included. Only where `glued` (several messages read
+ * together) does an ask that goes on with a plain "if" or "when" stay a
+ * member's offer of a hand: "holders, the docs are updated" then "dm me if you
+ * get stuck". An if-clause with money or pitch words is the lure either way.
  */
-function lures(text: string): boolean {
+function lures(text: string, glued = false): boolean {
   for (const m of text.matchAll(new RegExp(DM_LURE.source, "gi"))) {
     if (negated(text, m.index, m[0]) || asked(text, m.index, m[0].length) || askingForHelp(text, m as RegExpExecArray)) continue;
-    if (/^\W*(?:if|when)\b/i.test(text.slice(m.index + m[0].length))) continue;
+    const rest = text.slice(m.index + m[0].length);
+    if (glued && /^\W*(?:if|when)\b/i.test(rest) && !PITCH_IF.test(rest.split(/[.!?\n]/)[0] ?? "")) continue;
     return true;
   }
   return false;
@@ -623,11 +629,11 @@ export function says(re: RegExp, text: string): boolean {
  * flagged. Look-alike letters, digits for letters ("airdr0p") and spaced-out
  * words are read the way a person reads them.
  */
-export function scamReason(raw: string): ScamReason | null {
+export function scamReason(raw: string, glued = false): ScamReason | null {
   const text = scorable(raw);
   let warned: ScamReason | null = null;
   for (const t of spellings(text)) {
-    const why = wordsReason(t, text);
+    const why = wordsReason(t, text, glued);
     if (why && !WARN_ONLY.has(why)) return why;
     warned ??= why;
   }
@@ -635,7 +641,7 @@ export function scamReason(raw: string): ScamReason | null {
 }
 
 /** scamReason for one spelling of the text; links are read from the text as written. */
-function wordsReason(text: string, written: string): ScamReason | null {
+function wordsReason(text: string, written: string, glued = false): ScamReason | null {
   for (const re of [SECRET_REQUEST, SECRET_QUESTION]) {
     const m = re.exec(text);
     if (m && !negated(text, m.index, m[0])) return "secret_request";
@@ -648,7 +654,7 @@ function wordsReason(text: string, written: string): ScamReason | null {
       return "dm_support";
     }
   }
-  if (lures(text)) return "dm_support";
+  if (lures(text, glued)) return "dm_support";
   const shill = SHILL_FOLLOW.exec(text);
   if (shill && !negated(text, shill.index, shill[0])) return "promo_spam";
   // a shilling service that wants a private chat
@@ -677,8 +683,8 @@ function wordsReason(text: string, written: string): ScamReason | null {
  * connect or verify your wallet, a tx hash for an airdrop, holders into DMs.
  * The only thing a role in a name gets someone removed for.
  */
-function realPull(text: string): boolean {
-  if (says(SECRET_REQUEST, text) || says(FUNDS_PULL, text) || lures(text)) return true;
+function realPull(text: string, glued = false): boolean {
+  if (says(SECRET_REQUEST, text) || says(FUNDS_PULL, text) || lures(text, glued)) return true;
   if (says(WALLET_PULL, text) && !/\bgloam\.trade\b/i.test(text)) return true;
   return says(TX_PULL, text) && DROP_PROMISE.test(text);
 }
@@ -788,11 +794,11 @@ function roleOnlyName(u: { first_name?: string; last_name?: string }): boolean {
  * an airdrop?" is fine. Only ever checked for people who are not the owner or
  * an admin.
  */
-export function roleScam(u: { first_name?: string; last_name?: string }, raw: string): ScamReason | null {
+export function roleScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false): ScamReason | null {
   const words = nameWords(u).flat();
   if (!words.some((w) => ROLE.has(w))) return null;
   const texts = spellings(scorable(raw));
-  if (texts.some(realPull)) return "role_impostor";
+  if (texts.some((t) => realPull(t, glued))) return "role_impostor";
   const strongRole = words.some((w) => ROLE.has(w) && !PERSONAL.has(w));
   const pitch = (t: string) =>
     (says(MIGRATION, t) && says(DROP_PROMISE, t)) || (strongRole && (says(DM_ASK, t) || says(DROP_WORDS, t)));
@@ -800,10 +806,15 @@ export function roleScam(u: { first_name?: string; last_name?: string }, raw: st
 }
 
 /** What a member's message comes down for, a removal before a warning: the words' own reason, or the name's. */
-export function memberScam(u: { first_name?: string; last_name?: string }, raw: string): ScamReason | null {
-  const words = scamReason(raw);
+/**
+ * `glued`: the text is several of one member's messages read together (the
+ * split-scam joiner), where a harmless "holders, the docs are updated" and a
+ * later "dm me if you get stuck" must not read as the lure.
+ */
+export function memberScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false): ScamReason | null {
+  const words = scamReason(raw, glued);
   if (words && !WARN_ONLY.has(words)) return words;
-  const role = roleScam(u, raw);
+  const role = roleScam(u, raw, glued);
   return role && !WARN_ONLY.has(role) ? role : (words ?? role);
 }
 

@@ -3460,7 +3460,7 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
     "Relay support is at t.me/relaysupport",
     "join t.me/tempo_community for Tempo questions",
     "asked in t.me/tempo_community, they helped me find the faucet",
-    "Relay support is at t.me/relaysupport, they answered me fast",
+    "Relay support desk: t.me/relay_support_desk",
   ]) {
     await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Pia"))));
   }
@@ -3517,7 +3517,7 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
   assert.deepEqual(deletes().map((x) => x.body.message_id), [link.message_id], "only the link");
   assert.equal(bans().length + mutes().length, 0);
   const note = String(sends().filter((x) => x.body.chat_id === OWNER.id).pop()?.body.text ?? "");
-  assert.ok(note.includes("described a problem in Help, then shared a link"), note);
+  assert.ok(note.includes("described a problem, then shared a link in Help"), note);
   const [offences] = await kv([["LRANGE", `gloam:tg:v1:offences:${victim.id}`, 0, -1]]);
   assert.deepEqual(offences, []);
   // a real split phishing scam (no problem first) is still the scam
@@ -3528,6 +3528,60 @@ await test("round 3: the fake-support group is a ban (support, help desk, fix, r
   await handleUpdate(upd(inTopic(TOPIC.general, "https://bit.ly/3xYzAbC", fisher)));
   assert.equal(bans().length, 1);
   assert.equal(deletes().length, 2, "both parts come down");
+});
+
+await test("round 5: one-message lures with an if-clause still ban; recovery-named and vouched-for support groups, and branded domains, are the scam; asking whether a link is real is a victim", async () => {
+  resetMemoryKv();
+  reset();
+  await handleUpdate(upd(dm(OWNER, "hi")));
+  let id = 5600;
+  // the if/when exemption is only for several messages read together, and never with money or pitch words
+  for (const text of ["ALL HOLDERS DM ME IF YOU WANT TO DOUBLE YOUR BAG", "Investors dm me if you want early access", "whales message me when you're ready to load up"]) {
+    reset();
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Lure"))));
+    assert.equal(bans().length, 1, text);
+  }
+  reset();
+  const pair = user(id++, "Pair");
+  await handleUpdate(upd(inTopic(TOPIC.general, "gm holders", pair)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "dm me if you want to double your bag", pair)));
+  assert.equal(bans().length, 1, "read together, a pitch in the if-clause is the lure");
+  // a real project's prefix doesn't make a recovery group real; a support name passes only with nothing scam-like around it
+  for (const [text, outcome] of [
+    ["t.me/base_recovery_help", "ban"],
+    ["lost funds? t.me/base_recovery_help, they recovered mine", "ban"],
+    ["wallet issues? t.me/tempo_fix_wallet", "ban"],
+    ["stuck bridge? join t.me/relay_help and dm the admin", "mute"],
+    ["Relay support is at t.me/relaysupport, they answered me fast", "mute"],
+    ["Relay support desk: t.me/relay_support_desk", "delete"],
+  ] as const) {
+    reset();
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Tg"))));
+    const got = bans().length ? "ban" : mutes().length ? "mute" : deletes().length ? "delete" : "none";
+    assert.equal(got, outcome, text);
+  }
+  // a domain off the list carrying the brand is impersonation, problem or not
+  for (const text of ["this fixed it for me https://gloam-support.xyz", "deposit stuck? this fixed it for me https://gloam-support.xyz"]) {
+    reset();
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Fix"))));
+    assert.equal(bans().length, 1, text);
+    assert.equal((await recentModeration(1))[0]!.category, "impersonation", text);
+  }
+  // asking whether a link is real, alone or after their own problem: the link goes, the owner hears, they stay
+  for (const lines of [["got this link in DM, legit? https://claim-gloam.xyz"], ["anyone else see 0 balance?", "got this link in DM, legit? https://claim-gloam.xyz"]]) {
+    reset();
+    const victim = user(id++, "Vic");
+    for (const line of lines) await handleUpdate(upd(inTopic(TOPIC.help, line, victim)));
+    assert.equal(deletes().length, 1, lines.join(" / "));
+    assert.equal(bans().length + mutes().length, 0, lines.join(" / "));
+    assert.ok(String(sends().filter((x) => x.body.chat_id === OWNER.id).pop()?.body.text).includes("asked whether a link is real"));
+  }
+  // vouching for a branded link right after a problem is the scam, not a victim
+  reset();
+  const fixer = user(id++, "Fixer");
+  await handleUpdate(upd(inTopic(TOPIC.general, "my wallet shows 0", fixer)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "this fixed it: https://gloam-fix.xyz", fixer)));
+  assert.equal(bans().length, 1);
 });
 
 await test("Announcements: impostors, pasted seed phrases and scams are still dealt with; nothing else there is screened or answered", async () => {

@@ -52,7 +52,7 @@ import {
   type ModelImage,
   type ModelMiss,
 } from "./answer";
-import { MODEL_ACT_AT, established, newcomer, planFor, screen, type Plan, type ScreenInput, type SpamCategory, type Standing, type Verdict } from "./moderation";
+import { MODEL_ACT_AT, asksAboutLink, established, newcomer, planFor, screen, vouchedOrBranded, type Plan, type ScreenInput, type SpamCategory, type Standing, type Verdict } from "./moderation";
 import { personaName } from "./persona";
 import { groupAnswerModel } from "./raetoRoute";
 import { buildReport, formatModlog, teamContext } from "./report";
@@ -620,6 +620,9 @@ function screenInput(msg: TgMessage, from: TgUser, text: string, c: BotConfig, m
   return { text, name: from, entities: msg.entities ?? msg.caption_entities, forwardedFrom: msg.forward_origin?.type ?? null, okHandles: okHandles(c, me) };
 }
 
+/** Verdicts about a link, which a member asking "is this legit?" about it is not guilty of. */
+const LINK_RULES = new Set(["brand_domain", "brand_telegram", "support_telegram", "telegram_link", "link_cta", "telegram_pointer"]);
+
 /** Business leads noted to the owner, per minute: a pitch wave doesn't flood the owner's chat. */
 const LEAD_NOTES_PER_MIN = 6;
 
@@ -657,8 +660,9 @@ async function onLead(msg: TgMessage, from: TgUser, c: BotConfig, topic: number,
  * member stays with nothing held against them, and the owner gets the words to
  * look at.
  */
-async function onLinkAfterProblem(msg: TgMessage, from: TgUser, c: BotConfig, topic: number, text: string): Promise<void> {
-  const verdict: Verdict = { category: "scam", confidence: 0.85, rule: "link_after_problem", source: "rule", sure: false, outcome: "delete" };
+async function onLinkAfterProblem(msg: TgMessage, from: TgUser, c: BotConfig, topic: number, text: string, kind: "after_problem" | "asked"): Promise<void> {
+  const rule = kind === "asked" ? "link_asked_about" : "link_after_problem";
+  const verdict: Verdict = { category: "scam", confidence: 0.85, rule, source: "rule", sure: false, outcome: "delete" };
   await enforce({ c, msg, from, topic, text, verdict, plan: { ban: false, muteSec: 0, why: "a link after their own problem" }, offence: false });
   if (!(await hitRateLimit("tg:lead-notes", "tg-ban-notes", LEAD_NOTES_PER_MIN)).allowed) return;
   const name = escapeHtml(cleanName(from.first_name, "someone"));
@@ -667,7 +671,7 @@ async function onLinkAfterProblem(msg: TgMessage, from: TgUser, c: BotConfig, to
   for (const o of await ownerChats().catch(() => [])) {
     await sendMessage(
       o.chatId,
-      `${who} described a problem in ${topicName(topic)}, then shared a link. It may be a scam they were sent, so I took the link down and left them in the group:${what ? `\n"${escapeHtml(what)}"` : ""}`,
+      `${who} ${kind === "asked" ? "asked whether a link is real" : "described a problem, then shared a link"} in ${topicName(topic)}. It may be a scam they were sent, so I took the link down and left them in the group:${what ? `\n"${escapeHtml(what)}"` : ""}`,
       { parseMode: "HTML" },
     );
   }
@@ -694,6 +698,11 @@ async function screenMessage(msg: TgMessage, from: TgUser, c: BotConfig, topic: 
   const known = standing ? established(standing, now) : false;
   // a business lead goes to Duke, whoever sent it and however new they are
   if (!s.verdict && s.lead) return onLead(msg, from, c, topic, text, s.lead, known);
+  // someone asking whether a link is real is a likely victim: the link goes, the owner hears, nobody is removed
+  if (s.verdict && LINK_RULES.has(s.verdict.rule) && asksAboutLink(text)) {
+    await onLinkAfterProblem(msg, from, c, topic, text, "asked");
+    return "acted";
+  }
   const gate = Boolean(standing && s.gate && !known && newcomer(standing, now));
   let v: Verdict | null = s.verdict;
   let ask = s.unclear;
@@ -1144,10 +1153,10 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   if (!trusted && earlier.length && (!reason || WARN_ONLY.has(reason))) {
     // joined as one run of words, so "ALL HOLDERS" then "DM ME NOW" reads as the one sentence it is
     const parts = [...earlier.map((e) => e.t), text];
-    const whole = memberScam(from, parts.join(" "));
+    const whole = memberScam(from, parts.join(" "), true);
     // only a real scam split over messages: not words members say too read with their next harmless line, not the fake
     // migration unless one message announces it, and not a link someone shares right after describing their own problem
-    if (whole === "phishing_link" && !reason && earlier.some((e) => looksLikeQuestion(e.t) || looksLikeBugReport(e.t) || PROBLEM_HINT.test(e.t))) {
+    if (whole === "phishing_link" && !reason && !vouchedOrBranded(text) && (asksAboutLink(text) || earlier.some((e) => looksLikeQuestion(e.t) || looksLikeBugReport(e.t) || PROBLEM_HINT.test(e.t)))) {
       linkAfterProblem = true;
     } else if (whole && !WARN_ONLY.has(whole) && (whole !== "migration_airdrop" || parts.some(announcesMigration))) {
       reason = whole;
@@ -1155,7 +1164,12 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
     }
   }
   if (linkAfterProblem && !(await isChatAdmin(chatId, from.id))) {
-    await onLinkAfterProblem(msg, from, c, topic, text);
+    await onLinkAfterProblem(msg, from, c, topic, text, "after_problem");
+    return;
+  }
+  // asking whether a link is real ("got this link in DM, legit? https://claim-gloam.xyz"): a victim, not the scam
+  if (!trusted && reason === "phishing_link" && asksAboutLink(text) && !(await isChatAdmin(chatId, from.id))) {
+    await onLinkAfterProblem(msg, from, c, topic, text, "asked");
     return;
   }
   if (!trusted && (promo || reason) && !(await isChatAdmin(chatId, from.id))) {
