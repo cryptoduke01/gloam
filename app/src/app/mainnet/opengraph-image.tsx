@@ -10,6 +10,10 @@ export const contentType = "image/png";
 
 const asset = (f: string) => join(process.cwd(), "src/assets/og", f);
 
+/** One line under the title: with all four mainnets in it runs long, so it steps down a size instead of wrapping under the etching. */
+const LINE = `Private payments on ${liveMainnetNames()}`;
+const LINE_SIZE = LINE.length > 48 ? 32 : 38;
+
 /** Mainnet share card: the home card, saying mainnet is live and on which chains. */
 export default async function OpenGraphImage() {
   const [light, medium, etching] = await Promise.all([
@@ -92,7 +96,7 @@ export default async function OpenGraphImage() {
             style={{
               marginTop: 18,
               maxWidth: 1000,
-              fontSize: 38,
+              fontSize: LINE_SIZE,
               lineHeight: 1.2,
               fontWeight: 300,
               letterSpacing: "-0.015em",
@@ -100,7 +104,7 @@ export default async function OpenGraphImage() {
               display: "flex",
             }}
           >
-            {`Private payments on ${liveMainnetNames()}`}
+            {LINE}
           </div>
         </div>
         <img
