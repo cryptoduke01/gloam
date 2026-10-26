@@ -68,8 +68,8 @@ const RH_READ: import("../src/lib/contractDirectory").VaultRead = {
   poseidon: "0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4",
   feeRecipient: "0xB3900ac9350903218e4c7597bAb0f008F01B30B8",
   withdrawFeeBps: 25,
-  cashOutVerifier: "0xa8cf34C6F3985B7901F6fA0e1E13a3Da2D2dC7E4",
-  sendVerifier: "0x938E79B271241EC29D9279BE83A43184D415eE0b",
+  cashOutVerifier: "0x35de99bcD26B0F25E5a3a3b1e76FA5a708a01DF1",
+  sendVerifier: "0x4dCac25a820D0C9Ede8f056378C08e31042AB7b1",
 };
 /** Robinhood Chain testnet's older vault: its own owner, no fee calls. */
 const RH_TESTNET_READ: import("../src/lib/contractDirectory").VaultRead = {
@@ -261,7 +261,7 @@ check("the CSV: one header, every app row, then what was read, with explorer lin
   const withRead = dir.directoryCsv(entries, { "robinhood-mainnet": RH_READ });
   const extra = withRead.trimEnd().split("\r\n").length - lines.length;
   assert.equal(extra, dir.chainRows(nets.getNetwork("robinhood-mainnet"), RH_READ).length);
-  assert.match(withRead, /Robinhood Chain,4663,mainnet,send_proof_checker,Private send proof checker,TransferIVerifierFinal,0x938E79B271241EC29D9279BE83A43184D415eE0b,,https:\/\/robin\.etherscan\.io\/address\/0x938E79B271241EC29D9279BE83A43184D415eE0b,chain/);
+  assert.match(withRead, /Robinhood Chain,4663,mainnet,send_proof_checker,Private send proof checker,TransferIVerifierFinal,0x4dCac25a820D0C9Ede8f056378C08e31042AB7b1,,https:\/\/robin\.etherscan\.io\/address\/0x4dCac25a820D0C9Ede8f056378C08e31042AB7b1,chain/);
 });
 
 check("a CSV cell with a comma or a quote is quoted", () => {
