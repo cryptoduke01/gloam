@@ -155,7 +155,7 @@ export async function POST(req: Request) {
 
   // The vault's own checks, read before anyone pays: room under the beta
   // limits, a commitment it hasn't seen, and a proof its verifier accepts.
-  const client = createPublicClient({ chain: network.chain, transport: serverTransport(network) });
+  const client = createPublicClient({ chain: network.chain, transport: serverTransport(network, { retryCount: 2 }) });
   const pool = network.pool as Address;
   try {
     const [limitsOn, limit, deposited, seen, verifier] = await Promise.all([
