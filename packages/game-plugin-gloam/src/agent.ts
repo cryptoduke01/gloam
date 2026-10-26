@@ -1221,9 +1221,12 @@ export class GloamAgent {
    */
   private async secure(note: NoteExport, asset: GloamAsset, label: string): Promise<{ status: string; hash: Hex | null; handle?: string; reason?: string | null }> {
     const sweptFrom = note.nullifier;
-    if (this.store.list().some((n) => n.sweptFrom?.toLowerCase() === sweptFrom.toLowerCase() && n.status !== "spent" && !(n.status === "pending" && n.stale))) {
-      return { status: "already_secured", hash: null };
-    }
+    const earlier = this.store.list().filter((n) => n.sweptFrom?.toLowerCase() === sweptFrom.toLowerCase() && n.status !== "spent");
+    if (earlier.some((n) => n.status === "unspent")) return { status: "already_secured", hash: null };
+    // A sweep that may still land is not secured yet: the scan stays on this payment. After an hour with
+    // nothing on chain it is swept again (both spend the same payment note, so only one can land).
+    const waiting = earlier.find((n) => n.status === "pending" && !n.stale);
+    if (waiting) return { status: "unconfirmed", hash: waiting.createdTx, handle: waiting.handle, reason: "A sweep of this payment may still land. refresh() settles it." };
     registerSecret(note.secret);
     let fresh: StoredNote | undefined;
     let started = false;

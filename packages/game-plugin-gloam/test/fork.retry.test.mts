@@ -172,3 +172,21 @@ test("a cash out whose answer was lost is not paid again on a retry", { skip: SK
   assert.equal(formatUnits(got, 6), "4.9875", "one cash out of 5, less the 0.25% fee");
   assert.equal(await spendable(a), "5");
 });
+
+test("a sweep that never lands keeps the scan on its payment, and is tried again after the hour", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: alice } = await agentWith("retry-sweep-payer", "10");
+  const { agent: bob, state } = await agentWith("retry-sweep");
+  assert.equal((await alice.add({ amount: "5" })).status, "done");
+  assert.equal((await alice.pay({ to: await bob.address(), amount: "2" })).status, "done");
+  state.armed = true; // the sweep is signed and never sent
+  const first = (await bob.checkIncoming()).received as { status: string }[];
+  assert.equal(first[0]?.status, "unconfirmed");
+  const second = (await bob.checkIncoming()).received as { status: string }[];
+  assert.equal(second[0]?.status, "unconfirmed", "a pending sweep is not counted as secured; the scan stays on it");
+  later(61 * 60_000);
+  await bob.refresh();
+  const third = (await bob.checkIncoming()).received as { status: string }[];
+  assert.equal(third[0]?.status, "swept", JSON.stringify(third));
+  await bob.refresh();
+  assert.equal(await spendable(bob), "2");
+});
