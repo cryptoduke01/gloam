@@ -295,7 +295,7 @@ export function isShare(text: string): boolean {
 }
 
 /** A problem or an ask in a message that is not phrased as a question: "can't", "stuck", "error", "how to". */
-const PROBLEM_HINT =
+export const PROBLEM_HINT =
   /\b(?:can'?t|cannot|can not|couldn'?t|won'?t|doesn'?t|didn'?t|isn'?t|wasn'?t|not\s+(?:working|showing|loading|going|getting|seeing|able|sure)|stuck|fail\w*|errors?|issues?|problems?|bugs?|broken|missing|pending|wrong|lost|gone|disappeared|help|how\s+(?:do|can|to)|where\s+(?:do|is|can))\b/i;
 /** Price and valuation talk: an opinion, never a question for Glim on its own ("undervalued", "20M level", "bullish"). */
 const VALUATION =
@@ -428,6 +428,26 @@ export const SAFE_HOSTS = [
   "loom.com",
   "youtube.com",
   "youtu.be",
+  // explorers, faucets, bridges, exchanges and file hosts people paste with a problem
+  "blockscout.com",
+  "basescan.org",
+  "etherscan.io",
+  "base.org",
+  "alchemy.com",
+  "circle.com",
+  "chain.link",
+  "quicknode.com",
+  "pk910.de",
+  "coinbase.com",
+  "binance.com",
+  "kraken.com",
+  "okx.com",
+  "bybit.com",
+  "coinmarketcap.com",
+  "geckoterminal.com",
+  "dextools.io",
+  "drive.google.com",
+  "docs.google.com",
 ];
 
 export function hostOf(link: string): { host: string; path: string } {
@@ -477,6 +497,13 @@ const NO_DROP = /\bno\s+(?:presales?|(?:team\s+|insider\s+)?allocations?|airdrop
 const LOOKALIKE: Record<string, string> = {
   "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x", "\u0456": "i", "\u04cf": "l",
   "\u03bf": "o", "\u03b1": "a", "\u0131": "i", "\u217c": "l",
+  // Cyrillic and Greek capitals (and a few small letters) that read as Latin ones: "DМ mе" with a Cyrillic М
+  "\u0410": "a", "\u0412": "b", "\u0415": "e", "\u041a": "k", "\u041c": "m", "\u041d": "h", "\u041e": "o", "\u0420": "p",
+  "\u0421": "c", "\u0422": "t", "\u0425": "x", "\u0423": "y", "\u0406": "i", "\u0408": "j", "\u0405": "s",
+  "\u043a": "k", "\u043c": "m", "\u043d": "h", "\u0442": "t", "\u0443": "y", "\u0432": "b", "\u0458": "j", "\u0455": "s", "\u04bb": "h", "\u0501": "d",
+  "\u0391": "a", "\u0392": "b", "\u0395": "e", "\u0396": "z", "\u0397": "h", "\u0399": "i", "\u039a": "k", "\u039c": "m",
+  "\u039d": "n", "\u039f": "o", "\u03a1": "p", "\u03a4": "t", "\u03a5": "y", "\u03a7": "x",
+  "\u03b9": "i", "\u03ba": "k", "\u03bd": "v", "\u03c1": "p", "\u03c4": "t", "\u03c5": "u", "\u03c7": "x",
 };
 const SMALL_CAPS = "\u1d00\u0299\u1d04\u1d05\u1d07\ua730\u0262\u029c\u026a\u1d0a\u1d0b\u029f\u1d0d\u0274\u1d0f\u1d18\ua7af\u0280\ua731\u1d1b\u1d1c\u1d20\u1d21\u028f\u1d22";
 [..."abcdefghijklmnopqrstuvwyz"].forEach((l, i) => (LOOKALIKE[SMALL_CAPS[i]!] = l));
@@ -1071,7 +1098,7 @@ export function readSentinel(raw: string): { sentinel: Sentinel; text: string } 
 // ---------------------------------------------------------------- replies
 
 const EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]/gu;
-const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+export const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const HANDLE_RE = /(?<![\w@.])@([A-Za-z0-9_]{3,32})\b/g;
 const MAINNET_LIVE =
   /\bmainnet\s+(?:is\s+|has\s+)?(?:now\s+|already\s+)?(?:live|launched|out|open)\b|\b(?:live|launched|available|running)\s+on\s+mainnet\b/gi;
