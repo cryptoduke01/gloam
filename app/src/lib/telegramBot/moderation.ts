@@ -117,12 +117,17 @@ const TESTIMONIAL = /\bthey\s+(?:fixed|helped|answered|sorted|solved|resolved|re
 /** A t.me group named like support, a help desk, a fix or recovery service, or an admin. */
 const SUPPORT_PATH = /support|help|desk|fix|recover|admin/i;
 /**
- * Real projects whose own groups members point to ("Relay support is at
- * t.me/relaysupport"). None of their support groups is in the repo to check,
- * so a support-named group only passes as a pointer when its name starts with
- * the project the message names, and then it is only deleted.
+ * Real projects whose own Telegram groups members point to ("Relay support is
+ * at t.me/relaysupport", "asked in t.me/tempo_community"). None of their groups
+ * is in the repo to check, so a group whose name starts with one of them is
+ * only ever deleted: never a ban, never an offence, whatever the wording.
  */
-const REAL_PROJECTS = ["relay", "tempo", "base", "robinhood", "coinbase", "metamask", "rabby", "uniswap", "circle", "paxos", "alchemy", "phantom", "raeto", "virtuals", "orynth", "dexscreener", "blockscout"];
+const REAL_PROJECTS = ["relay", "tempo", "base", "robinhood", "circle", "paxos", "alchemy", "raeto", "virtuals", "orynth", "dexscreener", "blockscout"];
+/**
+ * Exchanges and wallets with no Telegram support at all: a t.me group named
+ * for one is always the fake-support scam.
+ */
+const NO_TELEGRAM_SUPPORT = /coinbase|binance|kraken|okx|bybit|kucoin|gate\.?io|metamask|phantom|ledger|trezor|trust\s?wallet|exodus|rabby|uniswap|robinhood\s?support/i;
 /** "Check my bio", "link in bio", "see my profile". */
 const BIO = /\b(?:check|see|visit|look\s+at|in|on)\s+(?:my|our)\s+(?:bio|profile|channel|page)\b|\blink\s+in\s+(?:my\s+|the\s+)?bio\b|\bbio\s+(?:for|has)\b/i;
 const WHATSAPP = /\bwa\.me\/|\bchat\.whatsapp\.com\/|\bwhats\s?app\s+(?:me|us|\+?\d)|\b(?:signal|telegram|tg|whatsapp)\s*(?:me|:)\s*@?\w{4,}/i;
@@ -422,10 +427,13 @@ export function screen(i: ScreenInput): Screen {
     // the fake-support scam: a group named for Gloam or Glim, or for support, a help desk, a fix or recovery, or one
     // vouched for with "they fixed mine"; a real project's own group, named in the message, is only a pointer
     const tgNames = tgLinks.map((h) => (h.path.replace(/^\//, "").split(/[/?#]/)[0] ?? "").toLowerCase());
-    const realPointer = (n: string) => REAL_PROJECTS.some((r) => n.startsWith(r) && new RegExp(`\\b${r}\\b`, "i").test(t));
+    const realProject = (n: string) => REAL_PROJECTS.some((r) => n.startsWith(r)) && !NO_TELEGRAM_SUPPORT.test(n);
     if (tgNames.some((n) => /gloam|glim/.test(n))) add("impersonation", 0.97, "brand_telegram", true);
+    else if (tgNames.some((n) => NO_TELEGRAM_SUPPORT.test(n))) add("scam", 0.97, "support_telegram", true);
+    // a real project's own group, checked before the testimonial: "asked in t.me/tempo_community, they helped me"
+    else if (tgNames.length && tgNames.every(realProject) && !TG_PITCH.test(t) && !strong) add("link_spam", 0.9, "telegram_pointer", false, "delete");
     else if (tgLinks.length && TESTIMONIAL.test(t)) add("scam", 0.95, "support_telegram", true);
-    else if (tgNames.some((n) => SUPPORT_PATH.test(n) && !realPointer(n))) add("scam", 0.95, "support_telegram", true);
+    else if (tgNames.some((n) => SUPPORT_PATH.test(n))) add("scam", 0.95, "support_telegram", true);
     else if (tgLinks.length && !TG_PITCH.test(t) && !strong && TG_POINTER.test(t)) add("link_spam", 0.9, "telegram_pointer", false, "delete");
     else if (tgLinks.length) add("link_spam", 0.95, "telegram_link", TG_PITCH.test(t) || strong);
     if (whatsapp) add("contact_spam", 0.95, "whatsapp", strong || MONEY_PITCH.test(t) || c.sure);

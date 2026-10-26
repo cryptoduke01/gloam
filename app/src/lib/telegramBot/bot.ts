@@ -80,6 +80,8 @@ import {
   impersonates,
   isChatter,
   isVague,
+  announcesMigration,
+  PROBLEM_HINT,
   looksLikeBugReport,
   looksLikeQuestion,
   markAddresses,
@@ -649,6 +651,29 @@ async function onLead(msg: TgMessage, from: TgUser, c: BotConfig, topic: number,
 }
 
 /**
+ * A member describes a problem, then shares a link ("my wallet shows 0" then "I
+ * followed this guide https://..."): read together that is a phishing link, but
+ * it is as likely a victim showing what they were sent. The link comes down, the
+ * member stays with nothing held against them, and the owner gets the words to
+ * look at.
+ */
+async function onLinkAfterProblem(msg: TgMessage, from: TgUser, c: BotConfig, topic: number, text: string): Promise<void> {
+  const verdict: Verdict = { category: "scam", confidence: 0.85, rule: "link_after_problem", source: "rule", sure: false, outcome: "delete" };
+  await enforce({ c, msg, from, topic, text, verdict, plan: { ban: false, muteSec: 0, why: "a link after their own problem" }, offence: false });
+  if (!(await hitRateLimit("tg:lead-notes", "tg-ban-notes", LEAD_NOTES_PER_MIN)).allowed) return;
+  const name = escapeHtml(cleanName(from.first_name, "someone"));
+  const who = from.username ? `${name} (@${escapeHtml(from.username)})` : `<a href="tg://user?id=${Math.trunc(from.id)}">${name}</a> (no username, id ${from.id})`;
+  const what = defanged(text, 300);
+  for (const o of await ownerChats().catch(() => [])) {
+    await sendMessage(
+      o.chatId,
+      `${who} described a problem in ${topicName(topic)}, then shared a link. It may be a scam they were sent, so I took the link down and left them in the group:${what ? `\n"${escapeHtml(what)}"` : ""}`,
+      { parseMode: "HTML" },
+    );
+  }
+}
+
+/**
  * The spam screen for a message from someone who is not the team. "acted":
  * deleted (and the sender banned or muted), silently. "quiet": spam-shaped but
  * left up, and the helper never replies to it. "clear": a normal message.
@@ -1115,15 +1140,23 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   const earlier = trusted ? [] : await recentThenKeep(chatId, from.id, { id: msg.message_id, t: text.slice(0, 600), at: Date.now() }).catch(() => []);
   let scored = text;
   let reason = trusted ? null : memberScam(from, text);
+  let linkAfterProblem = false;
   if (!trusted && earlier.length && (!reason || WARN_ONLY.has(reason))) {
     // joined as one run of words, so "ALL HOLDERS" then "DM ME NOW" reads as the one sentence it is
-    const joined = [...earlier.map((e) => e.t), text].join(" ");
-    const whole = memberScam(from, joined);
-    // only a real scam split over messages; words members say too, read with their next harmless line, are not one
-    if (whole && !WARN_ONLY.has(whole)) {
+    const parts = [...earlier.map((e) => e.t), text];
+    const whole = memberScam(from, parts.join(" "));
+    // only a real scam split over messages: not words members say too read with their next harmless line, not the fake
+    // migration unless one message announces it, and not a link someone shares right after describing their own problem
+    if (whole === "phishing_link" && !reason && earlier.some((e) => looksLikeQuestion(e.t) || looksLikeBugReport(e.t) || PROBLEM_HINT.test(e.t))) {
+      linkAfterProblem = true;
+    } else if (whole && !WARN_ONLY.has(whole) && (whole !== "migration_airdrop" || parts.some(announcesMigration))) {
       reason = whole;
-      scored = joined;
+      scored = parts.join(" ");
     }
+  }
+  if (linkAfterProblem && !(await isChatAdmin(chatId, from.id))) {
+    await onLinkAfterProblem(msg, from, c, topic, text);
+    return;
   }
   if (!trusted && (promo || reason) && !(await isChatAdmin(chatId, from.id))) {
     const parts = scored !== text ? earlier.map((e) => e.id) : [];
