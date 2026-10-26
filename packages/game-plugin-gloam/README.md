@@ -108,18 +108,21 @@ forgets a note once a send has started:
 
 - The deposit's note, a payment's change and payment notes, a split's halves,
   a sweep's fresh note are kept as pending, and the note being spent stays
-  held. The outcome says `unconfirmed`, with the hash when there is one.
+  held. The outcome says `unconfirmed`, with the hash when there is one. GAME
+  hears it as done, with an instruction not to send it again and to refresh.
 - `refresh()` (or `gloam_private_balance` with `refresh: "true"`) reads the
   chain and settles them: what landed becomes spendable, a payment's sealed
   message is posted to the board then, and a note is dropped only when it can
   never land: its transaction reverted, or the note its spend spends is spent
   while it is not in the vault (both read at one block).
-- An unconfirmed payment counts against the daily limit, and the same payment
-  (payee, asset, amount, note) is refused while it may land. Each new note
-  records which note its spend spends. After an hour with nothing on chain the
-  same payment may be sent again, but only from that same note, so at most one
-  of the two can land. A retry that finds the first one landed says so
-  (`alreadyPaid`) and sends nothing.
+- An unconfirmed payment, claim link sealed to an address, or cash out counts
+  against the daily limit, and the same one (payee or address, asset, amount,
+  note) is refused while it may land. Each new note records which note its
+  spend spends. After an hour with nothing on chain the same payment may be
+  sent again, but only from that same note, so at most one of the two can
+  land; a cash out keeps its note held for that same cash out. A retry that
+  finds the first one landed says so (`alreadyPaid`, `alreadyCashedOut`) and
+  sends nothing.
 - `cancelPayment(handle)` (owner code) makes a payment whose answer was lost
   an hour ago never land, by spending the note it spends back to the agent; if
   the payment lands first, the cancel reverts and the payment counts.

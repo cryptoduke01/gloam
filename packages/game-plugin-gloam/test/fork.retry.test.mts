@@ -17,10 +17,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BASE_SEPOLIA_USDC, POOL_TRANSFER_ABI } from "@gloamtrade/sdk";
-import { createWalletClient, http, parseUnits, toFunctionSelector, type Address, type Hex } from "viem";
+import { createWalletClient, formatUnits, http, parseUnits, toFunctionSelector, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { GloamAgent, shutdownProver, walletCallSender, type Call, type CallSender, type LimitsConfig } from "../src/index.ts";
-import { findAnvil, startFork, type Fork } from "./fork/harness.mts";
+import { ERC20, findAnvil, startFork, type Fork } from "./fork/harness.mts";
 
 const UPSTREAM = process.env.BASE_SEPOLIA_RPC_URL?.trim();
 const SKIP = !UPSTREAM ? "set BASE_SEPOLIA_RPC_URL to run the fork test" : !findAnvil() ? "anvil not found" : false;
@@ -136,4 +136,39 @@ test("an hour after a payment's answer was lost, paying it again spends the same
   assert.deepEqual(got.map((g) => [g.amount, g.status, g.note]), [["3 USDC", "swept", "inv-77"]], "the payee is paid once");
   assert.equal(await spendable(alice), "22", "20 + 5 - 3");
   assert.ok(!alice.notes().some((n) => n.status === "pending"), JSON.stringify(alice.notes()));
+});
+
+test("a claim link sealed to an address whose answer was lost is not sent again while it may land", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: alice, state } = await agentWith("retry-claim", "20");
+  const { agent: bob } = await agentWith("retry-claim-bob");
+  const bobTag = await bob.address();
+  assert.equal((await alice.add({ amount: "5" })).status, "done");
+  assert.equal((await alice.add({ amount: "5" })).status, "done");
+  state.armed = true;
+  assert.equal((await alice.payByClaimLink({ amount: "2", sealTo: bobTag, note: "gift" })).status, "unconfirmed");
+  const again = await alice.payByClaimLink({ amount: "2", sealTo: bobTag, note: "gift" });
+  assert.equal(again.code, "unconfirmed_payment", JSON.stringify(again));
+  assert.equal(state.sent.length, 0, "nothing else went out");
+  await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  await alice.refresh();
+  assert.equal(await spendable(alice), "8");
+});
+
+test("a cash out whose answer was lost is not paid again on a retry", { skip: SKIP, timeout: 20 * 60_000 }, async () => {
+  const { agent: a, state } = await agentWith("retry-cash", "20");
+  assert.equal((await a.add({ amount: "5" })).status, "done");
+  assert.equal((await a.add({ amount: "5" })).status, "done");
+  const carol = (await fork.newKey(0n)).address;
+  state.armed = true;
+  const first = await a.cashOut({ amount: "5", to: carol });
+  assert.equal(first.status, "unconfirmed");
+  // The planner tries again (as it would after a function that failed).
+  const second = await a.cashOut({ amount: "5", to: carol });
+  assert.notEqual(second.status, "done", JSON.stringify(second));
+  assert.equal(second.code, "unconfirmed_cash_out");
+  await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  await a.refresh();
+  const got = await fork.client.readContract({ address: BASE_SEPOLIA_USDC, abi: ERC20, functionName: "balanceOf", args: [carol] });
+  assert.equal(formatUnits(got, 6), "4.9875", "one cash out of 5, less the 0.25% fee");
+  assert.equal(await spendable(a), "5");
 });
