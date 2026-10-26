@@ -11,7 +11,9 @@ import type { TgUpdate } from "@/lib/telegramBot/telegram";
  * Setup, once:
  *  1. BotFather: /newbot, then /setprivacy, pick the bot, Disable (so it reads
  *     group messages, not only commands).
- *  2. Add the bot to the group as an admin with only Delete messages on.
+ *  2. Add the bot to the group as an admin with Delete messages and Ban users
+ *     on (Ban users also covers mutes). It moderates spam silently with them;
+ *     /report says when Telegram refuses one.
  *  3. Set on Vercel: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET (any long
  *     random string), ANTHROPIC_API_KEY, and optionally TELEGRAM_GROUP_ID,
  *     TELEGRAM_ADMIN_HANDLES, TELEGRAM_OWNER_HANDLES (default dukedotsol),
