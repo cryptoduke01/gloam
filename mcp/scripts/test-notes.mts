@@ -1187,7 +1187,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal((await later(HOUR, () => S.call("gloam_verify_payment", args))).grantAccess, false, "not served on those reads");
 
     lag = false; // the node catches up
-    const l2 = await later(HOUR, () => S.call("gloam_list_notes", { refresh: true }));
+    const l2 = await later(HOUR + 2 * 60 * 1000, () => S.call("gloam_list_notes", { refresh: true })); // a dead note is looked at again after a minute
     assert.ok(l2.refreshed.some((x: string) => x.includes(`${fresh!.handle}: confirmed`)), JSON.stringify(l2.refreshed));
     assert.equal(l2.balances[0].spendable, "3", "the payee holds the payment");
     const v2 = await S.call("gloam_verify_payment", args);
@@ -1329,6 +1329,64 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.match(answers.at(-1).error, /not swept again/, JSON.stringify(answers.at(-1)));
   });
 
+  test("dead notes are checked again less and less often, and not after seven days unless something new is seen", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let n = 0;
+    let held: readonly unknown[] = [];
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName === "transfer" && ++n === 1) {
+          noteBroadcast(`0x${"77".repeat(32)}`); // the node does not get it (yet)
+          held = call.args;
+          throw new Error("HTTP request failed.\n\nStatus: 504");
+        }
+        return call.functionName === "transfer" ? lands(chain, known, call.args) : chain.walletClient.writeContract(call);
+      },
+    };
+    const view = nodeView(chain, known);
+    const reads = new Map<string, number>();
+    const counted = {
+      ...view,
+      readContract: async (a: { functionName: string; args: [Hex] }) => {
+        if (a.functionName === "commitmentSeen") reads.set(a.args[0].toLowerCase(), (reads.get(a.args[0].toLowerCase()) ?? 0) + 1);
+        return view.readContract(a);
+      },
+    };
+    const { P, priced, payerEnv } = await walletParties(chain, walletClient, counted);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const p1 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const MIN = 60 * 1000;
+    const t0 = 11 * MIN;
+    await later(t0, () => P.call("gloam_list_notes", { refresh: true }));
+    const dead = openNoteStore(payerEnv).list().filter((x) => x.createdTx === p1.hash);
+    assert.deepEqual(dead.map((x) => x.status), ["dead", "dead"]);
+    const readsOf = () => dead.reduce((s, x) => s + (reads.get(x.commitment.toLowerCase()) ?? 0), 0);
+    const base = readsOf();
+    for (let i = 0; i < 5; i++) await later(t0 + 10_000, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base, "not re-read on every refresh");
+    await later(t0 + 2 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base + 2, "read again once the wait is up");
+    await later(t0 + 3 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), base + 2, "and the wait doubles");
+    await later(t0 + 8 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    const after7d = readsOf();
+    await later(t0 + 9 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.equal(readsOf(), after7d, "not after seven days");
+
+    // Something new: the old send lands after all. The refresh that sees its note spent looks at every dead note.
+    await chain.apply("transfer", held);
+    const woke = await later(t0 + 10 * 24 * 60 * MIN, () => P.call("gloam_list_notes", { refresh: true }));
+    assert.ok(readsOf() > after7d, JSON.stringify(woke.refreshed));
+    assert.deepEqual(
+      dead.map((x) => openNoteStore(payerEnv).get(x.handle)?.status).sort(),
+      ["spent", "unspent"],
+      `the change and the payment came back: ${JSON.stringify(woke.refreshed)}`
+    );
+    assert.equal(woke.balances[0].spendable, "7");
+  });
+
   // ------------------------------------------------ a relay resend that reverted while its first copy landed
 
   /**
@@ -1372,7 +1430,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(kept?.status, "dead", `kept, with its secret (${JSON.stringify(l1.refreshed)})`);
     assert.equal(kept?.secret, change!.secret);
     r.state.lag = false;
-    const l2 = await P.call("gloam_list_notes", { refresh: true });
+    const l2 = await later(2 * 60 * 1000, () => P.call("gloam_list_notes", { refresh: true })); // a dead note is looked at again after a minute
     assert.ok(l2.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(l2.refreshed));
     assert.equal(l2.balances[0].spendable, "7");
   });

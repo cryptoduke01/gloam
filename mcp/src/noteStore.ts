@@ -78,6 +78,12 @@ export type StoredNote = {
    * again and marks the note spent if it did.
    */
   recheck?: boolean;
+  /**
+   * Dead notes: when the note was marked dead, and when a refresh last looked for it on chain. The gap
+   * between looks doubles, and a refresh stops looking after seven days unless something new is seen.
+   */
+  deadAt?: string;
+  checkedAt?: string;
   /** What the note is for, e.g. the resource a received payment paid for. */
   label?: string;
   createdAt: string;
@@ -257,7 +263,15 @@ export class NoteStore {
    * reads can come from a node behind; a refresh brings the note back if it shows up.
    */
   markDead(handle: string): StoredNote | undefined {
-    return this.update(handle, { status: "dead" });
+    const now = new Date(Date.now()).toISOString(); // the clock deadCheckDue reads
+    return this.update(handle, { status: "dead", deadAt: now, checkedAt: now });
+  }
+
+  /** Something new was seen (a send that landed late): every dead note is looked at on the next refresh. */
+  wakeDead() {
+    this.mutate((d) => {
+      for (const n of d.notes) if (n.status === "dead") delete n.checkedAt;
+    });
   }
 
   /** Forget a note whose creating transaction never happened (a rollback). */
@@ -369,6 +383,21 @@ export class NoteStore {
 /** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */
 export function servedPayment(n: StoredNote): boolean {
   return n.served === true || (n.served === undefined && (n.status === "unspent" || n.status === "spent"));
+}
+
+const DEAD_CHECK_MIN_MS = 60 * 1000;
+const DEAD_CHECK_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a refresh should look for a dead note on chain now: a minute after it died, then each time after
+ * as long again as it has been dead at the last look, never after seven days, and always once woken.
+ */
+export function deadCheckDue(n: StoredNote, now = Date.now()): boolean {
+  if (!n.checkedAt) return true;
+  const last = Date.parse(n.checkedAt);
+  const died = Date.parse(n.deadAt ?? n.checkedAt);
+  if (now - died > DEAD_CHECK_FOR_MS) return false;
+  return now - last >= Math.max(DEAD_CHECK_MIN_MS, last - died);
 }
 
 /** Open this agent's note store (throws with a plain reason when there is no usable key). */
