@@ -1093,7 +1093,9 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const grants = all.filter((v) => v.grantAccess === true);
     assert.equal(grants.length, 1, `one payment, served once: ${JSON.stringify(all.map((v) => v.status))}`);
     assert.equal(grants[0].hash, sweepHash, "with the sweep's hash, whichever verify served it");
-    assert.deepEqual([...new Set(all.filter((v) => v.grantAccess !== true).map((v) => v.status))], ["already_settled"]);
+    // The others wait while it is being settled, then hear it was settled.
+    assert.ok(all.filter((v) => v.grantAccess !== true).every((v) => v.status === "unconfirmed" || v.status === "already_settled"), JSON.stringify(all.map((v) => v.status)));
+    assert.equal(all.at(-1).status, "already_settled");
     const received = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
     assert.equal(received.length, 1);
     assert.equal(received[0]!.status, "unspent");
@@ -1225,6 +1227,79 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const list = await S.call("gloam_list_notes", { refresh: true });
     assert.ok(list.refreshed.some((x: string) => x.includes(`${fresh!.handle}: confirmed`)), JSON.stringify(list.refreshed));
     assert.equal(list.balances[0].spendable, "2", "the payee holds the payment");
+  });
+
+  // ------------------------------------------------ one payment presented many times: what it costs
+
+  /** A payee wallet whose sweeps take 20ms to go out, over reads that take 40ms; with collide, a sweep sent while another is out is refused as a replacement. */
+  function slowPayee(chain: Chain, opts: { collide?: boolean } = {}) {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const count = { sweeps: 0, refused: 0, reverted: 0 };
+    let out = 0;
+    const walletClient = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        count.sweeps++;
+        if (opts.collide && out > 0) {
+          count.refused++;
+          noteBroadcast(`0x${(0xdead0000 + count.refused).toString(16).padStart(64, "0")}` as Hex);
+          throw Object.assign(new Error("replacement transaction underpriced"), { code: -32000 });
+        }
+        out++;
+        await wait(20);
+        const h = await chain.apply("transfer", call.args);
+        noteBroadcast(h);
+        if ((await chain.publicClient.getTransactionReceipt({ hash: h })).status === "reverted") count.reverted++;
+        out--;
+        return h;
+      },
+    };
+    const publicClient = {
+      ...chain.publicClient,
+      readContract: async (a: { functionName: string; args: [Hex] }) => {
+        await wait(40);
+        return chain.publicClient.readContract(a);
+      },
+      waitForTransactionReceipt: async (a: { hash: Hex }) => {
+        await wait(40);
+        return chain.publicClient.waitForTransactionReceipt(a);
+      },
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient, publicClient }) as unknown as Signer;
+    return { count, signer: signer as ServerDeps["signer"], publicClient, wait };
+  }
+
+  test("ten verifies of one payment at once send one sweep: none reverted, no dead notes left", async () => {
+    for (const collide of [false, true]) {
+      const chain = mockChain();
+      const payee = slowPayee(chain, { collide });
+      const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payee.signer);
+      await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+      const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+      const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+      const out = await Promise.all(Array.from({ length: 10 }, (_, i) => payee.wait(i * 5).then(() => S.call("gloam_verify_payment", args))));
+      await later(11 * 60 * 1000, () => S.call("gloam_list_notes", { refresh: true }));
+      const report = { collide, statuses: out.map((v) => v.status), ...payee.count };
+      assert.equal(out.filter((v) => v.grantAccess === true).length, 1, JSON.stringify(report));
+      assert.equal(payee.count.sweeps, 1, `one sweep sent: ${JSON.stringify(report)}`);
+      assert.deepEqual(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").map((n) => n.status), ["unspent"], JSON.stringify(report));
+      assert.ok(out.every((v) => ["settled", "unconfirmed", "already_settled"].includes(v.status)), JSON.stringify(report));
+    }
+  });
+
+  test("two servers on one note store (two processes) sweep a payment presented to both at once only once", async () => {
+    const chain = mockChain();
+    const payee = slowPayee(chain);
+    const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payee.signer);
+    const S2 = await connect(makeDeps(chain, payeeEnv, { signer: payee.signer, publicClient: () => payee.publicClient as unknown as Signer["publicClient"] }).deps);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const out = await Promise.all(Array.from({ length: 6 }, (_, i) => payee.wait(i * 5).then(() => (i % 2 ? S2 : S).call("gloam_verify_payment", args))));
+    assert.equal(out.filter((v) => v.grantAccess === true).length, 1, JSON.stringify(out.map((v) => v.status)));
+    assert.equal(payee.count.sweeps, 1, `one sweep sent: ${JSON.stringify({ statuses: out.map((v) => v.status), ...payee.count })}`);
   });
 
   // ------------------------------------------------ a relay resend that reverted while its first copy landed

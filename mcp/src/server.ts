@@ -1709,13 +1709,50 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
 
   type Reject = (message: string, extra?: Record<string, unknown>) => ReturnType<typeof text>;
 
+  /** Payments this server is settling right now, by note store and payment nullifier. */
+  const settling = new Set<string>();
+
+  /**
+   * One settle of a payment at a time: in this process, and across processes sharing the note store (a claim
+   * taken under its lock before anything is proved or sent). A verify of the same payment meanwhile answers
+   * unconfirmed at once, so a payment presented many times sends one sweep, not one per verify.
+   */
+  async function settleReceived(args: Parameters<typeof settlePayment>[0]) {
+    const key = `${args.notes.path}\n${args.paymentNullifier.toLowerCase()}`;
+    const busy = () =>
+      text({
+        status: "unconfirmed",
+        grantAccess: false,
+        final: false,
+        message: "Another verify of this payment is settling it right now. Verify again shortly; do not serve until it says settled.",
+      });
+    if (settling.has(key)) return busy();
+    settling.add(key);
+    try {
+      let claimed: boolean;
+      try {
+        claimed = args.notes.claimSettle(args.paymentNullifier, STUCK_MS);
+      } catch (e) {
+        return text({ status: "error", grantAccess: false, final: false, error: `Could not take this payment for settling (${errMsg(e)}). Nothing was sent; verify again.` });
+      }
+      if (!claimed) return busy();
+      try {
+        return await settlePayment(args);
+      } finally {
+        tryStore(() => args.notes.releaseSettle(args.paymentNullifier));
+      }
+    } finally {
+      settling.delete(key);
+    }
+  }
+
   /**
    * The settle tail both dialects share, once a received note has passed its
    * checks: refuse a payment this server already swept, then (pull) submit the
    * payer's transfer, then sweep the note into a fresh one, storing it before the
    * sweep is sent, and grant access only when the sweep confirms.
    */
-  async function settleReceived(args: {
+  async function settlePayment(args: {
     net: McpNetwork;
     notes: NoteStore;
     note: NoteExport;

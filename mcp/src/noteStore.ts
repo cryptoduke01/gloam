@@ -91,6 +91,8 @@ type StoreData = {
   receiveKey: ReceiveKey | null;
   /** MPP pull payments whose payer's transfer this server submitted: payment nullifier (lowercase) to challenge id. */
   pulls?: Record<string, string>;
+  /** Payments a verify is settling right now, in any process: payment nullifier (lowercase) to when it started. */
+  settling?: Record<string, string>;
 };
 
 type StoreFile = {
@@ -178,6 +180,7 @@ export class NoteStore {
         notes: Array.isArray(data.notes) ? data.notes : [],
         receiveKey: data.receiveKey ?? null,
         ...(data.pulls && typeof data.pulls === "object" ? { pulls: data.pulls } : {}),
+        ...(data.settling && typeof data.settling === "object" ? { settling: data.settling } : {}),
       };
     } catch {
       const hint =
@@ -326,6 +329,27 @@ export class NoteStore {
   markPull(paymentNullifier: Hex, challengeId: string) {
     this.mutate((d) => {
       (d.pulls ??= {})[paymentNullifier.toLowerCase()] = challengeId;
+    });
+  }
+
+  /**
+   * Take a payment for settling, under the lock: false while another verify (in this process or another
+   * sharing the store) settles it, unless that one started more than `staleMs` ago (a crash).
+   */
+  claimSettle(paymentNullifier: Hex, staleMs: number): boolean {
+    const key = paymentNullifier.toLowerCase();
+    return this.mutate((d) => {
+      const since = d.settling?.[key];
+      if (since && Date.now() - Date.parse(since) < staleMs) return false;
+      (d.settling ??= {})[key] = new Date().toISOString();
+      return true;
+    });
+  }
+
+  /** Done settling a payment (whatever the outcome). */
+  releaseSettle(paymentNullifier: Hex) {
+    this.mutate((d) => {
+      if (d.settling) delete d.settling[paymentNullifier.toLowerCase()];
     });
   }
 
