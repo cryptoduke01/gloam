@@ -116,8 +116,10 @@ export type JournalJob = {
   budgetRaw: string;
   /** What the client sends the provider at funding, outside the escrow (fund-transfer jobs). */
   transferRaw: string;
-  /** Set once the job is funded on chain. */
+  /** Set once the job is funded on chain (also when it was then blocked, rejected or expired). */
   funded?: boolean;
+  /** The chain could not say yet whether the job was funded: asked again, and its principal held meanwhile. */
+  fundingUnknown?: boolean;
   /** What the client's fund() actually moved to this provider (raw), read from the funding transaction. */
   receivedRaw?: string;
   /** The block the quote was made at (where a search for the funding starts). */
@@ -225,6 +227,7 @@ const short = (s: string) => (s.length > 24 ? `${s.slice(0, 14)}…${s.slice(-6)
 const lower = (s: string) => s.toLowerCase();
 const ACTIVE = new Set<JournalJob["state"]>(["quoted", "paying", "unconfirmed", "stuck"]);
 const HOUR_MS = 60 * 60_000;
+const FUNDED_ON_CHAIN = new Set<number>([ACP_STATUS.funded, ACP_STATUS.submitted, ACP_STATUS.completed]);
 
 export class PrivatePayoutProvider {
   private readonly journal: Journal;
@@ -555,10 +558,15 @@ export class PrivatePayoutProvider {
     }
     const why = this.notPayable(session.chainId, j, onChain);
     if (why) {
-      // Funded, then rejected or expired before this ran: the principal arrived, and onEnded sends it back.
-      const ended = onChain.status === ACP_STATUS.rejected || onChain.status === ACP_STATUS.expired;
-      const funded = Boolean(j.funded) || (ended && j.mode === "fund-transfer" && (await this.fundedOnChain(session.chainId, session.jobId, j.quotedAtBlock)) === true);
-      this.journal.put(k, { ...j, funded, blocked: why });
+      // Funded on chain but not payable (blocked), or funded then rejected or expired before this ran:
+      // the principal arrived, stays reserved, and onEnded sends back what did not leave the float.
+      let next: JournalJob = { ...j, blocked: why };
+      if (FUNDED_ON_CHAIN.has(onChain.status)) next = { ...next, funded: true, fundingUnknown: undefined };
+      else if (!j.funded && j.mode === "fund-transfer" && (onChain.status === ACP_STATUS.rejected || onChain.status === ACP_STATUS.expired)) {
+        const f = await this.funding(session.chainId, j);
+        next = { ...next, funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
+      }
+      this.journal.put(k, next);
       this.log(`job ${session.jobId}: not paying: ${why}`);
       return;
     }
@@ -730,9 +738,13 @@ export class PrivatePayoutProvider {
     this.log(`job ${session.jobId} ${how}${session.job ? ` (client ${short(session.job.clientAddress)})` : ""}`);
     if (!j || j.state === "submitted" || j.state === "completed") return;
     if (j.state !== "rejected" && j.state !== "expired") {
-      let funded = Boolean(j.funded);
-      if (!funded && j.mode === "fund-transfer") funded = (await this.fundedOnChain(session.chainId, session.jobId, j.quotedAtBlock)) === true;
-      this.journal.put(k, { ...j, state: how, funded, refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] });
+      let next: JournalJob = { ...j, state: how, refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] };
+      if (!j.funded && j.mode === "fund-transfer") {
+        // An RPC that cannot answer now is asked again later: never read as "not funded".
+        const f = await this.funding(session.chainId, j);
+        next = { ...next, funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
+      }
+      this.journal.put(k, next);
     }
     await this.retryRefunds([k]);
   }
@@ -766,17 +778,20 @@ export class PrivatePayoutProvider {
     const a = this.asset();
     for (const [k, j0] of this.journal.all()) {
       if (keys && !keys.includes(k)) continue;
-      if ((j0.state !== "rejected" && j0.state !== "expired") || j0.mode !== "fund-transfer" || !j0.funded) continue;
+      if ((j0.state !== "rejected" && j0.state !== "expired") || j0.mode !== "fund-transfer") continue;
+      if (!j0.funded && !j0.fundingUnknown) continue;
       let j = j0;
-      // What arrived, read from the funding transaction: asked again until the chain answers.
-      if (j.receivedRaw === undefined) {
+      // Whether it was funded, and what arrived: asked again until the chain answers.
+      if (!j.funded || j.receivedRaw === undefined) {
         const f = await this.funding(j.chainId, j);
-        if (f.received === null) {
+        if (f.funded === null || (f.funded && f.received === null)) {
+          this.journal.put(k, { ...j, fundingUnknown: !j.funded ? true : undefined });
           this.log(`job ${j.jobId}: the chain could not say what its funding moved; asked again on the next round`);
           continue;
         }
-        j = { ...j, receivedRaw: f.received.toString() };
+        j = { ...j, funded: f.funded, fundingUnknown: undefined, ...(f.funded ? { receivedRaw: f.received!.toString() } : {}) };
         this.journal.put(k, j);
+        if (!j.funded) continue;
       }
       const results = await this.reconcileAll(j);
       const received = BigInt(j.receivedRaw!);
@@ -842,9 +857,10 @@ export class PrivatePayoutProvider {
 
   /**
    * What of `token` in the provider's public wallet may still belong to
-   * clients: principal of funded jobs not yet paid out, principal of quoted
-   * jobs that may be funded any moment, and refunds owed or held. The earnings
-   * sweep leaves this much in the wallet.
+   * clients: principal of funded jobs not yet paid out (blocked ones too), of
+   * quoted jobs that may be funded any moment or whose funding the chain could
+   * not confirm, and refunds owed, held or not yet confirmed. The earnings sweep
+   * leaves this much in the wallet.
    */
   publicReserve(token: Address): bigint {
     const a = this.asset();
@@ -854,12 +870,17 @@ export class PrivatePayoutProvider {
     for (const [, j] of this.journal.all()) {
       if (j.mode !== "fund-transfer" || j.chainId !== chainId) continue;
       const transfer = BigInt(j.transferRaw);
+      const arrived = j.receivedRaw !== undefined ? BigInt(j.receivedRaw) : transfer;
+      const paid = this.paidRaw(j.results, ["paid"]);
       if (j.state === "submitted" || j.state === "completed") continue;
+      if (j.fundingUnknown) {
+        sum += transfer;
+        continue;
+      }
       if (j.state === "rejected" || j.state === "expired") {
         if (!j.funded) continue;
-        const due = BigInt(j.refundDueRaw ?? j.transferRaw);
         const refunded = BigInt(j.refundedRaw ?? "0");
-        sum += (due > refunded ? due - refunded : 0n) + BigInt(j.refundHeldRaw ?? "0");
+        sum += arrived > paid + refunded ? arrived - paid - refunded : 0n;
         continue;
       }
       if (!j.funded) {
@@ -868,8 +889,7 @@ export class PrivatePayoutProvider {
         sum += transfer;
         continue;
       }
-      const paid = this.paidRaw(j.results, ["paid"]);
-      sum += transfer > paid ? transfer - paid : 0n;
+      sum += arrived > paid ? arrived - paid : 0n;
     }
     return sum;
   }
