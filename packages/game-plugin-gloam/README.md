@@ -53,7 +53,8 @@ await agent.init();
 await agent.run(10, { verbose: true });
 ```
 
-Environment (the agent's own, never passed through the planner):
+Environment (the agent's own, never passed through the planner; `env.example`
+in the package lists it, named without the leading dot so it ships with the package):
 
 ```bash
 GLOAM_NETWORK=base                      # or robinhood-mainnet

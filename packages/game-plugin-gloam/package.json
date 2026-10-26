@@ -57,7 +57,7 @@
     "README.md",
     "plugin_metadata.yml",
     "limits.example.json",
-    ".env.example"
+    "env.example"
   ],
   "engines": {
     "node": ">=20"
