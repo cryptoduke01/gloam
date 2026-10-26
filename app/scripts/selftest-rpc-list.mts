@@ -61,7 +61,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { status: 200, headers: { "Content-Type": "application/json" } });
 }) as typeof fetch;
 
-const { REST_MS, isResting, resetRpcRest, rpcListTransport, rpcOrder } = await import("../src/lib/rpcList");
+const { REST_MS, isResting, resetRpcRest, restRpc, rpcListTransport, rpcOrder } = await import("../src/lib/rpcList");
 
 let pass = 0;
 async function ok(name: string, fn: () => Promise<void> | void) {
@@ -143,6 +143,17 @@ await ok("a log read never goes to an RPC that refuses or caps logs", async () =
   // other reads still go there
   assert.equal(await blockNumber(tr), "0x9");
   assert.deepEqual(rpcOrder([NOLOGS], "eth_getLogs"), [0], "a list of only such RPCs still asks one");
+});
+
+await ok("an RPC that trails the head (a history RPC) takes no list log read and no send, even with the others resting", async () => {
+  const { NO_LOG_RPCS, NO_SEND_RPCS } = await import("../src/lib/networks");
+  const head = "https://ethereum-sepolia-rpc.publicnode.com";
+  const trailing = "https://sepolia.gateway.tenderly.co";
+  assert.ok(NO_LOG_RPCS.has(trailing) && NO_SEND_RPCS.has(trailing));
+  restRpc(head);
+  assert.deepEqual(rpcOrder([head, trailing], "eth_sendRawTransaction"), [0], "the send waits on the head RPC");
+  assert.deepEqual(rpcOrder([head, trailing], "eth_getLogs"), [0], "so does a log read");
+  assert.deepEqual(rpcOrder([head, trailing], "eth_blockNumber"), [1], "other reads go down the list");
 });
 
 await ok("sendTo one: a send goes to exactly one RPC; one that failed it rests and the next send goes elsewhere", async () => {
