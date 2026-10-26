@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { formatUnits, parseUnits, type Address, type Hex } from "viem";
-import { useAccount, useConfig } from "wagmi";
+import { erc20Abi, formatUnits, parseUnits, type Address, type Hex } from "viem";
+import { useAccount, useConfig, useReadContract } from "wagmi";
 import { getAccount, sendTransaction, switchChain, waitForTransactionReceipt } from "wagmi/actions";
 import {
   BRIDGE_CHAINS,
@@ -299,6 +299,16 @@ function BridgeSheet({
     address: recipient as Address,
     chainId: (swap?.id ?? network.chainId) as GloamChainId,
     enabled: open && swapping,
+  });
+  // In a private bridge from another EVM chain: this wallet's balance of the token it pays in, for Max.
+  const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+  const tokenBal = useReadContract({
+    address: token.address as Address,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [recipient as Address],
+    chainId: chain.id as GloamChainId,
+    query: { enabled: open && privately && !swapping && chain.kind === "evm" && token.address !== ZERO_ADDR && Boolean(recipient) },
   });
   const send = useAppSendTransaction();
   const receipt = useAppTxReceipt({ hash: send.data, chainId: (swap?.id ?? network.chainId) as GloamChainId });
@@ -697,6 +707,10 @@ function BridgeSheet({
           const rec = await waitForTransactionReceipt(config, { hash: sent, chainId });
           if (rec.status !== "success") throw new Error("The approval didn't go through.");
           approved = true;
+          // Some wallets check the payment against a node that hasn't seen the approval yet
+          // and call it a failed contract call: give the chain a few seconds first.
+          setPriv({ ...r, quote, at, signing: true, error: null, progress: "Approval done. Getting the payment ready…" });
+          await new Promise((res) => window.setTimeout(res, 4000));
         }
       }
     } catch (err) {
@@ -1011,6 +1025,21 @@ function BridgeSheet({
                   <span className="text-[14px] text-mute">{dest.token.symbol}</span>
                 </div>
                 <AmountProblem value={amount} decimals={2} />
+                {!swapping && token.stable && tokenBal.data != null && (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="tnum text-[12px] text-mute">
+                      In your wallet on {chain.name}: {trimAmount(formatUnits(tokenBal.data as bigint, token.decimals))} {token.symbol}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={(tokenBal.data as bigint) === BigInt(0)}
+                      onClick={() => setAmount(String(Math.floor(Number(formatUnits(tokenBal.data as bigint, token.decimals)) * 0.995 * 100) / 100))}
+                      className="h-9 rounded-full border border-line px-3 text-[12.5px] text-soft transition-colors hover:bg-surface hover:text-foreground disabled:opacity-40"
+                    >
+                      Max
+                    </button>
+                  </div>
+                )}
                 {swapping && maxOut && (
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <span className="tnum text-[12px] text-mute">
