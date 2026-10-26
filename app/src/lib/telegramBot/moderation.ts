@@ -74,6 +74,8 @@ const SERVICE =
 /** "I offer", "our services", "for hire", "affordable": the selling half of a pitch. */
 const FIRST_BUSINESS =
   /\b(?:(?:i|we)\s+(?:offer|provide|deliver|specialize\s+in|specialise\s+in|handle|run)|(?:my|our)\s+(?:services|agency|company|packages?|portfolio|clients?|network\s+of|team\s+(?:of|has|can|will))|for\s+hire|hire\s+(?:me|us)|available\s+for\s+(?:hire|work|projects?|gigs?|collab\w*)|affordable|guaranteed|price\s+list|(?:my|our)\s+rates)\b/i;
+/** "Let's work together", "let's talk": a pitch's close, when a role or a service came before it. */
+const LETS = /\blet'?s\s+(?:work|talk|collab\w*|connect|discuss|partner|grow|build|do\s+business)\b/i;
 /** "We can boost", "I will promote": a first-person offer. */
 const OFFER_VERB =
   /\b(?:i|we)\s*(?:can|will|could|would|'ll)\s+(?:help|assist|boost|grow|promote|push|market|scale|bring|get|list|pump|build|develop|design|manage|handle|provide|offer|deliver|increase|skyrocket)\b/i;
@@ -82,13 +84,13 @@ const OFFER_HELP =
   /\b(?:i|we)\s*(?:can|will|could|would|'ll)\s+(?:help|assist|boost|grow|promote|push|market|scale|bring|pump|skyrocket|increase|list|take)\s+(?:your|ur)\s+(?:project|token|coin|community|team|brand|chart|growth|marketing|holders|volume|visibility|presence)\b/i;
 /** "I'm a professional crypto marketer", "we are a KOL agency", "I am a dev". */
 const SELF_ROLE =
-  /\b(?:i\s*'?\s*m|i\s+am|we\s*'?\s*re|we\s+are)\s+(?:an?\s+|the\s+)?(?:[\w-]+\s+){0,3}?(?:marketer|marketing\s+(?:expert|agency|team|manager|specialist|strategist|consultant)|promoter|promotion\s+(?:agency|team)|kol|influencer|shiller|caller|raider|growth\s+(?:hacker|manager|marketer)|listing\s+(?:agent|manager|expert)|developer|dev|designer|community\s+(?:manager|builder)|moderator|mod|advisor|consultant|ambassador|ama\s+host|copywriter|ghostwriter|video\s+editor|agency)\b/i;
+  /\b(?:i\s*'?\s*m|i\s+am|we\s*'?\s*re|we\s+are)(?:\s*an?\s+|\s+the\s+|\s+)(?:[\w-]+\s+){0,3}?(?:marketer|marketing\s+(?:expert|agency|team|manager|specialist|strategist|consultant)|promoter|promotion\s+(?:agency|team)|kol|influencer|shiller|caller|raider|growth\s+(?:hacker|manager|marketer)|listing\s+(?:agent|manager|expert)|developer|dev|designer|community\s+(?:manager|builder)|moderator|mod|advisor|consultant|ambassador|ama\s+host|copywriter|ghostwriter|video\s+editor|agency)\b/i;
 /** Roles nobody in a project's group sells but promoters. */
 const PROMO_ROLE = /\b(?:marketer|marketing|promoter|promotion|kol|influencer|shiller|caller|raider|growth|listing|agency)\b/i;
 /** "Need a dev?", "need marketing?": the opener of a pitch, when a contact or bio follows. */
 const NEED_ROLE =
   /\bneed\s+(?:an?\s+|any\s+|some\s+)?(?:dev|developer|marketer|promoter|moderator|mod|designer|kol|influencer|community\s+manager|listing|marketing|promotion|volume|trending|amas?|exposure|holders)\b/i;
-const FOR_HIRE = /\b(?:devs?|developers?|designers?|marketers?|mods?|moderators?|promoters?)\s+for\s+hire\b|\bhire\s+(?:me|us|a\s+(?:dev|developer|marketer|designer))\b/i;
+const FOR_HIRE = /\b(?:devs?|developers?|designers?|marketers?|mods?|moderators?|promoters?)\s+for\s+hire\b|\bhire\s+(?:me|us)\b/i;
 /** Promotion vocabulary, for the unclear and the new-member checks. */
 const PROMO_WORD =
   /\b(?:promot\w+|promo|marketing|marketer|kols?|influencers?|listings?|cmc|coinmarketcap|volume\s+bot|trending|shill\w*|raids?|partnership|collab\w*|exposure|visibility|investor\s+reach|for\s+hire|ads|advertis\w+|sponsor\w*)\b/i;
@@ -130,7 +132,7 @@ const BRAND = String.raw`(?:gloam|glim)`;
 const STAFF_ROLE = String.raw`(?:support(?:\s+team)?|team|admins?|mods?|moderators?|official|help\s*desk|customer\s+(?:care|service|support)|staff|devs?|developers?|founders?|co-?founders?|ceo|cto|management|security(?:\s+team)?|tech(?:nical)?\s+(?:team|support)|helpline|agents?|representatives?)`;
 /** "I'm from the Gloam team", "we are Gloam support", "on behalf of Gloam". */
 const IMPOSTOR_SELF = new RegExp(
-  String.raw`\b(?:i\s*'?\s*m|i\s+am|we\s*'?\s*re|we\s+are)\s+(?:from\s+|with\s+|on\s+|part\s+of\s+|one\s+of\s+)?(?:the\s+|an?\s+)?(?:official\s+)?${BRAND}(?:'s)?\s+${STAFF_ROLE}\b|\b(?:on\s+behalf\s+of|representing)\s+(?:the\s+)?${BRAND}\b`,
+  String.raw`\b(?:i\s*'?\s*m|i\s+am|we\s*'?\s*re|we\s+are)(?:\s*an?\s+|\s+)(?:from\s+|with\s+|on\s+|part\s+of\s+|one\s+of\s+)?(?:the\s+|an?\s+)?(?:official\s+)?${BRAND}(?:'s)?\s+${STAFF_ROLE}\b|\b(?:on\s+behalf\s+of|representing)\s+(?:the\s+)?${BRAND}\b`,
   "i",
 );
 /** A message that opens as "Gloam support", "Official Glim team". */
@@ -156,7 +158,7 @@ const FOLLOW_ME = /\bfollow\s+(?:me|us|my|our)\b/i;
 const CHATTY = /\b(?:thanks?|thank\s+you|thx|ty|gm|gn|hi|hello|hey|welcome|lol|haha|same|nice|great|congrats|agreed|exactly)\b/i;
 /** A link with a call to come and do something there. */
 const LINK_CTA =
-  /\b(?:join|visit|click|tap|check\s+(?:out|it|this)|sign\s*up|register|earn|free|bonus|mint|claim|connect|play|bet|casino|start\s+earning|passive|profits?|invest|trade\s+(?:now|here)|download|install|vote)\b/i;
+  /\b(?:join|click|sign\s*up|register|earn|free|bonus|mint|claim|connect|play|bet|casino|start\s+earning|passive|profits?|invest|trade\s+(?:now|here)|download|install)\b/i;
 
 /** A promoter's display name: "GUL ceo promoter", "KOL Agency", "Crypto Marketing". */
 const PROMO_NAME =
@@ -298,6 +300,7 @@ export function screen(i: ScreenInput): Screen {
     const selfRole = SELF_ROLE.exec(t);
     const firstBusiness = FIRST_BUSINESS.test(t);
     const offerVerb = OFFER_VERB.test(t);
+    const close = LETS.test(t);
     offer ||= firstBusiness || OFFER_HELP.test(t) || FOR_HIRE.test(t);
     pitch ||= PROMO_WORD.test(t) && (SECOND_PERSON.test(t) || offerVerb || firstBusiness || Boolean(selfRole));
 
@@ -325,11 +328,11 @@ export function screen(i: ScreenInput): Screen {
     // service and promotion pitches
     if (OFFER_HELP.test(t)) add("promo", 0.92, "offer_help");
     if (FOR_HIRE.test(t)) add("promo", 0.92, "for_hire");
-    if (selfRole && (reach || firstBusiness || offerVerb || SECOND_PERSON.test(t))) add("promo", 0.95, "self_pitch");
+    if (selfRole && (reach || firstBusiness || offerVerb || close || SECOND_PERSON.test(t))) add("promo", 0.95, "self_pitch");
     if (NEED_ROLE.test(t) && (reach || firstBusiness)) add("promo", 0.95, "need_pitch");
-    if (SERVICE.test(t) && (reach || firstBusiness || offerVerb)) add("promo", promoName ? 0.97 : 0.92, "service_pitch");
+    if (SERVICE.test(t) && (reach || firstBusiness || offerVerb || close)) add("promo", promoName ? 0.97 : 0.92, "service_pitch");
     if (PROMO_WORD.test(t) && reach) add("promo", 0.93, "promo_contact");
-    if (promoName && (reach || firstBusiness || offerVerb || talkToTeam || SERVICE.test(t) || (selfRole && PROMO_ROLE.test(selfRole[0])))) {
+    if (promoName && (reach || firstBusiness || offerVerb || close || talkToTeam || SERVICE.test(t) || (selfRole && PROMO_ROLE.test(selfRole[0])))) {
       add("promo", 0.93, "promo_name");
     }
     if (forwarded && (links.length || handles.length || otherTickers(t).length || PROMO_WORD.test(t) || reach)) add("promo", 0.9, "forwarded_promo");
@@ -343,10 +346,10 @@ export function screen(i: ScreenInput): Screen {
     // another token's shill
     const others = otherTickers(t);
     if (others.length && PUMP.test(t)) add("shill", 0.92, "ticker_shill");
-    if (addresses.evm.length && (PUMP.test(t) || CA_WORD.test(t) || others.length) && !/\b(?:sent|send|paid|pay|received|tx|txn|transaction|wallet|address)\b/i.test(t)) {
+    if (addresses.evm.length && (PUMP.test(t) || others.length || (CA_WORD.test(t) && !question)) && !/\b(?:sent|send|paid|pay|received|tx|txn|transaction|wallet|address)\b/i.test(t)) {
       add("shill", 0.92, "ca_shill");
     }
-    if (addresses.sol.length && (PUMP.test(t) || CA_WORD.test(t) || others.length)) add("shill", 0.9, "ca_shill");
+    if (addresses.sol.length && (PUMP.test(t) || others.length || (CA_WORD.test(t) && !question))) add("shill", 0.9, "ca_shill");
     if (addresses.copycat && !question && (CA_WORD.test(t) || BUY_WORD.test(t) || PUMP.test(t))) add("shill", 0.9, "copycat_ca");
 
     // pitches that only count from strangers

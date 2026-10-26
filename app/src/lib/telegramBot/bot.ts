@@ -612,7 +612,8 @@ async function screenMessage(msg: TgMessage, from: TgUser, c: BotConfig, topic: 
   const s = screen(input);
   if (!s.verdict && !s.strangerVerdict && !s.unclear && !s.gate) return s.quiet ? "quiet" : "clear";
   const chatId = msg.chat.id;
-  if (await isChatAdmin(chatId, from.id)) return "clear";
+  // a real group admin is never acted on; a pitch-shaped line from one still gets no reply from Glim
+  if (await isChatAdmin(chatId, from.id)) return s.quiet ? "quiet" : "clear";
   // calling spam out in their own words ("beware, he says DM me for listings"): left up, and never theirs
   if (s.verdict && pointsAtScam(text, (t) => screen({ ...input, text: t }).verdict)) return "quiet";
   const now = Date.now();
