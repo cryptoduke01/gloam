@@ -1227,6 +1227,104 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(list.balances[0].spendable, "2", "the payee holds the payment");
   });
 
+  // ------------------------------------------------ a relay resend that reverted while its first copy landed
+
+  /**
+   * A payer (or payee) behind the relay, whose relay sends the first copy (it lands) and hands back the
+   * hash of a resend, which reverts. While `lag` is on, the reads come from a node behind the one that
+   * mined the first copy: commitments read unseen, and with lagSpend the spend reads unspent too.
+   */
+  function relayResend(chain: Chain, opts: { lagSpend?: boolean } = {}) {
+    const state = { lag: true };
+    const relay: ServerDeps["relay"] = async (intent) => {
+      await chain.apply("transfer", intent.exec!.args); // the first copy lands
+      return chain.apply("transfer", intent.exec!.args); // the resend reverts, and its hash comes back
+    };
+    const view = {
+      ...chain.publicClient,
+      readContract: async (a: { functionName: string; args: [Hex] }) =>
+        state.lag && (a.functionName === "commitmentSeen" || (opts.lagSpend && a.functionName === "isSpent")) ? false : chain.publicClient.readContract(a),
+    };
+    const signer = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+    return { state, relay, view, signer: signer as ServerDeps["signer"] };
+  }
+
+  test("a note whose transaction reads reverted is marked dead, not deleted: a relay's first copy may have landed", async () => {
+    const chain = mockChain();
+    const dir = tmp();
+    const payerEnv = partyEnv("payer", dir, { ...PAYER_LIMITS, GLOAM_USE_RELAY: "1" });
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const r = relayResend(chain);
+    r.state.lag = false; // the pay itself reads the spend right
+    const P = await connect(makeDeps(chain, payerEnv, { relay: r.relay, signer: r.signer, publicClient: () => r.view as unknown as Signer["publicClient"] }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.match(paid.error, /earlier copy/, JSON.stringify(paid));
+    const [change] = openNoteStore(payerEnv).list().filter((n) => n.origin === "change");
+    r.state.lag = true; // a refresh answered by a node behind: the change reads unseen, its resend reverted
+    const l1 = await P.call("gloam_list_notes", { refresh: true });
+    const kept = openNoteStore(payerEnv).get(change!.handle);
+    assert.equal(kept?.status, "dead", `kept, with its secret (${JSON.stringify(l1.refreshed)})`);
+    assert.equal(kept?.secret, change!.secret);
+    r.state.lag = false;
+    const l2 = await P.call("gloam_list_notes", { refresh: true });
+    assert.ok(l2.refreshed.some((x: string) => x.includes(`${change!.handle}: confirmed`)), JSON.stringify(l2.refreshed));
+    assert.equal(l2.balances[0].spendable, "7");
+  });
+
+  test("a pay whose returned resend reverted, on a lagging spend read, keeps its change and payment as dead and rechecks the note", async () => {
+    const chain = mockChain();
+    const dir = tmp();
+    const payerEnv = partyEnv("payer", dir, { ...PAYER_LIMITS, GLOAM_USE_RELAY: "1" });
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off" });
+    const r = relayResend(chain, { lagSpend: true });
+    r.state.lag = false;
+    const P = await connect(makeDeps(chain, payerEnv, { relay: r.relay, signer: r.signer, publicClient: () => r.view as unknown as Signer["publicClient"] }).deps);
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    const shield = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    r.state.lag = true; // the spend after the revert reads unspent from a node behind
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(paid.status, "error", JSON.stringify(paid));
+    const outs = openNoteStore(payerEnv).list().filter((n) => n.origin === "change" || n.origin === "payment");
+    assert.deepEqual(outs.map((n) => n.status), ["dead", "dead"], "kept with their secrets, in case the first copy landed");
+    assert.equal(openNoteStore(payerEnv).get(shield.note.handle)?.recheck, true, "the note is spendable again, and checked on every refresh");
+    r.state.lag = false;
+    const l = await P.call("gloam_list_notes", { refresh: true });
+    assert.ok(l.refreshed.some((x: string) => x.includes(`${shield.note.handle}: spent`)), JSON.stringify(l.refreshed));
+    assert.ok(l.refreshed.some((x: string) => x.includes(": confirmed")), JSON.stringify(l.refreshed));
+    assert.equal(l.balances[0].spendable, "7", "the change, which landed with the first copy");
+  });
+
+  test("a sweep whose returned resend reverted, on a lagging read, keeps the fresh note and serves it once", async () => {
+    const chain = mockChain();
+    const dir = tmp();
+    const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
+    const payeeEnv = partyEnv("payee", dir, { GLOAM_LIMITS: "off", GLOAM_USE_RELAY: "1" });
+    const r = relayResend(chain);
+    const P = await connect(makeDeps(chain, payerEnv).deps);
+    const S = await connect(makeDeps(chain, payeeEnv, { relay: r.relay, signer: r.signer, publicClient: () => r.view as unknown as Signer["publicClient"] }).deps);
+    const priced = await S.call("gloam_payment_requirements", { amount: 3, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "r", network: "tempo" });
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    r.state.lag = false;
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    r.state.lag = true; // the payee's reads lag: the fresh note reads unseen after the returned resend reverted
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const v1 = await S.call("gloam_verify_payment", args);
+    assert.equal(v1.grantAccess, false, JSON.stringify(v1));
+    const [fresh] = openNoteStore(payeeEnv).list().filter((n) => n.origin === "received");
+    assert.equal(fresh?.status, "dead", "the fresh note is kept, with its secret");
+    r.state.lag = false;
+    const v2 = await S.call("gloam_verify_payment", args);
+    assert.equal(v2.status, "settled", JSON.stringify(v2));
+    assert.equal(v2.grantAccess, true);
+    assert.equal((await S.call("gloam_verify_payment", args)).status, "already_settled");
+    assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received" && n.status === "unspent").length, 1);
+  });
+
   test("limits still gate before any proving or signing, and refusals leave notes untouched", async () => {
     const dir = tmp();
     const chain = mockChain();

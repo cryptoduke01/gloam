@@ -849,9 +849,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             } else if (n.status === "dead") {
               // Still not on chain: it stays dead, secret kept.
             } else if (await tx.reverted(n.createdTx)) {
-              // Its creating transaction reverted, so the note never existed.
-              notes.remove(n.handle);
-              refreshed.push(`${n.handle}: removed, its transaction reverted`);
+              // Its creating transaction reverted. Through the relay that may be a resend whose first copy
+              // landed, read here by a node behind, so the note is marked dead, never deleted.
+              notes.markDead(n.handle);
+              refreshed.push(`${n.handle}: dead, its transaction reverted`);
             } else if (
               n.origin === "received" &&
               n.sweptFrom &&
@@ -863,7 +864,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               // Its sweep never showed up, and the payment it was to take is spent by another
               // transaction (a later sweep of it, or the payer): this note can never exist. Those
               // reads may come from nodes at different heights, so it is marked dead, never deleted.
-              notes.update(n.handle, { status: "dead" });
+              notes.markDead(n.handle);
               refreshed.push(`${n.handle}: dead, its payment was taken by another transaction`);
             } else if (
               (n.origin === "change" || n.origin === "payment") &&
@@ -874,7 +875,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             ) {
               // The send that makes this change or payment never showed up, and its input no longer waits on it
               // (made spendable again, or spent by another transaction): it can never land.
-              notes.update(n.handle, { status: "dead" });
+              notes.markDead(n.handle);
               refreshed.push(`${n.handle}: dead, its transaction never landed`);
             }
           } catch (e) {
@@ -1338,9 +1339,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           // payment notes landed: keep them pending, gloam_list_notes refresh settles them.
           if (input.handle) tryStore(() => notes.update(input.handle!, { status: "spent", spentTx: null }));
         } else if (spentElsewhere === false) {
-          if (change) tryStore(() => notes.remove(change!.handle));
-          tryStore(() => notes.remove(sent!.handle));
-          release();
+          // Nothing moved by these reads. Through the relay the reverted copy may be a resend whose first copy
+          // landed, read by a node behind: the change and payment are kept dead, the note checked on every refresh.
+          if (change) tryStore(() => notes.markDead(change!.handle));
+          tryStore(() => notes.markDead(sent!.handle));
+          if (input.handle) tryStore(() => notes.update(input.handle!, { status: "unspent", recheck: true }));
         }
         // Unread (null): everything stays pending, and gloam_list_notes refresh settles it from the chain.
         return fail({
@@ -1984,7 +1987,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       }
       if (sweep.status === "already_spent" && earlier.length) {
         // Spent by an earlier sweep of this payment that landed after all, while this one was sent: serve that one.
-        if (held) tryStore(() => notes.remove(held!.handle));
+        // (This one's fresh note, if it was sent, is kept dead: a relay's first copy of it may be the one that landed.)
+        if (held) tryStore(() => (sweep.hash ? notes.markDead(held!.handle) : notes.remove(held!.handle)));
         const serve = await serveEarlier();
         if (serve) return serve;
       }
@@ -2008,7 +2012,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           ...(sweepHash ? { hash: sweepHash } : {}),
         });
       }
-      if (held) tryStore(() => notes.remove(held!.handle));
+      // Sent and reverted: kept dead (a relay's first copy may have landed, read by a node behind). Never sent: forgotten.
+      if (held) tryStore(() => (sweep.hash ? notes.markDead(held!.handle) : notes.remove(held!.handle)));
       return text({
         status: sweep.status,
         grantAccess: false,
