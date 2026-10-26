@@ -268,8 +268,9 @@ function assetInfo(chainId: number, asset: Address, fallbackDecimals = 18) {
 /** A spend reservation with no transaction after this long was never sent (a crash between reserve and broadcast). */
 const STUCK_MS = 10 * 60 * 1000;
 
-/** A payment whose sweeps never land is swept again this many times at most. */
+/** A payment whose sweeps never land is swept again this many times ten minutes apart; after that, only after RESWEEP_WAIT_MS, doubling each time. */
 const MAX_RESWEEPS = 3;
+const RESWEEP_WAIT_MS = 60 * 60 * 1000;
 
 /** Relay answers that do not prove the transaction stayed unsent: the node may have taken it before the error. */
 const RELAY_MAYBE_SENT = ["maybe_sent", "rpc", "network", "error", "internal", "in_flight"];
@@ -1895,8 +1896,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const tx = txReads(client);
       let waiting = false;
       for (const n of earlier) {
+        // Ten minutes at least, even after a revert: a sweep that reverts for a reason that persists is not sent
+        // again on every verify (and a relay's first copy may still show up).
         const stuck = Date.now() - Date.parse(n.updatedAt) > STUCK_MS;
-        const dead = n.status === "dead" || (await tx.reverted(n.createdTx)) || (stuck && (!n.createdTx || (await tx.unknown(n.createdTx))));
+        const dead = stuck && (n.status === "dead" || (await tx.reverted(n.createdTx)) || !n.createdTx || (await tx.unknown(n.createdTx)));
         if (!dead) waiting = true;
       }
       if (waiting || spent === null) {
@@ -1904,7 +1907,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           status: "unconfirmed",
           grantAccess: false,
           final: false,
-          message: "A sweep of this payment was sent and has not confirmed. Verify again shortly; do not serve until it says settled.",
+          message: "A sweep of this payment was sent and has not landed yet. Verify again shortly; do not serve until it says settled.",
           ...(earlier.at(-1)?.createdTx ? { hash: earlier.at(-1)!.createdTx } : {}),
         });
       }
@@ -1919,12 +1922,18 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // Still unspent, and no earlier sweep can land: sweep it again, a few times at most. Their fresh notes stay
       // until a refresh marks them dead.
       if (earlier.length > MAX_RESWEEPS) {
-        return text({
-          status: "error",
-          grantAccess: false,
-          final: false,
-          error: `This payment was swept ${earlier.length} times and none landed, so it is not swept again. Check this server's RPC and wallet. Do not grant access.`,
-        });
+        // After that, once more only after a wait that doubles (an hour, two, four...), so a cause fixed later
+        // (the RPC, the wallet's gas) still gets the payment swept and served.
+        const last = Math.max(...earlier.map((n) => Date.parse(n.createdAt)));
+        const next = last + RESWEEP_WAIT_MS * 2 ** (earlier.length - MAX_RESWEEPS - 1);
+        if (Date.now() < next) {
+          return text({
+            status: "unconfirmed",
+            grantAccess: false,
+            final: false,
+            message: `This payment was swept ${earlier.length} times and none landed. It is swept again after ${new Date(next).toISOString()}; check this server's RPC and wallet meanwhile. Do not serve until it says settled.`,
+          });
+        }
       }
     }
 
