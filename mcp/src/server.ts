@@ -31,6 +31,7 @@
  * unsafe and off by default.
  */
 
+import { randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
@@ -1732,6 +1733,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
 
   /** Payments this server is settling right now, by note store and payment nullifier. */
   const settling = new Set<string>();
+  /** Who this server is in the note store's settle claims: a claim it left behind is its own to take back. */
+  const settlerId = `${process.pid}:${randomBytes(6).toString("hex")}`;
 
   /**
    * One settle of a payment at a time: in this process, and across processes sharing the note store (a claim
@@ -1752,7 +1755,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     try {
       let claimed: boolean;
       try {
-        claimed = args.notes.claimSettle(args.paymentNullifier, STUCK_MS);
+        claimed = args.notes.claimSettle(args.paymentNullifier, STUCK_MS, settlerId);
       } catch (e) {
         return text({ status: "error", grantAccess: false, final: false, error: `Could not take this payment for settling (${errMsg(e)}). Nothing was sent; verify again.` });
       }

@@ -14,9 +14,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, statSync, writeFileSync, copyFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, statSync, writeFileSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -175,6 +175,22 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     const env: Env = { GLOAM_AGENT_PRIVATE_KEY: pk, GLOAM_NOTE_STORE: join(dir, "n.json") };
     openNoteStore(env).add(sampleNote());
     assert.throws(() => openNoteStore({ ...env, GLOAM_NOTE_KEY: KEY_A }).list(), /written with a key derived from the signer/);
+  });
+
+  test("a payment is settled by one verify at a time; a claim left by a crash or a failed write does not block it", () => {
+    const store = openNoteStore({ GLOAM_NOTE_KEY: KEY_A, GLOAM_NOTE_STORE: join(tmp(), "n.json") });
+    const nf = `0x${"ab".repeat(32)}` as Hex;
+    const ten = 10 * 60 * 1000;
+    assert.equal(store.claimSettle(nf, ten, "a"), true);
+    assert.equal(store.claimSettle(nf, ten, "b"), false, "another verify waits");
+    assert.equal(store.claimSettle(nf, ten, "a"), true, "a claim this same server left behind (its release failed) is taken back");
+    store.releaseSettle(nf);
+    assert.equal(store.claimSettle(nf, ten, "b"), true);
+    // A claim from a process that is gone (pid 2^22 + 1 is above every real pid here) does not wait out the ten minutes.
+    const gone = `0x${"cd".repeat(32)}` as Hex;
+    assert.equal(store.claimSettle(gone, ten, `${2 ** 22 + 1}:x`), true);
+    assert.equal(store.claimSettle(gone, ten, `${process.pid}:y`), true);
+    assert.equal(store.claimSettle(gone, ten, `${process.pid}:z`), false, "a live one does");
   });
 
   test("a note is reserved for one spend at a time", () => {
@@ -1287,6 +1303,38 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
       assert.deepEqual(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").map((n) => n.status), ["unspent"], JSON.stringify(report));
       assert.ok(out.every((v) => ["settled", "unconfirmed", "already_settled"].includes(v.status)), JSON.stringify(report));
     }
+  });
+
+  test("a store that cannot be written while a payment settles holds it back only until it can", async () => {
+    const chain = mockChain();
+    let dir = "";
+    let armed = true;
+    const view = {
+      ...chain.publicClient,
+      waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+        const r = await chain.publicClient.waitForTransactionReceipt({ hash });
+        if (armed && chain.calls.filter((c) => c === "transfer").length === 2) {
+          armed = false;
+          chmodSync(dir, 0o500); // the sweep landed; the claim's lock and every write after it fail
+        }
+        return r;
+      },
+    };
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: chain.walletClient, publicClient: view }) as unknown as Signer;
+    const { P, S, priced, payeeEnv } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    dir = dirname(payeeEnv.GLOAM_NOTE_STORE!);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const v1 = await S.call("gloam_verify_payment", args);
+    chmodSync(dir, 0o700);
+    const [v2, v3] = await Promise.all([S.call("gloam_verify_payment", args), S.call("gloam_verify_payment", args)]);
+    const v4 = await S.call("gloam_verify_payment", args);
+    const all = [v1, v2, v3, v4];
+    assert.equal(v1.grantAccess, false, JSON.stringify(v1));
+    assert.equal(all.filter((v) => v.grantAccess === true).length, 1, `served once the store can be written: ${JSON.stringify(all.map((v) => v.status))}`);
+    assert.equal(v4.status, "already_settled");
   });
 
   test("two servers on one note store (two processes) sweep a payment presented to both at once only once", async () => {
