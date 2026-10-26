@@ -676,7 +676,14 @@ export class GloamAgent {
         // has not landed in an hour. Freed, it can be spent again; a payment still waiting on it is then
         // either retried from this same note or dropped once the note goes another way, never paid twice.
         const free = tx === "reverted" || (!n.spendStarted && !n.spentTx && age > 10 * 60_000) || (Boolean(n.spendStarted || n.spentTx) && tx === null && age > HOUR_MS);
-        if (free) {
+        if (free && n.requestKey && tx !== "reverted") {
+          // A note held by a cash out stays held for that cash out: only the same cash out, sent again from
+          // this note, may spend it, so the two can never both land.
+          if (!n.stale) {
+            this.store.update(n.handle, { stale: true });
+            updated++;
+          }
+        } else if (free) {
           this.store.update(n.handle, { status: "unspent", spentTx: null, spendStarted: undefined, stale: undefined });
           updated++;
         }
@@ -1071,14 +1078,37 @@ export class GloamAgent {
     const amountWei = this.amount(args.amount, asset);
     const memo = cleanPaymentNote(args.note);
     if (args.sealTo && !isReceiveTag(args.sealTo)) throw new Error("sealTo must be a Gloam address (gloamr1.…) whose key is a real P-256 point.");
-    const gate = this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: args.sealTo ?? CLAIM_LINK_RECIPIENT });
-    if (!gate.ok) return this.refused(gate.refusal);
+    // A link sealed to an address is a payment to that address: the same one is never sent twice while it may land.
+    const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, memo) : undefined;
+    const plan = requestKey
+      ? await this.retryPlan(requestKey, amountWei, async (n) => ({
+          status: "done",
+          action: "pay_by_claim_link",
+          alreadyPaid: true,
+          network: this.network.key,
+          paid: this.fmt(amountWei, asset),
+          claimHandle: n.handle,
+          ...(n.createdTx ? { hash: n.createdTx, explorer: this.explorer(n.createdTx) } : {}),
+          sealedLink: await sealToReceiveTag(this.claimLinkOf(n).link, args.sealTo!),
+          message: "This claim link already landed after its answer was lost. It was not sent again.",
+        }))
+      : ({ kind: "new" } as const);
+    if (plan.kind === "answer") return plan.outcome;
+    const gate = plan.kind === "same" ? null : this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: args.sealTo ?? CLAIM_LINK_RECIPIENT });
+    if (gate && !gate.ok) return this.refused(gate.refusal);
+    const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
+      if (gate?.ok) this.settle(gate.id, status, extra);
+    };
     let input: StoredNote;
-    try {
-      input = this.reserveNote(asset, amountWei);
-    } catch (e) {
-      this.settle(gate.id, "failed", { reason: errMsg(e) });
-      return { status: "error", message: errMsg(e) };
+    if (plan.kind === "same") {
+      input = plan.input;
+    } else {
+      try {
+        input = this.reserveNote(asset, amountWei);
+      } catch (e) {
+        settle("failed", { reason: errMsg(e) });
+        return { status: "error", message: errMsg(e) };
+      }
     }
     let sealedLink: string | undefined;
     const sent = await this.privateSend({
@@ -1088,6 +1118,7 @@ export class GloamAgent {
       payOrigin: "claim",
       label: args.label ?? "claim link",
       memo: memo || undefined,
+      requestKey,
       // Sealed before anything is sent: an address that cannot be sealed to stops the payment here.
       prepare: args.sealTo
         ? async (payment) => {
@@ -1096,7 +1127,7 @@ export class GloamAgent {
         : undefined,
     });
     if (!sent.ok) {
-      this.settle(gate.id, sent.maybeSent ? "unconfirmed" : "failed", { hash: sent.hash ?? undefined, reason: sent.error });
+      settle(sent.maybeSent ? "unconfirmed" : "failed", { hash: sent.hash ?? undefined, reason: sent.error });
       if (sent.maybeSent) {
         return this.unconfirmed("The claim-link payment", sent, {
           ...(sent.payment ? { claimHandle: sent.payment.handle } : {}),
@@ -1106,7 +1137,7 @@ export class GloamAgent {
       }
       return { status: "error", message: sent.error };
     }
-    this.settle(gate.id, "sent", { hash: sent.hash });
+    settle("sent", { hash: sent.hash });
     const out = this.claimLinkOf(sent.payment);
     let delivered: string;
     if (sealedLink) {
@@ -1342,28 +1373,92 @@ export class GloamAgent {
     const to = String(args.to ?? "").trim();
     if (!isAddress(to)) throw new Error("Cash out to a 0x address.");
     if (to.toLowerCase() === this.network.pool.toLowerCase()) throw new Error("That address is the vault itself. Cash out to a wallet.");
-    const gate = this.gate({ action: "cash_out", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: to });
-    if (!gate.ok) return this.refused(gate.refusal);
-    let input: StoredNote;
-    try {
-      input = this.reserveNote(asset, amountWei);
-    } catch (e) {
-      this.settle(gate.id, "failed", { reason: errMsg(e) });
-      return { status: "error", message: errMsg(e) };
-    }
-    let exact = input;
-    let splitHash: Hex | null = null;
-    if (BigInt(input.amountWei) > amountWei) {
-      const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `split for a cash out to ${to}` });
-      if (!split.ok) {
-        this.settle(gate.id, split.maybeSent ? "unconfirmed" : "failed", { hash: split.hash ?? undefined, reason: split.error });
-        // Both halves of the split are kept: refresh() makes them spendable once the split is on chain. Nothing was cashed out.
-        if (split.maybeSent) return this.unconfirmed("The private split before the cash out", split, { cashedOut: "nothing yet" });
-        return { status: "error", message: split.error };
+    // The same cash out (address, asset, amount) whose answer was lost may still land: it is never paid twice.
+    // Its notes carry this key: the split that makes the exact note, and the note being cashed out.
+    const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei, null);
+    const carrying = () => this.store.list().filter((x) => x.requestKey === requestKey && x.chainId === this.network.chainId && x.status !== "spent");
+    const unconfirmedCashOut = (n: StoredNote): Outcome => ({
+      status: "refused",
+      code: "unconfirmed_cash_out",
+      message: `The same cash out (${n.handle}) has not confirmed and may still land, so it is not sent again. Refresh the balance: once it lands it is done; after an hour it can be sent again from the same note, so only one of the two can land.`,
+    });
+    let exact: StoredNote | null = null;
+    let input: StoredNote | null = null;
+    let retrying = false;
+    if (carrying().length) {
+      const held = carrying().filter((x) => x.status === "pending" && x.pending === "spend").map((x) => x.handle);
+      await this.refresh().catch(() => undefined);
+      // A note held for this cash out alone is spent: the cash out landed.
+      const landed = held.map((h) => this.store.get(h)).find((x) => x?.status === "spent");
+      if (landed) {
+        return {
+          status: "done",
+          action: "cash_out",
+          alreadyCashedOut: true,
+          network: this.network.key,
+          cashedOut: this.fmt(amountWei, asset),
+          to,
+          ...(landed.spentTx ? { hash: landed.spentTx, explorer: this.explorer(landed.spentTx) } : {}),
+          message: "This cash out already landed after its answer was lost. It was not sent again.",
+        };
       }
-      splitHash = split.hash;
-      exact = this.store.reserveForSpend(split.payment.handle);
+      const now = carrying();
+      const spending = now.find((x) => x.status === "pending" && x.pending === "spend");
+      const splitting = now.find((x) => x.status === "pending" && x.pending === "create");
+      const ready = now.find((x) => x.status === "unspent" && BigInt(x.amountWei) === amountWei);
+      if (spending) {
+        if (!spending.stale) return unconfirmedCashOut(spending);
+        exact = spending; // sent again from the same note
+        retrying = true;
+      } else if (splitting) {
+        const from = splitting.spendsHandle ? this.store.get(splitting.spendsHandle) : undefined;
+        if (!splitting.stale || !from || from.status !== "unspent") return unconfirmedCashOut(splitting);
+        try {
+          input = this.store.reserveForSpend(from.handle); // split again from the same note
+          retrying = true;
+        } catch {
+          return unconfirmedCashOut(splitting);
+        }
+      } else if (ready) {
+        try {
+          exact = this.store.reserveForSpend(ready.handle);
+          retrying = true;
+        } catch {
+          /* taken meanwhile: a new cash out below */
+        }
+      }
     }
+    // A retry spends the note its first attempt did, and was counted once already.
+    const gate = retrying ? null : this.gate({ action: "cash_out", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: to });
+    if (gate && !gate.ok) return this.refused(gate.refusal);
+    const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
+      if (gate?.ok) this.settle(gate.id, status, extra);
+    };
+    let splitHash: Hex | null = null;
+    if (!exact) {
+      if (!input) {
+        try {
+          input = this.reserveNote(asset, amountWei);
+        } catch (e) {
+          settle("failed", { reason: errMsg(e) });
+          return { status: "error", message: errMsg(e) };
+        }
+      }
+      if (BigInt(input.amountWei) > amountWei) {
+        const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `split for a cash out to ${to}`, requestKey });
+        if (!split.ok) {
+          settle(split.maybeSent ? "unconfirmed" : "failed", { hash: split.hash ?? undefined, reason: split.error });
+          // Both halves of the split are kept: refresh() makes them spendable once the split is on chain. Nothing was cashed out.
+          if (split.maybeSent) return this.unconfirmed("The private split before the cash out", split, { cashedOut: "nothing yet" });
+          return { status: "error", message: split.error };
+        }
+        splitHash = split.hash;
+        exact = this.store.reserveForSpend(split.payment.handle);
+      } else {
+        exact = input;
+      }
+    }
+    exact = this.store.update(exact.handle, { requestKey }) ?? exact;
     let hash: Hex | null = null;
     let sending = false;
     try {
@@ -1381,13 +1476,13 @@ export class GloamAgent {
         chainId: this.network.chainId,
       });
       sending = true;
-      this.store.update(exact.handle, { spendStarted: new Date().toISOString() });
+      this.store.update(exact.handle, { spendStarted: new Date().toISOString(), stale: undefined });
       hash = await this.submitIntent(intent);
       this.store.update(exact.handle, { spentTx: hash });
       const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw Object.assign(new Error(`The cash out reverted (${hash}).`), { reverted: true });
       this.store.update(exact.handle, { status: "spent", spentTx: hash });
-      this.settle(gate.id, "sent", { hash });
+      settle("sent", { hash });
       const fee = isPaymentsPoolChainId(this.network.chainId) ? cashOutFee(amountWei, CASH_OUT_FEE_BPS) : 0n;
       return {
         status: "done",
@@ -1405,8 +1500,8 @@ export class GloamAgent {
     } catch (e) {
       const reverted = Boolean((e as { reverted?: boolean }).reverted);
       const maybe = !reverted && (Boolean(hash) || (sending && this.mayHaveSent(e)));
-      if (!maybe) this.release(exact.handle);
-      this.settle(gate.id, maybe ? "unconfirmed" : reverted ? "reverted" : "failed", { hash: hash ?? undefined, reason: errMsg(e) });
+      if (!maybe) this.release(exact!.handle);
+      settle(maybe ? "unconfirmed" : reverted ? "reverted" : "failed", { hash: hash ?? undefined, reason: errMsg(e) });
       if (maybe) return this.unconfirmed("The cash out", { hash, error: errMsg(e) }, splitHash ? { splitHash } : {});
       return { status: "error", message: errMsg(e) };
     }

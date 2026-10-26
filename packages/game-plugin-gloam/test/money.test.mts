@@ -250,3 +250,16 @@ test("a note pending for over an hour with nothing on chain is kept but stops co
   await agent.refresh();
   assert.deepEqual(view(agent), ["shield:10:unspent"]);
 });
+
+test("GAME hears an unconfirmed send as done with an instruction not to send it again, never as a failure to retry", async () => {
+  const unsure = {
+    network: { key: "base", testnet: true, assets: [{ symbol: "USDC" }] },
+    address: async () => "gloamr1.x",
+    limitsReport: () => ({ enforced: true }),
+    cashOut: async () => ({ status: "unconfirmed", message: "The cash out was sent, but its answer was lost.", next: "Do not send it again. Call gloam_private_balance with refresh." }),
+  } as unknown as GloamAgent;
+  const plugin = new GloamPlugin({ agent: unsure });
+  const res = await plugin.cashOutFunction.execute({ amount: { value: "5" }, to: { value: "0x00000000000000000000000000000000000000c1" } } as never, () => undefined);
+  assert.equal(res.status, "done");
+  assert.match(res.feedback, /Do not send it again/);
+});

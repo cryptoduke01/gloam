@@ -66,7 +66,9 @@ class GloamPlugin {
       const out = await fn();
       const text = redact(JSON.stringify(out, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
       logger(redact(`${what}: ${out.status}`));
-      const ok = out.status === "done" || out.status === "ok" || out.status === "pending";
+      // "unconfirmed": the send went out and its answer was lost. Reported as done (not failed), with the
+      // instruction not to send it again, so a planner never retries money that may already have moved.
+      const ok = out.status === "done" || out.status === "ok" || out.status === "pending" || out.status === "unconfirmed";
       return new ExecutableGameFunctionResponse(ok ? ExecutableGameFunctionStatus.Done : ExecutableGameFunctionStatus.Failed, text);
     } catch (e) {
       // One short line: an RPC error's full text quotes the URL, which can carry an API key.
