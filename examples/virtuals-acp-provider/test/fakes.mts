@@ -61,7 +61,7 @@ export class FakeAcp {
   getTransactionReceipt = async ({ hash }: { hash: Hex }) => {
     const r = this.receipts.get(hash);
     if (!r) throw new Error("receipt not found");
-    return r;
+    return { status: "success" as const, blockNumber: 100n, ...r };
   };
   getBlockNumber = async () => 100n;
   /**
@@ -88,12 +88,17 @@ export class FakeAcp {
       ],
     });
   }
-  /** A refund that went out on chain. */
+  /** A refund that went out on chain: the token's Transfer, in its own transaction. */
   sent(from: string, to: string, value: bigint) {
     const transactionHash = `0x${(0xe00000 + this.transfers.length).toString(16).padStart(64, "0")}` as Hex;
     this.transfers.push({ from, to, value, transactionHash });
+    const addr = (a: string) => pad(a as Hex, { size: 32 });
+    this.receipts.set(transactionHash, { logs: [{ address: BASE_SEPOLIA_USDC, topics: [TRANSFER_TOPIC, addr(from), addr(to)], data: toHex(value, { size: 32 }) }] });
     return transactionHash;
   }
+  /** The ACP proxy's EIP-1967 implementation slot (the audited implementation unless a test upgrades it). */
+  implementation: Hex = "0xc4e95dbc7e8c99c114ff9c8299a3e4851e1530ff";
+  getStorageAt = async () => pad(this.implementation, { size: 32 });
   set(jobId: string, patch: Partial<ChainJob>) {
     Object.assign(this.jobs.get(jobId)!, patch);
   }
@@ -135,6 +140,7 @@ export function fakeWallet(provider: ReceiveKey, acp: FakeAcp, opts: { float?: b
       getLogs: (q: never) => acp.getLogs(q),
       getBlockNumber: () => acp.getBlockNumber(),
       getTransactionReceipt: (q: { hash: Hex }) => acp.getTransactionReceipt(q),
+      getStorageAt: () => acp.getStorageAt(),
     },
     openSealed: (s: string) => openSealedTicket(s, provider),
     largestPayment: () => opts.float ?? 40_000_000n,

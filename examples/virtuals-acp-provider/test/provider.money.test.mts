@@ -10,7 +10,7 @@ import { BASE_SEPOLIA_USDC, generateReceiveKey } from "@gloamtrade/sdk";
 import { EarningsSweeper } from "../src/earnings.ts";
 import { NO_EVALUATOR } from "../src/acp.ts";
 import { OFFERING_NAME, RequirementError, parseRequirement } from "../src/offering.ts";
-import { ACP_STATUS, CLIENT, FakeAcp, FakeSession, completed, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
+import { ACP_STATUS, CLIENT, FakeAcp, FakeSession, PROVIDER, completed, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
 
 const BAD_TAG = "gloamr1." + Buffer.from("3059301306072a8648ce3d020106082a8648ce3d03010703420004" + "01".repeat(64), "hex").toString("base64url");
 const TRUSTED_EVALUATOR = "0x00000000000000000000000000000000000000e1";
@@ -107,7 +107,8 @@ test("a reject while a payout is unconfirmed refunds only what never left, and t
       return { status: "unconfirmed", message: "lost answer", check: "Refresh." };
     },
   });
-  const p = providerFor(f.wallet, { refund: async (_c, _t, raw) => (refunds.push(raw), `0xrefund${refunds.length}`) });
+  // Each refund lands on chain: the token's transfer to the client, in its own transaction.
+  const p = providerFor(f.wallet, { refund: async (to, _t, raw) => (refunds.push(raw), acp.sent(PROVIDER, to, raw)) });
   const s = new FakeSession("4", acp);
   await p.onEntry(s, requirementEntry("4", { payouts: [{ to: r1.tag, amount: "3" }, { to: r2.tag, amount: "4" }] }));
   s.fund();
@@ -221,7 +222,7 @@ test("the earnings sweep leaves principal still owed to clients, and retries a r
       // Refused before sending (the transfer would revert): certainly not sent, so tried again next round.
       if (!refundWorks) throw Object.assign(new Error("insufficient balance"), { notSent: true });
       refunds.push(raw);
-      return "0xrefund";
+      return acp.sent(PROVIDER, _c, raw);
     },
   });
   const s = new FakeSession("50", acp);
