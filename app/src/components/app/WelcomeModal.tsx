@@ -13,13 +13,22 @@ const STORAGE_KEY = "gloam_testnet_welcome_v1";
 const MAINNET_STORAGE_KEY = "gloam_mainnet_welcome_v1";
 
 /**
- * Before the app's JavaScript arrives the server HTML holds the testnet
- * welcome. Once mainnet is live (a pool is in and the launch time has passed)
- * the head start below stands aside and React shows the mainnet welcome, so
- * nobody reads the testnet welcome on a page that now opens on mainnet. Before
- * that this is empty and the script is exactly what it was.
+ * Whether mainnet was live when this page was built. A page built since the
+ * launch holds the mainnet welcome in its server HTML, so the head start below
+ * shows it with the first paint (it was the slowest paint of a first visit:
+ * 4.3 s on a throttled phone, waiting for the app's JavaScript). Same value in
+ * the browser, since the launch time has passed for both.
  */
-const LIVE_GUARD = MAINNET_CONFIGURED ? `if(Date.now()>=${MAINNET_LAUNCH_MS})return;` : "";
+const BUILT_LIVE = isMainnetLive();
+
+/**
+ * A page built before the launch holds the testnet welcome. Once mainnet is
+ * live the head start stands aside on it and React shows the mainnet welcome,
+ * so nobody reads the testnet welcome on a page that now opens on mainnet.
+ */
+const LIVE_GUARD = MAINNET_CONFIGURED && !BUILT_LIVE ? `if(Date.now()>=${MAINNET_LAUNCH_MS})return;` : "";
+/** The key the shown welcome is dismissed under. */
+const SHOWN_KEY = BUILT_LIVE ? MAINNET_STORAGE_KEY : STORAGE_KEY;
 
 /**
  * Shown once, before the app's JavaScript arrives: the modal is in the server
@@ -28,11 +37,11 @@ const LIVE_GUARD = MAINNET_CONFIGURED ? `if(Date.now()>=${MAINNET_LAUNCH_MS})ret
  * paint instead of seconds later, after the wallet code loads. Once React takes
  * over, state drives it as before (and recording demos keep it shut).
  */
-const REVEAL_SCRIPT = `(function(){try{${LIVE_GUARD}if(localStorage.getItem('${STORAGE_KEY}')==='1')return;if(/[?&]demo=1/.test(location.search)||sessionStorage.getItem('gloam_demo')==='1')return;var el=document.getElementById('gl-welcome');if(el)el.hidden=false}catch(e){}})()`;
+const REVEAL_SCRIPT = `(function(){try{${LIVE_GUARD}if(localStorage.getItem('${SHOWN_KEY}')==='1')return;if(/[?&]demo=1/.test(location.search)||sessionStorage.getItem('gloam_demo')==='1')return;var el=document.getElementById('gl-welcome');if(el)el.hidden=false}catch(e){}})()`;
 
 export function WelcomeModal() {
   const [open, setOpen] = useState(false);
-  const [live, setLive] = useState(false);
+  const [live, setLive] = useState(BUILT_LIVE);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
