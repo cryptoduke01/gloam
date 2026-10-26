@@ -249,6 +249,14 @@ export class NoteStore {
     });
   }
 
+  /**
+   * Mark a note dead: by the chain's reads its transaction can never land. The secret stays, since
+   * reads can come from a node behind; a refresh brings the note back if it shows up.
+   */
+  markDead(handle: string): StoredNote | undefined {
+    return this.update(handle, { status: "dead" });
+  }
+
   /** Forget a note whose creating transaction never happened (a rollback). */
   remove(handle: string) {
     this.mutate((d) => {
