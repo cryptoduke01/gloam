@@ -43,7 +43,7 @@ What to know before you use mainnet:
 - **Final keys.** Mainnet proofs use the final keys from the 13-contributor
   trusted setup (release `ceremony-final`). `circuitArtifactUrls("shield", chainId)`
   points at `final/` on mainnet and at the dev keys on testnet.
-- **Payments only.** The SDK does not swap. Private swaps are in the Gloam app on both mainnets.
+- **Payments only.** The SDK does not swap. Private swaps are in the Gloam app on Robinhood Chain and Tempo mainnet.
 - **The note secret is the money.** It stays in this browser's `localStorage`.
   Back it up; clearing site data without a backup loses the funds.
 

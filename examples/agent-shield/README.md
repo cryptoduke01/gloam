@@ -40,7 +40,7 @@ What to know before you use mainnet:
   `circuitArtifactFiles` / `circuitArtifactUrls`, so a mainnet proof is never made
   with the dev keys.
 - **Payments only.** The mainnet pools take deposits, private payments and cash
-  outs. The SDK does not swap; private swaps are in the Gloam app on both mainnets.
+  outs. The SDK does not swap; private swaps are in the Gloam app on Robinhood Chain and Tempo mainnet.
 - **Your secret is your money.** The script prints `note.secret`. Store it
   somewhere safe before anything else; losing it loses the funds.
 

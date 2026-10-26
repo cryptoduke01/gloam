@@ -45,7 +45,7 @@ What to know before you use mainnet:
 - **Final keys.** Mainnet proofs use the final keys from the 13-contributor
   trusted setup (release `ceremony-final`). The bot picks them with
   `circuitArtifactFiles` / `circuitArtifactUrls`.
-- **Payments only.** The SDK does not swap. Private swaps are in the Gloam app on both mainnets.
+- **Payments only.** The SDK does not swap. Private swaps are in the Gloam app on Robinhood Chain and Tempo mainnet.
 - **Secrets are money.** The bot prints the source note before it deposits, then
   the payment and change notes. Store them; losing a secret loses its funds.
 
