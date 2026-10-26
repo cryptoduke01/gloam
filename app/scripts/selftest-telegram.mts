@@ -3396,7 +3396,7 @@ await test("round 2: repeats ban only with a sure rule among them; warning-only 
   reset();
   const pointer = user(5440, "Pia");
   await handleUpdate(upd(inTopic(TOPIC.general, "join t.me/tempo_community for Tempo questions, they're helpful", pointer)));
-  await handleUpdate(upd(inTopic(TOPIC.general, "Relay support is at t.me/relaysupport, they fixed mine", user(5441, "Rel"))));
+  await handleUpdate(upd(inTopic(TOPIC.general, "Relay support is at t.me/relaysupport", user(5441, "Rel"))));
   assert.equal(deletes().length, 2);
   assert.equal(mutes().length + bans().length + groupSends().length, 0);
   const [after] = await kv([["LRANGE", `gloam:tg:v1:offences:${pointer.id}`, 0, -1]]);
@@ -3431,6 +3431,49 @@ await test("round 2: repeats ban only with a sure rule among them; warning-only 
   assert.equal(note.body.parse_mode, "HTML");
   assert.ok(String(note.body.text).includes(`<a href="tg://user?id=`), String(note.body.text));
   assert.ok(String(note.body.text).includes("(no username, id "));
+});
+
+await test("round 3: the fake-support group is a ban (support, help desk, fix, recovery, admin or Gloam in its name, or 'they fixed mine'); a real project's own group named in the message is only deleted; split 'ALL HOLDERS' / 'DM ME NOW' is read whole", async () => {
+  resetMemoryKv();
+  let id = 5500;
+  for (const [text, category] of [
+    ["Deposit stuck? t.me/fixdesk_support for help, they sorted mine in 5 min", "scam"],
+    ["funds missing? message t.me/recovery_helpdesk for help, they fixed mine", "scam"],
+    ["for support join t.me/gloam_support_desk", "impersonation"],
+    ["Gloam help is at t.me/gloamhelpdesk", "impersonation"],
+    ["Relay support is at t.me/relaysupport, they fixed mine", "scam"],
+    ["join t.me/tempo_community, they sorted mine fast", "scam"],
+    ["ask the admins at t.me/admin_desk_official", "scam"],
+  ] as const) {
+    reset();
+    const m = inTopic(TOPIC.help, text, user(id++, "Helper"));
+    await handleUpdate(upd(m));
+    assert.deepEqual(deletes().map((x) => x.body.message_id), [m.message_id], text);
+    assert.equal(bans().length, 1, `banned: ${text}`);
+    assert.equal(groupSends().length, 0, text);
+    assert.equal((await recentModeration(1))[0]!.category, category, text);
+  }
+  // a real project's own group, named in the message, with no testimonial: the link goes, nothing is held against them
+  reset();
+  for (const text of ["Relay support is at t.me/relaysupport", "join t.me/tempo_community for Tempo questions"]) {
+    await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Pia"))));
+  }
+  assert.equal(deletes().length, 2);
+  assert.equal(bans().length + mutes().length + groupSends().length, 0);
+  // a scam split over two lines, from one person, is read as the sentence it is
+  for (const [a, b] of [
+    ["ALL HOLDERS", "DM ME NOW"],
+    ["Gloam airdrop is live for all holders", "dm me to claim yours"],
+  ]) {
+    reset();
+    const who = user(id++, "Split");
+    const first = inTopic(TOPIC.general, a, who);
+    const second = inTopic(TOPIC.general, b, who);
+    await handleUpdate(upd(first));
+    await handleUpdate(upd(second));
+    assert.deepEqual(deletes().map((x) => x.body.message_id).sort(), [first.message_id, second.message_id].sort(), `${a} / ${b}`);
+    assert.equal(bans().length, 1, `${a} / ${b}`);
+  }
 });
 
 await test("Announcements: impostors, pasted seed phrases and scams are still dealt with; nothing else there is screened or answered", async () => {

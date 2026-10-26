@@ -1116,7 +1116,8 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   let scored = text;
   let reason = trusted ? null : memberScam(from, text);
   if (!trusted && earlier.length && (!reason || WARN_ONLY.has(reason))) {
-    const joined = [...earlier.map((e) => e.t), text].join("\n");
+    // joined as one run of words, so "ALL HOLDERS" then "DM ME NOW" reads as the one sentence it is
+    const joined = [...earlier.map((e) => e.t), text].join(" ");
     const whole = memberScam(from, joined);
     // only a real scam split over messages; words members say too, read with their next harmless line, are not one
     if (whole && !WARN_ONLY.has(whole)) {
