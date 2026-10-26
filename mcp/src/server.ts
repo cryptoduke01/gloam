@@ -847,6 +847,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               if (await chain.isSpent(n.nullifier)) {
                 notes.update(n.handle, { status: "spent", recheck: false });
                 refreshed.push(`${n.handle}: spent`);
+                // A copy of its send may have landed after a read of another copy said reverted: look at the dead notes.
+                notes.wakeDead();
+                woke = true;
               } else if (n.spentTx ? (await tx.reverted(n.spentTx)) || (stuck && (await tx.unknown(n.spentTx))) : stuck) {
                 // Never spent on chain, and its spend reverted or never showed up: spendable again.
                 // (If a copy is still in flight it will revert: the nullifier spends once. The
