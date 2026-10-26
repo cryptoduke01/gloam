@@ -1302,6 +1302,33 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(payee.count.sweeps, 1, `one sweep sent: ${JSON.stringify({ statuses: out.map((v) => v.status), ...payee.count })}`);
   });
 
+  test("a payment whose sweeps never land is swept again at most three times", async () => {
+    const chain = mockChain();
+    const known = new Set<string>();
+    let sweeps = 0;
+    const payeeWallet = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        sweeps++;
+        noteBroadcast(`0x${(0x5eed0000 + sweeps).toString(16).padStart(64, "0")}` as Hex); // the connection fails before the node gets it
+        throw new Error("HTTP request failed.\n\nDetails: fetch failed");
+      },
+    };
+    const view = nodeView(chain, known);
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: payeeWallet, publicClient: view }) as unknown as Signer;
+    const { P, S, priced } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const answers = [];
+    for (let k = 0; k <= 6; k++) answers.push(await later(k * 11 * 60 * 1000, () => S.call("gloam_verify_payment", args)));
+    assert.equal(sweeps, 4, `the first sweep and three more: ${JSON.stringify(answers.map((v) => v.status))}`);
+    assert.ok(answers.every((v) => v.grantAccess === false));
+    assert.match(answers.at(-1).error, /not swept again/, JSON.stringify(answers.at(-1)));
+  });
+
   // ------------------------------------------------ a relay resend that reverted while its first copy landed
 
   /**
