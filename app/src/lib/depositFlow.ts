@@ -3,6 +3,7 @@
  * from the view so they can be checked (scripts/selftest-add-privately.mts).
  */
 import type { Address, Hex } from "viem";
+import { allNetworks, networkName, type GloamNetwork } from "./networks";
 import { isNativeAsset, type LocalNote } from "./shield";
 
 export type DepositCall = {
@@ -33,6 +34,17 @@ export function depositCall(
   return proofBytes
     ? { address: note.pool, functionName: "shieldBound", args: [note.asset, amount, note.commitment, proofBytes], value }
     : { address: note.pool, functionName: "shield", args: [note.asset, amount, note.commitment], value };
+}
+
+/**
+ * Why a deposit stopped before it went out: the page is on another network
+ * than the note's by then. It names the deposit's network, the one to go back
+ * to, whichever network the wallet is on.
+ */
+export function networkMovedMessage(noteChainId: number, page: Pick<GloamNetwork, "chainId" | "label" | "testnet" | "family">): string {
+  const from = allNetworks().find((n) => n.chainId === noteChainId);
+  if (page.chainId === noteChainId) return "The vault changed before your deposit went out, so nothing was deposited. Reload the page and try again.";
+  return `The page moved to ${networkName(page)} before your deposit went out, so nothing was deposited. Switch back to ${from ? networkName(from) : "the network you started on"} and try again.`;
 }
 
 /**

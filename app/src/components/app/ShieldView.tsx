@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useReadContract, useReadContracts } from "wagmi";
@@ -22,7 +22,7 @@ import {
   useAppWriteContract,
 } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
-import { MAINNET_ENABLED } from "@/lib/networks";
+import { MAINNET_ENABLED, getActiveNetwork } from "@/lib/networks";
 import { safeParseEther, safeParseUnits } from "@/lib/amount";
 import { amountTextError } from "@/lib/amountText";
 import { erc20Abi } from "@/lib/dex";
@@ -32,7 +32,7 @@ import { formatUsd } from "@/lib/markets";
 import { approvalsBeforeDeposit, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
-import { createTxLog, depositAfterLostApproval, depositCall } from "@/lib/depositFlow";
+import { createTxLog, depositAfterLostApproval, depositCall, networkMovedMessage, type DepositCall } from "@/lib/depositFlow";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
 import { IssuerPolicyRow } from "./IssuerPolicyRow";
@@ -58,6 +58,12 @@ type AssetChoice = "eth" | string; // eth | token id
 export function ShieldView() {
   const { address, isConnected, chainId, demo } = useAppAccount();
   const { network } = useNetwork();
+  // The network the page shows now. Work that outlives the render it started in
+  // (a proof, an approval's wait) checks against it right before it sends.
+  const networkNow = useRef(network);
+  useLayoutEffect(() => {
+    networkNow.current = network;
+  }, [network]);
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { data: marketData } = useLiveMarkets();
@@ -390,6 +396,18 @@ export function ShieldView() {
       const nextApproval = queued?.values.shift();
       if (queued && nextApproval !== undefined && pending && network.pool && autoShieldAfterApprove.current) {
         setClearingAllowance(false);
+        // The page moved to another network while the old allowance was cleared:
+        // the next approval would name the old chain's token on the new one. Stop.
+        if (pending.note.chainId !== network.chainId) {
+          approvalsLeft.current = null;
+          autoShieldAfterApprove.current = false;
+          pendingShieldArgs.current = null;
+          depositProof.current = null;
+          setPendingKind(null);
+          setPendingNote(null);
+          setFormError(networkMovedMessage(pending.note.chainId, network));
+          return;
+        }
         txLog.writing("approve");
         writeContract({
           address: queued.token,
@@ -487,8 +505,7 @@ export function ShieldView() {
     pendingNote,
     pendingKind,
     address,
-    network.testnet,
-    network.chainId,
+    network,
     assetAddress,
     sentLabel,
     refreshNotes,
@@ -497,6 +514,7 @@ export function ShieldView() {
     refetchAllow,
     refetchPool,
     writeContract,
+    txLog,
     demo,
   ]);
 
@@ -574,18 +592,36 @@ export function ShieldView() {
     return proofBytes;
   }
 
+  /**
+   * The deposit's call while the page is still on the note's network, or null
+   * (said in the form). Checked again right before the wallet is asked: the
+   * page can move to another network while the proof is made or the approval
+   * is mined, and the deposit must not go out on the old one behind it.
+   */
+  function callForNote(note: LocalNote, proofBytes: Hex | null): DepositCall | null {
+    // NetworkProvider names a switch to lib code as it happens, before the next render
+    const shown = getActiveNetwork();
+    const page = shown.chainId !== note.chainId ? shown : networkNow.current;
+    const call = depositCall(note, page, proofBytes);
+    if (!call) setFormError(networkMovedMessage(note.chainId, page));
+    return call;
+  }
+
+  /** Stop a deposit before it went out: a note saved for it is dropped again (lib/shield dropUnsentNote). */
+  function stopDeposit(saved: LocalNote | null) {
+    if (saved) dropUnsentNote(saved.id);
+    setPendingKind(null);
+    setPendingNote(null);
+    setApproved(false);
+    pendingShieldArgs.current = null;
+    depositProof.current = null;
+  }
+
   async function executeShield(value: bigint, note: LocalNote, commitment: Hex) {
     // The deposit is the note's: its chain, vault and asset, whatever the form
-    // shows by now (lib/depositFlow depositCall).
-    if (!depositCall(note, network, null)) {
-      setFormError("The network changed before your deposit went out, so nothing was deposited. Switch back and try again.");
-      setPendingKind(null);
-      setPendingNote(null);
-      setApproved(false);
-      pendingShieldArgs.current = null;
-      depositProof.current = null;
-      return;
-    }
+    // shows by now (lib/depositFlow depositCall), and only while the page is
+    // still on that network (callForNote).
+    if (!callForNote(note, null)) return stopDeposit(null);
     setPendingNote(note);
     setPendingKind("shield");
     // The note's secret is the money: keep it in the browser before anything is
@@ -599,25 +635,25 @@ export function ShieldView() {
     if (shieldVerifierLive) {
       try {
         const proofBytes = await proveDeposit(value, note, commitment, note.asset);
+        // a switch while the proof was made: stop before the note is saved
+        if (!callForNote(note, proofBytes)) return stopDeposit(null);
         // stored and read back before the wallet is asked: a refused write stops here
         await keepUntilLanded();
-        const call = depositCall(note, network, proofBytes);
-        if (!call) throw new Error("The network changed before your deposit went out, so nothing was deposited. Switch back and try again.");
+        // and one while it was saved: right before the wallet is asked
+        const call = callForNote(note, proofBytes);
+        if (!call) return stopDeposit(note);
         txLog.writing("shield");
         writeContract({
           ...call,
           abi: shieldPoolAbi,
-          gas: gasFor(network.chainId, SHIELD_BOUND_GAS_LIMIT),
-          chainId: network.chainId,
+          gas: gasFor(note.chainId, SHIELD_BOUND_GAS_LIMIT),
+          chainId: networkNow.current.chainId,
         } as Parameters<typeof writeContract>[0]);
       } catch (err) {
         setFormError(
           err instanceof Error ? err.message : "Could not prepare your private deposit. Try again."
         );
-        setPendingKind(null);
-        setPendingNote(null);
-        setApproved(false);
-        depositProof.current = null;
+        stopDeposit(note);
       }
       return;
     }
@@ -630,14 +666,14 @@ export function ShieldView() {
       setPendingNote(null);
       return;
     }
-    const call = depositCall(note, network, null);
-    if (!call) return;
+    const call = callForNote(note, null);
+    if (!call) return stopDeposit(note);
     txLog.writing("shield");
     writeContract({
       ...call,
       abi: shieldPoolAbi,
-      gas: gasFor(network.chainId, SHIELD_GAS_LIMIT),
-      chainId: network.chainId,
+      gas: gasFor(note.chainId, SHIELD_GAS_LIMIT),
+      chainId: networkNow.current.chainId,
     } as Parameters<typeof writeContract>[0]);
   }
 
