@@ -302,8 +302,7 @@ export class PrivatePayoutProvider {
         await this.onFunded(session);
         break;
       case "job.completed": {
-        const j = this.journal.get(k);
-        if (j) this.journal.put(k, { ...j, state: "completed" });
+        await this.mutate(k, (cur) => ({ ...cur, state: "completed" }));
         this.log(`job ${session.jobId} completed; the escrow paid this provider`);
         await this.checkQuoted();
         await this.retryRefunds();
@@ -479,8 +478,13 @@ export class PrivatePayoutProvider {
       if (!j.expiredAt || Number(j.expiredAt) * 1000 > Date.now()) continue;
       const f = await this.funding(chainId, j);
       if (f.funded === null || (f.funded && f.received === null)) continue;
-      this.journal.put(k, { ...j, state: "expired", funded: f.funded, fundingUnknown: undefined, ...(f.funded ? { receivedRaw: f.received!.toString() } : {}), refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] });
-      this.log(`job ${j.jobId}: expired ${f.funded ? "after it was funded; its principal goes back" : "without being funded"}`);
+      // Written only if the job is still where it was when the lookup started (job.expired may have run meanwhile).
+      const wrote = await this.mutate(k, (cur) =>
+        cur.funded || !ACTIVE.has(cur.state)
+          ? null
+          : { ...cur, state: "expired", funded: f.funded!, fundingUnknown: undefined, ...(f.funded ? { receivedRaw: f.received!.toString() } : {}), refundedRaw: cur.refundedRaw ?? "0", refundTxs: cur.refundTxs ?? [] }
+      );
+      if (wrote?.state === "expired") this.log(`job ${j.jobId}: expired ${f.funded ? "after it was funded; its principal goes back" : "without being funded"}`);
     }
   }
 
@@ -625,19 +629,20 @@ export class PrivatePayoutProvider {
     if (why) {
       // Funded on chain but not payable (blocked), or funded then rejected or expired before this ran:
       // the principal arrived, stays reserved, and onEnded sends back what did not leave the float.
-      let next: JournalJob = { ...j, blocked: why };
-      if (FUNDED_ON_CHAIN.has(onChain.status)) next = { ...next, funded: true, fundingUnknown: undefined };
+      let patch: Partial<JournalJob> = { blocked: why };
+      if (FUNDED_ON_CHAIN.has(onChain.status)) patch = { ...patch, funded: true, fundingUnknown: undefined };
       else if (!j.funded && j.mode === "fund-transfer" && (onChain.status === ACP_STATUS.rejected || onChain.status === ACP_STATUS.expired)) {
         const f = await this.funding(session.chainId, j);
-        next = { ...next, funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
+        patch = { ...patch, funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
       }
-      this.journal.put(k, next);
+      // Funded is only ever learned, never unlearned: a copy that knew it was funded is not overwritten.
+      await this.mutate(k, (cur) => ({ ...cur, ...patch, funded: Boolean(cur.funded || patch.funded), ...(cur.funded ? { fundingUnknown: undefined } : {}) }));
       this.log(`job ${session.jobId}: not paying: ${why}`);
       return;
     }
     const upgraded = await this.acpUpgraded(session.chainId);
     if (upgraded) {
-      this.journal.put(k, { ...j, funded: true, fundingUnknown: undefined, blocked: upgraded });
+      await this.mutate(k, (cur) => ({ ...cur, funded: true, fundingUnknown: undefined, blocked: upgraded }));
       this.log(`job ${session.jobId}: not paying: ${upgraded}`);
       return;
     }
@@ -645,7 +650,7 @@ export class PrivatePayoutProvider {
     let received = j.receivedRaw !== undefined ? BigInt(j.receivedRaw) : null;
     if (j.mode === "fund-transfer" && received === null) received = (await this.funding(session.chainId, j)).received;
     if (j.mode === "fund-transfer" && received === null) {
-      this.journal.put(k, { ...j, funded: true, blocked: "could not read what the funding moved yet" });
+      await this.mutate(k, (cur) => ({ ...cur, funded: true, fundingUnknown: undefined, blocked: "could not read what the funding moved yet" }));
       this.log(`job ${session.jobId}: funded, but what the funding moved could not be read yet; not paying (tried again on the next event or resume)`);
       return;
     }
@@ -653,13 +658,13 @@ export class PrivatePayoutProvider {
     const total = j.payouts.reduce((sum, p) => sum + parseUnits(p.amount, a.decimals), 0n);
     if (j.mode === "fund-transfer" && received! < total) {
       const why2 = `the client's funding moved ${formatUnits(received!, a.decimals)} ${a.symbol}, less than the ${formatUnits(total, a.decimals)} ${a.symbol} of payouts`;
-      this.journal.put(k, { ...j, funded: true, receivedRaw: received!.toString(), blocked: why2 });
+      await this.mutate(k, (cur) => ({ ...cur, funded: true, fundingUnknown: undefined, receivedRaw: received!.toString(), blocked: why2 }));
       await session.sendMessage(`Not paying: ${why2}. What arrived goes back when the job ends.`).catch(() => undefined);
       this.log(`job ${session.jobId}: not paying: ${why2}`);
       return;
     }
-    const jf: JournalJob = { ...j, funded: true, ...(received !== null ? { receivedRaw: received.toString() } : {}), blocked: undefined };
-    this.journal.put(k, jf);
+    const jf = await this.mutate(k, (cur) => ({ ...cur, funded: true, fundingUnknown: undefined, ...(received !== null ? { receivedRaw: received.toString() } : {}), blocked: undefined }));
+    if (!jf || !ACTIVE.has(jf.state)) return;
     await this.payAll(session, jf);
   }
 
@@ -809,13 +814,18 @@ export class PrivatePayoutProvider {
     this.log(`job ${session.jobId} ${how}${session.job ? ` (client ${short(session.job.clientAddress)})` : ""}`);
     if (!j || j.state === "submitted" || j.state === "completed") return;
     if (j.state !== "rejected" && j.state !== "expired") {
-      let next: JournalJob = { ...j, state: how, refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] };
+      let patch: Partial<JournalJob> = {};
       if (!j.funded && j.mode === "fund-transfer") {
         // An RPC that cannot answer now is asked again later: never read as "not funded".
         const f = await this.funding(session.chainId, j);
-        next = { ...next, funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
+        patch = { funded: f.funded === true, fundingUnknown: f.funded === null ? true : undefined, ...(f.funded && f.received !== null ? { receivedRaw: f.received.toString() } : {}) };
       }
-      this.journal.put(k, next);
+      // Read again right before the write: a round may have ended it and counted a refund meanwhile.
+      await this.mutate(k, (cur) =>
+        cur.state === "rejected" || cur.state === "expired" || cur.state === "submitted" || cur.state === "completed"
+          ? null
+          : { ...cur, ...patch, state: how, funded: Boolean(cur.funded || patch.funded), ...(cur.funded ? { fundingUnknown: undefined } : {}), refundedRaw: cur.refundedRaw ?? "0", refundTxs: cur.refundTxs ?? [] }
+      );
     }
     await this.retryRefunds([k]);
   }
@@ -829,6 +839,24 @@ export class PrivatePayoutProvider {
   retryRefunds(keys?: string[]): Promise<void> {
     const run = this.refunds.then(() => this.refundRound(keys));
     this.refunds = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Change a job's journal entry in turn with the refund rounds: the entry is read
+   * again right before the write, so a change made meanwhile (a refund counted, a
+   * state moved on) is never written over with an older copy. `change` returns
+   * null to leave it as it is.
+   */
+  private mutate(k: string, change: (cur: JournalJob) => JournalJob | null): Promise<JournalJob | undefined> {
+    const run = this.refunds.then(() => {
+      const cur = this.journal.get(k);
+      if (!cur) return undefined;
+      const next = change(cur);
+      if (next) this.journal.put(k, next);
+      return next ?? cur;
+    });
+    this.refunds = run.then(() => undefined, () => undefined);
     return run;
   }
 
@@ -959,23 +987,39 @@ export class PrivatePayoutProvider {
   }
 
   /**
-   * Settle a refund that waits for the owner: `tx` is a transaction the owner
-   * found that sent it (counted only if it shows the provider's transfer of that
-   * amount to the client), or `notSent` when the owner is sure nothing went out
-   * (the next round sends it).
+   * Settle a refund that waits for the owner.
+   *
+   * `tx`: a transaction the owner found that sent it. It counts only if it shows
+   * the provider's transfer of that amount to the client, is not already counted
+   * for any job, and, when this refund's own transaction was recorded, is that
+   * transaction.
+   *
+   * `notSent`: the owner is sure nothing went out, and the next round sends it.
+   * Refused while a transaction is recorded for this refund, unless the chain
+   * shows that transaction final without the transfer. acp-node-v2 signs each
+   * user operation with a random nonce key, so an operation that was handed to a
+   * bundler can still land later and nobody can prove it was not sent: use
+   * `notSent` only for a refund whose answer was lost before any transaction
+   * came back, and only when the wallet's history shows nothing.
    */
   async resolveRefund(chainId: number, jobId: string, how: { tx: Hex } | { notSent: true }): Promise<JournalJob> {
     const run = this.refunds.then(async () => {
       const k = `${chainId}:${jobId}`;
       const j = this.journal.get(k);
       if (!j?.refundPending) throw new Error(`Job ${jobId} has no refund waiting.`);
+      const raw = BigInt(j.refundPending.raw);
+      const recorded = j.refundPending.tx;
       if ("notSent" in how) {
+        if (recorded && (await this.refundLanded(j, raw, recorded)) !== "failed") {
+          throw new Error(`The refund was sent as ${recorded}, and the chain does not show it final without the transfer. It may still land, so it is not sent again.`);
+        }
         this.journal.put(k, { ...j, refundPending: undefined, needsOwner: undefined });
         return;
       }
-      const raw = BigInt(j.refundPending.raw);
+      const counted = this.journal.all().some(([, other]) => (other.refundTxs ?? []).some((t) => lower(t) === lower(how.tx)));
+      if (counted) throw new Error(`${how.tx} is already counted as a refund.`);
+      if (recorded && lower(recorded) !== lower(how.tx)) throw new Error(`This refund was sent as ${recorded}; only that transaction settles it.`);
       if ((await this.refundLanded(j, raw, how.tx)) !== "landed") throw new Error(`${how.tx} does not show this provider sending ${raw} to the client.`);
-      if ((j.refundTxs ?? []).includes(how.tx)) throw new Error(`${how.tx} is already counted.`);
       const refunded = BigInt(j.refundedRaw ?? "0") + raw;
       const due = BigInt(j.refundDueRaw ?? "0");
       this.journal.put(k, {
