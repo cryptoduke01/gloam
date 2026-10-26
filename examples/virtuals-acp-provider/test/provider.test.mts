@@ -7,7 +7,7 @@ import { BASE_SEPOLIA_USDC, generateReceiveKey, openSealedTicket, type ReceiveKe
 import { NO_EVALUATOR } from "../src/acp.ts";
 import { OFFERING_NAME, PRIVATE_PAYOUT_OFFERING, RequirementError, buildPayoutRequirement, parseRequirement } from "../src/offering.ts";
 import { DELIVERABLE_TYPE } from "../src/provider.ts";
-import { ACP_STATUS, CLIENT, FakeAcp, FakeSession, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
+import { ACP_STATUS, CLIENT, FakeAcp, FakeSession, PROVIDER, fakeWallet, funded, providerFor, rejected, requirementEntry } from "./fakes.mts";
 
 let keys: ReceiveKey[] = [];
 async function key() {
@@ -148,7 +148,7 @@ test("a client that rejects a funded job gets its principal back and nothing is 
   const acp = new FakeAcp();
   const { wallet, paid } = fakeWallet(pk, acp);
   const refunds: [string, string, bigint][] = [];
-  const p = providerFor(wallet, { refund: async (to, token, raw) => (refunds.push([to, token, raw]), "0xrefund") });
+  const p = providerFor(wallet, { refund: async (to, token, raw) => (refunds.push([to, token, raw]), acp.sent(PROVIDER, to, raw)) });
   const s = new FakeSession("13", acp);
   await p.onEntry(s, requirementEntry("13", { payouts: [{ to: r1.tag, amount: "4" }] }));
   s.fund();
@@ -160,7 +160,7 @@ test("a client that rejects a funded job gets its principal back and nothing is 
   assert.equal(paid.length, 0);
   assert.deepEqual(refunds, [[CLIENT, BASE_SEPOLIA_USDC, 4_000_000n]]);
   assert.equal(p.status(84532, "13")?.state, "rejected");
-  assert.equal(p.status(84532, "13")?.refundTx, "0xrefund");
+  assert.equal(p.status(84532, "13")?.refundTx, acp.transfers[0]?.transactionHash, "counted from its own transaction on chain");
   // A job rejected before it was ever funded owes nothing back.
   const s2 = new FakeSession("17", acp);
   await p.onEntry(s2, requirementEntry("17", { payouts: [{ to: r1.tag, amount: "4" }] }));

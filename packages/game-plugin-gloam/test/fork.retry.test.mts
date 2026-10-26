@@ -204,6 +204,7 @@ test("two jobs paying the same payee, amount and note are two payments: the seco
   const first = await alice.pay({ to: bobTag, amount: "3", note: "inv-9", label: "acp 84532:500 payout 1" });
   assert.equal(first.status, "unconfirmed");
   await fork.client.waitForTransactionReceipt({ hash: await fork.client.sendRawTransaction({ serializedTransaction: state.held[0]! }) });
+  await alice.refresh();
   const second = await alice.pay({ to: bobTag, amount: "3", note: "inv-9", label: "acp 84532:501 payout 1" });
   assert.equal(second.status, "done", JSON.stringify(second));
   assert.notEqual(second.payment, first.payment, "job 501 has its own payment");

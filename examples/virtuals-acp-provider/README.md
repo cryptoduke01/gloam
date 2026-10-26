@@ -105,10 +105,13 @@ Other rules the provider keeps:
   go back.
 - A refund counts what arrived minus what certainly left the float. A payout
   that may have gone out is held back from the refund until it settles. Each
-  refund is written down before it is sent; one whose answer is lost is looked
-  for on chain (the token's Transfer to the client) and sent again only an hour
-  later with nothing found. Refund rounds run one at a time, on each job end
-  and before each earnings sweep. A funding lookup the RPC cannot answer is
+  refund is written down before it is sent, and counts only once its own
+  transaction is on chain with the provider's transfer to the client in it; its
+  amount stays reserved until then. One whose answer is lost is never sent
+  again on its own: it waits for the owner (`refundsNeedingOwner()`, then
+  `resolveRefund(chainId, jobId, { tx })` with the transaction that sent it, or
+  `{ notSent: true }`). Refund rounds run one at a time, on each job end and
+  before each earnings sweep. A funding lookup the RPC cannot answer is
   asked again, never read as "not funded", and a job funded on chain keeps its
   principal reserved even when it was blocked from paying.
 - A job on a chain other than the provider's is refused.

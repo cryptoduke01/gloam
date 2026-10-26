@@ -51,8 +51,9 @@
  * never sent again: the provider looks for it in its own note store and on
  * chain (by the payout's label) and carries on only once it is settled; after
  * an hour it is cancelled on chain so it can never land. A refund counts what
- * arrived minus what left the float, is written down before it is sent, and
- * one whose answer was lost is looked for on chain before it is sent again.
+ * arrived minus what left the float, is written down before it is sent, counts
+ * only once its own transaction shows the transfer to the client, and one whose
+ * answer was lost waits for the owner instead of being sent again.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -138,11 +139,15 @@ export type JournalJob = {
   refundTxs?: string[];
   refundError?: string;
   /**
-   * A refund written down before it was sent: when its answer is lost it is
-   * looked for on chain (the token's Transfer to the client) before anything
-   * is sent again, and only an hour on with nothing found is it sent again.
+   * A refund written down before it was sent, then its transaction. It counts
+   * only once that transaction is on chain with the provider's own transfer to
+   * the client in it; until then its amount stays reserved. One whose answer was
+   * lost (no hash) is never sent again on its own: `needsOwner` says why, and
+   * the owner settles it with resolveRefund().
    */
-  refundPending?: { raw: string; at: string; fromBlock?: string };
+  refundPending?: { raw: string; at: string; tx?: string; lost?: boolean };
+  /** Why a refund waits for the owner (its answer was lost, or it has not landed in an hour). */
+  needsOwner?: string;
   /** Principal still owed back to the client, in the asset's units. */
   refundOwed?: string;
   /** The last refund transaction. */
@@ -205,11 +210,12 @@ export interface PrivatePayoutProviderOptions {
   journalPath?: string;
   /**
    * Sends unpaid principal back to a client whose job ended before it was paid
-   * out. Resolve with the transaction hash once it is broadcast. Each refund is
-   * written down before it is sent: one that throws is looked for on chain (the
-   * token's Transfer to the client) and sent again only an hour later with
-   * nothing found, or at once when the error says nothing was sent (NotSentError,
-   * or `notSent: true`). Without it, the journal records what is owed.
+   * out. Resolve with the transaction hash. Each refund is written down before
+   * it is sent and counts only once that transaction is on chain with the
+   * provider's own transfer to the client in it (its amount stays reserved until
+   * then). One that throws is never sent again on its own, unless the error says
+   * nothing was sent (NotSentError, or `notSent: true`): it waits for the owner
+   * (refundsNeedingOwner, resolveRefund). Without it, the journal records what is owed.
    */
   refund?: (client: Address, token: Address, rawAmount: bigint) => Promise<string>;
   /** Adds received money to the private balance once a job completes (never principal still owed to a client). */
@@ -768,17 +774,26 @@ export class PrivatePayoutProvider {
     return run;
   }
 
-  /** A refund to this client of exactly `raw`, sent since `fromBlock` and not counted yet: its hash, null for none, undefined when the chain could not say. */
-  private async findRefund(j: JournalJob, raw: bigint, fromBlock: string | undefined, counted: string[]): Promise<string | null | undefined> {
-    const us = this.opts.providerAddress ?? this.opts.wallet.walletAddress;
-    if (!us) return undefined;
+  /**
+   * Whether a refund's own transaction moved `raw` of the asset from this
+   * provider to the client: "landed", "failed" (on chain without that transfer:
+   * reverted, or an operation that reverted inside a smart account; nothing
+   * moved and it cannot land later), or null when the chain cannot say yet.
+   */
+  private async refundLanded(j: JournalJob, raw: bigint, tx: string): Promise<"landed" | "failed" | null> {
+    const us = lower(this.opts.providerAddress ?? this.opts.wallet.walletAddress ?? "");
+    const token = lower(this.asset().address);
+    let receipt: Awaited<ReturnType<AcpChainReader["getTransactionReceipt"]>>;
     try {
-      const logs = await this.logsSince(this.asset().address, ERC20_TRANSFER_EVENT, { from: us, to: j.client }, fromBlock ?? j.quotedAtBlock);
-      const hit = logs.find((l) => BigInt((l.args as { value?: bigint } | undefined)?.value ?? -1n) === raw && l.transactionHash && !counted.includes(l.transactionHash));
-      return hit?.transactionHash ?? null;
+      receipt = await this.reader().getTransactionReceipt({ hash: tx as Hex });
     } catch {
-      return undefined;
+      return null;
     }
+    if (receipt.status !== "success") return "failed";
+    const moved = parseEventLogs({ abi: [ERC20_TRANSFER_EVENT], logs: receipt.logs as never }).some(
+      (l) => lower(l.address) === token && lower(l.args.from) === us && lower(l.args.to) === lower(j.client) && l.args.value === raw
+    );
+    return moved ? "landed" : "failed";
   }
 
   private async refundRound(keys?: string[]): Promise<void> {
@@ -807,39 +822,61 @@ export class PrivatePayoutProvider {
       const due = received > paid + held ? received - paid - held : 0n;
       let refunded = BigInt(j.refundedRaw ?? "0");
       const txs = [...(j.refundTxs ?? [])];
-      let refundError: string | undefined;
+      let refundError = j.refundError;
       let pending = j.refundPending;
-      // A refund sent before whose answer was lost: found on chain before anything is sent again.
-      if (pending) {
-        const found = await this.findRefund(j, BigInt(pending.raw), pending.fromBlock, txs);
-        if (found) {
+      let needsOwner = j.needsOwner;
+      // A refund sent before: it counts only once its own transaction shows the transfer to the client.
+      if (pending?.tx) {
+        const r = await this.refundLanded(j, BigInt(pending.raw), pending.tx);
+        if (r === "landed") {
           refunded += BigInt(pending.raw);
-          txs.push(found);
+          txs.push(pending.tx);
+          this.log(`job ${j.jobId}: the refund ${pending.tx} is on chain`);
           pending = undefined;
-          this.log(`job ${j.jobId}: the refund whose answer was lost landed (${found})`);
-        } else if (found === null && Date.now() - Date.parse(pending.at) > HOUR_MS) {
-          pending = undefined; // an hour and nothing on chain: it never went out
+          needsOwner = undefined;
+        } else if (r === "failed") {
+          this.log(`job ${j.jobId}: the refund ${pending.tx} is on chain without the transfer to the client; nothing moved, so it is sent again`);
+          pending = undefined;
+          needsOwner = undefined;
+        } else if (Date.now() - Date.parse(pending.at) > HOUR_MS) {
+          needsOwner = `The refund ${pending.tx} has not shown up on chain in an hour. It is not sent again: check it, then call resolveRefund.`;
         }
+      } else if (pending?.lost) {
+        needsOwner ??= "The refund's answer was lost, so it may or may not have gone out. It is not sent again: check the wallet's history, then call resolveRefund.";
       }
       const owed = due > refunded ? due - refunded : 0n;
       if (owed > 0n && !pending && this.opts.refund) {
-        const head = await this.reader().getBlockNumber().catch(() => null);
-        pending = { raw: owed.toString(), at: new Date().toISOString(), ...(head !== null ? { fromBlock: (head > 2n ? head - 2n : 0n).toString() } : {}) };
-        // Written down before it is sent, so a lost answer is looked for, never sent twice.
+        const started = { raw: owed.toString(), at: new Date().toISOString() };
+        pending = started;
+        // Written down before it is sent, so a lost answer is never read as "not sent".
         this.journal.put(k, { ...j, results, refundPending: pending });
         try {
           const tx = await this.opts.refund(j.client as Address, a.address, owed);
-          refunded += owed;
-          txs.push(tx);
-          pending = undefined;
-          this.log(`job ${j.jobId}: ${formatUnits(owed, a.decimals)} ${a.symbol} of the client's principal was not paid out; sent back (${tx})`);
+          pending = { ...started, tx };
+          refundError = undefined;
+          this.journal.put(k, { ...j, results, refundPending: pending });
+          const r = await this.refundLanded(j, owed, tx);
+          if (r === "landed") {
+            refunded += owed;
+            txs.push(tx);
+            pending = undefined;
+            this.log(`job ${j.jobId}: ${formatUnits(owed, a.decimals)} ${a.symbol} of the client's principal was not paid out; sent back (${tx})`);
+          } else if (r === "failed") {
+            pending = undefined;
+            refundError = `The refund ${tx} is on chain without the transfer to the client.`;
+            this.log(`job ${j.jobId}: ${refundError} It is sent again on the next round.`);
+          } else {
+            this.log(`job ${j.jobId}: the refund ${tx} is sent; it counts once it shows up on chain`);
+          }
         } catch (e) {
           refundError = safeErrorMessage(e);
           if (isNotSent(e)) {
             pending = undefined; // certainly not sent: tried again on the next round
             this.log(`job ${j.jobId}: the refund was not sent (${refundError}); it is tried again on the next round`);
           } else {
-            this.log(`job ${j.jobId}: the refund's answer was lost (${refundError}); it is looked for on chain before it is sent again`);
+            pending = { ...started, lost: true };
+            needsOwner = "The refund's answer was lost, so it may or may not have gone out. It is not sent again: check the wallet's history, then call resolveRefund.";
+            this.log(`job ${j.jobId}: the refund's answer was lost (${refundError}); held for the owner, not sent again`);
           }
         }
       } else if (owed > 0n && !this.opts.refund) {
@@ -857,9 +894,54 @@ export class PrivatePayoutProvider {
         refundOwed: formatUnits(left, a.decimals),
         ...(txs.length ? { refundTx: txs[txs.length - 1] } : {}),
         refundPending: pending,
+        needsOwner,
         refundError,
       });
     }
+  }
+
+  /**
+   * Settle a refund that waits for the owner: `tx` is a transaction the owner
+   * found that sent it (counted only if it shows the provider's transfer of that
+   * amount to the client), or `notSent` when the owner is sure nothing went out
+   * (the next round sends it).
+   */
+  async resolveRefund(chainId: number, jobId: string, how: { tx: Hex } | { notSent: true }): Promise<JournalJob> {
+    const run = this.refunds.then(async () => {
+      const k = `${chainId}:${jobId}`;
+      const j = this.journal.get(k);
+      if (!j?.refundPending) throw new Error(`Job ${jobId} has no refund waiting.`);
+      if ("notSent" in how) {
+        this.journal.put(k, { ...j, refundPending: undefined, needsOwner: undefined });
+        return;
+      }
+      const raw = BigInt(j.refundPending.raw);
+      if ((await this.refundLanded(j, raw, how.tx)) !== "landed") throw new Error(`${how.tx} does not show this provider sending ${raw} to the client.`);
+      if ((j.refundTxs ?? []).includes(how.tx)) throw new Error(`${how.tx} is already counted.`);
+      const refunded = BigInt(j.refundedRaw ?? "0") + raw;
+      const due = BigInt(j.refundDueRaw ?? "0");
+      this.journal.put(k, {
+        ...j,
+        refundedRaw: refunded.toString(),
+        refundTxs: [...(j.refundTxs ?? []), how.tx],
+        refundTx: how.tx,
+        refundOwed: formatUnits(due > refunded ? due - refunded : 0n, this.asset().decimals),
+        refundPending: undefined,
+        needsOwner: undefined,
+      });
+    });
+    this.refunds = run.catch(() => undefined);
+    await run;
+    await this.retryRefunds([`${chainId}:${jobId}`]);
+    return this.journal.get(`${chainId}:${jobId}`)!;
+  }
+
+  /** Refunds waiting for the owner, with why. */
+  refundsNeedingOwner() {
+    return this.journal
+      .all()
+      .filter(([, j]) => j.needsOwner)
+      .map(([, j]) => ({ chainId: j.chainId, jobId: j.jobId, client: j.client, amount: j.refundPending ? formatUnits(BigInt(j.refundPending.raw), this.asset().decimals) : null, tx: j.refundPending?.tx ?? null, why: j.needsOwner! }));
   }
 
   /**
