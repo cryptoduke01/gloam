@@ -144,8 +144,11 @@ export function useLocalShieldNotes(address?: string | null) {
 
   useEffect(() => {
     let cancelled = false;
-    // Show any legacy plaintext immediately, then decrypt the vault and re-read.
-    refreshLocal();
+    // Show any legacy plaintext at once (on the next microtask, so the effect
+    // body itself sets no state), then decrypt the vault and re-read.
+    void Promise.resolve().then(() => {
+      if (!cancelled) refreshLocal();
+    });
     void unlockNoteVault().then(() => {
       if (cancelled) return;
       refreshLocal();
@@ -157,7 +160,8 @@ export function useLocalShieldNotes(address?: string | null) {
   }, [refreshLocal]);
 
   useEffect(() => {
-    void syncChain();
+    // Start on the next microtask so the effect body itself sets no state.
+    void Promise.resolve().then(() => syncChain());
   }, [syncChain]);
 
   useEffect(() => {
