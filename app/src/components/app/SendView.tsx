@@ -401,7 +401,7 @@ export function SendView() {
               onClick={() => setShowPreview(false)}
             />
             <div className="relative z-[1] max-h-[min(90dvh,640px)] w-full max-w-[400px] overflow-y-auto rounded-[24px] bg-panel p-6 shadow-pop sm:p-8">
-              <p className="t-label">Review</p>
+              <p className="t-eyebrow">Review</p>
               <h2
                 id="send-review-title"
                 className="mt-2 text-[28px] font-light leading-[1.12] tracking-[-0.018em] text-foreground"

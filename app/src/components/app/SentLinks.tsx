@@ -220,7 +220,7 @@ export function SentLinks({
           aria-controls="sent-links-body"
           className="-my-2 flex min-h-10 items-center gap-2 text-left"
         >
-          <span id="sent-links-title" className="t-label">
+          <span id="sent-links-title" className="t-eyebrow">
             Sent links
           </span>
           {count > 0 && <span className="tnum text-[12px] text-faint">{count}</span>}
