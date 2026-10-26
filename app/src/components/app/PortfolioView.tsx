@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -7,7 +8,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
-import { SwapToStableButton } from "./BridgeIn";
 import { faucetFor } from "@/lib/faucet";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
@@ -46,6 +46,10 @@ import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
 import { bridgeVisible } from "@/lib/bridge";
 import { addAssetHref, pickAddAsset } from "@/lib/vaultHub";
+
+// The swap sheet is most of the bridge code and brings the animation library;
+// it loads after the page, for the one row that offers it.
+const SwapToStableButton = dynamic(() => import("./BridgeIn").then((m) => m.SwapToStableButton), { ssr: false });
 
 /* Small marks that carry the public / private duality. */
 function LockIcon({ className = "" }: { className?: string }) {
