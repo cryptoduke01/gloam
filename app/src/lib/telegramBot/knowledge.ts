@@ -260,7 +260,7 @@ REPORTING BUGS AND WHERE TO GO
  * The chains that went live on 21 October with a pool in: Robinhood Chain and
  * Tempo. Base came after, so it is never named as part of that launch.
  */
-function launchNames(): string {
+export function launchNames(): string {
   const names = [mainnetPool(4663) ? "Robinhood Chain" : null, mainnetPool(4217) ? "Tempo" : null].filter(Boolean);
   return names.length ? names.join(" and ") : "Robinhood Chain and Tempo";
 }
@@ -308,7 +308,7 @@ function ethereumFacts(): string | null {
 }
 
 /** The mainnets that joined after the 21 October launch, with a pool in: "Base", "Base and Ethereum". */
-function laterMainnets(): string[] {
+export function laterMainnets(): string[] {
   return [mainnetPool(8453) ? "Base" : null, mainnetPool(1) ? "Ethereum" : null].filter((n): n is string => n !== null);
 }
 
@@ -354,7 +354,7 @@ function mainnetLiveFacts(): string {
     "- On mainnet, a plain payment code or claim link works like cash: anyone who sees it can claim it. Send it privately to the one person, or pay their Gloam address so the payment is sealed to them.",
     "- Fees on mainnet: adding money and private payments are free; a cash out costs 0.25% of its amount, shown before you confirm. A private swap pays the same 0.25% plus its price buffer (see PRIVATE SWAPS). Partner API fees are not charged yet. Cash outs and private payments are never limited.",
     "- Security: Gloam had an internal review before launch, finished on 20 October 2026 with no Critical or High findings open. An external audit is planned and has not been done, so never say Gloam is audited. Mainnet is beta software: say so plainly when someone asks if it is safe.",
-    "- At launch the owner and the fee wallet are one wallet; the cash-out fees are moving to a dedicated treasury wallet, a change that waits the public three-day timelock (a multisig is planned). The Gloam team runs the relay. The relay only submits payments already proven in the browser and pays their network fee; it cannot move or redirect money. Raising limits, adding assets or changing where fees go waits a public three-day timelock; the owner can lower limits or close deposits at once.",
+    "- The owner is one wallet (a multisig is planned). Since 24 October the cash-out fees go to Gloam's own treasury wallet, a change that waited out the public three-day timelock. The Gloam team runs the relay. The relay only submits payments already proven in the browser and pays their network fee; it cannot move or redirect money. Raising limits, adding assets or changing where fees go waits a public three-day timelock; the owner can lower limits or close deposits at once.",
     "- The mainnet vaults are new, so their crowd is still small: treat privacy there as weaker for now too.",
     "",
     "MAINNET QUICK START",
@@ -393,7 +393,7 @@ function mainnetLiveFacts(): string {
       : "- The swap routers have no owner, no admin and no upgrade, and the vault itself did not change. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps.",
     "",
     "BUYBACKS (the current state; overrides any line below)",
-    "- Buybacks have not started yet. Cash-out fees switched on with mainnet. Before the first buyback, the fees move to their own treasury wallet so every buyback can be followed on-chain; that change waits a public three-day timelock on the contracts. After it, buybacks run on a regular schedule and the team posts each one's transaction. Half of Gloam's fees are set to buy $GLOAM; half of what is bought is burned, half goes to the treasury. Never give a buyback date, amount or size, and never say buybacks are live.",
+    "- Buybacks have not started yet. Cash-out fees switched on with mainnet, and since 24 October they go to their own treasury wallet, so every buyback can be followed on-chain. Buybacks will run on a regular schedule and the team posts each one's transaction. Half of Gloam's fees are set to buy $GLOAM; half of what is bought is burned, half goes to the treasury. Never give a buyback date, amount or size, and never say buybacks are live.",
     "",
     "CLAIM LINKS ON MAINNET",
     "- To claim: open the link, connect a wallet on the chain it names (Robinhood Chain for most), and tap Claim and secure. Or open Vault > Pay > Receive and paste it under Claim a payment: the box takes the whole link, the code alone, or a message with the link in it.",
@@ -422,7 +422,7 @@ function liveSwaps(): [string, string][] {
   return [
     [
       "- The app is on testnet for now, with development proving keys. Mainnet is coming on both Tempo and Robinhood Chain. The trusted-setup ceremony for mainnet is done (13 contributors). Mainnet goes live on Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT), on both Tempo and Robinhood Chain. The live countdown is at gloam.trade/mainnet: when someone asks when mainnet is, give the time in UTC and send them there. That is the only date and time you may give. Never give any other, and never say mainnet is live until the team announces it; until then the app is testnet. Launch news comes in Announcements and on X @gloamtrade.",
-      `- Mainnet is live on ${launch}, since Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT)${later.length ? `, and on ${later.join(" and ")} since later (see ${later.map((n) => n.toUpperCase()).join(" and ")})` : ""}, with the trusted setup's final keys (13 contributors). The testnets stay open with development proving keys. Never give or guess any other date. Launch news comes in Announcements and on X @gloamtrade.`,
+      `- Mainnet is live on ${launch}, since Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT)${later.length ? `, and on ${later.join(" and ")}, which joined later (see ${later.map((n) => n.toUpperCase()).join(" and ")})` : ""}, with the trusted setup's final keys (13 contributors). The Robinhood Chain and Tempo testnets stay open with development proving keys. Never give or guess any other date. Launch news comes in Announcements and on X @gloamtrade.`,
     ],
     [
       "The app itself is still on testnet; the token is not a testnet token.",
@@ -431,8 +431,8 @@ function liveSwaps(): [string, string][] {
     [
       "$GLOAM listed in the mainnet pool, ready for deploy. Next (mainnet): Gloam goes live on Tempo and Robinhood Chain mainnet; shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees switch on and half of them start buying back $GLOAM; the first holder vote, in the open.",
       rh
-        ? `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees on; $GLOAM listed on CoinGecko. Next: fees move to a dedicated treasury wallet and buybacks start; the first holder vote, in the open.`
-        : `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); fees on; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees move to a dedicated treasury wallet and buybacks start; the first holder vote, in the open.`,
+        ? `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: buybacks start; the first holder vote, in the open.`
+        : `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); buybacks start; the first holder vote, in the open.`,
     ],
     ["gloam.trade/app (the testnet app)", "gloam.trade/app (the app: mainnet and testnet)"],
     // fees, the relay and what you can do read as now, not as "at mainnet"
