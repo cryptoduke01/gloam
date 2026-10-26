@@ -1976,7 +1976,6 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     if (!(await verifyChallengeId(ch, secret))) {
       return reject("The challenge in this credential was not issued by this server, or was changed.", { problem: "invalid-challenge" });
     }
-    if (isExpired(ch)) return reject("The challenge has expired.", { problem: "payment-expired" });
     let request: GloamChargeRequest;
     try {
       request = parseGloamChargeRequest(ch.request);
@@ -2006,22 +2005,32 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
     // A challenge settles one payment: another payment for a challenge already used is refused before it is swept.
     const challengeTag = `(mpp ${ch.id})`;
+    const label = `${ch.description ?? ch.realm} ${challengeTag}`;
+    const mppRef = { challengeId: ch.id, ...(request.externalId !== undefined ? { externalId: request.externalId } : {}) };
     // Swept by this server already? Ask before the chain checks, which would only see a spent note.
+    let early: { note: NoteExport; nullifier: Hex; mode: "push" | "pull" } | null = null;
     try {
-      const early = await openGloamPaymentNote(parseGloamChargePayload(cred.payload).ticket, receiveKey);
-      const nf = fieldToHex(await noteNullifierPoseidon(hexToField(early.secret), hexToField(early.commitment)));
-      const earlier = notes.list().find((n) => n.sweptFrom?.toLowerCase() === nf.toLowerCase());
-      if (earlier) {
-        return text({
-          status: "already_settled",
-          grantAccess: false,
-          final: false,
-          message: `This payment was already settled by this server (${earlier.handle}). Do not serve it twice.`,
-        });
-      }
+      const payload = parseGloamChargePayload(cred.payload);
+      const note = await openGloamPaymentNote(payload.ticket, receiveKey);
+      const nullifier = fieldToHex(await noteNullifierPoseidon(hexToField(note.secret), hexToField(note.commitment)));
+      early = { note, nullifier, mode: payload.type === "hash" ? "push" : "pull" };
     } catch {
       // The full check below explains what is wrong with it.
     }
+    const recorded = early ? notes.list().filter((n) => n.sweptFrom?.toLowerCase() === early!.nullifier.toLowerCase()) : [];
+    if (early && recorded.length) {
+      // A payment this server took for this challenge: settled from its record whatever the challenge's age, so a
+      // sweep that confirms late, or one swept again after ten minutes, still serves the payer, once.
+      if (!recorded.some((n) => n.label?.endsWith(challengeTag))) {
+        return reject("This payment was made for another challenge from this server, and settles only under that one.", { problem: "invalid-challenge" });
+      }
+      if (!(await verifyPaymentNoteBinding(early.note))) return reject("The payment note's amount does not bind to its commitment.");
+      const { note, nullifier, mode } = early;
+      const verifyView = { ok: true, reason: null, sealed: true, amountWei: note.amountWei, asset: note.asset, mode };
+      return settleReceived({ net, notes, note, paymentNullifier: nullifier, label, sealed: true, verifyView, mpp: mppRef });
+    }
+    // No payment recorded for it: an expired challenge is refused.
+    if (isExpired(ch)) return reject("The challenge has expired.", { problem: "payment-expired" });
     const usedBy = notes.list().find((n) => n.origin === "received" && n.label?.endsWith(challengeTag));
     if (usedBy) {
       return reject(`This challenge was already paid and used (${usedBy.handle}). The payer should request the resource again for a fresh challenge.`, {
@@ -2058,11 +2067,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       notes,
       note: v.note,
       paymentNullifier: v.paymentNullifier,
-      label: `${ch.description ?? ch.realm} ${challengeTag}`,
+      label,
       sealed: true,
       verifyView,
       ...(v.mode === "pull" && !v.landed ? { pull: v.transfer } : {}),
-      mpp: { challengeId: ch.id, ...(request.externalId !== undefined ? { externalId: request.externalId } : {}) },
+      mpp: mppRef,
     });
   }
 
