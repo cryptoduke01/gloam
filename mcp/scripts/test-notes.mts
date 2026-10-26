@@ -1350,7 +1350,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(payee.count.sweeps, 1, `one sweep sent: ${JSON.stringify({ statuses: out.map((v) => v.status), ...payee.count })}`);
   });
 
-  test("a payment whose sweeps never land is swept again at most three times", async () => {
+  test("a payment whose sweeps never land is swept again three times, then only after a wait that doubles", async () => {
     const chain = mockChain();
     const known = new Set<string>();
     let sweeps = 0;
@@ -1370,11 +1370,55 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
     const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
     const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const MIN = 60 * 1000;
     const answers = [];
-    for (let k = 0; k <= 6; k++) answers.push(await later(k * 11 * 60 * 1000, () => S.call("gloam_verify_payment", args)));
-    assert.equal(sweeps, 4, `the first sweep and three more: ${JSON.stringify(answers.map((v) => v.status))}`);
+    for (let k = 0; k <= 6; k++) answers.push(await later(k * 11 * MIN, () => S.call("gloam_verify_payment", args)));
+    assert.equal(sweeps, 4, `the first sweep and three more, ten minutes apart: ${JSON.stringify(answers.map((v) => v.status))}`);
     assert.ok(answers.every((v) => v.grantAccess === false));
-    assert.match(answers.at(-1).error, /not swept again/, JSON.stringify(answers.at(-1)));
+    assert.match(answers.at(-1).message, /swept 4 times/, JSON.stringify(answers.at(-1)));
+    await later(94 * MIN, () => S.call("gloam_verify_payment", args)); // an hour after the fourth
+    assert.equal(sweeps, 5, "then one more an hour later");
+    await later(155 * MIN, () => S.call("gloam_verify_payment", args));
+    assert.equal(sweeps, 5, "and the next waits two hours");
+    await later(215 * MIN, () => S.call("gloam_verify_payment", args));
+    assert.equal(sweeps, 6);
+  });
+
+  test("sweeps that revert are sent again ten minutes apart, and once the cause is fixed the payment is served", async () => {
+    const chain = mockChain();
+    let broken = true;
+    let sweeps = 0;
+    const payeeWallet = {
+      ...chain.walletClient,
+      writeContract: async (call: { functionName: string; args: readonly unknown[] }) => {
+        if (call.functionName !== "transfer") return chain.walletClient.writeContract(call);
+        sweeps++;
+        const args = [...call.args];
+        if (broken) args[1] = `0x${"ee".repeat(32)}`; // say a misconfigured RPC or prover: the sweep reverts
+        const h = await chain.apply("transfer", args);
+        noteBroadcast(h);
+        return h;
+      },
+    };
+    const payeeSigner = (net: unknown) =>
+      ({ account: { address: "0x0000000000000000000000000000000000000abc" }, network: net, walletClient: payeeWallet, publicClient: chain.publicClient }) as unknown as Signer;
+    const { P, S, priced } = await walletParties(chain, chain.walletClient, chain.publicClient, payeeSigner);
+    await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
+    const paid = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    const args = { requirements: priced.encoded, payment: paid.paymentHeader };
+    const MIN = 60 * 1000;
+    const now = [];
+    for (let i = 0; i < 5; i++) now.push((await S.call("gloam_verify_payment", args)).status);
+    assert.equal(sweeps, 1, `one sweep, not one per verify: ${JSON.stringify(now)}`);
+    for (const t of [11, 22, 33, 44]) await later(t * MIN, () => S.call("gloam_verify_payment", args));
+    assert.equal(sweeps, 4, "three more, ten minutes apart, then a wait");
+    broken = false; // the operator fixes it
+    const waiting = await later(50 * MIN, () => S.call("gloam_verify_payment", args));
+    assert.equal(waiting.grantAccess, false);
+    const served = await later(94 * MIN, () => S.call("gloam_verify_payment", args));
+    assert.equal(served.status, "settled", JSON.stringify(served));
+    assert.equal(served.grantAccess, true, "the payment is still swept and served once the cause is fixed");
+    assert.equal((await later(30 * 24 * 60 * MIN, () => S.call("gloam_verify_payment", args))).status, "already_settled");
   });
 
   test("dead notes are checked again less and less often, and not after seven days unless something new is seen", async () => {

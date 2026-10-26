@@ -144,6 +144,9 @@ export function noteStoreKey(env: Env = process.env): { key: Buffer; source: Key
   );
 }
 
+/** Now, from Date.now: the clock every age check reads. */
+const stamp = () => new Date(Date.now()).toISOString();
+
 function newHandle(): string {
   const bytes = randomBytes(10);
   return "n-" + Array.from(bytes, (b) => HANDLE_ALPHABET[b % HANDLE_ALPHABET.length]).join("");
@@ -237,7 +240,7 @@ export class NoteStore {
 
   add(note: NewNote): StoredNote {
     return this.mutate((d) => {
-      const now = new Date().toISOString();
+      const now = stamp();
       let handle = newHandle();
       while (d.notes.some((n) => n.handle === handle)) handle = newHandle();
       const stored: StoredNote = { ...note, handle, createdAt: now, updatedAt: now };
@@ -251,7 +254,7 @@ export class NoteStore {
     return this.mutate((d) => {
       const i = d.notes.findIndex((n) => n.handle === handle);
       if (i < 0) return undefined;
-      const next: StoredNote = { ...d.notes[i]!, ...patch, updatedAt: new Date().toISOString() };
+      const next: StoredNote = { ...d.notes[i]!, ...patch, updatedAt: stamp() };
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
       return next;
@@ -263,7 +266,7 @@ export class NoteStore {
    * reads can come from a node behind; a refresh brings the note back if it shows up.
    */
   markDead(handle: string): StoredNote | undefined {
-    const now = new Date(Date.now()).toISOString(); // the clock deadCheckDue reads
+    const now = stamp();
     return this.update(handle, { status: "dead", deadAt: now, checkedAt: now });
   }
 
@@ -296,7 +299,7 @@ export class NoteStore {
       }
       const why = check(note);
       if (why) throw new Error(why);
-      const next: StoredNote = { ...note, status: "pending", pending: "spend", updatedAt: new Date().toISOString() };
+      const next: StoredNote = { ...note, status: "pending", pending: "spend", updatedAt: stamp() };
       d.notes[i] = next;
       return next;
     });
@@ -326,7 +329,7 @@ export class NoteStore {
         ...(patch.createdTx !== undefined ? { createdTx: patch.createdTx } : {}),
         ...(promote && patch.status ? { status: patch.status } : {}),
         served: true,
-        updatedAt: new Date().toISOString(),
+        updatedAt: stamp(),
       };
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
@@ -356,7 +359,7 @@ export class NoteStore {
     return this.mutate((d) => {
       const held = d.settling?.[key];
       if (held && held.by !== by && processAlive(held.by) && Date.now() - Date.parse(held.at) < staleMs) return false;
-      (d.settling ??= {})[key] = { at: new Date(Date.now()).toISOString(), by };
+      (d.settling ??= {})[key] = { at: stamp(), by };
       return true;
     });
   }
