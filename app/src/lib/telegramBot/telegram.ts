@@ -214,15 +214,28 @@ export async function getChatAdministrators(chatId: number): Promise<number[] | 
  */
 export type ModResult = { ok: boolean; noRights: boolean };
 
-const NO_RIGHTS = /not enough rights|chat_admin_required|have no rights|need administrator rights|message can't be deleted|bot is not an administrator/i;
+const NO_RIGHTS = /not enough rights|chat_admin_required|have no rights|need administrator rights|bot is not an administrator/i;
 /** A message that is already gone (Rose or its author took it down first) counts as deleted. */
 const ALREADY_GONE = /message to delete not found|message_id_invalid/i;
+/** Telegram says this for a message over 48 hours old and for a bot without Delete messages alike. */
+const CANT_DELETE = /message can't be deleted/i;
+
+/** The bot's own Delete messages right in a chat, read only when a delete was refused. Null when Telegram won't say. */
+async function canDelete(chatId: number): Promise<boolean | null> {
+  const me = await getMe();
+  const r = me ? await call<{ status: string; can_delete_messages?: boolean }>("getChatMember", { chat_id: chatId, user_id: me.id }) : null;
+  const m = r?.ok ? r.result : undefined;
+  if (!m) return null;
+  return m.status === "creator" ? true : m.status === "administrator" ? m.can_delete_messages === true : false;
+}
 
 async function modCall(method: string, body: Record<string, unknown>): Promise<ModResult> {
   const r = await call(method, body);
   if (r.ok) return { ok: true, noRights: false };
   const why = r.description ?? "";
   if (method === "deleteMessage" && ALREADY_GONE.test(why)) return { ok: true, noRights: false };
+  // an old message, or no right to delete: the bot's own rights say which
+  if (method === "deleteMessage" && CANT_DELETE.test(why)) return { ok: false, noRights: (await canDelete(Number(body.chat_id))) === false };
   return { ok: false, noRights: NO_RIGHTS.test(why) };
 }
 

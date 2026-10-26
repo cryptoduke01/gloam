@@ -177,6 +177,8 @@ let classifierReply = "HELP";
 let spamReply = '{"spam": false, "category": "none", "confidence": 0.1}';
 /** Telegram refuses deletes, bans and mutes for lack of the admin rights while this is set. */
 let noRights = false;
+/** Telegram refuses deletes as "can't be deleted" (an old message) while the bot does have the right. */
+let oldMessages = false;
 /** Files Telegram would serve, by file_id. */
 const files = new Map<string, Uint8Array>();
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
@@ -214,6 +216,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       if (buyMode === "photoTimeout" && method === "sendPhoto") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
     }
     if (method === "sendMessage") return reply({ ok: true, result: { message_id: nextId++ } });
+    if (oldMessages && method === "deleteMessage") return new Response(JSON.stringify({ ok: false, error_code: 400, description: "Bad Request: message can't be deleted" }), { status: 400 });
     if (noRights && (method === "deleteMessage" || method === "banChatMember" || method === "restrictChatMember")) {
       const description = method === "deleteMessage" ? "Bad Request: message can't be deleted" : "Bad Request: not enough rights to restrict/ban chat member";
       return new Response(JSON.stringify({ ok: false, error_code: 400, description }), { status: 400 });
@@ -221,6 +224,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     if (method === "deleteMessage") return reply({ ok: true, result: true });
     if (method === "banChatMember") return reply({ ok: true, result: true });
     if (method === "restrictChatMember") return reply({ ok: true, result: true });
+    // the bot's own member record: what it may do in the group
+    if (method === "getChatMember") return reply({ ok: true, result: { status: "administrator", user: BOT, can_delete_messages: !noRights, can_restrict_members: !noRights } });
     if (method === "unbanChatMember") return reply({ ok: true, result: true });
     if (method === "sendPhoto") {
       if (photoFails) return reply({ ok: false, description: "Bad Request: wrong file identifier/HTTP URL specified" });
@@ -286,6 +291,7 @@ function reset() {
   classifierReply = "HELP";
   spamReply = '{"spam": false, "category": "none", "confidence": 0.1}';
   noRights = false;
+  oldMessages = false;
   modelFailures = 0;
   photoFails = false;
   buyMode = "ok";
@@ -2828,7 +2834,6 @@ await test("spam: the promoter pitch and the other real examples are deleted and
   await handleUpdate(upd(dm(OWNER, "hi")));
   const cases: [string, string, string][] = [
     ["GUL ceo promoter", PROMOTER_PITCH, "promo"],
-    ["GUL ceo promoter", "Hello team, I have something that will help Gloam grow fast. Who can I talk to?", "promo"],
     ["Kim", "I'm a professional crypto marketer, DM me", "promo"],
     ["Lee", "Need a dev? check my bio", "contact_spam"],
     ["Max", "Gloam support, DM me", "impersonation"],
@@ -2864,6 +2869,15 @@ await test("spam: the promoter pitch and the other real examples are deleted and
     id++;
   }
   assert.ok(String(everySend.filter((x) => x.body.chat_id === OWNER.id).at(-cases.length)?.body.text).startsWith("I removed GUL ceo promoter from the group in General, for promotion or a service pitch."));
+  // a "who can I talk to" pitch is a lead: down, never a ban, and the words go to Duke
+  reset();
+  const ask = inTopic(TOPIC.general, "Hello team, I have something that will help Gloam grow fast. Who can I talk to?", user(4089, "GUL ceo promoter", "gul_promo"));
+  await handleUpdate(upd(ask));
+  assert.deepEqual(deletes().map((x) => x.body.message_id), [ask.message_id]);
+  assert.equal(bans().length + mutes().length + groupSends().length, 0);
+  const lead = String(sends().find((x) => x.body.chat_id === OWNER.id)?.body.text ?? "");
+  assert.ok(lead.startsWith("A business ask in General from GUL ceo promoter (@gul_promo):"), lead);
+  assert.ok(lead.includes("reply to them directly"));
   // a member tagging Glim on a pitch that is still up gets no answer to it either
   reset();
   const pitch: TgMessage = { message_id: 4090, chat, from: user(4091, "Ola"), date: 0, text: "We would like to propose a partnership with your project" };
@@ -2871,7 +2885,8 @@ await test("spam: the promoter pitch and the other real examples are deleted and
   assert.equal(groupSends().length + modelCalls().length, 0);
   // forwards from a channel with a link, links hidden behind words, and other groups' invites
   const ok = ["glim_gloam_bot"];
-  assert.equal(screen({ text: "big news, read here https://somechannel.xyz/post", name: { first_name: "Ada" }, forwardedFrom: "channel", okHandles: ok }).verdict?.rule, "forwarded_promo");
+  assert.equal(screen({ text: "100x gem launching now https://pump.fun/abc", name: { first_name: "Ada" }, forwardedFrom: "channel", okHandles: ok }).verdict?.rule, "forwarded_promo");
+  assert.equal(screen({ text: "Base mainnet is live. Read more at gloam.trade/docs", name: { first_name: "Ada" }, forwardedFrom: "channel", okHandles: ok }).verdict, null);
   assert.equal(screen({ text: "read this", name: { first_name: "Ada" }, entities: [{ type: "text_link", offset: 0, length: 4, url: "https://evil.xyz/x" }], okHandles: ok }).gate, "link_spam");
   assert.equal(screen({ text: "come chat at t.me/gloamhq/5 or t.me/addstickers/GlimByGloam", name: { first_name: "Ada" }, okHandles: ok }).verdict, null);
   assert.equal(screen({ text: "better group here t.me/joinchat/abc", name: { first_name: "Ada" }, okHandles: ok }).verdict?.category, "link_spam");
@@ -2879,7 +2894,7 @@ await test("spam: the promoter pitch and the other real examples are deleted and
   assert.ok(!everySend.some((x) => x.body.chat_id === GROUP && /passed it on|that one.s for the team/i.test(String(x.body.text))));
 });
 
-await test("spam: a pitch the rules can't settle gets one strict-JSON model check; anything short of a sure yes leaves it up, still with no reply", async () => {
+await test("spam: a pitch the rules can't settle gets one strict-JSON model check; a yes mutes for a day (never a ban on its own), anything less leaves it up, still with no reply", async () => {
   reset();
   classifierReply = "TEAM";
   spamReply = '{"spam": true, "category": "promo", "confidence": 0.93}';
@@ -2888,7 +2903,8 @@ await test("spam: a pitch the rules can't settle gets one strict-JSON model chec
   assert.equal(spamChecks().length, 1);
   assert.equal(classifyCalls().length, 0, "the reply check never runs on it");
   assert.deepEqual(deletes().map((x) => x.body.message_id), [m.message_id]);
-  assert.equal(bans().length, 1);
+  assert.equal(bans().length, 0, "the model alone never bans on a first offence");
+  assert.equal(mutes().length, 1);
   assert.equal(groupSends().length, 0);
   const check = spamChecks()[0]!;
   assert.equal(check.body.model, "claude-haiku-5-5");
@@ -2927,7 +2943,8 @@ await test("spam: a pitch the rules can't settle gets one strict-JSON model chec
     await handleUpdate(upd(inTopic(TOPIC.general, `Hello Gloam, big fan of the project, part ${i}. Let me know when the team is free.`, user(4200 + i, "Crypto Marketing Agency"))));
   }
   assert.equal(spamChecks().length, 12, "12 a minute, like the reply check");
-  assert.equal(bans().length, 12);
+  assert.equal(mutes().length, 12);
+  assert.equal(bans().length, 0);
   assert.equal(groupSends().length, 0);
 });
 
@@ -3019,7 +3036,7 @@ await test("left alone: questions, gm, opinions, the team's links, the buy bot, 
   ]) {
     const s = screen({ text, name: { first_name: "Ada" }, okHandles: ok });
     assert.equal(s.verdict, null, text);
-    assert.equal(s.strangerVerdict, null, text);
+    assert.equal(s.lead, null, text);
   }
 });
 
@@ -3057,9 +3074,11 @@ await test("history: a member Glim knows gets a 24-hour mute on a first offence;
   await handleUpdate(upd(inTopic(TOPIC.general, "We would like to propose a partnership with your project", known)));
   assert.equal(deletes().length + groupSends().length, 0);
   assert.ok((await readLast24h()).unanswered.some((u) => u.name === "Kemi" && u.why === "team"));
-  await handleUpdate(upd(inTopic(TOPIC.general, "We would like to propose a partnership with your project", user(4503, "Stranger"))));
-  assert.equal(bans().length, 1);
-  assert.equal(bans()[0]!.body.user_id, 4503);
+  const pitch = inTopic(TOPIC.general, "We would like to propose a partnership with your project", user(4503, "Stranger"));
+  await handleUpdate(upd(pitch));
+  assert.deepEqual(deletes().map((x) => x.body.message_id), [pitch.message_id], "a stranger's lead comes down");
+  assert.equal(bans().length + mutes().length, 0, "and is never held against them");
+  assert.ok((await readLast24h()).unanswered.some((u) => u.name === "Stranger" && u.why === "team"));
   // newcomers who joined today
   reset();
   await kv([["SET", "gloam:tg:v1:welcome:cooldown", "1", "EX", 3600]]);
@@ -3070,7 +3089,8 @@ await test("history: a member Glim knows gets a 24-hour mute on a first offence;
   await handleUpdate(upd(inTopic(TOPIC.general, "@ada_x thanks, it worked", pip)));
   modelReply = "Open the transaction on Basescan: if it says Success, refresh the app.";
   await handleUpdate(upd(inTopic(TOPIC.help, `my tx failed, what now? https://basescan.org/tx/0x${"ab".repeat(32)}`, qua)));
-  assert.deepEqual(bans().map((x) => x.body.user_id), [nia.id], "only the newcomer's link");
+  assert.deepEqual(mutes().map((x) => x.body.user_id), [nia.id], "only the newcomer's link, muted for a day");
+  assert.equal(bans().length, 0, "the newcomer check never bans on its own");
   assert.equal(spamChecks().length, 0, "the newcomer check needs no model");
   assert.equal((await recentModeration(1))[0]!.rule, "new_member_gate");
   // the same link from someone who is not new: the model is asked, and its no leaves it up, with no reply
@@ -3079,12 +3099,26 @@ await test("history: a member Glim knows gets a 24-hour mute on a first offence;
   assert.equal(spamChecks().length, 1);
   assert.equal(deletes().length + bans().length + groupSends().length, 0);
   // the plan, on its own
-  const v = { category: "promo" as const, confidence: 0.95, rule: "x", source: "rule" as const };
+  const v = { category: "promo" as const, confidence: 0.95, rule: "x", source: "rule" as const, sure: true };
   const fresh = { priorMsgs: 0, firstSeen: null, joinedAt: null, offences: [], vouched: false, oldActiveHours: 0 };
-  assert.deepEqual(planFor(v, fresh, Date.now()).ban, true);
-  assert.equal(planFor({ ...v, source: "model" }, null, Date.now()).ban, false, "store down: a model verdict never bans");
-  assert.equal(planFor(v, null, Date.now()).ban, true, "store down: a rule still does");
-  assert.equal(planFor({ ...v, category: "otc" }, null, Date.now()).muteSec, 0);
+  const now = Date.now();
+  assert.equal(planFor(v, fresh, now).ban, true, "a sure rule and no history: out");
+  assert.deepEqual([planFor({ ...v, sure: false }, fresh, now).ban, planFor({ ...v, sure: false }, fresh, now).muteSec], [false, MUTE_SEC], "not sure: a day's mute");
+  assert.equal(planFor({ ...v, sure: false }, { ...fresh, offences: [{ at: now - 3_600_000, category: "promo" }] }, now).ban, true, "a repeat that week: out");
+  assert.equal(planFor({ ...v, source: "model" }, fresh, now).ban, false, "the model alone never bans a first offence");
+  assert.equal(planFor(v, fresh, now, true).ban, false, "nor does the newcomer check");
+  assert.equal(planFor({ ...v, source: "model" }, null, now).ban, false, "store down: a model verdict never bans");
+  assert.equal(planFor(v, null, now).ban, true, "store down: a sure rule still does");
+  assert.equal(planFor({ ...v, sure: false }, null, now).ban, false, "store down: an unsure one only deletes");
+  assert.equal(planFor({ ...v, category: "otc" }, null, now).muteSec, 0);
+  // a member's /spam goes by the same plan: a scam from a member Glim knows is a mute, not a removal
+  reset();
+  const regular = user(4530, "Reg");
+  await seedKnown(regular.id);
+  const slip = inTopic(TOPIC.general, "DM me for support, I can fix your wallet", regular);
+  await handleUpdate(upd(slip));
+  assert.equal(mutes().length, 1);
+  assert.equal(bans().length, 0);
 });
 
 await test("store down: clear spam still goes, a model-only verdict never bans, and an OTC offer is only deleted", async () => {
@@ -3149,6 +3183,22 @@ await test("rights: a refused delete, ban or mute is logged once and named in /r
   const after = String(sends().pop()!.body.text);
   assert.ok(!after.includes("Rights:"), after);
   assert.ok(after.includes("Moderation: 3 actions (1 removed, 0 muted for 24 hours, 0 deleted only, 2 Telegram refused)."), after);
+  // "message can't be deleted" also means a message over 48 hours old: with the right in hand, that is no rights warning
+  reset();
+  oldMessages = true;
+  await handleUpdate(upd(inTopic(TOPIC.general, "Need a dev? check my bio", user(4703, "Old"))));
+  assert.ok(calls.some((x) => x.method === "getChatMember"), "the bot's own rights are read");
+  await handleUpdate(upd(dm(OWNER, "/report")));
+  assert.ok(!String(sends().pop()!.body.text).includes("Rights:"));
+  // /unban on a mute Telegram won't lift says so
+  reset();
+  const muted = user(4704, "Mo");
+  await seedKnown(muted.id);
+  await handleUpdate(upd(inTopic(TOPIC.general, "Need a dev? check my bio", muted)));
+  assert.equal(mutes().length, 1);
+  noRights = true;
+  await handleUpdate(upd(dm(OWNER, "/unban 4704")));
+  assert.ok(String(sends().pop()!.body.text).startsWith("Telegram didn't let me lift 4704's mute."));
 });
 
 await test("/modlog lists the last 20 for the owner and the admins; /unban lifts a ban or a mute and vouches; the log keeps a week", async () => {
@@ -3204,6 +3254,100 @@ await test("/modlog lists the last 20 for the owner and the admins; /unban lifts
   const recent = await recentModeration(2);
   assert.deepEqual(recent.map((e) => e.action), ["unbanned", "unmuted"]);
   assert.equal(recent[0]!.by, "Yomi");
+});
+
+await test("left alone, for strangers and newcomers alike: the review's false positives (support asks, team mentions, explorers, faucets, emails, supported tickers, volunteers, forwards)", async () => {
+  resetMemoryKv();
+  const tx = `0x${"ab".repeat(32)}`;
+  const cases: [string, Partial<TgMessage>?, string?][] = [
+    ["Gloam support, can you DM me? my deposit is stuck"],
+    ["Gloam support didn't reply to my email, can someone DM me"],
+    ["Gloam team, when is Base mainnet going live?"],
+    ["Gloam devs: the deposit button does nothing on Safari"],
+    ["Gloam team: great work on the Base launch"],
+    ["Gloam admins, never DM first. Report scammers with /spam"],
+    ["contact the Gloam team at @gloamtrade on X, they reply"],
+    ["I'm with the Gloam team on this one, privacy matters"],
+    ["follow us on X https://x.com/gloamtrade for updates"],
+    ["I sent a DM to the bot, no reply"],
+    ["admin pls dm me, my deposit is stuck for 2 hours"],
+    ["please DM me, I still can't see my balance"],
+    ["If you need help with the faucet dm me"],
+    ["abeg make admin dm me, my money hook for vault"],
+    [`my withdrawal https://base-sepolia.blockscout.com/tx/${tx} never arrived`],
+    ["the faucet at https://www.alchemy.com/faucets/base-sepolia gives nothing, where else can I get gas"],
+    ["I bridged with bridge.base.org and nothing arrived yet"],
+    ["I withdrew from binance.com to my wallet, then deposited, still nothing"],
+    ["I filed the bug from my email ada.k@gmail.com, did it arrive"],
+    ["@ada_k mine too, deposit stuck since morning"],
+    ["@ada_k thanks it worked"],
+    ["anyone here from Lagos? dm me let's link up"],
+    ["I'm a developer, can I integrate your project into my wallet app?"],
+    ["I'm a community moderator in two other groups, happy to help mod here for free"],
+    ["$MSTR pumping today, perfect time to swap privately"],
+    ["how do I deposit $cbBTC privately on Base"],
+    ["$HYPE and $GLOAM both mooning lol"],
+    ["Base mainnet is live. Read more at gloam.trade/docs", { forward_origin: { type: "channel", chat: { id: -100777, type: "channel" } } }],
+    ["how do I claim a payment link?", {}, "Ade Promotions"],
+    ["gm everyone, good to be here", {}, "Crypto Marketing"],
+  ];
+  let id = 5100;
+  const wrong: string[] = [];
+  for (const standing of ["stranger", "newcomer"] as const) {
+    for (const [text, extra, name] of cases) {
+      reset();
+      // the worst case: the model would call anything spam
+      spamReply = '{"spam": true, "category": "promo", "confidence": 0.99}';
+      classifierReply = "NO";
+      const u = user(id++, name ?? "Ada");
+      if (standing === "newcomer") await kv([["SET", `gloam:tg:v1:joined:${u.id}`, String(Date.now() - 2 * 3_600_000)]]);
+      await handleUpdate(upd(inTopic(TOPIC.general, text, u, extra ?? {})));
+      if (deletes().length + bans().length + mutes().length + spamChecks().length) wrong.push(`${standing}: ${text}`);
+    }
+  }
+  assert.deepEqual(wrong, [], "never touched, and never even sent to the model");
+  // a volunteer's offer is the model's call, not a rule's: up when it says no, a day's mute at worst, never a ban
+  for (const text of ["I can help with the CoinGecko listing form if the team wants", "I can help your team translate the docs to Spanish"]) {
+    for (const reply of ['{"spam": false, "category": "none", "confidence": 0.2}', '{"spam": true, "category": "promo", "confidence": 0.99}']) {
+      reset();
+      spamReply = reply;
+      await handleUpdate(upd(inTopic(TOPIC.general, text, user(id++, "Vol"))));
+      assert.equal(spamChecks().length, 1, text);
+      assert.equal(bans().length, 0, text);
+      assert.equal(mutes().length, reply.includes("true") ? 1 : 0, `${text}: ${reply}`);
+    }
+  }
+  // a supported-asset question and a promo-named member's question still get answers
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.help, "can I swap $PONS privately?", user(id++, "Ada"))));
+  await handleUpdate(upd(inTopic(TOPIC.help, "how do I claim a payment link?", user(id++, "Ade Promotions"))));
+  assert.equal(groupSends().length, 2);
+  // a bug report with a Drive link is saved and thanked; one that is spam-shaped (another token) is saved without a reply
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.testers, "bug: proof fails on Safari, video here https://drive.google.com/file/d/abc/view", user(id++, "Tes"))));
+  assert.equal(groupSends().length, 1);
+  await handleUpdate(upd(inTopic(TOPIC.testers, "bug: the swap page errors when I pick $FOOBAR", user(id++, "Tes2"))));
+  assert.equal(groupSends().length, 1, "no reply to the quiet one");
+  const saved = (await listBugReports()).map((b) => b.text);
+  assert.ok(saved.includes("bug: proof fails on Safari, video here https://drive.google.com/file/d/abc/view"));
+  assert.ok(saved.includes("bug: the swap page errors when I pick $FOOBAR"), "saved before the quiet return");
+  // and the support offer that the support ask must not hide is still a scam
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "DM me if your deposit is stuck, I can fix it", user(id++, "Fixer"))));
+  assert.equal(bans().length, 1);
+  assert.equal((await recentModeration(1))[0]!.category, "scam");
+});
+
+await test("Announcements: impostors, pasted seed phrases and scams are still dealt with; nothing else there is screened or answered", async () => {
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.announcements, "Claim the airdrop at gloam-airdrop.xyz connect your wallet", user(5300, "Gloam Support"))));
+  assert.equal(bans().length, 1);
+  await handleUpdate(upd(inTopic(TOPIC.announcements, SEED, user(5301, "Ada"))));
+  assert.equal(deletes().length, 2);
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.announcements, "Need a dev? check my bio", user(5302, "Lee"))));
+  await handleUpdate(upd(inTopic(TOPIC.announcements, "how do I add privately?", user(5303, "Bo"))));
+  assert.equal(deletes().length + bans().length + groupSends().length + modelCalls().length, 0);
 });
 
 await test("welcomes: a burst of joins tags nobody from it; someone who left before the welcome is left out", async () => {
