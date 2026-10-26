@@ -57,6 +57,7 @@ const {
   relayMemo,
   relayTransfer,
   relayUnshield,
+  sendFailure,
 } = await import("../src/lib/relay/server");
 const relayClient = await import("../src/lib/relay/client");
 const { INFLIGHT_TTL_SEC, inflightKey, takeInflight } = await import("../src/lib/relay/inflight");
@@ -163,6 +164,12 @@ const unchecked = { says: null as number | null, calls: [] as string[] };
 /** A private RPC that never answers: every call waits until the caller gives up. */
 const HUNG_RPC = "https://hung-rpc.selftest.invalid";
 const hung: string[] = [];
+/**
+ * A private RPC that says this chain on eth_chainId and then fails the other
+ * calls: "503" answers a 503, "hang" never answers, "ok" answers.
+ */
+const FLAKY_RPC = "https://flaky-rpc.selftest.invalid";
+const flaky = { mode: "ok" as "ok" | "503" | "hang", calls: [] as string[] };
 const NONCE_TOO_LOW = { code: -32000, message: "nonce too low: address 0x0000000000000000000000000000000000000000, tx: 0 state: 1" };
 const SEL = {
   spent: toFunctionSelector("spent(bytes32)"),
@@ -267,6 +274,24 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     );
     return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { status: 200, headers: { "Content-Type": "application/json" } });
   }
+  if (url === FLAKY_RPC) {
+    const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
+    const list = Array.isArray(body) ? body : [body];
+    flaky.calls.push(...list.map((r) => r.method));
+    const onlyChainId = list.every((r) => r.method === "eth_chainId");
+    if (!onlyChainId && flaky.mode === "503") return new Response("busy", { status: 503 });
+    if (!onlyChainId && flaky.mode === "hang") {
+      return new Promise<Response>((_, reject) => {
+        const sig = init?.signal;
+        if (sig?.aborted) return reject(sig.reason);
+        sig?.addEventListener("abort", () => reject(sig.reason ?? new Error("aborted")));
+      });
+    }
+    const out = list.map((r) =>
+      r.method === "eth_blockNumber" ? { jsonrpc: "2.0", id: r.id, result: "0xbeef" } : { jsonrpc: "2.0", id: r.id, ...answer(r) }
+    );
+    return new Response(JSON.stringify(Array.isArray(body) ? out : out[0]), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
   const via = url === RPC.replace(/\/$/, "") ? "public" : url === PRIVATE_RPC ? "private" : url === WRONG_RPC ? "wrong" : null;
   if (!via) throw new Error(`selftest: no network (${url})`);
   const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
@@ -309,6 +334,8 @@ function reset(state: Partial<typeof chain> = {}) {
 async function withPrivateRpc(fn: () => Promise<void>) {
   const name = `GLOAM_RPC_URL_${net.chainId}`;
   process.env[name] = PRIVATE_RPC;
+  // a case before may have left it passed over (a send it dropped): start each one checked afresh
+  resetRpcChecks();
   try {
     await fn();
   } finally {
@@ -620,6 +647,8 @@ await test("sendOnce: the public backup answers reads but never gets a raw send"
       globalThis.fetch = down;
     }
     // without sendOnce (server reads), the public RPC stays a full backup
+    // (checked afresh: the failed reads above have the private RPC passed over for a while)
+    resetRpcChecks();
     sends.length = 0;
     const reads = serverTransport(net, { retryCount: 0 })({ chain: net.chain });
     await assert.rejects(reads.request({ method: "eth_sendRawTransaction", params: [raw] }));
@@ -910,6 +939,56 @@ await test("a private RPC that hangs costs one short wait: the read and the send
     assert.deepEqual(sends, ["public"]);
     assert.equal(await lockFree(nul), false);
   } finally {
+    resetRpcChecks();
+    delete process.env[name];
+  }
+});
+
+await test("a private RPC that said this chain and then fails is passed over too: the failed read goes on to the public RPC, the next calls skip it, a send it may have taken is never sent again", async () => {
+  const name = `GLOAM_RPC_URL_${net.chainId}`;
+  process.env[name] = FLAKY_RPC;
+  try {
+    reset();
+    resetRpcChecks();
+    flaky.calls.length = 0;
+    const others = () => flaky.calls.filter((m) => m !== "eth_chainId");
+    // a healthy check, then a 503 on the read itself: answered by the public RPC in the same call
+    flaky.mode = "503";
+    const reads = serverTransport(net, { timeout: 300, retryCount: 1 })({ chain: net.chain });
+    assert.equal(await reads.request({ method: "eth_blockNumber" }), "0x1");
+    assert.deepEqual(flaky.calls, ["eth_chainId", "eth_blockNumber"], "asked once, not once per retry");
+    // passed over now: reads and the relay's one send go to the public RPC without asking it
+    flaky.mode = "ok";
+    assert.equal(await reads.request({ method: "eth_blockNumber" }), "0x1");
+    const once = serverTransport(net, { timeout: 300, retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+    assert.equal(await once.request({ method: "eth_sendRawTransaction", params: [("0x" + "02".repeat(100)) as Hex] }), TX_HASH);
+    assert.deepEqual(sends, ["public"]);
+    assert.deepEqual(others(), ["eth_blockNumber"]);
+    // checked again after the pause, and used once it says this chain
+    resetRpcChecks();
+    assert.equal(await reads.request({ method: "eth_blockNumber" }), "0xbeef");
+
+    // a send it takes and never answers: one timeout, maybe_sent, never handed to the public RPC
+    resetRpcChecks();
+    reset();
+    flaky.calls.length = 0;
+    flaky.mode = "hang";
+    const t0 = Date.now();
+    const sendOnce = serverTransport(net, { timeout: 300, retryCount: 0 }, { sendOnce: true })({ chain: net.chain });
+    const err = await sendOnce.request({ method: "eth_sendRawTransaction", params: [("0x" + "03".repeat(100)) as Hex] }).then(
+      () => assert.fail("the hung send answered"),
+      (e: unknown) => e
+    );
+    assert.equal(sendFailure(err).code, "maybe_sent");
+    assert.deepEqual(sends, [], "a send the private RPC may hold never goes to the public RPC");
+    assert.deepEqual(others(), ["eth_sendRawTransaction"]);
+    assert.ok(Date.now() - t0 < 2_000, `took ${Date.now() - t0} ms`);
+    // the next send (a new one) skips it and goes out once, through the public RPC
+    assert.equal(await sendOnce.request({ method: "eth_sendRawTransaction", params: [("0x" + "04".repeat(100)) as Hex] }), TX_HASH);
+    assert.deepEqual(sends, ["public"]);
+    assert.deepEqual(others(), ["eth_sendRawTransaction"]);
+  } finally {
+    flaky.mode = "ok";
     resetRpcChecks();
     delete process.env[name];
   }

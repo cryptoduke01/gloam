@@ -13,7 +13,11 @@
  * and a send is refused before it reaches any node (WrongChainRpcError). One
  * that has not answered yet (down, slow, timed out) is passed over for a
  * while: reads and the relay's send go to the public RPC instead, so a private
- * RPC that is down never takes the server or the relay down with it.
+ * RPC that is down never takes the server or the relay down with it. So is
+ * one that passed the check and later hangs or fails (a timeout, a 5xx, a
+ * rate limit): that call fails as before (a send of it is maybe_sent, never
+ * sent again elsewhere), and the next ones go to the public RPC until the
+ * private one is checked again.
  *
  * The public side is the chain's whole list of public RPCs, in order
  * (lib/rpcList): one that is down is passed over for a while, and a send
@@ -21,7 +25,7 @@
  */
 import { fallback, http, type HttpTransportConfig, type Transport } from "viem";
 import type { GloamNetwork } from "./networks";
-import { SEND_METHODS, resetRpcRest, rpcListTransport } from "./rpcList";
+import { SEND_METHODS, nodeFailed, resetRpcRest, rpcListTransport } from "./rpcList";
 
 type Net = Pick<GloamNetwork, "chainId" | "chain">;
 
@@ -66,6 +70,12 @@ export function resetRpcChecks(): void {
   resetRpcRest();
 }
 
+/** Pass the private RPC over for RECHECK_AFTER_MS, then check its chain id again. */
+function passOver(key: string): void {
+  checks.delete(key);
+  quietUntil.set(key, Date.now() + RECHECK_AFTER_MS);
+}
+
 /**
  * Whether `url` answers eth_chainId with `chainId`. Null when it did not
  * answer (down, timed out): it is then passed over for RECHECK_AFTER_MS, so a
@@ -87,8 +97,7 @@ function answersFor(url: string, chainId: number, config: HttpTransportConfig): 
       return ok;
     })
     .catch((e: unknown) => {
-      checks.delete(key);
-      quietUntil.set(key, Date.now() + RECHECK_AFTER_MS);
+      passOver(key);
       const status = (e as { status?: number })?.status ?? null;
       console.warn("gloam_rpc_unchecked", JSON.stringify({ chainId, error: e instanceof Error ? e.name : "error", status }));
       return null;
@@ -103,7 +112,9 @@ function answersFor(url: string, chainId: number, config: HttpTransportConfig): 
  * reached it, so the send still goes out once, through the public RPC.
  */
 function checkedPrivate(url: string, chainId: number, config: HttpTransportConfig, sendInstead?: Transport): Transport {
-  const inner = http(url, config);
+  // asked once per call: a node that hangs costs one timeout, then it is passed over
+  const inner = http(url, { ...config, retryCount: 0 });
+  const key = `${chainId} ${url}`;
   return (params) => {
     const t = inner(params);
     return {
@@ -116,7 +127,17 @@ function checkedPrivate(url: string, chainId: number, config: HttpTransportConfi
           // reads: the fallback moves on to the public RPC
           throw new UncheckedRpcError(chainId);
         }
-        return t.request(args);
+        try {
+          return await t.request(args);
+        } catch (e) {
+          // checked, then failed as a node: passed over like one that never answered
+          if (nodeFailed(e)) {
+            passOver(key);
+            const status = (e as { status?: number })?.status ?? null;
+            console.warn("gloam_rpc_private_failed", JSON.stringify({ chainId, method: args.method, status }));
+          }
+          throw e;
+        }
       },
     } as typeof t;
   };
@@ -133,8 +154,12 @@ export function serverTransport(net: Net, config: HttpTransportConfig = {}, opts
   const urls = net.chain.rpcUrls.default.http;
   const priv = privateRpc(net);
   if (!priv || priv === urls[0]) return rpcListTransport(urls, config, opts.sendOnce ? { sendTo: "one" } : {});
-  if (!opts.sendOnce) return fallback([checkedPrivate(priv, net.chainId, config), rpcListTransport(urls, config)]);
-  const own = checkedPrivate(priv, net.chainId, config, rpcListTransport(urls, { ...config, retryCount: 0 }, { sendTo: "one" }));
-  const backup = rpcListTransport(urls, { ...config, methods: { exclude: SEND_METHODS } });
+  // the fallback retries the pair as a whole; each side asks each of its RPCs once a pass
+  const once = { ...config, retryCount: 0 };
+  if (!opts.sendOnce) {
+    return fallback([checkedPrivate(priv, net.chainId, config), rpcListTransport(urls, once)], { retryCount: config.retryCount });
+  }
+  const own = checkedPrivate(priv, net.chainId, config, rpcListTransport(urls, once, { sendTo: "one" }));
+  const backup = rpcListTransport(urls, { ...once, methods: { exclude: SEND_METHODS } });
   return fallback([own, backup], { retryCount: config.retryCount });
 }
