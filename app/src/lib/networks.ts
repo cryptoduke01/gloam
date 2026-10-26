@@ -480,7 +480,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
     stableAssets: [],
     status: "live",
-    payMemo: null,
+    // GloamPayMemo, deployed 26 Oct 2026 after the vault (no owner, holds nothing, never logs the poster)
+    payMemo: { address: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", deployBlock: 53109729n, emitsPoster: false },
     note: "Mainnet: private USDC, EURC, USDT and ETH payments.",
     explorerTx: (hash) => `${baseMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${baseMainnet.blockExplorers.default.url}/address/${addr}`,
@@ -507,7 +508,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     primaryAsset: { symbol: "ETH", address: null, decimals: 18 },
     stableAssets: [],
     status: "live",
-    payMemo: null,
+    // GloamPayMemo, deployed 26 Oct 2026 after the vault (no owner, holds nothing, never logs the poster)
+    payMemo: { address: "0x8699D015087dE6D25d55d5ceB63b34b9d773f135", deployBlock: 26276234n, emitsPoster: false },
     note: "Mainnet: private USDC, USDT, USDG, PYUSD, EURC and ETH payments.",
     explorerTx: (hash) => `${ethereumMainnet.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${ethereumMainnet.blockExplorers.default.url}/address/${addr}`,
