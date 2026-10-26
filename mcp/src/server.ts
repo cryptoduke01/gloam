@@ -820,6 +820,17 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
               // reads may come from nodes at different heights, so it is marked dead, never deleted.
               notes.update(n.handle, { status: "dead" });
               refreshed.push(`${n.handle}: dead, its payment was taken by another transaction`);
+            } else if (
+              (n.origin === "change" || n.origin === "payment") &&
+              n.createdTx &&
+              stuck &&
+              !notes.list().some((x) => x.status === "pending" && x.pending === "spend" && x.spentTx?.toLowerCase() === n.createdTx!.toLowerCase()) &&
+              (await tx.unknown(n.createdTx))
+            ) {
+              // The send that makes this change or payment never showed up, and its input no longer waits on it
+              // (made spendable again, or spent by another transaction): it can never land.
+              notes.update(n.handle, { status: "dead" });
+              refreshed.push(`${n.handle}: dead, its transaction never landed`);
             }
           } catch (e) {
             refreshed.push(`${n.handle}: could not check (${errMsg(e)})`);
