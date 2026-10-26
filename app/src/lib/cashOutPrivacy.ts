@@ -153,6 +153,36 @@ export type CashOutWarning = {
 export const OWN_WALLET_TEXT = "This is the wallet you're signed in with. Anyone can link this cash out to it.";
 export const DEPOSIT_WALLET_TEXT = "You added money to Gloam from this address. Anyone can link this cash out to it.";
 
+/**
+ * Who sends what, for the line on what goes public:
+ *  - "relay": the Gloam relay sends every step.
+ *  - "wallet": the signed-in wallet sends the cash out (and any step before it).
+ *  - "wallet-first-step": a part of the balance cashed out later with Hide my
+ *    wallet off: the wallet sends the first step (setting the amount aside)
+ *    right away, and the relay sends the cash out later.
+ */
+export type CashOutSender = "relay" | "wallet" | "wallet-first-step";
+
+/** The sender, from the cash-out form's choices. Pieces always go through the relay. */
+export function cashOutSender(p: { relayOn: boolean; pieces: boolean; later: boolean; partial: boolean }): CashOutSender {
+  if (p.relayOn || p.pieces) return "relay";
+  if (!p.later) return "wallet";
+  return p.partial ? "wallet-first-step" : "relay";
+}
+
+/** What a cash out makes public, in one plain sentence. */
+export function publicLine(p: { sender: CashOutSender; pieces?: boolean }): string {
+  const what = p.pieces
+    ? "Which asset, each piece's amount, where it goes and when"
+    : "Which asset, the amount, where it goes and when";
+  if (p.sender === "wallet") return `${what}, and your wallet, which sends it.`;
+  if (p.sender === "wallet-first-step") return `${what}. The first step, setting the amount aside, leaves from your wallet now.`;
+  return `${what}.`;
+}
+
+/** What stays private, in one plain sentence. */
+export const PRIVATE_LINE = "Which deposit it came from, and your other balance and payments.";
+
 export function sameAmountText(at: number, now = Date.now()): string {
   return `You added this exact amount ${whenLabel(at, now)}. A different or rounder amount is harder to match.`;
 }

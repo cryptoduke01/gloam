@@ -20,14 +20,17 @@ const {
   DEPOSIT_WALLET_TEXT,
   ETH_PRESETS,
   OWN_WALLET_TEXT,
+  PRIVATE_LINE,
   SAME_AMOUNT_LOOKBACK_MS,
   STABLE_PRESETS,
   cashOutPrivacyWarnings,
+  cashOutSender,
   depositWallets,
   isDepositNote,
   normAddress,
   presetAmounts,
   presetsFor,
+  publicLine,
   sameAmountDeposit,
   sameAmountText,
   sameScope,
@@ -327,8 +330,41 @@ test("address and amount together: the address line first, then the amount; keys
   assert.notEqual(other[0]!.key, w[0]!.key, "another address is another warning, even if one was dismissed");
 });
 
+// ---------------------------------------------------------------- what goes public
+
+test("who sends it: the relay, the wallet, or the wallet for the first step of a part cashed out later", () => {
+  // Hide my wallet on: the relay sends every step, now or later
+  assert.equal(cashOutSender({ relayOn: true, pieces: false, later: false, partial: true }), "relay");
+  assert.equal(cashOutSender({ relayOn: true, pieces: false, later: true, partial: true }), "relay");
+  // pieces always go through the relay
+  assert.equal(cashOutSender({ relayOn: false, pieces: true, later: false, partial: true }), "relay");
+  // off, now: the wallet sends it (and the split before it)
+  assert.equal(cashOutSender({ relayOn: false, pieces: false, later: false, partial: false }), "wallet");
+  assert.equal(cashOutSender({ relayOn: false, pieces: false, later: false, partial: true }), "wallet");
+  // off, later: the whole balance waits with the relay; a part is split off from the wallet right away
+  assert.equal(cashOutSender({ relayOn: false, pieces: false, later: true, partial: false }), "relay");
+  assert.equal(cashOutSender({ relayOn: false, pieces: false, later: true, partial: true }), "wallet-first-step");
+});
+
+test("the public line names the asset, the amount, the address and the time, and the wallet when it sends", () => {
+  assert.equal(publicLine({ sender: "relay" }), "Which asset, the amount, where it goes and when.");
+  assert.equal(publicLine({ sender: "wallet" }), "Which asset, the amount, where it goes and when, and your wallet, which sends it.");
+  assert.equal(
+    publicLine({ sender: "wallet-first-step" }),
+    "Which asset, the amount, where it goes and when. The first step, setting the amount aside, leaves from your wallet now."
+  );
+  assert.equal(publicLine({ sender: "relay", pieces: true }), "Which asset, each piece's amount, where it goes and when.");
+  assert.equal(PRIVATE_LINE, "Which deposit it came from, and your other balance and payments.");
+});
+
 test("the copy stays plain: no em dashes, no promises the chain can't keep", () => {
-  const lines = [OWN_WALLET_TEXT, DEPOSIT_WALLET_TEXT, sameAmountText(NOW - DAY, NOW)];
+  const lines = [
+    OWN_WALLET_TEXT,
+    DEPOSIT_WALLET_TEXT,
+    sameAmountText(NOW - DAY, NOW),
+    PRIVATE_LINE,
+    ...(["relay", "wallet", "wallet-first-step"] as const).flatMap((sender) => [publicLine({ sender }), publicLine({ sender, pieces: true })]),
+  ];
   for (const l of lines) {
     assert.doesNotMatch(l, /\u2014/);
     assert.doesNotMatch(l, /anonymous|untraceable|hides how much/i);

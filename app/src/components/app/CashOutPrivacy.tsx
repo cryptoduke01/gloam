@@ -9,7 +9,7 @@
  * only draw it. Nothing here blocks a cash out.
  */
 import { useRef, useState, type ReactNode } from "react";
-import type { CashOutWarning, PresetAmount } from "@/lib/cashOutPrivacy";
+import { PRIVATE_LINE, publicLine, type CashOutSender, type CashOutWarning, type PresetAmount } from "@/lib/cashOutPrivacy";
 
 /** Round amounts and Max as small chips, with one line on why round amounts help. */
 export function CashOutAmountChips({
@@ -81,12 +81,18 @@ export function CashOutWarnings({
   warnings,
   scope,
   onElsewhere,
+  amountAction,
+  disabled,
   className = "mt-3",
 }: {
   warnings: CashOutWarning[];
   scope: string;
   /** "Cash out somewhere else": move to the address field. */
   onElsewhere?: () => void;
+  /** A next step shown with a warning about the amount ("Cash out privately instead"). */
+  amountAction?: ReactNode;
+  /** A cash out is on its way: the actions wait. */
+  disabled?: boolean;
   className?: string;
 }) {
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
@@ -105,21 +111,24 @@ export function CashOutWarnings({
             {w.aboutAddress && onElsewhere && (
               <button
                 type="button"
+                disabled={disabled}
                 onClick={onElsewhere}
-                className="-my-1.5 inline-flex min-h-10 items-center font-medium underline underline-offset-4"
+                className="-my-1.5 inline-flex min-h-10 items-center font-medium underline underline-offset-4 disabled:opacity-50"
               >
                 Cash out somewhere else
               </button>
             )}
+            {!w.aboutAddress && amountAction}
           </div>
           <button
             type="button"
             aria-label="Dismiss this note"
+            disabled={disabled}
             onClick={() => {
               setDismissed((s) => new Set(s).add(`${scope}|${w.key}`));
               region.current?.focus({ preventScroll: true });
             }}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:text-foreground"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:text-foreground disabled:opacity-50"
           >
             <CloseGlyph />
           </button>
@@ -133,17 +142,16 @@ export function CashOutWarnings({
  * What a cash out makes public and what stays private, said once, plainly,
  * where the person confirms it.
  */
-export function CashOutPrivacyLine({ sentByWallet = false, pieces = false }: { sentByWallet?: boolean; pieces?: boolean }) {
-  const what = pieces ? "Each piece's amount, where it goes and when" : "The amount, where it goes and when";
+export function CashOutPrivacyLine({ sender, pieces = false }: { sender: CashOutSender; pieces?: boolean }) {
   return (
     <dl className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1.5 rounded-[14px] border border-line px-4 py-3 text-[12.5px] leading-relaxed">
       <dt className="text-foreground">Public</dt>
-      <dd className="text-soft">{sentByWallet ? `${what}, and your wallet, which sends it.` : `${what}.`}</dd>
+      <dd className="text-soft">{publicLine({ sender, pieces })}</dd>
       <dt className="flex items-center gap-1.5 text-sealed">
         <LockGlyph />
         Private
       </dt>
-      <dd className="text-soft">Which deposit it came from, and your other balance and payments.</dd>
+      <dd className="text-soft">{PRIVATE_LINE}</dd>
     </dl>
   );
 }
