@@ -21,7 +21,7 @@ globalThis.fetch = (async (url: unknown) => {
   throw new Error(`selftest-add-privately: no network calls allowed (${String(url)})`);
 }) as typeof fetch;
 
-const { depositCall, depositAfterLostApproval, createTxLog } = await import("../src/lib/depositFlow");
+const { depositCall, depositAfterLostApproval, createTxLog, networkMovedMessage } = await import("../src/lib/depositFlow");
 const { getNetwork } = await import("../src/lib/networks");
 const { shieldTokensFor } = await import("../src/lib/tokens");
 const { NATIVE_ASSET } = await import("../src/lib/shield");
@@ -119,9 +119,41 @@ const body = (name: string) => {
 
 check("the view sends what depositCall builds, never the picked asset", () => {
   const exec = body("executeShield");
-  assert.equal((exec.match(/depositCall\(note, network,/g) ?? []).length, 3, "checked first, then built for both pool kinds");
   assert.ok(!exec.includes("selectedToken"), "executeShield does not read the form's asset");
+  assert.ok(!/depositCall\(note, network,/.test(exec), "never against the network of the render it started in");
   assert.ok(view.includes("proveDeposit(value, note, commitment, note.asset)"), "the proof is for the note's asset");
+});
+
+check("a network switch mid-deposit: the message names the deposit's network, the one to go back to", () => {
+  const tempo = getNetwork("tempo-mainnet");
+  assert.equal(
+    networkMovedMessage(4663, tempo),
+    "The page moved to Tempo before your deposit went out, so nothing was deposited. Switch back to Robinhood Chain and try again."
+  );
+  assert.equal(
+    networkMovedMessage(11155111, getNetwork("base")),
+    "The page moved to Base testnet before your deposit went out, so nothing was deposited. Switch back to Ethereum Sepolia and try again."
+  );
+  assert.match(networkMovedMessage(4663, rh), /vault changed/, "same chain, another vault");
+  assert.doesNotMatch(networkMovedMessage(4663, tempo), /—|real money|play money/);
+});
+
+check("the deposit is checked against the page's network right before the wallet is asked", () => {
+  const exec = body("executeShield");
+  const check = body("callForNote");
+  assert.ok(check.includes("getActiveNetwork()") && check.includes("networkNow.current"), "the network the page shows now, not the click's");
+  assert.ok(view.includes("networkNow.current = network;"), "kept current on every network change");
+  // after the proof (nothing saved yet), and again after the note is saved, right before writeContract
+  const afterProof = exec.indexOf("await proveDeposit(");
+  const saved = exec.indexOf("await keepUntilLanded();", afterProof);
+  const write = exec.indexOf("writeContract(", saved);
+  const between = (a: number, b: number) => exec.slice(a, b);
+  assert.ok(/if \(!callForNote\(note, proofBytes\)\) return stopDeposit\(null\);/.test(between(afterProof, saved)), "checked after the proof");
+  assert.ok(/const call = callForNote\(note, proofBytes\);\s*\n\s*if \(!call\) return stopDeposit\(note\);/.test(between(saved, write)), "checked after saving; a stop drops the saved note");
+  assert.ok(/chainId: networkNow\.current\.chainId/.test(exec), "the write names the page's chain, which is the note's");
+  assert.ok(body("stopDeposit").includes("dropUnsentNote(saved.id)"), "no note left waiting for a deposit that never went out");
+  // a second approval (USDT's reset) after the page moved is not sent either
+  assert.ok(/if \(pending\.note\.chainId !== network\.chainId\) \{[\s\S]{0,400}networkMovedMessage\(pending\.note\.chainId, network\)/.test(view));
 });
 
 check("every write is logged before it goes to the wallet, and the deposit-lost notice is the deposit's", () => {
