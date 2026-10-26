@@ -86,7 +86,12 @@ export type StoredNote = {
 
 export type NewNote = Omit<StoredNote, "handle" | "createdAt" | "updatedAt">;
 
-type StoreData = { notes: StoredNote[]; receiveKey: ReceiveKey | null };
+type StoreData = {
+  notes: StoredNote[];
+  receiveKey: ReceiveKey | null;
+  /** MPP pull payments whose payer's transfer this server submitted: payment nullifier (lowercase) to challenge id. */
+  pulls?: Record<string, string>;
+};
 
 type StoreFile = {
   format: "gloam-note-store";
@@ -169,7 +174,11 @@ export class NoteStore {
       decipher.setAuthTag(Buffer.from(file.tag, "base64"));
       const plain = Buffer.concat([decipher.update(Buffer.from(file.data, "base64")), decipher.final()]);
       const data = JSON.parse(plain.toString("utf8")) as Partial<StoreData>;
-      return { notes: Array.isArray(data.notes) ? data.notes : [], receiveKey: data.receiveKey ?? null };
+      return {
+        notes: Array.isArray(data.notes) ? data.notes : [],
+        receiveKey: data.receiveKey ?? null,
+        ...(data.pulls && typeof data.pulls === "object" ? { pulls: data.pulls } : {}),
+      };
     } catch {
       const hint =
         file.keySource !== this.keySource
@@ -297,6 +306,18 @@ export class NoteStore {
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
       return { claimed: true, note: next };
+    });
+  }
+
+  /** MPP pull payments this server submitted the payer's transfer for: payment nullifier (lowercase) to challenge id. */
+  pulls(): Record<string, string> {
+    return this.read().pulls ?? {};
+  }
+
+  /** Record, before it is submitted, that the payer's transfer for this payment and challenge goes out. */
+  markPull(paymentNullifier: Hex, challengeId: string) {
+    this.mutate((d) => {
+      (d.pulls ??= {})[paymentNullifier.toLowerCase()] = challengeId;
     });
   }
 
