@@ -15,7 +15,7 @@ export function TestFundsNotice() {
   // its own chain's mainnet, never another chain's (Base Sepolia offered Robinhood Chain mainnet)
   const target = mainnetOf(network);
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-soft">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] bg-surface px-4 py-2.5 text-[13.5px] leading-relaxed text-soft">
       <p className="min-w-0">
         <span className="font-medium text-foreground">Testnet.</span> Balances here stay on this
         testnet.
