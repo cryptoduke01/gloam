@@ -5,6 +5,8 @@
  * the server to check the wallet holds enough before it signs.
  */
 import type { Chain } from "viem";
+import { robinhood } from "./chain";
+import { tempoMainnet } from "./networks";
 import {
   arbitrum,
   avalanche,
@@ -33,6 +35,8 @@ import {
 export const ORIGIN_CHAINS: readonly Chain[] = [
   mainnet,
   base,
+  robinhood,
+  tempoMainnet,
   bsc,
   arbitrum,
   polygon,

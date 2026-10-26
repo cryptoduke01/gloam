@@ -40,7 +40,7 @@ const noopSubscribe = () => () => {};
 /** Solana needs a Relay API key on the server, so it stays off until that is set. */
 const CHAINS = BRIDGE_CHAINS.filter((c) => !c.needsKey || process.env.NEXT_PUBLIC_BRIDGE_SOLANA === "1");
 /** The few logos the card shows before "+N more". */
-const FEATURED = [1, 8453, 792703809, 56, 8253038, 42161, 728126428];
+const FEATURED = [1, 8453, 4663, 792703809, 56, 8253038, 42161, 728126428];
 
 const ADDRESS_NAME: Record<string, string> = { svm: "Solana", tvm: "Tron", bvm: "Bitcoin" };
 
@@ -945,7 +945,7 @@ function BridgeSheet({
               />
             )}
 
-            {privately && solWallets.length > 1 && (
+            {privately && chain.kind === "svm" && solWallets.length > 1 && (
               <div role="radiogroup" aria-label="Solana wallet" className="flex flex-wrap gap-2">
                 {solWallets.map((w) => (
                   <button
