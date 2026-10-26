@@ -89,6 +89,33 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
 } else {
   // ---------------------------------------------------------------- the store
 
+  test("serving a payment late never rolls a note's own status back (it was read before the lock)", () => {
+    const dir = tmp();
+    const env: Env = { GLOAM_AGENT_ID: "bot", GLOAM_NOTE_KEY: KEY_A, GLOAM_NOTE_STORE: join(dir, "notes.json") };
+    const store = openNoteStore(env);
+    const paid = `0x${"ab".repeat(32)}` as Hex;
+    const tx = `0x${"77".repeat(32)}` as Hex;
+    // confirmed, then picked to pay with: a late serve must not make it spendable again
+    const mid = store.add(sampleNote({ sweptFrom: paid }));
+    store.update(mid.handle, { status: "pending", pending: "spend" });
+    const one = store.claimServed(mid.handle, { status: "unspent", createdTx: tx });
+    assert.ok(one.claimed);
+    assert.equal(one.claimed && one.note.status, "pending");
+    assert.equal(store.get(mid.handle)!.pending, "spend");
+    assert.equal(store.get(mid.handle)!.served, true);
+    // already spent stays spent
+    const spent = store.add(sampleNote({ sweptFrom: `0x${"cd".repeat(32)}` as Hex, status: "spent" }));
+    store.claimServed(spent.handle, { status: "unspent" });
+    assert.equal(store.get(spent.handle)!.status, "spent");
+    // a note still being created takes the confirmed status
+    const fresh = store.add(sampleNote({ sweptFrom: `0x${"ef".repeat(32)}` as Hex }));
+    store.update(fresh.handle, { status: "pending", pending: "create" });
+    store.claimServed(fresh.handle, { status: "unspent", createdTx: tx });
+    assert.equal(store.get(fresh.handle)!.status, "unspent");
+    assert.equal(store.get(fresh.handle)!.pending, undefined);
+    assert.equal(store.get(fresh.handle)!.createdTx, tx);
+  });
+
   test("the note store is encrypted at rest and opens only with its key", () => {
     const dir = tmp();
     const env: Env = { GLOAM_AGENT_ID: "bot", GLOAM_NOTE_KEY: KEY_A, GLOAM_NOTE_STORE: join(dir, "notes.json") };

@@ -284,7 +284,16 @@ export class NoteStore {
       const from = note.sweptFrom.toLowerCase();
       const before = d.notes.find((n) => n.sweptFrom?.toLowerCase() === from && servedPayment(n));
       if (before) return { claimed: false, servedBy: before.handle };
-      const next: StoredNote = { ...note, ...patch, served: true, updatedAt: new Date().toISOString() };
+      // Only a note still being created (or marked dead) takes the new status: one already confirmed,
+      // mid-spend or spent keeps its own (the patch comes from a read made before the lock).
+      const promote = note.status === "dead" || (note.status === "pending" && note.pending === "create");
+      const next: StoredNote = {
+        ...note,
+        ...(patch.createdTx !== undefined ? { createdTx: patch.createdTx } : {}),
+        ...(promote && patch.status ? { status: patch.status } : {}),
+        served: true,
+        updatedAt: new Date().toISOString(),
+      };
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
       return { claimed: true, note: next };
