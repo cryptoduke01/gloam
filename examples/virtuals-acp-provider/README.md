@@ -115,6 +115,14 @@ Other rules the provider keeps:
   asked again, never read as "not funded", and a job funded on chain keeps its
   principal reserved even when it was blocked from paying.
 - A job on a chain other than the provider's is refused.
+- The ACP contracts are upgradeable proxies. The provider reads the proxy's
+  implementation before it quotes and before it pays, and refuses unless it is
+  the one this code was checked against (`ACP_IMPLEMENTATIONS`). It does not
+  quote when it cannot read the chain's block number.
+- A quoted job keeps its principal reserved until the chain says it was not
+  funded. `provider.start()` (run by `scripts/live.mts`) settles quoted jobs
+  that expired while the provider was away: funded ones have their principal
+  sent back, the others free their reserve.
 - The earnings sweep adds only fees and settled principal: it leaves in the
   wallet the principal of jobs not yet paid out, of jobs quoted but not yet
   funded, and refunds owed or held (`publicReserve`).

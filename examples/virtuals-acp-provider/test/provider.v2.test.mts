@@ -255,3 +255,63 @@ test("a payout the engine answers without a hash is recorded without one, never 
   assert.equal(r?.status, "paid");
   assert.equal(r?.tx, undefined);
 });
+
+test("a quoted job past its expiry is settled from the chain on start: funded means its principal goes back, not funded frees its reserve", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const refunds: bigint[] = [];
+  const f = fakeWallet(pk, acp);
+  const p = providerFor(f.wallet, { refund: async (to, _t, raw) => (refunds.push(raw), acp.sent(PROVIDER, to, raw)) });
+  const token = f.wallet.network.assets[0]!.address;
+  const funded1 = new FakeSession("11", acp);
+  await p.onEntry(funded1, requirementEntry("11", { payouts: [{ to: r1.tag, amount: "4" }] }));
+  funded1.fund(); // funded on chain; the provider never heard
+  const unfunded = new FakeSession("12", acp);
+  await p.onEntry(unfunded, requirementEntry("12", { payouts: [{ to: r1.tag, amount: "3" }] }));
+  try {
+    Date.now = () => realNow() + 2 * 60 * 60_000;
+    assert.equal(p.publicReserve(token), 7_000_000n, "both held until the chain says otherwise");
+    await p.start();
+    assert.equal(p.status(84532, "12")?.state, "expired");
+    assert.equal(p.status(84532, "12")?.funded, false);
+    assert.equal(p.status(84532, "11")?.funded, true);
+    assert.deepEqual(refunds, [4_000_000n], "the funded one's principal goes back");
+    assert.equal(p.publicReserve(token), 0n);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("no quote when the chain's block number cannot be read, or when the ACP contract was upgraded; no payout after an upgrade", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp);
+  const p = providerFor(f.wallet);
+  const req = { payouts: [{ to: r1.tag, amount: "2" }] };
+  const realBlock = acp.getBlockNumber;
+  acp.getBlockNumber = async () => {
+    throw new Error("HTTP request failed. Status: 429");
+  };
+  const s1 = new FakeSession("13", acp);
+  await p.onEntry(s1, requirementEntry("13", req));
+  assert.match(String(s1.rejected), /chain/);
+  assert.equal(s1.budget, null);
+  acp.getBlockNumber = realBlock;
+  acp.implementation = "0x00000000000000000000000000000000000000ee";
+  const s2 = new FakeSession("14", acp);
+  await p.onEntry(s2, requirementEntry("14", req));
+  assert.match(String(s2.rejected), /upgraded|implementation/);
+  assert.equal(s2.budget, null);
+  // Quoted before an upgrade, funded after it: not paid.
+  acp.implementation = "0xc4e95dbc7e8c99c114ff9c8299a3e4851e1530ff";
+  const s3 = new FakeSession("15", acp);
+  await p.onEntry(s3, requirementEntry("15", req));
+  assert.ok(s3.budget);
+  acp.implementation = "0x00000000000000000000000000000000000000ee";
+  s3.fund();
+  await p.onEntry(s3, funded("15"));
+  assert.equal(f.paid.length, 0);
+  assert.match(String(p.status(84532, "15")?.blocked), /upgraded|implementation/);
+});

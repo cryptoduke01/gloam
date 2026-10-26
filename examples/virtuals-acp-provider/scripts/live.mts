@@ -112,5 +112,8 @@ const service = new PrivatePayoutProvider({
 });
 
 agent.on("entry", (session, entry) => service.onEntry(session, entry));
+// Jobs quoted before a restart that expired meanwhile, and refunds still owed, are settled from the chain first.
+await service.start();
+for (const r of service.refundsNeedingOwner()) console.log(`refund waiting for you: job ${r.jobId}, ${r.amount} to ${r.client}: ${r.why}`);
 await agent.start();
 console.log(`private payout provider listening on ACP ${mainnet ? "mainnet" : "testnet"} (chain ${chainId}); Gloam address ${await wallet.address()}`);
