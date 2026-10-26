@@ -81,6 +81,20 @@ export interface OnChainJob {
 export const NO_EVALUATOR: Address = "0x0000000000000000000000000000000000000000";
 
 /**
+ * The ACP contracts are upgradeable proxies. The implementation each one ran
+ * when this provider was written and checked (EIP-1967 slot, read 26 Oct 2026):
+ * the provider quotes and pays only while the proxy still points there.
+ */
+export const ACP_IMPLEMENTATIONS: Record<number, Address> = {
+  8453: "0x8e86fbef4a4c927561cb6447ced77fffbf3b77bc",
+  4663: "0x8e86fbef4a4c927561cb6447ced77fffbf3b77bc",
+  84532: "0xc4e95dbc7e8c99c114ff9c8299a3e4851e1530ff",
+};
+
+/** keccak256("eip1967.proxy.implementation") - 1 */
+export const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc" as const;
+
+/**
  * Virtuals' FundTransferHook (whitelisted on these contracts): with it as the
  * job's hook, the provider's setBudget names a token, an amount and a
  * destination, and the client's fund() moves that amount from the client to

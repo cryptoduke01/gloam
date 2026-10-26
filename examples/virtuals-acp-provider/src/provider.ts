@@ -63,7 +63,9 @@ import { isNotSent, safeErrorMessage, type GloamAgent } from "@gloamtrade/game-p
 import {
   ACP_ABI,
   ACP_CONTRACTS,
+  ACP_IMPLEMENTATIONS,
   ACP_STATUS,
+  EIP1967_IMPLEMENTATION_SLOT,
   ERC20_TRANSFER_EVENT,
   FUND_TRANSFER_EVENT_TOPIC,
   FUND_TRANSFER_HOOKS,
@@ -183,7 +185,7 @@ class Journal {
 }
 
 /** The chain reads the provider makes: jobs(jobId), the JobFunded log and its transaction, the block number. */
-export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber" | "getTransactionReceipt">;
+export type AcpChainReader = Pick<PublicClient, "readContract" | "getLogs" | "getBlockNumber" | "getTransactionReceipt" | "getStorageAt">;
 
 export interface PrivatePayoutProviderOptions {
   /** The provider's Gloam engine (its private float pays the payouts; its wallet receives the principal). */
@@ -224,6 +226,8 @@ export interface PrivatePayoutProviderOptions {
   providerAddress?: Address;
   /** The ACP contract. Default: ACP_CONTRACTS for the job's chain. */
   acpAddress?: Address;
+  /** The ACP implementation the proxy must point to. Default: ACP_IMPLEMENTATIONS for the job's chain. */
+  acpImplementation?: Address;
   /** Reads the ACP contract. Default: the Gloam engine's public client (the same chain). */
   chain?: AcpChainReader;
   log?: (msg: string) => void;
@@ -301,6 +305,7 @@ export class PrivatePayoutProvider {
         const j = this.journal.get(k);
         if (j) this.journal.put(k, { ...j, state: "completed" });
         this.log(`job ${session.jobId} completed; the escrow paid this provider`);
+        await this.checkQuoted();
         await this.retryRefunds();
         if (this.opts.earnings) {
           const res = await this.opts.earnings
@@ -406,6 +411,10 @@ export class PrivatePayoutProvider {
     const budget = this.opts.budgetToken(q.budget, session.chainId);
     if (budget.decimals !== a.decimals) throw new Error("The ACP token and the Gloam asset have different decimals; this provider prices them 1:1 only when they match.");
     const quotedAtBlock = await this.reader().getBlockNumber().catch(() => null);
+    // Without the block, a later search for the funding would have to guess its window.
+    if (quotedAtBlock === null) return this.refuse(session, "chain unreadable", "This provider could not read the chain just now, so it does not quote. Try again shortly.");
+    const upgraded = await this.acpUpgraded(session.chainId);
+    if (upgraded) return this.refuse(session, "acp upgraded", `Not quoting: ${upgraded}.`);
     this.journal.put(this.key(session), {
       chainId: session.chainId,
       jobId: session.jobId,
@@ -415,7 +424,7 @@ export class PrivatePayoutProvider {
       state: "quoted",
       budgetRaw: q.budget.toString(),
       transferRaw: q.transfer.toString(),
-      ...(quotedAtBlock !== null ? { quotedAtBlock: quotedAtBlock.toString() } : {}),
+      quotedAtBlock: quotedAtBlock.toString(),
       expiredAt: job.expiredAt.toString(),
       payouts: parsed.payouts,
       replyTo: parsed.replyTo,
@@ -437,6 +446,49 @@ export class PrivatePayoutProvider {
   }
 
   // ------------------------------------------------------------------ the chain
+
+  /**
+   * Why the ACP contract on this chain is not the one this provider was checked
+   * against (the proxy is upgradeable), or null when it is.
+   */
+  private async acpUpgraded(chainId: number): Promise<string | null> {
+    const acp = this.opts.acpAddress ?? ACP_CONTRACTS[chainId]?.acp;
+    const want = this.opts.acpImplementation ?? ACP_IMPLEMENTATIONS[chainId];
+    if (!acp || !want) return `no ACP contract and implementation known for chain ${chainId}`;
+    let slot: Hex | undefined;
+    try {
+      slot = await this.reader().getStorageAt({ address: acp, slot: EIP1967_IMPLEMENTATION_SLOT });
+    } catch {
+      return "the ACP contract's implementation could not be read";
+    }
+    const got = slot ? `0x${slot.slice(-40)}` : "";
+    return lower(got) === lower(want) ? null : `the ACP contract was upgraded (implementation ${got || "unknown"}, checked against ${want})`;
+  }
+
+  /**
+   * Settle quoted jobs past their expiry from the chain: one that was funded
+   * (its job.funded event never arrived) ends as expired with its principal owed
+   * back; one that was not funded ends and frees its reserve. Until the chain
+   * says, a quoted job keeps its principal reserved. Runs on start() and before
+   * each earnings sweep.
+   */
+  async checkQuoted(): Promise<void> {
+    const chainId = this.opts.wallet.network.chainId;
+    for (const [k, j] of this.journal.all()) {
+      if (j.chainId !== chainId || j.funded || !ACTIVE.has(j.state)) continue;
+      if (!j.expiredAt || Number(j.expiredAt) * 1000 > Date.now()) continue;
+      const f = await this.funding(chainId, j);
+      if (f.funded === null || (f.funded && f.received === null)) continue;
+      this.journal.put(k, { ...j, state: "expired", funded: f.funded, fundingUnknown: undefined, ...(f.funded ? { receivedRaw: f.received!.toString() } : {}), refundedRaw: j.refundedRaw ?? "0", refundTxs: j.refundTxs ?? [] });
+      this.log(`job ${j.jobId}: expired ${f.funded ? "after it was funded; its principal goes back" : "without being funded"}`);
+    }
+  }
+
+  /** Call once when the provider starts: settles quoted jobs that expired while it was away, and refunds owed. */
+  async start(): Promise<void> {
+    await this.checkQuoted();
+    await this.retryRefunds();
+  }
 
   /** The job as the ACP contract holds it, or null when no ACP contract is known for its chain. */
   async readJob(chainId: number, jobId: string): Promise<OnChainJob | null> {
@@ -581,6 +633,12 @@ export class PrivatePayoutProvider {
       }
       this.journal.put(k, next);
       this.log(`job ${session.jobId}: not paying: ${why}`);
+      return;
+    }
+    const upgraded = await this.acpUpgraded(session.chainId);
+    if (upgraded) {
+      this.journal.put(k, { ...j, funded: true, fundingUnknown: undefined, blocked: upgraded });
+      this.log(`job ${session.jobId}: not paying: ${upgraded}`);
       return;
     }
     // On a fund-transfer job, what the client's fund() moved to this provider bounds the payouts.
@@ -973,8 +1031,7 @@ export class PrivatePayoutProvider {
         continue;
       }
       if (!j.funded) {
-        // Quoted: the transfer can arrive until the job expires.
-        if (j.expiredAt && Number(j.expiredAt) * 1000 < Date.now()) continue;
+        // Quoted: held until the chain says it was not funded (checkQuoted), never on the clock alone.
         sum += transfer;
         continue;
       }
