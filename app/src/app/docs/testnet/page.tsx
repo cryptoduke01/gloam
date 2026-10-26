@@ -19,7 +19,7 @@ import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 export const metadata: Metadata = {
   title: "Practice on testnet",
   description:
-    "Practice with Gloam on testnet before you use mainnet: wallet setup, faucet, shield, private pay, cash out, demo video, and troubleshooting on Robinhood Chain testnet and Tempo Moderato.",
+    "Practice with Gloam on testnet before you use mainnet: wallet setup, faucet, shield, private pay, cash out, demo video, and troubleshooting on Robinhood Chain testnet, Tempo Moderato, Base Sepolia and Ethereum Sepolia.",
 };
 
 export default function DocsTestnetPage() {
@@ -45,9 +45,10 @@ export default function DocsTestnetPage() {
       ]}
     >
       <div className="rounded-[14px] bg-surface px-5 py-4 text-[14px] leading-relaxed text-mute">
-        Testnet proofs use development keys. For mainnet, pick Robinhood Chain or
-        Tempo mainnet in the app&apos;s network selector; mainnet uses the final
-        keys from the 13-contributor ceremony. Test funds never move to
+        Robinhood Chain and Tempo testnet proofs use development keys; Base
+        Sepolia and Ethereum Sepolia use the final keys, like mainnet. For
+        mainnet, pick a network marked Mainnet in the app&apos;s network
+        selector; mainnet uses the final keys from the 13-contributor ceremony. Test funds never move to
         mainnet. Network details:{" "}
         <Link href="/docs/chain">Networks</Link>.
       </div>
@@ -444,9 +445,9 @@ export default function DocsTestnetPage() {
           Export / import before clearing cache or switching browsers.
         </li>
         <li>
-          Testnet proofs use the dev keys. Mainnet proofs use the final keys
-          from the 13-contributor ceremony, so a testnet proof never checks out
-          on mainnet. See the{" "}
+          Robinhood Chain and Tempo testnet proofs use the dev keys, so they
+          never check out on mainnet. Mainnet, Base Sepolia and Ethereum
+          Sepolia proofs use the final keys from the 13-contributor ceremony. See the{" "}
           <Link href="/docs/production">production gate</Link>.
         </li>
       </ul>

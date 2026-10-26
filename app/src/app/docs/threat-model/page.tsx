@@ -77,7 +77,7 @@ const ACTORS: { who: string; can: string; cannot: string }[] = [
   },
   {
     who: "Whoever ran the trusted setup",
-    can: "On testnet, where the dev keys had one contributor, forge proofs if they kept its secret, and so drain the test pool.",
+    can: "On the Robinhood Chain and Tempo testnets, where the dev keys had one contributor, forge proofs if they kept its secret, and so drain the test pool.",
     cannot: "Do the same on mainnet, provided one of the 13 contributors to the mainnet ceremony destroyed their secret.",
   },
 ];
@@ -229,9 +229,9 @@ export default function DocsThreatModelPage() {
         adding an asset. A harmful change, such as a bad verifier, gives everyone three
         days to cash out first. On the mainnet vault the owner can also lower deposit
         limits at once, down to zero. That can stop new deposits during an incident,
-        never withdrawals or private sends. At launch the owner, which is also the
-        treasury, is a single wallet (<code>0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8</code>).
-        A multisig is planned.
+        never withdrawals or private sends. The owner is a single wallet (
+        <code>0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8</code>); since 24 October
+        cash-out fees go to a separate treasury wallet. A multisig is planned.
       </p>
 
       <h3>The web app</h3>
@@ -301,8 +301,9 @@ export default function DocsThreatModelPage() {
           goes through a public RPC, which can tie your IP address to that payment.
         </li>
         <li>
-          <strong>Single-wallet owner.</strong> One wallet is owner and treasury at
-          launch. A multisig is planned.
+          <strong>Single-wallet owner.</strong> One wallet is the owner. Cash-out
+          fees go to a separate treasury wallet since 24 October. A multisig is
+          planned.
         </li>
         <li>
           <strong>Team-run relayer.</strong> The Gloam team runs the relayer at launch.

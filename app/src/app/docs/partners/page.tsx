@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
+import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 
 export const metadata: Metadata = {
   title: "Partner program and API",
@@ -126,7 +127,7 @@ export default function DocsPartnersPage() {
 
       <h2>Partner fees: not charged yet</h2>
       <p>
-        Gloam runs on Robinhood Chain and Tempo mainnet, and on their testnets.
+        Gloam runs on {liveMainnetNames()} mainnet, and on the testnets.
         On every network, the portal records what your key brought in and the fee
         your setting would have earned, and every figure is labeled that way. No
         partner fee is taken from anyone, and every API response says{" "}
@@ -306,7 +307,11 @@ curl https://gloam.trade/api/v1/relay \\
       <p>
         <code>GET /api/v1/vaults</code> (or one network:{" "}
         <code>/vaults/robinhood-mainnet</code>, <code>/vaults/tempo-mainnet</code>,{" "}
-        <code>/vaults/robinhood</code>, <code>/vaults/tempo</code>) gives each
+        {mainnetPool(8453) ? <><code>/vaults/base-mainnet</code>, </> : null}
+        {mainnetPool(1) ? <><code>/vaults/ethereum-mainnet</code>, </> : null}
+        <code>/vaults/robinhood</code>, <code>/vaults/tempo</code>,{" "}
+        <code>/vaults/base</code> (Base Sepolia) or{" "}
+        <code>/vaults/ethereum</code> (Ethereum Sepolia)) gives each
         network&apos;s vault address, the
         tokens it takes, whether the relay is up, and a fresh read of the tree size
         and root, plus <code>leafCapacity</code> and <code>leavesLeft</code> for

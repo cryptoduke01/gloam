@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
+import { mainnetPool } from "@/lib/mainnet";
+
+/** Base and Ethereum mainnet move from "still ahead" to live once their pools are in (lib/mainnet.ts). */
+const BASE_LIVE = mainnetPool(8453) !== null;
+const ETHEREUM_LIVE = mainnetPool(1) !== null;
+const LATER = [BASE_LIVE ? "Base (8453)" : null, ETHEREUM_LIVE ? "Ethereum (1)" : null].filter(Boolean).join(" and ");
 
 export const metadata: Metadata = {
   title: "Production gate",
@@ -18,7 +24,7 @@ export default function DocsProductionPage() {
         { label: "Mainnet", value: "Live since 21 Oct, 13:00 UTC" },
         { label: "Keys", value: "Final, 13 contributors" },
         { label: "Review", value: "Internal; external planned" },
-        { label: "Testnet", value: "Dev keys, test funds" },
+        { label: "Testnet", value: "Test funds" },
       ]}
     >
       <h2>Why this page exists</h2>
@@ -29,8 +35,9 @@ export default function DocsProductionPage() {
         browser, and that is real cryptography. On mainnet the proofs use the
         final keys from the production trusted setup (see the{" "}
         <a href="https://github.com/cryptoduke01/gloam/releases/tag/ceremony-final">transcript</a>).
-        The testnets keep development keys, which are{" "}
-        <strong>not</strong> safe for mainnet, so they stay testnet only.
+        The Robinhood Chain and Tempo testnets keep development keys, which
+        are <strong>not</strong> safe for mainnet, so they stay testnet only.
+        Base Sepolia and Ethereum Sepolia run the final keys.
       </p>
 
       <FlowDiagram
@@ -77,7 +84,8 @@ export default function DocsProductionPage() {
         </li>
         <li>
           Done: their SHA-256 fingerprints are pinned, and each network proves with its own
-          set: dev keys on testnet, the final keys on mainnet
+          set: dev keys on the Robinhood Chain and Tempo testnets, the final
+          keys on mainnet, Base Sepolia and Ethereum Sepolia
         </li>
         <li>
           Done: the mainnet deploy refuses to create a pool unless its verifiers accept
@@ -90,7 +98,9 @@ export default function DocsProductionPage() {
       <ul>
         <li>
           <strong>Pools.</strong> <code>ShieldPoolPayments</code> on Robinhood
-          Chain (4663) and Tempo (4217). Addresses and assets are on{" "}
+          Chain (4663) and Tempo (4217).
+          {LATER ? ` ${LATER} joined later on the same deploy and keys.` : ""}{" "}
+          Addresses and assets are on{" "}
           <Link href="/docs/chain#mainnet">Networks</Link>.
         </li>
         <li>
@@ -133,9 +143,11 @@ export default function DocsProductionPage() {
           beta limits cap how much the pools can hold.
         </li>
         <li>
-          <strong>Multisig owner.</strong> At launch one wallet is owner and
-          treasury (<code>0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8</code>). A
-          multisig is planned.
+          <strong>Multisig owner.</strong> One wallet is the owner (
+          <code>0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8</code>). Cash-out
+          fees go to the treasury (
+          <code>0xB3900ac9350903218e4c7597bAb0f008F01B30B8</code>) since 24
+          October. A multisig is planned.
         </li>
         <li>
           <strong>Relayer.</strong> The Gloam team runs it at launch. It only
@@ -152,19 +164,23 @@ export default function DocsProductionPage() {
           swapped, not the tokens or the amounts. The old sealed trade, which
           tried to hide the size too, is retired and stays off
         </li>
-        <li>
-          <strong>Base mainnet.</strong> Next on the same deploy script and
-          final keys. Base Sepolia, its testnet, has run it since 24
-          October; Base mainnet follows once that is tested end to end. See{" "}
-          <Link href="/docs/chain#base">Networks</Link>.
-        </li>
-        <li>
-          <strong>Ethereum mainnet.</strong> Next on the same deploy script and
-          final keys, with Ethereum Sepolia as its testnet on the same code.
-          The relay pays Ethereum gas only under its ceiling, 3 gwei by
-          default, and waits above it. See{" "}
-          <Link href="/docs/chain#ethereum">Networks</Link>.
-        </li>
+        {!BASE_LIVE && (
+          <li>
+            <strong>Base mainnet.</strong> Next on the same deploy script and
+            final keys. Base Sepolia, its testnet, has run it since 24
+            October; Base mainnet follows once that is tested end to end. See{" "}
+            <Link href="/docs/chain#base">Networks</Link>.
+          </li>
+        )}
+        {!ETHEREUM_LIVE && (
+          <li>
+            <strong>Ethereum mainnet.</strong> Next on the same deploy script
+            and final keys. Ethereum Sepolia, its testnet, has run it since 25
+            October. The relay pays Ethereum gas only under its ceiling, 3 gwei
+            by default, and waits above it. See{" "}
+            <Link href="/docs/chain#ethereum">Networks</Link>.
+          </li>
+        )}
         <li>
           <strong>Stronger key custody.</strong> Notes and receive keys are encrypted at rest, but
           the key is device-bound; a wallet-bound or passphrase key is still open
