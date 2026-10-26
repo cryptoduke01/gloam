@@ -157,6 +157,27 @@ await ok("a saved part that does not parse is ignored, and a full walk runs", as
   }
 });
 
+await ok("a first walk that stops halfway keeps what it read, and the next load starts there", async () => {
+  scan.clearDepositScans();
+  // the node goes away after 20 reads
+  const c = fakeClient(() => head);
+  const getLogs = c.getLogs;
+  let n = 0;
+  c.getLogs = (async (q: Parameters<typeof getLogs>[0]) => {
+    if (++n > 20) throw new Error("connection reset");
+    return getLogs(q);
+  }) as typeof getLogs;
+  await assert.rejects(scan.scanDeposits(c as never, NET, ME));
+  // parts of 3 rounds of 3 spans (900k blocks) are saved as they end: 18 reads made it
+  const c2 = fakeClient(() => head);
+  const rows = await scan.scanDeposits(c2 as never, NET, ME);
+  assert.equal(c2.calls[0]!.from, DEPLOY + 1_800_000n);
+  assert.equal(c2.calls.length, 40 - 18);
+  assert.deepEqual(rows.map((r) => r.leafIndex), [0, 2, 3]);
+  const again = await scan.scanDeposits(fakeClient(() => head) as never, NET, ME);
+  assert.deepEqual(again, rows);
+});
+
 await ok("two callers at once share one read", async () => {
   scan.clearDepositScans();
   const c = fakeClient(() => head);
