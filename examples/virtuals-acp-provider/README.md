@@ -110,8 +110,13 @@ Other rules the provider keeps:
   amount stays reserved until then. One whose answer is lost is never sent
   again on its own: it waits for the owner (`refundsNeedingOwner()`, then
   `resolveRefund(chainId, jobId, { tx })` with the transaction that sent it, or
-  `{ notSent: true }`). Refund rounds run one at a time, on each job end and
-  before each earnings sweep. A funding lookup the RPC cannot answer is
+  `{ notSent: true }`). A `tx` already counted for any job is refused, and when
+  the refund's own transaction was recorded only that one settles it.
+  `notSent` is refused while a recorded transaction may still land: acp-node-v2
+  signs each user operation with a random nonce key, so nobody can prove an
+  operation handed to a bundler was not sent. Refund rounds, and every other
+  change to a job's journal entry outside a payout, run one at a time and read
+  the entry again right before writing it. A funding lookup the RPC cannot answer is
   asked again, never read as "not funded", and a job funded on chain keeps its
   principal reserved even when it was blocked from paying.
 - A job on a chain other than the provider's is refused.
