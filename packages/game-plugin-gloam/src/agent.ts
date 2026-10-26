@@ -1095,15 +1095,16 @@ export class GloamAgent {
     const now = this.store.get(first.handle);
     if (now && now.status !== "pending") {
       // The earlier one landed. It is this payment only if it carries this note; another payment of the same
-      // amount to the same payee (another invoice) is never answered with it. It is not sent this time either:
-      // asked again, it goes out (the earlier one is settled now).
+      // amount to the same payee (another invoice) is never answered with it. Nothing is sent this time: a planner
+      // that reworded the note of the same payment must not pay it again, so it is told to ask again only for a
+      // different payment (the earlier one is settled now, so that next call goes out).
       if ((now.memo ?? "") === (memo ?? "")) return { kind: "answer", outcome: await landed(now) };
       return {
         kind: "answer",
         outcome: {
           status: "refused",
           code: "earlier_payment_landed",
-          message: `An earlier payment of the same amount to the same payee (${now.handle}${now.memo ? `, note "${now.memo}"` : ""}) has just landed. This one${memo ? ` (note "${memo}")` : ""} was not sent: ask again to send it.`,
+          message: `An earlier payment of the same amount to the same payee (${now.handle}${now.memo ? `, note "${now.memo}"` : ""}) has just landed, so this one${memo ? ` (note "${memo}")` : ""} was not sent. If this is the same payment, it is already paid; ask again only for a different payment.`,
           payment: now.handle,
         },
       };
