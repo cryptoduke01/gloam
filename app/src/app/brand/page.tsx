@@ -492,7 +492,7 @@ export default function BrandPage() {
                       <p className="text-[13px]">{s.name}</p>
                       <p className="tnum text-[12px] text-mute">{s.spec}</p>
                     </div>
-                    <p className={`${s.cls} min-w-0 truncate`}>{s.sample}</p>
+                    <p className={`${s.cls} min-w-0 truncate pb-[0.12em]`}>{s.sample}</p>
                   </div>
                 ))}
               </div>
