@@ -144,9 +144,11 @@ check("Ethereum assets as checked on chain, EURC never a dollar, USDT approvals 
   assert.equal(tokens.knownTokens(1)[0]!.symbol, "USDC");
 });
 
-check("still a bridge origin, but no bridge into Ethereum and no swaps", () => {
-  assert.equal(BRIDGE_DESTINATIONS.ethereum, undefined);
-  assert.equal(bridgeVisible(nets.getNetwork("ethereum-mainnet")), false);
+check("a bridge origin and a bridge into Ethereum (USDC), no swaps", () => {
+  assert.equal(BRIDGE_DESTINATIONS.ethereum?.chainId, 1);
+  assert.equal(BRIDGE_DESTINATIONS.ethereum?.token.address.toLowerCase(), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+  assert.equal(bridgeVisible(nets.getNetwork("ethereum-mainnet")), true);
+  assert.equal(bridgeVisible(nets.getNetwork("ethereum")), false, "Relay only delivers to mainnets");
   const origin = bridgeChain(1);
   assert.ok(origin, "Ethereum stays a chain money can be brought over from");
   assert.deepEqual(origin.tokens.map((t) => t.symbol), ["USDC", "USDT", "USDG", "PYUSD", "ETH"]);

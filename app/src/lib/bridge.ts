@@ -78,8 +78,8 @@ export interface BridgeDestination {
 
 /**
  * Where money lands on each chain: the mainnet stablecoin its pool takes. A
- * chain with no entry has no bridge in yet (Base: the Relay bridge comes next),
- * so the app shows no bridge panel there and the bridge routes refuse it.
+ * chain with no entry has no bridge in yet, so the app shows no bridge panel
+ * there and the bridge routes refuse it.
  */
 export const BRIDGE_DESTINATIONS: Partial<Record<ChainFamily, BridgeDestination>> = {
   robinhood: {
@@ -92,7 +92,22 @@ export const BRIDGE_DESTINATIONS: Partial<Record<ChainFamily, BridgeDestination>
     chain: "Tempo",
     token: { symbol: "USDC", address: "0x20c000000000000000000000b9537d11c60e8b50", decimals: 6, logo: "/brand/tokens/usdc.png" },
   },
+  base: {
+    chainId: 8453,
+    chain: "Base",
+    token: { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, logo: "/brand/tokens/usdc.png" },
+  },
+  ethereum: {
+    chainId: 1,
+    chain: "Ethereum",
+    token: { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, logo: "/brand/tokens/usdc.png" },
+  },
 };
+
+/** The chains money can come from into `destChainId`: every listed chain but that one. */
+export function bridgeSources<T extends { id: number }>(chains: readonly T[], destChainId: number): T[] {
+  return chains.filter((c) => c.id !== destChainId);
+}
 
 /**
  * The gas coin on a network's own chain, swapped by Relay into the pool's

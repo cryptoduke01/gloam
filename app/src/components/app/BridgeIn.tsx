@@ -8,6 +8,7 @@ import { useAccount, useConfig } from "wagmi";
 import { getAccount, sendTransaction, switchChain, waitForTransactionReceipt } from "wagmi/actions";
 import {
   BRIDGE_CHAINS,
+  bridgeSources,
   BRIDGE_DESTINATIONS,
   BRIDGE_MAX_USD,
   BRIDGE_MIN_USD,
@@ -129,9 +130,11 @@ export function BridgeInCard({
   const dest = BRIDGE_DESTINATIONS[network.family];
   const swap = swapSource(network);
   const [open, setOpen] = useState(false);
-  const featured = FEATURED.filter((id) => CHAINS.some((c) => c.id === id));
-  const solanaPrivate = !network.chain.testnet && Boolean(network.pool) && CHAINS.some(privateBridgeable);
-  // No bridge into this chain yet (Base): nothing to offer.
+  // never offer the chain the money lands on as where it comes from
+  const sources = dest ? bridgeSources(CHAINS, dest.chainId) : CHAINS;
+  const featured = FEATURED.filter((id) => sources.some((c) => c.id === id));
+  const solanaPrivate = !network.chain.testnet && Boolean(network.pool) && sources.some(privateBridgeable);
+  // No bridge into this chain yet: nothing to offer.
   if (!dest) return null;
 
   return (
@@ -141,10 +144,10 @@ export function BridgeInCard({
         {featured.map((id, i) => (
           <ChainLogo key={id} id={id} size={28} className={`ring-2 ring-panel ${i > 0 ? "-ml-2" : ""}`} />
         ))}
-        <span className="ml-2.5 text-[12.5px] text-mute">+{CHAINS.length - featured.length} more</span>
+        <span className="ml-2.5 text-[12.5px] text-mute">+{sources.length - featured.length} more</span>
       </div>
       <p className="mt-3 text-[14px] leading-relaxed text-foreground">
-        Bring money over from {CHAINS.length} chains, or straight from an exchange.
+        Bring money over from {sources.length} chains, or straight from an exchange.
       </p>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
         {solanaPrivate
@@ -225,7 +228,8 @@ function BridgeSheet({
   const dest = BRIDGE_DESTINATIONS[network.family]!;
   const swap = swapSource(network);
   // The swap on this chain comes first: it is the cheapest way in for ETH already here.
-  const chains = useMemo(() => (swap ? [swap, ...CHAINS] : CHAINS), [swap]);
+  const sources = useMemo(() => bridgeSources(CHAINS, dest.chainId), [dest.chainId]);
+  const chains = useMemo(() => (swap ? [swap, ...sources] : sources), [swap, sources]);
   const reduce = useReducedMotion();
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const [chosen, setChain] = useState<BridgeChain>(() => (startOnSwap && swap) || chains[0]!);
@@ -807,7 +811,7 @@ function BridgeSheet({
             </h2>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-mute">
               {picking
-                ? `${CHAINS.length} chains. Sending from an exchange works too: pick the chain you withdraw on.`
+                ? `${sources.length} chains. Sending from an exchange works too: pick the chain you withdraw on.`
                 : swapping
                   ? privately
                     ? `Swap ${token.symbol} for ${dest.token.symbol}, straight into your private balance.`
