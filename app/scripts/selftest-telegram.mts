@@ -2864,6 +2864,17 @@ await test("spam: the promoter pitch and the other real examples are deleted and
     id++;
   }
   assert.ok(String(everySend.filter((x) => x.body.chat_id === OWNER.id).at(-cases.length)?.body.text).startsWith("I removed GUL ceo promoter from the group in General, for promotion or a service pitch."));
+  // a member tagging Glim on a pitch that is still up gets no answer to it either
+  reset();
+  const pitch: TgMessage = { message_id: 4090, chat, from: user(4091, "Ola"), date: 0, text: "We would like to propose a partnership with your project" };
+  await handleUpdate(upd(inTopic(TOPIC.general, "@glim_gloam_bot is this legit?", user(4092, "Ife"), { reply_to_message: pitch })));
+  assert.equal(groupSends().length + modelCalls().length, 0);
+  // forwards from a channel with a link, links hidden behind words, and other groups' invites
+  const ok = ["glim_gloam_bot"];
+  assert.equal(screen({ text: "big news, read here https://somechannel.xyz/post", name: { first_name: "Ada" }, forwardedFrom: "channel", okHandles: ok }).verdict?.rule, "forwarded_promo");
+  assert.equal(screen({ text: "read this", name: { first_name: "Ada" }, entities: [{ type: "text_link", offset: 0, length: 4, url: "https://evil.xyz/x" }], okHandles: ok }).gate, "link_spam");
+  assert.equal(screen({ text: "come chat at t.me/gloamhq/5 or t.me/addstickers/GlimByGloam", name: { first_name: "Ada" }, okHandles: ok }).verdict, null);
+  assert.equal(screen({ text: "better group here t.me/joinchat/abc", name: { first_name: "Ada" }, okHandles: ok }).verdict?.category, "link_spam");
   // nothing anywhere in the group says "passed it on" any more
   assert.ok(!everySend.some((x) => x.body.chat_id === GROUP && /passed it on|that one.s for the team/i.test(String(x.body.text))));
 });
