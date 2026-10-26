@@ -152,8 +152,9 @@ USDC.
 `scripts/live.mts` wires the same provider into `@virtuals-protocol/acp-node-v2`
 (0.1.15). It needs a registered ACP agent, its Privy wallet, and
 `pnpm add @virtuals-protocol/acp-node-v2@0.1.15` in this folder. Copy
-`.env.example` to `.env`. It defaults to ACP's testnet; mainnet needs
-`ACP_MAINNET=1`. The agent's wallet policy must allow the Gloam vault and the
+`.env.example` to `.env`. It runs on ACP's testnet only for now:
+`ACP_MAINNET=1` is refused until refunds through the ACP smart wallet are
+settled from the chain end to end. The agent's wallet policy must allow the Gloam vault and the
 token's approve for received money to go into its private balance. Limits come
 from `GLOAM_LIMITS_FILE`, else `limits.example.json` (USDC, Base Sepolia) or
 `limits.robinhood-mainnet.example.json` (USDG); the script stops if they cannot

@@ -35,6 +35,12 @@ function need(name: string): string {
 }
 
 const mainnet = process.env.ACP_MAINNET === "1";
+// Mainnet stays off until refunds through the ACP smart wallet are settled from the chain end to end
+// (a fixed nonce key per refund, read back from the EntryPoint). On testnet a refund whose answer is
+// lost is held for the owner, never sent twice.
+if (mainnet) {
+  throw new Error("This example does not run on ACP mainnet yet: refunds through the ACP smart wallet are not settled from the chain end to end. Run it on testnet.");
+}
 const chainId = Number(process.env.ACP_CHAIN_ID ?? (mainnet ? 4663 : 84532));
 const acp = ACP_CONTRACTS[chainId];
 if (!acp) throw new Error(`No ACP contract known for chain ${chainId}.`);
