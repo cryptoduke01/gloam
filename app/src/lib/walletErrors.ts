@@ -36,7 +36,13 @@ const BEFORE_SEND = new Set([
 ]);
 
 export function failedBeforeSend(e: unknown): boolean {
-  return chain(e).some((x) => typeof x.name === "string" && BEFORE_SEND.has(x.name));
+  const links = chain(e);
+  // viem names any -32603 internal error from the wallet a ContractFunctionRevertedError,
+  // and a wallet can answer that after it already sent the transaction: not sure then
+  const internal = links.some((x) => x.code === -32603 || x.name === "InternalRpcError");
+  return links.some(
+    (x) => typeof x.name === "string" && BEFORE_SEND.has(x.name) && !(internal && x.name === "ContractFunctionRevertedError")
+  );
 }
 
 /** The transaction surely never went out, so what was kept ahead of it can go. */
