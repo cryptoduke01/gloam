@@ -267,6 +267,9 @@ function assetInfo(chainId: number, asset: Address, fallbackDecimals = 18) {
 /** A spend reservation with no transaction after this long was never sent (a crash between reserve and broadcast). */
 const STUCK_MS = 10 * 60 * 1000;
 
+/** A payment whose sweeps never land is swept again this many times at most. */
+const MAX_RESWEEPS = 3;
+
 /** Relay answers that do not prove the transaction stayed unsent: the node may have taken it before the error. */
 const RELAY_MAYBE_SENT = ["maybe_sent", "rpc", "network", "error", "internal", "in_flight"];
 
@@ -1892,7 +1895,16 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           message: "The payment note was spent by another transaction before this server's sweep landed, most likely by the payer who created it. Do not grant access.",
         });
       }
-      // Still unspent, and no earlier sweep can land: sweep it again. Their fresh notes stay until a refresh clears them.
+      // Still unspent, and no earlier sweep can land: sweep it again, a few times at most. Their fresh notes stay
+      // until a refresh marks them dead.
+      if (earlier.length > MAX_RESWEEPS) {
+        return text({
+          status: "error",
+          grantAccess: false,
+          final: false,
+          error: `This payment was swept ${earlier.length} times and none landed, so it is not swept again. Check this server's RPC and wallet. Do not grant access.`,
+        });
+      }
     }
 
     if (!signer && !relay) {
