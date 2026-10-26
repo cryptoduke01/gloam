@@ -83,7 +83,7 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const FACTS: Fact[] = [
   {
     title: "No admin withdraw",
-    body: "The vault has no emergency withdraw and no function that lets anyone, the Gloam team included, take a balance out. Only a valid proof from its owner can. The owner can only sweep native coin sent to the vault by mistake, never money behind a balance or an owed fee.",
+    body: "The vault has no emergency withdraw and no function that lets anyone, the Gloam team included, take a balance out. Only a valid proof from the person who holds it can. The vault owner's one other money call sweeps native coin sent to the vault by mistake, never money behind a balance or an owed fee.",
   },
   {
     title: "Three days of public notice",
