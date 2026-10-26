@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
@@ -7,11 +8,34 @@ import { liveMainnetNames } from "@/lib/mainnet";
 /** The mainnets with a pool in, as words: Base and Ethereum join once theirs are (lib/mainnet.ts). */
 const MAINNETS = liveMainnetNames();
 
+/** Nullmask's own pages, checked on 25 October 2026. */
+const NM = {
+  privacyPolicy: "https://app.nullmask.io/privacy",
+  terms: "https://app.nullmask.io/terms",
+  docsPrivacy: "https://nullmask.io/docs/privacy",
+  docsSecurity: "https://nullmask.io/docs/security",
+  docsStart: "https://nullmask.io/docs/getting-started",
+  docsNetworks: "https://nullmask.io/docs/networks",
+  docsFees: "https://nullmask.io/docs/fees",
+  docsGas: "https://nullmask.io/docs/gas",
+  docsChecks: "https://nullmask.io/docs/deposit-checks",
+  docsSend: "https://nullmask.io/docs/send",
+  audits: "https://github.com/nullmask-io/contract-audits",
+};
+
+function Src({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}
+
 export const metadata: Metadata = {
   title: "How Gloam compares",
   alternates: { canonical: "/docs/compare" },
   description:
-    "Why a payment needs no key holder, and how Gloam compares with Zama, Arcium, Tempo Zones, Helius Privacy and Railgun: who can see your payments, what a breach exposes, and where each one wins.",
+    "Why a payment needs no key holder, and how Gloam compares with Zama, Arcium, Tempo Zones, Helius Privacy, Railgun and Nullmask: who can see your payments, what a breach exposes, and where each one wins.",
 };
 
 export default function DocsComparePage() {
@@ -22,7 +46,7 @@ export default function DocsComparePage() {
       glance={[
         { label: "Who holds a key", value: "only you" },
         { label: "Proofs made", value: "on your device" },
-        { label: "Networks", value: "Tempo · Robinhood Chain (mainnet)" },
+        { label: "Networks", value: `${MAINNETS} (mainnet)` },
         { label: "New cryptography", value: "none, by design" },
       ]}
       quickLinks={[
@@ -157,6 +181,23 @@ export default function DocsComparePage() {
               <td>Not found</td>
               <td>Not found</td>
             </tr>
+            <tr>
+              <td>Nullmask</td>
+              <td>
+                You and Nullmask: its servers hold the account keys that read balances and history (
+                <Src href={NM.docsPrivacy}>docs</Src>)
+              </td>
+              <td>
+                Every account&apos;s balance and history; the keys it holds cannot spend (
+                <Src href={NM.docsSecurity}>docs</Src>)
+              </td>
+              <td>
+                Robinhood Chain, named in its audit report (<Src href={NM.audits}>October 2026</Src>)
+              </td>
+              <td>Not found</td>
+              <td>Not found</td>
+              <td>Not found</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -225,6 +266,113 @@ export default function DocsComparePage() {
         and {MAINNETS}.
       </p>
 
+      <h3 id="nullmask">Nullmask</h3>
+      <p>
+        Nullmask keeps a private balance in a pool contract. Its docs list
+        Ethereum and Base (<Src href={NM.docsNetworks}>networks</Src>), and its
+        October 2026 audit report also names BNB Chain and Robinhood Chain. Its
+        servers create and keep each user&apos;s viewing and receiving keys and
+        prepare the proofs (<Src href={NM.privacyPolicy}>privacy policy</Src>).
+        Its docs say it protects activity &quot;from outside observers, not
+        from the operator&quot; (<Src href={NM.docsPrivacy}>what stays private</Src>).
+      </p>
+      <p>
+        <strong>Where they win:</strong> signing one message restores the
+        account on any device, with nothing to back up (
+        <Src href={NM.docsStart}>getting started</Src>), and the user docs are
+        short and plain. <strong>Where Gloam differs:</strong> the keys and the
+        proofs stay on your device, so there is no operator that can read a
+        balance, and the vault cannot be upgraded or paused.
+      </p>
+      <p>Checked on 25 October 2026, from Nullmask&apos;s own pages.</p>
+      <div className="overflow-x-auto">
+        <table className="min-w-[720px] [&_th]:whitespace-normal">
+          <thead>
+            <tr>
+              <th />
+              <th>Nullmask</th>
+              <th>Gloam today</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Keys and proofs</td>
+              <td>
+                Viewing and receiving keys made and kept on its servers, which also prepare the
+                proofs (<Src href={NM.privacyPolicy}>privacy policy</Src>)
+              </td>
+              <td>
+                Keys made and kept on your device, and proofs made there too (
+                <Link href="/verify#keys">what Gloam can&apos;t see</Link>)
+              </td>
+            </tr>
+            <tr>
+              <td>Upgrades and pausing</td>
+              <td>
+                Upgradeable by a 2-of-3 Safe (<Src href={NM.audits}>audit</Src>). Its terms allow
+                upgrades at once and without notice, and pausing withdrawals with no maximum length
+                (<Src href={NM.terms}>terms 8.3 to 8.4</Src>)
+              </td>
+              <td>
+                No proxy and no upgrade. No pause. A rule change waits 3 days in public (
+                <Link href="/verify#contracts">contracts</Link>)
+              </td>
+            </tr>
+            <tr>
+              <td>Reviews and circuits</td>
+              <td>
+                External audit of the contracts (4irelabs, October 2026). It says the Noir circuits
+                were not provided and were out of scope. The circuits are not published (
+                <Src href={NM.audits}>audits</Src>)
+              </td>
+              <td>Internal reviews; an external audit is in progress. The circuits are public in the repo</td>
+            </tr>
+            <tr>
+              <td>Fees</td>
+              <td>
+                0.5% to deposit, 0.5% to withdraw, private transfers free, plus a network fee (
+                <Src href={NM.docsFees}>fees</Src>)
+              </td>
+              <td>Deposits and private payments free; 0.25% to cash out</td>
+            </tr>
+            <tr>
+              <td>Gas</td>
+              <td>
+                Paid in ETH from a separate gas balance, then from private ETH (
+                <Src href={NM.docsGas}>gas</Src>)
+              </td>
+              <td>Your wallet pays to deposit. The Gloam relay pays for the sends and cash outs it submits</td>
+            </tr>
+            <tr>
+              <td>Deposits</td>
+              <td>
+                Screened before they are credited. Most take minutes, some up to 24 hours, a few
+                longer (<Src href={NM.docsChecks}>deposit checks</Src>)
+              </td>
+              <td>The depositing wallet is checked against the OFAC list before you sign. Credited when it lands</td>
+            </tr>
+            <tr>
+              <td>Paying someone new</td>
+              <td>
+                Becomes a withdrawal: the address, asset and amount are public (
+                <Src href={NM.docsSend}>send</Src>)
+              </td>
+              <td>A claim link: the money stays in the vault until they claim it into a note of their own</td>
+            </tr>
+            <tr>
+              <td>A new device</td>
+              <td>
+                One signature restores the account (<Src href={NM.docsStart}>getting started</Src>)
+              </td>
+              <td>
+                Turn on recovery: an encrypted backup your wallet signature or passkey opens. Keys
+                from one signature are planned
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <h3>Others worth knowing</h3>
       <ul>
         <li>
@@ -264,7 +412,7 @@ export default function DocsComparePage() {
         <li>
           <strong>Internal review only.</strong> Several rounds, with fixes
           deployed, and a review before launch that finished on 20 October with
-          no Critical or High findings open. An external audit is planned.
+          no Critical or High findings open. An external audit is in progress.
         </li>
         <li>
           <strong>Small crowd.</strong> The mainnet pools are new, so the
