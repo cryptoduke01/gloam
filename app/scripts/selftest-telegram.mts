@@ -70,6 +70,7 @@ const {
   handsToAdmin,
   hasBearerCode,
   imageRef,
+  isChatter,
   isVague,
   pickPhoto,
   readSentinel,
@@ -170,6 +171,10 @@ let chainHead = 0;
 const buyLogs: { transactionHash: string; blockNumber: string; data: string; topics: string[] }[] = [];
 /** What the "should I answer this?" check says. */
 let classifierReply = "HELP";
+/** What the spam check says, as the model would write it. */
+let spamReply = '{"spam": false, "category": "none", "confidence": 0.1}';
+/** Telegram refuses deletes, bans and mutes for lack of the admin rights while this is set. */
+let noRights = false;
 /** Files Telegram would serve, by file_id. */
 const files = new Map<string, Uint8Array>();
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]);
@@ -207,8 +212,13 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       if (buyMode === "photoTimeout" && method === "sendPhoto") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
     }
     if (method === "sendMessage") return reply({ ok: true, result: { message_id: nextId++ } });
+    if (noRights && (method === "deleteMessage" || method === "banChatMember" || method === "restrictChatMember")) {
+      const description = method === "deleteMessage" ? "Bad Request: message can't be deleted" : "Bad Request: not enough rights to restrict/ban chat member";
+      return new Response(JSON.stringify({ ok: false, error_code: 400, description }), { status: 400 });
+    }
     if (method === "deleteMessage") return reply({ ok: true, result: true });
     if (method === "banChatMember") return reply({ ok: true, result: true });
+    if (method === "restrictChatMember") return reply({ ok: true, result: true });
     if (method === "unbanChatMember") return reply({ ok: true, result: true });
     if (method === "sendPhoto") {
       if (photoFails) return reply({ ok: false, description: "Bad Request: wrong file identifier/HTTP URL specified" });
@@ -246,6 +256,10 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       calls.push({ host: url.host, method: "classify", body, headers });
       return reply({ content: [{ type: "text", text: classifierReply }], stop_reason: "end_turn" });
     }
+    if (system.startsWith("You screen messages in Gloam's Telegram group for spam")) {
+      calls.push({ host: url.host, method: "spamcheck", body, headers });
+      return reply({ content: [{ type: "text", text: spamReply }], stop_reason: "end_turn" });
+    }
     calls.push({ host: url.host, method: "messages", body, headers });
     if (modelFailures > 0) {
       modelFailures--;
@@ -260,10 +274,16 @@ const sends = () => calls.filter((c) => c.method === "sendMessage");
 const deletes = () => calls.filter((c) => c.method === "deleteMessage");
 const modelCalls = () => calls.filter((c) => c.method === "messages");
 const classifyCalls = () => calls.filter((c) => c.method === "classify");
+const spamChecks = () => calls.filter((c) => c.method === "spamcheck");
+const bans = () => calls.filter((c) => c.method === "banChatMember");
+const mutes = () => calls.filter((c) => c.method === "restrictChatMember" && (c.body.permissions as Record<string, boolean>)?.can_send_messages === false);
+const groupSends = () => sends().filter((c) => c.body.chat_id === GROUP);
 function reset() {
   calls.length = 0;
   modelReply = "Sure, Add privately is on Portfolio. Proofs take about 10 to 30 seconds.";
   classifierReply = "HELP";
+  spamReply = '{"spam": false, "category": "none", "confidence": 0.1}';
+  noRights = false;
   modelFailures = 0;
   photoFails = false;
   buyMode = "ok";
@@ -960,7 +980,7 @@ await test("implied questions and wrong claims get a quick check, banter does no
   assert.ok(looksLikeQuestion("ok so how do i add the network"));
 });
 
-await test("General: chatter stays quiet, a tag or Glim's name gets a reply", async () => {
+await test("General: chatter stays quiet, a question to Glim gets a reply, banter to Glim gets none", async () => {
   reset();
   const dee = user(24, "Dee");
   await handleUpdate(upd(inTopic(TOPIC.general, "lfg", dee)));
@@ -969,8 +989,17 @@ await test("General: chatter stays quiet, a tag or Glim's name gets a reply", as
   assert.equal(sends().length, 1);
   assert.equal(sends()[0]!.body.message_thread_id, undefined, "General has no thread id");
   const botMsg: TgMessage = { message_id: 5, chat, from: BOT, date: 0, text: "Hi there" };
+  // less chatter: a reply to Glim with nothing to answer gets nothing back (it used to get a quip)
   await handleUpdate(upd(inTopic(TOPIC.general, "haha thanks", dee, { reply_to_message: botMsg })));
-  assert.equal(sends().length, 2);
+  await handleUpdate(upd(inTopic(TOPIC.general, "gm glim", dee)));
+  assert.equal(sends().length, 1, "banter to Glim gets no reply");
+  assert.equal(modelCalls().length, 1, "and no model call");
+  // a vague ask still gets the clarifying line, and a problem said to Glim still gets help
+  await handleUpdate(upd(inTopic(TOPIC.general, "@glim_gloam_bot help", dee)));
+  await handleUpdate(upd(inTopic(TOPIC.general, "@glim_gloam_bot the faucet is broken", dee)));
+  assert.equal(sends().length, 3);
+  assert.ok(isChatter("haha thanks", "Glim") && isChatter("thanks glim!", "Glim") && isChatter("you're the best", "Glim"));
+  for (const t of ["", "@glim_gloam_bot", "help", "Glim??", "the payroll is still gone after a refresh", "tell me a joke", "payroll"]) assert.ok(!isChatter(t, "Glim"), t);
 });
 
 await test("Feedback stays quiet for statements, answers questions and its name", async () => {
@@ -1013,13 +1042,13 @@ await test("a question to someone else in Help still gets an answer", async () =
   assert.equal(sends().length, 2);
 });
 
-await test("a scam is deleted and warned about; an admin's warning is not", async () => {
+await test("a scam is deleted and its sender removed, silently; an admin's warning is not", async () => {
   reset();
   await handleUpdate(upd(inTopic(TOPIC.help, "DM me for support, I can fix your wallet", user(30, "Jo"))));
   assert.equal(deletes().length, 1);
-  assert.equal(sends().length, 1);
-  assert.ok(String(sends()[0]!.body.text).includes("admins never DM first"));
-  assert.equal(sends()[0]!.body.message_thread_id, TOPIC.help);
+  assert.equal(bans().length, 1);
+  // silence plus action: a warning in the group was one more reply for spammers to farm
+  assert.equal(groupSends().length, 0, "no warning in the group");
   assert.equal(modelCalls().length, 0);
   reset();
   await handleUpdate(upd(inTopic(TOPIC.general, "Reminder: DM me for support is what scammers say", user(31, "Duke", "duke_admin"))));
@@ -1141,7 +1170,8 @@ await test("moderation: look-alike Gloam accounts, DM lures, and the team's dele
   assert.equal(deletes().length, 1);
   const ban = calls.find((x) => x.method === "banChatMember")!;
   assert.equal(ban.body.user_id, 901);
-  assert.ok(String(sends()[0]!.body.text).startsWith("Heads up, I removed an account pretending to be Gloam."));
+  assert.equal(ban.body.revoke_messages, true, "their other messages go too");
+  assert.equal(groupSends().length, 0, "removed silently, no notice in the group");
 
   // a scam line from a member: deleted and the account removed
   reset();
@@ -1236,7 +1266,7 @@ await test("a suggestion aimed at the team by tag gets no reply from Glim", asyn
   assert.equal(sends().length, 1);
 });
 
-await test("Glim stays out of chatter and price talk, and notes asks for the team once", async () => {
+await test("Glim stays out of chatter and price talk, and keeps asks for the team without a word in the group", async () => {
   reset();
   classifierReply = "NO";
   await handleUpdate(upd(inTopic(TOPIC.feedback, "Is there any one new to crypto here ?", user(953, "Richard"))));
@@ -1248,8 +1278,8 @@ await test("Glim stays out of chatter and price talk, and notes asks for the tea
   await handleUpdate(upd(inTopic(TOPIC.feedback, "Team can you manage the buy bot from general to buy thank you.", user(955, "Fsk"))));
   await handleUpdate(upd(inTopic(TOPIC.feedback, "Please get the outside audit done then mobile app !", user(955, "Fsk"))));
   assert.equal(modelCalls().length, 0, "the team answers their own asks");
-  assert.equal(sends().length, 1, "one note, not one per ask");
-  assert.ok(String(sends()[0]!.body.text).startsWith("That one's for the team, Fsk."));
+  // no "That one's for the team, I've passed it on": every such note brought more pitches
+  assert.equal(sends().length, 0, "no note in the group");
   const un = (await readLast24h()).unanswered.filter((u) => u.name === "Fsk");
   assert.equal(un.length, 2, "both are on the team's list");
   assert.ok(un.every((u) => u.why === "team"));
@@ -1261,7 +1291,7 @@ await test("Glim stays out of chatter and price talk, and notes asks for the tea
   await handleUpdate(upd(inTopic(TOPIC.help, "How do I turn on recovery?", user(956, "Ola"))));
   await handleUpdate(upd(inTopic(TOPIC.general, "anyone here from lagos?", user(957, "Tolu"))));
   delete process.env.TELEGRAM_BOT_DAILY_CHECKS;
-  assert.equal(sends().length, 2, "the note and the recovery question only");
+  assert.equal(sends().length, 1, "the recovery question only");
 });
 
 await test("buy alerts: every buy, spaced, with value, price, market cap and links", async () => {

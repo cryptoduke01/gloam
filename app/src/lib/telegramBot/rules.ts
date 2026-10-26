@@ -40,7 +40,7 @@ export function webhookSecretOk(got: string | null | undefined, expected: string
 // ---------------------------------------------------------------- messages
 
 /** Curly quotes to straight ones, so patterns see one kind of apostrophe. */
-function norm(text: string): string {
+export function norm(text: string): string {
   return text.replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"');
 }
 
@@ -243,6 +243,25 @@ export function isVague(text: string, persona: string): boolean {
   return words.length === 0 || (words.length < 8 && !TOPIC_WORD.test(t));
 }
 
+/** Words that make a tag worth an answer: an ask, a problem, a request. */
+const ASK_WORD =
+  /\b(?:help|how|what|whats|why|where|when|wen|who|which|can|could|should|would|will|does|do|did|is|are|pls|plz|please|explain|tell|show|need|want|issue|problem|error|bug|stuck|fail\w*|broken|not|can't|cant|cannot|won't|didn't|doesn't|isn't|missing|lost|wrong|pending|gone)\b/i;
+
+/**
+ * A tag or a reply to the helper with nothing to answer: "haha thanks", "gm
+ * glim", "you're the best", "lol". No question, no ask, no problem and no
+ * Gloam word, and short. A bare tag is not chatter (the helper asks what they
+ * need), and neither is a vague ask like "help".
+ */
+export function isChatter(text: string, persona: string): boolean {
+  let t = norm(text).replace(/(?<![\w@])@\w+/g, " ").replace(URL_RE, " ");
+  if (persona) t = t.replace(new RegExp(`(^|[^\\p{L}\\p{N}_])${escapeRe(persona)}(?=$|[^\\p{L}\\p{N}_])`, "giu"), "$1 ");
+  t = t.replace(/\s+/g, " ").trim();
+  if (!t || !/[\p{L}\p{N}]/u.test(t)) return false;
+  if (t.includes("?") || looksLikeQuestion(t) || ASK_WORD.test(t) || BUG_WORDS.test(t) || MY_PROBLEM.test(t) || TOPIC_WORD.test(t)) return false;
+  return t.split(/\s+/).length <= 10;
+}
+
 // ---------------------------------------------------------------- triggers
 
 const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
@@ -275,10 +294,26 @@ export function isShare(text: string): boolean {
   return !rest.includes("?") && !BUG_WORDS.test(rest) && !/\b(?:help|how do i|can't|cant|cannot|won't|doesn't|didn't)\b/i.test(rest);
 }
 
-/** Long enough and on topic: worth asking the model whether the helper should reply. */
+/** A problem or an ask in a message that is not phrased as a question: "can't", "stuck", "error", "how to". */
+const PROBLEM_HINT =
+  /\b(?:can'?t|cannot|can not|couldn'?t|won'?t|doesn'?t|didn'?t|isn'?t|wasn'?t|not\s+(?:working|showing|loading|going|getting|seeing|able|sure)|stuck|fail\w*|errors?|issues?|problems?|bugs?|broken|missing|pending|wrong|lost|gone|disappeared|help|how\s+(?:do|can|to)|where\s+(?:do|is|can))\b/i;
+/** Price and valuation talk: an opinion, never a question for Glim on its own ("undervalued", "20M level", "bullish"). */
+const VALUATION =
+  /\b(?:under\s*valued|over\s*valued|valuation|mcap|market\s*cap|fdv|\d+\s*(?:k|m|mil|million)\s+(?:level|mc|mcap|cap)|consolidat\w*|sideways|bullish|bearish|moon\w*|pump\w*|dump\w*|dip|ath|wagmi|ngmi|lfg|hodl|hold(?:ing)?|bags?|chart|support\s+level|resistance|\d+\s?x)\b/i;
+
+/**
+ * Worth asking the model whether the helper should reply to a message that is
+ * not phrased as a question: a problem word in four words or more, or a longer
+ * statement about Gloam (it may be a wrong claim). Price and valuation talk
+ * with no problem in it never is.
+ */
 export function mayNeedHelp(text: string): boolean {
   const t = norm(text).replace(URL_RE, " ").trim();
-  return t.split(/\s+/).length >= 5 && HELP_HINT.test(t);
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (!HELP_HINT.test(t)) return false;
+  const problem = PROBLEM_HINT.test(t);
+  if (!problem && VALUATION.test(t)) return false;
+  return (words >= 4 && problem) || words >= 7;
 }
 
 export function looksLikeQuestion(text: string): boolean {
@@ -297,7 +332,7 @@ export function looksLikeQuestion(text: string): boolean {
     .some((part) => (/^my\b/i.test(part) ? MY_PROBLEM.test(part) : QUESTION_START.test(part)));
 }
 
-const BUG_WORDS =
+export const BUG_WORDS =
   /\b(?:bugs?|buggy|broken|crash(?:ed|es|ing)?|glitch(?:y|es)?|not (?:[a-z]+ ){0,2}working|isn't (?:[a-z]+ ){0,2}working|no longer works?|keeps? failing|doesn't work|does not work|didn't work|won't (?:load|open|work|connect|send|go through)|stuck|fail(?:s|ed|ing|ure)?|errors?)\b/i;
 const NOT_A_BUG = /\b(?:no|zero|without|any|found no)\s+(?:bugs?|issues?|errors?)\b|\bbug[- ]free\b/i;
 
@@ -316,7 +351,7 @@ const NEGATION = /\b(?:never|not|no one|nobody|don't|do not|won't|will not|shoul
  * Whether a match is negated in its own clause: "never share your seed phrase"
  * is advice, "don't worry, just send your seed phrase" is not.
  */
-function negated(text: string, index: number, match: string): boolean {
+export function negated(text: string, index: number, match: string): boolean {
   const before = text.slice(Math.max(0, index - 40), index);
   const clause = before.slice(before.search(/[^,.;!?\n]*$/));
   return NEGATION.test(`${clause} ${match}`);
@@ -348,7 +383,7 @@ export function forwardedCall(text: string): boolean {
 }
 
 /** Asking to be contacted privately: "DM me", "D.m for collab", "inbox us for details". */
-const DM_ASK =
+export const DM_ASK =
   /\b(?:d\.?\s?m|p\.?\s?m|inbox|message|contact|text)\s+(?:me|us)\b|\bhit\s+(?:me|us)\s+up\b|\b(?:d\.?\s?m|p\.?\s?m|inbox)\s+(?:me\s+|us\s+)?(?:for|to)\b|\b(?:d\.?\s?m|p\.?\s?m|inbox)\s+(?:collab\w*|partnership|promo\w*|details|business|deals?|offers?)\b/i;
 /** "All holders DM me", "investors inbox me now": a stranger pulling the people with money into private chats. */
 const DM_LURE =
@@ -360,10 +395,10 @@ const DM_LURE =
  */
 const DM_CHAT =
   /\b(?:everyone|every\s*one|members?|testers?|users?|community|fam|guys)\b[^.!?\n]{0,30}?\b(?:dm|pm|inbox|message|text|contact)\s+(?:me|us)\b|\b(?:dm|pm|inbox|message)\s+(?:me|us)\s+(?:now|immediately|asap|urgently|quick(?:ly)?|right\s+now|fast)\b/i;
-const INVITATION = /^\W*(?:if|when)\s+(?:you|u|ya|anyone|someone|any\s+of\s+you)\b/i;
+export const INVITATION = /^\W*(?:if|when)\s+(?:you|u|ya|anyone|someone|any\s+of\s+you)\b/i;
 const WALLET_FIX =
   /\b(?:validate|validation|rectify|rectification|reactivate|synchroni[sz]e|resync|whitelist)\s+(?:your\s+|ur\s+|the\s+)?wallets?\b|\bsync\s+(?:your|ur)\s+wallets?\b|\bwallet\s+(?:validation|rectification|synchroni[sz]ation)\b/i;
-const LINK_RE =
+export const LINK_RE =
   /\b(?:https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|t\.me\/[^\s<>"']+|(?:[a-z0-9-]+\.)+(?:com|io|xyz|org|net|app|finance|link|site|online|live|pro|top|info|co|me|cc|vip|club|fi|dev|gg|ai|so|claims?|gift|cash|money|exchange|network|tech|trade)(?:\/[^\s<>"']*)?)/gi;
 const LURE =
   /\b(?:wallets?|claim(?:ing|ed)?|airdrops?|giveaways?|rewards?|bonus|free (?:tokens?|money|usdc|usdt|eth|crypto)|connect|whitelist|presale|mint|eligible|allocation)\b/i;
@@ -372,7 +407,7 @@ const LURE =
  * bridge, $GLOAM's pages and pool). Not flagged as phishing, and neither is any
  * link the helper may share itself.
  */
-const SAFE_HOSTS = [
+export const SAFE_HOSTS = [
   "gloam.trade",
   "x.com",
   "twitter.com",
@@ -395,7 +430,7 @@ const SAFE_HOSTS = [
   "youtu.be",
 ];
 
-function hostOf(link: string): { host: string; path: string } {
+export function hostOf(link: string): { host: string; path: string } {
   const bare = link.replace(/^https?:\/\//i, "").replace(/[).,!?;:'"]+$/, "");
   const slash = bare.indexOf("/");
   const host = (slash < 0 ? bare : bare.slice(0, slash)).toLowerCase().replace(/^www\./, "");
@@ -403,7 +438,7 @@ function hostOf(link: string): { host: string; path: string } {
   return { host, path };
 }
 
-function onHost(host: string, base: string): boolean {
+export function onHost(host: string, base: string): boolean {
   return host === base || host.endsWith(`.${base}`);
 }
 
@@ -412,7 +447,7 @@ function isGroupLink(host: string, path: string): boolean {
 }
 
 /** Someone asking for help ("can someone DM me for help?") rather than offering it. */
-function askingForHelp(text: string, m: RegExpExecArray): boolean {
+export function askingForHelp(text: string, m: RegExpExecArray): boolean {
   const around = text.slice(Math.max(0, m.index - 40), m.index + m[0].length);
   const end = text.slice(m.index).search(/[.!?\n]/);
   return ASKING.test(around) || (end >= 0 && text[m.index + end] === "?");
@@ -454,7 +489,7 @@ const SPLIT_WORD = /\b(re|air|white|give|pre|snap)[\s-]+(deploy\w*|launch\w*|dro
  * characters out, look-alike letters swapped, and letters spaced out
  * ("D M me", "A d m i n") or split ("re deploying") joined up again.
  */
-function plain(raw: string): string {
+export function plain(raw: string): string {
   return norm(raw)
     .normalize("NFKC")
     .replace(/[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]/g, "")
@@ -469,7 +504,7 @@ function plain(raw: string): string {
  * member repeating them is no lure), and so are the labels scanCodes puts in
  * place of codes ("[claim link]" is a payment, not a claim pitch).
  */
-function scorable(raw: string): string {
+export function scorable(raw: string): string {
   let text = plain(raw);
   for (const line of tokenCard().split("\n")) if (line.trim()) text = text.split(line.trim()).join(" ");
   return text.replace(new RegExp(SHARED_LABEL.source, "gi"), " ").replace(NO_DROP, " ");
@@ -482,7 +517,7 @@ const DIGIT_LETTER: Record<string, string> = { "0": "o", "3": "e", "4": "a", "5"
  * ("r3deploying airdr0p", "cla1m"), once with 1 as i and once as l. Numbers,
  * amounts ("0.1eth") and hex (addresses, hashes) are left alone.
  */
-function spellings(text: string): string[] {
+export function spellings(text: string): string[] {
   const as = (one: string) =>
     text.replace(/[a-z0-9@]+/gi, (w) => {
       if (/^0x/i.test(w) || /^[0-9a-f]{16,}$/i.test(w) || /^\d+[a-z]*$/i.test(w) || (w.match(/[a-z]/gi)?.length ?? 0) < 2) return w;
@@ -526,7 +561,7 @@ function asked(text: string, index: number, length: number): boolean {
 }
 
 /** Said outright somewhere in the text: a match that is neither negated in its clause nor in a question. */
-function says(re: RegExp, text: string): boolean {
+export function says(re: RegExp, text: string): boolean {
   for (const m of text.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))) {
     if (!negated(text, m.index, m[0]) && !asked(text, m.index, m[0].length)) return true;
   }
@@ -1092,7 +1127,7 @@ export type ReplyPolicy = {
 };
 
 /** A link the helper may share: the website, the group, the X account, $GLOAM's pages on Orynth, DEX Screener and CoinGecko. */
-function linkAllowed(link: string): boolean {
+export function linkAllowed(link: string): boolean {
   const { host, path } = hostOf(link);
   if (host === "gloam.trade") return true;
   if (host === "x.com" || host === "twitter.com") return /^\/gloamtrade(?:[/?#]|$)/i.test(path);
@@ -1110,7 +1145,7 @@ const ABOUT_TOKEN = /\$gloam\b|\btoken\b/i;
 const SEND_TO_ADDRESS = /\b(?:send|transfer|deposit|move|pay)\b[^.!?\n]*?\bto\s+(?:(?:this|that|the|my|our)\s+(?:address|wallet)\s*:?\s*)?0x[0-9a-fA-F]{40}\b/i;
 
 /** $GLOAM's contract and Gloam's mainnet pools (and Base Sepolia's and Ethereum Sepolia's): the addresses the helper may name on its own. */
-function ownAddress(a: string): boolean {
+export function ownAddress(a: string): boolean {
   const l = a.toLowerCase();
   if (l === GLOAM_TOKEN.address.toLowerCase()) return true;
   if (baseSepoliaPool()?.pool.toLowerCase() === l) return true;

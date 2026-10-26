@@ -25,6 +25,8 @@ export type TgEntity = {
   offset: number;
   length: number;
   user?: TgUser;
+  /** Where a text_link points: a link hidden behind other words. */
+  url?: string;
 };
 
 /** One size of a photo. Telegram sends several, smallest first. */
@@ -117,7 +119,7 @@ function token(): string | null {
  * went out; `retryAfter`: it asked to wait that many seconds (a 429). A
  * timeout or a network error is neither: the call may still have gone through.
  */
-type CallResult<T> = { ok: boolean; result?: T; refused?: boolean; retryAfter?: number };
+type CallResult<T> = { ok: boolean; result?: T; refused?: boolean; retryAfter?: number; description?: string };
 
 async function call<T>(method: string, body: Record<string, unknown>): Promise<CallResult<T>> {
   const t = token();
@@ -135,7 +137,12 @@ async function call<T>(method: string, body: Record<string, unknown>): Promise<C
       | null;
     if (res.ok && json?.ok) return { ok: true, result: json.result };
     const wait = Number(json?.parameters?.retry_after ?? /retry after (\d+)/i.exec(json?.description ?? "")?.[1]);
-    return { ok: false, refused: true, ...(Number.isFinite(wait) && wait > 0 ? { retryAfter: wait } : {}) };
+    return {
+      ok: false,
+      refused: true,
+      ...(Number.isFinite(wait) && wait > 0 ? { retryAfter: wait } : {}),
+      ...(typeof json?.description === "string" ? { description: json.description.slice(0, 200) } : {}),
+    };
   } catch {
     return { ok: false };
   }
@@ -200,9 +207,41 @@ export async function getChatAdministrators(chatId: number): Promise<number[] | 
   return r.ok && Array.isArray(r.result) ? r.result.map((m) => m.user.id) : null;
 }
 
+/**
+ * What a moderation call came to. `noRights`: Telegram refused it because the
+ * bot lacks the admin right (Delete messages, or Ban users, which also covers
+ * mutes), so the owner has to grant it. Any other failure is not that.
+ */
+export type ModResult = { ok: boolean; noRights: boolean };
+
+const NO_RIGHTS = /not enough rights|chat_admin_required|have no rights|need administrator rights|message can't be deleted|bot is not an administrator/i;
+/** A message that is already gone (Rose or its author took it down first) counts as deleted. */
+const ALREADY_GONE = /message to delete not found|message_id_invalid/i;
+
+async function modCall(method: string, body: Record<string, unknown>): Promise<ModResult> {
+  const r = await call(method, body);
+  if (r.ok) return { ok: true, noRights: false };
+  const why = r.description ?? "";
+  if (method === "deleteMessage" && ALREADY_GONE.test(why)) return { ok: true, noRights: false };
+  return { ok: false, noRights: NO_RIGHTS.test(why) };
+}
+
+/** Deletes a message, and says whether Telegram refused for lack of the Delete messages right. */
+export function removeMessage(chatId: number, messageId: number): Promise<ModResult> {
+  return modCall("deleteMessage", { chat_id: chatId, message_id: messageId });
+}
+
 /** Deletes a message. Works only while the bot is an admin with Delete messages. */
 export async function deleteMessage(chatId: number, messageId: number): Promise<boolean> {
-  return (await call("deleteMessage", { chat_id: chatId, message_id: messageId })).ok;
+  return (await removeMessage(chatId, messageId)).ok;
+}
+
+/**
+ * Removes someone from the group and keeps them out, deleting what they posted
+ * there (revoke_messages). Works only while the bot is an admin with Ban users.
+ */
+export function banUser(chatId: number, userId: number): Promise<ModResult> {
+  return modCall("banChatMember", { chat_id: chatId, user_id: userId, revoke_messages: true });
 }
 
 /**
@@ -211,12 +250,50 @@ export async function deleteMessage(chatId: number, messageId: number): Promise<
  * lift it in the group's settings.
  */
 export async function banMember(chatId: number, userId: number): Promise<boolean> {
-  return (await call("banChatMember", { chat_id: chatId, user_id: userId, revoke_messages: true })).ok;
+  return (await banUser(chatId, userId)).ok;
+}
+
+/** Every permission a member can have, all off (a mute) or all on (the mute lifted). */
+function permissions(on: boolean): Record<string, boolean> {
+  return Object.fromEntries(
+    [
+      "can_send_messages",
+      "can_send_audios",
+      "can_send_documents",
+      "can_send_photos",
+      "can_send_videos",
+      "can_send_video_notes",
+      "can_send_voice_notes",
+      "can_send_polls",
+      "can_send_other_messages",
+      "can_add_web_page_previews",
+      "can_change_info",
+      "can_invite_users",
+      "can_pin_messages",
+      "can_manage_topics",
+    ].map((k) => [k, on]),
+  );
+}
+
+/** Mutes someone until `untilSec` (unix seconds). Needs the Ban users right, which covers restricting. */
+export function muteUser(chatId: number, userId: number, untilSec: number): Promise<ModResult> {
+  return modCall("restrictChatMember", {
+    chat_id: chatId,
+    user_id: userId,
+    permissions: permissions(false),
+    use_independent_chat_permissions: true,
+    until_date: Math.floor(untilSec),
+  });
 }
 
 /** Lets someone the bot banned join the group again. Only lifts a ban; never removes a member. */
 export async function unbanMember(chatId: number, userId: number): Promise<boolean> {
   return (await call("unbanChatMember", { chat_id: chatId, user_id: userId, only_if_banned: true })).ok;
+}
+
+/** Lifts a mute: Telegram's way is every permission on, which leaves the member with the group's defaults. */
+export async function unmuteUser(chatId: number, userId: number): Promise<boolean> {
+  return (await modCall("restrictChatMember", { chat_id: chatId, user_id: userId, permissions: permissions(true), use_independent_chat_permissions: true })).ok;
 }
 
 /** The bot's own account, read once per server instance. */

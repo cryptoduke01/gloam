@@ -13,11 +13,15 @@
  * DM; the scheduled report goes only to a chat an owner opened. Every other
  * chat is ignored. In the group:
  *  - a seed phrase or private key gets deleted (when the bot is admin) and a
- *    warning to move funds now; an obvious scam gets deleted and a short "admins
- *    never DM first" note
- *  - it answers when tagged or replied to, and every question, in any topic
- *    but Announcements, plus bug reports in Testers and Feedback, which it
- *    also saves for the admin dashboard
+ *    warning to move funds now
+ *  - spam is dealt with silently, never answered: scams, phishing, anyone
+ *    posing as the team, promotion and service pitches, contact asks, links to
+ *    other groups, OTC offers and other tokens' shills (lib/telegramBot/
+ *    moderation.ts). Deleted, and the sender banned or muted by the rules there;
+ *    every action is in /modlog, and /unban undoes one
+ *  - it answers questions, in any topic but Announcements (a tag with nothing
+ *    to answer, like "haha thanks", gets nothing), plus bug reports in Testers
+ *    and Feedback, which it also saves for the admin dashboard
  *  - tagged on someone else's message, it answers that message, as a reply to
  *    its author
  *  - it reads pictures: a screenshot with a question, one it is tagged on,
@@ -26,7 +30,8 @@
  *  - payment codes and claim links are fine on testnet, so they stay; the
  *    person gets one friendly heads-up a day about sending them privately on
  *    mainnet. Gloam addresses and payment requests never get one
- *  - new members get one short batched welcome at most once an hour
+ *  - new members get one short batched welcome at most once an hour, and none
+ *    during a burst of joins
  *  - /help and /start give a short guide, /bug saves a report
  *  - it counts messages, joins, leaves and its own work for the report
  * Answers are rate limited per person and overall, and pictures to about 20
@@ -37,6 +42,7 @@ import {
   askModel,
   askTeamChat,
   botModel,
+  spamCheck,
   systemPrompt,
   teamSystemPrompt,
   triage,
@@ -46,9 +52,10 @@ import {
   type ModelImage,
   type ModelMiss,
 } from "./answer";
+import { MODEL_ACT_AT, established, newcomer, planFor, screen, type Plan, type ScreenInput, type SpamCategory, type Standing, type Verdict } from "./moderation";
 import { personaName } from "./persona";
 import { groupAnswerModel } from "./raetoRoute";
-import { buildReport, teamContext } from "./report";
+import { buildReport, formatModlog, teamContext } from "./report";
 import {
   MAX_IMAGE_BYTES,
   SHORT_CAPTION_WORDS,
@@ -70,6 +77,7 @@ import {
   hasBearerCode,
   imageRef,
   impersonates,
+  isChatter,
   isVague,
   looksLikeBugReport,
   looksLikeQuestion,
@@ -106,6 +114,7 @@ import {
   type Command,
   type ImageRef,
   type Joiner,
+  type ScamReason,
   type Sentinel,
 } from "./rules";
 import {
@@ -120,6 +129,10 @@ import {
   handedOffLately,
   lockedCodeNear,
   logEscalation,
+  logModeration,
+  memberStanding,
+  recentModeration,
+  vouchFor,
   ownerChats,
   logQuestion,
   logAnswered,
@@ -143,19 +156,27 @@ import {
   threadThenRemember,
   watchLockedCode,
   type Counter,
+  type ModEntry,
+  type ModOutcome,
+  type ModRight,
   type Unanswered,
   tokenCardLately,
 } from "./store";
 import {
   banMember,
+  banUser,
   deleteMessage,
   downloadFile,
   getChatAdministrators,
   getFile,
   getMe,
+  muteUser,
   refreshWebhook,
+  removeMessage,
   sendMessage,
   unbanMember,
+  unmuteUser,
+  type ModResult,
   type TgChatMemberUpdated,
   type TgMessage,
   type TgUpdate,
@@ -309,7 +330,8 @@ function ownerHelp(c: BotConfig): string {
     `/ca - the $GLOAM contract and token page (same in the group)\n` +
     `/answer <message link> - I answer that group message in the group, as a reply (or say "go answer this" with the link)\n` +
     `/webhook - turn on edited messages, so a question added in an edit gets an answer\n` +
-    `/unban <number> - let back in someone I removed (the number is in my removal note)\n` +
+    `/modlog - my last 20 moderation actions: who, what for, which rule, and what I did\n` +
+    `/unban <number> - let back in, or unmute, someone I acted on (the number is in /modlog and my removal note)\n` +
     `You can also just say "report" or "how was today".\n\n${CHAT_HELP}${daily}`
   );
 }
@@ -320,7 +342,7 @@ function adminHelp(name: string): string {
     `how to answer a member, or for a draft announcement. Screenshots work too. I remember the last few messages for a few hours.\n\n` +
     `To have me answer a member in the group, send the link to their message with "answer this" (or /answer and the link). ` +
     `I post the answer there as a reply and tell you here what I said. Anything else I only draft for you to post.\n` +
-    `/unban <number> - let back in someone I removed (the number is in my removal note)\n/help - this note`
+    `/modlog - my last 20 moderation actions\n/unban <number> - let back in, or unmute, someone I acted on (the number is in /modlog)\n/help - this note`
   );
 }
 
@@ -340,11 +362,6 @@ const CHAT_REFUSED =
 
 function bugThanks(name: string): string {
   return `Thanks ${name}, saved for the team, and I'll make sure Boss Duke sees it. An admin will take a look. Steps, a screenshot or a transaction link make you everyone's favourite tester.`;
-}
-
-/** The reply to an ask only the team can answer: noted, not answered. */
-function teamNoted(name: string): string {
-  return `That one's for the team, ${name}. I've passed it on, and they'll pick it up here.`;
 }
 
 function bugNotSaved(name: string): string {
@@ -410,15 +427,6 @@ function leakWarning(name: string, removed: boolean): string {
   return `${first} Treat that wallet as exposed: move your funds to a new wallet now, and never share it again. Nobody from Gloam will ever ask for it.`;
 }
 
-function scamWarning(removed: boolean, banned = false): string {
-  const first = removed
-    ? banned
-      ? "Heads up, I removed a scam message and the account that posted it."
-      : "Heads up, I removed a message that looked like a scam."
-    : "Heads up, that message looks like a scam.";
-  return `${first}\n\nGloam admins never DM first and will never ask for your seed phrase, private key or funds. If someone messages you offering help, it's not us.`;
-}
-
 /** A member repeated a scam's words to call it out: the words go, they stay. */
 function pointedWarning(name: string, removed: boolean): string {
   const first = removed
@@ -447,6 +455,14 @@ const BAN_WHY: Record<string, string> = {
   role_impostor: "posing as the team",
   role_pitch: "a pitch under a team-sounding name",
   impostor: "a name posing as Gloam or the team",
+  scam: "a scam",
+  impersonation: "posing as Gloam or the team",
+  link_spam: "a link to another group or site",
+  contact_spam: "asking people to DM or contact them",
+  promo: "promotion or a service pitch",
+  otc: "OTC buy or sell offers",
+  shill: "shilling another token",
+  new_member: "a link, handle, contact ask or pitch in their first messages after joining",
 };
 
 /** Owner notes about removals, per minute: a spam wave doesn't flood the owner's chat. */
@@ -458,25 +474,170 @@ const BAN_NOTES_PER_MIN = 6;
  * final without a person able to lift it. Telegram also lists them under the
  * group's Removed users. Counted as a scam in the report, not an escalation.
  */
-async function noteBan(c: BotConfig, who: TgUser, why: string, text: string, topic: number | null): Promise<void> {
+async function noteBan(c: BotConfig, who: TgUser, why: string, text: string, topic: number | null, guess = false): Promise<void> {
   if (!(await hitRateLimit("tg:ban-notes", "tg-ban-notes", BAN_NOTES_PER_MIN)).allowed) return;
   const name = cleanName(who.first_name, "an account");
   const what = defanged(text);
   const where = topic === null ? "as they joined" : `in ${topicName(topic)}`;
+  const how = guess ? " (the model's call, not a fixed rule, so worth a look)" : "";
   for (const o of await ownerChats().catch(() => [])) {
     await sendMessage(
       o.chatId,
-      `I removed ${name}${who.username ? ` (@${who.username})` : ""} from the group ${where}, for ${BAN_WHY[why] ?? why}.` +
+      `I removed ${name}${who.username ? ` (@${who.username})` : ""} from the group ${where}, for ${BAN_WHY[why] ?? why}${how}.` +
         `${what ? `\n"${what}"` : ""}\n\nIf that was a mistake, send /unban ${who.id} here and they can join again.`,
     );
   }
 }
 
-function impostorWarning(banned: boolean): string {
-  const first = banned
-    ? "Heads up, I removed an account pretending to be Gloam."
-    : "Heads up, that account is pretending to be Gloam. Don't reply to it or DM it.";
-  return `${first}\n\nThe real team never DMs first and never asks for funds, keys or seed phrases.`;
+// ---------------------------------------------------------------- spam, silently
+
+/** The categories of the scam checks in rules.ts, as the spam screen's. */
+const REASON_CATEGORY: Record<ScamReason, SpamCategory> = {
+  secret_request: "scam",
+  dm_support: "scam",
+  dm_lure: "contact_spam",
+  wallet_fix: "scam",
+  phishing_link: "scam",
+  promo_spam: "promo",
+  migration_airdrop: "scam",
+  role_impostor: "impersonation",
+  role_pitch: "impersonation",
+};
+
+/** Rights Telegram refused, said once per server instance in the logs; the report says it every time. */
+const rightsWarned = new Set<ModRight>();
+const RIGHT_LABEL: Record<ModRight, string> = { delete: "delete messages", ban: "ban members", restrict: "mute members" };
+
+function warnRights(right: ModRight): void {
+  if (rightsWarned.has(right)) return;
+  rightsWarned.add(right);
+  console.error(
+    `telegram: moderation blocked, Telegram says Glim may not ${RIGHT_LABEL[right]} in the group. ` +
+      "Give Glim the Delete messages and Ban users admin rights (Ban users covers mutes).",
+  );
+}
+
+/** What a call's result says about a right: granted, refused for lack of it, or neither. */
+function rightOf(r: ModResult | null): boolean | undefined {
+  if (!r) return undefined;
+  return r.ok ? true : r.noRights ? false : undefined;
+}
+
+type Enforcement = {
+  c: BotConfig;
+  msg: TgMessage;
+  from: TgUser;
+  topic: number;
+  /** The words that were judged, for the log's excerpt and the owner's note. */
+  text: string;
+  verdict: Verdict;
+  plan: Plan;
+  /** Earlier messages of a split scam, deleted with it. */
+  extraIds?: number[];
+  /** What the owner's removal note says it was for (a BAN_WHY key), when not the category. */
+  why?: string;
+};
+
+/**
+ * Deletes the message and, by the plan, bans the sender (with their other
+ * messages, revoke_messages) or mutes them for a day. Silent in the group: no
+ * reply, no warning, no hand-off. Every action is logged for /modlog and the
+ * report, refused rights are flagged, and a removal is noted to the owner with
+ * the number /unban takes.
+ */
+async function enforce(x: Enforcement): Promise<void> {
+  const chatId = x.msg.chat.id;
+  const del = await removeMessage(chatId, x.msg.message_id);
+  for (const id of x.extraIds ?? []) await removeMessage(chatId, id);
+  const ban = x.plan.ban ? await banUser(chatId, x.from.id) : null;
+  const mute = !x.plan.ban && x.plan.muteSec > 0 ? await muteUser(chatId, x.from.id, Date.now() / 1000 + x.plan.muteSec) : null;
+  const rights: Partial<Record<ModRight, boolean>> = {};
+  for (const [right, r] of [["delete", del], ["ban", ban], ["restrict", mute]] as const) {
+    const ok = rightOf(r);
+    if (ok === undefined) continue;
+    rights[right] = ok;
+    if (!ok) warnRights(right);
+  }
+  const scam = x.verdict.category === "scam" || x.verdict.category === "impersonation";
+  if (!del.ok) await count("scamsMissed");
+  else if (scam) await count("scams");
+  const action: ModOutcome = ban?.ok ? "banned" : mute?.ok ? "muted" : del.ok ? "deleted" : "failed";
+  const now = Date.now();
+  await logModeration(
+    {
+      at: now,
+      uid: x.from.id,
+      name: cleanName(x.from.first_name, "an account"),
+      ...(x.from.username ? { username: x.from.username } : {}),
+      category: x.verdict.category,
+      source: x.verdict.source,
+      rule: x.verdict.rule,
+      confidence: x.verdict.confidence,
+      excerpt: defanged(x.text, 120) ?? "",
+      action,
+      topic: topicName(x.topic),
+      link: messageLink(x.msg),
+    },
+    { offence: { at: now, category: x.verdict.category }, rights, gone: Boolean(ban?.ok) },
+  ).catch(() => {});
+  if (ban?.ok) {
+    const why = x.why ?? (x.verdict.rule === "new_member_gate" ? "new_member" : x.verdict.category);
+    await noteBan(x.c, x.from, why, x.text, x.topic, x.verdict.source === "model");
+  }
+}
+
+/** What Glim knows about a member, or null when the store is down (then it fails safe). */
+function standingOf(userId: number, edited: boolean): Promise<Standing | null> {
+  return memberStanding(userId, Date.now(), !edited).catch(() => null);
+}
+
+/** Handles anyone may name in the group: the bot, the team and the official accounts. */
+function okHandles(c: BotConfig, me: TgUser | null): string[] {
+  return [...c.admins, ...c.owners.handles, "gloamtrade", "gloamhq", "missrose_bot", "glimforgloambot", ...(me?.username ? [me.username.toLowerCase()] : [])];
+}
+
+function screenInput(msg: TgMessage, from: TgUser, text: string, c: BotConfig, me: TgUser | null): ScreenInput {
+  return { text, name: from, entities: msg.entities ?? msg.caption_entities, forwardedFrom: msg.forward_origin?.type ?? null, okHandles: okHandles(c, me) };
+}
+
+/**
+ * The spam screen for a message from someone who is not the team. "acted":
+ * deleted (and the sender banned or muted), silently. "quiet": spam-shaped but
+ * left up, and the helper never replies to it. "clear": a normal message.
+ * Rules first; a message they find unclear, from someone Glim has no history
+ * with, gets one model check under the same per-minute limit as the reply check.
+ */
+async function screenMessage(msg: TgMessage, from: TgUser, c: BotConfig, topic: number, text: string, me: TgUser | null, edited: boolean): Promise<"acted" | "quiet" | "clear"> {
+  const input = screenInput(msg, from, text, c, me);
+  const s = screen(input);
+  if (!s.verdict && !s.strangerVerdict && !s.unclear && !s.gate) return s.quiet ? "quiet" : "clear";
+  const chatId = msg.chat.id;
+  if (await isChatAdmin(chatId, from.id)) return "clear";
+  // calling spam out in their own words ("beware, he says DM me for listings"): left up, and never theirs
+  if (s.verdict && pointsAtScam(text, (t) => screen({ ...input, text: t }).verdict)) return "quiet";
+  const now = Date.now();
+  const standing = await standingOf(from.id, edited);
+  const known = standing ? established(standing, now) : false;
+  const gate = Boolean(standing && s.gate && newcomer(standing, now));
+  let v: Verdict | null = s.verdict ?? (standing && !known ? s.strangerVerdict : null);
+  if (!v && gate) v = { category: s.gate!, confidence: 0.9, rule: "new_member_gate", source: "rule" };
+  if (!v && s.unclear && !known && !standing?.vouched && (await hitRateLimit("tg:classify", "tg-classify", CLASSIFY_PER_MIN)).allowed) {
+    const name = [from.first_name, from.last_name].filter(Boolean).join(" ");
+    const r = await spamCheck({ text, name, newcomer: standing ? newcomer(standing, now) : null });
+    if (r?.spam && r.category && r.confidence >= MODEL_ACT_AT) v = { category: r.category, confidence: r.confidence, rule: `model:${s.unclear}`, source: "model" };
+  }
+  if (!v) {
+    // a business pitch from a member Glim knows: kept for the team, never answered in the group
+    if (s.strangerVerdict && known) {
+      const kept = memoryText(text);
+      if (kept) {
+        await logUnanswered({ at: now, name: firstName(from, c), topic: topicName(topic), text: kept.slice(0, 200), link: messageLink(msg), why: "team" }).catch(() => {});
+      }
+    }
+    return s.quiet ? "quiet" : "clear";
+  }
+  await enforce({ c, msg, from, topic, text, verdict: v, plan: planFor(v, standing, now, gate && !s.verdict) });
+  return "acted";
 }
 
 // ---------------------------------------------------------------- helpers
@@ -623,15 +784,36 @@ async function flushWelcome(c: BotConfig): Promise<void> {
 }
 
 async function welcome(users: TgUser[], c: BotConfig): Promise<void> {
-  // an account named like Gloam or the team is out before it can post
+  // an account named like Gloam or the team is out before it can post, silently
   for (const u of users) {
     if (u.is_bot || isTrusted(u, c) || !impersonates(u) || (await isChatAdmin(c.groupId, u.id))) continue;
-    if (await banMember(c.groupId, u.id)) await noteBan(c, u, "impostor", "", null);
+    const r = await banUser(c.groupId, u.id);
+    const ok = rightOf(r);
+    if (ok === false) warnRights("ban");
+    const now = Date.now();
+    await logModeration(
+      {
+        at: now,
+        uid: u.id,
+        name: cleanName(u.first_name, "an account"),
+        ...(u.username ? { username: u.username } : {}),
+        category: "impersonation",
+        source: "rule",
+        rule: "impostor_name",
+        confidence: 0.97,
+        excerpt: "",
+        action: r.ok ? "banned" : "failed",
+        topic: "joining",
+      },
+      { offence: { at: now, category: "impersonation" }, rights: ok === undefined ? {} : { ban: ok }, gone: r.ok },
+    ).catch(() => {});
+    if (r.ok) await noteBan(c, u, "impostor", "", null);
   }
   const people = users.filter((u) => !u.is_bot && (isTrusted(u, c) || !impersonates(u)));
   if (people.length === 0) return;
   await countMembers("joins", people.map((u) => u.id)).catch(() => {});
-  await queueJoiners(people.map(joinerOf)).catch(() => 0);
+  // in a burst of joins (a raid, usually) nobody is queued and no welcome goes out
+  await queueJoiners(people.map(joinerOf)).catch(() => null);
   await flushWelcome(c);
 }
 
@@ -717,6 +899,25 @@ async function moderate(msg: TgMessage, target: TgMessage, remove: boolean, c: B
   const deleted = await deleteMessage(chatId, target.message_id);
   const banned = remove && who ? await banMember(chatId, who.id) : false;
   if (deleted) await count("scams");
+  if (who && (deleted || banned)) {
+    await logModeration(
+      {
+        at: Date.now(),
+        uid: who.id,
+        name: cleanName(who.first_name, "an account"),
+        ...(who.username ? { username: who.username } : {}),
+        category: "admin",
+        source: "team",
+        rule: remove ? "team_remove" : "team_delete",
+        excerpt: defanged(scanCodes(messageText(target)).masked, 120) ?? "",
+        action: banned ? "banned" : "deleted",
+        topic: topicName(topicOf(target)),
+        link: messageLink(target),
+        by: msg.from ? firstName(msg.from, c) : undefined,
+      },
+      { gone: banned },
+    ).catch(() => {});
+  }
   const name = who && !impersonates(who) ? cleanName(who.first_name, "that account") : "that account";
   if (!deleted && !banned) {
     await say("Telegram didn't let me. I need the Delete messages and Ban users rights in the group's admin settings.");
@@ -783,6 +984,25 @@ async function onReport(msg: TgMessage, from: TgUser, target: TgMessage | null, 
     // words members say too ("everyone DM me") come down, the account stays
     const banned = why !== "impostor" && WARN_ONLY.has(why) ? false : await banMember(chatId, who.id);
     if (deleted) await count("scams");
+    if (deleted || banned) {
+      await logModeration(
+        {
+          at: Date.now(),
+          uid: who.id,
+          name: cleanName(who.first_name, "an account"),
+          ...(who.username ? { username: who.username } : {}),
+          category: "report",
+          source: "report",
+          rule: why,
+          excerpt: defanged(targetText, 120) ?? "",
+          action: banned ? "banned" : "deleted",
+          topic: topicName(topic),
+          link: messageLink(target),
+          by: name,
+        },
+        { offence: { at: Date.now(), category: why === "impostor" ? "impersonation" : REASON_CATEGORY[why] }, gone: banned },
+      ).catch(() => {});
+    }
     await say(
       banned
         ? `Thanks ${name}. That was a scam, so it's gone, and so is the account.`
@@ -814,22 +1034,27 @@ async function onReport(msg: TgMessage, from: TgUser, target: TgMessage | null, 
 
 async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Promise<void> {
   const from = msg.from;
-  // other bots, channels, anonymous admins and service messages are not people asking
+  // other bots (Rose, the buy bots), channels, anonymous admins and service messages are not people asking
   if (!from || from.is_bot || msg.sender_chat || msg.via_bot) return;
   const chatId = msg.chat.id;
   const topic = topicOf(msg);
   // an edit is the same message again: counted once, when it was posted
   if (!edited) await countMessage(topic, from.id).catch(() => {});
-  // someone posting as "Gloam", "Glim", "Gloam Support" or a team tag: out, whatever they posted (a bare GIF too)
-  if (!isTrusted(from, c) && impersonates(from) && !(await isChatAdmin(chatId, from.id))) {
-    const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
-    const removed = await deleteMessage(chatId, msg.message_id);
-    const banned = await banMember(chatId, from.id);
-    await count(removed ? "scams" : "scamsMissed");
-    if ((await hitRateLimit(`tg:${chatId}:${topic}`, "tg-warn", WARN_PER_MIN)).allowed) {
-      await sendMessage(chatId, impostorWarning(banned), { threadId, replyTo: removed ? undefined : msg.message_id });
-    }
-    if (banned) await noteBan(c, from, "impostor", messageText(msg), topic);
+  // Announcements is the team's: nothing there is moderated or answered
+  if (topic === TOPIC.announcements) return;
+  const trusted = isTrusted(from, c);
+  // someone posting as "Gloam", "Glim", "Gloam Support" or a team tag: out, whatever they posted (a bare GIF too), silently
+  if (!trusted && impersonates(from) && !(await isChatAdmin(chatId, from.id))) {
+    await enforce({
+      c,
+      msg,
+      from,
+      topic,
+      text: messageText(msg),
+      verdict: { category: "impersonation", confidence: 0.97, rule: "impostor_name", source: "rule" },
+      plan: { ban: true, muteSec: 0, why: "a name posing as the team" },
+      why: "impostor",
+    });
     return;
   }
   const ownPicture = imageRef(msg);
@@ -840,7 +1065,6 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   const text = codes.masked;
   const threadId = msg.is_topic_message ? msg.message_thread_id : undefined;
   const name = firstName(from, c);
-  const trusted = isTrusted(from, c);
 
   if (secretLeak(text)) {
     const removed = await deleteMessage(chatId, msg.message_id);
@@ -848,6 +1072,7 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
     await sendMessage(chatId, leakWarning(name, removed), { threadId, replyTo: removed ? undefined : msg.message_id });
     return;
   }
+  const me = await getMe();
   // a call-channel post forwarded or quoted in from elsewhere ("80x move from our call")
   const outside = msg.forward_origin || msg.external_reply ? [text, msg.external_reply?.text, msg.external_reply?.caption, msg.quote?.text].filter(Boolean).join(" ") : "";
   const promo = Boolean(outside) && forwardedCall(outside);
@@ -864,27 +1089,68 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
     }
   }
   if (!trusted && (promo || reason) && !(await isChatAdmin(chatId, from.id))) {
+    const parts = scored !== text ? earlier.map((e) => e.id) : [];
     // Repeating a scam to call it out (forwarding a person's message, quoting it,
     // reporting what it says) is reporting it: the words come down, the member stays.
     const pointing = !promo && reportsScam(msg, from, scored);
     const warnOnly = !promo && Boolean(reason && WARN_ONLY.has(reason));
-    const removed = await deleteMessage(chatId, msg.message_id);
-    // the earlier parts of a split scam come down with it
-    if (scored !== text) for (const e of earlier) await deleteMessage(chatId, e.id);
-    // a scam post of their own costs the account its place in the group
-    const banned = removed && !pointing && !warnOnly ? await banMember(chatId, from.id) : false;
-    await count(removed ? "scams" : "scamsMissed");
-    if ((await hitRateLimit(`tg:${chatId}:${topic}`, "tg-warn", WARN_PER_MIN)).allowed) {
-      const warning = pointing ? pointedWarning(name, removed) : warnOnly ? warnOnlyWarning(name, removed) : scamWarning(removed, banned);
-      await sendMessage(chatId, warning, {
-        threadId,
-        replyTo: removed ? undefined : msg.message_id,
-      });
+    const now = Date.now();
+    if (pointing || warnOnly) {
+      if (!pointing) {
+        // words members say too ("dm me now"): the person stays, unless the spam screen is sure,
+        // or they joined today and this is one of their first messages
+        const s = screen(screenInput(msg, from, scored, c, me));
+        const standing = await standingOf(from.id, edited);
+        const gate = Boolean(standing && newcomer(standing, now));
+        const v: Verdict | null = s.verdict ?? (gate ? { category: s.gate ?? REASON_CATEGORY[reason!], confidence: 0.9, rule: "new_member_gate", source: "rule" } : null);
+        if (v) {
+          await enforce({ c, msg, from, topic, text: scored, verdict: v, plan: planFor(v, standing, now, gate && !s.verdict), extraIds: parts });
+          return;
+        }
+      }
+      const removed = await deleteMessage(chatId, msg.message_id);
+      for (const id of parts) await deleteMessage(chatId, id);
+      await count(removed ? "scams" : "scamsMissed");
+      await logModeration(
+        {
+          at: now,
+          uid: from.id,
+          name: cleanName(from.first_name, "an account"),
+          ...(from.username ? { username: from.username } : {}),
+          category: pointing ? "report" : REASON_CATEGORY[reason!],
+          source: "rule",
+          rule: pointing ? "repeats_a_scam" : reason!,
+          confidence: 0.9,
+          excerpt: defanged(scored, 120) ?? "",
+          action: removed ? "deleted" : "failed",
+          topic: topicName(topic),
+          link: messageLink(msg),
+        },
+        // a warn-only line still counts against them for a week; calling a scam out never does
+        { offence: pointing ? null : { at: now, category: REASON_CATEGORY[reason!] } },
+      ).catch(() => {});
+      // the member stays, so they hear why their words went (to them, never to a spammer)
+      if ((await hitRateLimit(`tg:${chatId}:${topic}`, "tg-warn", WARN_PER_MIN)).allowed) {
+        await sendMessage(chatId, pointing ? pointedWarning(name, removed) : warnOnlyWarning(name, removed), {
+          threadId,
+          replyTo: removed ? undefined : msg.message_id,
+        });
+      }
+      return;
     }
-    if (banned) await noteBan(c, from, reason ?? "promo_spam", scored, topic);
+    // a scam post of their own: out, silently (a member Glim knows gets a day's mute on a first offence)
+    const verdict: Verdict = { category: promo ? "promo" : REASON_CATEGORY[reason!], confidence: 0.95, rule: promo ? "call_post" : reason!, source: "rule" };
+    const standing = await standingOf(from.id, edited);
+    await enforce({ c, msg, from, topic, text: scored, verdict, plan: planFor(verdict, standing, now), extraIds: parts, why: reason ?? "promo_spam" });
     return;
   }
-  if (topic === TOPIC.announcements) return;
+  // promotion, contact asks, other groups' links, OTC, shills, impostors in words, the newcomer check
+  let quiet = false;
+  if (!trusted) {
+    const screened = await screenMessage(msg, from, c, topic, text, me, edited);
+    if (screened === "acted") return;
+    quiet = screened === "quiet";
+  }
 
   // kept 3 days so a team member can link it in a private chat ("answer this")
   const stored = memoryText(text) ?? (ownPicture ? "[picture]" : null);
@@ -894,7 +1160,6 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   // an edit to something already answered changes nothing
   if (edited && (await wasReplied(msg.message_id).catch(() => true))) return;
 
-  const me = await getMe();
   if (!me) return;
   const cmd = parseCommand(text, me.username);
   // /ban, /kick, /mute and Rose's other moderation commands are Rose's to act on and answer
@@ -917,6 +1182,8 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
     if (!cmd.forOther) await onCommand(cmd, msg, from, c, topic);
     return;
   }
+  // spam-shaped (a pitch, a contact ask, another token, a strange link): never a reply, so it gets no attention
+  if (quiet) return;
   if (!trusted && !edited) await codeHeadsUp(msg, from, codes, name, threadId);
 
   const history = edited
@@ -943,7 +1210,7 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   const isQuestion = !share && looksLikeQuestion(text);
   // tagged, or a question on a screenshot: answered as before
   let asked = (tagged || Boolean(ownPicture)) && isQuestion;
-  // an ask for the team ("team can you...", "get the audit done", "wen mobile app"): kept for them, with a one-line note
+  // an ask for the team ("team can you...", "get the audit done", "wen mobile app"): kept for them, not answered
   let forTeam = false;
   // a member talking to Boss Duke or an admin by tag ("@dukedotsol we should..."): theirs to answer, unless it is a question for Glim
   const toTeam = !tagged && tagsSomeone(msg, [...c.admins, ...c.owners.handles], c.owners.ids);
@@ -953,7 +1220,7 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
     !tagged &&
     !share &&
     !ownPicture &&
-    (isQuestion || (!toTeam && (mayNeedHelp(text) || (followUp && wordCount(text) >= 2))))
+    (isQuestion || (!toTeam && (mayNeedHelp(text) || (followUp && wordCount(text) >= 3))))
   ) {
     const kind = (await hitRateLimit("tg:classify", "tg-classify", CLASSIFY_PER_MIN)).allowed ? await triage(text, followUp) : null;
     // the check could not run: only an on-topic question gets an answer
@@ -972,20 +1239,14 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   const kept = question ? memoryText(question) : null;
   if (kept) await logQuestion(kept).catch(() => {});
   if (forTeam && !bug) {
+    // kept for the team's report, and no reply in the group: "passed it on" notes only bring more of the same
     if (kept) {
       await logUnanswered({ at: Date.now(), name, topic: topicName(topic), text: kept.slice(0, 200), link: messageLink(msg), why: "team" }).catch(() => {});
     }
-    // one line so the ask doesn't look ignored, once per person per conversation
-    if (!(await handedOffLately(chatId, from.id).catch(() => true)) && (await withinLimits(from.id))) {
-      const note = teamNoted(name);
-      if (await sendMessage(chatId, note, { threadId, replyTo: msg.message_id })) {
-        await markHandOff(chatId, from.id).catch(() => {});
-        await markReplied(msg.message_id).catch(() => {});
-        await remember(chatId, topic, { n: c.persona, t: note, b: 1, a: Math.floor(Date.now() / 1000) }).catch(() => {});
-      }
-    }
     return;
   }
+  // a tag or a reply to Glim with nothing to answer ("haha thanks", "gm glim"): no reply
+  if (tagged && !target && !ownPicture && !bug && isChatter(text, c.persona)) return;
   if (!tagged && !bug && !asked && !bareShot) return;
   // every handled album message marks the album, so a captioned first picture also covers the rest
   const albumFirst = msg.media_group_id ? await firstOfAlbum(msg.media_group_id).catch(() => true) : true;
@@ -1214,19 +1475,17 @@ async function onPrivate(msg: TgMessage, c: BotConfig): Promise<void> {
       await answerLinked(chatId, from, c, groupMessageIds(raw));
       return;
     }
-    if (cmd.name === "unban") {
-      const id = Number(cmd.args.trim());
-      if (!Number.isSafeInteger(id) || id <= 0) {
-        await sendMessage(chatId, "Send /unban and the number from my removal note, like /unban 123456789.");
+    if (cmd.name === "modlog") {
+      const entries = await recentModeration(20).catch(() => null);
+      if (!entries) {
+        await sendMessage(chatId, "I couldn't read the moderation log just now. Try again in a minute.");
         return;
       }
-      const ok = await unbanMember(c.groupId, id);
-      await sendMessage(
-        chatId,
-        ok
-          ? `Done, ${id} can join the group again. They'll need the invite link: t.me/gloamhq`
-          : "Telegram didn't take that. Check the number, or lift it in the group's settings under Removed users.",
-      );
+      for (const part of formatModlog(entries, c.persona)) await sendMessage(chatId, part);
+      return;
+    }
+    if (cmd.name === "unban") {
+      await liftAction(chatId, from, c, cmd.args);
       return;
     }
     if (cmd.name === "webhook" && owner) {
@@ -1261,6 +1520,50 @@ async function onPrivate(msg: TgMessage, c: BotConfig): Promise<void> {
   }
   const extra = linked.length ? await linkedContext(linked) : "";
   await chatWithTeam(msg, from, c, owner, text, picture, extra);
+}
+
+/**
+ * /unban <number>: a team member lifts what Glim did to someone, a ban or a
+ * mute (the log says which; with no log both are lifted). The person is then
+ * vouched for: their offences are cleared and for 30 days Glim's own guesses
+ * (the model check, the newcomer check) leave them alone.
+ */
+async function liftAction(chatId: number, from: TgUser, c: BotConfig, args: string): Promise<void> {
+  const id = Number(args.trim());
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    await sendMessage(chatId, "Send /unban and the number from /modlog or my removal note, like /unban 123456789.");
+    return;
+  }
+  const log = await recentModeration(200).catch(() => [] as ModEntry[]);
+  const last = log.find((e) => e.uid === id && (e.action === "banned" || e.action === "muted"));
+  const unbanned = await unbanMember(c.groupId, id);
+  const unmuted = last?.action !== "banned" ? await unmuteUser(c.groupId, id) : false;
+  const mutedOnly = last?.action === "muted" && unmuted;
+  if (unbanned || unmuted) {
+    await vouchFor(id).catch(() => {});
+    await logModeration({
+      at: Date.now(),
+      uid: id,
+      name: last?.name ?? String(id),
+      ...(last?.username ? { username: last.username } : {}),
+      category: "admin",
+      source: "team",
+      rule: "unban",
+      excerpt: "",
+      action: mutedOnly ? "unmuted" : "unbanned",
+      topic: "private chat",
+      by: firstName(from, c),
+    }).catch(() => {});
+  }
+  const easy = " For 30 days my own guesses leave them alone; a clear rule still applies.";
+  await sendMessage(
+    chatId,
+    mutedOnly
+      ? `Done, ${id} can post again.${easy}`
+      : unbanned
+        ? `Done, ${id} can join the group again. They'll need the invite link: t.me/gloamhq${easy}`
+        : "Telegram didn't take that. Check the number, or lift it in the group's settings under Removed users.",
+  );
 }
 
 /** The linked group messages as context for a team chat: what each says, or that it is not on record. */
