@@ -21,10 +21,10 @@ export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
   4663: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 94_194_599 },
   // Tempo mainnet (4217): USDC.e, pathUSD, USDT0, OUSD
   4217: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 45_172_561 },
-  // Base mainnet (8453): USDC, EURC, USDT, ETH. Not deployed yet (DEPLOY-BASE.md).
-  8453: { pool: null, deployBlock: null },
-  // Ethereum mainnet (1): USDC, USDT, USDG, PYUSD, EURC, ETH. Not deployed yet (DEPLOY-ETHEREUM.md).
-  1: { pool: null, deployBlock: null },
+  // Base mainnet (8453): USDC, EURC, USDT, ETH. Deployed 26 Oct 2026 (DEPLOY-BASE.md).
+  8453: { pool: "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194", deployBlock: 53109632 },
+  // Ethereum mainnet (1): USDC, USDT, USDG, PYUSD, EURC, ETH. Deployed 26 Oct 2026 (DEPLOY-ETHEREUM.md).
+  1: { pool: "0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194", deployBlock: 26276183 },
 };
 
 /** Base Sepolia (84532): USDC, EURC, ETH, test funds. Deployed 24 Oct 2026 (DEPLOY-BASE.md). */

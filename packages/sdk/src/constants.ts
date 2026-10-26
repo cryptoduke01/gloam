@@ -454,10 +454,10 @@ const MAINNET_SPECS: Partial<Record<
   // Payment-message boards on Robinhood Chain and Tempo deployed 2026-10-23 (no owner, never log the poster).
   robinhood: { chainId: 4663, key: "robinhood-mainnet", label: "Robinhood Chain", chain: RH_MAINNET_CHAIN, payMemo: "0x01B3172d9900Cb26d57E986429b9b23854c74598", nativeShield: false, assets: RH_MAINNET_ASSETS },
   tempo: { chainId: 4217, key: "tempo-mainnet", label: "Tempo", chain: TEMPO_MAINNET_CHAIN, payMemo: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", nativeShield: false, assets: TEMPO_MAINNET_ASSETS },
-  // No board on Base yet: payments to a Gloam address there are handed over as a sealed code.
-  base: { chainId: 8453, key: "base-mainnet", label: "Base", chain: BASE_MAINNET_CHAIN, payMemo: null, nativeShield: true, assets: BASE_MAINNET_ASSETS },
-  // No board on Ethereum yet either: payments to a Gloam address are handed over as a sealed code.
-  ethereum: { chainId: 1, key: "ethereum-mainnet", label: "Ethereum", chain: ETHEREUM_MAINNET_CHAIN, payMemo: null, nativeShield: true, assets: ETHEREUM_MAINNET_ASSETS },
+  // Base's payment-message board, deployed 26 Oct 2026 after the vault (no owner, never logs the poster).
+  base: { chainId: 8453, key: "base-mainnet", label: "Base", chain: BASE_MAINNET_CHAIN, payMemo: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", nativeShield: true, assets: BASE_MAINNET_ASSETS },
+  // Ethereum's payment-message board, deployed 26 Oct 2026 after the vault (no owner, never logs the poster).
+  ethereum: { chainId: 1, key: "ethereum-mainnet", label: "Ethereum", chain: ETHEREUM_MAINNET_CHAIN, payMemo: "0x8699D015087dE6D25d55d5ceB63b34b9d773f135", nativeShield: true, assets: ETHEREUM_MAINNET_ASSETS },
 };
 
 function buildMainnet(family: GloamChainFamily): GloamNetwork | null {

@@ -67,6 +67,10 @@ export const PAY_MEMO_BOARDS: Record<number, PayMemoBoard | null> = {
   [BASE_SEPOLIA_CHAIN_ID]: { address: BASE_SEPOLIA_PAY_MEMO, deployBlock: 49_804_175n, emitsPoster: false },
   [RH_MAINNET_CHAIN_ID]: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 95_494_392n, emitsPoster: false },
   [TEMPO_MAINNET_CHAIN_ID]: { address: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", deployBlock: 45_417_629n, emitsPoster: false },
+  // Ethereum mainnet's, deployed 26 Oct 2026 after the vault.
+  1: { address: "0x8699D015087dE6D25d55d5ceB63b34b9d773f135", deployBlock: 26276234n, emitsPoster: false },
+  // Base mainnet's, deployed 26 Oct 2026 after the vault.
+  8453: { address: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", deployBlock: 53109729n, emitsPoster: false },
   // Ethereum Sepolia's, once it is filled in next to its pool (ETHEREUM_SEPOLIA_POOL in mainnet.ts).
   [ETHEREUM_SEPOLIA_CHAIN_ID]: ethereumSepoliaBoard(),
 };
