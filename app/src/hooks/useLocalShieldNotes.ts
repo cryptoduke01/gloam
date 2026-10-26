@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Address, Hex } from "viem";
+import type { Address } from "viem";
 import { publicClientFor } from "@/lib/rhClient";
 import { useDemoLive } from "@/lib/demo";
 import { readDemo } from "@/lib/demoFlag";
 import { unlockNoteVault, syncFromDisk, NOTES_KEY } from "@/lib/noteVault";
 import { reconcileClaims, reconcileUnfunded, reopenGhostEthNotes } from "@/lib/claimSweep";
 import { reconcileCashOuts } from "@/lib/cashOutLater";
+import { markSpentNotes } from "@/lib/spentCheck";
 import {
   activeSpendableNotes,
   confirmedNotes,
@@ -17,7 +18,6 @@ import {
   loadLocalNotes,
   markNoteRecovered,
   mergeNotes,
-  notesOnNetwork,
   purgeSenderPaymentNotes,
   visibleNotes,
   shieldPoolAbi,
@@ -61,35 +61,11 @@ export function useLocalShieldNotes(address?: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, network.key]);
 
+  // every note asked at once (lib/spentCheck), not one read after another
   const reconcileSpent = useCallback(
     async (notes: LocalNote[], net: GloamNetwork) => {
       if (!net.pool) return;
-      const publicClient = publicClientFor(net);
-      const candidates = notesOnNetwork(notes, net).filter(
-        (n) =>
-          n.nullifier &&
-          n.nullifier !== "0x" &&
-          n.status !== "recovered" &&
-          n.secret &&
-          n.secret !== "0x"
-      );
-      let any = false;
-      for (const n of candidates) {
-        try {
-          const spent = (await publicClient.readContract({
-            address: net.pool,
-            abi: shieldPoolAbi,
-            functionName: "isSpent",
-            args: [n.nullifier as Hex],
-          })) as boolean;
-          if (spent) {
-            markNoteRecovered(n.id);
-            any = true;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      const any = await markSpentNotes(publicClientFor(net), notes, net).catch(() => false);
       if (any && shownKey.current === net.key) {
         setLocal(loadLocalNotes(address, net));
       }
@@ -113,18 +89,23 @@ export function useLocalShieldNotes(address?: string | null) {
     const still = () => shownKey.current === net.key;
     setSyncing(true);
     try {
+      const publicClient = publicClientFor(net);
+      // The wallet's deposits are only read here, so their walk starts now and
+      // runs alongside the passes below instead of after them.
+      const rowsP = fetchChainShieldNotes(publicClient, address as Address, net);
       // Claimed payments that reached the vault since, then secured claims and
       // cash-out splits whose move landed (or never can) since last time.
       if ((await reconcileUnfunded().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
       if ((await reconcileClaims().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
       // once per vault: ETH notes an older sync wrongly marked spent, reopened while the vault still holds them
       if ((await reopenGhostEthNotes().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));
-      const publicClient = publicClientFor(net);
-      const rows = await fetchChainShieldNotes(publicClient, address as Address, net);
+      // Spent checks only ask about notes with a secret, which chain rows never
+      // have, so they run on this browser's notes without waiting for the walk.
+      const spentP = reconcileSpent(loadLocalNotes(address, net), net);
+      const rows = await rowsP;
+      await spentP;
       if (!still()) return;
       setChain(rows);
-      const merged = mergeNotes(loadLocalNotes(address, net), rows);
-      await reconcileSpent(merged, net);
       // Scheduled cash outs, after spent notes are retired: one that came back
       // unsent (and is unspent on its chain) makes its note spendable again.
       if ((await reconcileCashOuts().catch(() => false)) && still()) setLocal(loadLocalNotes(address, net));

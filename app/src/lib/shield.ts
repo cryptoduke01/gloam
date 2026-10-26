@@ -12,7 +12,7 @@ import { dataKeyLocked, getAllNotes, setAllNotes, syncFromDisk, unlockNoteVault 
 import { readDemo } from "./demoFlag";
 import type { VaultSwapRefundInfo } from "./vaultSwap";
 import type { DelayWindow } from "./relay/scheduled";
-import { walkLogs, walkTuning } from "./leafIndex";
+import { scanDeposits } from "./depositScan";
 import {
   activeHashScheme,
   activePoolAddress,
@@ -1019,7 +1019,11 @@ export function mergeNotes(
   );
 }
 
-/** Pull Shielded events for a wallet (amounts public on deposit edge). */
+/**
+ * Shielded events for a wallet (amounts public on deposit edge). Read through
+ * lib/depositScan, which keeps what it read for the tab, so after the first
+ * load only the blocks since are read.
+ */
 export async function fetchChainShieldNotes(
   client: PublicClient,
   from: Address,
@@ -1030,57 +1034,23 @@ export async function fetchChainShieldNotes(
   if (!pool) return [];
   const deployBlock = net.deployBlock ?? SHIELD_DEPLOY_BLOCK;
   try {
-    const latest = await client.getBlockNumber();
-    const logs: {
-      args?: {
-        commitment?: Hex;
-        asset?: Address;
-        amount?: bigint;
-        leafIndex?: bigint;
-        from?: Address;
-      };
-      transactionHash?: Hex | null;
-    }[] = [];
-    // this wallet's deposits only, in the chain's widest ranges and a few at a time
-    // (lib/leafIndex): a handful of calls on Robinhood Chain instead of one per 100k blocks
-    const found = await walkLogs(client, pool, deployBlock, latest, walkTuning(net.chainId, net.logRange), {
-      event: {
-        type: "event",
-        name: "Shielded",
-        inputs: [
-          { name: "commitment", type: "bytes32", indexed: true },
-          { name: "asset", type: "address", indexed: true },
-          { name: "amount", type: "uint256", indexed: false },
-          { name: "leafIndex", type: "uint256", indexed: false },
-          { name: "from", type: "address", indexed: true },
-        ],
-      },
-      args: { from },
-    });
-    logs.push(...(found as unknown as typeof logs));
-
-    return logs.map((log, i) => {
-      const args = log.args ?? {};
-      const commitment = (args.commitment ??
-        "0x0000000000000000000000000000000000000000000000000000000000000000") as Hex;
-      return {
-        id: `chain-${log.transactionHash ?? i}-${args.leafIndex ?? i}`,
-        chainId: net.chainId,
-        pool,
-        asset: (args.asset ?? NATIVE_ASSET) as Address,
-        amountWei: (args.amount ?? BigInt(0)).toString(),
-        commitment,
-        // chain-only row, no spend secret (placeholder, not a key)
-        secret: "0x" as Hex,
-        leafIndex:
-          args.leafIndex != null ? Number(args.leafIndex) : undefined,
-        txHash: (log.transactionHash ?? undefined) as Hex | undefined,
-        from: (args.from ?? from) as Address,
-        createdAt: Date.now() - i,
-        status: "open" as const,
-        source: "chain" as const,
-      };
-    });
+    const rows = await scanDeposits(client, { ...net, deployBlock }, from);
+    return rows.map((r, i) => ({
+      id: `chain-${r.txHash ?? i}-${r.leafIndex ?? i}`,
+      chainId: net.chainId,
+      pool,
+      asset: r.asset,
+      amountWei: r.amount,
+      commitment: r.commitment,
+      // chain-only row, no spend secret (placeholder, not a key)
+      secret: "0x" as Hex,
+      leafIndex: r.leafIndex ?? undefined,
+      txHash: r.txHash ?? undefined,
+      from,
+      createdAt: Date.now() - i,
+      status: "open" as const,
+      source: "chain" as const,
+    }));
   } catch {
     return [];
   }
