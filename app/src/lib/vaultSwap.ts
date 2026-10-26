@@ -316,6 +316,18 @@ export function swapRouterFor(chainId: number, address?: string | null): SwapRou
   return all.find((r) => same(r.address, address)) ?? null;
 }
 
+/**
+ * Every router on a chain the relay still knows, the one new swaps go through
+ * first (an older one stays for refunds of swaps made through it). Empty while
+ * swaps are off there. For the contract list on /verify.
+ */
+export function swapRoutersOn(chainId: number): SwapRouter[] {
+  const current = VAULT_SWAP_ROUTERS[chainId];
+  if (!current) return [];
+  const all = routerList(chainId);
+  return all.map((r, i) => (i === 0 ? { ...r, address: current } : r));
+}
+
 export function isSwapAsset(chainId: number, asset: string, router?: string | null): boolean {
   const list = swapRouterFor(chainId, router)?.assets ?? VAULT_SWAP_ASSETS[chainId] ?? [];
   return list.some((a) => same(a, asset));
