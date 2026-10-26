@@ -100,7 +100,9 @@ Other rules the provider keeps:
   of it. A payout whose answer was lost is never sent again: on the next event
   or restart (or `provider.resume(session)`) the provider looks it up by its
   label in its note store, after reading the chain, and carries on only once it
-  has settled.
+  has settled. One still unconfirmed after an hour is cancelled on chain (its
+  note spent back to the provider), so it can never land and its principal can
+  go back.
 - A refund counts what arrived minus what certainly left the float. A payout
   that may have gone out is held back from the refund until it settles. Each
   refund is written down before it is sent; one whose answer is lost is looked

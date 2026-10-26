@@ -129,3 +129,31 @@ test("a refund that threw with nothing on chain is sent again only an hour on", 
     Date.now = realNow;
   }
 });
+
+test("a payout left unconfirmed for an hour is cancelled on chain, so its principal goes back", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const refunds: bigint[] = [];
+  const f = fakeWallet(pk, acp, {
+    pay: async (a, _n, w) => {
+      w.notes.push({ handle: "n-1", label: a.label ?? "", origin: "payment", status: "pending", createdTx: null });
+      return { status: "unconfirmed", message: "lost answer", check: "Refresh." };
+    },
+  });
+  const p = providerFor(f.wallet, { refund: async (_c, _t, raw) => (refunds.push(raw), `0x${"7".repeat(64)}`) });
+  const s = new FakeSession("6", acp);
+  await p.onEntry(s, requirementEntry("6", { payouts: [{ to: r1.tag, amount: "7" }] }));
+  s.fund();
+  await p.onEntry(s, funded("6"));
+  acp.set("6", { status: ACP_STATUS.rejected });
+  s.status = "rejected";
+  await p.onEntry(s, rejected("6"));
+  assert.deepEqual(refunds, [], "held while it may land");
+  // An hour on, the engine marks it stale; the provider cancels it (spends its note back) and refunds.
+  f.notes[0]!.stale = true;
+  await p.retryRefunds();
+  assert.deepEqual(f.cancelled, ["n-1"]);
+  assert.deepEqual(refunds, [7_000_000n]);
+  assert.equal(p.status(84532, "6")?.refundHeldRaw, "0");
+});

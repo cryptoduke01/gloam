@@ -524,10 +524,11 @@ export class GloamAgent {
         poolAddress: this.network.pool,
         chainId: this.network.chainId,
       });
+      const from = { spends: input.nullifier, spendsHandle: input.handle };
       if (BigInt(intent.changeNote.amountWei) > 0n) {
-        change = this.keep(this.newNote(intent.changeNote, asset, "change", { label: args.label ? `change from ${args.label}` : undefined }));
+        change = this.keep(this.newNote(intent.changeNote, asset, "change", { label: args.label ? `change from ${args.label}` : undefined, ...from }));
       }
-      payment = this.keep(this.newNote(intent.paymentNote, asset, args.payOrigin, { label: args.label, memo: args.memo, requestKey: args.requestKey }));
+      payment = this.keep(this.newNote(intent.paymentNote, asset, args.payOrigin, { label: args.label, memo: args.memo, requestKey: args.requestKey, ...from }));
       if (args.prepare) {
         const patch = await args.prepare(payment, intent.paymentNote);
         if (patch) payment = this.store.update(payment.handle, patch) ?? payment;
@@ -582,6 +583,7 @@ export class GloamAgent {
       ...(sent.payment ? { payment: sent.payment.handle } : {}),
       ...(sent.change ? { change: noteView(sent.change) } : {}),
       check: "Refresh the balance before trying again: refresh() reads the chain and settles every note of this send. It counts against today's limit until then.",
+      next: "Do not send it again. Call gloam_private_balance with refresh \"true\" (refresh() in code): a send that landed is settled there, and the same one asked again is refused or made from the same note, so it can never be paid twice.",
       ...extra,
     };
   }
@@ -627,8 +629,24 @@ export class GloamAgent {
    */
   async refresh(): Promise<{ updated: number }> {
     let updated = 0;
+    const pool = this.network.pool;
     const receiptStatus = async (hash: Hex | null | undefined) =>
       hash ? ((await this.publicClient.getTransactionReceipt({ hash }).catch(() => null))?.status ?? null) : null;
+    // Whether a spend that would create a note can still land is read at one block, so two RPC
+    // nodes at different heights can never make a note that landed look dead.
+    const head = await this.publicClient.getBlockNumber({ cacheTime: 0 }).catch(() => null);
+    const deadAt = async (n: StoredNote): Promise<boolean> => {
+      if (!n.spends || head === null) return false;
+      try {
+        const [inputSpent, seen] = await Promise.all([
+          this.publicClient.readContract({ address: pool, abi: POOL_STATE_ABI, functionName: "isSpent", args: [n.spends], blockNumber: head }),
+          this.publicClient.readContract({ address: n.pool, abi: POOL_STATE_ABI, functionName: "commitmentSeen", args: [n.commitment], blockNumber: head }),
+        ]);
+        return inputSpent && !seen;
+      } catch {
+        return false;
+      }
+    };
     for (const n of this.store.list()) {
       if (n.chainId !== this.network.chainId || n.status === "spent") continue;
       const [seen, spent] = await Promise.all([
@@ -639,16 +657,15 @@ export class GloamAgent {
         this.store.update(n.handle, { status: "spent" });
         updated++;
       } else if (n.status === "pending" && n.pending === "create" && seen) {
-        this.store.update(n.handle, { status: n.origin === "payment" ? "spent" : "unspent" });
+        this.store.update(n.handle, { status: n.origin === "payment" ? "spent" : "unspent", stale: undefined });
         updated++;
       } else if (n.status === "pending" && n.pending === "create") {
-        const tx = await receiptStatus(n.createdTx);
-        if (tx === "reverted") {
-          // The one transaction that could make it failed for good.
+        if ((await receiptStatus(n.createdTx)) === "reverted" || (await deadAt(n))) {
+          // The transaction that would make it reverted, or the note it spends went another way: it can never land.
           this.store.remove(n.handle);
           updated++;
         } else if (!n.stale && Date.now() - Date.parse(n.createdAt) > HOUR_MS) {
-          // Kept (it settles if it lands after all), but no longer counted as confirming or in flight.
+          // Kept (it settles if it lands after all). A retry of the same payment must spend the same note.
           this.store.update(n.handle, { stale: true });
           updated++;
         }
@@ -656,10 +673,11 @@ export class GloamAgent {
         const tx = await receiptStatus(n.spentTx);
         const age = Date.now() - Date.parse(n.spendStarted ?? n.updatedAt);
         // Free it when its transaction reverted, when nothing was ever sent (ten minutes on), or when a send
-        // has not landed in an hour (if it lands after all, its nullifier marks this spent and the other spend reverts).
+        // has not landed in an hour. Freed, it can be spent again; a payment still waiting on it is then
+        // either retried from this same note or dropped once the note goes another way, never paid twice.
         const free = tx === "reverted" || (!n.spendStarted && !n.spentTx && age > 10 * 60_000) || (Boolean(n.spendStarted || n.spentTx) && tx === null && age > HOUR_MS);
         if (free) {
-          this.store.update(n.handle, { status: "unspent", spentTx: null, spendStarted: undefined });
+          this.store.update(n.handle, { status: "unspent", spentTx: null, spendStarted: undefined, stale: undefined });
           updated++;
         }
       }
@@ -671,6 +689,34 @@ export class GloamAgent {
       if (posted.posted) this.store.update(n.handle, { deliver: undefined });
     }
     return { updated };
+  }
+
+  /**
+   * Make sure a payment (or claim link) whose answer was lost an hour ago never
+   * lands: spend the note it spends back to this agent. If the payment lands
+   * first, this send reverts and the payment counts as landed. Either way the
+   * chain settles it, and refresh() drops whichever cannot land.
+   */
+  async cancelPayment(handle: string): Promise<Outcome> {
+    await this.refresh().catch(() => undefined);
+    const n = this.store.get(handle);
+    if (!n) return { status: "done", action: "cancel", result: "dropped", message: "It can never land: the note it spends went another way." };
+    if (n.origin !== "payment" && n.origin !== "claim") throw new Error(`There is no payment "${handle}".`);
+    if (n.status !== "pending") return { status: "done", action: "cancel", result: "landed", payment: handle, ...(n.createdTx ? { hash: n.createdTx } : {}) };
+    if (!n.stale) return { status: "refused", code: "not_stale", message: "It may still land. An hour after it was sent, it can be cancelled." };
+    const input = n.spendsHandle ? this.store.get(n.spendsHandle) : undefined;
+    const asset = this.network.assets.find((a) => a.address.toLowerCase() === n.asset.toLowerCase());
+    if (!input || input.status !== "unspent" || !asset) {
+      return { status: "refused", code: "input_held", message: "The note it spends is not free yet. Refresh later." };
+    }
+    const reserved = this.store.reserveForSpend(input.handle);
+    const sent = await this.privateSend({ input: reserved, asset, amountPay: BigInt(reserved.amountWei), payOrigin: "change", label: `cancel ${handle}` });
+    await this.refresh().catch(() => undefined);
+    const after = this.store.get(handle);
+    if (!after) return { status: "done", action: "cancel", result: "cancelled", ...(sent.ok ? { hash: sent.hash } : {}), message: "The note it spent went back to this agent, so it can never land." };
+    if (after.status !== "pending") return { status: "done", action: "cancel", result: "landed", payment: handle, ...(after.createdTx ? { hash: after.createdTx } : {}) };
+    if (!sent.ok && sent.maybeSent) return this.unconfirmed("The cancel", sent);
+    return { status: "error", message: sent.ok ? "The cancel landed but the payment is still pending. Refresh again." : sent.error };
   }
 
   /** The newest payment or claim note with this label (what an ACP provider checks after a send it is unsure of). */
@@ -879,16 +925,34 @@ export class GloamAgent {
 
     // A payment like this one whose answer was lost may still land: never pay it twice.
     const requestKey = this.requestKeyOf(payTo, asset, amountWei, memo);
-    const inFlight = this.inFlight(requestKey);
-    if (inFlight) return inFlight;
-    const gate = this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: payTo });
-    if (!gate.ok) return this.refused(gate.refusal);
+    const plan = await this.retryPlan(requestKey, amountWei, (n) => ({
+      status: "done",
+      action: "pay",
+      alreadyPaid: true,
+      network: this.network.key,
+      paid: this.fmt(amountWei, asset),
+      to: shortTag(payTo),
+      payment: n.handle,
+      ...(n.createdTx ? { hash: n.createdTx, explorer: this.explorer(n.createdTx) } : {}),
+      message: "This payment already landed after its answer was lost. It was not sent again.",
+    }));
+    if (plan.kind === "answer") return plan.outcome;
+    // A retry spends the same note as the attempt it repeats, so only one of them can land. It was counted once already.
+    const gate = plan.kind === "same" ? null : this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: payTo });
+    if (gate && !gate.ok) return this.refused(gate.refusal);
+    const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
+      if (gate?.ok) this.settle(gate.id, status, extra);
+    };
     let input: StoredNote;
-    try {
-      input = this.reserveNote(asset, amountWei);
-    } catch (e) {
-      this.settle(gate.id, "failed", { reason: errMsg(e) });
-      return { status: "error", message: errMsg(e), privateBalance: balances(this.store.list(), this.network.chainId) };
+    if (plan.kind === "same") {
+      input = plan.input;
+    } else {
+      try {
+        input = this.reserveNote(asset, amountWei);
+      } catch (e) {
+        settle("failed", { reason: errMsg(e) });
+        return { status: "error", message: errMsg(e), privateBalance: balances(this.store.list(), this.network.chainId) };
+      }
     }
     let sealed = "";
     const sent = await this.privateSend({
@@ -915,7 +979,7 @@ export class GloamAgent {
       },
     });
     if (!sent.ok) {
-      this.settle(gate.id, sent.maybeSent ? "unconfirmed" : "failed", { hash: sent.hash ?? undefined, reason: sent.error });
+      settle(sent.maybeSent ? "unconfirmed" : "failed", { hash: sent.hash ?? undefined, reason: sent.error });
       if (sent.maybeSent) {
         return this.unconfirmed("The payment", sent, {
           sealedCode: sealed || undefined,
@@ -924,7 +988,7 @@ export class GloamAgent {
       }
       return { status: "error", message: sent.error };
     }
-    this.settle(gate.id, "sent", { hash: sent.hash });
+    settle("sent", { hash: sent.hash });
     const memoPost = await this.postMemo(sent.paymentNote.commitment, sealed);
     if (memoPost.posted) this.store.update(sent.payment.handle, { deliver: undefined });
     return {
@@ -951,15 +1015,49 @@ export class GloamAgent {
     return createHash("sha256").update(`${this.network.chainId}|${payTo.trim()}|${asset.address.toLowerCase()}|${amountWei}|${memo ?? ""}`).digest("hex").slice(0, 32);
   }
 
-  /** A refusal when the same payment is still unconfirmed. */
-  private inFlight(requestKey: string): Outcome | null {
-    const n = this.store.list().find((x) => x.requestKey === requestKey && x.status === "pending" && !x.stale && x.chainId === this.network.chainId);
-    if (!n) return null;
+  /**
+   * How to go on with a payment (or claim link) that may repeat an earlier one
+   * whose answer was lost:
+   *   new     no earlier attempt can still land: pay from any note
+   *   same    the earlier attempt is over an hour old and its note is free again:
+   *           pay from that same note (reserved), so at most one of the two lands
+   *   answer  it already landed, or it may still land and its note is held: say so
+   * The earlier attempt is dropped (by refresh) only once the note it spends reads
+   * spent and its payment is not in the vault.
+   */
+  private async retryPlan(
+    requestKey: string,
+    amountWei: bigint,
+    landed: (n: StoredNote) => Outcome | Promise<Outcome>
+  ): Promise<{ kind: "new" } | { kind: "same"; input: StoredNote } | { kind: "answer"; outcome: Outcome }> {
+    const prior = () =>
+      this.store
+        .list()
+        .filter((x) => x.requestKey === requestKey && x.chainId === this.network.chainId && x.status === "pending" && (x.origin === "payment" || x.origin === "claim"))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+    const first = prior();
+    if (!first) return { kind: "new" };
+    await this.refresh().catch(() => undefined);
+    const now = this.store.get(first.handle);
+    if (now && now.status !== "pending") return { kind: "answer", outcome: await landed(now) };
+    const p = now ?? prior();
+    if (!p) return { kind: "new" };
+    const input = p.spendsHandle ? this.store.get(p.spendsHandle) : undefined;
+    if (p.stale && input && input.status === "unspent" && BigInt(input.amountWei) >= amountWei) {
+      try {
+        return { kind: "same", input: this.store.reserveForSpend(input.handle) };
+      } catch {
+        /* taken meanwhile: refused below */
+      }
+    }
     return {
-      status: "refused",
-      code: "unconfirmed_payment",
-      message: `The same payment (${n.handle}) is still waiting to confirm, so it is not sent again. Refresh the balance: once it lands it is done, and if it failed for good it can be sent again.`,
-      payment: n.handle,
+      kind: "answer",
+      outcome: {
+        status: "refused",
+        code: "unconfirmed_payment",
+        message: `The same payment (${p.handle}) has not confirmed and may still land, so it is not sent again. Refresh the balance: once it lands it is done; after an hour it can be sent again from the same note, so only one of the two can land.`,
+        payment: p.handle,
+      },
     };
   }
 
@@ -1115,7 +1213,7 @@ export class GloamAgent {
         }
       },
       beforeSubmit: (freshNote) => {
-        fresh = this.keep(this.newNote(freshNote, asset, "received", { sweptFrom, label }));
+        fresh = this.keep(this.newNote(freshNote, asset, "received", { sweptFrom, spends: sweptFrom, label }));
       },
     });
     // The SDK reads "failed" when the chain shows nothing yet; a sweep still in the mempool reads the same.

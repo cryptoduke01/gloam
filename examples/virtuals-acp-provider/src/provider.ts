@@ -49,9 +49,10 @@
  * Crash safety: a small journal (no secrets) records each payout before it is
  * sent ("sending"), then what came of it. A payout whose answer was lost is
  * never sent again: the provider looks for it in its own note store and on
- * chain (by the payout's label) and carries on only once it is settled. A
- * refund counts what actually left the float: a payout that may have gone
- * out is held back from the refund until it is settled.
+ * chain (by the payout's label) and carries on only once it is settled; after
+ * an hour it is cancelled on chain so it can never land. A refund counts what
+ * arrived minus what left the float, is written down before it is sent, and
+ * one whose answer was lost is looked for on chain before it is sent again.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -593,7 +594,16 @@ export class PrivatePayoutProvider {
     const n = w.findPayment(r.label);
     // The engine keeps a payment's note from before it is sent and drops it only when nothing went out.
     if (!n) return { ...r, status: "failed", error: r.error ?? "It was not sent." };
-    if (n.status === "pending") return { ...r, status: "unconfirmed", handle: n.handle };
+    if (n.status === "pending") {
+      if (!("stale" in n && n.stale)) return { ...r, status: "unconfirmed", handle: n.handle };
+      // An hour with nothing on chain: make sure it never lands by spending the note it spends back to
+      // this provider. If it lands first, that send reverts and the payout counts as paid.
+      await w.cancelPayment(n.handle).catch(() => undefined);
+      const after = w.findPayment(r.label);
+      if (!after) return { ...r, status: "failed", error: "It never landed and can no longer land (cancelled)." };
+      if (after.status === "pending") return { ...r, status: "unconfirmed", handle: after.handle };
+      return this.reconcile(j, { ...r, status: "unconfirmed" });
+    }
     const out: PayoutResult = { ...r, status: "paid", handle: n.handle, ...(n.createdTx ? { tx: n.createdTx } : {}), error: undefined };
     if (n.origin === "claim" && j.replyTo && !r.sealedClaimLink) {
       out.sealedClaimLink = await sealToReceiveTag(w.claimLink(n.handle).link, j.replyTo);

@@ -111,11 +111,18 @@ forgets a note once a send has started:
   held. The outcome says `unconfirmed`, with the hash when there is one.
 - `refresh()` (or `gloam_private_balance` with `refresh: "true"`) reads the
   chain and settles them: what landed becomes spendable, a payment's sealed
-  message is posted to the board then, and a note whose transaction reverted is
-  dropped.
+  message is posted to the board then, and a note is dropped only when it can
+  never land: its transaction reverted, or the note its spend spends is spent
+  while it is not in the vault (both read at one block).
 - An unconfirmed payment counts against the daily limit, and the same payment
-  (payee, asset, amount, note) is refused until it settles, so a retry never
-  pays twice.
+  (payee, asset, amount, note) is refused while it may land. Each new note
+  records which note its spend spends. After an hour with nothing on chain the
+  same payment may be sent again, but only from that same note, so at most one
+  of the two can land. A retry that finds the first one landed says so
+  (`alreadyPaid`) and sends nothing.
+- `cancelPayment(handle)` (owner code) makes a payment whose answer was lost
+  an hour ago never land, by spending the note it spends back to the agent; if
+  the payment lands first, the cancel reverts and the payment counts.
 - A Gloam address is checked to be a real P-256 key, and the payment sealed to
   it, before any money moves.
 - A payment message that can never be secured (one anyone could post, worth
