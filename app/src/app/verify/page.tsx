@@ -1,13 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { toHex } from "viem";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { SealedField } from "@/components/ui/SealedField";
 import { FlowField } from "@/components/ui/FlowField";
 import {
   LEGACY_DISCLOSURE,
@@ -24,12 +22,13 @@ import {
 } from "@/lib/proofs";
 import { ProofVerdict, amountOf, symbolOf } from "@/components/verify/ProofVerdict";
 import { networkForChain } from "@/lib/proofs/chain";
-import { NETWORK_KEYS, getNetwork, type ChainFamily, type GloamNetwork, type NetworkKey } from "@/lib/networks";
 import { track } from "@/lib/track";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { useMainnetLive } from "@/components/MainnetCountdown";
-import { liveMainnetNames } from "@/lib/mainnet";
-import { swapRouterFor, vaultSwapRouter } from "@/lib/vaultSwap";
+import { ContractsSection } from "@/components/verify/ContractsSection";
+import { OwnershipStatement } from "@/components/verify/OwnershipStatement";
+import { CheckMark } from "@/components/verify/VerifyBits";
+import { GLOAM_OWNER } from "@/lib/contractDirectory";
 
 type Result =
   | { kind: "idle" }
@@ -76,174 +75,32 @@ function assetAddress(asset: string): string {
 
 const GITHUB = "https://github.com/cryptoduke01/gloam";
 
-/* ---------- small pieces ---------- */
+type Fact = { title: string; body: string; link?: { href: string; label: string } };
 
-function CheckMark({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        } catch {
-          /* clipboard unavailable */
-        }
-      }}
-      aria-label={copied ? `${label} copied` : `Copy ${label}`}
-      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
-    >
-      {copied ? (
-        <CheckMark />
-      ) : (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <rect x="8.5" y="8.5" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M15.5 8.5V6.5a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-      )}
-      <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
-    </button>
-  );
-}
-
-function ExplorerLink({ href }: { href: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground"
-    >
-      Explorer <ArrowUpRight />
-    </a>
-  );
-}
-
-/* ---------- the contracts ---------- */
-
-type Row = { name: string; what: string; address: string };
-
-function chainRows(n: GloamNetwork): Row[] {
-  const rows: Row[] = [];
-  if (n.pool) {
-    rows.push({
-      name: "Vault",
-      what: "Holds every private balance. Releases money only for a valid proof.",
-      address: n.pool,
-    });
-  }
-  if (n.payMemo) {
-    rows.push({
-      name: "Payment messages",
-      what: "Encrypted notes that let a recipient find a payment with their Gloam address.",
-      address: n.payMemo.address,
-    });
-  }
-  const router = vaultSwapRouter(n.chainId);
-  if (router) {
-    rows.push({
-      name: "Swap router",
-      what:
-        swapRouterFor(n.chainId)?.version === 2
-          ? "Swaps one note through a public DEX and back into the vault. No upgrade; its owner can only add a pool, with 3 days of public notice, or take one off."
-          : "Swaps one note through a public DEX and back into the vault. No owner, no admin, no upgrade.",
-      address: router,
-    });
-  }
-  return rows;
-}
-
-const CHAIN_LOGOS: Record<ChainFamily, string> = {
-  robinhood: "/brand/logos/robinhood.png",
-  tempo: "/brand/logos/tempo.svg",
-  base: "/brand/chains/8453.png",
-  ethereum: "/brand/chains/1.png",
-};
-
-const NETWORK_LINES: Record<NetworkKey, string> = {
-  robinhood: "Robinhood Chain testnet",
-  tempo: "Tempo Moderato testnet",
-  base: "Base Sepolia testnet",
-  ethereum: "Ethereum Sepolia testnet",
-  "robinhood-mainnet": "Robinhood Chain mainnet",
-  "tempo-mainnet": "Tempo mainnet",
-  "base-mainnet": "Base mainnet",
-  "ethereum-mainnet": "Ethereum mainnet",
-};
-
-/** Every network Gloam runs on: each mainnet once its pool is in, then the testnets. */
-const CHAINS: { key: NetworkKey; logo: string; testnet: string }[] = NETWORK_KEYS.map((key) => ({
-  key,
-  logo: CHAIN_LOGOS[getNetwork(key).family],
-  testnet: NETWORK_LINES[key],
-}));
-
-function ChainCard({ chainKey, logo, testnet }: { chainKey: NetworkKey; logo: string; testnet: string }) {
-  const n = getNetwork(chainKey);
-  const rows = chainRows(n);
-  return (
-    <div className="gl-card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <Image src={logo} alt="" width={28} height={28} className="h-7 w-7 rounded-lg ring-1 ring-line" />
-          <div>
-            <p className="text-[16px] text-foreground">{n.label}</p>
-            <p className="tnum text-[12.5px] text-mute">
-              {testnet}, chain {n.chainId}
-            </p>
-          </div>
-        </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-[12px] text-soft">
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-foreground/70" />
-          {n.status === "live" ? "Live" : "Planned"}
-        </span>
-      </div>
-      <ul className="divide-y divide-line">
-        {rows.map((r) => (
-          <li key={r.name} className="px-5 py-4 sm:px-6">
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)] lg:items-center lg:gap-8">
-              <div className="min-w-0">
-                <p className="text-[15px] text-foreground">{r.name}</p>
-                <p className="mt-0.5 text-[13px] leading-relaxed text-mute">{r.what}</p>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center rounded-xl bg-surface py-1 pl-3.5 pr-1 sm:flex-nowrap sm:gap-1">
-                <span
-                  className="tnum min-w-0 flex-1 basis-full break-all pb-1 pr-2 pt-2.5 text-[13.5px] leading-snug text-foreground sm:basis-auto sm:truncate sm:p-0"
-                  title={r.address}
-                >
-                  {r.address}
-                </span>
-                <div className="-ml-3 flex shrink-0 items-center sm:ml-0">
-                  <CopyButton value={r.address} label={`${n.label} ${r.name.toLowerCase()} address`} />
-                  <ExplorerLink href={n.explorerAddress(r.address)} />
-                </div>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-const FACTS = [
+/** What the contracts allow, each checked against contracts/src (ShieldPoolCore, ChangeTimelock). */
+const FACTS: Fact[] = [
   {
     title: "No admin withdraw",
-    body: "The vault has no function that lets anyone, the Gloam team included, take money out. Only a valid proof from the owner of a balance can.",
+    body: "The vault has no emergency withdraw and no function that lets anyone, the Gloam team included, take a balance out. Only a valid proof from its owner can. The owner can only sweep native coin sent to the vault by mistake, never money behind a balance or an owed fee.",
   },
   {
     title: "Three days of public notice",
-    body: "Setup is closed. Any change to how proofs, rates or prices are checked waits behind a public three day timelock on-chain.",
+    body: "Setup is closed on every vault. A new proof checker, a new asset, a higher limit or a higher fee must be queued on chain and waits 3 days before it can run. Lowering a limit or the fee works at once.",
+  },
+  {
+    title: "Code that cannot change",
+    body: "The vault is not a proxy and has no upgrade function, so its code is fixed. Only the settings above can change, and only in public.",
+  },
+  {
+    title: "One owner wallet, for now",
+    body: `${short(GLOAM_OWNER)} owns every mainnet vault. It is one wallet at launch, and a multisig is planned. A handover takes two steps on chain: the new owner has to accept it, and a pending one shows above.`,
+  },
+  {
+    title: "Keys from a public ceremony",
+    body: "Mainnet proofs use the final keys from a trusted setup with 13 contributors, sealed with drand round 6561386.",
+    link: { href: `${GITHUB}/releases/tag/ceremony-final`, label: "The ceremony-final release" },
   },
   {
     title: "The relay cannot redirect",
@@ -256,11 +113,31 @@ const FACTS = [
 ];
 
 /** Once mainnet is live: the beta deposit limits sit next to the facts above. */
-const LIVE_FACTS = [
+const LIVE_FACTS: Fact[] = [
   ...FACTS,
   {
     title: "Beta deposit limits",
     body: "On mainnet each stablecoin takes up to 500 per deposit and 25,000 in total, and $GLOAM 25,000 and 250,000. Cash outs and private payments are never limited. Raising a limit waits the same three days; lowering one is instant.",
+  },
+];
+
+/** What Gloam's servers do hold, said exactly (lib/recovery, lib/relay/scheduled, mcp/src/noteStore, lib/mcpRemote). */
+const SERVER_HOLDS: { title: string; body: string }[] = [
+  {
+    title: "Recovery, if you turn it on",
+    body: "An encrypted copy of your notes. The key comes from your wallet signature or your passkey, in your browser, so Gloam cannot open it.",
+  },
+  {
+    title: "A cash out for later",
+    body: "Its finished proof, until it goes out. The proof holds no secret and fixes the amount and the address, which are public once it lands.",
+  },
+  {
+    title: "The relay",
+    body: "Your IP address and when it sends for you. It never gets a note secret.",
+  },
+  {
+    title: "Agents",
+    body: "The local MCP server keeps an agent's notes on the machine that runs it. The hosted one at gloam.trade/mcp only reads and plans, and never takes a key.",
   },
 ];
 
@@ -606,48 +483,7 @@ export default function VerifyPage() {
         )}
 
         {/* the contracts */}
-        <section id="contracts" className="mx-auto max-w-[1400px] scroll-mt-20 px-4 sm:px-7">
-          <div className="gl-panel bg-surface px-5 py-14 sm:px-12 sm:py-20">
-            <SealedField tone="soft" />
-            <div className="relative mx-auto max-w-[1120px]">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div className="max-w-[640px]">
-                  <h2 className="t-display-l">The contracts</h2>
-                  <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-mute">
-                    {live ? (
-                      <>
-                        Gloam runs on {liveMainnetNames()} mainnet, and on the
-                        testnets. The mainnet vaults hold payments, and private swaps
-                        run through a separate router on Robinhood Chain and Tempo. Every address
-                        links to the public explorer, and the source behind each one
-                        is on GitHub.
-                      </>
-                    ) : (
-                      <>
-                        The same contracts run on two chains. Every address links to
-                        the public explorer, and the source behind each one is on
-                        GitHub.
-                      </>
-                    )}
-                  </p>
-                </div>
-                <a
-                  href={`${GITHUB}/tree/main/contracts`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-ghost self-start lg:self-auto"
-                >
-                  Read the source <ArrowUpRight />
-                </a>
-              </div>
-              <div className="mt-12 grid grid-cols-1 gap-4">
-                {CHAINS.map((c) => (
-                  <ChainCard key={c.key} chainKey={c.key} logo={c.logo} testnet={c.testnet} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <ContractsSection live={live} />
 
         {/* no middlemen */}
         <section className="mx-auto max-w-[1240px] px-6 pb-8 pt-20 sm:pt-28">
@@ -684,8 +520,93 @@ export default function VerifyPage() {
                     {f.title}
                   </p>
                   <p className="mt-3 text-[14px] leading-relaxed text-mute">{f.body}</p>
+                  {f.link && (
+                    <a href={f.link.href} target="_blank" rel="noreferrer" className="gl-arrowlink mt-3 min-h-10 text-[14px]">
+                      {f.link.label} <ArrowUpRight />
+                    </a>
+                  )}
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* what Gloam can't see */}
+        <section id="keys" className="mx-auto max-w-[1240px] scroll-mt-20 px-6 pt-20 sm:pt-28">
+          <div className="grid grid-cols-1 gap-12 border-t border-line pt-14 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <h2 className="t-display-l max-w-[12ch]">What Gloam can&apos;t see</h2>
+              <p className="mt-5 max-w-[36ch] text-[15px] leading-relaxed text-soft">
+                Gloam can&apos;t see or hand over a private balance. The keys that open one, your note secrets and your
+                receive key, are made and kept on your device.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+                <Link href="/docs/threat-model" className="gl-arrowlink min-h-10">
+                  Threat model <span aria-hidden>→</span>
+                </Link>
+                <Link href="/docs/privacy-model" className="gl-arrowlink min-h-10">
+                  What stays private <span aria-hidden>→</span>
+                </Link>
+              </div>
+            </div>
+            <div>
+              <p className="text-[13px] text-mute">What Gloam&apos;s servers do hold</p>
+              <ul className="mt-3 divide-y divide-line border-y border-line">
+                {SERVER_HOLDS.map((h) => (
+                  <li key={h.title} className="grid grid-cols-1 gap-1 py-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-8">
+                    <span className="text-[15px] text-foreground">{h.title}</span>
+                    <span className="text-[14px] leading-relaxed text-mute">{h.body}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* report a problem, and the owner's statement */}
+        <section id="contact" className="mx-auto max-w-[1240px] scroll-mt-20 px-6 pb-8 pt-20 sm:pt-28">
+          <div className="grid grid-cols-1 gap-12 border-t border-line pt-14 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <h2 className="t-display-l max-w-[12ch]">Report a problem</h2>
+              <p className="mt-5 max-w-[36ch] text-[15px] leading-relaxed text-soft">
+                Found a bug or something that does not match this page? Tell us privately, and please don&apos;t post
+                details until a fix ships.
+              </p>
+            </div>
+            <div className="space-y-10">
+              <ul className="divide-y divide-line border-y border-line text-[15px]">
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3">
+                  <span className="text-mute">Email</span>
+                  <a href="mailto:hello@gloam.trade?subject=Security" className="inline-flex min-h-10 items-center text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                    hello@gloam.trade, with Security in the subject
+                  </a>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3">
+                  <span className="text-mute">Direct message</span>
+                  <a href="https://x.com/gloamtrade" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1 text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                    @gloamtrade on X <ArrowUpRight />
+                  </a>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3">
+                  <span className="text-mute">Policy</span>
+                  <a href={`${GITHUB}/blob/main/SECURITY.md#reporting-a-vulnerability`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1 text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                    SECURITY.md <ArrowUpRight />
+                  </a>
+                </li>
+                <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-3">
+                  <span className="text-mute">Machine-readable</span>
+                  <a href="/.well-known/security.txt" className="inline-flex min-h-10 items-center text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground">
+                    security.txt
+                  </a>
+                </li>
+              </ul>
+              <div id="statement" className="scroll-mt-20">
+                <p className="text-[18px] leading-snug tracking-[-0.01em] text-foreground">Signed ownership statement</p>
+                <p className="mb-4 mt-1.5 max-w-[56ch] text-[14px] leading-relaxed text-mute">
+                  A message from the owner key, so you can check who controls these vaults without taking our word for it.
+                </p>
+                <OwnershipStatement />
+              </div>
             </div>
           </div>
         </section>
