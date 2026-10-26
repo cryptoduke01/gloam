@@ -340,10 +340,10 @@ export function AppShell({
       <TabBar items={navItems} pathname={pathname} />
 
       <div className="gl-tabbar-space flex flex-1 flex-col lg:pl-[272px]">
-        <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-16 pt-8 sm:px-8 sm:pt-12">
+        <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-16 pt-5 sm:px-8 sm:pt-7">
           <TestFundsNotice />
           {/* no fade on the title: it paints with the page, not after the app's JavaScript frees the phone */}
-          <div className="gl-pagehead mb-8 gap-4 sm:mb-10">
+          <div className="gl-pagehead mb-6 gap-4 sm:mb-8">
             <div>
               <h1 className="t-display-m text-foreground">{title}</h1>
               {shownSubtitle && (
