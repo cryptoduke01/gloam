@@ -14,8 +14,8 @@
  * second system block, and the chat's last few exchanges as real turns.
  */
 import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
-import { isMainnetLive, liveMainnetNames } from "@/lib/mainnet";
-import { knowledgeBlock } from "./knowledge";
+import { isMainnetLive } from "@/lib/mainnet";
+import { knowledgeBlock, laterMainnets, launchNames } from "./knowledge";
 import { PERSONALITY, TEAM_TONE_RULES, TONE_RULES, honestyRule } from "./persona";
 import { markAddresses, secretLeak, tidyReply, type ChatLine } from "./rules";
 
@@ -79,7 +79,10 @@ function mainnetRule(live: boolean, drafts: boolean): string {
       ? "The Gloam app is on testnet until mainnet launches. Never say or hint that the app is live on mainnet. The one timing you may use, drafts included, is the announced launch: Wednesday 21 October, 13:00 UTC, with the countdown at gloam.trade/mainnet. Never give or guess any other date or time."
       : "The Gloam app is on testnet until mainnet launches. Never say or hint that the app is live on mainnet. The one timing you may give is the announced launch: Wednesday 21 October, 13:00 UTC, with the countdown at gloam.trade/mainnet. Never give or guess any other date or time.";
   }
-  return `Gloam is live on mainnet on ${liveMainnetNames()}, since Wednesday 21 October, 13:00 UTC, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
+  // Base and Ethereum joined after the 21 October launch: never date them to it.
+  const later = laterMainnets();
+  const since = `on ${launchNames()} since Wednesday 21 October, 13:00 UTC${later.length ? `, and on ${later.join(" and ")} since then` : ""}`;
+  return `Gloam is live on mainnet ${since}, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
 }
 
 export function botModel(): string {
