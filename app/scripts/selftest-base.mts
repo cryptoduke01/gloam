@@ -147,9 +147,10 @@ check("The testnet bar offers Base Sepolia only Base mainnet, never another chai
   assert.equal(nets.mainnetOf(nets.getNetwork("base"))?.key ?? null, CONFIGURED ? "base-mainnet" : null);
 });
 
-check("No bridge and no swaps on Base yet", () => {
-  assert.equal(BRIDGE_DESTINATIONS.base, undefined);
-  assert.equal(bridgeVisible(nets.getNetwork("base-mainnet")), false);
+check("a bridge into Base (USDC) on mainnet, no swaps yet", () => {
+  assert.equal(BRIDGE_DESTINATIONS.base?.chainId, 8453);
+  assert.equal(BRIDGE_DESTINATIONS.base?.token.address.toLowerCase(), "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+  assert.equal(bridgeVisible(nets.getNetwork("base-mainnet")), true);
   assert.equal(bridgeVisible(nets.getNetwork("base")), false);
   assert.equal(vaultSwapRouter(8453), null);
   assert.equal(vaultSwapRouter(84532), null);
