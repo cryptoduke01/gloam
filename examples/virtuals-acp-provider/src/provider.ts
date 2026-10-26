@@ -329,6 +329,9 @@ export class PrivatePayoutProvider {
 
   private async onRequirement(session: JobSessionLike, content: string) {
     const k = this.key(session);
+    if (session.chainId !== this.opts.wallet.network.chainId) {
+      return this.refuse(session, "wrong chain", `This provider pays on chain ${this.opts.wallet.network.chainId}; this job is on chain ${session.chainId}.`);
+    }
     // One quote per job. A second list could otherwise replace the first after the client funded the
     // first price (the session can still read "open" before budget.set arrives).
     if (this.quoting.has(k) || this.journal.get(k)) {
@@ -554,6 +557,10 @@ export class PrivatePayoutProvider {
     }
     if (!onChain) {
       this.log(`job ${session.jobId}: no ACP contract known for chain ${session.chainId}; not paying`);
+      return;
+    }
+    if (session.chainId !== this.opts.wallet.network.chainId) {
+      this.log(`job ${session.jobId}: on chain ${session.chainId}, and this provider pays on chain ${this.opts.wallet.network.chainId}; not paying`);
       return;
     }
     const why = this.notPayable(session.chainId, j, onChain);

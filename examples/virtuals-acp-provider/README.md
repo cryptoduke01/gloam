@@ -111,6 +111,7 @@ Other rules the provider keeps:
   and before each earnings sweep. A funding lookup the RPC cannot answer is
   asked again, never read as "not funded", and a job funded on chain keeps its
   principal reserved even when it was blocked from paying.
+- A job on a chain other than the provider's is refused.
 - The earnings sweep adds only fees and settled principal: it leaves in the
   wallet the principal of jobs not yet paid out, of jobs quoted but not yet
   funded, and refunds owed or held (`publicReserve`).
