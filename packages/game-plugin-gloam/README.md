@@ -117,7 +117,9 @@ forgets a note once a send has started:
   while it is not in the vault (both read at one block).
 - An unconfirmed payment, claim link sealed to an address, or cash out counts
   against the daily limit, and the same one (payee or address, asset, amount,
-  note) is refused while it may land. Each new note records which note its
+  and the caller's label when there is one; never the note, which a planner
+  may reword) is refused while it may land. A second payment of the same
+  amount to the same payee with no label waits until the first settles. Each new note records which note its
   spend spends. After an hour with nothing on chain the same payment may be
   sent again, but only from that same note, so at most one of the two can
   land; a cash out keeps its note held for that same cash out. A retry that
