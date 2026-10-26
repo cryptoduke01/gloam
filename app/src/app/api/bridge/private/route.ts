@@ -29,6 +29,7 @@ import {
   type PrivateBridgeTx,
 } from "@/lib/bridge";
 import { originChain } from "@/lib/originChains";
+import { serverTransport } from "@/lib/serverRpc";
 import { buildSolanaTx, type RelaySolanaInstruction } from "@/lib/solanaTx";
 import { screenAddresses } from "@/lib/screeningServer";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
 
   // The vault's own checks, read before anyone pays: room under the beta
   // limits, a commitment it hasn't seen, and a proof its verifier accepts.
-  const client = createPublicClient({ chain: network.chain, transport: http(network.chain.rpcUrls.default.http[0]) });
+  const client = createPublicClient({ chain: network.chain, transport: serverTransport(network) });
   const pool = network.pool as Address;
   try {
     const [limitsOn, limit, deposited, seen, verifier] = await Promise.all([

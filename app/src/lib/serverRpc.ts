@@ -14,14 +14,16 @@
  * that has not answered yet (down, slow, timed out) is passed over for a
  * while: reads and the relay's send go to the public RPC instead, so a private
  * RPC that is down never takes the server or the relay down with it.
+ *
+ * The public side is the chain's whole list of public RPCs, in order
+ * (lib/rpcList): one that is down is passed over for a while, and a send
+ * still goes to exactly one node.
  */
 import { fallback, http, type HttpTransportConfig, type Transport } from "viem";
 import type { GloamNetwork } from "./networks";
+import { SEND_METHODS, resetRpcRest, rpcListTransport } from "./rpcList";
 
 type Net = Pick<GloamNetwork, "chainId" | "chain">;
-
-/** The calls that put a signed transaction out. */
-const SEND_METHODS = ["eth_sendRawTransaction", "eth_sendRawTransactionSync"];
 
 function privateRpc(net: Net): string | null {
   return process.env[`GLOAM_RPC_URL_${net.chainId}`]?.trim() || null;
@@ -61,6 +63,7 @@ const quietUntil = new Map<string, number>();
 export function resetRpcChecks(): void {
   checks.clear();
   quietUntil.clear();
+  resetRpcRest();
 }
 
 /**
@@ -127,11 +130,11 @@ function checkedPrivate(url: string, chainId: number, config: HttpTransportConfi
  * also takes `retryCount` from `config` then, instead of its own default of 3.
  */
 export function serverTransport(net: Net, config: HttpTransportConfig = {}, opts: { sendOnce?: boolean } = {}): Transport {
-  const pub = net.chain.rpcUrls.default.http[0]!;
+  const urls = net.chain.rpcUrls.default.http;
   const priv = privateRpc(net);
-  if (!priv || priv === pub) return http(pub, config);
-  if (!opts.sendOnce) return fallback([checkedPrivate(priv, net.chainId, config), http(pub, config)]);
-  const own = checkedPrivate(priv, net.chainId, config, http(pub, { ...config, retryCount: 0 }));
-  const backup = http(pub, { ...config, methods: { exclude: SEND_METHODS } });
+  if (!priv || priv === urls[0]) return rpcListTransport(urls, config, opts.sendOnce ? { sendTo: "one" } : {});
+  if (!opts.sendOnce) return fallback([checkedPrivate(priv, net.chainId, config), rpcListTransport(urls, config)]);
+  const own = checkedPrivate(priv, net.chainId, config, rpcListTransport(urls, { ...config, retryCount: 0 }, { sendTo: "one" }));
+  const backup = rpcListTransport(urls, { ...config, methods: { exclude: SEND_METHODS } });
   return fallback([own, backup], { retryCount: config.retryCount });
 }
