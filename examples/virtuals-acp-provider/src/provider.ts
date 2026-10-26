@@ -666,7 +666,7 @@ export class PrivatePayoutProvider {
             : await wallet.pay({ to: p.to, amount: p.amount, note, label: payLabel });
         const msg = String(out.message ?? out.code ?? out.status);
         if (out.status === "done") {
-          r = { ...base, status: "paid", handle: String(out.payment ?? out.claimHandle), tx: String(out.hash), ...(out.sealedLink ? { sealedClaimLink: String(out.sealedLink) } : {}) };
+          r = { ...base, status: "paid", handle: String(out.payment ?? out.claimHandle), ...(out.hash ? { tx: String(out.hash) } : {}), ...(out.sealedLink ? { sealedClaimLink: String(out.sealedLink) } : {}) };
         } else if (out.status === "unconfirmed" || out.check || out.code === "unconfirmed_payment") {
           r = { ...base, status: "unconfirmed", error: msg };
         } else {

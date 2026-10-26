@@ -217,3 +217,23 @@ test("a job on a chain other than the provider's is refused", async () => {
   assert.match(String(s.rejected), /chain/);
   assert.equal(s.budget, null);
 });
+
+test("a payout the engine answers without a hash is recorded without one, never as the text undefined", async () => {
+  const pk = await generateReceiveKey();
+  const r1 = await generateReceiveKey();
+  const acp = new FakeAcp();
+  const f = fakeWallet(pk, acp, {
+    pay: async (a, _n, w) => {
+      w.notes.push({ handle: "n-1", label: a.label ?? "", origin: "payment", status: "spent", createdTx: null });
+      return { status: "done", alreadyPaid: true, payment: "n-1" };
+    },
+  });
+  const p = providerFor(f.wallet);
+  const s = new FakeSession("10", acp);
+  await p.onEntry(s, requirementEntry("10", { payouts: [{ to: r1.tag, amount: "2" }] }));
+  s.fund();
+  await p.onEntry(s, funded("10"));
+  const r = p.status(84532, "10")?.results[0];
+  assert.equal(r?.status, "paid");
+  assert.equal(r?.tx, undefined);
+});

@@ -931,7 +931,7 @@ export class GloamAgent {
     }
 
     // A payment like this one whose answer was lost may still land: never pay it twice.
-    const requestKey = this.requestKeyOf(payTo, asset, amountWei, memo);
+    const requestKey = this.requestKeyOf(payTo, asset, amountWei, memo, args.label);
     const plan = await this.retryPlan(requestKey, amountWei, (n) => ({
       status: "done",
       action: "pay",
@@ -1017,9 +1017,14 @@ export class GloamAgent {
     };
   }
 
-  /** What makes two payments the same one: payee, asset, amount and note (hashed; none of it secret). */
-  private requestKeyOf(payTo: string, asset: GloamAsset, amountWei: bigint, memo: string | null | undefined): string {
-    return createHash("sha256").update(`${this.network.chainId}|${payTo.trim()}|${asset.address.toLowerCase()}|${amountWei}|${memo ?? ""}`).digest("hex").slice(0, 32);
+  /**
+   * What makes two payments the same one: payee, asset, amount and note, and the
+   * caller's label when it gives one (two ACP jobs paying the same payee the same
+   * amount carry different labels, so they are two payments). Hashed; none of it secret.
+   */
+  private requestKeyOf(payTo: string, asset: GloamAsset, amountWei: bigint, memo: string | null | undefined, label?: string): string {
+    const parts = [this.network.chainId, payTo.trim(), asset.address.toLowerCase(), amountWei, memo ?? "", ...(label ? [`label:${label}`] : [])];
+    return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 32);
   }
 
   /**
@@ -1079,7 +1084,7 @@ export class GloamAgent {
     const memo = cleanPaymentNote(args.note);
     if (args.sealTo && !isReceiveTag(args.sealTo)) throw new Error("sealTo must be a Gloam address (gloamr1.…) whose key is a real P-256 point.");
     // A link sealed to an address is a payment to that address: the same one is never sent twice while it may land.
-    const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, memo) : undefined;
+    const requestKey = args.sealTo ? this.requestKeyOf(`claim:${args.sealTo}`, asset, amountWei, memo, args.label) : undefined;
     const plan = requestKey
       ? await this.retryPlan(requestKey, amountWei, async (n) => ({
           status: "done",
