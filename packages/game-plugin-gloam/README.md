@@ -126,6 +126,8 @@ forgets a note once a send has started:
 - `cancelPayment(handle)` (owner code) makes a payment whose answer was lost
   an hour ago never land, by spending the note it spends back to the agent; if
   the payment lands first, the cancel reverts and the payment counts.
+- A sweep that may still land is not counted as secured: the scan stays on that
+  payment, and a sweep with nothing on chain after an hour is tried again.
 - A Gloam address is checked to be a real P-256 key, and the payment sealed to
   it, before any money moves.
 - A payment message that can never be secured (one anyone could post, worth
