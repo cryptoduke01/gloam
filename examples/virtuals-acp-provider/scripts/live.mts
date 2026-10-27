@@ -18,8 +18,8 @@
  * payouts go through the Gloam relay, so the smart account only signs deposits.
  */
 import { createPublicClient, encodeFunctionData, http, type Address } from "viem";
-import { GloamAgent, acpCallSender, resolveNetwork, type AcpEvmProviderLike } from "@gloamtrade/game-plugin-gloam";
-import { ACP_ABI, ACP_CONTRACTS, type AcpAgentLike } from "../src/acp.js";
+import { GloamAgent, NotSentError, acpCallSender, resolveNetwork, type AcpEvmProviderLike } from "@gloamtrade/game-plugin-gloam";
+import { ACP_ABI, ACP_CONTRACTS, ENTRYPOINT_V07, type AcpAgentLike } from "../src/acp.js";
 import { EarningsSweeper } from "../src/earnings.js";
 import { limitsFileFor } from "../src/limitsFile.js";
 import { PrivatePayoutProvider } from "../src/provider.js";
@@ -35,11 +35,10 @@ function need(name: string): string {
 }
 
 const mainnet = process.env.ACP_MAINNET === "1";
-// Mainnet stays off until refunds through the ACP smart wallet are settled from the chain end to end
-// (a fixed nonce key per refund, read back from the EntryPoint). On testnet a refund whose answer is
-// lost is held for the owner, never sent twice.
+// Mainnet stays off until the refund path below (a nonce key of its own per refund, read back from the
+// EntryPoint) has run end to end on testnet. A refund whose answer is lost is never sent twice either way.
 if (mainnet) {
-  throw new Error("This example does not run on ACP mainnet yet: refunds through the ACP smart wallet are not settled from the chain end to end. Run it on testnet.");
+  throw new Error("This example does not run on ACP mainnet yet: run it on testnet first, where refunds through the ACP smart wallet are settled from the EntryPoint.");
 }
 const chainId = Number(process.env.ACP_CHAIN_ID ?? (mainnet ? 4663 : 84532));
 const acp = ACP_CONTRACTS[chainId];
@@ -97,14 +96,33 @@ const service = new PrivatePayoutProvider({
     return platform + evaluator;
   },
   journalPath: process.env.PAYOUT_JOURNAL ?? "./payout-jobs.json",
-  // Unpaid principal of a job that ends early goes back to the client from the ACP wallet. The provider
-  // writes each refund down before sending it; one whose answer is lost (this throws) is looked for on chain
-  // (the token's Transfer to the client) and sent again only an hour later with nothing found.
-  refund: async (to, token, raw) => {
-    const out = await evmProvider.sendCalls(chainId, [
-      { to: token, data: encodeFunctionData({ abi: ERC20_TRANSFER, functionName: "transfer", args: [to, raw] }), value: 0n },
-    ]);
-    const hash = Array.isArray(out) ? out[out.length - 1] : out;
+  // Unpaid principal of a job that ends early goes back to the client from the ACP wallet, as one user
+  // operation with a nonce key of its own (the same steps as the adapter's sendCalls). Its sender and full
+  // nonce go to the provider after it is signed and before it is sent: only one operation can ever run with
+  // that nonce, so a lost answer is settled from the EntryPoint (counted once it ran with the transfer, sent
+  // again only if it reverted) and never sent twice.
+  refund: async (to, token, raw, ctx) => {
+    const client = evmProvider.getAcpClient(chainId);
+    const call = evmProvider.toSmartWalletCall({ to: token, data: encodeFunctionData({ abi: ERC20_TRANSFER, functionName: "transfer", args: [to, raw] }), value: 0n });
+    let signed: unknown;
+    let op: { sender: Address; nonce: bigint };
+    try {
+      let prepared = await client.prepareCalls({ calls: [call], capabilities: { nonceOverride: { nonceKey: evmProvider.getRandomNonce() } } });
+      if (prepared.type === "paymaster-permit") {
+        const signature = await client.signSignatureRequest(prepared.signatureRequest);
+        prepared = await client.prepareCalls({ ...prepared.modifiedRequest, paymasterPermitSignature: signature });
+      }
+      const ops = prepared.type === "array" ? prepared.data.filter((c: { type: string }) => c.type !== "authorization") : [prepared];
+      if (ops.length !== 1 || ops[0].type !== "user-operation-v070") throw new Error(`unexpected prepared calls (${prepared.type})`);
+      op = { sender: ops[0].data.sender, nonce: BigInt(ops[0].data.nonce) };
+      signed = await client.signPreparedCalls(prepared);
+    } catch (e) {
+      // Nothing was handed to the bundler yet.
+      throw new NotSentError(`The refund was not sent: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    ctx.sending({ userOp: { entryPoint: ENTRYPOINT_V07, sender: op.sender, nonce: op.nonce } });
+    const sent = await client.sendPreparedCalls(signed);
+    const hash = await evmProvider.waitForTransactionHash(client, sent.id, chainId, evmProvider.userOpHashFromSendResult(sent));
     if (!hash) throw new Error("The ACP wallet returned no transaction hash for the refund. It may still land.");
     return String(hash);
   },

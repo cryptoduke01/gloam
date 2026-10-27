@@ -105,16 +105,33 @@ Other rules the provider keeps:
   go back.
 - A refund counts what arrived minus what certainly left the float. A payout
   that may have gone out is held back from the refund until it settles. Each
-  refund is written down before it is sent, and counts only once its own
-  transaction is on chain with the provider's transfer to the client in it; its
-  amount stays reserved until then. One whose answer is lost is never sent
-  again on its own: it waits for the owner (`refundsNeedingOwner()`, then
-  `resolveRefund(chainId, jobId, { tx })` with the transaction that sent it, or
-  `{ notSent: true }`). A `tx` already counted for any job is refused, and when
-  the refund's own transaction was recorded only that one settles it.
-  `notSent` is refused while a recorded transaction may still land: acp-node-v2
-  signs each user operation with a random nonce key, so nobody can prove an
-  operation handed to a bundler was not sent. Refund rounds, and every other
+  refund is written down before it is sent, and counts only once the chain
+  shows the provider's transfer to the client; its amount stays reserved until
+  then. The refund callback hands over what pins the refund on chain before it
+  is broadcast (`ctx.sending(pin)`): a user operation's sender and full nonce
+  (give each refund a nonce key of its own), or an EOA transaction's nonce.
+  - A pinned user operation whose answer is lost is read back from the
+    EntryPoint: once it ran, it counts (its bundle transaction shows the
+    transfer) or, if it reverted, it is sent again. Until it runs it is held,
+    since it can still run.
+  - A refund without a pin whose answer is lost is never sent again on its own.
+    It waits for the owner: `refundsNeedingOwner()`, then
+    `resolveRefund(chainId, jobId, { tx })` with the transaction that sent it,
+    or `{ notSent: true }`.
+  - The owner's `tx` is refused when it is counted for any job or recorded as
+    another job's refund. When the refund's own transaction or user operation is
+    known, only that settles it, unless the chain shows it moved nothing or can
+    never land (its EOA nonce was used by another transaction); then a
+    transaction from after it was sent may.
+  - `notSent` is refused while the refund call may still answer and while what
+    was sent may still land. For an EOA refund whose nonce another transaction
+    used, it is accepted only when no uncounted transfer to the client went out
+    since.
+  - A refund call that does not answer within `refundTimeoutMs` (default 120
+    seconds) counts as a lost answer, so it cannot hold up the provider. Its
+    late answer is still recorded.
+  - A payout that waited behind a refund round reads the job on chain again,
+    and its time left, before any money moves. Refund rounds, and every other
   change to a job's journal entry outside a payout, run one at a time and read
   the entry again right before writing it. A funding lookup the RPC cannot answer is
   asked again, never read as "not funded", and a job funded on chain keeps its
@@ -169,8 +186,9 @@ USDC.
 (0.1.15). It needs a registered ACP agent, its Privy wallet, and
 `pnpm add @virtuals-protocol/acp-node-v2@0.1.15` in this folder. Copy
 `.env.example` to `.env`. It runs on ACP's testnet only for now:
-`ACP_MAINNET=1` is refused until refunds through the ACP smart wallet are
-settled from the chain end to end. The agent's wallet policy must allow the Gloam vault and the
+`ACP_MAINNET=1` is refused until its refund path (one user operation per
+refund with a nonce key of its own, read back from the EntryPoint) has run end
+to end on testnet. The agent's wallet policy must allow the Gloam vault and the
 token's approve for received money to go into its private balance, and the
 token's `transfer` for refunds of principal that was not paid out. Limits come
 from `GLOAM_LIMITS_FILE`, else `limits.example.json` (USDC, Base Sepolia) or
@@ -189,8 +207,9 @@ const service = new PrivatePayoutProvider({
   budgetToken: (raw, chainId) => AssetToken.usdcFromRaw(raw, chainId),
   transferToken: (address, symbol, decimals, raw) => AssetToken.create(address, symbol, decimals, Number(raw) / 10 ** decimals),
   acpFeeBps: () => 1000, // platform 5% + evaluator 5%
-  // Resolve with the hash once broadcast; throw only when nothing was sent (a refund that threw is retried).
-  refund: async (client, token, raw) => sendTransfer(client, token, raw),
+  // Call ctx.sending(pin) once signed, before broadcasting; resolve with the hash. Throw a NotSentError only
+  // when nothing was sent: any other error is a lost answer, settled from the pin or by the owner.
+  refund: async (client, token, raw, ctx) => sendTransfer(client, token, raw, ctx),
   earnings: new EarningsSweeper({ wallet, tokens: [ACP_CONTRACTS[4663].paymentToken] }),
 });
 agent.on("entry", (session, entry) => service.onEntry(session, entry));
