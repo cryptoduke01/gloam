@@ -2,17 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppLink } from "./AppLink";
-import { CountdownCompact, useMainnetLive, useMainnetRemaining } from "./MainnetCountdown";
-import { MAINNET_LAUNCH_SHORT, MAINNET_PAGE, liveMainnetNames } from "@/lib/mainnet";
+import { compactRemaining, remainingUntil, type Remaining } from "@/lib/mainnet";
 
-const KEY = "gloam:announce-dismissed:mainnet-v1";
-// Its own key, so someone who closed the countdown still hears that mainnet is live.
-const LIVE_KEY = "gloam:announce-dismissed:mainnet-live-v1";
+/** Private stock swaps on Robinhood Chain open at this time. */
+export const STOCKS_LIVE_MS = Date.parse("2026-10-27T12:00:00Z");
 
-// Keep the launch note on marketing + docs; stay out of the working app and the countdown page itself.
-const HIDDEN_ON = ["/app", "/admin", "/verify", "/pitch", "/claim", MAINNET_PAGE];
+// Their own keys, so someone who closed the mainnet note still hears about stocks,
+// and someone who closed the countdown still hears that they are live.
+const KEY = "gloam:announce-dismissed:stocks-v1";
+const LIVE_KEY = "gloam:announce-dismissed:stocks-live-v1";
+
+// Keep the note on marketing + docs; stay out of the working app (it has its own notice).
+const HIDDEN_ON = ["/app", "/admin", "/verify", "/pitch", "/claim", "/mainnet"];
 
 const DISMISSED_EVENT = "gloam-announce-dismissed";
 
@@ -34,7 +37,34 @@ function dismissedSnapshot(): string {
   }
 }
 
-/** Slim site-wide mainnet countdown, then the news that mainnet is live. Dismissible per browser. */
+const LAUNCHED: Remaining = remainingUntil(STOCKS_LIVE_MS, STOCKS_LIVE_MS);
+
+/**
+ * The time left to the stocks launch, ticking once a second. Before it, null
+ * until mounted so the server and the first render agree; after it, done from
+ * the first render, server included.
+ */
+function useStocksRemaining(): Remaining | null {
+  const [r, setR] = useState<Remaining | null>(() => (Date.now() >= STOCKS_LIVE_MS ? LAUNCHED : null));
+  useEffect(() => {
+    if (Date.now() >= STOCKS_LIVE_MS) return;
+    let id = 0;
+    const tick = () => {
+      const next = remainingUntil(Date.now(), STOCKS_LIVE_MS);
+      setR(next);
+      if (next.done) window.clearInterval(id);
+    };
+    id = window.setInterval(tick, 1000);
+    tick();
+    return () => window.clearInterval(id);
+  }, []);
+  return r;
+}
+
+const linkClass =
+  "shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white";
+
+/** Slim site-wide private-stocks countdown, then the news that they are live. Dismissible per browser. */
 export function AnnouncementBanner() {
   const pathname = usePathname();
   // The server can't see what this browser closed, so it renders the note.
@@ -42,8 +72,8 @@ export function AnnouncementBanner() {
   // Closed here, for when storage refuses the write.
   const [closed, setClosed] = useState<{ countdown: boolean; live: boolean }>({ countdown: false, live: false });
   const dismissed = { countdown: closed.countdown || stored[0] === "1", live: closed.live || stored[1] === "1" };
-  const remaining = useMainnetRemaining();
-  const live = useMainnetLive();
+  const remaining = useStocksRemaining();
+  const live = Boolean(remaining?.done);
 
   if (live ? dismissed.live : dismissed.countdown) return null;
   if (HIDDEN_ON.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -67,32 +97,27 @@ export function AnnouncementBanner() {
         <p className="min-w-0 truncate text-[13px] leading-tight">
           {live ? (
             <>
-              <span className="font-medium">Gloam is live on mainnet.</span>{" "}
-              <span className="text-white/60 max-sm:hidden">Private payments on {liveMainnetNames()}.</span>
+              <span className="font-medium">Private stocks are live.</span>{" "}
+              <span className="text-white/60 max-sm:hidden">Swap TSLA, NVDA, AAPL and more on Robinhood Chain from your private balance.</span>
             </>
-          ) : remaining?.done ? (
-            <span className="font-medium">Gloam mainnet is rolling out now.</span>
           ) : (
             <>
-              <span className="font-medium">Mainnet goes live {MAINNET_LAUNCH_SHORT}.</span>{" "}
+              <span className="font-medium">Private stocks go live at 12:00 UTC.</span>{" "}
               {remaining && (
                 <span className="text-white/60">
-                  In <CountdownCompact />
+                  In <span className="tnum">{compactRemaining(remaining)}</span>
                 </span>
               )}
             </>
           )}
         </p>
         {live ? (
-          <AppLink href="/app" className="shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white">
-            Open the app
+          <AppLink href="/app/vault?tab=swap" className={linkClass}>
+            Swap privately
           </AppLink>
         ) : (
-          <Link
-            href={MAINNET_PAGE}
-            className="shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white"
-          >
-            See the countdown
+          <Link href="/docs/private-swaps" className={linkClass}>
+            How it works
           </Link>
         )}
         <button
