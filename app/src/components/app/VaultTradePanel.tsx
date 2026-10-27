@@ -547,7 +547,7 @@ export function VaultTradePanel({
       return;
     }
     // The trade cashes out to this wallet and deposits back from it.
-    const targetProblem = cashOutTargetProblem(address, { pool: SHIELD_POOL_ADDRESS, payMemo: network.payMemo });
+    const targetProblem = cashOutTargetProblem(address, { chainId: network.chainId, pool: SHIELD_POOL_ADDRESS, payMemo: network.payMemo });
     if (targetProblem) {
       setError(targetProblem);
       return;

@@ -51,6 +51,13 @@ await test("a mixed-case address with a wrong checksum is flagged, not accepted"
   assert.equal(isWalletRecipient(classifyPayRecipient(bad)), false);
 });
 
+await test("the zero address is no one's wallet: flagged, not accepted", () => {
+  const zero = "0x0000000000000000000000000000000000000000";
+  assert.equal(kind(zero), "badAddress");
+  assert.equal(kind(`  ${zero}  `), "badAddress");
+  assert.equal(isWalletRecipient(classifyPayRecipient(zero)), false);
+});
+
 await test("a half-typed 0x address is just other", () => {
   assert.equal(kind("0x"), "other");
   assert.equal(kind("0xd8dA6BF2"), "other");
@@ -110,10 +117,11 @@ await test("a name resolves to its address", async () => {
   assert.deepEqual(seen, ["vitalik.eth"]);
 });
 
-await test("no address, a bad answer or a failed lookup all come back as null, quietly", async () => {
+await test("no address, a bad answer, the zero address or a failed lookup all come back as null, quietly", async () => {
   assert.equal(await resolveEnsName("nobody.eth", async () => null), null);
   assert.equal(await resolveEnsName("x.eth", async () => "0x123" as `0x${string}`), null);
   assert.equal(await resolveEnsName("x.eth", async () => { throw new Error("rpc down"); }), null);
+  assert.equal(await resolveEnsName("x.eth", async () => "0x0000000000000000000000000000000000000000"), null);
 });
 
 await test("an answer for text that has since changed is dropped", async () => {

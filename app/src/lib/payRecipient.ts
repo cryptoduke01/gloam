@@ -8,7 +8,7 @@
  * Resolving a name is `resolveEnsName`, the one network call, kept separate so
  * the classifier stays pure.
  */
-import { isAddress, type Address } from "viem";
+import { isAddress, isAddressEqual, zeroAddress, type Address } from "viem";
 import { normalize } from "viem/ens";
 import { RECEIVE_TAG_PREFIX } from "./receiveTag";
 
@@ -18,7 +18,10 @@ export type PayRecipient =
   | { kind: "gloam" }
   /** A valid 0x address (a mixed-case one must have its checksum right). */
   | { kind: "address"; address: Address }
-  /** 40 hex digits after 0x, mixed case, wrong checksum: probably a typo. */
+  /**
+   * 40 hex digits after 0x that are no one's wallet: mixed case with a wrong
+   * checksum (probably a typo), or the zero address.
+   */
   | { kind: "badAddress" }
   /** Looks like an ENS name; `name` is its normalized form, to resolve. */
   | { kind: "ens"; name: string }
@@ -50,7 +53,7 @@ export function classifyPayRecipient(input: string): PayRecipient {
   const text = input.trim();
   if (!text) return { kind: "empty" };
   if (text.startsWith(RECEIVE_TAG_PREFIX)) return { kind: "gloam" };
-  if (isAddress(text)) return { kind: "address", address: text as Address };
+  if (isAddress(text)) return isAddressEqual(text, zeroAddress) ? { kind: "badAddress" } : { kind: "address", address: text as Address };
   if (HEX_ADDRESS.test(text)) return { kind: "badAddress" };
   const name = ensCandidate(text);
   if (name) return { kind: "ens", name };
@@ -83,9 +86,10 @@ export function cashOutHandoff(to: Address, typedAmount: string): CashOutHandoff
 export type EnsReader = (name: string) => Promise<Address | null>;
 
 /**
- * Look a name up and hand back its address, never throwing: a failed lookup is
- * the same as no address. `stale()` is asked after the wait so a slow answer
- * for text the user has since changed is dropped.
+ * Look a name up and hand back its address, never throwing: a failed lookup,
+ * or a name set to the zero address, is the same as no address. `stale()` is
+ * asked after the wait so a slow answer for text the user has since changed
+ * is dropped.
  */
 export async function resolveEnsName(
   name: string,
@@ -95,7 +99,7 @@ export async function resolveEnsName(
   try {
     const found = await read(name);
     if (stale()) return null;
-    return found && isAddress(found) ? found : null;
+    return found && isAddress(found) && !isAddressEqual(found, zeroAddress) ? found : null;
   } catch {
     return null;
   }
