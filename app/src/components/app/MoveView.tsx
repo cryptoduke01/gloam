@@ -156,6 +156,8 @@ import { TokenLogo } from "./TokenLogo";
 import { AddTokenToWallet } from "./AddTokenToWallet";
 import { checkSweep, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
 import { moveModeFromParam, searchWithMoveMode } from "@/lib/vaultNav";
+import { cashOutHandoff, classifyPayRecipient, isWalletRecipient } from "@/lib/payRecipient";
+import { useEnsAddress } from "@/hooks/useEnsAddress";
 
 /** How securing a claim ended (lib/claimSweep), or "error" when it threw. */
 type SweepStatus = SweepResult["status"] | "error";
@@ -272,6 +274,19 @@ export function MoveView() {
   const [claimPreview, setClaimPreview] = useState<{ text: string; note?: string } | null>(null);
   const [payStyle, setPayStyle] = useState<PayStyle>("direct");
   const [recipientTag, setRecipientTag] = useState(() => request?.to ?? "");
+  // A 0x address or an ENS name in the To field is not paid with a note: Pay offers
+  // Cash out to that wallet instead (lib/payRecipient). The name is looked up on Ethereum mainnet.
+  const payRecipient = useMemo(() => classifyPayRecipient(recipientTag), [recipientTag]);
+  const ensLookup = useEnsAddress(payStyle === "direct" && payRecipient.kind === "ens" ? payRecipient.name : null);
+  const payWalletTo: Address | null =
+    payStyle !== "direct"
+      ? null
+      : payRecipient.kind === "address"
+        ? payRecipient.address
+        : payRecipient.kind === "ens" && ensLookup.status === "found"
+          ? ensLookup.address
+          : null;
+  const payToWallet = payStyle === "direct" && (isWalletRecipient(payRecipient) || payRecipient.kind === "badAddress");
   const [myIdentity, setMyIdentity] = useState<ReceiveIdentity | null>(null);
   const [tagCopied, setTagCopied] = useState(false);
   const [shareLocked, setShareLocked] = useState(false);
@@ -2011,6 +2026,21 @@ export function MoveView() {
     setClaimPreview(null);
   }
 
+  /**
+   * Pay hands a wallet over to Cash out (nothing else changes): another address,
+   * that address, and the amount typed in Pay when it fits the picked balance.
+   * The URL follows through selectMode (?mode=cashout), as for a tab click.
+   */
+  function payThisWallet(to: Address) {
+    const wei = selected && sendAmount.trim() ? parseAssetAmount(sendAmount.trim(), selected.asset) : null;
+    const fits = wei !== null && wei > 0n && wei <= noteWei;
+    const h = cashOutHandoff(to, sendAmount, fits);
+    setCashOutDest(h.dest);
+    setOtherTo(h.to);
+    setCashOutInput(h.amount);
+    selectMode("cashout");
+  }
+
   // The URL and the mode follow each other. The app nav's Pay privately,
   // Receive and Cash out links only change ?mode= on a page already showing
   // Pay, so a new ?mode= switches the mode as a tab click would; and a mode
@@ -2378,7 +2408,7 @@ export function MoveView() {
                     ) : (
                     <>
                     <label htmlFor="recv-tag" className="sr-only">
-                      Their Gloam address
+                      Their Gloam address, 0x address or ENS name
                     </label>
                     <input
                       id="recv-tag"
@@ -2391,10 +2421,51 @@ export function MoveView() {
                         if (v.startsWith("gloamr1.")) setPayStyle("direct");
                         else if (v === "") setPayStyle("direct");
                       }}
-                      placeholder="Their Gloam address (gloamr1…)"
+                      placeholder="Gloam address, 0x address or ENS name"
                       className="gl-input tnum mt-3"
                     />
-                    {recipientTag.trim().startsWith("gloamr1.") && !isValidReceiveTag(recipientTag) ? (
+                    {payToWallet ? (
+                      <div
+                        id="pay-wallet"
+                        className="mt-3 rounded-[14px] border border-line bg-surface px-4 py-3.5"
+                      >
+                        {payRecipient.kind === "badAddress" ? (
+                          <p role="alert" className="text-[12.5px] leading-relaxed text-danger">
+                            That 0x address looks mistyped. Check it and paste it again.
+                          </p>
+                        ) : (
+                          <>
+                            {payWalletTo && (
+                              <p className="text-[14.5px] leading-snug text-foreground">That&apos;s a wallet address</p>
+                            )}
+                            {payRecipient.kind === "ens" && (
+                              <p aria-live="polite" className={`tnum text-[12.5px] leading-snug text-mute ${payWalletTo ? "mt-1" : ""}`}>
+                                {ensLookup.status === "found"
+                                  ? `${payRecipient.name} · ${shortAddress(ensLookup.address)}`
+                                  : ensLookup.status === "none"
+                                    ? "No address found for that name."
+                                    : "Looking up name…"}
+                              </p>
+                            )}
+                            {payWalletTo && (
+                              <>
+                                <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                                  Gloam pays it from your private balance. It arrives in their wallet like a normal
+                                  transfer, and nobody can see who sent it. The amount is public.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => payThisWallet(payWalletTo)}
+                                  className="btn btn-ink mt-3"
+                                >
+                                  Pay this wallet
+                                </button>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ) : recipientTag.trim().startsWith("gloamr1.") && !isValidReceiveTag(recipientTag) ? (
                       <p role="alert" className="mt-2 text-[12.5px] leading-relaxed text-danger">
                         That Gloam address looks incomplete or mistyped. Copy it again from their Receive page.
                       </p>
@@ -2500,6 +2571,7 @@ export function MoveView() {
                         treeLoading ||
                         !relayChecked ||
                         working ||
+                        payToWallet ||
                         (payStyle !== "bearer" && !recipientTag.trim())
                       }
                       onClick={() => {
