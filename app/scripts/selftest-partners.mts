@@ -469,6 +469,37 @@ await test("keys: two rotations at once leave one working secret, and revoke sto
   assert.equal(await lookupApiKey(live, pepper), null, "revoked means refused");
 });
 
+await test("keys: a rename racing a revoke or a rotation never undoes it, and a revoked key is not renamed", async () => {
+  const tick = (n: number) => (async () => {
+    for (let i = 0; i < n; i++) await Promise.resolve();
+  })();
+  for (let delay = 0; delay < 12; delay++) {
+    // revoke first, the rename starts `delay` microtasks later
+    const gone = await createApiKey({ partnerId: partner.id, name: "Gone", env: "test", pepper });
+    await Promise.allSettled([
+      revokeApiKey({ partnerId: partner.id, keyId: gone.key.id }),
+      tick(delay).then(() => renameApiKey({ partnerId: partner.id, keyId: gone.key.id, name: "Renamed" })),
+    ]);
+    const after = (await listApiKeys(partner.id)).find((v) => v.id === gone.key.id);
+    assert.notEqual(after?.revokedAt, null, `revoked stays revoked (offset ${delay})`);
+
+    // rotate first: whichever change runs second sees the other's record, so one secret always works
+    const made = await createApiKey({ partnerId: partner.id, name: "Spin", env: "test", pepper });
+    const [rot] = await Promise.allSettled([
+      rotateApiKey({ partnerId: partner.id, keyId: made.key.id, pepper }),
+      tick(delay).then(() => renameApiKey({ partnerId: partner.id, keyId: made.key.id, name: "Spun" })),
+    ]);
+    const live = rot.status === "fulfilled" ? rot.value.secret : made.secret;
+    assert.ok(await lookupApiKey(live, pepper), `the current secret works (offset ${delay})`);
+    if (rot.status === "fulfilled") assert.equal(await lookupApiKey(made.secret, pepper), null, "the old secret is gone");
+    await revokeApiKey({ partnerId: partner.id, keyId: made.key.id });
+  }
+  const done = await createApiKey({ partnerId: partner.id, name: "Done", env: "test", pepper });
+  await revokeApiKey({ partnerId: partner.id, keyId: done.key.id });
+  await assert.rejects(renameApiKey({ partnerId: partner.id, keyId: done.key.id, name: "Back" }), /revoked/);
+  assert.equal((await listApiKeys(partner.id)).find((v) => v.id === done.key.id)?.name, "Done");
+});
+
 await test("keys: at most MAX_ACTIVE_KEYS active", async () => {
   const other = await upsertPartner(stranger.address, { name: "Busy" });
   for (let i = 0; i < MAX_ACTIVE_KEYS; i++) await createApiKey({ partnerId: other.id, name: `k${i}`, env: "test", pepper });

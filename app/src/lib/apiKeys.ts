@@ -17,7 +17,7 @@
  *   keyrec:<id>        -> the full record (name, display, dates, hash)
  *   partnerkeys:<pid>  -> set of key ids
  *   keyused:<id>       -> last use, ms
- *   keylock:<id>       -> short lock while a key is rotated or revoked
+ *   keylock:<id>       -> short lock while a key is rotated, revoked or renamed
  *
  * A lookup trusts key:<hash> only when keyrec:<id> still holds that hash and
  * is not revoked, so an index entry left behind by an interrupted or
@@ -240,7 +240,7 @@ export async function createApiKey(args: {
   return { key: viewOf(rec, null), secret };
 }
 
-/** How long a rotate or revoke may hold a key's lock before it lapses on its own. */
+/** How long a rotate, revoke or rename may hold a key's lock before it lapses on its own. */
 const KEY_LOCK_SEC = 15;
 
 /**
@@ -303,13 +303,20 @@ export async function revokeApiKey(args: { partnerId: string; keyId: string }): 
   });
 }
 
+/**
+ * New name for a key. Under the key's lock like a rotate or revoke, so it never
+ * writes back a record one of them has just changed. A revoked key keeps its name.
+ */
 export async function renameApiKey(args: { partnerId: string; keyId: string; name: string }): Promise<ApiKeyView> {
-  const rec = await ownRecord(args.partnerId, args.keyId);
   const name = cleanKeyName(args.name);
   if (!name) throw new ApiKeyError("Give the key a name.", 400, "bad_name");
-  const next: ApiKeyRecord = { ...rec, name };
-  await kv1(["SET", k("keyrec", rec.id), JSON.stringify(next)]);
-  return viewOf(next, null);
+  return withKeyLock(args.keyId, 5_000, async () => {
+    const rec = await ownRecord(args.partnerId, args.keyId);
+    if (rec.revokedAt !== null) throw new ApiKeyError("This key was revoked. Make a new one.", 409, "revoked");
+    const next: ApiKeyRecord = { ...rec, name };
+    await kv1(["SET", k("keyrec", rec.id), JSON.stringify(next)]);
+    return viewOf(next, null);
+  });
 }
 
 export type AuthedKey = { id: string; partnerId: string; env: KeyEnv };
