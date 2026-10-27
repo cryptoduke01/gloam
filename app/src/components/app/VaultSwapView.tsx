@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { formatUnits, type Address } from "viem";
+import { formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useAppAccount } from "@/lib/demo";
@@ -56,6 +56,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { countPerson } from "@/lib/people";
 import type { GloamNetwork } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
+import { SuccessModal } from "./SuccessModal";
 import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { ADD_FIRST, vaultActionSearch } from "@/lib/vaultHub";
@@ -326,6 +327,14 @@ export function VaultSwapView() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // The swap that just landed, so the receipt can show both marks and both amounts.
+  const [receipt, setReceipt] = useState<{
+    pay: Address;
+    payAmount: bigint;
+    receive: Address;
+    receiveAmount: bigint;
+    hash: Hex;
+  } | null>(null);
   const [inverse, setInverse] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [picker, setPicker] = useState<"pay" | "receive" | null>(null);
@@ -410,24 +419,31 @@ export function VaultSwapView() {
   if (!router) return null;
 
   async function onSwap() {
-    if (!note || !toAsset || !shownPlan || feeBps == null || !address || amount === null) return;
+    if (!note || !toAsset || !shownPlan || feeBps == null || !address || amount === null || !payAsset) return;
+    const paid = amount;
+    const from = payAsset;
+    const into = toAsset;
     setBusy(true);
     setError(null);
     setDone(null);
+    setReceipt(null);
     try {
-      const { outNote, refunded } = await runVaultSwap({
+      const { outNote, refunded, hash } = await runVaultSwap({
         network,
         router: router!,
         note,
-        amount,
-        assetOut: toAsset,
+        amount: paid,
+        assetOut: into,
         plan: shownPlan,
         feeBps,
         owner: address as Address,
         pathFor: async (n) => ((await freshPath(n.commitment))?.path as PoseidonMerklePath | undefined) ?? null,
         onStatus: setStatus,
       });
-      if (!refunded) countPerson("swap", address, network.testnet);
+      if (!refunded) {
+        countPerson("swap", address, network.testnet);
+        setReceipt({ pay: from, payAmount: paid, receive: into, receiveAmount: BigInt(outNote.amountWei), hash });
+      }
       setDone(
         refunded ? SWAP_REFUNDED : `Swapped. ${formatAssetLabel(outNote.amountWei, outNote.asset)} is in your private balance.`
       );
@@ -448,6 +464,7 @@ export function VaultSwapView() {
     setAmountInput("");
     setQuote(null);
     setDone(null);
+    setReceipt(null);
   }
   function pickReceive(a: Address) {
     if (payAsset && same(a, payAsset)) {
@@ -459,6 +476,7 @@ export function VaultSwapView() {
     setToPick(a);
     setQuote(null);
     setDone(null);
+    setReceipt(null);
   }
   // Flip: what you receive becomes what you pay, when there is a private balance in it.
   const canFlip = Boolean(toAsset && holdings.has(toAsset.toLowerCase())) && !busy;
@@ -471,12 +489,14 @@ export function VaultSwapView() {
     setAmountInput(next);
     setQuote(null);
     setDone(null);
+    setReceipt(null);
   }
   function setShare(pct: number) {
     if (!held || !payAsset) return;
     const v = pct === 100 ? oneSwapMax : (oneSwapMax * BigInt(pct)) / 100n;
     setAmountInput(plainAmount(v, payAsset, assetDecimals(payAsset)));
     setDone(null);
+    setReceipt(null);
   }
 
   const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : "Uniswap on Robinhood Chain";
@@ -580,6 +600,7 @@ export function VaultSwapView() {
                   onChange={(e) => {
                     setAmountInput(e.target.value);
                     setDone(null);
+                    setReceipt(null);
                   }}
                   size={1}
                   className={`gl-amount tnum w-0 min-w-0 flex-1 bg-transparent font-light leading-tight tracking-[-0.02em] text-foreground outline-none placeholder:text-faint disabled:opacity-60 ${amountSize(
@@ -824,6 +845,77 @@ export function VaultSwapView() {
           onClose={() => setPicker(null)}
         />
       )}
+
+      <SuccessModal
+        open={receipt !== null}
+        title="Swapped"
+        body={
+          receipt
+            ? `${formatAssetLabel(receipt.receiveAmount, receipt.receive)} is in your private balance.`
+            : ""
+        }
+        detail={
+          receipt ? (
+            <SwapPair
+              chainId={network.chainId}
+              pay={receipt.pay}
+              payAmount={receipt.payAmount}
+              receive={receipt.receive}
+              receiveAmount={receipt.receiveAmount}
+            />
+          ) : null
+        }
+        primaryHref={receipt ? network.explorerTx(receipt.hash) : undefined}
+        primaryLabel="View on explorer"
+        secondaryLabel="Done"
+        onClose={() => setReceipt(null)}
+      />
+    </div>
+  );
+}
+
+/** Both marks and both amounts for a finished swap. Works for any pair, not one market. */
+function SwapPair({
+  chainId,
+  pay,
+  payAmount,
+  receive,
+  receiveAmount,
+}: {
+  chainId: number;
+  pay: Address;
+  payAmount: bigint;
+  receive: Address;
+  receiveAmount: bigint;
+}) {
+  const from = tokenFor(chainId, pay);
+  const to = tokenFor(chainId, receive);
+  const fromSymbol = from?.symbol ?? assetLabel(pay);
+  const toSymbol = to?.symbol ?? assetLabel(receive);
+  const paid = formatAssetAmount(payAmount, pay);
+  const got = formatAssetAmount(receiveAmount, receive);
+  return (
+    <div
+      className="flex items-center justify-center gap-2 rounded-[18px] bg-surface px-3 py-4 sm:gap-3 sm:px-4"
+      aria-label={`Swapped ${paid} ${fromSymbol} for ${got} ${toSymbol}`}
+    >
+      <SwapSide label="You pay" id={from?.id ?? fromSymbol.toLowerCase()} symbol={fromSymbol} amount={paid} />
+      <span aria-hidden className="shrink-0 text-[20px] font-light leading-none text-mute">
+        →
+      </span>
+      <SwapSide label="You receive" id={to?.id ?? toSymbol.toLowerCase()} symbol={toSymbol} amount={got} />
+    </div>
+  );
+}
+
+function SwapSide({ label, id, symbol, amount }: { label: string; id: string; symbol: string; amount: string }) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center">
+      <p className="text-[12px] text-mute">{label}</p>
+      <TokenLogo id={id} symbol={symbol} size={52} />
+      <p className="tnum max-w-full text-[14px] font-medium leading-snug text-foreground">
+        {amount} <span className="font-normal text-mute">{symbol}</span>
+      </p>
     </div>
   );
 }
