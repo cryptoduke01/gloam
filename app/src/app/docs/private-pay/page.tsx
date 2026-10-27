@@ -70,7 +70,9 @@ export default function DocsPrivatePayPage() {
       <h2>Claim links you send</h2>
       <p>
         No Gloam address? Pick <strong>Claim link</strong> under To and you
-        get a link that holds the payment instead.
+        get a link that holds the payment instead. Or paste a 0x address or an
+        ENS name, and Gloam pays that wallet from your private balance (the
+        amount is public there).
         Every one you send is kept under <strong>Sent links</strong>, below
         the Send privately form, encrypted in that browser like your balance.
         Each shows whether its money has moved yet. Copy a code again, or take
