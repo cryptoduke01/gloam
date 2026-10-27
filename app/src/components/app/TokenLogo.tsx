@@ -33,6 +33,9 @@ const PNG_LOGO_IDS = new Set([
   "dis", "uber", "abnb", "shop", "pypl", "sbux", "nke", "mcd", "ko", "wmt",
   "cost", "jpm", "v", "ma", "mstr", "gme", "rblx", "rddt", "snap", "f",
   "rivn", "baba", "spot",
+  // Robinhood Chain swap list that had no file yet (FMP company marks, CoinGecko token marks)
+  "spy", "spcx", "crcl", "amc", "hims", "tsm", "gld",
+  "usde", "u", "cbbtc", "pons", "cashcat", "virtual",
   // stablecoins
   "usdg", "usdce", "usdt0",
   // networks
@@ -42,7 +45,7 @@ const PNG_LOGO_IDS = new Set([
 ]);
 
 /** Round marks (a full disc): shown as a circle with no plate, so no white corners. */
-const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux"]);
+const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux", "usde", "u", "cbbtc"]);
 
 const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
