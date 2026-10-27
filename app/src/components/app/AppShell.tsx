@@ -11,6 +11,7 @@ import { WelcomeModal } from "./WelcomeModal";
 import { PasskeyGate } from "./PasskeyGate";
 import { NetworkSelector } from "./NetworkSelector";
 import { useNetwork } from "./NetworkProvider";
+import { StocksLiveNotice } from "./StocksLiveNotice";
 import { TestFundsNotice } from "./TestFundsNotice";
 import { VaultNavGroup, VaultNavGroupStatic, navActiveFill } from "./VaultNavGroup";
 
@@ -342,6 +343,9 @@ export function AppShell({
       <div className="gl-tabbar-space flex flex-1 flex-col lg:pl-[272px]">
         <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 pb-16 pt-5 sm:px-8 sm:pt-7">
           <TestFundsNotice />
+          <Suspense fallback={null}>
+            <StocksLiveNotice />
+          </Suspense>
           {/* no fade on the title: it paints with the page, not after the app's JavaScript frees the phone */}
           <div className="gl-pagehead mb-6 gap-4 sm:mb-8">
             <div>
