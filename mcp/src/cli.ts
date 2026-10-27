@@ -15,7 +15,7 @@ import {
   parsePeriod,
   type AccessKeyPlan,
 } from "./accessKey.js";
-import { appendEnvFile, defaultEnvFilePath } from "./envFile.js";
+import { appendEnvFile, defaultEnvFilePath, readEnvFile } from "./envFile.js";
 import { MCP_NETWORKS, networkByKey, tempoAccessNetwork, type McpNetwork } from "./networks.js";
 import { packageVersion } from "./version.js";
 
@@ -234,6 +234,13 @@ export async function runAuthorizeAccessKey(
     if (envKey) {
       throw new Error(
         `An agent key is already configured (access key ${envKey}). Drop --generate to authorize that key, or pass --env-file with a new file for a second agent.`
+      );
+    }
+    // The file is never overwritten, so a key line already in it (even an empty one) would keep the new key out.
+    const target = f.envFile ?? defaultEnvFilePath(env);
+    if ("GLOAM_AGENT_PRIVATE_KEY" in readEnvFile(target)) {
+      throw new Error(
+        `${target} already has a GLOAM_AGENT_PRIVATE_KEY line, so a new key would not be saved there. Remove that line, or pass --env-file with a new file, then run --generate again.`
       );
     }
     generated = newAgentKey();

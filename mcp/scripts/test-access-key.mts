@@ -264,6 +264,32 @@ test("authorize-access-key --generate saves the key (never prints it) and prints
   assert.equal(plan.expiry.unix, NOW + 30 * 86400);
 });
 
+test("authorize-access-key --generate refuses a settings file that already has a key line, even an empty one", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gloam-cli-"));
+  const owner = privateKeyToAccount(generatePrivateKey()).address;
+  for (const line of ["GLOAM_AGENT_PRIVATE_KEY=", `GLOAM_AGENT_PRIVATE_KEY=${generatePrivateKey()}`]) {
+    const path = join(dir, `agent-${line.length}.env`);
+    const before = `# filled in later\n${line}\n`;
+    writeFileSync(path, before, { mode: 0o600 });
+    // As the binary runs it: the file is loaded first, then --generate writes to it (or to --env-file).
+    const env: Record<string, string | undefined> = { GLOAM_ENV_FILE: join(dir, "other.env") };
+    loadEnvFile(env);
+    const lines: string[] = [];
+    await assert.rejects(
+      runAuthorizeAccessKey(["--owner", owner, "--generate", "--env-file", path], env, (s) => lines.push(s), NOW),
+      /already has a GLOAM_AGENT_PRIVATE_KEY line/
+    );
+    assert.equal(readFileSync(path, "utf8"), before, "the file is left as it was");
+    assert.deepEqual(lines, [], "no key is offered for the owner to authorize");
+  }
+  // The empty line loaded as the settings file itself: same refusal.
+  const path = join(dir, "agent.env");
+  writeFileSync(path, "GLOAM_AGENT_PRIVATE_KEY=\n", { mode: 0o600 });
+  const env: Record<string, string | undefined> = { GLOAM_ENV_FILE: path };
+  loadEnvFile(env);
+  await assert.rejects(runAuthorizeAccessKey(["--owner", owner, "--generate"], env, () => {}, NOW), /already has a GLOAM_AGENT_PRIVATE_KEY line/);
+});
+
 test("authorize-access-key refuses bad input", async () => {
   const run = (args: string[]) => runAuthorizeAccessKey(args, {}, () => {}, NOW);
   await assert.rejects(run(["--key", "0x2222222222222222222222222222222222222222"]), /--owner/);

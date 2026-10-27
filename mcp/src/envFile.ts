@@ -77,6 +77,11 @@ export function loadEnvFile(env: Env = process.env): EnvFileResult {
   return result;
 }
 
+/** The GLOAM_* settings a file holds now; none when it does not exist. */
+export function readEnvFile(path: string): Record<string, string> {
+  return existsSync(path) ? parseEnvFile(readFileSync(path, "utf8")).values : {};
+}
+
 /**
  * Add settings to the file, creating it (mode 0600, directory 0700) if needed.
  * Existing keys are never replaced: those are returned in `kept`.
