@@ -63,11 +63,23 @@ const keyType = [
   { name: "hooks", type: "address" },
 ] as const;
 
-// The routers deployed on 2026-10-23, and nothing on the testnets.
-assert.equal(vaultSwapRouter(4663), "0x34AB06208586A737Bf1607fa996Bc9162271c52d");
+// The routers deployed on 2026-10-23, and nothing on the testnets. On Robinhood
+// Chain new swaps go through v2 (any listed token, stocks included).
+const RH_V1 = "0x34AB06208586A737Bf1607fa996Bc9162271c52d" as Address;
+const RH_V2 = "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC" as Address;
+assert.equal(VAULT_SWAP_V2_ROUTER[4663], RH_V2, "v2 is switched on");
+assert.equal(vaultSwapRouter(4663), RH_V2);
+assert.deepEqual(VAULT_SWAP_ASSETS[4663], RH_SWAP_ASSETS_V2, "on: v2's tokens");
+assert.equal(swapRouterFor(4663)!.version, 2);
+assert.equal(swapRouterFor(4663, RH_V1)!.version, 1, "the relay still knows v1 for its refunds");
 assert.equal(vaultSwapRouter(4217), "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC");
 assert.equal(vaultSwapRouter(46630), null);
-n += 3;
+n += 7;
+
+// The rest runs from the state before the switch (v1 only) and turns v2 on itself.
+VAULT_SWAP_V2_ROUTER[4663] = null;
+VAULT_SWAP_ROUTERS[4663] = RH_V1;
+(VAULT_SWAP_ASSETS as Record<number, readonly Address[]>)[4663] = [USDG, GLOAM];
 
 // The pool ids are the live ones the simulation used.
 const ids = RH_SWAP_POOLS.map((k) => keccak256(encodeAbiParameters([{ type: "tuple", components: keyType }], [k])).slice(0, 10));
@@ -239,7 +251,7 @@ n += 4;
   const V2 = "0x00000000000000000000000000000000000b2b2b" as Address;
   const WETH = RH_WETH;
   const ETH = "0x0000000000000000000000000000000000000000" as Address;
-  assert.equal(VAULT_SWAP_V2_ROUTER[4663], null, "v2 is off until Duke sets it");
+  assert.equal(VAULT_SWAP_V2_ROUTER[4663], null, "off, as set above");
   assert.deepEqual(VAULT_SWAP_ASSETS[4663], [USDG, GLOAM], "off: v1's two tokens");
   assert.equal(swapRouterFor(4663)!.version, 1);
   assert.equal(swapRouterFor(4663, V2), null, "unknown while off");

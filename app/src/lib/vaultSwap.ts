@@ -45,7 +45,8 @@ const TEMPO_ROUTER: Address = "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC";
  * of a swap made through it still finishes.
  */
 export const VAULT_SWAP_V2_ROUTER: Record<number, Address | null> = {
-  4663: null,
+  // GloamVaultSwapV4b, deployed 2026-10-23 (block 96142003); the vault's 28 asset limits ran 2026-10-27
+  4663: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC",
 };
 
 /** The router new swaps go through, per chain. null: swaps are off there. */
