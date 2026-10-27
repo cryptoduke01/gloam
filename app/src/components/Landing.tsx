@@ -13,7 +13,6 @@ import { LiveProduct } from "@/components/landing/LiveProduct";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { LivePartnersStrip } from "@/components/LivePartners";
-import { StocksLiveNote } from "@/components/StocksLiveNote";
 
 /**
  * Gloam landing, the "Sealed" system. White ground, light display type, one
@@ -237,9 +236,6 @@ export function Landing() {
                 <Link href="/docs" className="gl-arrowlink ml-4 self-center">
                   Read the docs <span aria-hidden>→</span>
                 </Link>
-              </div>
-              <div className="mt-6 max-w-[46ch]">
-                <StocksLiveNote where="home" />
               </div>
             </div>
             <a
