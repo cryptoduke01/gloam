@@ -3,7 +3,8 @@
  * challenge into a credential, the payee validates it and sweeps the payment
  * before issuing a receipt. Covers push and pull, replay, a credential lifted
  * onto another challenge, wrong keys, amounts, assets, pools and events, a
- * payer who spends the payment back, lost sweep receipts, and concurrency.
+ * payer who spends the payment back, lost sweep receipts, a sweep that landed
+ * while the relay's answer was lost, and concurrency.
  */
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -14,6 +15,7 @@ import {
   buildPrivateSendIntent,
   fieldToHex,
   generateReceiveKey,
+  GloamRelayError,
   hexToField,
   noteNullifierPoseidon,
   type NoteExport,
@@ -410,6 +412,36 @@ test("a sweep whose receipt was lost is served once on retry, and never twice", 
   const receipt = await settle(ch, paid.credential.payload, healthy);
   assert.equal(receipt.status, "success");
   await rejects(settle(ch, paid.credential.payload, healthy), /already used/);
+});
+
+test("a sweep that landed while the relay's answer was lost is served at once, and never twice", async () => {
+  for (const mode of ["push", "pull"] as const) {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, mode);
+    // The relay sends the sweep, then its answer is lost (a 504 at the edge): no hash comes back.
+    // In pull mode the server's first submission is the payer's transfer, the second the sweep.
+    const sweepCall = mode === "push" ? 1 : 2;
+    let calls = 0;
+    const config = serverConfig(pool, {
+      submit: async (intent) => {
+        const hash = await pool.submitter("payee")(intent);
+        if (++calls === sweepCall) throw new GloamRelayError("Relay error (504)", "error");
+        return hash;
+      },
+    });
+    const receipt = await settle(ch, paid.credential.payload, config);
+    assert.equal(receipt.status, "success", mode);
+    assert.equal(config.stored.length, 1);
+    const fresh = config.stored[0]!.commitment;
+    assert.equal(await pool.chain.isCommitmentSeen(fresh), true, "the payee holds the money");
+    // No sweep hash: the reference is what a retry of a sent record would use.
+    const payload = paid.credential.payload as { type: string; hash?: Hex };
+    assert.equal(receipt.reference, payload.type === "hash" ? payload.hash : fresh, mode);
+    // The same credential again is refused as used, never blamed on the payer, and nothing is swept twice.
+    await rejects(settle(ch, paid.credential.payload, config), /already used/);
+    assert.equal(calls, sweepCall, "one sweep");
+  }
 });
 
 test("a challenge settles one payment: a second payment for it is refused before it is swept", async () => {
