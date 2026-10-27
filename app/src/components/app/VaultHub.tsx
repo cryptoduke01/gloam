@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { StocksLiveNote } from "@/components/StocksLiveNote";
 import { VaultActionIcon, VaultHome } from "./VaultHome";
 import { useNetwork } from "./NetworkProvider";
 import { swapOpenTo, vaultSwapRouter } from "@/lib/vaultSwap";
@@ -135,10 +136,18 @@ export function VaultHub() {
     );
   }
 
-  if (!current) return <VaultHome actions={actions} />;
+  if (!current) {
+    return (
+      <div className="space-y-6">
+        <StocksLiveNote chainId={network.chainId} where="vault" />
+        <VaultHome actions={actions} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      <StocksLiveNote chainId={network.chainId} where="vault" />
       <ActionRow actions={actions} current={current.id} onSelect={select} />
 
       <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${current.id}`} className="min-w-0">

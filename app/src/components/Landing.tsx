@@ -13,6 +13,7 @@ import { LiveProduct } from "@/components/landing/LiveProduct";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { LivePartnersStrip } from "@/components/LivePartners";
+import { StocksLiveNote } from "@/components/StocksLiveNote";
 
 /**
  * Gloam landing, the "Sealed" system. White ground, light display type, one
@@ -111,7 +112,7 @@ const USES = [
     title: "Stocks on Robinhood Chain",
     body: (
       <MainnetCopy
-        live="Hold tokenized stocks with the size of your position off the public record. On the testnet for now: the mainnet pools take payments."
+        live="Swap a stock from your private balance on Robinhood Chain. Your position stays yours."
         before="Hold tokenized stocks with the size of your position off the public record."
       />
     ),
@@ -236,6 +237,9 @@ export function Landing() {
                 <Link href="/docs" className="gl-arrowlink ml-4 self-center">
                   Read the docs <span aria-hidden>→</span>
                 </Link>
+              </div>
+              <div className="mt-6 max-w-[46ch]">
+                <StocksLiveNote where="home" />
               </div>
             </div>
             <a
