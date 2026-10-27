@@ -57,7 +57,7 @@ import { countPerson } from "@/lib/people";
 import type { GloamNetwork } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
 import { SuccessModal } from "./SuccessModal";
-import { TokenLogo } from "./TokenLogo";
+import { logoIsDisc, TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { ADD_FIRST, vaultActionSearch } from "@/lib/vaultHub";
 
@@ -981,15 +981,25 @@ function TokenPill({
 }) {
   const t = tokenFor(chainId, asset);
   const symbol = t?.symbol ?? assetLabel(asset);
+  const id = t?.id ?? symbol.toLowerCase();
+  // Square marks take the pill's left curve so the tile sits in the control.
+  // A disc already follows that curve, so it stays a circle.
+  const disc = logoIsDisc(id);
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       aria-label={`${label}, now ${symbol}`}
-      className="gl-press inline-flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-panel pl-1.5 pr-3 text-[15px] font-medium text-foreground shadow-card hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 disabled:opacity-60"
+      className="gl-press inline-flex h-11 shrink-0 items-center gap-2 overflow-hidden rounded-full border border-line bg-panel py-0 pl-0 pr-3 text-[15px] font-medium text-foreground shadow-card hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 disabled:opacity-60"
     >
-      <TokenLogo id={t?.id ?? symbol.toLowerCase()} symbol={symbol} size={30} />
+      <span
+        className={`grid w-[42px] shrink-0 self-stretch place-items-center overflow-hidden ${
+          disc ? "rounded-full" : "rounded-l-[21px] rounded-r-[14px]"
+        }`}
+      >
+        <TokenLogo id={id} symbol={symbol} size={42} className="!rounded-none !border-0" />
+      </span>
       {symbol}
       <Chevron open={false} />
     </button>

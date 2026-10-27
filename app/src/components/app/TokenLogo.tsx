@@ -47,6 +47,11 @@ const PNG_LOGO_IDS = new Set([
 /** Round marks (a full disc): shown as a circle with no plate, so no white corners. */
 const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux", "usde", "u", "cbbtc"]);
 
+/** True when the mark is a disc, so a pill can keep it round instead of clipping a tile. */
+export function logoIsDisc(id: string): boolean {
+  return DISC_LOGO_IDS.has(id.toLowerCase());
+}
+
 const SPECIAL_LOGOS: Record<string, string> = {
   tempo: "/brand/logos/tempo.svg",
   // Robinhood Chain's own app icon: a full tile, so no white plate shows
