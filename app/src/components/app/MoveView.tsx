@@ -2028,13 +2028,11 @@ export function MoveView() {
 
   /**
    * Pay hands a wallet over to Cash out (nothing else changes): another address,
-   * that address, and the amount typed in Pay when it fits the picked balance.
+   * that address, and the amount typed in Pay (Cash out checks it).
    * The URL follows through selectMode (?mode=cashout), as for a tab click.
    */
   function payThisWallet(to: Address) {
-    const wei = selected && sendAmount.trim() ? parseAssetAmount(sendAmount.trim(), selected.asset) : null;
-    const fits = wei !== null && wei > 0n && wei <= noteWei;
-    const h = cashOutHandoff(to, sendAmount, fits);
+    const h = cashOutHandoff(to, sendAmount);
     setCashOutDest(h.dest);
     setOtherTo(h.to);
     setCashOutInput(h.amount);

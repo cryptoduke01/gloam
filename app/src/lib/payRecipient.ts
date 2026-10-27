@@ -66,18 +66,17 @@ export function isWalletRecipient(r: PayRecipient): boolean {
 export type CashOutHandoff = {
   dest: "other";
   to: Address;
-  /** The amount typed in Pay, only when it is a usable one for this balance; otherwise "" (the whole balance, Cash out's default). */
+  /** The amount typed in Pay, as typed; "" when none was. */
   amount: string;
 };
 
 /**
- * The state Cash out opens with when Pay hands a wallet over. The amount comes
- * along only when `amountOk` says it parses and fits the picked balance;
- * Cash out checks it again either way.
+ * The state Cash out opens with when Pay hands a wallet over. A typed amount
+ * always comes along, even one that does not fit: Cash out then shows its own
+ * error, rather than a blank field quietly meaning the whole balance.
  */
-export function cashOutHandoff(to: Address, typedAmount: string, amountOk: boolean): CashOutHandoff {
-  const amount = typedAmount.trim();
-  return { dest: "other", to, amount: amount && amountOk ? amount : "" };
+export function cashOutHandoff(to: Address, typedAmount: string): CashOutHandoff {
+  return { dest: "other", to, amount: typedAmount.trim() };
 }
 
 /** A name's 0x address on Ethereum mainnet, or null (no such name, or the lookup failed). */

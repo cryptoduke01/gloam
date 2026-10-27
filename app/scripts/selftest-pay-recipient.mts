@@ -91,14 +91,13 @@ await test("a claim code or a URL is not a name or a wallet", () => {
   assert.equal(kind("https://gloam.trade/app"), "other");
 });
 
-await test("the hand-off opens Cash out on another address with the typed amount when it fits", () => {
-  assert.deepEqual(cashOutHandoff(VITALIK, " 12.5 ", true), { dest: "other", to: VITALIK, amount: "12.5" });
+await test("the hand-off opens Cash out on another address with the typed amount", () => {
+  assert.deepEqual(cashOutHandoff(VITALIK, " 12.5 "), { dest: "other", to: VITALIK, amount: "12.5" });
 });
 
-await test("the hand-off leaves the amount blank (the whole balance) when none is typed or it does not fit", () => {
-  assert.deepEqual(cashOutHandoff(VITALIK, "", true), { dest: "other", to: VITALIK, amount: "" });
-  assert.deepEqual(cashOutHandoff(VITALIK, "   ", true), { dest: "other", to: VITALIK, amount: "" });
-  assert.deepEqual(cashOutHandoff(VITALIK, "9999999", false), { dest: "other", to: VITALIK, amount: "" });
+await test("an amount too big still comes along (Cash out shows its error), and none typed stays blank", () => {
+  assert.deepEqual(cashOutHandoff(VITALIK, "9999999"), { dest: "other", to: VITALIK, amount: "9999999" });
+  assert.deepEqual(cashOutHandoff(VITALIK, "   "), { dest: "other", to: VITALIK, amount: "" });
 });
 
 await test("a name resolves to its address", async () => {
