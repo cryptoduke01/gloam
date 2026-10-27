@@ -94,7 +94,7 @@ import {
   type McpNetwork,
 } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
-import { authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
+import { assetDecimals, authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
 import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type NoteStore, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
@@ -1608,7 +1608,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         body: z.string().optional().describe("Request body for POST."),
         contentType: z.string().optional().describe("Content-Type for the body (default application/json)."),
         note: z.string().optional().describe("Handle of the note to pay from; omit to use the smallest that covers the price."),
-        maxAmount: z.number().positive().optional().describe("Refuse if the 402 asks for more than this, in the asset's units."),
+        maxAmount: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Refuse if the 402 asks for more than this, in the asset's units. Only for an asset Gloam lists or the limits file lists with its decimals; any other is refused."),
         paymentHeader: z
           .string()
           .optional()
@@ -1668,7 +1672,19 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         if (typeof req === "string") return text({ status: "error", httpStatus: 402, error: req, body: firstBody.slice(0, 2000) });
       }
       if (maxAmount !== undefined) {
-        const { symbol, decimals } = assetInfo(Number(req.network), req.asset);
+        // maxAmount is in whole units, so it needs the asset's real decimals: the owner's limits or Gloam's list, never a guess.
+        const asset = typeof req.asset === "string" && isAddress(req.asset, { strict: false }) ? req.asset : null;
+        const decimals = asset ? assetDecimals(Number(req.network), asset, env) : null;
+        if (asset === null || decimals === null) {
+          return text({
+            status: "refused",
+            code: "unknown_decimals",
+            message: asset
+              ? `This server does not know the decimals of ${asset}, the asset the resource asks for, so it cannot check maxAmount. Not paying. List the asset with its decimals in the limits file (GLOAM_LIMITS_FILE) to use maxAmount with it.`
+              : "The 402 names no asset to pay in, so maxAmount cannot be checked. Not paying.",
+          });
+        }
+        const { symbol } = assetInfo(Number(req.network), asset, decimals);
         let asked: bigint;
         try {
           asked = BigInt(String(req.maxAmountRequired));

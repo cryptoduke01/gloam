@@ -42,14 +42,24 @@ export function spendLogPath(agent: string, env: Env = process.env): string {
   return env.GLOAM_SPEND_LOG?.trim() || join(homedir(), ".gloam", `spend-log.${agent.replace(/[^\w.-]+/g, "_")}.json`);
 }
 
-function decimalsOf(loaded: LoadedPolicy, chainId: number, asset: Address): number {
+/** The decimals the owner's limits give an asset, else Gloam's own list; null when neither names it. */
+function knownDecimals(loaded: LoadedPolicy, chainId: number, asset: Address): number | null {
   if (loaded.mode === "enforced") {
     const limit = findAssetLimit(loaded.policy, chainId, asset);
     if (limit) return limit.decimals;
   }
   return (
-    KNOWN_ASSETS.find((a) => a.chainId === chainId && a.address.toLowerCase() === asset.toLowerCase())?.decimals ?? 18
+    KNOWN_ASSETS.find((a) => a.chainId === chainId && a.address.toLowerCase() === asset.toLowerCase())?.decimals ?? null
   );
+}
+
+function decimalsOf(loaded: LoadedPolicy, chainId: number, asset: Address): number {
+  return knownDecimals(loaded, chainId, asset) ?? 18;
+}
+
+/** An asset's decimals from the owner's limits or Gloam's own list, or null when neither names it (never a guess). */
+export function assetDecimals(chainId: number, asset: Address, env: Env = process.env): number | null {
+  return knownDecimals(currentPolicy(env), chainId, asset);
 }
 
 /** Payments only ever go through Gloam's own pool on that network. */
