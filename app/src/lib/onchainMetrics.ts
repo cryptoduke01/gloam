@@ -9,8 +9,9 @@
  *   blocks but takes an address-only query over millions; Tempo caps every
  *   query at 100k (`logRange`).
  * - PaymentMemo logs on the payment-message board since the vault's deploy.
- * - balanceOf(vault) for each listed token, plus the native balance where the
- *   chain shields its native coin.
+ * - balanceOf(vault) for every token the vault can hold (the listed ones plus
+ *   those a private swap lands in, `holdableTokens`), plus the native balance
+ *   where the chain shields its native coin.
  * - The cash-out fee: WithdrawFee and FeesCollected logs (from the same scan),
  *   plus withdrawFeeBps(), feeRecipient() and feesOwed(asset) on the vault.
  * - $GLOAM creator fees from the Orynth fee vault on Robinhood Chain (lib/creatorFees).
@@ -33,7 +34,14 @@ import {
   type PublicClient,
 } from "viem";
 import { getNetwork, NETWORK_KEYS, networkName, type GloamNetwork, type NetworkKey } from "./networks";
-import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
+import {
+  erc20BalanceOfAbi,
+  isDollarStable,
+  RH_MAINNET_SWAP_TOKENS,
+  shieldTokensFor,
+  supportsNativeShield,
+  type OnchainToken,
+} from "./tokens";
 import { loadEthUsd, loadLiveMarkets } from "./live-quotes";
 import { cacheGetJson, cacheSetJson, lastDays, utcDay } from "./tractionStore";
 import { serverTransport } from "@/lib/serverRpc";
@@ -417,12 +425,57 @@ function hexTs(v: unknown): number {
 
 /* ------------------------------------------------------------------ assets */
 
-type AssetInfo = { symbol: string; decimals: number; stable: boolean };
+/**
+ * Tokens a private swap can land in that Add does not list, per chain. Only
+ * Robinhood Chain mainnet has any (lib/vaultSwap RH_SWAP_ASSETS_V2): Tempo's
+ * swap assets are its four listed stablecoins, and Base and Ethereum have no
+ * private swap yet.
+ */
+const SWAP_LANDABLE: Record<number, readonly OnchainToken[]> = { 4663: RH_MAINNET_SWAP_TOKENS };
 
-function assetInfo(n: GloamNetwork, asset: string): AssetInfo {
+const holdable = new Map<number, OnchainToken[]>();
+
+/**
+ * Every ERC-20 the vault on a chain can hold: the tokens Add lists plus the
+ * ones a private swap lands in, listed first, each address once. Reading only
+ * the listed set left a vault's stocks, WETH and the rest out of "held".
+ */
+export function holdableTokens(chainId: number): OnchainToken[] {
+  const hit = holdable.get(chainId);
+  if (hit) return hit;
+  const seen = new Set<string>();
+  const out: OnchainToken[] = [];
+  for (const t of [...shieldTokensFor(chainId), ...(SWAP_LANDABLE[chainId] ?? [])]) {
+    const a = t.address.toLowerCase();
+    if (seen.has(a)) continue;
+    seen.add(a);
+    out.push(t);
+  }
+  holdable.set(chainId, out);
+  return out;
+}
+
+/**
+ * A Robinhood mainnet stock token is worth the share price times its
+ * uiMultiplier / 1e18 per raw token (splits and dividends move the multiplier;
+ * balances never rebase), as the private swap marks it (VaultSwapView).
+ */
+function hasUiMultiplier(chainId: number, t: Pick<OnchainToken, "kind">): boolean {
+  return chainId === 4663 && t.kind === "stock";
+}
+
+type AssetInfo = {
+  symbol: string;
+  decimals: number;
+  stable: boolean;
+  /** Wrapped ETH: one token is one ETH. */
+  weth?: boolean;
+};
+
+export function assetInfo(n: GloamNetwork, asset: string): AssetInfo {
   if (asset === NATIVE) return { symbol: n.primaryAsset.symbol, decimals: n.primaryAsset.decimals, stable: false };
-  const t = shieldTokensFor(n.chainId).find((x) => x.address.toLowerCase() === asset);
-  if (t) return { symbol: t.symbol, decimals: t.decimals, stable: isDollarStable(t) };
+  const t = holdableTokens(n.chainId).find((x) => x.address.toLowerCase() === asset);
+  if (t) return { symbol: t.symbol, decimals: t.decimals, stable: isDollarStable(t), ...(t.id === "weth" ? { weth: true } : {}) };
   return { symbol: `${asset.slice(0, 6)}…${asset.slice(-4)}`, decimals: 18, stable: false };
 }
 
@@ -434,7 +487,7 @@ function fmtUnits(raw: bigint, info: AssetInfo): string {
   return frac ? `${i}.${frac}` : i;
 }
 
-type Prices = { at: number; ethUsd: number | null; marks: Map<string, number>; stocks: "live" | "unpriced" };
+export type Prices = { at: number; ethUsd: number | null; marks: Map<string, number>; stocks: "live" | "unpriced" };
 let priceCache: Prices | null = null;
 const PRICE_KEY = "gloam:onchain:prices:v1";
 
@@ -456,10 +509,82 @@ async function loadGloamUsd(): Promise<number | null> {
   return Number.isFinite(price) && price > 0 ? price : null;
 }
 
+const UI_MULTIPLIER_ABI = parseAbi(["function uiMultiplier() view returns (uint256)"]);
+
+type LiveMarkets = Awaited<ReturnType<typeof loadLiveMarkets>>;
+
+/**
+ * USD for one whole swap-landable token, or null: a stock
+ * is the live market mark with the token's id times uiMultiplier / 1e18, else the
+ * CoinGecko price for the token; any other token is its CoinGecko price. The same
+ * order VaultSwapView and /api/markets use, so the admin never disagrees with the app.
+ */
+export function swapTokenPrice(
+  chainId: number,
+  t: Pick<OnchainToken, "id" | "kind">,
+  markets: readonly { id: string; source: string; mark: number }[],
+  uiMultiplier: bigint | null,
+  geckoUsd: number | undefined
+): number | null {
+  let price: number | null = null;
+  if (hasUiMultiplier(chainId, t)) {
+    const m = markets.find((x) => x.id === t.id && x.source === "live" && x.mark > 0);
+    if (m && uiMultiplier && uiMultiplier > 0n) price = (m.mark * Number(uiMultiplier)) / 1e18;
+  }
+  if (price == null && typeof geckoUsd === "number" && geckoUsd > 0) price = geckoUsd;
+  return price != null && Number.isFinite(price) && price > 0 ? price : null;
+}
+
+/**
+ * USD per token for the Robinhood mainnet tokens a private swap lands in, by
+ * address (lowercase), priced the way the app prices them (VaultSwapView):
+ * - a stock token: the live market with the token's id (the /api/markets mark,
+ *   a share price) times the token's uiMultiplier / 1e18, else CoinGecko's price
+ *   for the token itself. Never the share price alone: with the multiplier unread
+ *   it falls back to CoinGecko, and with neither it is left out (unpriced).
+ * - any other token with a CoinGecko id (cbBTC, PONS, CASHCAT, VIRTUAL): its CoinGecko price.
+ * Dollar stablecoins ($1) and WETH (ETH's price) need no mark; $GLOAM is priced
+ * from DEX Screener. Anything not returned here has no price.
+ */
+async function loadSwapTokenMarks(marketsRead: Promise<LiveMarkets>): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const n = getNetwork("robinhood-mainnet");
+  if (n.status !== "live") return out;
+  const tokens = (SWAP_LANDABLE[n.chainId] ?? []).filter((t) => !isDollarStable(t) && t.id !== "weth");
+  const stocks = tokens.filter((t) => hasUiMultiplier(n.chainId, t));
+  const c = clientFor(n);
+
+  const ids = [...new Set(tokens.map((t) => t.coingecko).filter((x): x is string => Boolean(x)))];
+  const gecko = ids.length
+    ? fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`, {
+        signal: AbortSignal.timeout(8_000),
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? (r.json() as Promise<Record<string, { usd?: number }>>) : null))
+        .catch(() => null)
+    : Promise.resolve(null);
+  const mults = Promise.all(
+    stocks.map((t) =>
+      gated(n.chainId, () => c.readContract({ address: t.address, abi: UI_MULTIPLIER_ABI, functionName: "uiMultiplier" })).catch(
+        () => null
+      )
+    )
+  );
+  const [markets, g, multRaw] = await Promise.all([marketsRead, gecko, mults]);
+
+  const multOf = new Map(stocks.map((t, i) => [t.address.toLowerCase(), multRaw[i] ?? null]));
+  for (const t of tokens) {
+    const a = t.address.toLowerCase();
+    const price = swapTokenPrice(n.chainId, t, markets, multOf.get(a) ?? null, t.coingecko ? g?.[t.coingecko]?.usd : undefined);
+    if (price != null) out.set(a, price);
+  }
+  return out;
+}
+
 /**
  * ETH from CoinGecko, the stock tokens from live equity marks (the same source
- * as /api/markets, static fallbacks left out), $GLOAM from DEX Screener.
- * Stablecoins count as $1. Cached five minutes in memory and Redis; the
+ * as /api/markets, static fallbacks left out), $GLOAM from DEX Screener, and
+ * the swap tokens as loadSwapTokenMarks says. Stablecoins count as $1, WETH as ETH. Cached five minutes in memory and Redis; the
  * upstreams are slow, so this starts alongside the chain reads.
  */
 async function loadPrices(): Promise<Prices> {
@@ -474,10 +599,12 @@ async function loadPrices(): Promise<Prices> {
     };
     return priceCache;
   }
-  const [ethUsd, markets, gloamUsd] = await Promise.all([
+  const marketsRead = withTimeout(loadLiveMarkets(), 25_000, [] as LiveMarkets);
+  const [ethUsd, markets, gloamUsd, swapMarks] = await Promise.all([
     withTimeout(loadEthUsd(), 15_000, null),
-    withTimeout(loadLiveMarkets(), 25_000, []),
+    marketsRead,
     withTimeout(loadGloamUsd(), 10_000, null),
+    withTimeout(loadSwapTokenMarks(marketsRead), 25_000, new Map<string, number>()),
   ]);
   const marks = new Map<string, number>();
   for (const m of markets) {
@@ -486,6 +613,13 @@ async function loadPrices(): Promise<Prices> {
   const prev = priceCache;
   const stocksLive = marks.size > 0 || prev?.stocks === "live";
   const kept = marks.size ? marks : new Map(prev?.marks ?? []);
+  // A swap token whose price could not be read this time keeps the last one read.
+  for (const t of SWAP_LANDABLE[4663] ?? []) {
+    const a = t.address.toLowerCase();
+    const last = prev?.marks.get(a);
+    if (last != null && !swapMarks.has(a)) kept.set(a, last);
+  }
+  for (const [a, price] of swapMarks) kept.set(a, price);
   const gloam = gloamUsd ?? (GLOAM ? prev?.marks.get(GLOAM) : undefined);
   if (GLOAM && gloam) kept.set(GLOAM, gloam);
   priceCache = {
@@ -494,7 +628,7 @@ async function loadPrices(): Promise<Prices> {
     marks: kept,
     stocks: stocksLive ? "live" : "unpriced",
   };
-  if (ethUsd != null || marks.size || gloamUsd != null) {
+  if (ethUsd != null || marks.size || gloamUsd != null || swapMarks.size) {
     await cacheSetJson(
       PRICE_KEY,
       { at: priceCache.at, ethUsd: priceCache.ethUsd, marks: [...priceCache.marks], stocks: priceCache.stocks },
@@ -504,20 +638,22 @@ async function loadPrices(): Promise<Prices> {
   return priceCache;
 }
 
-function usdOf(n: GloamNetwork, asset: string, units: number, info: AssetInfo, prices: Prices): number | null {
+export function usdOf(n: GloamNetwork, asset: string, units: number, info: AssetInfo, prices: Prices): number | null {
   if (info.stable) return units;
   if (asset === NATIVE) return n.primaryAsset.symbol === "ETH" && prices.ethUsd != null ? units * prices.ethUsd : null;
+  // WETH is an ERC-20, but one token is one ETH.
+  if (info.weth) return prices.ethUsd != null ? units * prices.ethUsd : null;
   const mark = prices.marks.get(asset);
   return mark != null ? units * mark : null;
 }
 
 /* ------------------------------------------------------------------ read */
 
-type Holding = { asset: string; raw: bigint | null };
+export type Holding = { asset: string; raw: bigint | null };
 
 async function readHoldings(n: GloamNetwork, vault: Address): Promise<Holding[]> {
   const c = clientFor(n);
-  const rows: Promise<Holding>[] = shieldTokensFor(n.chainId).map(async (t) => ({
+  const rows: Promise<Holding>[] = holdableTokens(n.chainId).map(async (t) => ({
     asset: t.address.toLowerCase(),
     raw: await gated(n.chainId, () =>
       c.readContract({ address: t.address, abi: erc20BalanceOfAbi, functionName: "balanceOf", args: [vault] })
@@ -535,14 +671,19 @@ async function readHoldings(n: GloamNetwork, vault: Address): Promise<Holding[]>
 
 type FeeSettings = { bps: number | null; recipient: string | null; owed: Map<string, bigint | null> };
 
-/** The vault's cash-out fee and what it holds for collectFees(). Mainnet only; each read fails soft. */
+/**
+ * The vault's cash-out fee and what it holds for collectFees(). Mainnet only; each
+ * read fails soft. A cash-out charges its fee in the asset cashed out, so this reads
+ * feesOwed for every holdable asset (a swap can leave the vault holding a stock or
+ * WETH that is later cashed out), not only the listed ones.
+ */
 async function readFeeSettings(n: GloamNetwork, vault: Address): Promise<FeeSettings | null> {
   if (n.testnet) return null;
   const c = clientFor(n);
   const soft = <T>(call: () => Promise<T>) => gated(n.chainId, call).catch(() => null);
   const assets = [
     ...(supportsNativeShield(n.chainId) ? [NATIVE] : []),
-    ...shieldTokensFor(n.chainId).map((t) => t.address.toLowerCase()),
+    ...holdableTokens(n.chainId).map((t) => t.address.toLowerCase()),
   ];
   const [bps, recipient, owed] = await Promise.all([
     soft(() => c.readContract({ address: vault, abi: FEE_ABI, functionName: "withdrawFeeBps" })),
@@ -829,7 +970,8 @@ function revenueOf(n: GloamNetwork, s: ScanState, prices: Prices, settings: FeeS
   };
 }
 
-function figures(
+/** Exported for scripts/selftest-vault-holdings. */
+export function figures(
   n: GloamNetwork,
   s: ScanState,
   holdings: Holding[] | null,
@@ -874,7 +1016,7 @@ function figures(
   // One row per listed asset that is held or has moved; listed order (stables first).
   const order = [
     ...(supportsNativeShield(n.chainId) ? [NATIVE] : []),
-    ...shieldTokensFor(n.chainId).map((t) => t.address.toLowerCase()),
+    ...holdableTokens(n.chainId).map((t) => t.address.toLowerCase()),
   ];
   for (const a of flows.keys()) if (!order.includes(a)) order.push(a);
   const heldBy = new Map((holdings ?? []).map((h) => [h.asset, h.raw]));
