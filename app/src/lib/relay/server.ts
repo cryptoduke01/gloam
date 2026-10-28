@@ -21,8 +21,9 @@
  *     a spent note never reaches the gas estimate
  *   - dry run (gas estimate against the pool) before anything is sent, so a bad
  *     proof, a spent note or a stale root costs the relay nothing
- *   - no cash out to the vault itself or the memo board (lib/cashOutTarget),
- *     which would strand the money
+ *   - no cash out to the vault itself, the memo board, a token contract, a
+ *     swap router or the zero address (lib/cashOutTarget), which would strand
+ *     the money
  *   - memos only for commitments the pool has actually inserted, and no larger
  *     than a real sealed ticket needs (RELAY_MEMO_MAX_BYTES)
  *   - sanctions screening of every public recipient (a cash out's `to`) before
@@ -424,8 +425,8 @@ export function asMemo(v: unknown): Hex {
   return v as Hex;
 }
 
-/** Refuses a cash out that would strand the money in the vault or the memo board. */
-export function assertCashOutTarget(net: Pick<GloamNetwork, "pool" | "payMemo">, to: Address): void {
+/** Refuses a cash out that would strand the money: the vault, the memo board, a token contract, a swap router, the zero address. */
+export function assertCashOutTarget(net: Pick<GloamNetwork, "chainId" | "pool" | "payMemo">, to: Address): void {
   const problem = cashOutTargetProblem(to, net);
   if (problem) throw new RelayError(problem, 400, "vault_recipient");
 }

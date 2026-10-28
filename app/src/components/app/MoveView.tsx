@@ -1119,14 +1119,14 @@ export function MoveView() {
 
   /**
    * The checks every cash out passes before anything is proven, for each
-   * address it pays: never the vault or the memo board, the sweep check, and
-   * screening. A swept `quiet` address (the one under To) stops without a
-   * message, since its warning says why and how to go ahead; any other swept
-   * address is refused.
+   * address it pays: never the vault, the memo board, a token contract, a swap
+   * router or the zero address, the sweep check, and screening. A swept
+   * `quiet` address (the one under To) stops without a message, since its
+   * warning says why and how to go ahead; any other swept address is refused.
    */
   async function checkCashOutTargets(targets: Address[], asset: Address, quiet: Address | null): Promise<boolean> {
     const unique = targets.filter((t, i) => targets.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i);
-    // Never to the vault or the memo board: the money would be stuck there.
+    // Never to the vault, the memo board, a token or a swap router: the money would be stuck there.
     for (const t of unique) {
       const problem = cashOutTargetProblem(t, network);
       if (problem) {
