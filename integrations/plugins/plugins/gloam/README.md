@@ -9,13 +9,13 @@ Reviewed internally before launch; an external audit is planned.
 
 ## What it adds
 
-- The Gloam MCP server, run locally over stdio with `npx -y @gloamtrade/mcp@0.3.0`.
+- The Gloam MCP server, run locally over stdio with `npx -y @gloamtrade/mcp@0.6.1`.
 - Two skills: `gloam` (pay, get paid, check limits and spending safely) and `gloam-setup`
   (connect, and give the agent a capped Tempo access key).
 
 ## What it runs, reads and contacts
 
-- **Runs:** the `@gloamtrade/mcp` package from npm, pinned to 0.3.0. Source:
+- **Runs:** the `@gloamtrade/mcp` package from npm, pinned to 0.6.1. Source:
   https://github.com/cryptoduke01/gloam/tree/main/mcp
 - **Reads:** settings from `~/.gloam/agent.env` on your machine (agent key, Tempo account,
   spending limits, note store key). Nothing secret is stored in the plugin's files.

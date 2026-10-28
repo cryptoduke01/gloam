@@ -479,13 +479,16 @@ export async function settleGloamCharge(args: {
       },
     });
 
-    if (result.grantAccess && result.sweep?.hash) {
-      const receipt = receiptOf(v, result.sweep.hash, clock());
+    if (result.grantAccess && result.freshNote) {
+      // The chain can show the sweep landed when the relay never gave its hash (its answer was lost after it
+      // sent): settled all the same, and referenced as a retry of a sent record is.
+      const sweepHash = result.sweep?.hash ?? null;
+      const receipt = receiptOf(v, sweepHash ?? (v.payload.type === "hash" ? v.payload.hash : result.freshNote.commitment), clock());
       await replay.put(key, {
         state: "settled",
         at: clock(),
-        freshCommitment: result.freshNote?.commitment,
-        sweepHash: result.sweep.hash,
+        freshCommitment: result.freshNote.commitment,
+        sweepHash,
         receipt,
       });
       await markChallenge("settled");

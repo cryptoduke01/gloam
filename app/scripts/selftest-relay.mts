@@ -20,7 +20,9 @@
  *    have tried, partner keys keep their own few, the app client keeps the
  *    ticket and sends it, no secret means no ticket, and no limit keys on an IP
  *  - cash outs to the vault or the memo board are refused before any chain
- *    call, on the server, in the shared check the app uses, and in the SDK
+ *    call, on the server, in the shared check the app uses, and in the SDK;
+ *    so are a listed token contract, a swap router and the zero address, while
+ *    a wallet is never refused
  *  - Redis set but not answering: every send, cash out and payment message is
  *    refused relay_off before any chain call, logged once per outage; the
  *    per-spend lock never runs on memory then, nor in a production build with
@@ -61,9 +63,16 @@ const {
 } = await import("../src/lib/relay/server");
 const relayClient = await import("../src/lib/relay/client");
 const { INFLIGHT_TTL_SEC, inflightKey, takeInflight } = await import("../src/lib/relay/inflight");
-const { CASH_OUT_TO_BOARD_MESSAGE, CASH_OUT_TO_VAULT_MESSAGE, cashOutTargetProblem } = await import(
-  "../src/lib/cashOutTarget"
-);
+const {
+  CASH_OUT_TO_BOARD_MESSAGE,
+  CASH_OUT_TO_ROUTER_MESSAGE,
+  CASH_OUT_TO_TOKEN_MESSAGE,
+  CASH_OUT_TO_VAULT_MESSAGE,
+  CASH_OUT_TO_ZERO_MESSAGE,
+  cashOutTargetProblem,
+} = await import("../src/lib/cashOutTarget");
+const { swapRoutersOn } = await import("../src/lib/vaultSwap");
+const { RH_MAINNET_SWAP_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS, shieldTokensFor } = await import("../src/lib/tokens");
 const { POST: relayPost } = await import("../src/app/api/relay/route");
 const { resetRpcChecks, serverTransport } = await import("../src/lib/serverRpc");
 const { getNetwork } = await import("../src/lib/networks");
@@ -826,8 +835,63 @@ await test("shared check: vault and memo board refused, any case; wallets pass",
   assert.equal(cashOutTargetProblem(getAddress(POOL), net), CASH_OUT_TO_VAULT_MESSAGE);
   assert.equal(cashOutTargetProblem(BOARD.toLowerCase(), net), CASH_OUT_TO_BOARD_MESSAGE);
   assert.equal(cashOutTargetProblem(CLEAN, net), null);
-  assert.equal(cashOutTargetProblem(CLEAN, { pool: null, payMemo: null }), null);
+  assert.equal(cashOutTargetProblem(CLEAN, { chainId: net.chainId, pool: null, payMemo: null }), null);
   assert.equal(CASH_OUT_TO_VAULT_MESSAGE, "That address is the vault itself. Cash out to a wallet you control.");
+});
+
+const NETWORK_KEYS = [
+  "robinhood", "tempo", "base", "ethereum", "robinhood-mainnet", "tempo-mainnet", "base-mainnet", "ethereum-mainnet",
+] as const;
+
+await test("shared check: the zero address, a listed token and a swap router are refused, any case, on every network", () => {
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  for (const key of NETWORK_KEYS) {
+    const n = getNetwork(key);
+    assert.equal(cashOutTargetProblem(ZERO, n), CASH_OUT_TO_ZERO_MESSAGE, key);
+    const tokens = [...shieldTokensFor(n.chainId)];
+    if (n.chainId === 4663) tokens.push(...RH_MAINNET_SWAP_TOKENS);
+    for (const t of tokens) {
+      assert.equal(cashOutTargetProblem(t.address, n), CASH_OUT_TO_TOKEN_MESSAGE, `${t.symbol} on ${key}`);
+      assert.equal(cashOutTargetProblem(t.address.toLowerCase(), n), CASH_OUT_TO_TOKEN_MESSAGE);
+    }
+    for (const r of swapRoutersOn(n.chainId)) {
+      assert.equal(cashOutTargetProblem(r.address, n), CASH_OUT_TO_ROUTER_MESSAGE, `${r.address} on ${key}`);
+      assert.equal(cashOutTargetProblem(r.address.toLowerCase(), n), CASH_OUT_TO_ROUTER_MESSAGE);
+      // what the router swaps between, and the WETH it holds, are tokens
+      for (const a of [...r.assets, ...(r.weth ? [r.weth] : [])]) assert.equal(cashOutTargetProblem(a, n), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
+    }
+  }
+  // Both Robinhood Chain routers (the one new swaps use and the older one kept for refunds) and Tempo's are covered.
+  assert.ok(swapRoutersOn(4663).length >= 2 && swapRoutersOn(4217).length >= 1);
+});
+
+await test("shared check: wallets are never refused, and a token of another chain is just an address", () => {
+  const rh = getNetwork("robinhood-mainnet");
+  const tempo = getNetwork("tempo-mainnet");
+  // an address one hex digit off a listed token or a router is a different address
+  const off = (a: string) => `${a.slice(0, -1)}${a.endsWith("1") ? "2" : "1"}`;
+  const wallets = [CLEAN, "0x00000000000000000000000000000000000000a1", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", off(RH_MAINNET_TOKENS[0]!.address), off(swapRoutersOn(4663)[0]!.address)];
+  for (const key of NETWORK_KEYS) for (const w of wallets) assert.equal(cashOutTargetProblem(w, getNetwork(key)), null, `${w} on ${key}`);
+  assert.equal(cashOutTargetProblem(RH_MAINNET_TOKENS[0]!.address, tempo), null);
+  assert.equal(cashOutTargetProblem(TEMPO_MAINNET_TOKENS[0]!.address, rh), null);
+});
+
+await test("relay refuses a cash out to a token contract, a swap router or the zero address before any chain call or lock", async () => {
+  reset();
+  const rh = getNetwork("robinhood-mainnet");
+  const cases: [typeof net, string, string][] = [
+    [net, shieldTokensFor(net.chainId)[0]!.address, CASH_OUT_TO_TOKEN_MESSAGE],
+    [net, "0x0000000000000000000000000000000000000000", CASH_OUT_TO_ZERO_MESSAGE],
+    [rh, RH_MAINNET_TOKENS[0]!.address.toLowerCase(), CASH_OUT_TO_TOKEN_MESSAGE],
+    [rh, swapRoutersOn(rh.chainId)[0]!.address, CASH_OUT_TO_ROUTER_MESSAGE],
+    [rh, swapRoutersOn(rh.chainId)[1]!.address, CASH_OUT_TO_ROUTER_MESSAGE],
+  ];
+  for (const [n, to, message] of cases) {
+    const nul = nullifier();
+    await assert.rejects(relayUnshield(n, unshieldBody(nul, to)), isRelayError("vault_recipient", 400, message));
+    assert.ok(await lockFree(nul));
+  }
+  assert.deepEqual(calls, []);
 });
 
 await test("relay refuses a cash out to the vault before any chain call or lock", async () => {

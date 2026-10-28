@@ -469,6 +469,46 @@ await test("keys: two rotations at once leave one working secret, and revoke sto
   assert.equal(await lookupApiKey(live, pepper), null, "revoked means refused");
 });
 
+await test("keys: a rename waits for the key's lock, never writes over a rotate or revoke, and a revoked key is not renamed", async () => {
+  // A revoke holds the lock: the rename waits, then sees the key revoked.
+  const gone = await createApiKey({ partnerId: partner.id, name: "Gone", env: "test", pepper });
+  const lock = k("keylock", gone.key.id);
+  assert.equal(await kv1(["SET", lock, "held", "NX", "EX", 15]), "OK");
+  const waiting = renameApiKey({ partnerId: partner.id, keyId: gone.key.id, name: "Renamed" });
+  const settled = await Promise.race([waiting.then(() => "done", () => "done"), new Promise((r) => setTimeout(() => r("waiting"), 300))]);
+  assert.equal(settled, "waiting", "the rename waits while the key is locked");
+  const rec = JSON.parse((await kv1(["GET", k("keyrec", gone.key.id)])) as string);
+  await kv1(["SET", k("keyrec", gone.key.id), JSON.stringify({ ...rec, revokedAt: Date.now() })]);
+  await kv1(["DEL", lock]);
+  await assert.rejects(waiting, /revoked/);
+  const after = (await listApiKeys(partner.id)).find((v) => v.id === gone.key.id);
+  assert.equal(after?.name, "Gone");
+  assert.notEqual(after?.revokedAt, null, "the revoke stands");
+
+  // A rename racing a rotate or a revoke, started at every offset: whichever runs second sees the other's record.
+  const tick = async (n: number) => {
+    for (let i = 0; i < n; i++) await Promise.resolve();
+  };
+  for (let delay = 0; delay < 12; delay++) {
+    const made = await createApiKey({ partnerId: partner.id, name: "Spin", env: "test", pepper });
+    const [rotated] = await Promise.allSettled([
+      rotateApiKey({ partnerId: partner.id, keyId: made.key.id, pepper }),
+      tick(delay).then(() => renameApiKey({ partnerId: partner.id, keyId: made.key.id, name: "Spun" })),
+    ]);
+    if (rotated.status === "fulfilled") {
+      assert.ok(await lookupApiKey(rotated.value.secret, pepper), `the rotated secret works (offset ${delay})`);
+      assert.equal(await lookupApiKey(made.secret, pepper), null, `the old secret stays gone (offset ${delay})`);
+    } else {
+      assert.ok(await lookupApiKey(made.secret, pepper), `a busy rotation changed nothing (offset ${delay})`);
+    }
+    await Promise.allSettled([
+      revokeApiKey({ partnerId: partner.id, keyId: made.key.id }),
+      tick(delay).then(() => renameApiKey({ partnerId: partner.id, keyId: made.key.id, name: "Late" })),
+    ]);
+    assert.notEqual((await listApiKeys(partner.id)).find((v) => v.id === made.key.id)?.revokedAt, null, `revoked stays revoked (offset ${delay})`);
+  }
+});
+
 await test("keys: at most MAX_ACTIVE_KEYS active", async () => {
   const other = await upsertPartner(stranger.address, { name: "Busy" });
   for (let i = 0; i < MAX_ACTIVE_KEYS; i++) await createApiKey({ partnerId: other.id, name: `k${i}`, env: "test", pepper });

@@ -77,6 +77,11 @@ export function loadEnvFile(env: Env = process.env): EnvFileResult {
   return result;
 }
 
+/** Whether the settings file at `path` has a line for `key`, even one with no value. A missing file has none. */
+export function envFileHas(path: string, key: string): boolean {
+  return existsSync(path) && key in parseEnvFile(readFileSync(path, "utf8")).values;
+}
+
 /**
  * Add settings to the file, creating it (mode 0600, directory 0700) if needed.
  * Existing keys are never replaced: those are returned in `kept`.

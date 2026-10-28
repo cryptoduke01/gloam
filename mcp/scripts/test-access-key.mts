@@ -27,7 +27,7 @@ import {
   type AccessKeyPolicy,
 } from "../src/accessKey.js";
 import { runAuthorizeAccessKey } from "../src/cli.js";
-import { appendEnvFile, loadEnvFile, parseEnvFile } from "../src/envFile.js";
+import { appendEnvFile, envFileHas, loadEnvFile, parseEnvFile } from "../src/envFile.js";
 import { MCP_NETWORKS } from "../src/networks.js";
 import { getSigner, signerSetup } from "../src/signer.js";
 
@@ -262,6 +262,35 @@ test("authorize-access-key --generate saves the key (never prints it) and prints
   assert.equal(plan.accessKey, keyAddr);
   assert.equal(plan.owner, owner);
   assert.equal(plan.expiry.unix, NOW + 30 * 86400);
+});
+
+test("authorize-access-key --generate never offers a key it could not save: a key line already in the file stops it, even an empty one", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gloam-cli-"));
+  const owner = privateKeyToAccount(generatePrivateKey()).address;
+  const refusal = /already has a GLOAM_AGENT_PRIVATE_KEY line/;
+  // The file is not the one this run loaded (--env-file), so the key is not in its environment.
+  for (const [i, line] of ["GLOAM_AGENT_PRIVATE_KEY=", `GLOAM_AGENT_PRIVATE_KEY=${generatePrivateKey()}`].entries()) {
+    const path = join(dir, `other-${i}.env`);
+    const before = `# set up earlier\n${line}\n`;
+    writeFileSync(path, before, { mode: 0o600 });
+    const lines: string[] = [];
+    await assert.rejects(runAuthorizeAccessKey(["--owner", owner, "--generate", "--env-file", path], {}, (s) => lines.push(s), NOW), refusal);
+    assert.equal(readFileSync(path, "utf8"), before, "the file is left as it was");
+    assert.deepEqual(lines, [], "no key is offered for the owner to authorize");
+  }
+  // The settings file itself holds an empty key line: loaded, it still sets no key, and the same refusal applies.
+  const own = join(dir, "agent.env");
+  writeFileSync(own, "GLOAM_AGENT_PRIVATE_KEY=\n", { mode: 0o600 });
+  const env: Record<string, string | undefined> = { GLOAM_ENV_FILE: own };
+  loadEnvFile(env);
+  await assert.rejects(runAuthorizeAccessKey(["--owner", owner, "--generate"], env, () => {}, NOW), refusal);
+  // A file with other settings but no key line, or none at all, is fine.
+  assert.equal(envFileHas(join(dir, "none.env"), "GLOAM_AGENT_PRIVATE_KEY"), false);
+  const fresh = join(dir, "fresh.env");
+  writeFileSync(fresh, "GLOAM_NETWORK=tempo-mainnet\n", { mode: 0o600 });
+  assert.equal(envFileHas(fresh, "GLOAM_AGENT_PRIVATE_KEY"), false);
+  assert.equal(await runAuthorizeAccessKey(["--owner", owner, "--generate", "--env-file", fresh], {}, () => {}, NOW), 0);
+  assert.match(parseEnvFile(readFileSync(fresh, "utf8")).values.GLOAM_AGENT_PRIVATE_KEY!, /^0x[0-9a-f]{64}$/);
 });
 
 test("authorize-access-key refuses bad input", async () => {
