@@ -1777,6 +1777,39 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assertNoSecrets(secretsOf([payerEnv, payeeEnv]));
   });
 
+  test("gloam_fetch_paid: maxAmount counts in the asset's real decimals, and is refused for an asset whose decimals nobody has told it", async () => {
+    const dir = tmp();
+    const chain = mockChain();
+    // A 6-decimal token Gloam does not list, priced at 5 tokens.
+    const TOKEN = "0x2222222222222222222222222222222222222222";
+    const S = await connect(makeDeps(chain, partyEnv("payee", dir, { GLOAM_LIMITS: "off" })).deps);
+    const priced = await S.call("gloam_payment_requirements", {
+      amount: 5, decimals: 6, assetSymbol: "TKN", asset: TOKEN, resource: "https://api.example/answer", network: "tempo",
+    });
+    const resourceServer = (async () =>
+      new Response(JSON.stringify({ x402Version: 1, accepts: [priced.requirements] }), {
+        status: 402,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+
+    // The owner's limits file gives the token its decimals: 5 is more than a maxAmount of 1.
+    const limits = join(dir, "limits.json");
+    const agents = { payer: { recipients: "any", tools: ["pay"], assets: { [TOKEN]: { decimals: 6, network: "tempo", maxPerPayment: "10", maxPerDay: "50" } } } };
+    writeFileSync(limits, JSON.stringify({ agents }));
+    const listed = await connect(makeDeps(chain, partyEnv("payer", dir, { GLOAM_LIMITS_FILE: limits }), { fetch: resourceServer }).deps);
+    const over = await listed.call("gloam_fetch_paid", { url: "https://api.example/answer", maxAmount: 1 });
+    assert.equal(over.status, "refused", JSON.stringify(over));
+    assert.equal(over.code, "over_max_amount");
+    assert.match(over.message, /asks 5 /);
+
+    // With no limits to give the decimals, they would have been guessed as 18 and the cap passed: now it refuses.
+    const unknown = await connect(makeDeps(chain, partyEnv("payer", dir, { GLOAM_LIMITS: "off" }), { fetch: resourceServer }).deps);
+    const guess = await unknown.call("gloam_fetch_paid", { url: "https://api.example/answer", maxAmount: 1 });
+    assert.equal(guess.status, "refused", JSON.stringify(guess));
+    assert.equal(guess.code, "unknown_decimals");
+    assert.deepEqual(chain.calls, [], "nothing was signed or paid");
+  });
+
   test("GLOAM_EXPOSE_NOTE_SECRETS=1 brings back secrets, and only then", async () => {
     const dir = tmp();
     const chain = mockChain();
