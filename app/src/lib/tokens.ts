@@ -257,6 +257,48 @@ export function shieldTokensFor(chainId: number): OnchainToken[] {
 }
 
 /**
+ * Tokens a wallet can hold on a chain that Add does not list: the ones a private
+ * swap can land in (Robinhood Chain mainnet's RH_MAINNET_SWAP_TOKENS: WETH, the
+ * stocks and so on). Empty on every other chain.
+ */
+export function swapDisplayTokensFor(chainId: number): OnchainToken[] {
+  return chainId === 4663 ? RH_MAINNET_SWAP_TOKENS : [];
+}
+
+/**
+ * Every token the Portfolio's wallet card reads and lists on a chain: what Add
+ * takes (shieldTokensFor) first, then the swap tokens, deduped by address. A
+ * stock cashed out of the vault lands in the wallet and shows here, but only
+ * shieldTokensFor tokens can be added privately.
+ */
+export function walletDisplayTokensFor(chainId: number): OnchainToken[] {
+  const seen = new Set<string>();
+  return [...shieldTokensFor(chainId), ...swapDisplayTokensFor(chainId)].filter((t) => {
+    const a = t.address.toLowerCase();
+    if (seen.has(a)) return false;
+    seen.add(a);
+    return true;
+  });
+}
+
+/** Whether Add takes this token on the chain (it is in shieldTokensFor), compared by address. */
+export function isAddableToken(chainId: number, token: Pick<OnchainToken, "address">): boolean {
+  const a = token.address.toLowerCase();
+  return shieldTokensFor(chainId).some((t) => t.address.toLowerCase() === a);
+}
+
+/**
+ * A Robinhood stock token whose balance is shown with its uiMultiplier (splits,
+ * dividends): one raw token is worth the share price times uiMultiplier / 1e18.
+ * The mainnet stock tokens, not the testnet ones.
+ */
+export function hasUiMultiplier(chainId: number, token: Pick<OnchainToken, "address" | "kind">): boolean {
+  if (token.kind !== "stock") return false;
+  const a = token.address.toLowerCase();
+  return swapDisplayTokensFor(chainId).some((t) => t.address.toLowerCase() === a);
+}
+
+/**
  * Every listed token on one chain, or on all of them when no chain is given,
  * for naming an asset by its address. Chain first, because an address can be
  * listed on more than one chain (pathUSD and OUSD sit at the same address on
