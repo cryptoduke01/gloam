@@ -272,7 +272,7 @@ const VIEWS: { key: View; label: string }[] = [
   { key: "public", label: "What the public sees" },
 ];
 
-/** What goes into a private balance once mainnet is live: the mainnet pools' assets (stock tokens stay on testnet). */
+/** What goes into a private balance once mainnet is live: the mainnet pools' assets (stocks come in through a private swap). */
 const MAINNET_BALANCE_BODY = "Move USDG, USDC.e, pathUSD, USDT0 or $GLOAM into a balance only you can see.";
 
 export function LiveProduct() {
