@@ -110,8 +110,9 @@ export default function DocsPrivateSwapsPage() {
         shows the live quote.
       </p>
       <p>
-        Swaps are on mainnet only. The testnets have no swap router. Stock
-        tokens stay on Robinhood Chain testnet and cannot be swapped.
+        Swaps are on mainnet only, stock tokens included. The testnets have no
+        swap router, so the sample stock tokens on Robinhood Chain testnet
+        cannot be swapped there.
       </p>
 
       <h2 id="private-public">What stays private and what is public</h2>

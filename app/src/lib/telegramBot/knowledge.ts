@@ -353,7 +353,7 @@ function mainnetLiveFacts(): string {
       ? ["- Tempo mainnet (chain ID 4217): the vault takes USDC.e, pathUSD, USDT0 and OUSD, and fees are paid in stablecoins. Details, if someone adds the chain by hand: RPC https://rpc.tempo.xyz, chain ID 4217, currency USD, explorer https://explore.tempo.xyz."]
       : []),
     "- Beta deposit limits on mainnet: 500 per deposit and 25,000 in total for each stablecoin; $GLOAM 25,000 per deposit and 250,000 in total. The app shows the room left before you sign.",
-    "- Mainnet proofs use the trusted setup's final keys (13 contributors). The sample stock tokens stay on Robinhood Chain testnet. The old private trade (sealed swaps) is retired and stays off; private swaps replaced it on mainnet (see PRIVATE SWAPS).",
+    "- Mainnet proofs use the trusted setup's final keys (13 contributors). Private stock swaps are live on Robinhood Chain mainnet (see PRIVATE SWAPS); only the sample stock tokens on Robinhood Chain testnet cannot be swapped. The old private trade (sealed swaps) is retired and stays off; private swaps replaced it on mainnet (see PRIVATE SWAPS).",
     "- In the app, the network selector marks every network Mainnet or Testnet. The testnets stay open for trying things first, and test funds never move to mainnet.",
     "- Passkey sign-in (Tempo Wallet) is on Tempo testnet. On mainnet, connect a browser wallet or a wallet app.",
     "- On mainnet, a plain payment code or claim link works like cash: anyone who sees it can claim it. Send it privately to the one person, or pay their Gloam address so the payment is sealed to them.",

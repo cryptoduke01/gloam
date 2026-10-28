@@ -284,8 +284,9 @@ export default function DocsNetworksPage() {
           <strong>Mainnet pool</strong>, <MainnetPoolAddress chainId={4663} />
         </li>
         <li>
-          <strong>Mainnet assets</strong>, USDG and $GLOAM. Native ETH pays gas
-          but is not a pool asset, and stock tokens are testnet only.
+          <strong>Mainnet assets</strong>, USDG and $GLOAM to add privately.
+          Stock tokens, ETH (held as WETH) and the other listed tokens come in
+          through a private swap. Native ETH pays gas.
         </li>
         <li>
           <strong>Mainnet swap router</strong> (GloamVaultSwapV4, Uniswap v4),{" "}

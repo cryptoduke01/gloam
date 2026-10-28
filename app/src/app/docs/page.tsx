@@ -155,9 +155,8 @@ export default function DocsOverviewPage() {
       <h2 id="not-yet">What does not work yet</h2>
       <ul>
         <li>
-          Private swaps on the testnets, and swaps of stock tokens. Stock
-          tokens can be held and sent privately on Robinhood Chain testnet.
-          The old <Link href="/docs/sealed-trade">sealed trade</Link> is
+          Private swaps on the testnets (private swaps, stock tokens
+          included, are on mainnet). The old <Link href="/docs/sealed-trade">sealed trade</Link> is
           retired
         </li>
         <li>
