@@ -1102,7 +1102,19 @@ export function ShieldView() {
                   onClick={() => {
                     if (walletBalance === undefined) return;
                     if (selectedToken) {
-                      setAmount(formatUnits(walletBalance, decimals).slice(0, 18));
+                      // On Tempo gas is paid in the stablecoin itself, so Max
+                      // leaves a little of the token for the approve and deposit
+                      // gas, the same reason the native branch keeps an ETH buffer.
+                      // Without it, the approve's gas drops the balance below Max
+                      // and the deposit reverts. Other chains pay gas in ETH, so
+                      // a token deposit keeps its whole balance.
+                      const leaveForGas =
+                        network.family === "tempo"
+                          ? BigInt(2) * BigInt(10) ** BigInt(Math.max(0, decimals - 2)) // ~0.02 of the token
+                          : BigInt(0);
+                      const v =
+                        walletBalance > leaveForGas ? walletBalance - leaveForGas : BigInt(0);
+                      setAmount(v === BigInt(0) ? "0" : formatUnits(v, decimals).slice(0, 18));
                     } else {
                       const leave = 50_000_000_000_000n;
                       const v =
