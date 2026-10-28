@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useReadContracts } from "wagmi";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
@@ -17,7 +18,17 @@ import {
   formatUsd,
   formatUsdCompact,
 } from "@/lib/markets";
-import { isDollarStable, knownTokens, shieldTokensFor, supportsNativeShield, type OnchainToken } from "@/lib/tokens";
+import {
+  hasUiMultiplier,
+  isAddableToken,
+  isDollarStable,
+  knownTokens,
+  shieldTokensFor,
+  supportsNativeShield,
+  swapDisplayTokensFor,
+  walletDisplayTokensFor,
+  type OnchainToken,
+} from "@/lib/tokens";
 import { COINGECKO_MARKED, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import {
   privateHeadline,
@@ -44,7 +55,7 @@ import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { NetworkPulse } from "./NetworkPulse";
 import { Sparkline } from "./Sparkline";
-import { bridgeVisible } from "@/lib/bridge";
+import { BRIDGE_DESTINATIONS, bridgeVisible } from "@/lib/bridge";
 import { addAssetHref, pickAddAsset } from "@/lib/vaultHub";
 
 // The swap sheet is most of the bridge code and brings the animation library;
@@ -143,7 +154,13 @@ type WalletRow = WalletHolding & {
   decimals: number;
   change24h: number;
   spark: number[];
+  /** Add takes it (the gas coin and the pool's tokens); a stock or swap token can't be added as it is. */
+  addable: boolean;
 };
+
+const uiMultiplierAbi = [
+  { type: "function", name: "uiMultiplier", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
@@ -192,6 +209,26 @@ export function PortfolioView() {
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
   // $GLOAM and the swap tokens on Robinhood Chain mainnet, priced like Transparency does.
   const { marks: geckoMarks, pending: geckoPending } = useCoingeckoMarks(network.chainId === 4663);
+  // A mainnet stock token is worth the share price times its uiMultiplier / 1e18 per raw
+  // token (splits and dividends move it; balances never rebase), as the private swap marks it.
+  const multTokens = useMemo(
+    () => swapDisplayTokensFor(network.chainId).filter((t) => hasUiMultiplier(network.chainId, t)),
+    [network.chainId]
+  );
+  const { data: multData, isPending: multsPending } = useReadContracts({
+    contracts: multTokens.map(
+      (t) => ({ address: t.address, abi: uiMultiplierAbi, functionName: "uiMultiplier", chainId: network.chainId }) as const
+    ),
+    query: { enabled: onProduct && multTokens.length > 0, staleTime: 5 * 60_000 },
+  });
+  const multiplierOf = useCallback(
+    (t: OnchainToken): number | null => {
+      const i = multTokens.findIndex((x) => x.address.toLowerCase() === t.address.toLowerCase());
+      const r = i >= 0 ? multData?.[i] : undefined;
+      return r?.status === "success" ? Number(r.result as bigint) / 1e18 : null;
+    },
+    [multTokens, multData]
+  );
   /**
    * What one unit of a token is worth in dollars, or null when nothing here
    * prices it (EURC is a euro and never $1; a token with no feed): a dollar
@@ -203,10 +240,15 @@ export function PortfolioView() {
       if (isDollarStable(t)) return 1;
       if (t.id === "weth") return ethUsd;
       const m = markets.find((x) => x.id === t.id);
-      if (m?.mark) return m.mark;
+      if (m?.mark) {
+        if (!hasUiMultiplier(network.chainId, t)) return m.mark;
+        // Unpriced until the multiplier is read, never the share price alone.
+        const mult = multiplierOf(t);
+        return mult == null ? null : m.mark * mult;
+      }
       return geckoMarks.get(t.address.toLowerCase()) ?? null;
     },
-    [ethUsd, markets, geckoMarks]
+    [ethUsd, markets, geckoMarks, network.chainId, multiplierOf]
   );
   /**
    * The price unitUsd gives a token is still on its way: the markets feed's
@@ -216,11 +258,12 @@ export function PortfolioView() {
   const pricePending = useCallback(
     (t: OnchainToken): boolean => {
       if (isDollarStable(t)) return false;
+      if (hasUiMultiplier(network.chainId, t)) return marketsPending || (multsPending && multiplierOf(t) == null);
       if (t.id === "weth" || markets.some((x) => x.id === t.id)) return marketsPending;
       const a = t.address.toLowerCase();
       return geckoPending && COINGECKO_MARKED.some((c) => c.address.toLowerCase() === a);
     },
-    [markets, marketsPending, geckoPending]
+    [markets, marketsPending, geckoPending, network.chainId, multsPending, multiplierOf]
   );
   // Every token this network can hold, its own first (a swap leaves tokens the pool list doesn't name).
   const knownHere = useMemo(() => knownTokens(network.chainId), [network.chainId]);
@@ -248,6 +291,8 @@ export function PortfolioView() {
     window.setTimeout(() => setRefreshing(false), 600);
   };
   const shieldLive = isShieldDeployed();
+  // The stablecoin a swap in the wallet should end in, which Add then takes.
+  const swapTo = BRIDGE_DESTINATIONS[network.family]?.token.symbol ?? "a stablecoin";
 
   const { data: bal } = useAppBalance({
     address,
@@ -262,8 +307,11 @@ export function PortfolioView() {
     () => shieldTokensFor(network.chainId),
     [network.chainId]
   );
+  // The wallet card also reads what a private swap or a cash-out can leave there
+  // (stocks, WETH) that Add does not take: tokenSet stays what Add offers.
+  const walletTokenSet = useMemo(() => walletDisplayTokensFor(network.chainId), [network.chainId]);
 
-  const tokenAddresses = useMemo(() => tokenSet.map((t) => t.address), [tokenSet]);
+  const tokenAddresses = useMemo(() => walletTokenSet.map((t) => t.address), [walletTokenSet]);
   const tokenBals = useAppTokenBalances({
     tokens: tokenAddresses,
     address,
@@ -272,7 +320,7 @@ export function PortfolioView() {
   });
 
   const positions = useMemo(() => {
-    return tokenSet
+    return walletTokenSet
       .map((t, i) => {
         const raw = tokenBals[i] ?? BigInt(0);
         const m = markets.find((x) => x.id === t.id);
@@ -294,18 +342,19 @@ export function PortfolioView() {
           live: m?.source === "live",
         };
       })
-      .filter((p) => (settings.hideZeroBalances ? p.raw > BigInt(0) : true));
-  }, [tokenSet, tokenBals, markets, unitUsd, pricePending, settings.hideZeroBalances]);
+      // A token Add doesn't take is listed only while held: 20-odd zero rows of stocks help no one.
+      .filter((p) => p.raw > BigInt(0) || (!settings.hideZeroBalances && isAddableToken(network.chainId, p)));
+  }, [network.chainId, walletTokenSet, tokenBals, markets, unitUsd, pricePending, settings.hideZeroBalances]);
 
   // The public balance to point at the vault: a dollar stablecoin first.
   const addSuggestion = useMemo(
     () =>
       pickAddAsset(
         positions
-          .filter((p) => p.raw > BigInt(0))
+          .filter((p) => p.raw > BigInt(0) && isAddableToken(network.chainId, p))
           .map((p) => ({ id: p.id, symbol: p.symbol, address: p.address, raw: p.raw, amount: p.amount, dollar: isDollarStable(p) }))
       ),
-    [positions]
+    [positions, network.chainId]
   );
 
   const shieldRows = useMemo(() => {
@@ -400,6 +449,7 @@ export function PortfolioView() {
       pending: p.pending,
       change24h: p.change24h,
       spark: p.spark,
+      addable: isAddableToken(network.chainId, p),
     }));
     if (nativeWei > BigInt(0)) {
       const amount = Number(nativeWei) / 1e18;
@@ -418,10 +468,11 @@ export function PortfolioView() {
         pending: marketsPending,
         change24h: 0,
         spark: [],
+        addable: true,
       });
     }
     return rows;
-  }, [positions, nativeWei, nativeSymbol, nativeUsdRate, marketsPending]);
+  }, [network.chainId, positions, nativeWei, nativeSymbol, nativeUsdRate, marketsPending]);
   const walletSplit = useMemo(() => splitWalletRows(walletRows), [walletRows]);
   const foldEmpty = walletSplit.held.length > 0 && walletSplit.empty.length > 0;
   const walletShown = foldEmpty && !showEmptyRows ? walletSplit.held : [...walletSplit.held, ...walletSplit.empty];
@@ -865,11 +916,28 @@ export function PortfolioView() {
                             )
                           ) : (
                             <>
-                              {shieldLive && (
-                                <Link href={addAssetHref(r.id)} className="btn btn-ghost btn-sm h-10">
-                                  Add privately
-                                </Link>
-                              )}
+                              {shieldLive &&
+                                (r.addable ? (
+                                  <Link href={addAssetHref(r.id)} className="btn btn-ghost btn-sm h-10">
+                                    Add privately
+                                  </Link>
+                                ) : (
+                                  // Add only takes the pool's tokens, so a stock or swap token can't go in as it is.
+                                  // The in-app swap sells the gas coin only, so point at the wallet's own swap.
+                                  <div className="flex flex-col items-end gap-1 @max-xl:items-start">
+                                    <button
+                                      type="button"
+                                      aria-disabled="true"
+                                      aria-describedby={`swap-hint-${r.key}`}
+                                      className="btn btn-ghost btn-sm h-10 cursor-not-allowed opacity-50"
+                                    >
+                                      Swap to {swapTo}
+                                    </button>
+                                    <p id={`swap-hint-${r.key}`} className="text-[12px] leading-tight text-mute @xl:text-right">
+                                      Swap to {swapTo} in your wallet, then add
+                                    </p>
+                                  </div>
+                                ))}
                               {network.stocks && (
                                 <Link href={`/app/trade?market=${r.id}`} className="btn btn-quiet btn-sm h-10">
                                   Trade
