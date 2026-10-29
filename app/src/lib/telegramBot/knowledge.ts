@@ -22,6 +22,7 @@ import {
   mainnetPool,
 } from "@/lib/mainnet";
 import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
+import { voteFacts } from "@/lib/vote/glim";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
 const SWAPS_V2 = Boolean(VAULT_SWAP_V2_ROUTER[4663]);
@@ -560,6 +561,7 @@ export function knowledgeBlock(testingOpen: boolean, live: boolean = isMainnetLi
     ...(ethereum ? [ethereum] : []),
     ...(sepolia ? [sepolia] : []),
     TOKEN.trim(),
+    ...[voteFacts()].filter((v): v is string => v !== null),
     CRYPTO_TALK.trim(),
     APP_MAP.trim(),
     (testingOpen ? START_OPEN : START_CLOSED).trim(),

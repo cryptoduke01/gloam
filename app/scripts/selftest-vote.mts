@@ -443,6 +443,21 @@ await test("routes: the vote endpoint is rate limited per IP", async () => {
   assert.equal(last, 429);
 });
 
+// ---------------------------------------------------------------- Glim
+
+await test("Glim says nothing about votes until one is published, then gives the link and the rules", async () => {
+  const { voteFacts } = await import("../src/lib/vote/glim");
+  assert.equal(voteFacts([{ ...testVote, published: false }]), null);
+  const text = voteFacts([testVote], NOW)!;
+  assert.match(text, /gloam\.trade\/vote\/selftest-vote/);
+  assert.match(text, /open until 8 Jan 2030, 00:00 UTC/);
+  assert.match(text, /never tell anyone how to vote/);
+  assert.match(text, /can't be counted in an open vote/);
+  assert.doesNotMatch(text, /\u2014/, "no em dashes");
+  assert.match(voteFacts([testVote], END)!, /closed/);
+  if (!VOTES.some((v) => v.published)) assert.equal(voteFacts(), null, "nothing published, nothing said");
+});
+
 // ---------------------------------------------------------------- display
 
 await test("amounts and shares read plainly", () => {

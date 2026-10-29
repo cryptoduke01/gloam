@@ -8,10 +8,14 @@ import { MainnetCopy } from "@/components/MainnetCountdown";
 import { robinhood } from "@/lib/chain";
 import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 import { CopyAddress, TokenFilm } from "./TokenClient";
+import { VOTES } from "@/lib/vote/config";
 
 const GLOAM_TOKEN = "0xDcD885F5c60b3aD49F6D58718696417314e8724d";
 const ORYNTH_URL = "https://www.orynth.dev/projects/gloam";
 const EXPLORER_URL = `${robinhood.blockExplorers.default.url}/token/${GLOAM_TOKEN}`;
+
+/** A holder vote is published (lib/vote/config): the hero links to it. */
+const HOLDER_VOTE = VOTES.some((v) => v.published);
 
 /** The Robinhood Chain mainnet pool (the one that lists $GLOAM) is filled in. */
 const RH_MAINNET = mainnetPool(4663) !== null;
@@ -296,9 +300,15 @@ export default function TokenPage() {
                   <a href={ORYNTH_URL} target="_blank" rel="noopener noreferrer" className="btn btn-ink btn-lg">
                     Get $GLOAM on Orynth
                   </a>
-                  <Link href="#roadmap" className="gl-arrowlink">
-                    See the roadmap <span aria-hidden>→</span>
-                  </Link>
+                  {HOLDER_VOTE ? (
+                    <Link href="/vote" className="gl-arrowlink">
+                      Holder votes <span aria-hidden>→</span>
+                    </Link>
+                  ) : (
+                    <Link href="#roadmap" className="gl-arrowlink">
+                      See the roadmap <span aria-hidden>→</span>
+                    </Link>
+                  )}
                 </div>
               </div>
 
