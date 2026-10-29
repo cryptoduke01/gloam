@@ -231,11 +231,11 @@ export async function voterStanding(
  * vote each ballot's weight is the live one while it runs, and the final one
  * (at `final.closeBlock`) once the count is in.
  */
-export async function ballotsExport(v: VoteConfig, snapshot: VoteSnapshot | null, excluded: Map<string, Excluded>, opts: { finalize?: boolean } = {}) {
+export async function ballotsExport(v: VoteConfig, snapshot: VoteSnapshot | null, excluded: Map<string, Excluded>, opts: { finalize?: boolean; now?: number } = {}) {
   const close = weightingOf(v) === "close";
   const stored = snapshot || close ? await cachedBallots(v.id) : [];
   const final = close ? await finalFor(v, snapshot, excluded, opts) : null;
-  const ballots = final ? finalBallots(stored, final) : close ? await liveBallots(v, stored, excluded) : stored;
+  const ballots = final ? finalBallots(stored, final) : close ? await liveBallots(v, stored, excluded, opts.now) : stored;
   return {
     vote: { id: v.id, question: v.question, options: v.options, start: v.start, end: v.end, snapshotBlock: v.snapshotBlock, weighting: weightingOf(v) },
     chainId: VOTE_CHAIN_ID,
