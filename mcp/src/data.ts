@@ -50,14 +50,14 @@ export function findMarket(query: string): Market | undefined {
  */
 export const PRIVACY_STATUS = {
   network:
-    "Mainnet (beta) on Robinhood Chain and Tempo, launched 21 October 2026. The testnets stay up.",
+    "Mainnet (beta) on Robinhood Chain and Tempo since 21 October 2026, and on Base and Ethereum since 26 October 2026. The testnets stay up.",
   provingKeys:
     "Mainnet verifies the final keys of the 13-contributor trusted setup (drand round 6561386, release ceremony-final). The testnets use single-party dev keys. This server proves with the set of the network it pays on.",
   live: ["shield (deposit)", "private send and private payments (x402 and MPP)", "receiving and sweeping payments", "cash out (in the Gloam app and SDK)"],
   disabled: ["private trading (sealed swaps): off on every network while a new engine is built; the mainnet pools take payments only"],
   notLive: ["private trading", "an external audit (planned; the contracts and circuits were reviewed internally before launch, with no Critical or High findings open)"],
   mainnetLimits:
-    "Beta deposit limits: 500 per deposit and 25,000 in total for each stablecoin, 25,000 and 250,000 for GLOAM. Private payments and cash outs are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.",
+    "Beta deposit limits: 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for GLOAM. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026. Private payments and cash outs are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.",
   fees: "Deposits and private payments are free. Cashing out costs 0.25%.",
   operator:
     "No admin withdraw: notes leave the pool only with an unshield proof. The pool owner is one wallet at launch (a multisig is planned). The Gloam relay, run by the team, only submits already-proven transactions and pays gas; it cannot move or redirect money.",

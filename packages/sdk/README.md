@@ -1,13 +1,13 @@
 # @gloamtrade/sdk
 
-**Private stablecoin payments for apps and agents on Robinhood Chain and Tempo, as a package.**
+**Private stablecoin payments for apps and agents on Robinhood Chain, Tempo, Base and Ethereum, as a package.**
 
-Add shielded balances, private payments, and selective disclosure to any app or agent on Robinhood Chain or Tempo. Live on Robinhood Chain and Tempo mainnet (beta), on the trusted setup's final keys. Real zero-knowledge proofs, no proving stack to build from scratch.
+Add shielded balances, private payments, and selective disclosure to any app or agent on Robinhood Chain, Tempo, Base or Ethereum. Live on all four mainnets (beta), on the trusted setup's final keys. Real zero-knowledge proofs, no proving stack to build from scratch.
 
 [![npm version](https://img.shields.io/npm/v/@gloamtrade/sdk?color=0B0C0E&label=npm)](https://www.npmjs.com/package/@gloamtrade/sdk)
 [![license](https://img.shields.io/npm/l/@gloamtrade/sdk?color=0B0C0E)](https://github.com/cryptoduke01/gloam/blob/main/LICENSE)
 [![types](https://img.shields.io/npm/types/@gloamtrade/sdk?color=0B0C0E)](https://www.npmjs.com/package/@gloamtrade/sdk)
-[![Networks](https://img.shields.io/badge/mainnet-Robinhood%20Chain%204663%20%C2%B7%20Tempo%204217-2E7D53)](https://gloam.trade/docs/chain)
+[![Networks](https://img.shields.io/badge/mainnet-Robinhood%20Chain%204663%20%C2%B7%20Tempo%204217%20%C2%B7%20Base%208453%20%C2%B7%20Ethereum%201-2E7D53)](https://gloam.trade/docs/chain)
 
 ![The Gloam SDK](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-hero.jpg)
 
@@ -41,7 +41,7 @@ Add shielded balances, private payments, and selective disclosure to any app or 
 
 Public chains are public ledgers. Every balance and every payment is visible on-chain and copyable by anyone. For a business that means payroll and suppliers are exposed. For an agent it means the entire strategy leaks on the first payment.
 
-Gloam is the shielded layer on top of Robinhood Chain and Tempo, and `@gloamtrade/sdk` is that layer as a dependency. Deposit into a private balance, move value with the amount hidden, and prove a holding to one chosen party without revealing anything else. Every private action is backed by a real Groth16 proof verified on-chain. Nothing is a mock. If a path cannot be made private, it stays disabled rather than pretending.
+Gloam is the shielded layer on top of Robinhood Chain, Tempo, Base and Ethereum, and `@gloamtrade/sdk` is that layer as a dependency. Deposit into a private balance, move value with the amount hidden, and prove a holding to one chosen party without revealing anything else. Every private action is backed by a real Groth16 proof verified on-chain. Nothing is a mock. If a path cannot be made private, it stays disabled rather than pretending.
 
 The Gloam vault app is the reference implementation, not a special case. The same core that powers it is what you install here.
 
@@ -73,12 +73,14 @@ That scaffolds a Next.js app already wired to the SDK. See [create-gloam-app](ht
 
 ## Networks: mainnet and testnet
 
-Gloam runs on two chains, each with a mainnet and a testnet. They are separate pools of the same design, not a bridge.
+Gloam runs on four chains, each with a mainnet and a testnet. They are separate pools of the same design, not a bridge. Robinhood Chain and Tempo mainnet are live since 21 October 2026, Base and Ethereum mainnet since 26 October 2026 (from 0.4.1).
 
 | Network | Key | Chain id | Pool | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- | --- |
 | Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (500 / 25,000), $GLOAM (25,000 / 250,000) | Final |
 | Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (500 / 25,000 each) | Final |
+| Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
+| Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10) | Final |
 | Robinhood Chain testnet | `robinhood` | `46630` | `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` | Test ETH, test USDG, stock tokens | Dev |
 | Tempo testnet (Moderato) | `tempo` | `42431` | `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` | PathUSD and other test stablecoins | Dev |
 
@@ -96,27 +98,27 @@ Each `GloamNetwork` carries `chainId`, `pool`, `deployBlock`, a viem `chain`, `r
 What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
-- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on each mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
-- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 25,000 and 250,000 for $GLOAM. `buildShieldBoundIntent` refuses an unlisted asset or an amount over the per-deposit limit before it proves. Cash outs and private payments are never limited.
+- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
+- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026; this version checks the limits above. `buildShieldBoundIntent` refuses an unlisted asset or an amount over the per-deposit limit before it proves. Cash outs and private payments are never limited.
 - **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
 
-### Base: testnet live, mainnet next
+### Base
 
-Base is the third chain. Base Sepolia, the testnet, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys. Base mainnet is not deployed yet, so `mainnetNetwork("base")` returns `null` and the builders refuse chain id `8453` until an SDK release has its pool.
+Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1, `mainnetNetwork("base")` returns its vault (`0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`, deploy block `53109632`). Base Sepolia, the testnet, is in 0.3.0: `testnetNetwork("base")` returns its vault (`0x39e28cde55cab798874746ac52cb4b5cc99a0194`, deploy block `49802958`) and its payment-message board, and it runs the mainnet pool and final keys.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH. Base Sepolia has a payment-message board (`payMemoBoardFor(84532)`); Base mainnet gets one at its deploy, and until then a payee there gets the sealed code from the payer (`openIncomingPayment`). Private swaps and the bridge into Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
 
-### Ethereum: coming next
+### Ethereum
 
-Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defines it, but it has no pool in this version, so `mainnetNetwork("ethereum")` returns `null` and the builders refuse chain id `1`. It switches on once its pool is published in an SDK release. Its testnet is Ethereum Sepolia (below), `testnetNetwork("ethereum")`.
+Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `mainnetNetwork("ethereum")` returns its vault (`0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`, deploy block `26276183`) and its payment-message board (`payMemoBoardFor(1)`). Its testnet is Ethereum Sepolia (below), `testnetNetwork("ethereum")`.
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
@@ -126,8 +128,8 @@ Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defi
 - **EURC is a euro stablecoin.** Never count it as a dollar.
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
-- No payment-message board on Ethereum yet, no private swaps, and no bridge into Ethereum.
-### Ethereum Sepolia: next
+- No private swaps on Ethereum yet, and no bridge into Ethereum.
+### Ethereum Sepolia
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
@@ -135,7 +137,7 @@ Ethereum mainnet is the fourth chain, and it is not live yet. Version 0.4.0 defi
 
 - **RPC.** `ETHEREUM_SEPOLIA_CHAIN` reads through publicnode, which is at the chain head but keeps only about the last 10,000 blocks of logs, receipts and state. Older reads go to Tenderly's public gateway (`ETHEREUM_SEPOLIA_HISTORY_RPC`, the network's `historyRpc`), which keeps everything but can trail the head by a minute or two. `gloamReadTransport(network)` splits reads that way for you: build the public client you sync the tree and wait for receipts with on it.
 
-0.4.0 knows Ethereum Sepolia, a testnet on the mainnet pool and final keys like Base Sepolia. Its pool is not deployed yet, so `testnetNetwork("ethereum")` returns `null` and the builders refuse chain id `11155111` until a release has `ETHEREUM_SEPOLIA_POOL` filled in. Its proofs always use the final keys (`ceremonyForChainId(11155111)`).
+0.4.0 knows Ethereum Sepolia, a testnet on the mainnet pool and final keys like Base Sepolia, live since 25 October 2026: `testnetNetwork("ethereum")` returns its vault (`0x465EbfcdE1e384C7B1e8388E1aFEA95438c7A0ef`, deploy block `11992914`) and its payment-message board. Its proofs always use the final keys (`ceremonyForChainId(11155111)`).
 
 ## Quickstart: shield your first note
 
@@ -443,7 +445,7 @@ for (const p of payments) {
 }
 ```
 
-**Every network has a board,** Robinhood Chain and Tempo mainnet included (since October 2026), so `scanIncomingPayments` finds payments to your key on its own. A payer can also hand you the sealed code (`gloam2t.…`) their app shows after paying; check it with `openIncomingPayment`, which says whether it is ready, has not landed yet, or was already spent. The full runnable version is [`examples/receive-and-credit.ts`](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts).
+**Every network has a board,** every mainnet included (since October 2026), so `scanIncomingPayments` finds payments to your key on its own. A payer can also hand you the sealed code (`gloam2t.…`) their app shows after paying; check it with `openIncomingPayment`, which says whether it is ready, has not landed yet, or was already spent. The full runnable version is [`examples/receive-and-credit.ts`](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts).
 
 ## API reference
 
@@ -634,11 +636,11 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 ## Guardrails and honesty
 
-- **Mainnet is beta.** Robinhood Chain (`4663`) and Tempo (`4217`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
+- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
-- **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) is a testnet too, but on the final keys.
+- **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
-- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on both mainnets; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
+- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on Robinhood Chain and Tempo mainnet; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
 - **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.
 - **A received x402 payment is not yours until you sweep it.** The payer knows the payment note's secret. Use `settleGloamPayment` and serve only on `grantAccess`.
 

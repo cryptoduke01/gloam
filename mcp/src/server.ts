@@ -396,7 +396,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     },
     async () =>
       text({
-        what: "Gloam is private stablecoin payments for people and AI agents on Robinhood Chain and Tempo. Hold a private balance, pay and get paid without putting amounts or counterparties on the public chain, and prove one fact to one reader when needed.",
+        what: "Gloam is private stablecoin payments for people and AI agents on Robinhood Chain, Tempo, Base and Ethereum. Hold a private balance, pay and get paid without putting amounts or counterparties on the public chain, and prove one fact to one reader when needed.",
         whyAgentsCareMost:
           "Agents pay for tools and data all day. On a public chain every payment shows who it pays, how much and how often, which leaks the agent's whole strategy. Gloam keeps those payments private.",
         networks: allNetworks().map((n) => ({

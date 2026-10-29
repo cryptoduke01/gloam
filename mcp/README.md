@@ -1,8 +1,8 @@
 # @gloamtrade/mcp
 
-Private stablecoin payments for AI agents on Tempo and Robinhood Chain, powered by [`@gloamtrade/sdk`](../packages/sdk). The agent pays x402 and MPP resources, holds a shielded balance and gets paid, within spending limits it cannot lift: off-chain limits this server checks, and on Tempo an access key whose cap the protocol enforces.
+Private stablecoin payments for AI agents on Tempo, Robinhood Chain, Base and Ethereum, powered by [`@gloamtrade/sdk`](../packages/sdk). The agent pays x402 and MPP resources, holds a shielded balance and gets paid, within spending limits it cannot lift: off-chain limits this server checks, and on Tempo an access key whose cap the protocol enforces.
 
-Live on mainnet (beta) on Tempo (`4217`) and Robinhood Chain (`4663`). Robinhood gives agents an MCP server for **public** trading. Gloam gives them one for **private** payments, so who an agent pays, and how much, stays off the public chain.
+Live on mainnet (beta) on Tempo (`4217`) and Robinhood Chain (`4663`) since 21 October 2026, and on Base (`8453`) and Ethereum (`1`) since 26 October 2026 (from 0.6.1). Robinhood gives agents an MCP server for **public** trading. Gloam gives them one for **private** payments, so who an agent pays, and how much, stays off the public chain.
 
 ## Mainnet or testnet
 
@@ -12,24 +12,28 @@ Every tool that touches a chain takes a `network`:
 | --- | --- | --- | --- |
 | `tempo-mainnet` | Tempo mainnet | USDC.e, pathUSD, USDT0, OUSD | Final ceremony keys |
 | `robinhood-mainnet` | Robinhood Chain mainnet | USDG, GLOAM | Final ceremony keys |
+| `base-mainnet` | Base mainnet | USDC, EURC, USDT, ETH | Final ceremony keys |
+| `ethereum-mainnet` | Ethereum mainnet | USDC, USDT, USDG, PYUSD, EURC, ETH | Final ceremony keys |
 | `tempo` | Tempo testnet (Moderato) | PathUSD and other test stablecoins | Dev keys |
 | `robinhood` | Robinhood Chain testnet | Test ETH, test USDG | Dev keys |
+| `base` | Base Sepolia | Test USDC, EURC, ETH | Final ceremony keys |
+| `ethereum` | Ethereum Sepolia | Test USDC, USDG, PYUSD, EURC, ETH | Final ceremony keys |
 
-`GLOAM_NETWORK` sets the network a tool uses when the agent names none. Unset, it is `robinhood` (testnet), as in earlier versions, so an existing setup never moves to mainnet by itself. For mainnet, set `GLOAM_NETWORK=tempo-mainnet` (or `robinhood-mainnet`) and give the agent mainnet limits (see [Mainnet assets in limits](#mainnet-assets-in-limits)). A price an agent pays names its own network, and the server pays there only if that network is one it has a pool for.
+`GLOAM_NETWORK` sets the network a tool uses when the agent names none. Unset, it is `robinhood` (testnet), as in earlier versions, so an existing setup never moves to mainnet by itself. For mainnet, set `GLOAM_NETWORK=tempo-mainnet` (or `robinhood-mainnet`, `base-mainnet` or `ethereum-mainnet`) and give the agent mainnet limits (see [Mainnet assets in limits](#mainnet-assets-in-limits)). A price an agent pays names its own network, and the server pays there only if that network is one it has a pool for.
 
 On mainnet:
 
-- **Payments only, beta limits.** On the mainnet pools this server makes deposits, private payments and sweeps. It does not swap: private swaps are in the Gloam app (Vault > Swap) on both mainnets. A deposit is at most 500 of a stablecoin (25,000 GLOAM) during the beta, checked before anything is proved; private payments are never limited.
+- **Payments only, beta limits.** On the mainnet pools this server makes deposits, private payments and sweeps. It does not swap: private swaps are in the Gloam app (Vault > Swap) on Robinhood Chain and Tempo mainnet. A deposit is at most 500 of a stablecoin (0.2 ETH on Base and Ethereum, 25,000 GLOAM) during the beta, with a 100x raise queued behind the public 3-day timelock for around 1 November 2026, checked before anything is proved; private payments are never limited.
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25% (this server does not cash out; use the Gloam app or the SDK).
 - **Final keys.** Proofs for mainnet use the final keys of the 13-contributor trusted setup, downloaded from `https://www.gloam.trade/circuits/final` and checked against the SHA-256 the SDK pins. Testnet proofs use the dev keys. The two are cached apart.
 - **Beta software.** The contracts and circuits were reviewed internally before launch with no Critical or High findings open, and an independent review on 23 October found no new exploitable contract flaw (its app fixes are being merged). An external audit is planned, not done. The mainnet pools are new, so the crowd of notes to hide among is small at first. Start with small amounts.
 - **Pools come with the version.** A mainnet appears here once the SDK this package ships with has its pool. If `GLOAM_NETWORK` names a mainnet this version lacks, the server stops at startup and says so.
-- **Your own RPC.** `GLOAM_RPC_URL_4217` and `GLOAM_RPC_URL_4663` point Tempo and Robinhood Chain mainnet at another RPC (any chain id works the same way).
+- **Your own RPC.** `GLOAM_RPC_URL_4217`, `GLOAM_RPC_URL_4663`, `GLOAM_RPC_URL_8453` and `GLOAM_RPC_URL_1` point Tempo, Robinhood Chain, Base and Ethereum mainnet at another RPC (any chain id works the same way).
 
-**Base: testnet live, mainnet next.** `GLOAM_NETWORK=base` runs on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys, with the same beta limits as Base mainnet (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board. This version also knows `base-mainnet` (Base, `8453`: USDC, EURC, USDT and ETH), but the SDK it ships with has no pool for it yet, so it is not offered and `GLOAM_NETWORK=base-mainnet` stops the server at startup until a release has that pool.
+**Base.** `GLOAM_NETWORK=base-mainnet` runs on Base mainnet (`8453`: USDC, EURC, USDT and ETH), live since 26 October 2026, and `GLOAM_NETWORK=base` on Base Sepolia (`84532`): test USDC, EURC and ETH on the mainnet pool and final keys. Both have the same beta limits (500 per stablecoin, 0.2 ETH per deposit) and a payment-message board.
 
-**Ethereum is next too, not live yet.** This version knows `ethereum-mainnet` (Ethereum, `1`: USDC, USDT, USDG, PYUSD, EURC and ETH, 500 per stablecoin and 0.2 ETH per deposit), but the SDK it ships with has no pool for it, so it is not offered and `GLOAM_NETWORK=ethereum-mainnet` stops the server at startup. Its testnet is Ethereum Sepolia (`ethereum`), below. Gas costs more there: the Gloam relay waits while Ethereum gas is above its ceiling (3 gwei by default) and answers `gas_high`. A USDT shield clears an old USDT approval first, since Tether's token refuses to change one non-zero approval into another. `GLOAM_RPC_URL_1` points it at your own RPC.
-**Ethereum Sepolia: next.** This version knows `ethereum` (Ethereum Sepolia, `11155111`: test USDC, USDG, PYUSD, EURC and ETH on the mainnet pool and final keys). It is offered once the SDK it ships with has its pool; until then `GLOAM_NETWORK=ethereum` stops the server at startup. `GLOAM_RPC_URL_11155111` points it at your own RPC.
+**Ethereum.** `GLOAM_NETWORK=ethereum-mainnet` runs on Ethereum mainnet (`1`: USDC, USDT, USDG, PYUSD, EURC and ETH, 500 per stablecoin and 0.2 ETH per deposit), live since 26 October 2026. Its testnet is Ethereum Sepolia (`ethereum`), below. Gas costs more there: the Gloam relay waits while Ethereum gas is above its ceiling (3 gwei by default) and answers `gas_high`. A USDT shield clears an old USDT approval first, since Tether's token refuses to change one non-zero approval into another. `GLOAM_RPC_URL_1` points it at your own RPC.
+**Ethereum Sepolia.** `GLOAM_NETWORK=ethereum` runs on Ethereum Sepolia (`11155111`: test USDC, USDG, PYUSD, EURC and ETH on the mainnet pool and final keys). `GLOAM_RPC_URL_11155111` points it at your own RPC.
 
 ## Install
 
@@ -65,7 +69,7 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 
 | Setting | Meaning |
 | --- | --- |
-| `GLOAM_NETWORK` | Default network for tools: `tempo-mainnet`, `robinhood-mainnet` (mainnet), `tempo` or `robinhood` (testnet). Default `robinhood`. A mainnet here also puts the Tempo access key on Tempo mainnet |
+| `GLOAM_NETWORK` | Default network for tools: `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet`, `ethereum-mainnet` (mainnet), `tempo`, `robinhood`, `base` or `ethereum` (testnet). Default `robinhood`. A mainnet here also puts the Tempo access key on Tempo mainnet |
 | `GLOAM_AGENT_PRIVATE_KEY` | The agent's key. Without it the execute tools return plans |
 | `GLOAM_TEMPO_ACCOUNT` | The owner's Tempo account. With it, the key is a Tempo access key acting for that account |
 | `GLOAM_TEMPO_FEE_TOKEN` | Token to pay Tempo fees in, in access-key mode. Default: the protocol's choice |
@@ -204,10 +208,10 @@ Assets are named by symbol or by `0x` token address (with `decimals` for a token
 | `robinhood-mainnet` | `USDG`, `GLOAM` |
 | `tempo` (testnet) | `PathUSD`, `OUSD`, `AlphaUSD`, `BetaUSD`, `ThetaUSD` |
 | `robinhood` (testnet) | `ETH`, `USDG` |
-| `base-mainnet`, once live | `USDC`, `EURC`, `USDT`, `ETH` |
-| `base` (Base Sepolia), once live | `USDC`, `EURC`, `ETH` |
-| `ethereum-mainnet`, once live | `USDC`, `USDT`, `USDG`, `PYUSD`, `EURC`, `ETH` |
-| `ethereum` (Ethereum Sepolia), once live | `USDC`, `USDG`, `PYUSD`, `EURC`, `ETH` |
+| `base-mainnet` | `USDC`, `EURC`, `USDT`, `ETH` |
+| `base` (Base Sepolia) | `USDC`, `EURC`, `ETH` |
+| `ethereum-mainnet` | `USDC`, `USDT`, `USDG`, `PYUSD`, `EURC`, `ETH` |
+| `ethereum` (Ethereum Sepolia) | `USDC`, `USDG`, `PYUSD`, `EURC`, `ETH` |
 
 ### Mainnet assets in limits
 
@@ -395,7 +399,7 @@ Then the agent can shield into a private balance, pay for x402 and MPP resources
 
 ## Status
 
-- **Mainnet (beta):** Tempo and Robinhood Chain, payments only, beta deposit limits, the trusted setup's final keys. Reviewed internally before launch and independently on 23 October; an external audit is planned, not done.
-- **Testnet:** Tempo Moderato and Robinhood Chain testnet, dev keys.
+- **Mainnet (beta):** Tempo, Robinhood Chain, Base and Ethereum, payments only, beta deposit limits, the trusted setup's final keys. Reviewed internally before launch and independently on 23 October; an external audit is planned, not done.
+- **Testnet:** Tempo Moderato and Robinhood Chain testnet on dev keys; Base Sepolia and Ethereum Sepolia on the final keys.
 - **Circuit files** are fetched from `https://www.gloam.trade/circuits` (final keys under `/final`) on first use, checked against pinned SHA-256 and cached locally (`GLOAM_ARTIFACTS_DIR`).
-- **Swaps.** Private swaps are live in the Gloam app on both mainnets, with who swapped kept private and the amounts public ([docs](https://gloam.trade/docs/private-swaps)). This server does not swap: its market and trade tools only plan, for the retired sealed trade. See the [agent docs](https://gloam.trade/docs/agents).
+- **Swaps.** Private swaps are live in the Gloam app on Robinhood Chain and Tempo mainnet, with who swapped kept private and the amounts public ([docs](https://gloam.trade/docs/private-swaps)). This server does not swap: its market and trade tools only plan, for the retired sealed trade. See the [agent docs](https://gloam.trade/docs/agents).
