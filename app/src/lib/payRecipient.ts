@@ -5,11 +5,11 @@
  * or an ENS name has no receive key, so it is not paid with a note: Pay hands
  * it to Cash out, which already sends from the private balance to any address.
  * This file only classifies the text; it moves no money and reads no chain.
- * Resolving a name is `resolveEnsName`, the one network call, kept separate so
- * the classifier stays pure.
+ * Resolving a name is `resolveEnsForChain`, the one network call, kept separate
+ * so the classifier stays pure.
  */
-import { isAddress, type Address } from "viem";
-import { normalize } from "viem/ens";
+import { getAddress, isAddress, type Address } from "viem";
+import { normalize, toCoinType } from "viem/ens";
 import { RECEIVE_TAG_PREFIX } from "./receiveTag";
 
 export type PayRecipient =
@@ -79,24 +79,83 @@ export function cashOutHandoff(to: Address, typedAmount: string): CashOutHandoff
   return { dest: "other", to, amount: typedAmount.trim() };
 }
 
-/** A name's 0x address on Ethereum mainnet, or null (no such name, or the lookup failed). */
-export type EnsReader = (name: string) => Promise<Address | null>;
+/**
+ * Reads one address record of a name: `coinType` undefined is addr(bytes32),
+ * the Ethereum mainnet record (coinType 60); otherwise addr(bytes32, coinType)
+ * (ENSIP-9/11). Null when the name sets no such record.
+ */
+export type EnsChainReader = (name: string, coinType: bigint | undefined) => Promise<Address | null>;
+
+/** The default record for every EVM chain (ENSIP-19): coinType 0x80000000. */
+export const ENS_DEFAULT_EVM_COIN_TYPE = 0x80000000n;
+
+export type EnsChainLookup =
+  /**
+   * `source` says which record it came from: "chain" the one the name sets for
+   * this network (on Ethereum mainnet, its usual record), "evm" the default for
+   * every EVM chain, "mainnet" its Ethereum record, used only because it is a
+   * plain wallet (the same key controls it on every EVM chain).
+   */
+  | { status: "found"; address: Address; source: "chain" | "evm" | "mainnet" }
+  /**
+   * The name only sets an Ethereum address, and that address is a smart account
+   * (or it could not be checked). The same address on another chain may not
+   * exist or may belong to someone else, so it is not paid.
+   */
+  | { status: "unsafe"; address: Address }
+  | { status: "none" };
+
+/** EIP-7702 delegated wallets carry this code but are still controlled by their own key. */
+const DELEGATION_PREFIX = "0xef0100";
+
+/** True when `code` (eth_getCode) is a contract, not a plain or EIP-7702 delegated wallet. */
+export function isContractCode(code: string | undefined | null): boolean {
+  if (!code || code === "0x") return false;
+  return !(code.toLowerCase().startsWith(DELEGATION_PREFIX) && code.length === 2 + 23 * 2);
+}
 
 /**
- * Look a name up and hand back its address, never throwing: a failed lookup is
- * the same as no address. `stale()` is asked after the wait so a slow answer
- * for text the user has since changed is dropped.
+ * The address to pay a name at on the network with `chainId`, never throwing
+ * (GHSA-wxv6-6fjw-c2m9). Asks, in order: the name's record for that network
+ * (ENSIP-11), its default EVM record (ENSIP-19), and only then its Ethereum
+ * mainnet record, which is used off Ethereum only when `isContract` says that
+ * address is a plain wallet on Ethereum. `stale()` is asked after the wait so a
+ * slow answer for text the user has since changed is dropped.
  */
-export async function resolveEnsName(
+export async function resolveEnsForChain(
   name: string,
-  read: EnsReader,
+  chainId: number,
+  deps: { read: EnsChainReader; isContract: (address: Address) => Promise<boolean> },
   stale: () => boolean = () => false
-): Promise<Address | null> {
+): Promise<EnsChainLookup> {
+  const none = { status: "none" } as const;
+  const record = async (coinType: bigint | undefined): Promise<Address | null> => {
+    const found = await deps.read(name, coinType);
+    return found && isAddress(found, { strict: false }) ? getAddress(found) : null;
+  };
   try {
-    const found = await read(name);
-    if (stale()) return null;
-    return found && isAddress(found) ? found : null;
+    if (chainId === 1) {
+      const main = await record(undefined);
+      if (stale() || !main) return none;
+      return { status: "found", address: main, source: "chain" };
+    }
+    const own = await record(toCoinType(chainId));
+    if (stale()) return none;
+    if (own) return { status: "found", address: own, source: "chain" };
+    const evm = await record(ENS_DEFAULT_EVM_COIN_TYPE);
+    if (stale()) return none;
+    if (evm) return { status: "found", address: evm, source: "evm" };
+    const main = await record(undefined);
+    if (stale() || !main) return none;
+    let contract: boolean;
+    try {
+      contract = await deps.isContract(main);
+    } catch {
+      contract = true;
+    }
+    if (stale()) return none;
+    return contract ? { status: "unsafe", address: main } : { status: "found", address: main, source: "mainnet" };
   } catch {
-    return null;
+    return none;
   }
 }

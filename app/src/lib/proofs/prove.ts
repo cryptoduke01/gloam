@@ -28,7 +28,7 @@ import { getActiveNetwork } from "@/lib/networks";
 import type { LocalNote } from "@/lib/shield";
 import type { SyncedTree } from "@/lib/treeSync";
 import { provingArtifacts, type ProofCircuit } from "./artifacts";
-import { findNoteTx, isSpent, networkForChain } from "./chain";
+import { findNoteTx, isSpent, networkForChain, type NoteOrigin } from "./chain";
 import { MAX_LABEL, plainLabel } from "./label";
 import {
   FUNDS_MAX_NOTES,
@@ -230,6 +230,20 @@ const NOT_A_PAYMENT: Record<"change" | "deposit" | "trade", string> = {
 };
 
 /**
+ * Why an Exact balance proof of a note from `origin` would show more than the
+ * balance, or null. The proof carries the note's commitment, and a deposit's
+ * Shielded(commitment, asset, amount, leafIndex, from) log names the wallet the
+ * money came from next to it (GHSA-x8fx-frxx-7f66). A note made by a private
+ * send or a trade has no wallet in its own log.
+ */
+export function balanceProofProblem(origin: NoteOrigin | null): string | null {
+  if (origin === "deposit") {
+    return "This balance came straight from a deposit, and the deposit's record names the wallet it came from. Anyone with this proof could find that wallet. Send it to your own Gloam address first, then prove the new balance.";
+  }
+  return null;
+}
+
+/**
  * Exact balance: one note, its exact amount shown, sealed for one verifier and
  * an expiry. The receipt circuit with the amount revealed, under the "balance"
  * kind, made on this device and never put on chain (the older gloamdisc1 reused
@@ -253,8 +267,17 @@ export async function proveBalance(args: ProveBalanceArgs): Promise<BalanceProof
     return { ...base, commitment: fieldToHex(commitment), proof, publicSignals };
   }
 
-  const { tree } = await vaultTree(chainId, pool);
-  const { path } = await leafOf(tree, note);
+  const { client, tree } = await vaultTree(chainId, pool);
+  const { index, path } = await leafOf(tree, note);
+  // What the proof's commitment leads to on chain: a deposit names the wallet, so it is refused.
+  const leaf = tree.leaves[index];
+  const txHash = (leaf?.leafIndex === index ? leaf.txHash : undefined) ?? note.txHash ?? null;
+  const net = networkForChain(chainId);
+  if (!net) throw new Error("This network is not supported for proofs.");
+  const tx = await findNoteTx(client, net, pool, note.commitment, txHash).catch(() => null);
+  if (!tx) throw new Error("Could not check where this balance came from. Try again.");
+  const problem = balanceProofProblem(tx.state === "found" ? tx.origin : null);
+  if (problem) throw new Error(problem);
   const w = await buildReceiptWitness({
     secretHex: note.secret,
     amount,

@@ -30,6 +30,7 @@ import { makeBoundNotePoseidon, type BoundNote } from "./note.js";
 import type { GloamIntent, IntentExec, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
 import { fieldToBytes32 } from "./proof.js";
+import { assertDepositWithinLiveLimit, type DepositLimitReader } from "./limits.js";
 import type { Prover } from "./prove.js";
 import { toField } from "./poseidon.js";
 import {
@@ -108,6 +109,12 @@ export interface ShieldBoundIntentParams extends ShieldIntentParams {
    * a proof at deposit.
    */
   prover: Prover;
+  /**
+   * Reads the vault's live beta limits (a viem PublicClient on this chain), so a
+   * deposit over them is refused before any proof is made. Left out, or when
+   * the read fails, the amount is not checked here and the vault enforces it.
+   */
+  client?: DepositLimitReader;
 }
 
 /**
@@ -116,8 +123,8 @@ export interface ShieldBoundIntentParams extends ShieldIntentParams {
  * (amount, asset), then resolves shieldBound(asset, amount, commitment, proof).
  * Use this on every live Gloam pool, mainnet and testnet: plain shield()
  * reverts there (ShieldProofRequired). On mainnet, the asset must be one the
- * pool lists and the amount within its beta per-deposit limit; both are checked
- * here before any proof is made.
+ * pool lists and the amount within its beta limits; with a `client`, both are
+ * read live from the vault before any proof is made.
  */
 export async function buildShieldBoundIntent(
   params: ShieldBoundIntentParams
@@ -127,7 +134,11 @@ export async function buildShieldBoundIntent(
   const asset = params.asset ?? NATIVE_ASSET;
   const isNative = isNativeAsset(asset);
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
-  assertDepositAllowed(chainId, asset, params.amountWei);
+  // The vault's own answer when it can be read: it also covers an asset added after this release.
+  const live = params.client
+    ? await assertDepositWithinLiveLimit(params.client, chainId, asset, params.amountWei, poolAddress)
+    : null;
+  if (!live || !live.on) assertDepositAllowed(chainId, asset, params.amountWei);
   const note = await makeBoundNotePoseidon(params.amountWei, asset);
   const { proofBytes } = await params.prover({
     commitment: note.commitmentField.toString(),

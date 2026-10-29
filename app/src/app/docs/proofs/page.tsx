@@ -44,7 +44,10 @@ export default function DocsProofsPage() {
         is in one account. It covers one balance, never your total. Like the
         other proofs it carries a label and an expiry, is made on your device and
         never goes on chain. It shows the balance existed, not that it is still
-        unspent; ask for a proof of funds for that.
+        unspent; ask for a proof of funds for that. It points at the
+        balance&apos;s record in the vault, so a balance that came straight from a
+        deposit, whose record names your wallet, has to be sent to your own Gloam
+        address before it can be proven this way.
       </p>
 
       <h3>At least (proof of funds)</h3>
@@ -93,8 +96,8 @@ export default function DocsProofsPage() {
         <tbody>
           <tr>
             <td>Exact balance</td>
-            <td>The asset and that one amount</td>
-            <td>Your wallet, other balances, history</td>
+            <td>The asset, that one amount, and the transaction that made it</td>
+            <td>Other balances, history</td>
           </tr>
           <tr>
             <td>At least</td>
@@ -175,8 +178,13 @@ export default function DocsProofsPage() {
           <strong>At least publishes spend markers.</strong> A proof of funds
           carries a marker for each balance behind it, so the verifier can tell
           none were spent. The flip side: if you later spend one of those
-          balances, whoever holds the proof can see that it was spent. Not where
-          it went or how much.
+          balances, whoever holds the proof can see that it was spent, and when.
+          Before a cash out or swap the app moves those balances to a fresh one
+          first, so the proof does not lead to where the money went or how
+          much. The move and the cash out land close together, so their
+          timing can still hint at a link. Proofs made with an older version of
+          the app left no mark on their balances: to be safe, send those
+          balances to your own Gloam address before you cash them out.
         </li>
         <li>
           <strong>At least means &quot;can open at least this much&quot;.</strong>{" "}

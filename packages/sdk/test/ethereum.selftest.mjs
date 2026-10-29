@@ -143,8 +143,9 @@ if (FILLED) {
   assertDepositAllowed(1, USDT, 500_000_000n);
   assertDepositAllowed(1, PYUSD, 1n);
   assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n);
-  throws(() => assertDepositAllowed(1, USDG, 500_000_001n), /at most 500 USDG per deposit/, "USDG over 500 refused");
-  throws(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n), /at most 0\.2 ETH per deposit/, "ETH over 0.2 refused");
+  // amounts are read live from the vault now (limits.selftest), not from the launch values
+  assertDepositAllowed(1, USDG, 500_000_001n);
+  assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n);
   throws(() => assertDepositAllowed(1, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 1n), /does not list/, "Base's USDC is not listed on Ethereum");
 
   // builders

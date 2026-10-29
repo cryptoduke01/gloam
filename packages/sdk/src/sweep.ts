@@ -154,7 +154,7 @@ export type SweepStatus = "swept" | "already_spent" | "not_settled" | "bad_note"
 
 export interface SweepResult {
   ok: boolean;
-  /** True only when the money now sits in a note only the payee knows, confirmed on chain. */
+  /** True only when the money now sits in a note only the payee knows: the fresh note is in the pool. */
   final: boolean;
   status: SweepStatus;
   reason: string | null;
@@ -189,7 +189,8 @@ const ALREADY_SPENT =
 
 /**
  * Move a received note into a fresh note only you know. Returns final: true
- * only after the sweep confirms. Refuses (already_spent) when the note was spent
+ * only after the sweep confirms and the fresh note is in the pool (a successful
+ * receipt alone is not enough: see GHSA-p2wm-6x89-63c2). Refuses (already_spent) when the note was spent
  * before the sweep could land, and reports not_settled when the payment is not
  * in the pool yet.
  */
@@ -249,11 +250,22 @@ export async function sweepReceivedNote(params: SweepParams): Promise<SweepResul
   // The relay could not say whether it sent the sweep (a timeout after the node took it, a lost reply):
   // it may still land, so the fresh note is kept rather than reported as nothing moved.
   let maybeSent = false;
+  // The transaction succeeded but the fresh note was not (yet) seen in the pool.
+  let outerOnly = false;
   try {
     hash = await params.submit(intent);
     const receipt = await chain.waitForReceipt(hash);
-    if (receipt.status === "success") return result("swept", null, { hash, freshNote: fresh });
-    reverted = true;
+    if (receipt.status === "success") {
+      // A receipt's status is the outer transaction's. Sent through a smart account, a bundler,
+      // a batch or a forwarder, it can succeed while the pool transfer inside it reverted (say,
+      // on a note the payer spent back first). Only the fresh note in the pool proves the sweep.
+      if ((await chain.isCommitmentSeen(fresh.commitment).catch(() => null)) === true) {
+        return result("swept", null, { hash, freshNote: fresh });
+      }
+      outerOnly = true;
+    } else {
+      reverted = true;
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     if (!hash) {
@@ -278,6 +290,13 @@ export async function sweepReceivedNote(params: SweepParams): Promise<SweepResul
   if (landed === false && spent === true && didNothing) return result("already_spent", ALREADY_SPENT, { hash });
   if (landed === false && spent === false && didNothing) {
     return result("failed", `The sweep did not go through and nothing moved${error ? `: ${error}` : "."} It can be retried.`, { hash });
+  }
+  if (outerOnly) {
+    return result(
+      "unconfirmed",
+      `The transaction ${hash} succeeded, but the fresh note is not in the pool. If it went through a smart account, bundler or forwarder, the transfer inside it may have reverted. Keep the fresh note and do not grant access until it is in the pool.`,
+      { hash, freshNote: fresh }
+    );
   }
   return result(
     "unconfirmed",

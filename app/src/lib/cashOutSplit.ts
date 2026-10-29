@@ -143,6 +143,21 @@ async function seen(client: PublicClient, chainId: number, pool: Address, commit
   })) as boolean;
 }
 
+/**
+ * How a cash out or swap of `amount` spends `note`. "direct": the note as it
+ * is. "split": the amount is set aside in a fresh note first (a private
+ * transfer that spends this note). "move": the whole note goes to a fresh note
+ * first, because it backed a proof of funds: that proof carries this note's
+ * spend nullifier, and a cash out or swap of it would show next to that
+ * nullifier where the money went and how much (GHSA-x8fx-frxx-7f66). The
+ * fresh note's nullifier is in no proof. The move and the cash out still land
+ * close together, so their timing can hint at a link.
+ */
+export function spendPlanFor(note: Pick<LocalNote, "amountWei" | "fundsProofAt">, amount: bigint): "direct" | "split" | "move" {
+  if (amount < BigInt(note.amountWei)) return "split";
+  return note.fundsProofAt ? "move" : "direct";
+}
+
 export type SplitArgs = {
   note: LocalNote;
   amount: bigint;
@@ -154,6 +169,8 @@ export type SplitArgs = {
   /** A private cash out's piece tags (lib/cashOutPrivately), saved with the two new notes before anything is sent. */
   partTag?: CashOutPlanTag;
   changeTag?: CashOutPlanTag;
+  /** Move the whole note to a fresh one (spendPlanFor "move"): `amount` may then be all of it. */
+  allowWhole?: boolean;
 };
 
 /**
@@ -174,14 +191,21 @@ export async function splitForCashOut(args: SplitArgs): Promise<LocalNote> {
 export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; change: LocalNote | null }> {
   const { note, amount, owner } = args;
   const total = BigInt(note.amountWei);
-  if (amount <= BigInt(0) || amount >= total) throw new Error("Pick an amount below this balance.");
+  if (amount <= BigInt(0) || amount > total || (amount === total && !args.allowWhole)) {
+    throw new Error("Pick an amount below this balance.");
+  }
+  const whole = amount === total;
   // the path came from the active network's tree: only that network's notes split, and every
   // read after the send (receipt, landing, new paths) stays on it if the page switches meanwhile
   const net = getActiveNetwork();
   assertNoteOnNetwork(note, net);
   const client = publicClientFor(net);
 
-  args.onStatus("Setting the amount aside privately, this takes 10 to 30 seconds…");
+  args.onStatus(
+    whole
+      ? "Moving it to a fresh private balance first, this takes 10 to 30 seconds…"
+      : "Setting the amount aside privately, this takes 10 to 30 seconds…"
+  );
   const w = await buildTransferWitness({
     secretHex: note.secret,
     amountIn: total,
@@ -216,7 +240,7 @@ export async function splitNote(args: SplitArgs): Promise<{ part: LocalNote; cha
   let hash: Hex;
   try {
     if (args.relayOn) {
-      args.onStatus("Setting the amount aside through the Gloam relay…");
+      args.onStatus(whole ? "Moving it through the Gloam relay…" : "Setting the amount aside through the Gloam relay…");
       hash = await relayTransfer({ chainId: note.chainId, ...t });
     } else {
       args.onStatus("Confirm the first step in your wallet…");

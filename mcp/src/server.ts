@@ -69,6 +69,7 @@ import {
   relayIntent,
   GloamRelayError,
   assertDepositAllowed,
+  assertDepositWithinLiveLimit,
   type GloamIntent,
   type GloamPaymentPayload,
   type GloamPaymentRequirements,
@@ -588,8 +589,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const amountWei = parseUnits(String(amount), dec);
       const isNative = assetAddr.toLowerCase() === NATIVE_ASSET.toLowerCase();
       // Mainnet pools list their assets and cap each deposit during the beta: say so before anything is reserved or signed.
+      // The caps are read live from the vault (they change through its timelock); a vault that can't be read refuses nothing here.
       try {
         assertDepositAllowed(net.chainId, assetAddr, amountWei);
+        await assertDepositWithinLiveLimit(deps.publicClient(net), net.chainId, assetAddr, amountWei, net.pool);
       } catch (e) {
         return text({ status: "error", network: net.key, error: errMsg(e) });
       }

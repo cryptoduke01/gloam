@@ -191,6 +191,48 @@ const stranger = await generateReceiveKey();
   assert(r.sweep.hash !== null, "the reverted sweep's hash is reported");
 }
 
+// ── 3b. a smart-account bundle succeeds while the sweep inside it reverts (GHSA-p2wm-6x89-63c2) ──
+{
+  const { pool, req, built } = await paidPool(payee);
+  let bundles = 0;
+  const viaBundle = async (intent) => {
+    // the payer spends the note back first, so the inner pool.transfer reverts...
+    const back = await buildPrivateSendIntent({
+      secretHex: built.paymentNote.secret, amountInWei: 400n, amountPayWei: 400n, asset: STABLE,
+      path: await pool.chain.pathForCommitment(built.paymentNote.commitment), prove: stubProve, poolAddress: SEALED_VAULT, chainId: NETWORK,
+    });
+    await pool.transfer(back.exec.args);
+    const inner = await pool.transfer(transferCallArgs(intent));
+    assert((await pool.chain.waitForReceipt(inner)).status === "reverted", "the inner sweep transfer reverts");
+    // ...while the bundle (the outer transaction) succeeds
+    const outer = `0x${"b".repeat(60)}${(++bundles).toString(16).padStart(4, "0")}`;
+    return outer;
+  };
+  const chain = { ...pool.chain, waitForReceipt: async (h) => (h.startsWith("0xbbbb") ? { status: "success" } : pool.chain.waitForReceipt(h)) };
+  const r = await settleGloamPayment({ requirements: req, payload: built.payload, receiveKey: payee, prove: stubProve, chain, submit: viaBundle });
+  assert(r.grantAccess === false && r.final === false, `a successful outer transaction whose sweep did not land grants nothing (${r.status})`);
+  assert(r.status !== "swept", "and is never reported swept");
+
+  // A bundle whose sweep did land is swept as before.
+  const ok = await paidPool(payee);
+  const landing = async (intent) => {
+    await ok.pool.transfer(transferCallArgs(intent));
+    return `0x${"b".repeat(60)}${(++bundles).toString(16).padStart(4, "0")}`;
+  };
+  const okChain = { ...ok.pool.chain, waitForReceipt: async () => ({ status: "success" }) };
+  const r2 = await settleGloamPayment({ requirements: ok.req, payload: ok.built.payload, receiveKey: payee, prove: stubProve, chain: okChain, submit: landing });
+  assert(r2.grantAccess === true && r2.status === "swept", "a bundle whose sweep landed settles");
+
+  // A reader that can't say whether the fresh note is in the pool is not taken as a landed sweep.
+  const blind = await paidPool(payee);
+  const blindChain = {
+    ...blind.pool.chain,
+    isCommitmentSeen: async () => { throw new Error("rpc down"); },
+  };
+  const r3 = await settleGloamPayment({ requirements: blind.req, payload: blind.built.payload, receiveKey: payee, prove: stubProve, chain: blindChain, submit: submitTo(blind.pool) });
+  assert(r3.grantAccess === false && r3.status === "unconfirmed" && r3.freshNote, "an unreadable fresh note is unconfirmed, and the fresh note is kept");
+}
+
 // ── 4. payment never landed ───────────────────────────────────────────────────
 {
   const { pool, req, built } = await paidPool(payee, { broadcast: false });

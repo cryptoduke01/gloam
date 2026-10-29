@@ -13,7 +13,9 @@ import {
   classifyPayRecipient,
   ensCandidate,
   isWalletRecipient,
-  resolveEnsName,
+  isContractCode,
+  resolveEnsForChain,
+  type EnsChainReader,
 } from "../src/lib/payRecipient";
 
 let passed = 0;
@@ -100,33 +102,106 @@ await test("an amount too big still comes along (Cash out shows its error), and 
   assert.deepEqual(cashOutHandoff(VITALIK, "   "), { dest: "other", to: VITALIK, amount: "" });
 });
 
-await test("a name resolves to its address", async () => {
-  const seen: string[] = [];
-  const got = await resolveEnsName("vitalik.eth", async (n) => {
-    seen.push(n);
-    return VITALIK as `0x${string}`;
-  });
-  assert.equal(got, VITALIK);
-  assert.deepEqual(seen, ["vitalik.eth"]);
+// GHSA-wxv6-6fjw-c2m9: a name is paid on the network the app is on, so its
+// address must be the one the name sets for that network (ENSIP-11/19), not
+// its Ethereum mainnet record. Records are read through a fake resolver.
+const MAINNET = "0x1111111111111111111111111111111111111111" as const;
+const ON_BASE = "0x2222222222222222222222222222222222222222" as const;
+const DEFAULT_EVM = "0x3333333333333333333333333333333333333333" as const;
+const BASE_COIN = 0x80000000n | 8453n;
+const EVM_COIN = 0x80000000n;
+
+/** A resolver answering only the records given; undefined is addr(bytes32), coinType 60. */
+function fakeResolver(records: Partial<Record<string, `0x${string}`>>, calls: string[] = []): EnsChainReader {
+  return async (_name, coinType) => {
+    const key = coinType == null ? "60" : coinType.toString();
+    calls.push(key);
+    return (records[key] as `0x${string}` | undefined) ?? null;
+  };
+}
+const eoa = async () => false;
+const contract = async () => true;
+
+await test("on Base, a name's Base record is paid, not its mainnet record", async () => {
+  const calls: string[] = [];
+  const read = fakeResolver({ "60": MAINNET, [BASE_COIN.toString()]: ON_BASE }, calls);
+  const got = await resolveEnsForChain("treasury.eth", 8453, { read, isContract: eoa });
+  assert.deepEqual(got, { status: "found", address: ON_BASE, source: "chain" });
+  assert.equal(calls[0], BASE_COIN.toString());
 });
 
-await test("no address, a bad answer or a failed lookup all come back as null, quietly", async () => {
-  assert.equal(await resolveEnsName("nobody.eth", async () => null), null);
-  assert.equal(await resolveEnsName("x.eth", async () => "0x123" as `0x${string}`), null);
-  assert.equal(await resolveEnsName("x.eth", async () => { throw new Error("rpc down"); }), null);
+await test("with no record for the network, the default EVM record (ENSIP-19) is used", async () => {
+  const read = fakeResolver({ "60": MAINNET, [EVM_COIN.toString()]: DEFAULT_EVM });
+  const got = await resolveEnsForChain("treasury.eth", 4663, { read, isContract: eoa });
+  assert.deepEqual(got, { status: "found", address: DEFAULT_EVM, source: "evm" });
 });
 
-await test("an answer for text that has since changed is dropped", async () => {
-  let current = "a.eth";
-  const got = await resolveEnsName(
-    "a.eth",
-    async () => {
-      current = "b.eth";
-      return VITALIK as `0x${string}`;
+await test("a mainnet-only name that is a plain wallet falls back to it, marked so the screen can say so", async () => {
+  const read = fakeResolver({ "60": MAINNET });
+  const got = await resolveEnsForChain("alice.eth", 4217, { read, isContract: eoa });
+  assert.deepEqual(got, { status: "found", address: MAINNET, source: "mainnet" });
+});
+
+await test("a mainnet-only name whose address is a smart account is refused off Ethereum", async () => {
+  const read = fakeResolver({ "60": MAINNET });
+  const got = await resolveEnsForChain("dao.eth", 8453, { read, isContract: contract });
+  assert.deepEqual(got, { status: "unsafe", address: MAINNET });
+});
+
+await test("when the code check fails, the mainnet fallback is refused rather than guessed", async () => {
+  const read = fakeResolver({ "60": MAINNET });
+  const got = await resolveEnsForChain("dao.eth", 8453, {
+    read,
+    isContract: async () => {
+      throw new Error("rpc down");
     },
-    () => current !== "a.eth"
+  });
+  assert.equal(got.status, "unsafe");
+});
+
+await test("a smart account set on purpose for the network is paid (the owner chose it)", async () => {
+  const read = fakeResolver({ "60": MAINNET, [BASE_COIN.toString()]: ON_BASE });
+  const got = await resolveEnsForChain("dao.eth", 8453, { read, isContract: contract });
+  assert.deepEqual(got, { status: "found", address: ON_BASE, source: "chain" });
+});
+
+await test("on Ethereum mainnet the mainnet record is the network's own record", async () => {
+  const calls: string[] = [];
+  const read = fakeResolver({ "60": MAINNET, [BASE_COIN.toString()]: ON_BASE }, calls);
+  const got = await resolveEnsForChain("treasury.eth", 1, { read, isContract: contract });
+  assert.deepEqual(got, { status: "found", address: MAINNET, source: "chain" });
+  assert.deepEqual(calls, ["60"]);
+});
+
+await test("no record anywhere, or a failed lookup, is none; a stale answer is dropped", async () => {
+  assert.deepEqual(await resolveEnsForChain("nobody.eth", 8453, { read: fakeResolver({}), isContract: eoa }), {
+    status: "none",
+  });
+  const failing: EnsChainReader = async () => {
+    throw new Error("rpc down");
+  };
+  assert.deepEqual(await resolveEnsForChain("x.eth", 8453, { read: failing, isContract: eoa }), { status: "none" });
+  const got = await resolveEnsForChain(
+    "x.eth",
+    8453,
+    { read: fakeResolver({ [BASE_COIN.toString()]: ON_BASE }), isContract: eoa },
+    () => true
   );
-  assert.equal(got, null);
+  assert.deepEqual(got, { status: "none" });
+});
+
+await test("a non-address answer for a network record (other bytes) is treated as no record", async () => {
+  const read = fakeResolver({ [BASE_COIN.toString()]: "0x1234" as `0x${string}`, "60": MAINNET });
+  const got = await resolveEnsForChain("x.eth", 8453, { read, isContract: eoa });
+  assert.deepEqual(got, { status: "found", address: MAINNET, source: "mainnet" });
+});
+
+await test("contract code is told apart from a plain or EIP-7702 delegated wallet", () => {
+  assert.equal(isContractCode(undefined), false);
+  assert.equal(isContractCode("0x"), false);
+  assert.equal(isContractCode("0xef0100" + "ab".repeat(20)), false);
+  assert.equal(isContractCode("0x6080604052"), true);
+  assert.equal(isContractCode("0xef0100" + "ab".repeat(21)), true);
 });
 
 console.log(`\npay recipient: ${passed} passed`);

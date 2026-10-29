@@ -19,7 +19,7 @@ import type { Spend } from "../src/policy.js";
 
 MAINNET_POOLS[1] = { pool: "0x00000000000000000000000000000000000000e1", deployBlock: 23_000_000n };
 
-const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, approvalSteps, ethereumSepoliaPool } = await import("@gloamtrade/sdk");
+const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, assertDepositWithinLiveLimit, approvalSteps, ethereumSepoliaPool } = await import("@gloamtrade/sdk");
 const nets = await import("../src/networks.js");
 const { checkSpend, loadPolicy, resolveAgent } = await import("../src/policy.js");
 
@@ -63,11 +63,19 @@ test("GLOAM_NETWORK takes ethereum-mainnet, the access key goes to Tempo mainnet
   assert.match(src, /GLOAM_RPC_URL_\$\{chainId\}/, "any chain id, 1 included");
 });
 
-test("deposits on Ethereum are checked against its listed assets and limits", () => {
+test("deposits on Ethereum are checked against its listed assets and limits", async () => {
   assert.doesNotThrow(() => assertDepositAllowed(1, ETHEREUM_PYUSD, 500_000_000n));
-  assert.throws(() => assertDepositAllowed(1, ETHEREUM_USDT, 500_000_001n), /at most 500 USDT per deposit/);
-  assert.doesNotThrow(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n));
-  assert.throws(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n), /at most 0\.2 ETH per deposit/);
+  // amounts are read live from the vault, so the 100x raise is taken the day it lands
+  assert.doesNotThrow(() => assertDepositAllowed(1, ETHEREUM_USDT, 500_000_001n));
+  assert.doesNotThrow(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n));
+  const vault = (per: bigint) => ({
+    readContract: (async ({ functionName }: { functionName: string }) =>
+      functionName === "depositLimitsOn" ? true : functionName === "depositLimit" ? [per, per * 50n] : 0n) as never,
+  });
+  await assert.rejects(assertDepositWithinLiveLimit(vault(500_000_000n), 1, ETHEREUM_USDT, 500_000_001n), /at most 500 USDT per deposit/);
+  await assertDepositWithinLiveLimit(vault(50_000_000_000n), 1, ETHEREUM_USDT, 500_000_001n);
+  const down = { readContract: (async () => { throw new Error("rpc down"); }) as never };
+  assert.equal(await assertDepositWithinLiveLimit(down, 1, ETHEREUM_USDT, 10n ** 30n), null, "an unreadable vault refuses nothing");
   assert.throws(() => assertDepositAllowed(1, BASE_USDT, 1n), /does not list/);
 });
 

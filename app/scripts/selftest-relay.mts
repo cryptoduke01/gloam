@@ -18,7 +18,9 @@
  *  - payment messages: a relayed transfer hands back a memo ticket for its
  *    payment, the payer's ticketed message gets through after 40 strangers
  *    have tried, partner keys keep their own few, the app client keeps the
- *    ticket and sends it, no secret means no ticket, and no limit keys on an IP
+ *    ticket and sends it, no secret means no ticket, and no limit keys on an IP;
+ *    strangers' messages stop at their own network budget and never take a
+ *    send's slot, so sends, the payer's heads-up and partner keys still go
  *  - cash outs to the vault or the memo board are refused before any chain
  *    call, on the server, in the shared check the app uses, and in the SDK;
  *    so are a listed token contract, a swap router and the zero address, while
@@ -754,6 +756,41 @@ await test("no memo limit keys on the poster's IP", async () => {
   for (const ip of ips) await post(ip, memoBody(pay, { ticket }));
   // and one for the payer
   assert.equal(added(), 2);
+});
+
+await test("memo budget (GHSA-5gwv-jpjr-x34r): strangers' messages can't use up the network's sends", async () => {
+  withMemoSecret(MEMO_SECRET);
+  reset();
+  const counts = (globalThis as { __gloamMcpRate?: Map<string, { n: number }> }).__gloamMcpRate!;
+  for (const k of [...counts.keys()]) if (/:relay-(?:net|memo)/.test(k)) counts.delete(k);
+  const spendSlots = () => [...counts.entries()].filter(([k]) => /:relay-net:/.test(k)).reduce((a, [, v]) => a + v.n, 0);
+  // spread over many payments, as an attacker reading /api/vault-leaves would
+  let accepted = 0;
+  let refused = 0;
+  for (let p = 0; p < 80 && refused === 0; p++) {
+    const pay = payment();
+    for (let i = 0; i < 10; i++) {
+      try {
+        await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) });
+        accepted++;
+      } catch (e) {
+        assert.ok(isRelayError("memo_busy", 429)(e));
+        refused++;
+        break;
+      }
+    }
+  }
+  assert.ok(refused > 0, `strangers' messages stop at their own hourly budget (accepted ${accepted})`);
+  assert.equal(spendSlots(), 0, "no stranger message took a send's slot");
+  // sends still go, and the payer's ticketed heads-up and a partner key's still go
+  const pay = payment();
+  const { status, json } = await post("203.0.113.9", transferTo(pay));
+  assert.equal(status, 200);
+  assert.equal(spendSlots(), 1);
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64), ticket: json.memoTicket }), TX_HASH);
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, "key:key_budget"), TX_HASH);
+  assert.equal(spendSlots(), 1, "messages never count as sends");
+  for (const k of [...counts.keys()]) if (/:relay-(?:net|memo)/.test(k)) counts.delete(k);
 });
 
 await test("app client: keeps the transfer's ticket and sends it with that payment's message", async () => {

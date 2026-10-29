@@ -239,11 +239,14 @@ function BalanceAside({
           { label: "Who it is for", value: verifier.trim() || unset },
           { label: "Good until", value: longDate(until * 1000) },
         ]}
-        never={["Your other balances", "Your history", "Your wallet"]}
+        never={["Your other balances", "Your history"]}
         note={
           <p>
-            The proof points at this balance&apos;s record in the vault. It does not show whether it
-            moves later. An At least proof does.
+            The proof points at this balance&apos;s record in the vault, so whoever has it can find
+            the transaction that made it. A balance straight from a deposit can&apos;t be proven
+            this way, because its record names your wallet: send it to your own Gloam address first.
+            A balance from a send you made without the relay shows that wallet too. It does not
+            show whether the balance moves later. An At least proof does.
           </p>
         }
       />

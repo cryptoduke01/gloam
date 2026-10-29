@@ -64,7 +64,8 @@ test("GLOAM_RPC_URL_11155111 and GLOAM_NETWORK=ethereum", async () => {
 test("deposits are checked against its listed assets and limits", () => {
   assert.doesNotThrow(() => assertDepositAllowed(11155111, ETHEREUM_SEPOLIA_PYUSD, 500_000_000n));
   assert.doesNotThrow(() => assertDepositAllowed(11155111, NATIVE_ASSET, 2n * 10n ** 17n));
-  assert.throws(() => assertDepositAllowed(11155111, NATIVE_ASSET, 21n * 10n ** 16n), /at most 0\.2 ETH per deposit/);
+  // amounts are read live from the vault (assertDepositWithinLiveLimit), not from the launch values
+  assert.doesNotThrow(() => assertDepositAllowed(11155111, NATIVE_ASSET, 21n * 10n ** 16n));
   assert.throws(() => assertDepositAllowed(11155111, BASE_SEPOLIA_USDC, 1n), /does not list/);
 });
 
