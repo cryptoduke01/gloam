@@ -40,6 +40,7 @@ const groups: {
       { href: "/brand", label: "Brand" },
       { href: "/brand#downloads", label: "Brand kit" },
       { href: "/transparency", label: "Transparency" },
+      { href: "/stats", label: "Stats" },
       { href: "/research", label: "Research" },
       ...POSTS.map((p) => ({ href: postHref(p), label: p.short })),
       { href: "/pitch", label: "Pitch" },

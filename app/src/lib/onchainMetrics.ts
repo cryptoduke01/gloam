@@ -34,14 +34,7 @@ import {
   type PublicClient,
 } from "viem";
 import { getNetwork, NETWORK_KEYS, networkName, type GloamNetwork, type NetworkKey } from "./networks";
-import {
-  erc20BalanceOfAbi,
-  isDollarStable,
-  RH_MAINNET_SWAP_TOKENS,
-  shieldTokensFor,
-  supportsNativeShield,
-  type OnchainToken,
-} from "./tokens";
+import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 import { loadEthUsd, loadLiveMarkets } from "./live-quotes";
 import { cacheGetJson, cacheSetJson, lastDays, utcDay } from "./tractionStore";
 import { serverTransport } from "@/lib/serverRpc";
@@ -50,6 +43,10 @@ import { MAINNET_LAUNCH_MS } from "./mainnet";
 import { errText, getLogsSafe } from "./logRange";
 import { VAULT_SWAP_ROUTERS } from "./vaultSwap";
 import { addChainPeople } from "./peopleStore";
+import { hasUiMultiplier, holdableTokens, SWAP_LANDABLE, swapTokenPrice } from "./vaultAssets";
+
+// Moved to lib/vaultAssets so the browser's read on /transparency uses them too.
+export { holdableTokens, swapTokenPrice };
 
 export type ActivityKind = "deposit" | "transfer" | "cashout" | "trade";
 
@@ -207,6 +204,12 @@ export type CombinedMetrics = {
   daily: DayRow[];
   /** Absent on snapshots cached before revenue tracking. */
   revenue?: CombinedRevenue;
+  /**
+   * Mainnets only: one row per UTC day from the public launch to today, so a
+   * public page can chart every day since launch (`daily` keeps 14). Absent on
+   * snapshots cached before it was added.
+   */
+  sinceLaunch?: DayRow[];
 };
 
 export type OnchainMetrics = {
@@ -295,7 +298,7 @@ type ChainEvent = {
   f?: string;
 };
 
-type ScanState = {
+export type ScanState = {
   v: 1;
   pool: string;
   scannedTo: number;
@@ -425,45 +428,6 @@ function hexTs(v: unknown): number {
 
 /* ------------------------------------------------------------------ assets */
 
-/**
- * Tokens a private swap can land in that Add does not list, per chain. Only
- * Robinhood Chain mainnet has any (lib/vaultSwap RH_SWAP_ASSETS_V2): Tempo's
- * swap assets are its four listed stablecoins, and Base and Ethereum have no
- * private swap yet.
- */
-const SWAP_LANDABLE: Record<number, readonly OnchainToken[]> = { 4663: RH_MAINNET_SWAP_TOKENS };
-
-const holdable = new Map<number, OnchainToken[]>();
-
-/**
- * Every ERC-20 the vault on a chain can hold: the tokens Add lists plus the
- * ones a private swap lands in, listed first, each address once. Reading only
- * the listed set left a vault's stocks, WETH and the rest out of "held".
- */
-export function holdableTokens(chainId: number): OnchainToken[] {
-  const hit = holdable.get(chainId);
-  if (hit) return hit;
-  const seen = new Set<string>();
-  const out: OnchainToken[] = [];
-  for (const t of [...shieldTokensFor(chainId), ...(SWAP_LANDABLE[chainId] ?? [])]) {
-    const a = t.address.toLowerCase();
-    if (seen.has(a)) continue;
-    seen.add(a);
-    out.push(t);
-  }
-  holdable.set(chainId, out);
-  return out;
-}
-
-/**
- * A Robinhood mainnet stock token is worth the share price times its
- * uiMultiplier / 1e18 per raw token (splits and dividends move the multiplier;
- * balances never rebase), as the private swap marks it (VaultSwapView).
- */
-function hasUiMultiplier(chainId: number, t: Pick<OnchainToken, "kind">): boolean {
-  return chainId === 4663 && t.kind === "stock";
-}
-
 type AssetInfo = {
   symbol: string;
   decimals: number;
@@ -512,28 +476,6 @@ async function loadGloamUsd(): Promise<number | null> {
 const UI_MULTIPLIER_ABI = parseAbi(["function uiMultiplier() view returns (uint256)"]);
 
 type LiveMarkets = Awaited<ReturnType<typeof loadLiveMarkets>>;
-
-/**
- * USD for one whole swap-landable token, or null: a stock
- * is the live market mark with the token's id times uiMultiplier / 1e18, else the
- * CoinGecko price for the token; any other token is its CoinGecko price. The same
- * order VaultSwapView and /api/markets use, so the admin never disagrees with the app.
- */
-export function swapTokenPrice(
-  chainId: number,
-  t: Pick<OnchainToken, "id" | "kind">,
-  markets: readonly { id: string; source: string; mark: number }[],
-  uiMultiplier: bigint | null,
-  geckoUsd: number | undefined
-): number | null {
-  let price: number | null = null;
-  if (hasUiMultiplier(chainId, t)) {
-    const m = markets.find((x) => x.id === t.id && x.source === "live" && x.mark > 0);
-    if (m && uiMultiplier && uiMultiplier > 0n) price = (m.mark * Number(uiMultiplier)) / 1e18;
-  }
-  if (price == null && typeof geckoUsd === "number" && geckoUsd > 0) price = geckoUsd;
-  return price != null && Number.isFinite(price) && price > 0 ? price : null;
-}
 
 /**
  * USD per token for the Robinhood mainnet tokens a private swap lands in, by
@@ -847,6 +789,18 @@ function dailyRows(sources: ChainEvent[][], days: string[]): DayRow[] {
   });
 }
 
+/** Every UTC day from `startMs` to `now`, oldest first. */
+export function daysSince(startMs: number, now = Date.now()): string[] {
+  const out: string[] = [];
+  const end = utcDay(now);
+  for (let t = Date.parse(`${utcDay(startMs)}T00:00:00Z`); ; t += 86_400_000) {
+    const d = utcDay(t);
+    out.push(d);
+    if (d >= end || out.length > 3660) break;
+  }
+  return out;
+}
+
 function recentRows(n: GloamNetwork, events: ChainEvent[]): RecentRow[] {
   return events
     .slice(-RECENT_KEEP)
@@ -1100,10 +1054,16 @@ function emptyState(n: GloamNetwork): ScanState {
  * (21 Oct 2026, 13:00 UTC), not from its deploy, so the team's own checks
  * before the doors opened stay out. Balances held are read live either way.
  */
-function counted(n: GloamNetwork, s: ScanState): ScanState {
+export function counted(n: Pick<GloamNetwork, "testnet">, s: ScanState): ScanState {
   if (n.testnet) return s;
   const from = Math.floor(MAINNET_LAUNCH_MS / 1000);
-  return { ...s, events: s.events.filter((e) => !e.ts || e.ts >= from) };
+  // An event not dated yet (Robinhood's logs carry no time; a pass dates the
+  // newest 250) counts only once it is surely after launch: at or after a block
+  // already dated after it. Until then it waits, so a fresh read never counts
+  // the team's checks from before launch.
+  let firstAfter = Infinity;
+  for (const e of s.events) if (e.ts >= from && e.b < firstAfter) firstAfter = e.b;
+  return { ...s, events: s.events.filter((e) => (e.ts ? e.ts >= from : e.b >= firstAfter)) };
 }
 
 async function readNetwork(n: GloamNetwork, days: string[], revenueDays: string[]) {
@@ -1260,7 +1220,13 @@ async function readAll(): Promise<OnchainMetrics> {
     prices: { ethUsd: prices.ethUsd, stocks: prices.stocks },
     networks,
     combined: all,
-    mainnet: part(false),
+    mainnet: {
+      ...part(false),
+      sinceLaunch: dailyRows(
+        reads.filter((_, i) => !networks[i]!.testnet).map((r) => r.state.events),
+        daysSince(MAINNET_LAUNCH_MS)
+      ),
+    },
     testnet: part(true),
     ...(creator ? { creator } : {}),
     recent: networks
@@ -1277,6 +1243,18 @@ let inflight: Promise<OnchainMetrics> | null = null;
 
 function aged(data: OnchainMetrics, source: OnchainMetrics["source"], at: number): OnchainMetrics {
   return { ...data, source, ageSec: Math.max(0, Math.round((Date.now() - at) / 1000)) };
+}
+
+/**
+ * The last snapshot read, however old (memory, then Redis, which keeps one for
+ * an hour), or null. Never reads a chain: for a page that must render fast, or
+ * at build time, and says how old the figures are.
+ */
+export async function lastOnchainSnapshot(): Promise<OnchainMetrics | null> {
+  if (snapshot) return aged(snapshot.data, "memory", snapshot.at);
+  const r = await cacheGetJson<{ at: number; data: OnchainMetrics }>(SNAPSHOT_KEY);
+  if (!r?.data) return null;
+  return aged(r.data, "redis", r.at);
 }
 
 /**
