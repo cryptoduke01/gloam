@@ -118,6 +118,8 @@ check("the live reads open BDX only with a limit above 0, and never while unread
   assert.equal(openGatedFromReads(gated, true, [[0n, 0n]]).size, 0, "queued, not landed: 0 / 0");
   assert.equal(openGatedFromReads(gated, true, [[0n, total]]).size, 0, "a zero per-deposit limit takes nothing");
   assert.deepEqual([...openGatedFromReads(gated, true, [[per, total]])], [bdxLower], "landed");
+  const MAX = (1n << 128n) - 1n;
+  assert.deepEqual([...openGatedFromReads(gated, true, [[MAX, MAX]])], [bdxLower], "no limit (uint128 max) is open");
   assert.deepEqual([...openGatedFromReads(gated, false, [undefined])], [bdxLower], "a pool with no limits takes it");
 });
 

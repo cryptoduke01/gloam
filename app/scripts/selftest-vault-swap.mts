@@ -200,6 +200,19 @@ n++;
   assert.ok(refundFits(v, cap) && !refundFits(v, cap + 1n));
   assert.ok(!refundFits({ ...v, total: 24_000_000_000n }, 100_000_000n), "a refund past a lowered total");
   assert.equal(maxSwapInForRefund({ perDeposit: 0n, total: 0n, deposited: 0n }), 0n);
+  // No limit (type(uint128).max on both sides): the room and the refund cap stay
+  // far above any note, so nothing is capped or split, and the math stays exact.
+  const MAX = (1n << 128n) - 1n;
+  const free = { perDeposit: MAX, total: MAX, deposited: 2_400_000_000_000n };
+  const big = 10n ** 30n;
+  assert.equal(depositRoom(free), MAX - free.deposited, "no limit: the room is what is left under the max");
+  const freeCap = maxSwapInForRefund(free);
+  assert.ok(refundAmountFor(freeCap) <= MAX && freeCap > big, "no limit: the refund cap is above any note");
+  assert.ok(refundFits(free, big) && refundFits({ ...free, deposited: big }, big), "no limit: any refund fits");
+  // mixed: only the finite side binds
+  assert.equal(depositRoom({ perDeposit: 500_000_000n, total: MAX, deposited: big }), 500_000_000n, "finite perDeposit binds under a max total");
+  assert.equal(depositRoom({ perDeposit: MAX, total: 25_000_000_000n, deposited: 24_800_000_000n }), 200_000_000n, "finite total binds under a max perDeposit");
+  n += 1;
   // price impact: the same rate at both sizes is 0, a 2% worse rate at full size is 200 bps
   assert.equal(priceImpactBps(1000n, 2000n, 10n, 20n), 0);
   assert.equal(priceImpactBps(1000n, 1960n, 10n, 20n), 200);
