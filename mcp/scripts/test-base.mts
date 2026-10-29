@@ -62,6 +62,7 @@ test("GLOAM_NETWORK takes the Base keys, and access keys stay on Tempo", () => {
 
 test("deposits on Base Sepolia are checked against its listed assets and limits", () => {
   assert.doesNotThrow(() => assertDepositAllowed(84532, NATIVE_ASSET, 2n * 10n ** 17n));
-  assert.throws(() => assertDepositAllowed(84532, NATIVE_ASSET, 21n * 10n ** 16n), /at most 0\.2 ETH per deposit/);
+  // amounts are read live from the vault (assertDepositWithinLiveLimit), not from the launch values
+  assert.doesNotThrow(() => assertDepositAllowed(84532, NATIVE_ASSET, 21n * 10n ** 16n));
   assert.throws(() => assertDepositAllowed(84532, BASE_USDC, 1n), /does not list/);
 });
