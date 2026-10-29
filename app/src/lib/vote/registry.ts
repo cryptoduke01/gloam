@@ -9,7 +9,7 @@
  */
 import "server-only";
 import { VOTES, type VoteConfig } from "./config";
-import { configProblems, inWindow, voteStatus, type VoteSnapshot, type VoteStatus } from "./core";
+import { configProblems, inWindow, voteStatus, weightingOf, type VoteSnapshot, type VoteStatus } from "./core";
 import { excludedFor, type Excluded } from "./excluded";
 import { SNAPSHOTS } from "./snapshots";
 
@@ -40,9 +40,12 @@ export function snapshotFor(v: VoteConfig, all: Record<string, VoteSnapshot> = S
   return s;
 }
 
-/** Whether a vote takes votes at `now`: visible, its snapshot in, and inside its window. */
+/**
+ * Whether a vote takes votes at `now`: visible, inside its window, and for a
+ * snapshot-weighted vote, its snapshot in (a close-weighted one needs none).
+ */
 export function acceptingVotes(v: VoteConfig, snapshot: VoteSnapshot | null, now: number = Date.now()): boolean {
-  if (!snapshot) return false;
+  if (!snapshot && weightingOf(v) === "snapshot") return false;
   if (!v.published && !votePreview()) return false;
   return inWindow(v, now);
 }

@@ -3,6 +3,10 @@
  * weight, then keep it if it is the wallet's latest. Server only. The API
  * route passes the vote, its snapshot and the clock in, so the self-test runs
  * the same code against a test vote.
+ *
+ * A snapshot-weighted vote takes the weight from the snapshot. A
+ * close-weighted one reads the wallet's $GLOAM now: it can vote when it holds
+ * some, and the ballot keeps that balance (the final weight is set at close).
  */
 import "server-only";
 import { createPublicClient, getAddress, isAddress, isHex, type Hex, type PublicClient } from "viem";
@@ -20,10 +24,12 @@ import {
   voteText,
   voteTypedData,
   weightOf,
+  weightingOf,
   type Ballot,
   type VoteMessage,
   type VoteSnapshot,
 } from "./core";
+import { balanceNow } from "./chainReads";
 import type { Excluded } from "./excluded";
 import { saveBallot } from "./store";
 
@@ -75,7 +81,10 @@ export async function smartWalletCheck(message: VoteMessage, signature: Hex): Pr
 
 export type SubmitContext = {
   vote: VoteConfig;
-  snapshot: VoteSnapshot;
+  /** Needed for a snapshot-weighted vote; a close-weighted one reads balances now. */
+  snapshot: VoteSnapshot | null;
+  /** The wallet's $GLOAM now, or null when it can't be read. Defaults to a fresh chain read. */
+  balanceNow?: (address: string) => Promise<bigint | null>;
   excluded: Map<string, Excluded>;
   /** ms */
   now?: number;
@@ -103,14 +112,28 @@ export async function submitBallot(raw: unknown, ctx: SubmitContext): Promise<{ 
     throw new VoteError(401, "bad_signature", "That signature doesn't match this wallet. Sign again.");
   }
 
-  const { weight, excluded } = weightOf(snapshot, ctx.excluded, input.voter);
-  if (excluded) throw new VoteError(403, "excluded", `This address doesn't vote. ${excluded.reason}.`);
-  if (weight === 0n) {
-    throw new VoteError(
-      403,
-      "no_balance",
-      `This wallet held no $GLOAM at block ${snapshot.block.toLocaleString("en-US")}, so it has no vote here.`,
-    );
+  let weight: bigint;
+  if (weightingOf(v) === "close") {
+    const ex = ctx.excluded.get(input.voter.toLowerCase());
+    if (ex) throw new VoteError(403, "excluded", `This address doesn't vote. ${ex.reason}.`);
+    const held = await (ctx.balanceNow ?? ((a: string) => balanceNow(a, { fresh: true })))(input.voter);
+    if (held === null) throw new VoteError(503, "balance_unavailable", "We couldn't read this wallet's $GLOAM just now. Try again in a moment.");
+    if (held === 0n) throw new VoteError(403, "no_balance", "You need $GLOAM in this wallet to vote.");
+    weight = held;
+    // the read takes a moment: a vote that started in the last second must not land after the close
+    if (!inWindow(v, ctx.now ?? Date.now())) throw new VoteError(409, "closed", "This vote has closed.");
+  } else {
+    if (!snapshot) throw new VoteError(409, "not_open", "This vote isn't open.");
+    const w = weightOf(snapshot, ctx.excluded, input.voter);
+    if (w.excluded) throw new VoteError(403, "excluded", `This address doesn't vote. ${w.excluded.reason}.`);
+    if (w.weight === 0n) {
+      throw new VoteError(
+        403,
+        "no_balance",
+        `This wallet held no $GLOAM at block ${snapshot.block.toLocaleString("en-US")}, so it has no vote here.`,
+      );
+    }
+    weight = w.weight;
   }
 
   const ballot: Ballot = {

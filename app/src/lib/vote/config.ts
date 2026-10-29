@@ -11,9 +11,17 @@
  *  3. Set `start` and `end`, then `published: true`, and ship it.
  *
  * Once a vote is published, never change its id, options (or their order) or
- * snapshot block: every signature names the option it picked, so a change
- * would void the votes already cast. Fix a typo in the question or the
- * description only.
+ * snapshot block: every signature names the option it picked and the
+ * snapshot block, so a change would void the votes already cast. Fix a typo
+ * in the question or the description only.
+ *
+ * Weighting: a vote without `weighting` (or with "snapshot") counts each
+ * wallet's $GLOAM at `snapshotBlock`. With "close", any wallet holding $GLOAM
+ * can vote while it is open, the live results use what each voter holds now,
+ * and the final count uses what each voter held at the closing block (the
+ * first block at or after `end`), worked out from the Transfer logs. GLOAM
+ * sits in one wallet at the close, so it can't be counted twice. The snapshot
+ * is still signed (its block is part of the message) and kept for reference.
  */
 
 export type VoteConfig = {
@@ -34,11 +42,21 @@ export type VoteConfig = {
   /** When voting opens and closes, in UTC, like "2026-11-03T13:00:00Z". */
   start: string;
   end: string;
+  /**
+   * What sets a wallet's weight. "snapshot" (the default): its $GLOAM at
+   * `snapshotBlock`. "close": its $GLOAM when the vote closes, live until then.
+   */
+  weighting?: "snapshot" | "close";
   /** Extra addresses that never count in this vote, on top of the standing list (lib/vote/excluded.ts). */
   exclude?: { address: string; reason: string }[];
 };
 
-/** The first three votes share one window and one snapshot block. */
+/**
+ * The first three votes share one window and one snapshot block. They opened
+ * weighted by the snapshot and moved to weight at close on 29 October, so
+ * holders who bought after the snapshot can vote too. The block stays: the
+ * ballots already cast signed it.
+ */
 const FIRST_START = "2026-10-29T16:30:00Z";
 // Sunday 1 November, 11pm UTC (midnight in Lagos)
 const FIRST_END = "2026-11-01T23:00:00Z";
@@ -58,6 +76,7 @@ export const VOTES: VoteConfig[] = [
       "Swap between stablecoins like USDC and USDT privately on Base and Ethereum, where the vault already runs.",
     ],
     snapshotBlock: FIRST_BLOCK,
+    weighting: "close",
     start: FIRST_START,
     end: FIRST_END,
   },
@@ -75,6 +94,7 @@ export const VOTES: VoteConfig[] = [
       "The busiest non-EVM chain for stablecoin payments. Gloam would build a Solana version of the vault.",
     ],
     snapshotBlock: FIRST_BLOCK,
+    weighting: "close",
     start: FIRST_START,
     end: FIRST_END,
   },
@@ -92,6 +112,7 @@ export const VOTES: VoteConfig[] = [
       "Paying merchants and topping up cards without showing your balance.",
     ],
     snapshotBlock: FIRST_BLOCK,
+    weighting: "close",
     start: FIRST_START,
     end: FIRST_END,
   },

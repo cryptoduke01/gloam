@@ -65,6 +65,8 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
 
   const shared = active.length > 0 && active.every((v) => v.end === active[0]!.end && v.start === active[0]!.start) ? active[0]! : null;
   const block = votes[0]?.snapshotBlock ?? 0;
+  // close-weighted votes count what each wallet holds when voting closes
+  const closesAt = votes[0]?.weighting === "close" ? (shared ?? active[0] ?? votes[0])!.end : undefined;
   const anyVoted = active.some((v) => voted(v.id));
   // the note is for holders who voted, while a vote they can vote in is open
   const canNote = anyVoted && active.some((v) => v.accepting && BigInt(me?.votes[v.id]?.weight ?? "0") > 0n);
@@ -85,7 +87,8 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
             </h1>
             <p className="mt-6 max-w-[52ch] text-[16.5px] leading-relaxed text-soft sm:text-[18px]">
               {active.length > 1 ? `${["", "One", "Two", "Three", "Four", "Five"][active.length] ?? active.length} questions.` : "One question."} Each
-              answer is a free signature, weighted by the $GLOAM you held at block {block.toLocaleString("en-US")}.
+              answer is a free signature,{" "}
+              {closesAt ? "weighted by the $GLOAM in your wallet when voting closes." : `weighted by the $GLOAM you held at block ${block.toLocaleString("en-US")}.`}
             </p>
             {shared && <ClosingLine s={shared} className="mt-6" />}
           </div>
@@ -112,6 +115,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
                 onRetry={retry}
                 onDisconnect={wallet.disconnect}
                 block={block}
+                closesAt={closesAt}
                 onResults={() => setDrawer(true)}
                 onStart={chosen === null ? start : undefined}
                 startLabel={firstOpen === -1 ? "See your answers" : anyVoted ? "Continue voting" : "Start voting"}
@@ -224,7 +228,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
       )}
 
       <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-24">
-        <HowItWorks block={block} firstId={votes[0]?.id} />
+        <HowItWorks block={block} firstId={votes[0]?.id} closesAt={closesAt} />
       </section>
 
       {active.length > 0 && past.length > 0 && (

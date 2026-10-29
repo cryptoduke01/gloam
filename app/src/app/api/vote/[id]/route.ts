@@ -3,12 +3,15 @@ import { isAddress, getAddress } from "viem";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { KvUnavailableError } from "@/lib/partnersKv";
 import { acceptingVotes, excludedForVote, findVote, snapshotFor } from "@/lib/vote/registry";
-import { voteSummary, voterStanding } from "@/lib/vote/results";
+import { weightingOf } from "@/lib/vote/core";
+import { BalanceUnavailableError, voteSummary, voterStanding } from "@/lib/vote/results";
 import { BallotBusyError } from "@/lib/vote/store";
 import { VoteError, smartWalletCheck, submitBallot } from "@/lib/vote/submit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// the first request after a close-weighted vote ends works out its final count
+export const maxDuration = 60;
 
 /** Reads per IP per minute: the page polls the totals every few seconds. */
 const READS_PER_MINUTE = 120;
@@ -39,8 +42,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (address && !isAddress(address, { strict: false })) return fail(400, "bad_address", "That wallet address doesn't look right.");
 
   try {
-    const summary = await voteSummary(vote, snapshot, excluded);
-    const you = address && snapshot ? await voterStanding(vote, snapshot, excluded, getAddress(address)) : null;
+    const summary = await voteSummary(vote, snapshot, excluded, undefined, { finalize: true });
+    // a balance that can't be read now leaves `you` out; the totals still answer
+    const you =
+      address && summary.snapshotReady
+        ? await voterStanding(vote, snapshot, excluded, getAddress(address)).catch((e) => {
+            if (e instanceof BalanceUnavailableError) return null;
+            throw e;
+          })
+        : null;
     return NextResponse.json(
       { ok: true, data: { ...summary, you } },
       // the totals change only when someone votes; a few seconds at the edge spares the store
@@ -62,8 +72,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const vote = findVote(id);
   if (!vote) return notFound();
   const snapshot = snapshotFor(vote);
-  if (!snapshot || !acceptingVotes(vote, snapshot)) {
-    return fail(409, "not_open", vote.published && snapshot && Date.now() >= Date.parse(vote.end) ? "This vote has closed." : "This vote isn't open.");
+  const ready = snapshot !== null || weightingOf(vote) === "close";
+  if (!ready || !acceptingVotes(vote, snapshot)) {
+    return fail(409, "not_open", vote.published && ready && Date.now() >= Date.parse(vote.end) ? "This vote has closed." : "This vote isn't open.");
   }
 
   const raw = await req.text();

@@ -10,7 +10,8 @@ import { DataTable, Kpi, Panel } from "./AdminDashboard";
 type Data = {
   backend: string;
   kept: { ballots: string; feedback: string };
-  votes: { summary: VoteSummary; ballots: Ballot[] }[];
+  /** `live` and `final`: a close-weighted vote's weight now and at the closing block (null when not known). */
+  votes: { summary: VoteSummary; ballots: (Ballot & { live?: string | null; final?: string | null })[] }[];
   feedback: Feedback[];
   holders?: (HolderRecord & { voted: string[] })[];
 };
@@ -21,6 +22,14 @@ const big = (v: string | null) => (v ? BigInt(v) : -1n);
 const cmpBig = (a: bigint, b: bigint) => (a > b ? -1 : a < b ? 1 : 0);
 
 const REFRESH_MS = 60_000;
+
+/** Where a vote's tally comes from, for the Tallies table. */
+function basisText(s: VoteSummary): string {
+  if (s.basis === "live") return "Live (GLOAM now)";
+  if (s.basis === "counting") return "Live, final count pending";
+  if (s.basis === "final") return `Final at block ${n(s.closeBlock ?? 0)}`;
+  return `Snapshot block ${n(s.snapshotBlock)}`;
+}
 const n = (v: number) => v.toLocaleString("en-US");
 
 function Chips<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
@@ -191,7 +200,8 @@ export function VotesPanel() {
         />
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
           Every wallet that connected on a vote page and ran the $GLOAM check. Balances are worked out on the server (the snapshot file and a
-          Robinhood Chain read), never taken from the browser. The wallet filter under Every vote applies here too.
+          Robinhood Chain read), never taken from the browser. In a vote weighted at close, Eligible means the wallet held GLOAM when it
+          was last seen. The wallet filter under Every vote applies here too.
         </p>
       </Panel>
 
@@ -204,12 +214,13 @@ export function VotesPanel() {
         }
       >
         <DataTable
-          headers={["Vote", "Status", "Answer", "Share", "GLOAM", "Wallets"]}
+          headers={["Vote", "Status", "Weights", "Answer", "Share", "GLOAM", "Wallets"]}
           rows={data.votes.flatMap((v) => {
             const total = BigInt(v.summary.totals.weight);
             return v.summary.totals.options.map((o, i) => [
               i === 0 ? <span key="q" className="text-foreground">{v.summary.question}</span> : "",
               i === 0 ? (v.summary.draft ? "Draft" : v.summary.status) : "",
+              i === 0 ? basisText(v.summary) : "",
               o.label,
               `${percentOf(BigInt(o.weight), total)}%`,
               formatGloam(o.weight),
@@ -217,7 +228,7 @@ export function VotesPanel() {
             ]);
           })}
           empty="No votes configured"
-          minWidth={820}
+          minWidth={980}
         />
       </Panel>
 
@@ -252,7 +263,7 @@ export function VotesPanel() {
           />
         </div>
         <DataTable
-          headers={["Wallet", "Vote", "Answer", "GLOAM", "Signed (UTC)", "Signature"]}
+          headers={["Wallet", "Vote", "Answer", "GLOAM at signing", "GLOAM live", "GLOAM final", "Signed (UTC)", "Signature"]}
           rows={rows.map(({ vote: v, b }) => [
             <span key="w" className="font-mono text-[12.5px]" title={b.voter}>
               {b.voter}
@@ -260,13 +271,15 @@ export function VotesPanel() {
             v.id,
             b.choice,
             formatGloam(b.weight),
+            v.weighting !== "close" ? <span key="l" className="text-mute">snapshot</span> : b.live == null ? <span key="l" className="text-mute">not read</span> : formatGloam(b.live),
+            v.weighting !== "close" ? <span key="f" className="text-mute">snapshot</span> : b.final == null ? <span key="f" className="text-mute">after close</span> : formatGloam(b.final),
             new Date(b.timestamp * 1000).toISOString().replace("T", " ").slice(0, 19),
             <span key="s" className="block max-w-[180px] truncate font-mono text-[12px] text-mute" title={b.signature}>
               {b.signature}
             </span>,
           ])}
           empty={data.backend === "none" ? "Vote storage is not configured (set Upstash Redis)." : "No votes match"}
-          minWidth={1100}
+          minWidth={1300}
         />
       </Panel>
 

@@ -6,6 +6,7 @@ import { ballotsCsv, ballotsExport } from "@/lib/vote/results";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const READS_PER_MINUTE = 30;
 
@@ -26,7 +27,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!vote) return fail(404, "not_found", "There is no vote here.");
 
   try {
-    const doc = await ballotsExport(vote, snapshotFor(vote), excludedForVote(vote));
+    const doc = await ballotsExport(vote, snapshotFor(vote), excludedForVote(vote), { finalize: true });
     const cache = "public, s-maxage=10, stale-while-revalidate=30";
     if (new URL(req.url).searchParams.get("format") === "csv") {
       return new Response(ballotsCsv(doc.ballots), {
