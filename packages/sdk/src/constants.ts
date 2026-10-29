@@ -587,6 +587,40 @@ export function networkForChainId(chainId: number): GloamNetwork | undefined {
   return gloamNetworks().find((n) => n.chainId === chainId);
 }
 
+/**
+ * Gloam's private-swap routers, per chain: GloamVaultSwapV4 and V4b on
+ * Robinhood Chain, GloamVaultSwapTempo on Tempo. A router sends what it holds
+ * to the treasury on its next swap, so a cash out sent to one is lost to the sender.
+ */
+export const GLOAM_SWAP_ROUTERS: Readonly<Record<number, readonly Address[]>> = {
+  [RH_MAINNET_CHAIN_ID]: ["0x34AB06208586A737Bf1607fa996Bc9162271c52d", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [TEMPO_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+};
+
+/**
+ * Why `to` cannot take a cash out on `chainId`, or null when it can. Refused:
+ * the vault itself, the payment-message board, a token the vault lists there,
+ * one of Gloam's swap routers, and the zero address. Money sent to any of them
+ * is stuck or goes to the treasury. The same rule as the Gloam app and relay
+ * (app/src/lib/cashOutTarget.ts). Tokens, routers and the board are matched on
+ * that chain only: the same address can be a wallet on another chain.
+ */
+export function cashOutTargetProblem(to: string, chainId: number, poolAddress?: string | null): string | null {
+  const a = to.trim().toLowerCase();
+  const same = (b: string | null | undefined) => Boolean(b) && a === b!.trim().toLowerCase();
+  const net = networkForChainId(chainId);
+  if (same(poolAddress ?? net?.pool)) return "That address is the vault itself. Cash out to a wallet you control.";
+  if (same(zeroAddress)) return "That is the zero address, which nobody controls. Cash out to a wallet you control.";
+  if (same(net?.payMemo)) return "That address is Gloam's payment message board. Cash out to a wallet you control.";
+  if ((GLOAM_SWAP_ROUTERS[chainId] ?? []).some(same)) {
+    return "That address is Gloam's swap router, not a wallet. Money sent there goes to the treasury. Cash out to a wallet you control.";
+  }
+  if ((net?.assets ?? []).some((x) => x.address !== NATIVE_ASSET && same(x.address))) {
+    return "That address is a token contract, not a wallet. Money sent there would be lost. Cash out to a wallet you control.";
+  }
+  return null;
+}
+
 /** True for Robinhood Chain (4663), Tempo (4217), Base (8453) and Ethereum (1) mainnet, pool or not. */
 export function isMainnetChainId(chainId: number): boolean {
   return (

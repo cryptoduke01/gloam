@@ -22,6 +22,7 @@ import {
   NATIVE_ASSET,
   RH_TESTNET_CHAIN_ID,
   assertDepositAllowed,
+  cashOutTargetProblem,
   isPaymentsPoolChainId,
   networkName,
   poolForChainId,
@@ -180,10 +181,9 @@ export async function buildUnshieldIntent(
   const asset = params.asset ?? NATIVE_ASSET;
   const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
-  // A cash out to the vault itself strands the money there.
-  if (params.to.toLowerCase() === poolAddress.toLowerCase()) {
-    throw new Error("That address is the vault itself. Cash out to a wallet you control.");
-  }
+  // A cash out to the vault, the memo board, a token, a swap router or the zero address strands the money.
+  const targetProblem = cashOutTargetProblem(params.to, chainId, poolAddress);
+  if (targetProblem) throw new Error(targetProblem);
   const w = await buildPoseidonUnshieldWitness({
     secretHex: params.secretHex,
     amount: params.amountWei,
