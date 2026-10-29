@@ -14,6 +14,13 @@
  *    tampered weight, a bad signature and a stale duplicate
  *  - The real routes: drafts stay hidden without GLOAM_VOTE_PREVIEW, unknown
  *    votes are 404, bad input is refused, the vote endpoint is rate limited
+ *  - Weight at close: a wallet that bought after the snapshot can vote, an
+ *    empty one and an excluded one can't, a balance that can't be read
+ *    refuses the vote; live totals use what each voter holds now; the final
+ *    count uses the balances at the closing block (Transfer replay, checked
+ *    with balanceOf), so GLOAM moved after a vote never counts twice; the
+ *    count is the same however it is worked out, and stored once; the
+ *    ballots published before the change still verify
  *  - The holder check: an eligible holder, a wallet with nothing at the
  *    snapshot and a team wallet each come back as they should; a connected
  *    wallet is recorded once (first seen kept, last seen moved on), its
@@ -51,6 +58,8 @@ const { SNAPSHOTS } = await import("../src/lib/vote/snapshots");
 const registry = await import("../src/lib/vote/registry");
 const { submitBallot, VoteError } = await import("../src/lib/vote/submit");
 const { listBallots, clearBallotCache, BallotBusyError } = await import("../src/lib/vote/store");
+const chainReads = await import("../src/lib/vote/chainReads");
+const final = await import("../src/lib/vote/final");
 const { ballotsCsv } = await import("../src/lib/vote/results");
 const { kv, resetMemoryKv } = await import("../src/lib/partnersKv");
 const directory = await import("../src/lib/contractDirectory");
@@ -64,6 +73,8 @@ let passed = 0;
 async function test(name: string, fn: () => Promise<void> | void) {
   resetMemoryKv();
   clearBallotCache();
+  chainReads.setVoteChain(null);
+  final.clearFinalCache();
   (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
   await fn();
   passed++;
@@ -495,7 +506,9 @@ await test("routes: every published vote answers with its own snapshot and optio
     assert.deepEqual(body.data.options, v.options);
     assert.equal(body.data.snapshotReady, true);
     assert.equal(body.data.snapshotBlock, v.snapshotBlock);
-    assert.ok(body.data.eligible.wallets > 100);
+    const d = body.data as typeof body.data & { weighting: string; basis: string };
+    if (d.weighting === "snapshot") assert.ok(body.data.eligible.wallets > 100);
+    else assert.ok(["live", "counting", "final"].includes(d.basis), d.basis);
   }
 });
 
@@ -554,6 +567,14 @@ await test("routes: /api/vote lists every published vote, /api/vote/me gives one
   const snap = registry.snapshotFor(pub)!;
   const ex = registry.excludedForVote(pub);
   const [top] = Object.entries(snap.balances).filter(([a]) => !ex.has(a));
+  const closeWeighted = core.weightingOf(pub) === "close";
+  // a close-weighted vote reads the wallet's GLOAM now: with no chain it says so instead of guessing
+  if (closeWeighted) {
+    assert.equal((await meRoute.GET(meReq(`?address=${top![0]}`))).status, 503);
+    // the wallet now holds a little less than at the snapshot: that is its weight
+    chainReads.setVoteChain(fakeChain({ [top![0]]: BigInt(top![1]) - 1n }));
+    top![1] = (BigInt(top![1]) - 1n).toString();
+  }
   const res = await meRoute.GET(meReq(`?address=${top![0]}`));
   assert.equal(res.status, 200);
   const mj = (await res.json()) as { data: { name: string | null; votes: Record<string, { weight: string; eligibleWallets: number; ballot: unknown; excluded: string | null }> } };
@@ -563,7 +584,7 @@ await test("routes: /api/vote lists every published vote, /api/vote/me gives one
     assert.equal(st.weight, top![1]);
     assert.equal(st.excluded, null);
     assert.equal(st.ballot, null);
-    assert.equal(st.eligibleWallets, core.eligibleTotal(snap, ex).wallets);
+    if (!closeWeighted) assert.equal(st.eligibleWallets, core.eligibleTotal(snap, ex).wallets);
   }
   // a team wallet comes back excluded with weight 0
   const team = (await (await meRoute.GET(meReq("?address=0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8"))).json()) as typeof mj;
@@ -586,18 +607,26 @@ const [topHolder, topWei] = Object.entries(pubSnap.balances).find(([a]) => !pubE
 const TEAM_WALLET = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
 
 await test("holder check: eligible, nothing at the snapshot, and a team wallet", async () => {
-  const yes = await holders.holderFacts(getAddress(topHolder));
+  const closeWeighted = pubVotes.some((v) => core.weightingOf(v) === "close");
+  const yes = await holders.holderFacts(getAddress(topHolder), undefined, BigInt(topWei));
   assert.equal(yes.snapshot, topWei);
   assert.equal(yes.eligible, true);
   assert.equal(yes.excluded, null);
   assert.deepEqual(yes.signed, []);
+  // weight at close: what the wallet holds now decides, whatever it held at the snapshot
+  if (closeWeighted) assert.equal((await holders.holderFacts(getAddress(topHolder), undefined, 0n)).eligible, false, "sold since the snapshot");
 
-  const zero = await holders.holderFacts(carol.address);
+  const zero = await holders.holderFacts(carol.address, undefined, 0n);
   assert.equal(zero.snapshot, "0");
   assert.equal(zero.eligible, false);
   assert.equal(zero.excluded, null);
+  if (closeWeighted) {
+    const bought = await holders.holderFacts(carol.address, undefined, 5n * ONE);
+    assert.equal(bought.snapshot, "0");
+    assert.equal(bought.eligible, true, "bought after the snapshot");
+  }
 
-  const teamFacts = await holders.holderFacts(getAddress(TEAM_WALLET));
+  const teamFacts = await holders.holderFacts(getAddress(TEAM_WALLET), undefined, 1000n * ONE);
   assert.equal(teamFacts.eligible, false);
   assert.match(teamFacts.excluded ?? "", /Team/);
 });
@@ -627,7 +656,7 @@ await test("connected holders: the signed votes are noted, and stay noted", asyn
   const v = pubVotes[0]!;
   const { saveBallot } = await import("../src/lib/vote/store");
   await saveBallot(v.id, { voter: getAddress(topHolder), option: 0, choice: v.options[0]!, weight: topWei, timestamp: nowSec, signature: `0x${"cd".repeat(65)}`, receivedAt: NOW });
-  const rec = await holders.recordHolder(await holders.holderFacts(getAddress(topHolder)), null, 2_000);
+  const rec = await holders.recordHolder(await holders.holderFacts(getAddress(topHolder), undefined, BigInt(topWei)), null, 2_000);
   assert.deepEqual(rec!.signed, [v.id]);
   const csv = holders.holdersCsv([{ ...rec!, voted: rec!.signed }]);
   assert.ok(csv.startsWith('"wallet","first_seen_utc"'));
@@ -661,6 +690,294 @@ await test("the seen route: balances from the server only, bad input refused, ra
   let last = 0;
   for (let i = 0; i < 25; i++) last = (await seenRoute.POST(seenReq({ address: alice.address }, "203.0.113.21"))).status;
   assert.equal(last, 429);
+});
+
+// ---------------------------------------------------------------- weight at close
+
+const dave = privateKeyToAccount(generatePrivateKey()); // bought after the snapshot
+
+/** A stand-in chain: balances now from `now`, and blocks one second apart with the Transfer logs given. */
+function fakeChain(now: Record<string, bigint>, opts: { logs?: import("../src/lib/vote/core").TransferLog[]; b0?: number; t0?: number; head?: number; atBlock?: "replay" | "gone" | "wrong"; calls?: { balances: number } } = {}) {
+  const b0 = opts.b0 ?? 100_000_000;
+  const t0 = opts.t0 ?? Math.floor(START / 1000) - 1_000;
+  const head = opts.head ?? b0 + 10_000_000;
+  const logs = opts.logs ?? [];
+  const blk = (n: number) => ({ number: n, hash: `0x${n.toString(16).padStart(64, "0")}`, time: t0 + (n - b0) });
+  const chain: import("../src/lib/vote/chainReads").VoteChain = {
+    async balances(addresses, block) {
+      if (opts.calls) opts.calls.balances++;
+      const out = new Map<string, bigint>();
+      if (block === undefined) {
+        for (const a of addresses) out.set(a.toLowerCase(), now[a.toLowerCase()] ?? now[a] ?? 0n);
+        return out;
+      }
+      if (opts.atBlock === "gone") throw new Error("missing trie node");
+      const at = core.replayTransfers(logs, block);
+      for (const a of addresses) out.set(a.toLowerCase(), (at.get(a.toLowerCase()) ?? 0n) + (opts.atBlock === "wrong" ? 1n : 0n));
+      return out;
+    },
+    totalSupply: async () => Object.values(now).reduce((s, b) => s + b, 0n),
+    head: async () => blk(head),
+    block: async (n) => blk(n),
+    transferLogs: async (from, to) => logs.filter((l) => parseInt(l.blockNumber, 16) >= from && parseInt(l.blockNumber, 16) <= to),
+  };
+  return chain;
+}
+
+const word = (a: string) => `0x${a.slice(2).toLowerCase().padStart(64, "0")}`;
+const ZERO = "0x0000000000000000000000000000000000000000";
+const tlog = (block: number, from: string, to: string, amount: bigint) => ({
+  blockNumber: `0x${block.toString(16)}`,
+  topics: [core.TRANSFER_TOPIC, word(from), word(to)],
+  data: `0x${amount.toString(16).padStart(64, "0")}`,
+});
+
+const closeVote: VoteConfig = { ...testVote, id: "selftest-close", weighting: "close" };
+const B0 = 100_000_000;
+const T0 = Math.floor(START / 1000) - 1_000;
+/** The block whose time is the vote's end: the closing block. */
+const CLOSE_BLOCK = B0 + (Math.floor(END / 1000) - T0);
+const nowCtx = (now: Record<string, bigint | null>, extra: Partial<Parameters<typeof submitBallot>[1]> = {}) =>
+  ctx({ vote: closeVote, snapshot: null, balanceNow: async (a: string) => (a.toLowerCase() in now ? now[a.toLowerCase()]! : 0n), ...extra });
+const lower = (a: string) => a.toLowerCase();
+
+await test("weight at close: the config field is optional, and only snapshot or close", () => {
+  assert.equal(core.weightingOf(testVote), "snapshot", "a vote without the field weighs the snapshot, as before");
+  assert.equal(core.weightingOf(closeVote), "close");
+  assert.deepEqual(core.configProblems(closeVote), []);
+  assert.deepEqual(core.configProblems({ ...closeVote, snapshotBlock: 0 }), [], "a close-weighted vote needs no snapshot");
+  assert.ok(core.configProblems({ ...closeVote, weighting: "later" as never }).length > 0);
+  for (const v of VOTES.filter((x) => x.published)) assert.equal(core.weightingOf(v), "close", `${v.id} weighs at close`);
+  // and it takes votes without a snapshot
+  assert.equal(registry.acceptingVotes(closeVote, null, NOW), true);
+  assert.equal(registry.acceptingVotes(testVote, null, NOW), false);
+});
+
+await test("weight at close: a wallet that bought after the snapshot can vote, with what it holds now", async () => {
+  assert.equal(snapshot.balances[lower(dave.address)], undefined, "dave isn't in the snapshot");
+  const { ballot } = await submitBallot(await sign(dave, 1, nowSec, closeVote), nowCtx({ [lower(dave.address)]: 30n * ONE }));
+  assert.equal(ballot.weight, (30n * ONE).toString());
+  // the same wallet in the snapshot-weighted vote still can't
+  await rejects(submitBallot(await sign(dave, 1), ctx()), "no_balance");
+  // a snapshot holder votes with what it holds now, not what it held then
+  const r = await submitBallot(await sign(alice, 0, nowSec, closeVote), nowCtx({ [lower(alice.address)]: 7n * ONE }));
+  assert.equal(r.ballot.weight, (7n * ONE).toString());
+});
+
+await test("weight at close: an empty wallet is refused, and an unread balance never lets a vote through", async () => {
+  try {
+    await submitBallot(await sign(alice, 0, nowSec, closeVote), nowCtx({ [lower(alice.address)]: 0n }));
+    assert.fail("went through");
+  } catch (e) {
+    assert.equal((e as InstanceType<typeof VoteError>).code, "no_balance");
+    assert.equal((e as Error).message, "You need $GLOAM in this wallet to vote.");
+  }
+  await rejects(submitBallot(await sign(alice, 0, nowSec, closeVote), nowCtx({ [lower(alice.address)]: null })), "balance_unavailable");
+  // with chain reads off, the default read can't answer: refused, not waved through
+  await rejects(submitBallot(await sign(alice, 0, nowSec, closeVote), ctx({ vote: closeVote, snapshot: null })), "balance_unavailable");
+  assert.equal((await listBallots(closeVote.id)).length, 0);
+});
+
+await test("weight at close: excluded wallets are still refused, whatever they hold", async () => {
+  let asked = 0;
+  const read = async () => {
+    asked++;
+    return 1000n * ONE;
+  };
+  await rejects(submitBallot(await sign(team, 0, nowSec, closeVote), ctx({ vote: closeVote, snapshot: null, balanceNow: read })), "excluded");
+  assert.equal(asked, 0, "excluded before any read");
+  // and a recount at close drops them even if a ballot slipped in
+  const slipped = { ...(await sign(team, 0, nowSec, closeVote)), choice: "Red", weight: "1", receivedAt: NOW } as Ballot;
+  const r = await core.recount(closeVote, { balances: { [lower(team.address)]: (1000n * ONE).toString() }, block: CLOSE_BLOCK }, excluded, [slipped], undefined, { closeBlock: CLOSE_BLOCK });
+  assert.equal(r.tally.weight, 0n);
+  assert.match(r.problems[0]!.problem, /excluded/);
+});
+
+await test("weight at close: the routes take a vote with no snapshot, and refuse after the close", async () => {
+  // the snapshot-weighted path is unchanged; a close-weighted vote needs none (route check)
+  assert.equal(registry.acceptingVotes(closeVote, null, END), false);
+  await rejects(submitBallot(await sign(dave, 0, Math.floor(END / 1000), closeVote), nowCtx({ [lower(dave.address)]: ONE }, { now: END })), "closed");
+});
+
+await test("weight at close: live totals weigh each ballot by what its wallet holds now", async () => {
+  const { voteSummary } = await import("../src/lib/vote/results");
+  const held: Record<string, bigint> = { [lower(alice.address)]: 100n * ONE, [lower(dave.address)]: 30n * ONE, [lower(bob.address)]: 50n * ONE };
+  await submitBallot(await sign(alice, 0, nowSec - 30, closeVote), nowCtx(held));
+  await submitBallot(await sign(dave, 1, nowSec - 20, closeVote), nowCtx(held));
+  await submitBallot(await sign(bob, 1, nowSec - 10, closeVote), nowCtx(held));
+  // since voting: bob sold everything, alice sent 40 to dave
+  const calls = { balances: 0 };
+  chainReads.setVoteChain(fakeChain({ [lower(alice.address)]: 60n * ONE, [lower(dave.address)]: 70n * ONE, [lower(bob.address)]: 0n }, { calls }));
+  const s = await voteSummary(closeVote, null, excluded, NOW);
+  assert.equal(s.basis, "live");
+  assert.equal(s.weighting, "close");
+  assert.equal(s.snapshotReady, true);
+  assert.equal(s.closeBlock, null);
+  assert.deepEqual(s.totals.options.map((o) => o.weight), [(60n * ONE).toString(), (70n * ONE).toString(), "0"]);
+  assert.equal(s.totals.weight, (130n * ONE).toString(), "the 40 alice sent counts once, with dave");
+  assert.equal(s.totals.wallets, 2, "a wallet holding nothing now carries no weight");
+  assert.equal(s.eligible?.wallets, null, "live: only the total is known");
+  // the reads are cached: a second summary inside a minute asks the chain nothing new
+  const before = calls.balances;
+  await voteSummary(closeVote, null, excluded, NOW + 1_000);
+  assert.equal(calls.balances, before);
+  // a chain that doesn't answer: the weights the ballots were signed with stand in
+  chainReads.setVoteChain(null);
+  const off = await voteSummary(closeVote, null, excluded, NOW);
+  assert.equal(off.totals.weight, (180n * ONE).toString());
+});
+
+/** Alice and dave hold GLOAM; after voting alice sends dave everything, then after the close dave sends it all back. */
+function moves(closeBlock: number) {
+  return [
+    tlog(B0 - 5_000, ZERO, alice.address, 100n * ONE),
+    tlog(B0 - 4_000, ZERO, bob.address, 50n * ONE),
+    tlog(B0 - 3_000, ZERO, team.address, 1000n * ONE),
+    tlog(B0 + 200_000, ZERO, dave.address, 30n * ONE), // dave buys after the snapshot
+    tlog(B0 + 300_000, alice.address, dave.address, 100n * ONE), // after alice voted
+    tlog(closeBlock, bob.address, carol.address, 10n * ONE), // in the closing block itself: counts
+    tlog(closeBlock + 1, dave.address, alice.address, 130n * ONE), // after the close: doesn't
+  ];
+}
+
+async function castCloseBallots() {
+  const held: Record<string, bigint> = { [lower(alice.address)]: 100n * ONE, [lower(dave.address)]: 30n * ONE, [lower(bob.address)]: 50n * ONE };
+  await submitBallot(await sign(alice, 0, nowSec - 30, closeVote), nowCtx(held));
+  await submitBallot(await sign(dave, 1, nowSec - 20, closeVote), nowCtx(held));
+  await submitBallot(await sign(bob, 2, nowSec - 10, closeVote), nowCtx(held));
+}
+
+await test("weight at close: GLOAM moved after a vote is counted once, with the wallet that holds it at the close", async () => {
+  await castCloseBallots();
+  const chain = fakeChain({}, { logs: moves(CLOSE_BLOCK) });
+  const f = await final.computeFinal(closeVote, await listBallots(closeVote.id), excluded, null, { chain, now: END + 600_000 });
+  assert.equal(f.closeBlock, CLOSE_BLOCK);
+  assert.equal(f.closeBlockTime, Math.floor(END / 1000), "the first block at or after the end");
+  const expected: Record<string, string> = { [lower(alice.address)]: "0", [lower(bob.address)]: (40n * ONE).toString(), [lower(dave.address)]: (130n * ONE).toString() };
+  assert.deepEqual(f.balances, expected, "alice sent hers on, bob sent 10 away in the closing block, dave's send back came after");
+  // alice voted, then moved everything to dave: her 100 counts once, in dave's vote
+  assert.deepEqual(f.totals.options.map((o) => o.weight), ["0", (130n * ONE).toString(), (40n * ONE).toString()]);
+  assert.equal(f.totals.weight, (170n * ONE).toString(), "never more than was held at the close");
+  assert.equal(f.totals.wallets, 2);
+  assert.ok(f.problems.some((p) => p.voter === alice.address && /held no GLOAM at the closing block/.test(p.problem)));
+  assert.deepEqual(f.checked, { balanceOf: 3, mismatches: 0 });
+  // every voter's weight is at most its own balance at the close, and the total at most what voters held
+  const sumAtClose = Object.values(f.balances).reduce((s, b) => s + BigInt(b), 0n);
+  assert.ok(BigInt(f.totals.weight) <= sumAtClose);
+  // eligible: everyone at the close less the excluded team wallet
+  assert.equal(f.eligible.weight, (100n * ONE + 30n * ONE + 50n * ONE).toString());
+  // the same count from the published ballots, recounted by anyone with the balances at the close
+  const r = await core.recount(closeVote, { balances: f.balances, block: f.closeBlock }, excluded, await listBallots(closeVote.id), undefined, { closeBlock: f.closeBlock });
+  assert.equal(r.tally.weight.toString(), f.totals.weight);
+});
+
+await test("weight at close: the final count is the same however it is worked out", async () => {
+  await castCloseBallots();
+  const chain = fakeChain({}, { logs: moves(CLOSE_BLOCK) });
+  const ballots = await listBallots(closeVote.id);
+  const strip = (f: import("../src/lib/vote/core").FinalWeights) => ({ ...f, computedAt: "", replayFrom: 0, logs: 0 });
+  const a = await final.computeFinal(closeVote, ballots, excluded, null, { chain, now: 1 });
+  const b = await final.computeFinal(closeVote, [...ballots].reverse(), excluded, null, { chain, now: 2 });
+  assert.deepEqual(strip(a), strip(b), "ballot order doesn't matter");
+  // from a checked snapshot before the close: the same balances with fewer logs
+  const at = core.replayTransfers(moves(CLOSE_BLOCK), B0);
+  const base: VoteSnapshot = { ...snapshot, voteId: closeVote.id, block: B0, blockTime: T0, balances: Object.fromEntries([...at].map(([k, v]) => [k, v.toString()])) };
+  const c = await final.computeFinal(closeVote, ballots, excluded, base, { chain, now: 3 });
+  assert.equal(c.replayFrom, B0);
+  assert.ok(c.logs < a.logs);
+  assert.deepEqual(strip(c), strip(a), "replaying from the snapshot gives the same count as from launch");
+  // the state at the block gone from the RPC: the replay alone, still the same count
+  const gone = await final.computeFinal(closeVote, ballots, excluded, null, { chain: fakeChain({}, { logs: moves(CLOSE_BLOCK), atBlock: "gone" }) });
+  assert.equal(gone.checked, null);
+  assert.deepEqual(gone.totals, a.totals);
+  // balanceOf disagreeing with the replay: refused, never stored
+  await assert.rejects(final.computeFinal(closeVote, ballots, excluded, null, { chain: fakeChain({}, { logs: moves(CLOSE_BLOCK), atBlock: "wrong" }) }), /differ/);
+  // a chain that hasn't reached the close yet: refused
+  await assert.rejects(final.computeFinal(closeVote, ballots, excluded, null, { chain: fakeChain({}, { logs: moves(CLOSE_BLOCK), head: CLOSE_BLOCK - 10 }) }), /before the close/);
+});
+
+await test("weight at close: stored once, on the first results request after the close, and never replaced", async () => {
+  const { voteSummary, ballotsExport } = await import("../src/lib/vote/results");
+  await castCloseBallots();
+  chainReads.setVoteChain(fakeChain({ [lower(alice.address)]: 1n }, { logs: moves(CLOSE_BLOCK) }));
+  // closed, inside the grace: still live
+  const early = await voteSummary(closeVote, null, excluded, END + 30_000, { finalize: true });
+  assert.equal(early.status, "closed");
+  assert.equal(early.basis, "counting");
+  assert.equal(await final.storedFinal(closeVote.id), null);
+  // a page load (no finalize) never works it out
+  const page = await voteSummary(closeVote, null, excluded, END + final.FINAL_GRACE_MS + 1, {});
+  assert.equal(page.basis, "counting");
+  assert.equal(await final.storedFinal(closeVote.id), null);
+  // another instance holds the lock: this one waits its turn
+  await kv([["SET", `gloam:vote:v1:${closeVote.id}:final:lock`, "1", "NX", "EX", 90]]);
+  assert.equal(await final.ensureFinal(closeVote, excluded, null, { now: END + final.FINAL_GRACE_MS + 1 }), null);
+  await kv([["DEL", `gloam:vote:v1:${closeVote.id}:final:lock`]]);
+  // the first API request after the grace works it out and stores it
+  const after = END + final.FINAL_GRACE_MS + 1;
+  const s = await voteSummary(closeVote, null, excluded, after, { finalize: true });
+  assert.equal(s.basis, "final");
+  assert.equal(s.closeBlock, CLOSE_BLOCK);
+  assert.deepEqual(s.totals.options.map((o) => o.weight), ["0", (130n * ONE).toString(), (40n * ONE).toString()]);
+  assert.equal(s.eligible?.wallets, 3);
+  const stored = await final.storedFinal(closeVote.id);
+  assert.ok(stored);
+  // asking again changes nothing, even if the chain now says something else
+  chainReads.setVoteChain(fakeChain({}, { logs: [] }));
+  final.clearFinalCache();
+  const again = await final.ensureFinal(closeVote, excluded, null, { now: after + 60_000 });
+  assert.deepEqual(again, stored);
+  const s2 = await voteSummary(closeVote, null, excluded, after + 60_000, { finalize: true });
+  assert.deepEqual(s2.totals, s.totals);
+  // the standing and the export use the final weights
+  const { voterStanding } = await import("../src/lib/vote/results");
+  const st = await voterStanding(closeVote, null, excluded, dave.address, { now: after });
+  assert.equal(st.basis, "close");
+  assert.equal(st.weight, (130n * ONE).toString());
+  const doc = await ballotsExport(closeVote, null, excluded, { now: after });
+  assert.equal(doc.final?.closeBlock, CLOSE_BLOCK);
+  assert.equal(doc.ballots.find((b) => b.voter === alice.address)?.weight, "0");
+  assert.equal(doc.ballots.find((b) => b.voter === dave.address)?.weight, (130n * ONE).toString());
+  // a snapshot-weighted vote never has a final count
+  assert.equal(await final.ensureFinal(testVote, excluded, snapshot, { now: after }), null);
+});
+
+await test("weight at close: feedback and Glim follow what a wallet holds now", async () => {
+  const { feedbackWeight } = await import("../src/lib/vote/feedback");
+  const { voteFacts } = await import("../src/lib/vote/glim");
+  chainReads.setVoteChain(fakeChain({ [lower(dave.address)]: 30n * ONE, [lower(team.address)]: 1000n * ONE }));
+  assert.equal(await feedbackWeight(dave.address, [closeVote], NOW), 30n * ONE, "bought after the snapshot");
+  assert.equal(await feedbackWeight(carol.address, [closeVote], NOW), 0n);
+  assert.equal(await feedbackWeight(team.address, [closeVote], NOW), 0n, "excluded");
+  assert.equal(await feedbackWeight(dave.address, [closeVote], END), 0n, "closed");
+  const text = voteFacts([closeVote], NOW)!;
+  assert.match(text, /when the vote closes/);
+  assert.doesNotMatch(text, /snapshot block|\u2014/);
+  assert.match(voteFacts([testVote], NOW)!, /snapshot block/, "a snapshot-weighted vote still says so");
+});
+
+await test("weight at close: the ballots cast before the change still verify, unchanged", async () => {
+  const { readFileSync } = await import("node:fs");
+  const fixture = JSON.parse(readFileSync(new URL("./fixtures/vote-ballots-2026-10-29.json", import.meta.url), "utf8")) as { ballots: Record<string, Ballot[]> };
+  let n = 0;
+  for (const [id, ballots] of Object.entries(fixture.ballots)) {
+    const v = VOTES.find((x) => x.id === id)!;
+    assert.equal(core.weightingOf(v), "close");
+    for (const b of ballots) {
+      // the message is the one they signed: weighting isn't part of it
+      const message = core.voteMessage(v, b.option, b.voter, b.timestamp);
+      assert.deepEqual(message, core.voteMessage({ ...v, weighting: undefined }, b.option, b.voter, b.timestamp));
+      assert.equal(message.snapshotBlock, BigInt(v.snapshotBlock));
+      assert.ok(await core.signatureValid(message, b.signature), `${id} ${b.voter}`);
+      n++;
+    }
+    // and they count at close, with whatever their wallets held then
+    const balances = Object.fromEntries(ballots.map((b) => [lower(b.voter), b.weight]));
+    const r = await core.recount(v, { balances, block: 123 }, registry.excludedForVote(v), ballots, undefined, { closeBlock: 123 });
+    assert.deepEqual(r.problems, []);
+    assert.equal(r.counted.length, ballots.length);
+  }
+  assert.ok(n >= 4, `${n} ballots checked`);
 });
 
 // ---------------------------------------------------------------- display

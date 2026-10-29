@@ -1,0 +1,146 @@
+{
+ "note": "Ballots published at gloam.trade/api/vote/<id>/ballots on 29 Oct 2026, before votes moved to weight at close. They must keep verifying.",
+ "ballots": {
+  "private-swaps-next": [
+   {
+    "voter": "0x533B0E5AfB4c2f913A9bb47580De47675cad40f3",
+    "option": 2,
+    "choice": "Stablecoin swaps on Base and Ethereum",
+    "weight": "4636330625152916715",
+    "timestamp": 1793294110,
+    "signature": "0x9a9a186a693743fc338b591d438b0aae27eb747c82c322606f211438e96f95f7449a7c4e2d2d1953361a37cf5a37199fb85d9eaaf363ae05661989ca22bdc3211c",
+    "receivedAt": 1793294115668
+   },
+   {
+    "voter": "0x8524B5b180df372130F31Fa35DB3eEef83C6D3e3",
+    "option": 1,
+    "choice": "Popular Robinhood Chain tokens",
+    "weight": "51096184869917088146",
+    "timestamp": 1793294201,
+    "signature": "0xd8bb1ec6ef2cc9c9752cb87e2af09619401cf20e7d3fa9dc2ab256caff4ed313598f81db803110a99fbe36c21c056887f98167bc57c6aa627d3c066f901e49d51c",
+    "receivedAt": 1793294224691
+   },
+   {
+    "voter": "0x012075c3729c5CBf03227e287EF8aa381c34af92",
+    "option": 0,
+    "choice": "More Robinhood stock tokens",
+    "weight": "1006090164413550665",
+    "timestamp": 1793294384,
+    "signature": "0xbd3760c1ec9dda2b3cc3c6901198a0a5e332e6ab3fc138f6f346205e1bbc4f252214a0dd4048f676e1bbb4583d5f6560acebd9818d11ea9d4066144cf87ccdfd1c",
+    "receivedAt": 1793294397857
+   },
+   {
+    "voter": "0x3344CFfc99302ECfD3DdABff5685Cf09F4b029a5",
+    "option": 2,
+    "choice": "Stablecoin swaps on Base and Ethereum",
+    "weight": "5859835967",
+    "timestamp": 1793294422,
+    "signature": "0x7d4c658fe9959f4b77479090c4da04526c5c8c5446000867295f575b3a257c6c7e2a54d1d993f4b172e1c7ea9eaecf42917025c6104c6adf140b498cc8fceeed1b",
+    "receivedAt": 1793294450766
+   },
+   {
+    "voter": "0x74161975C58470A48663673e5A8e0E2BDDe650Bd",
+    "option": 1,
+    "choice": "Popular Robinhood Chain tokens",
+    "weight": "1625605195340096524",
+    "timestamp": 1793296266,
+    "signature": "0xd25154bd6456f1347923ba9969b59ccf65be5147a0dc4320877d28e2787252c03f1420921cce43646be02f082987f67f487b871379ead573df988ab716d9b2651b",
+    "receivedAt": 1793296271549
+   }
+  ],
+  "next-chain": [
+   {
+    "voter": "0x533B0E5AfB4c2f913A9bb47580De47675cad40f3",
+    "option": 3,
+    "choice": "Solana",
+    "weight": "4636330625152916715",
+    "timestamp": 1793294139,
+    "signature": "0x865b53f5784825e66ca06a577b91857b62605df8ebdd1190ff0be4760d6e52c231dd4ec8e1463592a85419a6b44f9e13bfb76a9e14566b9739a344ca5c1244a81b",
+    "receivedAt": 1793294143344
+   },
+   {
+    "voter": "0x8524B5b180df372130F31Fa35DB3eEef83C6D3e3",
+    "option": 3,
+    "choice": "Solana",
+    "weight": "51096184869917088146",
+    "timestamp": 1793294228,
+    "signature": "0x4d2a957b01c389ab77643f28bba83102c096a4eb9c7b92fbc5606ae9ff864a3451eadc514c9b7f7c3688da6de529a18cf97af306732aee60171995f3818557cc1b",
+    "receivedAt": 1793294248956
+   },
+   {
+    "voter": "0x012075c3729c5CBf03227e287EF8aa381c34af92",
+    "option": 1,
+    "choice": "BNB Chain",
+    "weight": "1006090164413550665",
+    "timestamp": 1793294407,
+    "signature": "0xf463fc0283ad24c455821ddfaf04cf54e679eddd6103f3da8d9404de8814dd630f2fa83e34726703a024b41154de9d6659af214a1e2ad674706e67166cdf44f61c",
+    "receivedAt": 1793294413643
+   },
+   {
+    "voter": "0x3344CFfc99302ECfD3DdABff5685Cf09F4b029a5",
+    "option": 3,
+    "choice": "Solana",
+    "weight": "5859835967",
+    "timestamp": 1793294462,
+    "signature": "0x9cd84a99cd0383d8d83e4509b38430157b3b3a4287e36ae01f1e7cdbac23a7194b111622bf9b2a10a894ca7ef93c328819549069981c9342a35df205eceebec41b",
+    "receivedAt": 1793294478693
+   },
+   {
+    "voter": "0x74161975C58470A48663673e5A8e0E2BDDe650Bd",
+    "option": 3,
+    "choice": "Solana",
+    "weight": "1625605195340096524",
+    "timestamp": 1793296276,
+    "signature": "0x1467b553c17d178f633bd90476d6aef58516169a153bc00ba23817eb090204b46413d2bfdf5e530eedbebccd6940cb696084dab7167fc154a70ea0c98459e8ea1b",
+    "receivedAt": 1793296280629
+   }
+  ],
+  "first-integration": [
+   {
+    "voter": "0x533B0E5AfB4c2f913A9bb47580De47675cad40f3",
+    "option": 3,
+    "choice": "Shopping and cards",
+    "weight": "4636330625152916715",
+    "timestamp": 1793294160,
+    "signature": "0xa7361dd9f430f577d20d8ff8542bc4c33a14174ca4ff08bdd2c426791ec436683a900895f12e54a2d9895c2396cce018a4aee5a8b3f742d65d9a7b617b1dfd7c1c",
+    "receivedAt": 1793294163909
+   },
+   {
+    "voter": "0x8524B5b180df372130F31Fa35DB3eEef83C6D3e3",
+    "option": 1,
+    "choice": "AI agent platforms",
+    "weight": "51096184869917088146",
+    "timestamp": 1793294241,
+    "signature": "0x97a97b546bdf22175e8dc208c23ebcdbc02ce60f1f555cec930d835c4eb2b2b1746a9f780e72f7a88377be33ce1bf0e530250283cb488f5047811d54752c15cf1c",
+    "receivedAt": 1793294261762
+   },
+   {
+    "voter": "0x012075c3729c5CBf03227e287EF8aa381c34af92",
+    "option": 2,
+    "choice": "Payroll and payout tools",
+    "weight": "1006090164413550665",
+    "timestamp": 1793294435,
+    "signature": "0x389ffab14a8ee616e4d96f3a9caad9a9483e76b93a381650729f3720440a53205ab5ebab249ef84bd30c5afabdc39178766ab5aa619508d6b634b5352358ca8b1c",
+    "receivedAt": 1793294442239
+   },
+   {
+    "voter": "0x3344CFfc99302ECfD3DdABff5685Cf09F4b029a5",
+    "option": 3,
+    "choice": "Shopping and cards",
+    "weight": "5859835967",
+    "timestamp": 1793294509,
+    "signature": "0xfd0d9b4f9025f769bd077ed23a6a4fe331beacefd101a15c23486b1257f60d9e5b53949776f01e6f1df9eb03dc144cac8de747bb85fd251704f0cadc7b82cbd51c",
+    "receivedAt": 1793294529758
+   },
+   {
+    "voter": "0x74161975C58470A48663673e5A8e0E2BDDe650Bd",
+    "option": 1,
+    "choice": "AI agent platforms",
+    "weight": "1625605195340096524",
+    "timestamp": 1793296285,
+    "signature": "0x091aa51f235cf4d34997384207b4cb8480acbd99222339c0da97f2e3929627f641e48ff403f6042022198474c00d69cd60c71ba8ecf5149bb34bccbc94aade1f1c",
+    "receivedAt": 1793296289693
+   }
+  ]
+ }
+}
