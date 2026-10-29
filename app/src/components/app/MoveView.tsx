@@ -276,9 +276,13 @@ export function MoveView() {
   const [payStyle, setPayStyle] = useState<PayStyle>("direct");
   const [recipientTag, setRecipientTag] = useState(() => request?.to ?? "");
   // A 0x address or an ENS name in the To field is not paid with a note: Pay offers
-  // Cash out to that wallet instead (lib/payRecipient). The name is looked up on Ethereum mainnet.
+  // Cash out to that wallet instead (lib/payRecipient). The name is looked up on Ethereum mainnet,
+  // for the address it sets for this network (useEnsAddress).
   const payRecipient = useMemo(() => classifyPayRecipient(recipientTag), [recipientTag]);
-  const ensLookup = useEnsAddress(payStyle === "direct" && payRecipient.kind === "ens" ? payRecipient.name : null);
+  const ensLookup = useEnsAddress(
+    payStyle === "direct" && payRecipient.kind === "ens" ? payRecipient.name : null,
+    network.chainId
+  );
   const payWalletTo: Address | null =
     payStyle !== "direct"
       ? null
@@ -2472,7 +2476,21 @@ export function MoveView() {
                                   ? `${payRecipient.name} · ${shortAddress(ensLookup.address)}`
                                   : ensLookup.status === "none"
                                     ? "No address found for that name."
-                                    : "Looking up name…"}
+                                    : ensLookup.status === "unsafe"
+                                      ? `${payRecipient.name} · ${shortAddress(ensLookup.address)}`
+                                      : "Looking up name…"}
+                              </p>
+                            )}
+                            {ensLookup.status === "found" && ensLookup.source === "mainnet" && (
+                              <p className="mt-1 text-[12.5px] leading-relaxed text-mute">
+                                This name has no {network.label} address set, so this is its Ethereum address. It&apos;s a
+                                regular wallet, so the same owner holds it on {network.label}.
+                              </p>
+                            )}
+                            {ensLookup.status === "unsafe" && (
+                              <p role="alert" className="mt-1 text-[12.5px] leading-relaxed text-danger">
+                                This name only has an Ethereum address, and it&apos;s a smart account. It may not
+                                belong to them on {network.label}. Ask them for their {network.label} address.
                               </p>
                             )}
                             {payWalletTo && (
