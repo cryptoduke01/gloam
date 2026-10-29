@@ -296,6 +296,9 @@ export default function AgentsPage() {
                 public. A Gloam address gets a private payment instead: free,
                 with the amount hidden.
               </p>
+              <Link href="/docs/agents#fund-link" className="gl-arrowlink mt-5">
+                The full format <span aria-hidden>→</span>
+              </Link>
             </div>
           </div>
         </section>

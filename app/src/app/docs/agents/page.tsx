@@ -171,6 +171,52 @@ export default function DocsAgentsPage() {
         machine.
       </p>
 
+      <h2 id="fund-link">Fund an agent with one link</h2>
+      <p>
+        A platform can send its users to one link that opens Gloam with the
+        agent&apos;s address, the amount, the token and the network filled in.
+        Nothing is sent on its own: the user checks it and confirms.
+      </p>
+      <pre>
+        <code>{`https://gloam.trade/app/vault?tab=move&mode=pay#to=<address>&amount=<amount>&asset=<token>&chain=<network>&name=<name>&note=<note>`}</code>
+      </pre>
+      <ul>
+        <li>
+          <code>to</code>: a 0x address, an ENS name, or a Gloam address
+          (<code>gloamr1.…</code>). A 0x address with mixed case must have a
+          valid checksum; the zero address is refused.
+        </li>
+        <li>
+          <code>amount</code>: optional, in whole tokens (<code>25</code>,{" "}
+          <code>12.5</code>). It is only filled in when <code>asset</code> names
+          a token Gloam knows on that network.
+        </li>
+        <li>
+          <code>asset</code>: the token&apos;s symbol or address on that network,
+          for example <code>USDG</code> on Robinhood Chain.
+        </li>
+        <li>
+          <code>chain</code>: <code>robinhood-mainnet</code> or{" "}
+          <code>tempo-mainnet</code> for mainnet. <code>robinhood</code> and{" "}
+          <code>tempo</code> are the testnets.
+        </li>
+        <li>
+          <code>name</code> (up to 40 characters) and <code>note</code> (up to
+          80): optional. The note is sealed inside a payment to a Gloam address;
+          for a 0x address or ENS name it is only shown to the payer.
+        </li>
+      </ul>
+      <p>
+        Keep the fields after the <code>#</code>: browsers never send that part
+        to a server. A Gloam address opens Pay and makes a private payment,
+        free, with the amount hidden. A 0x address or an ENS name opens Cash out
+        to that wallet: the relay sends it from the user&apos;s private balance
+        for 0.25%, so their wallet does not show, while the receiving wallet,
+        the token and the amount are public. An ENS name is looked up on
+        Ethereum mainnet and paid on the network the link names. A field that
+        does not check out is left blank, with the reason shown to the user.
+      </p>
+
       <h2>Reference agent (the SDK path)</h2>
       <p>
         <code>examples/agent-shield</code> is the smallest complete agent: it
