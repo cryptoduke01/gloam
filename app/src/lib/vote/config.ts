@@ -40,8 +40,8 @@ export type VoteConfig = {
 
 /** The first three votes share one window and one snapshot block. */
 const FIRST_START = "2026-10-29T16:30:00Z";
-// the end of Sunday 1 November, midnight UTC
-const FIRST_END = "2026-11-02T00:00:00Z";
+// Sunday 1 November, 11pm UTC (midnight in Lagos)
+const FIRST_END = "2026-11-01T23:00:00Z";
 const FIRST_BLOCK = 101_022_464;
 
 export const VOTES: VoteConfig[] = [

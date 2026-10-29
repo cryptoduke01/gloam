@@ -349,15 +349,23 @@ function utcDay(d: Date): string {
   return `${weekday} ${date}`;
 }
 
+/** "11pm", "4:15pm", "noon", "midnight", in UTC. */
+function clock(d: Date): string {
+  const h = d.getUTCHours();
+  const m = d.getUTCMinutes();
+  if (m === 0 && h === 12) return "noon";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
+}
+
 /**
- * A time in plain words: "Sunday 1 Nov at midnight UTC" for the midnight that
- * ends Sunday (people say midnight for the end of a day), else "Thursday 29 Oct at 16:15 UTC".
+ * A time in plain words: "Sunday 1 Nov at 11pm UTC". The midnight that ends a
+ * day reads as that day ("Sunday 1 Nov at midnight UTC"), the way people say it.
  */
 export function whenPhrase(iso: string): string {
   const d = new Date(iso);
   if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return `${utcDay(new Date(d.getTime() - 1))} at midnight UTC`;
-  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
-  return `${utcDay(d)} at ${time} UTC`;
+  return `${utcDay(d)} at ${clock(d)} UTC`;
 }
 
 /** "2 days, 7 hours", "5 hours, 12 minutes", "12 minutes", "less than a minute". */

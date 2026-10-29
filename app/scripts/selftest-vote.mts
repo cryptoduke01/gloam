@@ -161,8 +161,8 @@ await test("the first three votes are published with one window and one snapshot
     assert.match(v.description, /advisory/);
   }
   assert.equal(new Set(first.map((v) => `${v!.snapshotBlock} ${v!.start} ${v!.end}`)).size, 1);
-  assert.equal(first[0]!.end, "2026-11-02T00:00:00Z");
-  assert.equal(core.whenPhrase(first[0]!.end), "Sunday 1 Nov at midnight UTC");
+  assert.equal(first[0]!.end, "2026-11-01T23:00:00Z");
+  assert.equal(core.whenPhrase(first[0]!.end), "Sunday 1 Nov at 11pm UTC");
   for (const v of first) {
     assert.equal(v!.details?.length, v!.options.length, `${v!.id}: one detail per option`);
     for (const d of v!.details ?? []) assert.doesNotMatch(d, /\u2014|\u2013|price|moon|pump/i);
@@ -583,7 +583,10 @@ await test("amounts and shares read plainly", () => {
   assert.equal(core.sharePercent(5n, 0n), "0%");
   assert.equal(core.sharePercent(1n, 4n), "25%");
   assert.equal(core.whenPhrase("2026-11-02T00:00:00Z"), "Sunday 1 Nov at midnight UTC");
-  assert.equal(core.whenPhrase("2026-10-29T16:15:00Z"), "Thursday 29 Oct at 16:15 UTC");
+  assert.equal(core.whenPhrase("2026-10-29T16:15:00Z"), "Thursday 29 Oct at 4:15pm UTC");
+  assert.equal(core.whenPhrase("2026-11-01T23:00:00Z"), "Sunday 1 Nov at 11pm UTC");
+  assert.equal(core.whenPhrase("2026-11-01T12:00:00Z"), "Sunday 1 Nov at noon UTC");
+  assert.equal(core.whenPhrase("2026-11-01T09:30:00Z"), "Sunday 1 Nov at 9:30am UTC");
   assert.equal(core.timeLeft(30_000), "less than a minute");
   assert.equal(core.timeLeft(60_000), "1 minute");
   assert.equal(core.timeLeft(12 * 60_000), "12 minutes");
