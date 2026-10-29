@@ -21,6 +21,7 @@ import {
   inWindow,
   signatureValid,
   voteMessage,
+  voteText,
   voteTypedData,
   weightOf,
   weightingOf,
@@ -73,7 +74,9 @@ export async function smartWalletCheck(message: VoteMessage, signature: Hex): Pr
     chain: robinhood,
     transport: serverTransport({ chainId: robinhood.id, chain: robinhood, historyRpc: null }, { timeout: 8_000, retryCount: 1 }),
   }) as PublicClient;
-  return rhClient.verifyTypedData({ address: message.voter, ...voteTypedData(message), signature });
+  // a smart wallet may have signed the typed data or, on the fallback, the plain-text form
+  if (await rhClient.verifyTypedData({ address: message.voter, ...voteTypedData(message), signature }).catch(() => false)) return true;
+  return rhClient.verifyMessage({ address: message.voter, message: voteText(message), signature }).catch(() => false);
 }
 
 export type SubmitContext = {
