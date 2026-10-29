@@ -177,8 +177,9 @@ if (!baseSepoliaPool()) {
   assert(live.indexOf(n) === live.indexOf(GLOAM_NETWORKS.tempo) + 1, "gloamNetworks puts Base Sepolia after the older testnets");
   assert(n.payMemo === BASE_SEPOLIA_PAY_MEMO && payMemoBoardFor(BASE_SEPOLIA_CHAIN_ID)?.deployBlock === 49_804_175n, "Base Sepolia's memo board");
   assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_USDC, 500_000_000n);
-  throws(() => assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_EURC, 500_000_001n), /at most 500 EURC/, "Base Sepolia: EURC over 500 refused");
-  throws(() => assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, NATIVE_ASSET, 210_000_000_000_000_000n), /at most 0\.2 ETH/, "Base Sepolia: ETH over 0.2 refused");
+  // amounts are read live from the vault now (limits.selftest), not from the launch values
+  assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_EURC, 500_000_001n);
+  assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, NATIVE_ASSET, 210_000_000_000_000_000n);
   throws(() => assertDepositAllowed(BASE_SEPOLIA_CHAIN_ID, BASE_USDT, 1n), /does not list/, "Base Sepolia: mainnet USDT refused");
 }
 await throwsAsync(
@@ -219,7 +220,7 @@ for (const [family, chainId, key, assets, native, memo] of [
   // Deposits: listed assets only, within the beta per-deposit limit, never native.
   const usd = net.assets[0];
   assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit);
-  throws(() => assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit + 1n), /beta limit/, `${key}: over the per-deposit limit`);
+  assertDepositAllowed(chainId, usd.address, usd.depositLimit.perDeposit + 1n); // the launch value no longer refuses
   if (!native) throws(() => assertDepositAllowed(chainId, NATIVE_ASSET, 1n), /no native deposits/, `${key}: native refused`);
   throws(() => assertDepositAllowed(chainId, "0x00000000000000000000000000000000000000bb", 1n), /does not list/, `${key}: unlisted asset refused`);
   const intent = await buildShieldBoundIntent({ chainId, asset: usd.address, amountWei: usd.depositLimit.perDeposit, prover });

@@ -30,7 +30,8 @@
  *   incoming  payee side: find payments sealed to your key and read their notes
  *   api       GloamApiClient: the partner API (relay with a key, proofs, links)
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
- *             testnet), assets + beta limits, cash-out fee, circuit files
+ *             testnet), assets + launch beta limits, cash-out fee, circuit files
+ *   limits    the vault's beta deposit limits, read live
  *   mainnet   MAINNET_POOLS, BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL, the
  *             one place those pool addresses live
  *
@@ -56,6 +57,7 @@ export * from "./witness.js";
 export * from "./proofs.js";
 export * from "./prove.js";
 export * from "./builders.js";
+export * from "./limits.js";
 export * from "./sync.js";
 export * from "./x402.js";
 export * from "./receiveTag.js";

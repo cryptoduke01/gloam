@@ -99,7 +99,7 @@ What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
 - **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
-- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026; this version checks the limits above. `buildShieldBoundIntent` refuses an unlisted asset or an amount over the per-deposit limit before it proves. Cash outs and private payments are never limited.
+- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. Those are the launch values. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026, so from 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`). Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
 - **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
@@ -162,7 +162,7 @@ const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: net.chain, transport: http(net.rpcUrl) });
 // Reads at the chain head, and old logs from a full-history RPC where the network names one (net.historyRpc).
 const publicClient = createPublicClient({ chain: net.chain, transport: gloamReadTransport(net) });
-const amount = parseUnits("25", 6);           // 25 USDC.e; the beta limit is 500 per deposit
+const amount = parseUnits("25", 6);           // 25 USDC.e, within the vault's beta limit (read live below)
 
 // 1. Mint the note and generate the shield proof with the mainnet (final) keys.
 const intent = await buildShieldBoundIntent({
@@ -171,6 +171,7 @@ const intent = await buildShieldBoundIntent({
   asset: TEMPO_USDCE,
   amountWei: amount,
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
+  client: publicClient, // checks the vault's live beta limits before proving
 });
 
 // 2. Let the pool pull the token, then sign the resolved shieldBound(asset, amount, commitment, proof) call.
@@ -409,7 +410,7 @@ New in 0.2.0. A service can ask to be paid privately, with a note on each paymen
 2. **Make a request link** with `buildPaymentRequestLink`: the same link the Gloam app makes, with your address, the network, the token, an optional amount and a note of up to 80 characters. A longer note is refused, not cut.
 3. **The payer pays it** from their private balance in Gloam. The note travels inside the payment, sealed to your address.
 4. **Find it.** Where the network has a payment-message board, `scanIncomingPayments` returns every payment sealed to your key, with its amount, token and note. It only returns payments that are in the vault and not yet spent, read at one block, and it splits any block range the node refuses. Resume from `scannedTo + 1`.
-5. **Secure it, then credit.** Until you move it, the payer could still spend it back. `sweepReceivedNote` moves it into a note only you know, through the Gloam relay, so your server needs no gas. Credit only when it returns `final: true`.
+5. **Secure it, then credit.** Until you move it, the payer could still spend it back. `sweepReceivedNote` moves it into a note only you know, through the Gloam relay, so your server needs no gas. Credit only when it returns `final: true`. From 0.4.2 that also means the fresh note is in the pool: a successful receipt alone is not enough, since a sweep sent through a smart account, bundler or forwarder can succeed outside while the transfer inside it reverts. Such a sweep comes back `unconfirmed`, with the fresh note kept.
 
 ```ts
 import {
@@ -467,7 +468,9 @@ ceremonyForChainId(chainId): "dev" | "production"           // production (final
 circuitArtifactUrls(circuit, chainId, base?)                // { wasm, zkey } for "shield" | "transfer" | "unshield"
 circuitArtifactFiles(circuit, ceremony), CIRCUIT_SHA256     // relative paths and SHA-256 to check a download
 GLOAM_ARTIFACTS_URL                                         // https://www.gloam.trade/circuits
-assertDepositAllowed(chainId, asset, amount)                // listed asset, beta per-deposit limit, no native on mainnet
+assertDepositAllowed(chainId, asset, amount)                // listed asset, no native on mainnet (amounts: read live, below)
+readDepositLimit(client, pool, asset)                       // the vault's live beta limit: { on, perDeposit, total, deposited, room } (0.4.2)
+assertDepositWithinLiveLimit(client, chainId, asset, amount, pool?)  // refuses over the live limit; refuses nothing if the vault can't be read
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
 BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia pool, null until it is in

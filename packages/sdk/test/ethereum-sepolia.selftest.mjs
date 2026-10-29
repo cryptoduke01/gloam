@@ -162,16 +162,22 @@ if (CONFIGURED || live !== null) {
   assertDepositAllowed(11155111, ETHEREUM_SEPOLIA_PYUSD, 500n * SIX);
   assertDepositAllowed(11155111, ETHEREUM_SEPOLIA_USDG, 500n * SIX);
   assertDepositAllowed(11155111, NATIVE_ASSET, 2n * 10n ** 17n);
-  throws(() => assertDepositAllowed(11155111, ETHEREUM_SEPOLIA_EURC, 500n * SIX + 1n), /at most 500 EURC per deposit/, "EURC over 500 refused");
-  throws(() => assertDepositAllowed(11155111, NATIVE_ASSET, 2n * 10n ** 17n + 1n), /at most 0\.2 ETH per deposit/, "ETH over 0.2 refused");
+  // amounts are not checked from the launch values any more: the vault's live limits decide (limits.selftest)
+  assertDepositAllowed(11155111, ETHEREUM_SEPOLIA_EURC, 500n * SIX + 1n);
+  assertDepositAllowed(11155111, NATIVE_ASSET, 2n * 10n ** 17n + 1n);
   throws(() => assertDepositAllowed(11155111, BASE_SEPOLIA_USDC, 1n), /does not list/, "Base Sepolia's USDC is not listed here");
 
   const i = await buildShieldBoundIntent({ chainId: 11155111, asset: ETHEREUM_SEPOLIA_USDC, amountWei: 100n * SIX, prover });
   assert(i.exec.poolAddress === pool && i.exec.fn === "shieldBound", "a USDC deposit goes to its pool with a proof");
   await throwsAsync(
-    () => buildShieldBoundIntent({ chainId: 11155111, asset: ETHEREUM_SEPOLIA_USDC, amountWei: 501n * SIX, prover }),
+    () =>
+      buildShieldBoundIntent({
+        chainId: 11155111, asset: ETHEREUM_SEPOLIA_USDC, amountWei: 501n * SIX, prover,
+        // the vault's own answer, read live: 500 per deposit
+        client: { readContract: async ({ functionName }) => (functionName === "depositLimitsOn" ? true : functionName === "depositLimit" ? [500n * SIX, 25_000n * SIX] : 0n) },
+      }),
     /beta limit/,
-    "the builder checks the limit before proving"
+    "the builder checks the vault's live limit before proving"
   );
 
   const payee = await generateReceiveKey();

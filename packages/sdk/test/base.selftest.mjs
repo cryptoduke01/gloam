@@ -118,15 +118,15 @@ assert(circuitArtifactUrls("unshield", 84532).zkey.endsWith("/final/unshield_fin
 
 // ── deposits: listed assets only, within the beta limits ─────────────────────────
 assertDepositAllowed(84532, BASE_SEPOLIA_USDC, 500_000_000n);
-throws(() => assertDepositAllowed(84532, BASE_SEPOLIA_EURC, 500_000_001n), /at most 500 EURC per deposit/, "EURC over 500 refused");
+assertDepositAllowed(84532, BASE_SEPOLIA_EURC, 500_000_001n); // amounts are read live (limits.selftest)
 throws(() => assertDepositAllowed(84532, BASE_USDC, 1n), /does not list/, "mainnet USDC is not listed on Sepolia");
 throws(() => assertDepositAllowed(84532, BASE_USDT, 1n), /does not list/, "no USDT on Sepolia");
 throws(() => assertDepositAllowed(84532, "0x00000000000000000000000000000000000000bb", 1n), /does not list/, "unlisted asset refused");
 assertDepositAllowed(84532, NATIVE_ASSET, eth("0.2"));
-throws(() => assertDepositAllowed(84532, NATIVE_ASSET, eth("0.21")), /at most 0\.2 ETH per deposit/, "ETH over 0.2 refused");
+assertDepositAllowed(84532, NATIVE_ASSET, eth("0.21"));
 assertDepositAllowed(8453, BASE_USDT, 500_000_000n);
 assertDepositAllowed(8453, NATIVE_ASSET, eth("0.2"));
-throws(() => assertDepositAllowed(8453, BASE_USDC, 500_000_001n), /at most 500 USDC per deposit/, "mainnet USDC over 500 refused");
+assertDepositAllowed(8453, BASE_USDC, 500_000_001n);
 throws(() => assertDepositAllowed(8453, BASE_SEPOLIA_USDC, 1n), /does not list/, "test USDC is not listed on mainnet");
 
 // ── builders ─────────────────────────────────────────────────────────────────────
@@ -134,9 +134,14 @@ throws(() => assertDepositAllowed(8453, BASE_SEPOLIA_USDC, 1n), /does not list/,
   const i = await buildShieldBoundIntent({ chainId: 84532, asset: NATIVE_ASSET, amountWei: eth("0.2"), prover });
   assert(i.exec.poolAddress === TEST_POOL && i.exec.fn === "shieldBound" && i.exec.valueWei === eth("0.2"), "ETH deposit on Sepolia sends value to its pool");
   await throwsAsync(
-    () => buildShieldBoundIntent({ chainId: 84532, asset: NATIVE_ASSET, amountWei: eth("0.21"), prover }),
+    () =>
+      buildShieldBoundIntent({
+        chainId: 84532, asset: NATIVE_ASSET, amountWei: eth("0.21"), prover,
+        // the vault's own answer, read live: 0.2 per deposit
+        client: { readContract: async ({ functionName }) => (functionName === "depositLimitsOn" ? true : functionName === "depositLimit" ? [eth("0.2"), eth("10")] : 0n) },
+      }),
     /beta limit/,
-    "builder checks the limit before proving"
+    "builder checks the vault's live limit before proving"
   );
   await throwsAsync(() => buildShieldIntent({ chainId: 84532, amountWei: 1n }), /Plain shield\(\) is off/, "no plain shield on Sepolia");
   await throwsAsync(

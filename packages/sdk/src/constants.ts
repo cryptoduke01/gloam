@@ -1,4 +1,4 @@
-import { defineChain, formatUnits, zeroAddress, type Address, type Chain } from "viem";
+import { defineChain, zeroAddress, type Address, type Chain } from "viem";
 import { base, baseSepolia, mainnet as ethereum, sepolia } from "viem/chains";
 import { baseSepoliaPool, ethereumSepoliaPayMemo, ethereumSepoliaPool, mainnetPoolFor, type MainnetChainId } from "./mainnet.js";
 import type { HistoryRpc } from "./rpc.js";
@@ -163,7 +163,11 @@ export function cashOutFee(amount: bigint, bps: number = CASH_OUT_FEE_BPS): bigi
  */
 export type CeremonyKind = "dev" | "production";
 
-/** Beta deposit limit for one asset, in its base units. */
+/**
+ * Beta deposit limit for one asset, in its base units, as it was at launch.
+ * The vault's owner changes limits through its timelock: read the current ones
+ * with readDepositLimit (lib limits).
+ */
 export interface DepositLimit {
   perDeposit: bigint;
   total: bigint;
@@ -646,13 +650,19 @@ export function poolForChainId(chainId: number): Address {
 
 /**
  * Checks a deposit against what the network's pool takes, before any proof is
- * made: a native deposit where the pool takes none, an asset a payments pool
- * (mainnet, Base Sepolia) does not list, or an amount over the beta per-deposit
- * limit. Unknown chains (a pool passed in explicitly) are not checked, nor are
- * the older testnets, whose pools list nothing. The pool's running total is
- * checked on chain, not here.
+ * made: a native deposit where the pool takes none, or an asset a payments pool
+ * (mainnet, Base Sepolia) does not list. Unknown chains (a pool passed in
+ * explicitly) are not checked, nor are the older testnets, whose pools list
+ * nothing.
+ *
+ * The amount is not checked here: the beta limits change through the vault's
+ * timelock, so the `depositLimit` on each asset is only the launch value. Read
+ * them live with assertDepositWithinLiveLimit (lib limits), which
+ * buildShieldBoundIntent does when given a `client`. `amount` is kept so
+ * existing callers compile.
  */
 export function assertDepositAllowed(chainId: number, asset: Address, amount: bigint): void {
+  void amount;
   const net = networkForChainId(chainId);
   if (!net) return;
   const where = networkName(chainId);
@@ -663,11 +673,6 @@ export function assertDepositAllowed(chainId: number, asset: Address, amount: bi
   const listed = net.assets.find((a) => a.address.toLowerCase() === asset.toLowerCase());
   if (!listed) {
     throw new Error(`The ${where} pool does not list ${asset}. It takes ${net.assets.map((a) => a.symbol).join(", ")}.`);
-  }
-  if (listed.depositLimit && amount > listed.depositLimit.perDeposit) {
-    const [whole = "0", frac] = formatUnits(listed.depositLimit.perDeposit, listed.decimals).split(".");
-    const cap = BigInt(whole).toLocaleString("en-US") + (frac ? `.${frac}` : "");
-    throw new Error(`Over the beta limit on ${where}: at most ${cap} ${listed.symbol} per deposit.`);
   }
 }
 
