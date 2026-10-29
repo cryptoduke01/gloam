@@ -184,7 +184,7 @@ export function SendView() {
           add them to your private balance and pay from Move, or send them from your
           wallet app.
         </p>
-        <Link href="/app/vault?tab=move&mode=pay" className="btn btn-ink mt-5 inline-flex">
+        <Link href="/app/vault?tab=move" className="btn btn-ink mt-5 inline-flex">
           Pay privately
         </Link>
       </div>

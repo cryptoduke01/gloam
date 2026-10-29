@@ -34,7 +34,8 @@ const TEXT_W = size.width - PAD_X * 2 - ART_W - 56;
 const asset = (f: string) => join(process.cwd(), "src/assets/og", f);
 
 let assets: Promise<{ light: Buffer; medium: Buffer; etching: string }> | undefined;
-function loadAssets() {
+/** Aeonik Light and Medium and the etching as a data URL, read once per server. */
+export function loadAssets() {
   assets ??= Promise.all([
     readFile(asset("Aeonik-Light.ttf")),
     readFile(asset("Aeonik-Medium.ttf")),
@@ -76,7 +77,8 @@ function titleSize(lines: string[]): number {
   return Math.min(76, fit);
 }
 
-function Mark() {
+/** The Gloam mark: the paper tile with its ink square. */
+export function Mark() {
   return (
     <div
       style={{
