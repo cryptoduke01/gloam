@@ -33,7 +33,7 @@ Mainnet runs `ShieldPoolPayments`: the same surface without `sealedSwap`, plus b
 
 ## Mainnet deploy (2026-10-21, beta)
 
-Both mainnets run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol` and `DeployTempoMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open; an external audit is planned.
+All four mainnets (Robinhood Chain, Tempo, Base and Ethereum) run `ShieldPoolPayments` (`src/ShieldPoolPayments.sol`): the shared core with no sealed swap code, deposits through `shieldBound()` only, beta deposit limits and a 0.25% cash-out fee. Each was deployed by `script/MainnetDeploy.sol` (through `DeployRobinhoodMainnet.s.sol`, `DeployTempoMainnet.s.sol`, `DeployBaseMainnet.s.sol` and `DeployEthereumMainnet.s.sol`), which deploys the final-key verifiers, refuses to create the pool unless they accept final-key proofs and reject dev-key ones, and ends setup in the same run. The internal pre-mainnet review (20 October 2026) closed with no Critical or High findings open; an external audit is planned.
 
 Base runs the same deploy, with native ETH listed next to USDC, EURC and, on mainnet, bridged USDT. Base Sepolia (`84532`, a testnet on the final keys) went live on 24 October 2026 through `DeployBaseSepolia.s.sol` (table below). Base mainnet (`8453`, `DeployBaseMainnet.s.sol`) is next and not deployed. Runbook: [`DEPLOY-BASE.md`](../DEPLOY-BASE.md).
 
@@ -153,7 +153,7 @@ Older verifier deployments (for example `DualProofVerifier 0x4B0D…949C`, `Seal
 | --- | --- | --- |
 | 0 | Interfaces + scaffold | Done |
 | 1 | Keccak pool, shield only | Superseded (history only) |
-| 2 | Poseidon pool, bound shield + unshield + transfer, dual verifier | **Live on mainnet (final keys, `ShieldPoolPayments`) and testnet (dev keys)**, RH + Tempo |
+| 2 | Poseidon pool, bound shield + unshield + transfer, dual verifier | **Live on mainnet (final keys, `ShieldPoolPayments`)** on RH, Tempo, Base and Ethereum, and **on testnet (dev keys)** on RH + Tempo |
 | 2b | No admin withdraw, timelocked rule changes | **Live on testnet** since 2026-09-29, **on mainnet** from launch |
 | 3a | Vault trade adapter (unshield → DEX → reshield) | In the app where a public pool exists; size is public on the swap edge |
 | 3b | Sealed-size private trade | **Built, switched off pending audit** (`sealedSwapVerifier = 0`); see [SEALED_TRADE.md](./SEALED_TRADE.md) |
