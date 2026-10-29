@@ -112,7 +112,7 @@ function HeldList({ stats }: { stats: PublicStats }) {
             {/* the token's own mark, with its network as a small badge */}
             <span className="relative inline-block shrink-0" style={{ width: 28, height: 28 }}>
               <TokenLogo id={r.symbol.toLowerCase().replace(/[^a-z0-9]/g, "")} symbol={r.symbol} size={28} />
-              <span className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-background">
+              <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-background">
                 <ChainMark chainId={r.chainId} size={12} />
               </span>
             </span>
