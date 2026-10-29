@@ -536,8 +536,8 @@ export default function DocsNetworksPage() {
         </li>
         <li>
           <strong>Mainnet assets</strong>,{" "}
-          {BASE_MAINNET_TOKENS.map((t) => t.symbol).join(", ")}{" "}
-          (6 decimals each) and ETH. USDC and EURC are Circle&apos;s; USDT is Tether bridged from
+          {BASE_MAINNET_TOKENS.filter((t) => t.kind === "stablecoin").map((t) => t.symbol).join(", ")}{" "}
+          (6 decimals each), ETH, and Beldex&apos;s BDX (9 decimals). USDC and EURC are Circle&apos;s; USDT is Tether bridged from
           Ethereum over Base&apos;s standard bridge.
         </li>
         <li>
@@ -568,6 +568,10 @@ export default function DocsNetworksPage() {
         <li>
           <strong>Beta limits, both networks</strong>, each stablecoin 500 per
           deposit and 25,000 in total; ETH 0.2 per deposit and 10 in total
+        </li>
+        <li>
+          <strong>BDX on Base mainnet</strong>, 100,000 per deposit and 2,000,000 in total, set through
+          the vault&apos;s 3-day timelock. Add offers BDX once that limit is live on chain.
         </li>
       </ul>
 
@@ -632,13 +636,17 @@ export default function DocsNetworksPage() {
           {ETHEREUM_MAINNET_MEMO ? <code>{ETHEREUM_MAINNET_MEMO.address}</code> : <>Not deployed yet</>}
         </li>
         <li>
-          <strong>Assets</strong>, {ETHEREUM_MAINNET_TOKENS.map((t) => t.symbol).join(", ")} (6
-          decimals each) and ETH. USDC and EURC are Circle&apos;s, USDT is
+          <strong>Assets</strong>, {ETHEREUM_MAINNET_TOKENS.filter((t) => t.kind === "stablecoin").map((t) => t.symbol).join(", ")} (6
+          decimals each), ETH, and Beldex&apos;s BDX (9 decimals). USDC and EURC are Circle&apos;s, USDT is
           Tether&apos;s, USDG and PYUSD are issued by Paxos.
         </li>
         <li>
           <strong>Beta limits</strong>, each stablecoin 500 per deposit and
           25,000 in total; ETH 0.2 per deposit and 10 in total
+        </li>
+        <li>
+          <strong>BDX</strong>, 100,000 per deposit and 2,000,000 in total, set through the
+          vault&apos;s 3-day timelock. Add offers BDX once that limit is live on chain.
         </li>
       </ul>
 
