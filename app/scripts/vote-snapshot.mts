@@ -10,7 +10,7 @@
  *
  * Creating and opening a vote:
  *   1. In src/lib/vote/config.ts, add the vote with `published: false` and `snapshotBlock: 0`.
- *   2. From app/:  ../mcp/node_modules/.bin/tsx scripts/vote-snapshot.mts <id>
+ *   2. From app/:  ../mcp/node_modules/.bin/tsx scripts/vote-snapshot.mts <id>   (several ids share one block)
  *   3. Put the block it prints into `snapshotBlock`, set `start` and `end` (UTC).
  *   4. Preview it: GLOAM_VOTE_PREVIEW=1 pnpm dev, then open /vote/<id>.
  *   5. Set `published: true`, commit the config and the snapshot, ship.
@@ -48,19 +48,28 @@ const flag = (name: string) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const VALUE_FLAGS = new Set(["--block", "--rpc"]);
-const id = args.find((a, i) => !a.startsWith("--") && !VALUE_FLAGS.has(args[i - 1] ?? ""));
-if (!id) {
-  console.error("Usage: tsx scripts/vote-snapshot.mts <vote id> [--block <n>] [--rpc <url>] [--allow-unchecked]");
+const ids = args.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.has(args[i - 1] ?? ""));
+if (ids.length === 0) {
+  console.error("Usage: tsx scripts/vote-snapshot.mts <vote id> [<vote id> ...] [--block <n>] [--rpc <url>] [--allow-unchecked]");
   process.exit(1);
 }
-const vote = VOTES.find((v) => v.id === id);
-if (!vote) {
-  console.error(`No vote "${id}" in src/lib/vote/config.ts.`);
-  process.exit(1);
-}
-const problems = configProblems({ ...vote, published: false });
-if (problems.length) {
-  console.error(`Fix the vote config first:\n- ${problems.join("\n- ")}`);
+// several votes can share one snapshot: one block, one read, one file each
+const votes = ids.map((id) => {
+  const v = VOTES.find((x) => x.id === id);
+  if (!v) {
+    console.error(`No vote "${id}" in src/lib/vote/config.ts.`);
+    process.exit(1);
+  }
+  const problems = configProblems({ ...v, published: false });
+  if (problems.length) {
+    console.error(`Fix the vote config first:\n- ${problems.join("\n- ")}`);
+    process.exit(1);
+  }
+  return v;
+});
+const configured = [...new Set(votes.map((v) => v.snapshotBlock).filter((b) => b > 0))];
+if (configured.length > 1) {
+  console.error(`These votes name different snapshot blocks (${configured.join(", ")}). Take them one at a time.`);
   process.exit(1);
 }
 
@@ -72,7 +81,7 @@ if ((await client.getChainId()) !== VOTE_CHAIN_ID) {
 }
 
 const head = Number(await client.getBlockNumber());
-const asked = flag("--block") ? Number(flag("--block")) : vote.snapshotBlock || head - 20;
+const asked = flag("--block") ? Number(flag("--block")) : configured[0] || head - 20;
 if (!Number.isSafeInteger(asked) || asked < GLOAM_FIRST_BLOCK || asked > head) {
   console.error(`Block ${asked} is not between ${GLOAM_FIRST_BLOCK} and the head (${head}).`);
   process.exit(1);
@@ -144,8 +153,7 @@ try {
   }
 }
 
-const snapshot: VoteSnapshot = {
-  voteId: vote.id,
+const shared: Omit<VoteSnapshot, "voteId"> = {
   chainId: VOTE_CHAIN_ID,
   token: GLOAM_TOKEN_ADDRESS,
   block: asked,
@@ -158,7 +166,7 @@ const snapshot: VoteSnapshot = {
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "../src/lib/vote/snapshots");
 mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, `${vote.id}.json`), JSON.stringify(snapshot, null, 1) + "\n");
+for (const v of votes) writeFileSync(join(dir, `${v.id}.json`), JSON.stringify({ voteId: v.id, ...shared }, null, 1) + "\n");
 
 // the index imports every snapshot in the folder
 const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
@@ -174,14 +182,17 @@ const index = [
   "",
 ].join("\n");
 writeFileSync(join(dir, "index.ts"), index);
-JSON.parse(readFileSync(join(dir, `${vote.id}.json`), "utf8"));
-
-const excluded = excludedFor(vote.exclude);
-const eligible = eligibleTotal(snapshot, excluded);
-const left = [...excluded.values()].filter((e) => balances.has(e.address.toLowerCase()));
 console.log("");
-console.log(`Snapshot written: src/lib/vote/snapshots/${vote.id}.json`);
-console.log(`Eligible: ${eligible.wallets} wallets holding ${formatGloam(eligible.weight)} GLOAM.`);
-for (const e of left) console.log(`Not counted: ${e.address} ${formatGloam(balances.get(e.address.toLowerCase())!)} GLOAM (${e.reason})`);
+for (const v of votes) {
+  JSON.parse(readFileSync(join(dir, `${v.id}.json`), "utf8"));
+  const excluded = excludedFor(v.exclude);
+  const eligible = eligibleTotal(shared, excluded);
+  console.log(`Snapshot written: src/lib/vote/snapshots/${v.id}.json`);
+  console.log(`  Eligible: ${eligible.wallets} wallets holding ${formatGloam(eligible.weight)} GLOAM.`);
+  for (const e of excluded.values()) {
+    const held = balances.get(e.address.toLowerCase());
+    if (held) console.log(`  Not counted: ${e.address} ${formatGloam(held)} GLOAM (${e.reason})`);
+  }
+}
 console.log("");
-console.log(`Now set snapshotBlock: ${asked} for "${vote.id}" in src/lib/vote/config.ts.`);
+console.log(`Now set snapshotBlock: ${asked} for ${votes.map((v) => `"${v.id}"`).join(", ")} in src/lib/vote/config.ts.`);

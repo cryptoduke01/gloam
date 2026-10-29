@@ -16,7 +16,7 @@ const POLL_MS = 10_000;
 const explorer = (a: string) => `${robinhood.blockExplorers.default.url}/address/${a}`;
 const LIST_PAGE = 25;
 
-type Props = { initial: VoteSummary };
+type Props = { initial: VoteSummary; others?: { id: string; question: string }[] };
 
 function statusLine(s: VoteSummary): string {
   if (s.draft) return "Draft, not published";
@@ -47,7 +47,7 @@ function Check({ size = 14 }: { size?: number }) {
   );
 }
 
-export function VoteClient({ initial }: Props) {
+export function VoteClient({ initial, others = [] }: Props) {
   const [summary, setSummary] = useState<VoteSummary>(initial);
   const [ballots, setBallots] = useState<Ballot[] | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -345,6 +345,23 @@ export function VoteClient({ initial }: Props) {
           )}
         </div>
       </section>
+
+      {/* the other votes running now: each counts on its own */}
+      {others.length > 0 && (
+        <nav className="mx-auto max-w-[760px] px-5 pt-8 sm:px-7" aria-label="Other votes">
+          <p className="text-[14px] text-mute">Also open. Each vote counts on its own.</p>
+          <ul className="mt-3 divide-y divide-line border-y border-line">
+            {others.map((o) => (
+              <li key={o.id}>
+                <Link href={`/vote/${o.id}`} className="flex min-h-12 items-center justify-between gap-4 py-3 text-[15px] text-foreground transition-colors hover:text-soft">
+                  <span className="min-w-0">{o.question}</span>
+                  <span aria-hidden>→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
       {/* how it works */}
       <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-20" aria-labelledby="how-title">
