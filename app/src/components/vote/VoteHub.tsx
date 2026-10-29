@@ -1,0 +1,196 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useCallback, useRef, useState } from "react";
+import { whenPhrase, type Ballot } from "@/lib/vote/core";
+import type { VoteSummary } from "@/lib/vote/results";
+import { BallotCard, CheckIcon, ClosingLine, HowItWorks, Progress, Recount, ResultsCard, ShareVoted, UpdatedAgo, Welcome } from "./VoteParts";
+import { useLiveVotes, useMe, useVoteWallet } from "./voteHooks";
+
+const WalletConnectSheet = dynamic(() => import("@/components/app/WalletConnectSheet").then((m) => m.WalletConnectSheet), { ssr: false });
+
+const isActive = (v: VoteSummary) => v.status === "open" || v.status === "upcoming" || v.draft;
+
+/**
+ * /vote: every open question as one guided ballot, a question per screen,
+ * then a thank-you summary, with the live results and the recount below.
+ */
+export function VoteHub({ initial }: { initial: VoteSummary[] }) {
+  const wallet = useVoteWallet();
+  const { me, failed, retry, recordBallot } = useMe(wallet.address);
+  const { votes, updatedAt, refresh } = useLiveVotes(initial, "all");
+  const active = votes.filter(isActive);
+  const past = votes.filter((v) => !isActive(v));
+
+  const voted = useCallback((id: string) => Boolean(me?.votes[id]?.ballot), [me]);
+  const firstOpen = active.findIndex((v) => !voted(v.id));
+  const auto: number | "summary" = me && active.length > 0 && firstOpen === -1 ? "summary" : Math.max(0, firstOpen);
+  const [chosen, setChosen] = useState<number | "summary" | null>(null);
+  const step = chosen ?? auto;
+
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const summaryRef = useRef<HTMLHeadingElement>(null);
+  const ballotTop = useRef<HTMLDivElement>(null);
+
+  const go = (to: number | "summary") => {
+    setChosen(to);
+    // move focus with the step, so a screen reader reads the new question; keep its top in view
+    window.requestAnimationFrame(() => {
+      (to === "summary" ? summaryRef.current : headingRef.current)?.focus({ preventScroll: true });
+      const top = ballotTop.current?.getBoundingClientRect().top ?? 0;
+      if (top < 64) ballotTop.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    });
+  };
+
+  const onSigned = (id: string) => (b: Ballot) => {
+    recordBallot(id, b);
+    void refresh();
+  };
+
+  const shared = active.length > 0 && active.every((v) => v.end === active[0]!.end && v.start === active[0]!.start) ? active[0]! : null;
+  const block = votes[0]?.snapshotBlock ?? 0;
+  const anyVoted = active.some((v) => voted(v.id));
+
+  return (
+    <>
+      {/* welcome */}
+      <section className="mx-auto max-w-[760px] px-5 pt-12 sm:px-7 sm:pt-20">
+        <p className="text-[14px] text-mute">$GLOAM holder votes</p>
+        <h1 className="t-display-l mt-5 max-w-[16ch] [text-wrap:balance]">Help decide what Gloam builds next</h1>
+        <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
+          {active.length > 1 ? `${["", "One", "Two", "Three", "Four", "Five"][active.length] ?? active.length} questions.` : "One question."} Each
+          answer is a free signature, weighted by the $GLOAM you held at block {block.toLocaleString("en-US")}.
+        </p>
+        {shared && <ClosingLine s={shared} className="mt-4" />}
+      </section>
+
+      {active.length === 0 ? (
+        <section className="mx-auto max-w-[760px] px-5 pt-12 sm:px-7">
+          <div className="border-y border-line py-8">
+            <p className="text-[17px] text-foreground">No vote is open right now.</p>
+            <p className="mt-2 text-[14.5px] leading-relaxed text-mute">The next one is announced on X @gloamtrade and in the Telegram group.</p>
+          </div>
+        </section>
+      ) : (
+        <section className="mx-auto max-w-[760px] px-5 pt-10 sm:px-7" aria-label="Your ballot">
+          {wallet.address && (
+            <div className="mb-4">
+              <Welcome me={me} address={wallet.address} chainId={wallet.chainId} failed={failed} onRetry={retry} onDisconnect={wallet.disconnect} />
+            </div>
+          )}
+
+          <div ref={ballotTop} className="scroll-mt-20">
+            {active.length > 1 && <Progress votes={active} current={step} voted={voted} onJump={go} />}
+
+            <div key={String(step)} className="gl-settle mt-2">
+              {step === "summary" ? (
+                <section aria-labelledby="summary-title" className="gl-card p-5 sm:p-8">
+                  <h2 id="summary-title" ref={summaryRef} tabIndex={-1} className="text-[24px] leading-[1.2] tracking-[-0.02em] text-foreground outline-none sm:text-[30px]">
+                    {active.every((v) => voted(v.id)) ? "Thank you for voting" : "Your answers so far"}
+                  </h2>
+                  <p className="mt-3 max-w-[56ch] text-[15px] leading-relaxed text-soft">
+                    {wallet.address
+                      ? active.every((v) => voted(v.id))
+                        ? `Your voice is counted in all ${active.length}. You can change any answer until ${whenPhrase(active[0]!.end)}.`
+                        : "Answer the rest whenever you like, until the votes close."
+                      : "Connect your wallet to vote."}
+                  </p>
+                  <ol className="mt-6 divide-y divide-line border-y border-line">
+                    {active.map((v, i) => {
+                      const b = me?.votes[v.id]?.ballot ?? null;
+                      return (
+                        <li key={v.id} className="flex items-center justify-between gap-4 py-4">
+                          <div className="min-w-0">
+                            <p className="text-[13.5px] text-mute">{v.question}</p>
+                            <p className={`mt-1 flex items-center gap-2 text-[16px] ${b ? "text-foreground" : "text-faint"}`}>
+                              {b && (
+                                <span className="text-sealed">
+                                  <CheckIcon />
+                                </span>
+                              )}
+                              {b ? b.choice : "Not answered yet"}
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => go(i)} className="btn btn-quiet btn-sm min-h-10 shrink-0">
+                            {b ? "Change" : "Answer"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <a href="#results" className="btn btn-ink btn-lg w-full sm:w-auto">
+                      See the live results
+                    </a>
+                    {anyVoted && <ShareVoted endPhrase={whenPhrase(active[0]!.end)} />}
+                  </div>
+                  {anyVoted && <p className="mt-3 text-[12.5px] text-mute">The post doesn&apos;t include your wallet address.</p>}
+                </section>
+              ) : (
+                <BallotCard
+                  key={active[step]!.id}
+                  s={active[step]!}
+                  standing={me?.votes[active[step]!.id] ?? null}
+                  wallet={wallet}
+                  meFailed={failed}
+                  onSigned={onSigned(active[step]!.id)}
+                  headingRef={headingRef}
+                  step={{
+                    index: step,
+                    total: active.length,
+                    back: step > 0 ? () => go(step - 1) : undefined,
+                    next: () => go(step + 1 < active.length ? step + 1 : "summary"),
+                    nextLabel: step + 1 < active.length ? "Next question" : "See your summary",
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* live results */}
+      {votes.length > 0 && (
+        <section id="results" className="mx-auto max-w-[760px] scroll-mt-20 px-5 pt-16 sm:px-7 sm:pt-24" aria-labelledby="results-title">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h2 id="results-title" className="t-display-m">
+              Live results
+            </h2>
+            <UpdatedAgo at={updatedAt} />
+          </div>
+          <p className="mt-3 max-w-[58ch] text-[14.5px] leading-relaxed text-mute">
+            Weighted by $GLOAM at the snapshot. The darker bar is the answer leading right now.
+          </p>
+          <div className="mt-6 flex flex-col gap-4">
+            {active.map((v) => (
+              <ResultsCard key={v.id} s={v} mine={me?.votes[v.id]?.ballot ?? null} />
+            ))}
+          </div>
+          <div className="mt-6">
+            <Recount votes={active.length ? active : votes} />
+          </div>
+        </section>
+      )}
+
+      <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-24">
+        <HowItWorks block={block} firstId={votes[0]?.id} />
+      </section>
+
+      {past.length > 0 && (
+        <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7" aria-labelledby="past-title">
+          <h2 id="past-title" className="t-display-m">
+            Past votes
+          </h2>
+          <div className="mt-6 flex flex-col gap-4">
+            {past.map((v) => (
+              <ResultsCard key={v.id} s={v} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="pb-20 sm:pb-28" />
+      {wallet.sheetOpen && <WalletConnectSheet open={wallet.sheetOpen} onClose={wallet.closeSheet} />}
+    </>
+  );
+}

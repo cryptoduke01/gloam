@@ -84,6 +84,8 @@ export const SIGNED_MAX_AHEAD_SEC = 2 * 60;
 /** The longest signature taken: a smart wallet's ERC-1271 or ERC-6492 signature can run long. */
 export const MAX_SIGNATURE_HEX = 6_000;
 
+/** Paths under /api/vote that are not votes. */
+const RESERVED_IDS = new Set(["me", "all"]);
 const ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 /** What's wrong with a vote's configuration, or an empty list. */
@@ -96,6 +98,9 @@ export function configProblems(v: VoteConfig): string[] {
   if (labels.some((o) => !o)) out.push(`${v.id}: an option is empty`);
   if (new Set(labels).size !== labels.length) out.push(`${v.id}: two options are the same`);
   if (v.options.some((o) => o.length > 80)) out.push(`${v.id}: keep each option under 80 characters`);
+  if (v.details && v.details.length !== v.options.length) out.push(`${v.id}: details needs one line per option`);
+  if (v.details?.some((d) => !d.trim() || d.length > 160)) out.push(`${v.id}: keep each detail to one line under 160 characters`);
+  if (RESERVED_IDS.has(v.id)) out.push(`${v.id}: that id is taken by the site`);
   if (!Number.isSafeInteger(v.snapshotBlock) || v.snapshotBlock < 0) out.push(`${v.id}: snapshotBlock must be a block number`);
   if (v.snapshotBlock > 0 && v.snapshotBlock < GLOAM_FIRST_BLOCK) out.push(`${v.id}: snapshotBlock is before $GLOAM existed`);
   const start = Date.parse(v.start);
@@ -336,4 +341,42 @@ export function formatUtc(iso: string): string {
 /** 0x1234…abcd */
 export function shortAddress(a: string): string {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+function utcDay(d: Date): string {
+  const weekday = d.toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  return `${weekday} ${date}`;
+}
+
+/**
+ * A time in plain words: "Sunday 1 Nov at midnight UTC" for the midnight that
+ * ends Sunday (people say midnight for the end of a day), else "Thursday 29 Oct at 16:15 UTC".
+ */
+export function whenPhrase(iso: string): string {
+  const d = new Date(iso);
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return `${utcDay(new Date(d.getTime() - 1))} at midnight UTC`;
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+  return `${utcDay(d)} at ${time} UTC`;
+}
+
+/** "2 days, 7 hours", "5 hours, 12 minutes", "12 minutes", "less than a minute". */
+export function timeLeft(ms: number): string {
+  if (ms < 60_000) return "less than a minute";
+  const min = Math.floor(ms / 60_000);
+  const days = Math.floor(min / 1440);
+  const hours = Math.floor((min % 1440) / 60);
+  const mins = min % 60;
+  const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  if (days > 0) return hours > 0 ? `${n(days, "day")}, ${n(hours, "hour")}` : n(days, "day");
+  if (hours > 0) return mins > 0 ? `${n(hours, "hour")}, ${n(mins, "minute")}` : n(hours, "hour");
+  return n(mins, "minute");
+}
+
+/** A small share in percent with two decimals: "0.28%", "<0.01%" for dust, "0%" for nothing. */
+export function sharePercent(part: bigint, whole: bigint): string {
+  if (whole <= 0n || part <= 0n) return "0%";
+  const bp = (part * 10_000n) / whole;
+  if (bp === 0n) return "<0.01%";
+  return `${(Number(bp) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
 }

@@ -27,6 +27,7 @@ import { getAddress, isAddress, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 process.env.GLOAM_PARTNERS_STORE = "memory";
+process.env.GLOAM_VOTE_NO_ENS = "1";
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
 delete process.env.GLOAM_VOTE_PREVIEW;
@@ -160,7 +161,12 @@ await test("the first three votes are published with one window and one snapshot
     assert.match(v.description, /advisory/);
   }
   assert.equal(new Set(first.map((v) => `${v!.snapshotBlock} ${v!.start} ${v!.end}`)).size, 1);
-  assert.equal(first[0]!.end, "2026-11-03T18:00:00Z");
+  assert.equal(first[0]!.end, "2026-11-02T00:00:00Z");
+  assert.equal(core.whenPhrase(first[0]!.end), "Sunday 1 Nov at midnight UTC");
+  for (const v of first) {
+    assert.equal(v!.details?.length, v!.options.length, `${v!.id}: one detail per option`);
+    for (const d of v!.details ?? []) assert.doesNotMatch(d, /\u2014|\u2013|price|moon|pump/i);
+  }
 });
 
 await test("config problems are caught", () => {
@@ -174,6 +180,10 @@ await test("config problems are caught", () => {
   assert.ok(bad({ snapshotBlock: 0 })); // published with no snapshot
   assert.ok(bad({ snapshotBlock: 5 }));
   assert.ok(!bad({ published: false, snapshotBlock: 0 }));
+  assert.ok(bad({ details: ["only one"] }));
+  assert.ok(bad({ details: ["a", "", "c"] }));
+  assert.ok(!bad({ details: ["a", "b", "c"] }));
+  assert.ok(bad({ id: "me" }), "reserved for /api/vote/me");
 });
 
 await test("the standing exclusions name the team wallets, the vault, the swap routers and the pools", () => {
@@ -521,6 +531,42 @@ await test("three votes at once: separate tallies, separate last-vote-wins, no s
   assert.equal((await voterStanding(d, snapshot, excluded, bob.address)).ballot, null);
 });
 
+await test("routes: /api/vote lists every published vote, /api/vote/me gives one wallet's standing in each", async () => {
+  const listRoute = await import("../src/app/api/vote/route");
+  const meRoute = await import("../src/app/api/vote/me/route");
+  const list = await listRoute.GET(new Request("http://localhost/api/vote", { headers: { "x-forwarded-for": "203.0.113.9" } }));
+  assert.equal(list.status, 200);
+  const lj = (await list.json()) as { data: { votes: { id: string; details: string[] }[] } };
+  assert.deepEqual(lj.data.votes.map((v) => v.id).sort(), VOTES.filter((v) => v.published).map((v) => v.id).sort());
+  for (const v of lj.data.votes) assert.equal(v.details.length, VOTES.find((x) => x.id === v.id)!.options.length);
+
+  const meReq = (q: string) => new Request(`http://localhost/api/vote/me${q}`, { headers: { "x-forwarded-for": "203.0.113.9" } });
+  assert.equal((await meRoute.GET(meReq("?address=nope"))).status, 400);
+  assert.equal((await meRoute.GET(meReq(""))).status, 400);
+  // the largest eligible holder in the snapshot: weight, share, nothing cast yet
+  const pub = VOTES.find((v) => v.published)!;
+  const snap = registry.snapshotFor(pub)!;
+  const ex = registry.excludedForVote(pub);
+  const [top] = Object.entries(snap.balances).filter(([a]) => !ex.has(a));
+  const res = await meRoute.GET(meReq(`?address=${top![0]}`));
+  assert.equal(res.status, 200);
+  const mj = (await res.json()) as { data: { name: string | null; votes: Record<string, { weight: string; eligibleWallets: number; ballot: unknown; excluded: string | null }> } };
+  assert.equal(mj.data.name, null);
+  for (const v of VOTES.filter((x) => x.published)) {
+    const st = mj.data.votes[v.id]!;
+    assert.equal(st.weight, top![1]);
+    assert.equal(st.excluded, null);
+    assert.equal(st.ballot, null);
+    assert.equal(st.eligibleWallets, core.eligibleTotal(snap, ex).wallets);
+  }
+  // a team wallet comes back excluded with weight 0
+  const team = (await (await meRoute.GET(meReq("?address=0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8"))).json()) as typeof mj;
+  for (const st of Object.values(team.data.votes)) {
+    assert.equal(st.weight, "0");
+    assert.match(st.excluded ?? "", /Team/);
+  }
+});
+
 // ---------------------------------------------------------------- display
 
 await test("amounts and shares read plainly", () => {
@@ -531,6 +577,20 @@ await test("amounts and shares read plainly", () => {
   assert.equal(core.formatGloam((54_550n * ONE).toString()), "54,550");
   assert.equal(core.percentOf(1n, 3n), 33.3);
   assert.equal(core.percentOf(0n, 0n), 0);
+  assert.equal(core.sharePercent(1240n * ONE, 447_743n * ONE), "0.27%");
+  assert.equal(core.sharePercent(1n, 447_743n * ONE), "<0.01%");
+  assert.equal(core.sharePercent(0n, 5n), "0%");
+  assert.equal(core.sharePercent(5n, 0n), "0%");
+  assert.equal(core.sharePercent(1n, 4n), "25%");
+  assert.equal(core.whenPhrase("2026-11-02T00:00:00Z"), "Sunday 1 Nov at midnight UTC");
+  assert.equal(core.whenPhrase("2026-10-29T16:15:00Z"), "Thursday 29 Oct at 16:15 UTC");
+  assert.equal(core.timeLeft(30_000), "less than a minute");
+  assert.equal(core.timeLeft(60_000), "1 minute");
+  assert.equal(core.timeLeft(12 * 60_000), "12 minutes");
+  assert.equal(core.timeLeft(3_600_000), "1 hour");
+  assert.equal(core.timeLeft(5 * 3_600_000 + 12 * 60_000), "5 hours, 12 minutes");
+  assert.equal(core.timeLeft(2 * 86_400_000 + 7 * 3_600_000 + 59_000), "2 days, 7 hours");
+  assert.equal(core.timeLeft(86_400_000), "1 day");
 });
 
 console.log(`\n${passed} passed`);

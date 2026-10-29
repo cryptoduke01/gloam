@@ -27,6 +27,8 @@ export type VoteConfig = {
   description: string;
   /** 2 to 5 options, each a few words. The order is fixed once published. */
   options: string[];
+  /** One plain line under each option, in the same order. Not signed, so it can be reworded. */
+  details?: string[];
   /** The Robinhood Chain mainnet block whose $GLOAM balances set each wallet's weight. 0: not taken yet. */
   snapshotBlock: number;
   /** When voting opens and closes, in UTC, like "2026-11-03T13:00:00Z". */
@@ -38,7 +40,8 @@ export type VoteConfig = {
 
 /** The first three votes share one window and one snapshot block. */
 const FIRST_START = "2026-10-29T16:30:00Z";
-const FIRST_END = "2026-11-03T18:00:00Z";
+// the end of Sunday 1 November, midnight UTC
+const FIRST_END = "2026-11-02T00:00:00Z";
 const FIRST_BLOCK = 101_022_464;
 
 export const VOTES: VoteConfig[] = [
@@ -49,6 +52,11 @@ export const VOTES: VoteConfig[] = [
     description:
       "Private swaps hide who traded, while the token and the amount stay public. The winning option goes on the roadmap first: the result is advisory, and the team will act on it.",
     options: ["More Robinhood stock tokens", "Popular Robinhood Chain tokens", "Stablecoin swaps on Base and Ethereum"],
+    details: [
+      "Swap privately into more of the stock tokens on Robinhood Chain.",
+      "Swap privately into the most traded tokens on Robinhood Chain that are not stocks.",
+      "Swap between stablecoins like USDC and USDT privately on Base and Ethereum, where the vault already runs.",
+    ],
     snapshotBlock: FIRST_BLOCK,
     start: FIRST_START,
     end: FIRST_END,
@@ -60,6 +68,12 @@ export const VOTES: VoteConfig[] = [
     description:
       "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum, and the vault is EVM, so each of these is a chain we can ship to. The result is advisory, and the team will act on it.",
     options: ["Arbitrum", "BNB Chain", "Polygon", "Optimism"],
+    details: [
+      "An Ethereum layer 2 with deep stablecoin and DeFi activity.",
+      "A large EVM chain with heavy USDT use.",
+      "An EVM chain used widely for payments and stablecoin transfers.",
+      "An Ethereum layer 2 built on the OP Stack, like Base.",
+    ],
     snapshotBlock: FIRST_BLOCK,
     start: FIRST_START,
     end: FIRST_END,
@@ -71,6 +85,12 @@ export const VOTES: VoteConfig[] = [
     description:
       "Gloam is the privacy layer apps plug into, and this tells us where to spend partner time first. The result is advisory, and the team will act on it.",
     options: ["Trading apps", "AI agent platforms", "Payroll and payout tools", "Shopping and cards"],
+    details: [
+      "Private balances and private swaps inside the apps where people trade.",
+      "Agents that pay and get paid privately, within the limits you set.",
+      "Teams paying people without putting salaries on the public record.",
+      "Paying merchants and topping up cards without showing your balance.",
+    ],
     snapshotBlock: FIRST_BLOCK,
     start: FIRST_START,
     end: FIRST_END,

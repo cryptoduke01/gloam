@@ -29,6 +29,7 @@ export type VoteSummary = {
   question: string;
   description: string;
   options: string[];
+  details: string[];
   status: VoteStatus;
   start: string;
   end: string;
@@ -77,6 +78,7 @@ export async function voteSummary(
     question: v.question,
     description: v.description,
     options: v.options,
+    details: v.details ?? v.options.map(() => ""),
     status: voteStatus(v, now),
     start: v.start,
     end: v.end,

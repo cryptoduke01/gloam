@@ -1,0 +1,632 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { useSignTypedData } from "wagmi";
+import { robinhood } from "@/lib/chain";
+import {
+  VOTE_CHAIN_ID,
+  formatGloam,
+  percentOf,
+  sharePercent,
+  shortAddress,
+  timeLeft,
+  voteMessage,
+  voteTypedData,
+  whenPhrase,
+  type Ballot,
+} from "@/lib/vote/core";
+import type { VoteConfig } from "@/lib/vote/config";
+import type { VoteSummary } from "@/lib/vote/results";
+import { useNow, type Me, type Standing } from "./voteHooks";
+
+export const explorer = (a: string) => `${robinhood.blockExplorers.default.url}/address/${a}`;
+const blockText = (n: number) => n.toLocaleString("en-US");
+
+/** The vote as the config has it, rebuilt from the summary for signing. */
+function asConfig(s: VoteSummary): VoteConfig {
+  return { id: s.id, published: !s.draft, question: s.question, description: s.description, options: s.options, snapshotBlock: s.snapshotBlock, start: s.start, end: s.end };
+}
+
+export function CheckIcon({ size = 14, stroke = 2 }: { size?: number; stroke?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ time */
+
+/** "Closes Sunday 1 Nov at midnight UTC", and once mounted, how long is left. */
+export function ClosingLine({ s, className = "" }: { s: Pick<VoteSummary, "status" | "start" | "end" | "draft">; className?: string }) {
+  const now = useNow(30_000);
+  const upcoming = s.status === "upcoming" || (s.draft && now !== null && now < Date.parse(s.start));
+  const closed = s.status === "closed";
+  const target = Date.parse(upcoming ? s.start : s.end);
+  const words = closed ? `Closed ${whenPhrase(s.end)}` : upcoming ? `Opens ${whenPhrase(s.start)}` : `Closes ${whenPhrase(s.end)}`;
+  return (
+    <p className={`text-[14px] text-mute ${className}`}>
+      <span className={s.draft ? "text-warn" : "text-foreground"}>{s.draft ? `Draft. ${words}` : words}</span>
+      {!closed && now !== null && target > now && (
+        <span className="tnum">
+          <span aria-hidden className="mx-2 text-faint">
+            ·
+          </span>
+          {timeLeft(target - now)} {upcoming ? "to go" : "left"}
+        </span>
+      )}
+    </p>
+  );
+}
+
+/* ------------------------------------------------------------------ welcome */
+
+/** A connected holder, greeted by name, with their weight and their share of the vote. */
+export function Welcome({
+  me,
+  address,
+  chainId,
+  failed,
+  onRetry,
+  onDisconnect,
+  focus,
+}: {
+  me: Me | null;
+  address: string;
+  chainId: number | undefined;
+  failed: boolean;
+  onRetry: () => void;
+  onDisconnect: () => void;
+  /** The vote whose numbers to show; the first with a snapshot when not given. */
+  focus?: string;
+}) {
+  const standing = me ? (focus ? me.votes[focus] : Object.values(me.votes).find((x) => x !== null)) ?? null : null;
+  const who = me?.name ?? shortAddress(address);
+  return (
+    <section aria-label="Your wallet" className="gl-card p-5 sm:p-7">
+      <div className="flex items-start justify-between gap-4">
+        <p className="min-w-0 text-[19px] leading-snug tracking-[-0.01em] text-foreground sm:text-[21px]">
+          Welcome, <span className="[overflow-wrap:anywhere]">{who}</span>
+        </p>
+        <button type="button" onClick={onDisconnect} className="-mr-2 -mt-1 inline-flex min-h-10 shrink-0 items-center rounded-full px-3 text-[13px] text-mute transition-colors hover:bg-surface hover:text-foreground">
+          Disconnect
+        </button>
+      </div>
+      {failed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2" role="alert">
+          <p className="text-[14.5px] text-soft">We couldn&apos;t load your voting weight.</p>
+          <button type="button" onClick={onRetry} className="btn btn-quiet btn-sm">
+            Try again
+          </button>
+        </div>
+      ) : !standing ? (
+        <div className="mt-3 space-y-2" aria-hidden>
+          <div className="gl-skeleton h-4 w-64 max-w-full rounded" />
+          <div className="gl-skeleton h-4 w-48 max-w-full rounded" />
+        </div>
+      ) : standing.excluded ? (
+        <p className="mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft">
+          This address belongs to the Gloam team or one of its contracts, so it sits these votes out. {standing.excluded}.
+        </p>
+      ) : BigInt(standing.weight) === 0n ? (
+        <p className="mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft">
+          This wallet held no public $GLOAM at the snapshot, so it can&apos;t vote this time. If you hold GLOAM in another wallet, switch to it in
+          your wallet app. GLOAM kept privately inside Gloam stays private: it can vote once private voting arrives, which is next on the roadmap.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-1.5 text-[15px] leading-relaxed">
+          <p className="tnum text-foreground">
+            Your {formatGloam(standing.weight)} GLOAM is {sharePercent(BigInt(standing.weight), BigInt(standing.eligibleWeight))} of the vote.
+          </p>
+          <p className="tnum text-soft">You&apos;re one of {standing.eligibleWallets.toLocaleString("en-US")} holders shaping what Gloam builds next.</p>
+        </div>
+      )}
+      {chainId !== undefined && chainId !== VOTE_CHAIN_ID && (
+        <p className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-mute">
+          Your wallet is on another network. That&apos;s fine: a vote is a signature, so it works from any network and nothing is sent on chain.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ ballot */
+
+type Phase =
+  | { k: "choose" }
+  | { k: "signing" }
+  | { k: "saving" }
+  | { k: "done"; changed: boolean }
+  | { k: "rejected" }
+  | { k: "failed"; message: string; retry: boolean };
+
+type Wallet = {
+  address: string | undefined;
+  mounted: boolean;
+  reconnecting: boolean;
+  connecting: boolean;
+  connectFailed: boolean;
+  canConnect: boolean;
+  walletConnectOn: boolean;
+  open: () => void;
+};
+
+/**
+ * One question: the options as cards (real radio buttons, so arrows, Tab and
+ * screen readers work as they should), and one action that follows the
+ * wallet's state: connect, sign, the thank-you, or why this wallet can't vote.
+ */
+export function BallotCard({
+  s,
+  standing,
+  wallet,
+  meFailed,
+  onSigned,
+  step,
+  headingRef,
+  headingLevel = "h2",
+}: {
+  s: VoteSummary;
+  standing: Standing | null;
+  wallet: Wallet;
+  meFailed: boolean;
+  onSigned: (b: Ballot) => void;
+  step?: { index: number; total: number; next?: () => void; nextLabel?: string; back?: () => void };
+  headingRef?: React.Ref<HTMLHeadingElement>;
+  headingLevel?: "h1" | "h2";
+}) {
+  const Heading = headingLevel;
+  const mine = standing?.ballot ?? null;
+  const [picked, setPicked] = useState<number | null>(mine?.option ?? null);
+  const [phase, setPhase] = useState<Phase>({ k: "choose" });
+  const lastSent = useRef<{ voter: string; option: number; timestamp: number; signature: string } | null>(null);
+  const { signTypedDataAsync } = useSignTypedData();
+  const doneRef = useRef<HTMLDivElement>(null);
+
+  // the wallet's earlier vote arrives after the page: show it picked
+  const mineOption = mine?.option;
+  const [seenMine, setSeenMine] = useState<number | undefined>(undefined);
+  if (mineOption !== undefined && mineOption !== seenMine) {
+    setSeenMine(mineOption);
+    if (picked === null) setPicked(mineOption);
+  }
+
+  useEffect(() => {
+    if (phase.k === "done") doneRef.current?.focus();
+  }, [phase.k]);
+
+  const accepting = s.accepting;
+  const canVote = accepting && !!wallet.address && !!standing && !standing.excluded && BigInt(standing.weight) > 0n;
+  const busy = phase.k === "signing" || phase.k === "saving";
+  const locked = !accepting || busy || phase.k === "done";
+
+  async function send(body: { voter: string; option: number; timestamp: number; signature: string }) {
+    setPhase({ k: "saving" });
+    try {
+      const res = await fetch(`/api/vote/${s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = (await res.json().catch(() => null)) as
+        | { ok: true; data: { ballot: Ballot; changed: boolean } }
+        | { ok: false; error: { code: string; message: string } }
+        | null;
+      if (j?.ok) {
+        lastSent.current = null;
+        onSigned(j.data.ballot);
+        setPhase({ k: "done", changed: j.data.changed });
+        return;
+      }
+      const code = j && !j.ok ? j.error.code : "";
+      // a store or network hiccup: the same signature can go again; anything else needs a fresh one
+      const retry = !j || ["storage", "error", "busy", "rate_limited"].includes(code);
+      setPhase({ k: "failed", message: j && !j.ok ? j.error.message : "We couldn't reach Gloam. Check your connection.", retry });
+    } catch {
+      setPhase({ k: "failed", message: "We couldn't reach Gloam. Check your connection.", retry: true });
+    }
+  }
+
+  async function sign() {
+    if (!wallet.address || picked === null || busy) return;
+    setPhase({ k: "signing" });
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const message = voteMessage(asConfig(s), picked, wallet.address as `0x${string}`, timestamp);
+      const signature = await signTypedDataAsync({ ...voteTypedData(message), account: wallet.address as `0x${string}` });
+      const body = { voter: wallet.address, option: picked, timestamp, signature };
+      lastSent.current = body;
+      await send(body);
+    } catch (e) {
+      const name = e instanceof Error ? e.name : "";
+      const msg = e instanceof Error ? e.message : "";
+      if (name === "UserRejectedRequestError" || /reject|denied|cancel/i.test(msg)) setPhase({ k: "rejected" });
+      else setPhase({ k: "failed", message: "Your wallet couldn't sign that.", retry: false });
+    }
+  }
+
+  const choice = picked !== null ? s.options[picked] : null;
+
+  return (
+    <section aria-labelledby={`q-${s.id}`} className="gl-card overflow-hidden">
+      <div className="px-5 pt-6 sm:px-8 sm:pt-8">
+        {step && step.total > 1 && <p className="tnum text-[13.5px] text-mute">Question {step.index + 1} of {step.total}</p>}
+        <Heading id={`q-${s.id}`} ref={headingRef} tabIndex={-1} className="mt-2 text-[24px] leading-[1.2] tracking-[-0.02em] text-foreground outline-none [text-wrap:balance] sm:text-[30px]">
+          {s.question}
+        </Heading>
+        {s.description && <p className="mt-3 max-w-[58ch] text-[15px] leading-relaxed text-soft">{s.description}</p>}
+      </div>
+
+      <fieldset className="mt-6 px-3 sm:px-5" disabled={locked && phase.k !== "done"}>
+        <legend className="sr-only">Pick one answer</legend>
+        <div className="flex flex-col gap-2">
+          {s.options.map((label, i) => {
+            const on = picked === i;
+            const isMine = mine?.option === i;
+            return (
+              <label
+                key={label}
+                className={`relative flex min-h-[64px] items-start gap-4 rounded-[14px] border px-4 py-4 transition-colors sm:px-5 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground ${
+                  on ? "border-foreground bg-surface" : "border-line bg-panel"
+                } ${locked ? "cursor-default" : "cursor-pointer hover:border-line-strong"}`}
+              >
+                <input
+                  type="radio"
+                  name={`vote-${s.id}`}
+                  value={i}
+                  checked={on}
+                  disabled={locked}
+                  onChange={() => {
+                    setPicked(i);
+                    if (phase.k !== "choose") setPhase({ k: "choose" });
+                  }}
+                  className="sr-only"
+                />
+                <span
+                  aria-hidden
+                  className={`mt-0.5 grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border transition-colors ${
+                    on ? "border-foreground bg-foreground" : "border-line-strong"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full bg-panel transition-transform duration-150 motion-reduce:transition-none ${on ? "scale-100" : "scale-0"}`} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="text-[16.5px] leading-snug text-foreground">{label}</span>
+                    {isMine && (
+                      <span className="inline-flex items-center gap-1 text-[12.5px] text-sealed">
+                        <CheckIcon size={12} /> Your vote
+                      </span>
+                    )}
+                  </span>
+                  {s.details[i] && <span className="mt-1 block text-[14px] leading-relaxed text-mute">{s.details[i]}</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <div className="mt-6 border-t border-line px-5 py-6 sm:px-8" aria-live="polite">
+        {s.status === "closed" ? (
+          <p className="text-[15px] leading-relaxed text-soft">
+            This vote has closed and the results are final.{mine ? ` You voted ${mine.choice}. Thank you.` : ""}
+          </p>
+        ) : !s.snapshotReady ? (
+          <p className="text-[15px] leading-relaxed text-soft">The balance snapshot for this vote isn&apos;t in yet, so it can&apos;t take votes.</p>
+        ) : !accepting ? (
+          <p className="text-[15px] leading-relaxed text-soft">Voting opens {whenPhrase(s.start)}. Read the options now and come back then.</p>
+        ) : !wallet.mounted || (wallet.reconnecting && !wallet.address) ? (
+          <div className="gl-skeleton h-12 w-full rounded-full sm:w-56" aria-hidden />
+        ) : !wallet.address ? (
+          <div>
+            {wallet.canConnect ? (
+              <button type="button" onClick={wallet.open} disabled={wallet.connecting} className="btn btn-ink btn-lg w-full sm:w-auto">
+                {wallet.connecting ? "Check your wallet…" : "Connect wallet to vote"}
+              </button>
+            ) : (
+              <p className="text-[15px] leading-relaxed text-soft">
+                No wallet found in this browser. Open gloam.trade/vote in your wallet app&apos;s browser
+                {wallet.walletConnectOn ? "" : ", or on a computer with a wallet extension"} to vote.
+              </p>
+            )}
+            <p className="mt-3 text-[13.5px] leading-relaxed text-mute">Voting is free. You sign a message; nothing is sent and no gas is paid.</p>
+            {wallet.connectFailed && <p className="mt-2 text-[13.5px] text-danger">Your wallet didn&apos;t connect. Try again.</p>}
+          </div>
+        ) : meFailed ? (
+          <p className="text-[15px] leading-relaxed text-soft">Your voting weight didn&apos;t load. Use Try again above.</p>
+        ) : !standing ? (
+          <div className="gl-skeleton h-12 w-full rounded-full sm:w-56" aria-hidden />
+        ) : standing.excluded ? (
+          <p className="text-[15px] leading-relaxed text-soft">Team and contract addresses don&apos;t vote. You can still follow the results below.</p>
+        ) : !canVote ? (
+          <p className="text-[15px] leading-relaxed text-soft">This wallet has no vote here, but the results below are open to everyone.</p>
+        ) : phase.k === "done" ? (
+          <div ref={doneRef} tabIndex={-1} className="gl-settle outline-none">
+            <div className="flex items-start gap-3">
+              <span className="gl-pop mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sealed text-panel">
+                <CheckIcon size={16} stroke={2.2} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[18px] leading-snug tracking-[-0.01em] text-foreground">
+                  {phase.changed ? "Your vote is changed. Thank you." : "Your vote is in. Thank you."}
+                </p>
+                <p className="mt-1 text-[14.5px] leading-relaxed text-soft">
+                  You chose {choice}. You can change it until {whenPhrase(s.end)}.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <button type="button" onClick={() => setPhase({ k: "choose" })} className="btn btn-quiet btn-lg w-full sm:w-auto">
+                Change my vote
+              </button>
+              {step?.next && (
+                <button type="button" onClick={step.next} className="btn btn-ink btn-lg w-full sm:w-auto">
+                  {step.nextLabel ?? "Next question"} <span aria-hidden>→</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={sign}
+              disabled={picked === null || busy || (mine?.option === picked && phase.k === "choose")}
+              className="btn btn-ink btn-lg w-full sm:w-auto"
+            >
+              {phase.k === "signing"
+                ? "Sign in your wallet…"
+                : phase.k === "saving"
+                  ? "Saving your vote…"
+                  : picked === null
+                    ? "Pick an answer"
+                    : mine?.option === picked
+                      ? "This is your vote"
+                      : mine
+                        ? `Change my vote to ${choice}`
+                        : "Sign my vote"}
+            </button>
+            {phase.k === "rejected" ? (
+              <p className="mt-3 text-[14px] leading-relaxed text-soft">No problem. Nothing was signed. Sign when you&apos;re ready.</p>
+            ) : phase.k === "failed" ? (
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" role="alert">
+                <p className="text-[14px] leading-relaxed text-danger">{phase.message}</p>
+                {phase.retry ? (
+                  <button type="button" onClick={() => lastSent.current && send(lastSent.current)} className="btn btn-quiet btn-sm">
+                    Try again
+                  </button>
+                ) : (
+                  <button type="button" onClick={sign} className="btn btn-quiet btn-sm">
+                    Sign again
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="mt-3 max-w-[60ch] text-[13.5px] leading-relaxed text-mute">
+                {picked === null
+                  ? "Pick one, then sign. You can change it until the vote closes."
+                  : `Your wallet will ask you to sign a message that says you chose ${choice}. It's free, nothing is sent, and you can change it later.`}
+              </p>
+            )}
+            {mine && mine.option !== picked && phase.k === "choose" && (
+              <p className="mt-2 text-[13.5px] text-mute">Right now your vote is {mine.choice}.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {step && (step.back || (step.next && phase.k !== "done")) && (
+        <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 sm:px-5">
+          {step.back ? (
+            <button type="button" onClick={step.back} className="btn btn-quiet btn-sm min-h-10">
+              <span aria-hidden>←</span> Back
+            </button>
+          ) : (
+            <span />
+          )}
+          {step.next && phase.k !== "done" && (
+            <button type="button" onClick={step.next} className="btn btn-quiet btn-sm min-h-10">
+              {mine ? (step.nextLabel ?? "Next question") : "Skip for now"} <span aria-hidden>→</span>
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ progress */
+
+/** Which question you're on and which you've answered. Each step jumps to its question. */
+export function Progress({
+  votes,
+  current,
+  voted,
+  onJump,
+}: {
+  votes: VoteSummary[];
+  current: number | "summary";
+  voted: (id: string) => boolean;
+  onJump: (i: number | "summary") => void;
+}) {
+  return (
+    <nav aria-label="Questions" className="flex items-center gap-2">
+      <ol className="flex flex-1 items-center gap-1.5">
+        {votes.map((v, i) => {
+          const done = voted(v.id);
+          const here = current === i;
+          return (
+            <li key={v.id} className="flex-1">
+              <button
+                type="button"
+                onClick={() => onJump(i)}
+                aria-current={here ? "step" : undefined}
+                aria-label={`Question ${i + 1}: ${v.question}${done ? " (voted)" : ""}`}
+                className="group block w-full py-3"
+              >
+                <span
+                  className={`block h-[5px] rounded-full transition-colors ${
+                    here ? "bg-foreground" : done ? "bg-foreground/45" : "bg-surface-2 group-hover:bg-line-strong"
+                  }`}
+                />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <button
+        type="button"
+        onClick={() => onJump("summary")}
+        aria-current={current === "summary" ? "step" : undefined}
+        className={`min-h-10 shrink-0 rounded-full px-3 text-[13px] transition-colors hover:bg-surface ${current === "summary" ? "text-foreground" : "text-mute"}`}
+      >
+        Summary
+      </button>
+    </nav>
+  );
+}
+
+/* ------------------------------------------------------------------ results */
+
+/** One vote's live totals: a bar per answer, its share, its weight and its wallets. */
+export function ResultsCard({ s, mine, link = true }: { s: VoteSummary; mine?: Ballot | null; link?: boolean }) {
+  const total = BigInt(s.totals.weight);
+  const lead = s.totals.options.reduce((a, b) => (BigInt(b.weight) > BigInt(a.weight) ? b : a), s.totals.options[0]!);
+  return (
+    <article className="gl-card p-5 sm:p-7" aria-label={`Results: ${s.question}`}>
+      <h3 className="text-[17px] leading-snug tracking-[-0.01em] text-foreground [text-wrap:balance] sm:text-[19px]">{s.question}</h3>
+      <ul className="mt-5 flex flex-col gap-4">
+        {s.totals.options.map((o) => {
+          const pct = percentOf(BigInt(o.weight), total);
+          const leading = total > 0n && o.option === lead.option;
+          return (
+            <li key={o.option}>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="min-w-0 text-[15px] leading-snug text-foreground">
+                  {o.label}
+                  {mine?.option === o.option && (
+                    <span className="ml-2 inline-flex items-center gap-1 align-middle text-[12px] text-sealed">
+                      <CheckIcon size={11} /> You
+                    </span>
+                  )}
+                </span>
+                <span className="tnum shrink-0 text-[17px] text-foreground">{pct}%</span>
+              </div>
+              <div
+                className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2"
+                role="img"
+                aria-label={`${o.label}: ${pct}% of the vote, ${formatGloam(o.weight)} GLOAM from ${o.wallets} ${o.wallets === 1 ? "wallet" : "wallets"}`}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${leading ? "bg-foreground" : "bg-foreground/40"}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="tnum mt-1.5 text-[12.5px] text-mute">
+                {formatGloam(o.weight)} GLOAM · {o.wallets} {o.wallets === 1 ? "wallet" : "wallets"}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-4">
+        <p className="tnum text-[13px] text-mute">
+          {s.totals.wallets} {s.totals.wallets === 1 ? "wallet" : "wallets"} · {formatGloam(s.totals.weight)} GLOAM
+          {s.eligible ? ` of ${formatGloam(s.eligible.weight)}` : ""}
+        </p>
+        {link && (
+          <Link href={`/vote/${s.id}`} className="gl-arrowlink text-[13.5px]">
+            Every vote <span aria-hidden>→</span>
+          </Link>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/** "Updated 8 seconds ago", kept fresh. */
+export function UpdatedAgo({ at }: { at: number | null }) {
+  const now = useNow(5_000);
+  if (at === null || now === null) return <span className="text-[13px] text-mute">Live</span>;
+  const sec = Math.max(0, Math.round((now - at) / 1000));
+  return (
+    <span className="tnum text-[13px] text-mute" aria-live="off">
+      Updated {sec < 10 ? "just now" : sec < 60 ? `${sec} seconds ago` : `${Math.round(sec / 60)} min ago`}
+    </span>
+  );
+}
+
+/** Where to download every signed vote and count again. */
+export function Recount({ votes }: { votes: Pick<VoteSummary, "id" | "question">[] }) {
+  return (
+    <section aria-labelledby="recount-title" className="rounded-[18px] border border-line p-5 sm:p-7">
+      <h2 id="recount-title" className="text-[17px] tracking-[-0.01em] text-foreground">
+        Count it yourself
+      </h2>
+      <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-mute">
+        Every vote is a public EIP-712 signature. The downloads carry each wallet, its answer, its weight and its signature, with the message
+        format, so anyone can check every one and recount.
+      </p>
+      <ul className="mt-4 divide-y divide-line border-t border-line">
+        {votes.map((v) => (
+          <li key={v.id} className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <span className="min-w-0 text-[14px] text-soft">{v.question}</span>
+            <span className="flex shrink-0 gap-2">
+              <a href={`/api/vote/${v.id}/ballots?download=1`} className="btn btn-ghost btn-sm">
+                JSON
+              </a>
+              <a href={`/api/vote/${v.id}/ballots?format=csv`} className="btn btn-ghost btn-sm">
+                CSV
+              </a>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A prefilled X post. Never carries the wallet. */
+export function ShareVoted({ endPhrase }: { endPhrase: string }) {
+  const text = `I voted in the $GLOAM holder votes on what Gloam builds next. Open until ${endPhrase}.\n\ngloam.trade/vote`;
+  return (
+    <a
+      href={`https://x.com/intent/post?text=${encodeURIComponent(text)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="btn btn-ghost btn-lg w-full sm:w-auto"
+    >
+      Share that you voted <span aria-hidden>↗</span>
+    </a>
+  );
+}
+
+/* ------------------------------------------------------------------ the plain rules */
+
+export function HowItWorks({ block, firstId }: { block: number; firstId?: string }) {
+  const lines = [
+    "This is an open vote. Every vote, with the wallet that cast it, is public.",
+    `Your weight is the $GLOAM your wallet held at Robinhood Chain block ${block ? blockText(block) : "(not set yet)"}. Buying or moving GLOAM after that changes nothing.`,
+    "Voting is free: you sign a message, nothing is sent and no gas is paid. You can change your vote until it closes; your latest signature counts.",
+    "Team wallets, Gloam's own contracts and the trading pools don't count.",
+    "GLOAM held privately inside Gloam can't be counted in an open vote. Private voting, where you prove your balance without showing your wallet, is the next step on the roadmap.",
+    "The results are advisory, and the team will act on them.",
+  ];
+  return (
+    <section aria-labelledby="how-title">
+      <h2 id="how-title" className="t-display-m">
+        How this vote works
+      </h2>
+      <ul className="mt-6 divide-y divide-line border-y border-line">
+        {lines.map((line) => (
+          <li key={line} className="py-4 text-[15px] leading-relaxed text-soft">
+            {line}
+          </li>
+        ))}
+      </ul>
+      {firstId && (
+        <Link href={`/vote/${firstId}#not-counted`} className="gl-arrowlink mt-5 inline-flex text-[14px]">
+          The addresses that don&apos;t count <span aria-hidden>→</span>
+        </Link>
+      )}
+    </section>
+  );
+}
