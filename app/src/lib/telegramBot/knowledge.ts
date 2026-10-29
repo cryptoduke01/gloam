@@ -10,7 +10,17 @@
  * says that the program's tasks, rewards and guides land in the Testers topic.
  */
 
-import { baseSepoliaPool, ethereumSepoliaPool, isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import {
+  MAINNET_CHAINS,
+  baseSepoliaPool,
+  ethereumSepoliaPool,
+  isMainnetLive,
+  joinNames,
+  liveMainnetCountWords,
+  liveMainnetNames,
+  liveMainnetsByDay,
+  mainnetPool,
+} from "@/lib/mainnet";
 import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
@@ -317,6 +327,20 @@ export function laterMainnets(): string[] {
   return [mainnetPool(8453) ? "Base" : null, mainnetPool(1) ? "Ethereum" : null].filter((n): n is string => n !== null);
 }
 
+/** The day the later mainnets went live ("26 October 2026"), or null when none is in or they joined on different days. */
+export function laterMainnetsSince(): string | null {
+  const later = laterMainnets();
+  const days = [...new Set(MAINNET_CHAINS.filter((c) => later.includes(c.name)).map((c) => c.liveSince))];
+  return days.length === 1 ? days[0]! : null;
+}
+
+/** "four mainnets: Robinhood Chain and Tempo since 21 October 2026, and Base and Ethereum since 26 October 2026" */
+export function liveMainnetsSummary(): string {
+  const days = liveMainnetsByDay().map((d) => `${d.names} since ${d.since}`);
+  const list = days.length > 1 ? `${days.slice(0, -1).join(", ")}, and ${days[days.length - 1]}` : (days[0] ?? liveMainnetNames());
+  return `${liveMainnetCountWords()}: ${list}`;
+}
+
 /**
  * What Glim knows about Ethereum Sepolia, only once its pool is filled in
  * (lib/mainnet.ts: ETHEREUM_SEPOLIA_POOL). Before that it says nothing about
@@ -340,19 +364,25 @@ function mainnetLiveFacts(): string {
   const rh = mainnetPool(4663) !== null;
   const tempo = mainnetPool(4217) !== null;
   const later = laterMainnets();
+  const laterSince = laterMainnetsSince();
   const joined = later.length
-    ? ` ${later.join(" and ")} mainnet joined after that (see ${later.map((n) => n.toUpperCase()).join(" and ")}).`
+    ? ` ${later.join(" and ")} mainnet joined after that${laterSince ? `, on ${laterSince}` : ""} (see ${later.map((n) => n.toUpperCase()).join(" and ")}).`
     : "";
+  const usdc = [mainnetPool(8453) ? "Base" : null, mainnetPool(1) ? "Ethereum" : null].filter((n): n is string => n !== null);
   const lines = [
-    "MAINNET IS LIVE (this overrides any line below that says the app is testnet only or that mainnet is coming)",
-    `- Gloam went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on ${launchNames()}.${joined} Say so plainly when asked, and point to gloam.trade/app.`,
+    "MAINNET IS LIVE (this overrides any line below that says the app is testnet only, that mainnet is coming, or that names fewer mainnets)",
+    `- Gloam is live on ${liveMainnetsSummary()}. It went live on mainnet on Wednesday 21 October 2026 at 13:00 UTC, on ${launchNames()}.${joined} The vault has the same address on every mainnet; it is listed on gloam.trade/docs/chain, so point there instead of writing it out. Say so plainly when asked, and point to gloam.trade/app.`,
     ...(rh
       ? ["- Robinhood Chain mainnet (chain ID 4663): the vault takes USDG and $GLOAM. Native ETH pays gas but cannot be added privately there. Details, if someone adds the chain by hand: RPC https://rpc.mainnet.chain.robinhood.com, chain ID 4663, currency ETH, explorer RobinScan https://robin.etherscan.io (a transaction is at robin.etherscan.io/tx/ and its hash, an address at robin.etherscan.io/address/ and the address)."]
       : []),
     ...(tempo
       ? ["- Tempo mainnet (chain ID 4217): the vault takes USDC.e, pathUSD, USDT0 and OUSD, and fees are paid in stablecoins. Details, if someone adds the chain by hand: RPC https://rpc.tempo.xyz, chain ID 4217, currency USD, explorer https://explore.tempo.xyz."]
       : []),
+    ...(usdc.length
+      ? [`- USDC is in the vault: on ${joinNames(usdc)} mainnet as USDC${tempo ? ", and on Tempo as USDC.e (USDC bridged to Tempo)" : ""}. On Robinhood Chain the dollar stablecoin is USDG. Never say Gloam has no USDC.`]
+      : []),
     "- Beta deposit limits on mainnet: 500 per deposit and 25,000 in total for each stablecoin; $GLOAM 25,000 per deposit and 250,000 in total. The app shows the room left before you sign.",
+    "- Higher limits: the beta deposit limits are being raised 100x. The change is queued on-chain behind the public three-day timelock, so anyone can see it coming, and applies around 1 November 2026. Until it applies, the limits above hold. Never give the new numbers or promise an exact time; the app always shows the room left.",
     "- Mainnet proofs use the trusted setup's final keys (13 contributors). Private stock swaps are live on Robinhood Chain mainnet (see PRIVATE SWAPS); only the sample stock tokens on Robinhood Chain testnet cannot be swapped. The old private trade (sealed swaps) is retired and stays off; private swaps replaced it on mainnet (see PRIVATE SWAPS).",
     "- In the app, the network selector marks every network Mainnet or Testnet. The testnets stay open for trying things first, and test funds never move to mainnet.",
     "- Passkey sign-in (Tempo Wallet) is on Tempo testnet. On mainnet, connect a browser wallet or a wallet app.",
@@ -423,11 +453,14 @@ function liveSwaps(): [string, string][] {
   const names = liveMainnetNames();
   const launch = launchNames();
   const later = laterMainnets();
+  const laterSince = laterMainnetsSince();
   const rh = mainnetPool(4663) !== null;
+  const usdc = [mainnetPool(8453) ? "Base" : null, mainnetPool(1) ? "Ethereum" : null].filter((n): n is string => n !== null);
+  const mainnetIds = MAINNET_CHAINS.filter((c) => mainnetPool(c.chainId)).map((c) => `${c.name} ${c.chainId}`);
   return [
     [
       "- The app is on testnet for now, with development proving keys. Mainnet is coming on both Tempo and Robinhood Chain. The trusted-setup ceremony for mainnet is done (13 contributors). Mainnet goes live on Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT), on both Tempo and Robinhood Chain. The live countdown is at gloam.trade/mainnet: when someone asks when mainnet is, give the time in UTC and send them there. That is the only date and time you may give. Never give any other, and never say mainnet is live until the team announces it; until then the app is testnet. Launch news comes in Announcements and on X @gloamtrade.",
-      `- Mainnet is live on ${launch}, since Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT)${later.length ? `, and on ${later.join(" and ")}, which joined later (see ${later.map((n) => n.toUpperCase()).join(" and ")})` : ""}, with the trusted setup's final keys (13 contributors). The Robinhood Chain and Tempo testnets stay open with development proving keys. Never give or guess any other date. Launch news comes in Announcements and on X @gloamtrade.`,
+      `- Gloam is live on ${liveMainnetsSummary()}, with the trusted setup's final keys (13 contributors). ${launch} went live first, on Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT)${later.length ? `; ${later.join(" and ")} joined after that${laterSince ? `, on ${laterSince}` : ""} (see ${later.map((n) => n.toUpperCase()).join(" and ")})` : ""}. The Robinhood Chain and Tempo testnets stay open with development proving keys. Never give or guess any other date. News comes in Announcements and on X @gloamtrade.`,
     ],
     [
       "The app itself is still on testnet; the token is not a testnet token.",
@@ -436,8 +469,8 @@ function liveSwaps(): [string, string][] {
     [
       "$GLOAM listed in the mainnet pool, ready for deploy. Next (mainnet): Gloam goes live on Tempo and Robinhood Chain mainnet; shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees switch on and half of them start buying back $GLOAM; the first holder vote, in the open.",
       rh
-        ? `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: buybacks start; the first holder vote, in the open.`
-        : `$GLOAM listed in the mainnet pool; Gloam live on mainnet (${names}); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); buybacks start; the first holder vote, in the open.`,
+        ? `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); private swaps from the private balance on Robinhood Chain and Tempo; fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: beta deposit limits raised 100x (queued behind the public three-day timelock); buybacks start; the first holder vote, in the open.`
+        : `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); buybacks start; the first holder vote, in the open.`,
     ],
     ["gloam.trade/app (the testnet app)", "gloam.trade/app (the app: mainnet and testnet)"],
     // fees, the relay and what you can do read as now, not as "at mainnet"
@@ -457,9 +490,9 @@ function liveSwaps(): [string, string][] {
       "It is on by default in Payroll and Vault, and it costs nothing extra on mainnet or testnet: the relay pays the network fee.",
     ],
     ["WHAT YOU CAN DO (LIVE ON TESTNET)", "WHAT YOU CAN DO (ON MAINNET AND TESTNET; STOCKS AND TEST FUNDS ARE TESTNET ONLY)"],
-    ["At mainnet it shows \"You receive\"", "On mainnet it shows \"You receive\""],
+    ["At mainnet it shows \"You get\"", "On mainnet it shows \"You get\""],
     // the testnets stay up next to mainnet; stocks and test funds stay there
-    ["- It runs on two testnets:", "- Its two testnets:"],
+    ["- It runs on two testnets:", "- The Robinhood Chain and Tempo testnets (any other testnet has its own part above):"],
     [
       "Private trading is built but switched off on-chain while the team builds a new engine for it, because trading mixes many people's orders and needs its own design. It is underway; never promise a date.",
       "The old private trade (sealed swaps) is retired and stays off. On mainnet, private swaps replaced it: see PRIVATE SWAPS. Stock tokens can't be swapped yet: swaps into 28 more Robinhood Chain tokens, stock tokens and ETH included, are coming, and the vault limits for them are already queued on-chain behind the public 3-day timelock. Never give a date.",
@@ -488,6 +521,16 @@ function liveSwaps(): [string, string][] {
         : "- Add privately on Robinhood Chain testnet supports ETH, USDG and the sample stock tokens TSLA, AMZN, PLTR, NFLX and AMD.",
     ],
     ["- On Tempo the vault takes test stablecoins:", "- On Tempo testnet the vault takes test stablecoins:"],
+    [
+      "(stablecoins first: USDG on Robinhood Chain, PathUSD on Tempo; other vault assets under More)",
+      `(the network's stablecoins first: USDG on Robinhood Chain, pathUSD or USDC.e on Tempo${usdc.length ? `, USDC on ${joinNames(usdc)}` : ""}; other vault assets under More)`,
+    ],
+    ["Settings > Network > Add to wallet adds the selected testnet to the wallet", "Settings > Network > Add to wallet adds the selected network to the wallet"],
+    [
+      "Robinhood Chain testnet is chain ID 46630, Tempo testnet is 42431.",
+      `Robinhood Chain testnet is chain ID 46630, Tempo testnet is 42431. The mainnets: ${joinNames(mainnetIds)}.`,
+    ],
+    ["the code is for the other mainnet (Robinhood Chain or Tempo).", "the code is for another network, a different mainnet or a testnet."],
     ...(rh
       ? ([
           [

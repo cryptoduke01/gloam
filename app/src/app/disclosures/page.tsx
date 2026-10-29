@@ -26,14 +26,17 @@ export default function DisclosuresPage() {
       <h2>Mainnet is beta</h2>
       <p>
         Since Gloam&apos;s mainnet launch on 21 October 2026, the mainnet pools
-        on Robinhood Chain and Tempo have been live. They are beta software.
+        on Robinhood Chain and Tempo have been live, and since 26 October 2026
+        the pools on Base and Ethereum. They are beta software.
         The contracts were reviewed internally before launch; an external
         audit is planned and has not been done.
       </p>
       <p>
         Deposits are capped during the beta: 500 per deposit and 25,000 in
-        total for each stablecoin, and 25,000 per deposit and 250,000 in total
-        for $GLOAM. Cash outs and private payments are never limited.
+        total for each stablecoin, 0.2 per deposit and 10 in total for ETH on
+        Base and Ethereum, and 25,000 per deposit and 250,000 in total for
+        $GLOAM. A raise of these limits is queued behind the public three-day
+        timelock. Cash outs and private payments are never limited.
         Deposits and private payments are free; a cash out costs 0.25% of its
         amount.
       </p>

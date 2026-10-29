@@ -61,12 +61,12 @@ export default function DocsProductionPage() {
           {
             n: "4",
             title: "Mainnet deploy (done)",
-            body: "New ShieldPoolPayments pools on Robinhood Chain and Tempo mainnet: payments only, no sealed swap. The app proves with the final keys there.",
+            body: "New ShieldPoolPayments pools on Robinhood Chain and Tempo mainnet (21 October 2026), then Base and Ethereum mainnet (26 October 2026): payments only, no sealed swap. The app proves with the final keys there.",
           },
           {
             n: "5",
             title: "Private swap routers (deployed)",
-            body: "One router per mainnet, with no owner, no admin and no upgrade. They use only the vault's normal release and deposit calls, so the vault did not change. Reviewed internally before deploy, not externally audited.",
+            body: "One router each on Robinhood Chain and Tempo mainnet, with no owner, no admin and no upgrade. They use only the vault's normal release and deposit calls, so the vault did not change. Reviewed internally before deploy, not externally audited.",
           },
         ]}
       />

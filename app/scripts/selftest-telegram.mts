@@ -103,6 +103,7 @@ const {
 const { botConfig, handleUpdate, isAdmin } = await import("../src/lib/telegramBot/bot");
 const { DEFAULT_DAILY_DMS, systemPrompt, teamSystemPrompt, userPrompt } = await import("../src/lib/telegramBot/answer");
 const { knowledgeBlock } = await import("../src/lib/telegramBot/knowledge");
+const { liveMainnetNames } = await import("../src/lib/mainnet");
 const { isMainnetLive } = await import("../src/lib/mainnet");
 const { personaName } = await import("../src/lib/telegramBot/persona");
 const { DM_TTL_SEC, IMAGES_PER_HOUR, MODLOG_TTL_SEC, dmHistory, listBugReports, readLast24h, recentModeration, rememberOwnerChat, takeImageSlot } = await import(
@@ -601,7 +602,7 @@ await test("mainnet live: Glim says so, still never another date, and its facts 
   const post = systemPrompt({ persona: "Glim", testingOpen: false, admins: [], mainnetLive: true });
   assert.ok(pre.includes("Never say or hint that the app is live on mainnet"));
   assert.ok(!post.includes("Never say or hint that the app is live on mainnet"));
-  assert.ok(post.includes("Gloam is live on mainnet on "));
+  assert.ok(post.includes("Gloam is live on four mainnets, on Robinhood Chain and Tempo since Wednesday 21 October, 13:00 UTC, and on Base and Ethereum since 26 October, with beta deposit limits."), "the live mainnet rule");
   const team = teamSystemPrompt({ persona: "Glim", testingOpen: false, admins: [], mainnetLive: true });
   assert.ok(team.includes("drafts included") && !team.includes("testnet only)"));
 
@@ -626,6 +627,19 @@ await test("replies: RobinScan links to a transaction or an address may go out",
   assert.equal((cleanReply("See robin.etherscan.io/login to connect.", policy) ?? "").includes("robin.etherscan.io"), false, "only tx and address pages");
   assert.ok(knowledgeBlock(false, true).includes("https://robin.etherscan.io"), "the facts name RobinScan");
   assert.ok(!knowledgeBlock(false, true).includes("blockscout"));
+});
+
+await test("facts: live on four mainnets, with USDC, and none of the old two-chain wording", () => {
+  const k = knowledgeBlock(false, true);
+  assert.ok(k.includes("Gloam is live on four mainnets: Robinhood Chain and Tempo since 21 October 2026, and Base and Ethereum since 26 October 2026."));
+  assert.ok(k.includes("USDC is in the vault: on Base and Ethereum mainnet as USDC"));
+  assert.ok(k.includes("Never say Gloam has no USDC."));
+  assert.ok(k.includes("raised 100x"), "the limit raise behind the timelock");
+  assert.ok(k.includes("The mainnets: Robinhood Chain 4663, Tempo 4217, Base 8453 and Ethereum 1."));
+  assert.ok(k.includes('On mainnet it shows "You get"'), "the cash-out line reads as now");
+  for (const stale of ["Mainnet is coming", "Next (mainnet): Gloam goes live", "Its two testnets", "the other mainnet (Robinhood Chain or Tempo)", "which joined later"]) {
+    assert.ok(!k.includes(stale), stale);
+  }
 });
 
 await test("replies: the real $GLOAM contract and its pages go out; a fake one never does", () => {
@@ -833,7 +847,8 @@ await test("welcome: tags, mention links, escaping, the others count", () => {
   assert.ok(html.startsWith('Welcome to Gloam, @ada_lovelace, <a href="tg://user?id=12">'));
   assert.ok(html.includes("Bo &amp; Co</a> and "));
   assert.ok(!html.includes("<b>"));
-  assert.ok(html.includes("Send and receive money privately on Robinhood Chain and Tempo at gloam.trade/app."));
+  assert.ok(html.includes(`Send and receive money privately on ${liveMainnetNames()} at gloam.trade/app.`), "every mainnet with a vault in");
+  assert.ok(html.includes("Send and receive money privately on Robinhood Chain, Tempo, Base and Ethereum at gloam.trade/app."), "the four mainnets as shipped");
   assert.ok(html.includes("Questions go in Help.\n\n"), "no testing line while the tester program is closed");
   assert.ok(!/testing directions|soon/i.test(html), "nothing promised for later");
   assert.ok(html.endsWith("Admins never DM first."));

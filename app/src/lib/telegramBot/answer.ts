@@ -14,8 +14,8 @@
  * second system block, and the chat's last few exchanges as real turns.
  */
 import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
-import { isMainnetLive } from "@/lib/mainnet";
-import { knowledgeBlock, laterMainnets, launchNames } from "./knowledge";
+import { isMainnetLive, liveMainnetCountWords } from "@/lib/mainnet";
+import { knowledgeBlock, laterMainnets, laterMainnetsSince, launchNames } from "./knowledge";
 import { PERSONALITY, TEAM_TONE_RULES, TONE_RULES, honestyRule } from "./persona";
 import { parseSpamCheck, type SpamCheck } from "./moderation";
 import { markAddresses, secretLeak, tidyReply, type ChatLine } from "./rules";
@@ -82,8 +82,9 @@ function mainnetRule(live: boolean, drafts: boolean): string {
   }
   // Base and Ethereum joined after the 21 October launch: never date them to it.
   const later = laterMainnets();
-  const since = `on ${launchNames()} since Wednesday 21 October, 13:00 UTC${later.length ? `, and on ${later.join(" and ")} since then` : ""}`;
-  return `Gloam is live on mainnet ${since}, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
+  const laterSince = laterMainnetsSince();
+  const since = `on ${launchNames()} since Wednesday 21 October, 13:00 UTC${later.length ? `, and on ${later.join(" and ")} since ${laterSince ? laterSince.replace(/ \d{4}$/, "") : "then"}` : ""}`;
+  return `Gloam is live on ${liveMainnetCountWords()}, ${since}, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
 }
 
 export function botModel(): string {

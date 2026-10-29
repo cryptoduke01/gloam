@@ -4,7 +4,7 @@ Private payments for the [Machine Payments Protocol](https://mpp.dev) (MPP).
 
 MPP is HTTP 402 done properly: a server answers `WWW-Authenticate: Payment …`, the client pays and retries with `Authorization: Payment …`, and gets a `Payment-Receipt`. Every method so far (tempo, evm, stripe, solana) settles in public, so the ledger shows which agent paid which service, how much, how often.
 
-This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo or Robinhood Chain, on mainnet (beta) or testnet:
+This package adds the **`gloam`** method. A charge is paid with a private transfer inside a Gloam shielded pool on Tempo, Robinhood Chain, Base or Ethereum, on mainnet (beta) or testnet:
 
 - the payment note is sealed to the payee's receive tag, so only the payee can open it;
 - the server checks it binds the price, that it is the payment output of a `Transferred` event in the official pool, and that the credential is bound to this exact challenge;
@@ -114,9 +114,9 @@ It also exports the Payment scheme codec (challenges, credentials, receipts, the
 
 The default `network` is still `"tempo"` (the testnet), as in 0.0.x. Official pools come from the SDK this package is built with: a mainnet appears once that SDK has its pool, and a challenge naming any other pool is refused on both sides.
 
-Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, on the final keys) works with SDK 0.3.0, which has its pool. `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH) is refused with a plain error until the SDK has its pool.
+Base: `"base"` (Base Sepolia `84532`, test USDC by default, also EURC and ETH, on the final keys) works with SDK 0.3.0, which has its pool. `"base-mainnet"` (Base `8453`, USDC by default, also EURC, USDT and ETH), live since 26 October 2026, works when built with SDK 0.4.1 or later, which has its pool; built with an older SDK it is refused with a plain error.
 
-Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH) is refused the same way until the SDK has its pool. Its testnet is Ethereum Sepolia, below.
+Ethereum too (0.3.0): `"ethereum-mainnet"` (Ethereum `1`, USDC by default, also USDT, USDG, PYUSD, EURC and ETH), live since 26 October 2026, works the same way with SDK 0.4.1 or later. Its testnet is Ethereum Sepolia, below.
 
 Ethereum Sepolia: `"ethereum"` (`11155111`, test USDC by default, also USDG, PYUSD, EURC and ETH, on the final keys) is known to 0.3.0 and works with SDK 0.4.0, which has its pool (deployed 25 October 2026). Built with an older SDK it is refused with a plain error.
 
@@ -130,7 +130,7 @@ Gloam's vault has one address on every chain, and ETH is `0x0` on all of them. A
 
 ## Status
 
-Mainnet (beta) on Tempo and Robinhood Chain, payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.
+Mainnet (beta) on Tempo, Robinhood Chain, Base and Ethereum (Base and Ethereum need a build with SDK 0.4.1 or later), payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.
 
 ## Tests
 

@@ -5,14 +5,14 @@ import { DocsLayout } from "@/components/DocsLayout";
 export const metadata: Metadata = {
   title: "Agents",
   description:
-    "Give an AI agent private payments on Robinhood Chain and Tempo: shield, pay, and disclose end to end via @gloamtrade/sdk and the @gloamtrade/mcp server, under policy.",
+    "Give an AI agent private payments on Robinhood Chain, Tempo, Base and Ethereum: shield, pay, and disclose end to end via @gloamtrade/sdk and the @gloamtrade/mcp server, under policy.",
 };
 
 export default function DocsAgentsPage() {
   return (
     <DocsLayout
       title="Build a private agent"
-      lede="Give an AI agent a private execution surface on Robinhood Chain and Tempo. It shields, pays, and proves holdings end to end, with size and strategy hidden and signing under policy."
+      lede="Give an AI agent a private execution surface on Robinhood Chain, Tempo, Base and Ethereum. It shields, pays, and proves holdings end to end, with size and strategy hidden and signing under policy."
       glance={[
         { label: "SDK", value: "@gloamtrade/sdk" },
         { label: "Server", value: "@gloamtrade/mcp (MCP)" },
@@ -196,9 +196,11 @@ export default function DocsAgentsPage() {
           for example <code>USDG</code> on Robinhood Chain.
         </li>
         <li>
-          <code>chain</code>: <code>robinhood-mainnet</code> or{" "}
-          <code>tempo-mainnet</code> for mainnet. <code>robinhood</code> and{" "}
-          <code>tempo</code> are the testnets.
+          <code>chain</code>: <code>robinhood-mainnet</code>,{" "}
+          <code>tempo-mainnet</code>, <code>base-mainnet</code> or{" "}
+          <code>ethereum-mainnet</code> for mainnet. <code>robinhood</code>,{" "}
+          <code>tempo</code>, <code>base</code> and <code>ethereum</code> are
+          the testnets.
         </li>
         <li>
           <code>name</code> (up to 40 characters) and <code>note</code> (up to
@@ -245,8 +247,9 @@ const hash = await wallet.writeContract({
       </pre>
       <p>
         That snippet runs on the testnet, the SDK default. For mainnet,
-        pass a mainnet network (<code>mainnetNetwork(&quot;tempo&quot;)</code> or{" "}
-        <code>&quot;robinhood&quot;</code>), its stablecoin as <code>asset</code>,
+        pass a mainnet network (<code>mainnetNetwork(&quot;tempo&quot;)</code>,{" "}
+        <code>&quot;robinhood&quot;</code>, <code>&quot;base&quot;</code> or{" "}
+        <code>&quot;ethereum&quot;</code>), its stablecoin as <code>asset</code>,
         and prove with <code>circuitArtifactUrls(&quot;shield&quot;, net.chainId)</code>{" "}
         so the final keys are used. See the <Link href="/docs/quickstart">quickstart</Link>.
       </p>
@@ -502,7 +505,7 @@ const hash = await wallet.writeContract({
         No fabricated fills, ever. If a private path is not live, the tool says so
         and returns a plan rather than a fake success.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link> are live in the
-        Gloam app on both mainnets, but the SDK and the MCP server do not swap
+        Gloam app on the Robinhood Chain and Tempo mainnets, but the SDK and the MCP server do not swap
         yet: the market and trade tools only plan, and the old sealed trade they
         describe is retired. Shield, private send, cash out, and disclosure are
         live and proof-gated. Mainnet uses the final keys from the 13-contributor

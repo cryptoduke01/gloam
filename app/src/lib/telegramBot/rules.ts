@@ -6,7 +6,7 @@
  */
 import { createHash, timingSafeEqual } from "crypto";
 import { english } from "viem/accounts";
-import { baseSepoliaPool, ethereumSepoliaPool, isMainnetLive, mainnetPool } from "@/lib/mainnet";
+import { baseSepoliaPool, ethereumSepoliaPool, isMainnetLive, liveMainnetNames, mainnetPool } from "@/lib/mainnet";
 import { COPYCAT_GLOAM, GLOAM_TOKEN } from "./knowledge";
 import type { TgMessage, TgPhotoSize, TgUser } from "./telegram";
 
@@ -1445,10 +1445,10 @@ export function welcomeHtml(joiners: Joiner[], testingOpen: boolean): string {
   if (others > 0) tags.push(`${others} ${others === 1 ? "other" : "others"}`);
   const list = tags.length > 1 ? `${tags.slice(0, -1).join(", ")} and ${tags[tags.length - 1]}` : (tags[0] ?? "friends");
   const testing = testingOpen ? " Testers, your guide is pinned in the Testers topic." : "";
-  // A warm hello and where to start. No admin handles: they would ping the admins on every welcome, and the group shows who they are.
+  // A warm hello and where to start, naming every mainnet with a vault in. No admin handles: they would ping the admins on every welcome, and the group shows who they are.
   return (
     `Welcome to Gloam, ${list}. Glad you're here.\n\n` +
-    `Send and receive money privately on Robinhood Chain and Tempo at gloam.trade/app. Questions go in Help.${testing}\n\n` +
+    `Send and receive money privately on ${liveMainnetNames()} at gloam.trade/app. Questions go in Help.${testing}\n\n` +
     `Admins never DM first.`
   );
 }

@@ -332,7 +332,8 @@ cashOutFee(500_000_000n);                     // what the pool keeps on a 500 US
         sealed trade, which is retired: the on-chain sealed-swap path stays
         disabled on testnet, and the mainnet pools have no sealed swap at all.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link> replaced it. They
-        run in the Gloam app through a swap router on each mainnet, and the SDK
+        run in the Gloam app through a swap router on Robinhood Chain and
+        Tempo mainnet, and the SDK
         does not build them yet.
       </p>
 

@@ -8,5 +8,5 @@ export const alt = `Gloam research: ${title}. ${subtitle}`;
 export { size, contentType } from "@/lib/docsCard";
 
 export default function OpenGraphImage() {
-  return docsCard({ title, subtitle, art: <ChainsArt />, section: "Research" });
+  return docsCard({ title, subtitle, art: <ChainsArt chains={[["Robinhood", "RH"], ["Tempo", "T"]]} />, section: "Research" });
 }

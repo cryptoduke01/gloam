@@ -13,8 +13,9 @@ The `gloam` MCP server runs with `npx -y @gloamtrade/mcp`. With no settings it o
 To execute it needs a key, a note-store key and limits, all read from `~/.gloam/agent.env` (mode
 600), never from the plugin config or the chat.
 
-First ask whether the user wants **mainnet** (beta: `tempo-mainnet` or
-`robinhood-mainnet`) or the **testnet** (`tempo` or `robinhood`).
+First ask whether the user wants **mainnet** (beta: `tempo-mainnet`, `robinhood-mainnet`,
+`base-mainnet` or `ethereum-mainnet`) or the **testnet** (`tempo`, `robinhood`, `base` or
+`ethereum`).
 Suggest practicing on testnet first if they are new to it. `GLOAM_NETWORK` in the settings file sets
 the default network; unset, it is the Robinhood Chain testnet.
 
@@ -69,7 +70,7 @@ key can never be authorized again; run step 2 again for a new one.
 
 ## 3. Other setups
 
-- Raw key (no onchain cap, and the only option on Robinhood Chain): set `GLOAM_AGENT_PRIVATE_KEY`
+- Raw key (no onchain cap, and the only option on Robinhood Chain, Base and Ethereum): set `GLOAM_AGENT_PRIVATE_KEY`
   to a funded key, plus `GLOAM_NOTE_KEY` (`openssl rand -hex 32`), `GLOAM_NETWORK`, and off-chain
   limits (`GLOAM_LIMIT_ASSETS`, `GLOAM_LIMIT_MAX_PER_PAYMENT`, `GLOAM_LIMIT_MAX_PER_DAY`,
   `GLOAM_LIMIT_RECIPIENTS`, and `GLOAM_LIMIT_NETWORK` for mainnet assets) in `~/.gloam/agent.env`.

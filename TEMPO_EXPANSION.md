@@ -15,10 +15,11 @@ the relay all run there. Private trade is off on both, as on Robinhood Chain. Th
 sections below are the original design, annotated with what shipped (re-checked
 2026-10-10).
 
-Gloam runs one product on two chains: the flagship on Robinhood Chain
+Gloam started as one product on two chains: the flagship on Robinhood Chain
 (tokenized-equity privacy) and an expansion on Tempo (private stablecoin
 payments for people and agents). Same shielded-pool protocol, two chain-specific
-frames. The runtime network toggle (Phase 0) is already shipped: see
+frames. Base and Ethereum mainnet joined on 26 October 2026, on the same
+vault. The runtime network toggle (Phase 0) is already shipped: see
 `app/src/lib/networks.ts`, `app/src/components/app/NetworkProvider.tsx`,
 `NetworkSelector.tsx`.
 

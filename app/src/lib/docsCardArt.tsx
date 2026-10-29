@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { C } from "./docsCard";
+import { MAINNET_CHAINS, mainnetPool } from "./mainnet";
 
 /**
  * The small drawings on the docs link cards, one per page, each built from a
@@ -136,17 +137,38 @@ export function ChatArt() {
   );
 }
 
-/** Networks: two chains feeding one private pool. */
-export function ChainsArt() {
+/** The short label and monogram each mainnet gets on a card. */
+const CHAIN_PILLS: Record<string, [label: string, mono: string]> = {
+  "Robinhood Chain": ["Robinhood", "RH"],
+  Tempo: ["Tempo", "T"],
+  Base: ["Base", "B"],
+  Ethereum: ["Ethereum", "E"],
+};
+
+/** The mainnets with a pool in, as card pills (lib/mainnet.ts). */
+function liveChainPills(): [string, string][] {
+  return MAINNET_CHAINS.filter((c) => mainnetPool(c.chainId)).map((c) => CHAIN_PILLS[c.name] ?? [c.name, c.name.slice(0, 1)]);
+}
+
+/**
+ * Networks: the chains feeding one private pool. Every live mainnet by
+ * default; a dated card (a launch post) passes the chains it was about.
+ */
+export function ChainsArt({ chains = liveChainPills() }: { chains?: [label: string, mono: string][] } = {}) {
+  const n = Math.max(chains.length, 1);
+  const tall = n <= 2;
+  const h = tall ? 58 : 40;
+  const gap = tall ? 60 : (200 - n * h) / (n - 1 || 1);
+  const tops = chains.map((_, i) => (tall ? (n === 1 ? 71 : 12 + i * (h + gap)) : i * (h + gap)));
   const chain = (label: string, mono: string) => (
     <div
       style={{
         ...row,
-        gap: 12,
+        gap: tall ? 12 : 10,
         width: 214,
-        height: 58,
-        padding: "0 16px 0 10px",
-        borderRadius: 29,
+        height: h,
+        padding: tall ? "0 16px 0 10px" : "0 14px 0 6px",
+        borderRadius: h / 2,
         border: `1.5px solid ${C.line}`,
         background: C.surface,
       }}
@@ -155,28 +177,33 @@ export function ChainsArt() {
         style={{
           ...row,
           justifyContent: "center",
-          width: 38,
-          height: 38,
-          borderRadius: 19,
+          width: tall ? 38 : 28,
+          height: tall ? 38 : 28,
+          borderRadius: tall ? 19 : 14,
           background: C.raised,
-          fontSize: 17,
+          fontSize: tall ? 17 : 13,
           fontWeight: 500,
           color: C.paper,
         }}
       >
         {mono}
       </div>
-      <Text size={22}>{label}</Text>
+      <Text size={tall ? 22 : 18}>{label}</Text>
     </div>
   );
   return (
     <div style={{ position: "relative", display: "flex", width: 330, height: 200 }}>
       <svg width={330} height={200} viewBox="0 0 330 200" style={{ position: "absolute", left: 0, top: 0 }}>
-        <path d="M214 41 C 250 41, 250 100, 268 100" fill="none" stroke={C.line} strokeWidth={2} />
-        <path d="M214 159 C 250 159, 250 100, 268 100" fill="none" stroke={C.line} strokeWidth={2} />
+        {tops.map((top, i) => {
+          const y = top + h / 2;
+          return <path key={i} d={`M214 ${y} C 250 ${y}, 250 100, 268 100`} fill="none" stroke={C.line} strokeWidth={2} />;
+        })}
       </svg>
-      <div style={{ position: "absolute", left: 0, top: 12, display: "flex" }}>{chain("Robinhood", "RH")}</div>
-      <div style={{ position: "absolute", left: 0, top: 130, display: "flex" }}>{chain("Tempo", "T")}</div>
+      {chains.map(([label, mono], i) => (
+        <div key={label} style={{ position: "absolute", left: 0, top: tops[i], display: "flex" }}>
+          {chain(label, mono)}
+        </div>
+      ))}
       <div
         style={{
           position: "absolute",

@@ -11,7 +11,7 @@ import { GLOAM_OWNER, GLOAM_RELAYERS, GLOAM_TREASURY, MAINNET_POSEIDON_T3 } from
 export const metadata: Metadata = {
   title: "Networks",
   description:
-    "Gloam runs one private core on two chains, Robinhood Chain and Tempo, each with a mainnet and a testnet. Chain IDs, RPCs, pools, assets, beta limits, and the Tempo integration details.",
+    "Gloam runs one private core on four mainnets, Robinhood Chain, Tempo, Base and Ethereum, each with a testnet. Chain IDs, RPCs, pools, assets, beta limits, and the integration details for each chain.",
 };
 
 /** A mainnet pool address, or a placeholder until it is filled in on deploy day. */
@@ -55,35 +55,38 @@ export default function DocsNetworksPage() {
   return (
     <DocsLayout
       title="Networks"
-      lede="One private core, two chains. Robinhood Chain and Tempo, each with a mainnet and a testnet."
+      lede="One private core, four mainnets. Robinhood Chain, Tempo, Base and Ethereum, each with a testnet."
       glance={[
         { label: "Robinhood mainnet", value: "4663" },
         { label: "Tempo mainnet", value: "4217" },
-        { label: "Robinhood testnet", value: "46630" },
-        { label: "Tempo testnet", value: "42431" },
-        { label: "Robinhood gas", value: "ETH" },
-        { label: "Tempo gas", value: "Stablecoin" },
+        { label: "Base mainnet", value: "8453" },
+        { label: "Ethereum mainnet", value: "1" },
+        { label: "Testnets", value: "46630 · 42431 · 84532 · 11155111" },
+        { label: "Gas", value: "ETH; stablecoins on Tempo" },
       ]}
     >
-      <h2>Two chains, one shielded pool design</h2>
+      <h2>Four mainnets, one shielded pool design</h2>
       <p>
         Gloam is not a chain. It is a shielded-pool contract plus verifiers,
         deployed to the chains where the money already moves. The same circuits,
-        the same vault design, and the same SDK run on both networks. What
+        the same vault design, and the same SDK run on every network. What
         differs is the asset each chain leads with: USDG and $GLOAM on Robinhood
-        Chain, dollar stablecoins on Tempo. The app switches networks at runtime
+        Chain, dollar stablecoins on Tempo, USDC, EURC, USDT and ETH on Base and
+        Ethereum, with USDG and PYUSD on Ethereum too. The app switches networks at runtime
         and points at the right pool for each.
       </p>
 
       <h2 id="mainnet">Mainnet</h2>
       <p>
         Gloam went live on Robinhood Chain and Tempo mainnet on 21 October 2026,
-        13:00 UTC. This is beta software. The mainnet pools
+        13:00 UTC, and on Base and Ethereum mainnet on 26 October 2026. The
+        vault has the same address on all four. This is beta software. The mainnet pools
         (<code>ShieldPoolPayments</code>) take shield, private send, cash out
         and proofs, and have no swap code.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link>{" "}
-        run through a separate router on each chain, which uses only the
-        vault&apos;s normal calls.
+        run through a separate router on Robinhood Chain and Tempo, which uses
+        only the vault&apos;s normal calls; Base and Ethereum have no swap
+        router yet.
       </p>
       <div className="overflow-x-auto">
         <table>
@@ -92,6 +95,8 @@ export default function DocsNetworksPage() {
               <th />
               <th>Robinhood Chain</th>
               <th>Tempo</th>
+              <th>Base</th>
+              <th>Ethereum</th>
             </tr>
           </thead>
           <tbody>
@@ -103,6 +108,12 @@ export default function DocsNetworksPage() {
               <td>
                 <code>4217</code>
               </td>
+              <td>
+                <code>8453</code>
+              </td>
+              <td>
+                <code>1</code>
+              </td>
             </tr>
             <tr>
               <td>RPC</td>
@@ -111,6 +122,12 @@ export default function DocsNetworksPage() {
               </td>
               <td>
                 <code>https://rpc.tempo.xyz</code>
+              </td>
+              <td>
+                <code>https://mainnet.base.org</code>
+              </td>
+              <td>
+                <code>https://rpc.mevblocker.io</code>
               </td>
             </tr>
             <tr>
@@ -125,6 +142,16 @@ export default function DocsNetworksPage() {
                   explore.tempo.xyz
                 </a>
               </td>
+              <td>
+                <a href="https://basescan.org" target="_blank" rel="noreferrer">
+                  basescan.org
+                </a>
+              </td>
+              <td>
+                <a href="https://etherscan.io" target="_blank" rel="noreferrer">
+                  etherscan.io
+                </a>
+              </td>
             </tr>
             <tr>
               <td>Pool</td>
@@ -133,6 +160,12 @@ export default function DocsNetworksPage() {
               </td>
               <td>
                 <MainnetPoolAddress chainId={4217} />
+              </td>
+              <td>
+                <MainnetPoolAddress chainId={8453} />
+              </td>
+              <td>
+                <MainnetPoolAddress chainId={1} />
               </td>
             </tr>
             <tr>
@@ -143,6 +176,12 @@ export default function DocsNetworksPage() {
               <td>
                 <MainnetDeployBlock chainId={4217} />
               </td>
+              <td>
+                <MainnetDeployBlock chainId={8453} />
+              </td>
+              <td>
+                <MainnetDeployBlock chainId={1} />
+              </td>
             </tr>
             <tr>
               <td>Swap router</td>
@@ -152,16 +191,26 @@ export default function DocsNetworksPage() {
               <td>
                 <SwapRouterAddress chainId={4217} />
               </td>
+              <td>
+                <SwapRouterAddress chainId={8453} />
+              </td>
+              <td>
+                <SwapRouterAddress chainId={1} />
+              </td>
             </tr>
             <tr>
               <td>Swaps on</td>
               <td>Uniswap v4 (USDG and $GLOAM)</td>
               <td>Tempo&apos;s stablecoin exchange (the four stablecoins)</td>
+              <td>Not yet</td>
+              <td>Not yet</td>
             </tr>
             <tr>
               <td>Gas</td>
               <td>ETH (gas only, not a pool asset)</td>
               <td>Paid in stablecoins</td>
+              <td>ETH, also a pool asset</td>
+              <td>ETH, also a pool asset; the relay waits while gas is above {DEFAULT_MAX_GAS_GWEI[1]} gwei</td>
             </tr>
           </tbody>
         </table>
@@ -199,14 +248,52 @@ export default function DocsNetworksPage() {
                 <td>{t.decimals}</td>
               </tr>
             ))}
+            {BASE_MAINNET_LIVE &&
+              BASE_MAINNET_TOKENS.map((t) => (
+                <tr key={`base-${t.address}`}>
+                  <td>{t.symbol}</td>
+                  <td>Base</td>
+                  <td>
+                    <code>{t.address}</code>
+                  </td>
+                  <td>{t.decimals}</td>
+                </tr>
+              ))}
+            {ETHEREUM_LIVE &&
+              ETHEREUM_MAINNET_TOKENS.map((t) => (
+                <tr key={`eth-${t.address}`}>
+                  <td>{t.symbol}</td>
+                  <td>Ethereum</td>
+                  <td>
+                    <code>{t.address}</code>
+                  </td>
+                  <td>{t.decimals}</td>
+                </tr>
+              ))}
+            {[BASE_MAINNET_LIVE ? "Base" : null, ETHEREUM_LIVE ? "Ethereum" : null]
+              .filter((c): c is string => c !== null)
+              .map((c) => (
+                <tr key={`eth-native-${c}`}>
+                  <td>ETH</td>
+                  <td>{c}</td>
+                  <td>Native, no token address</td>
+                  <td>18</td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
       <ul>
         <li>
           <strong>Beta deposit limits.</strong> Each stablecoin: 500 per deposit
-          and 25,000 in total. $GLOAM: 25,000 per deposit and 250,000 in total.
-          The app shows the room left before you sign.
+          and 25,000 in total. ETH on Base and Ethereum: 0.2 per deposit and 10
+          in total. $GLOAM: 25,000 per deposit and 250,000 in total. The app
+          shows the room left before you sign.
+        </li>
+        <li>
+          <strong>Higher limits queued.</strong> A 100x raise of the beta
+          deposit limits is queued behind the public 3-day timelock and applies
+          around 1 November 2026. Until then the limits above hold.
         </li>
         <li>
           <strong>Never limited:</strong> private payments and cash outs.
@@ -240,7 +327,7 @@ export default function DocsNetworksPage() {
           testnets keep the dev keys.
         </li>
         <li>
-          <strong>PoseidonT3</strong> (both chains), <code>{MAINNET_POSEIDON_T3}</code>
+          <strong>PoseidonT3</strong> (every mainnet), <code>{MAINNET_POSEIDON_T3}</code>
         </li>
         <li>
           <strong>Owner</strong>, <code>{GLOAM_OWNER}</code>. One wallet at
@@ -420,9 +507,9 @@ export default function DocsNetworksPage() {
         Base is an Ethereum L2 (OP Stack) where a lot of USDC already moves.
         Gloam on Base is the same vault as on the other mainnets:{" "}
         <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
-        deposit limits and the 0.25% cash-out fee. Base Sepolia comes first as
-        the testnet, then Base mainnet on the same code once it is
-        tested end to end.{" "}
+        deposit limits and the 0.25% cash-out fee. Base Sepolia, the testnet,
+        went live on 24 October 2026 and Base mainnet on 26 October 2026, on
+        the same code.{" "}
         {BASE_MAINNET_LIVE
           ? "Both are live: Base mainnet is beta software, Base Sepolia is its testnet."
           : BASE_SEPOLIA_LIVE
@@ -681,7 +768,7 @@ export default function DocsNetworksPage() {
 
       <h2>Honest status</h2>
       <p>
-        Mainnet on both chains is beta software. It uses
+        Mainnet on all four chains is beta software. It uses
         the final keys from the multi-party ceremony that closed on 17 October
         with 13 contributors, and beta deposit limits cap what the pools take.
         The code was reviewed internally before launch; that review finished on

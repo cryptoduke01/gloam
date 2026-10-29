@@ -10,15 +10,16 @@ license: MIT
 
 # Gloam
 
-Gloam gives the agent private stablecoin payments on Tempo and Robinhood Chain through the `gloam`
-MCP server: the public chain sees a shielded transfer, not who paid whom or how much.
+Gloam gives the agent private stablecoin payments on Tempo, Robinhood Chain, Base and Ethereum
+through the `gloam` MCP server: the public chain sees a shielded transfer, not who paid whom or how much.
 
 Each chain has a mainnet and a testnet, and tools take a `network`:
 
-- `tempo-mainnet` and `robinhood-mainnet` are **mainnet** (beta). Deposits are capped at 500 of
-  a stablecoin (25,000 GLOAM) per deposit during the beta. Deposits and private payments are free;
+- `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet` and `ethereum-mainnet` are **mainnet**
+  (beta). Deposits are capped at 500 of a stablecoin (0.2 ETH, 25,000 GLOAM) per deposit during
+  the beta. Deposits and private payments are free;
   cashing out costs 0.25%.
-- `tempo` and `robinhood` are the testnets.
+- `tempo`, `robinhood`, `base` (Base Sepolia) and `ethereum` (Ethereum Sepolia) are the testnets.
 
 `gloam_info` lists the networks this server has and its default. Always say which network a payment
 is on, and say plainly when it is mainnet.
@@ -78,9 +79,9 @@ only reaches the conversation when a retry fails. Always pass `maxAmount` with t
 - Be honest about privacy. Deposits (shields) are public, and the mainnet pools are new, so the
   crowd of notes to hide among is small at first. Quote `gloam_privacy_status` when the user asks
   how private something is. Never call Gloam audited: it was reviewed internally before launch and
-  an external audit is planned. Private swaps are live in the Gloam app on both mainnets (who
-  swapped stays private, the tokens and amounts are public), but these tools do not swap. The old
-  sealed trade is retired.
+  an external audit is planned. Private swaps are live in the Gloam app on Robinhood Chain and
+  Tempo mainnet (who swapped stays private, the tokens and amounts are public), but these tools
+  do not swap. The old sealed trade is retired.
 
 ## When tools return plans
 

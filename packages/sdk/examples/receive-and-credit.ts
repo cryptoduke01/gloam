@@ -16,7 +16,7 @@
  *   npm install @gloamtrade/sdk viem snarkjs
  *   npx tsx receive-and-credit.ts
  *
- * Robinhood Chain and Tempo mainnet both have a payment-message board, so
+ * Every mainnet (Robinhood Chain, Tempo, Base and Ethereum) has a payment-message board, so
  * watch() finds payments to your Gloam address on its own. handleCode() is the
  * fallback for a sealed code (gloam2t.…) a payer hands over directly.
  */

@@ -163,6 +163,10 @@ export default function PrivacyWithoutAnOperatorPost() {
           </tbody>
         </table>
       </div>
+      <p className="text-[14px] text-mute">
+        Since this was written, Gloam went live on mainnet: on Robinhood Chain
+        and Tempo on 21 October 2026, and on Base and Ethereum on 26 October.
+      </p>
 
       <h2>The compliance question, honestly</h2>
       <p>

@@ -91,7 +91,7 @@ assert.equal((await decodeNotePackage(leftover)).secret, pack.secret, "and claim
 const whole = `https://www.gloam.trade/claim?net=robinhood-mainnet#claim=gloam1\n${leftover}`;
 assert.equal((await decodeNotePackage(whole)).secret, pack.secret, "the whole cut message pasted back claims");
 n += 3;
-// The network check: same vault address on both mainnets, so the asset decides.
+// The network check: same vault address on every mainnet, so the asset decides.
 {
   const rh = getNetwork("robinhood-mainnet");
   const tempo = getNetwork("tempo-mainnet");

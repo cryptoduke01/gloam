@@ -763,7 +763,7 @@ export function AdminDashboard() {
               <Stat
                 label="In the vault now"
                 value={agg ? fmtUsd(agg.heldUsd) : null}
-                sub={agg?.unpriced.length ? `${money}, plus ${agg.unpriced.length} unpriced` : `${money}, across both chains`}
+                sub={agg?.unpriced.length ? `${money}, plus ${agg.unpriced.length} unpriced` : `${money}, across every ${isMain ? "mainnet" : "testnet"}`}
               />
               <Stat
                 label="Private payments"
@@ -1824,7 +1824,7 @@ function BugsPanel() {
 }
 
 /** A network's name; "testnet" is added once a mainnet sits beside it. */
-/** The chains Gloam runs on, one side, as words: "Robinhood Chain and Tempo", or with Base once it is in. */
+/** The chains Gloam runs on, one side, as words: "Robinhood Chain, Tempo, Base and Ethereum" on mainnet. */
 function chainsOn(side: "mainnet" | "testnet"): string {
   const labels = [...new Set(NETWORK_KEYS.map(getNetwork).filter((n) => n.testnet === (side === "testnet")).map((n) => n.label))];
   if (!labels.length) return "Robinhood Chain and Tempo";

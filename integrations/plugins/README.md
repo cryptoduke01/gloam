@@ -1,7 +1,7 @@
 # Gloam plugins
 
-Agent plugins for [Gloam](https://gloam.trade): private stablecoin payments for AI agents on Tempo
-and Robinhood Chain, live on mainnet (beta) and on the testnets, under spending
+Agent plugins for [Gloam](https://gloam.trade): private stablecoin payments for AI agents on Tempo,
+Robinhood Chain, Base and Ethereum, live on mainnet (beta) and on the testnets, under spending
 limits the agent cannot lift. The layout mirrors
 [tempoxyz/plugins](https://github.com/tempoxyz/plugins), so the same marketplace works in Claude
 Code, Codex and Cursor.

@@ -82,12 +82,15 @@ function checkedPool({ pool, deployBlock }: MainnetPoolInput, name: string): Mai
   return { pool: pool as `0x${string}`, deployBlock: block };
 }
 
-/** Every mainnet Gloam knows, in the order it names them, with or without a pool. */
-export const MAINNET_CHAINS: readonly { chainId: MainnetChainId; name: string }[] = [
-  { chainId: 4663, name: "Robinhood Chain" },
-  { chainId: 4217, name: "Tempo" },
-  { chainId: 8453, name: "Base" },
-  { chainId: 1, name: "Ethereum" },
+/**
+ * Every mainnet Gloam knows, in the order it names them, with or without a pool,
+ * and the day its vault went live (written the way the copy writes dates).
+ */
+export const MAINNET_CHAINS: readonly { chainId: MainnetChainId; name: string; liveSince: string }[] = [
+  { chainId: 4663, name: "Robinhood Chain", liveSince: "21 October 2026" },
+  { chainId: 4217, name: "Tempo", liveSince: "21 October 2026" },
+  { chainId: 8453, name: "Base", liveSince: "26 October 2026" },
+  { chainId: 1, name: "Ethereum", liveSince: "26 October 2026" },
 ];
 
 /** At least one mainnet pool is filled in. */
@@ -110,7 +113,40 @@ export function isMainnetLive(now: number = Date.now()): boolean {
 export function liveMainnetNames(): string {
   const names = MAINNET_CHAINS.filter((c) => mainnetPool(c.chainId)).map((c) => c.name);
   if (!names.length) return "Robinhood Chain and Tempo";
-  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return joinNames(names);
+}
+
+/** "A", "A and B", "A, B and C". */
+export function joinNames(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+const COUNT_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/** How many mainnets have a pool in: 4. Two, as announced, when none is in (only a test asks then). */
+export function liveMainnetCount(): number {
+  return MAINNET_CHAINS.filter((c) => mainnetPool(c.chainId)).length || 2;
+}
+
+/** The same count as a word for copy: "four mainnets", "one mainnet". */
+export function liveMainnetCountWords(): string {
+  const n = liveMainnetCount();
+  return `${COUNT_WORDS[n] ?? String(n)} ${n === 1 ? "mainnet" : "mainnets"}`;
+}
+
+/**
+ * The live mainnets grouped by the day each went live, oldest first:
+ * [{ names: "Robinhood Chain and Tempo", since: "21 October 2026" }, { names: "Base and Ethereum", since: "26 October 2026" }].
+ */
+export function liveMainnetsByDay(): { names: string; since: string }[] {
+  const days: { names: string[]; since: string }[] = [];
+  for (const c of MAINNET_CHAINS) {
+    if (!mainnetPool(c.chainId)) continue;
+    const day = days.find((d) => d.since === c.liveSince);
+    if (day) day.names.push(c.name);
+    else days.push({ names: [c.name], since: c.liveSince });
+  }
+  return days.map((d) => ({ names: joinNames(d.names), since: d.since }));
 }
 
 /**
