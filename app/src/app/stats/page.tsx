@@ -11,7 +11,12 @@ import { getPublicStats, type PublicNetwork, type PublicStats } from "@/lib/publ
  * minute (ISR), and each regeneration reads a snapshot that is itself shared
  * for a minute, so visitors never reach an RPC. /transparency is the other
  * half: one vault at a time, read in the visitor's own browser.
+ *
+ * force-static: the chain read's price lookups are no-store fetches, which
+ * would otherwise flip this page to dynamic (and fail its regeneration). Here
+ * they simply run on each regeneration, which is what the page wants.
  */
+export const dynamic = "force-static";
 export const revalidate = 60;
 export const maxDuration = 60;
 
@@ -235,8 +240,8 @@ export default async function StatsPage() {
           </p>
           {readAt != null && (
             <p className="tnum mt-6 text-[13.5px] text-mute">
-              Counted since launch on {utcDate(Date.parse(stats!.countedSince))}. Read from the chains at {utcTime(readAt)} UTC
-              on {utcDate(readAt)}.
+              Counted since launch on {utcDate(Date.parse(stats!.countedSince))}, {utcTime(Date.parse(stats!.countedSince))} UTC.
+              Read from the chains at {utcTime(readAt)} UTC on {utcDate(readAt)}.
             </p>
           )}
           <div className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-3">
@@ -300,6 +305,12 @@ export default async function StatsPage() {
                 lead="Deposits, private transfers and cash-outs per UTC day, all four mainnets together. Point at a bar, or focus the chart and use the arrow keys."
               >
                 <DailyChart days={stats.daily} />
+                {stats.undated > 0 && (
+                  <p className="tnum mt-4 text-[13px] leading-relaxed text-mute">
+                    {intFmt.format(stats.undated)} {stats.undated === 1 ? "action is" : "actions are"} in the totals above but
+                    not in a day yet: the chain read is still dating {stats.undated === 1 ? "its block" : "their blocks"}.
+                  </p>
+                )}
               </Section>
             )}
 
