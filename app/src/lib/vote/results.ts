@@ -64,8 +64,11 @@ export async function voteSummary(
   snapshot: VoteSnapshot | null,
   excluded: Map<string, Excluded>,
   now: number = Date.now(),
+  opts: { tolerateStore?: boolean } = {},
 ): Promise<VoteSummary> {
-  const ballots = snapshot ? await cachedBallots(v.id, now) : [];
+  // the page still renders the vote when the store is down (with empty totals the client fills in later); the API says 503
+  const read = snapshot ? cachedBallots(v.id, now) : Promise.resolve([]);
+  const ballots = opts.tolerateStore ? await read.catch(() => []) : await read;
   const t = tally(v, ballots);
   const eligible = snapshot ? eligibleTotal(snapshot, excluded) : null;
   return {

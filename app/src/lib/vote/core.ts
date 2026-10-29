@@ -324,3 +324,16 @@ export function percentOf(part: bigint, whole: bigint): number {
   if (whole <= 0n) return 0;
   return Number((part * 1000n) / whole) / 10;
 }
+
+/** "3 Nov 2026, 13:00 UTC": the same on the server and in every browser. */
+export function formatUtc(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+  return `${date}, ${time} UTC`;
+}
+
+/** 0x1234…abcd */
+export function shortAddress(a: string): string {
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
