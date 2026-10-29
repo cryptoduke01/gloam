@@ -14,6 +14,11 @@
  *    tampered weight, a bad signature and a stale duplicate
  *  - The real routes: drafts stay hidden without GLOAM_VOTE_PREVIEW, unknown
  *    votes are 404, bad input is refused, the vote endpoint is rate limited
+ *  - The holder check: an eligible holder, a wallet with nothing at the
+ *    snapshot and a team wallet each come back as they should; a connected
+ *    wallet is recorded once (first seen kept, last seen moved on), its
+ *    balances worked out on the server whatever the browser sends, its signed
+ *    votes noted, and the endpoint is rate limited
  *
  * Uses the in-process store (GLOAM_PARTNERS_STORE=memory). Nothing is sent to
  * any chain.
@@ -28,6 +33,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 process.env.GLOAM_PARTNERS_STORE = "memory";
 process.env.GLOAM_VOTE_NO_ENS = "1";
+process.env.GLOAM_VOTE_NO_CHAIN = "1";
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
 delete process.env.GLOAM_VOTE_PREVIEW;
@@ -565,6 +571,96 @@ await test("routes: /api/vote lists every published vote, /api/vote/me gives one
     assert.equal(st.weight, "0");
     assert.match(st.excluded ?? "", /Team/);
   }
+});
+
+// ---------------------------------------------------------------- holder check and connected holders
+
+const holders = await import("../src/lib/vote/holders");
+const seenRoute = await import("../src/app/api/vote/seen/route");
+const seenReq = (body: unknown, ip = "203.0.113.20") =>
+  new Request("http://localhost/api/vote/seen", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body), headers: { "x-forwarded-for": ip } });
+const pubVotes = VOTES.filter((v) => v.published);
+const pubSnap = registry.snapshotFor(pubVotes[0]!)!;
+const pubEx = registry.excludedForVote(pubVotes[0]!);
+const [topHolder, topWei] = Object.entries(pubSnap.balances).find(([a]) => !pubEx.has(a))!;
+const TEAM_WALLET = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
+
+await test("holder check: eligible, nothing at the snapshot, and a team wallet", async () => {
+  const yes = await holders.holderFacts(getAddress(topHolder));
+  assert.equal(yes.snapshot, topWei);
+  assert.equal(yes.eligible, true);
+  assert.equal(yes.excluded, null);
+  assert.deepEqual(yes.signed, []);
+
+  const zero = await holders.holderFacts(carol.address);
+  assert.equal(zero.snapshot, "0");
+  assert.equal(zero.eligible, false);
+  assert.equal(zero.excluded, null);
+
+  const teamFacts = await holders.holderFacts(getAddress(TEAM_WALLET));
+  assert.equal(teamFacts.eligible, false);
+  assert.match(teamFacts.excluded ?? "", /Team/);
+});
+
+await test("connected holders: one record per wallet, first seen kept, last seen moved on", async () => {
+  const facts = await holders.holderFacts(getAddress(topHolder));
+  const first = await holders.recordHolder(facts, 5n * ONE, 1_000);
+  assert.ok(first);
+  assert.equal(first.visits, 1);
+  // the same wallet again later, typed in lower case, with a failed chain read
+  const again = await holders.recordHolder({ ...facts, address: topHolder.toLowerCase() }, null, 9_000);
+  assert.equal(again!.firstSeen, 1_000);
+  assert.equal(again!.lastSeen, 9_000);
+  assert.equal(again!.visits, 2);
+  assert.equal(again!.current, (5n * ONE).toString(), "a failed read keeps the last balance");
+  assert.equal(again!.currentAt, 1_000);
+  const list = await holders.listHolders();
+  assert.equal(list.length, 1);
+  assert.equal(list[0]!.address, getAddress(topHolder));
+  // a newer read replaces it
+  const third = await holders.recordHolder(facts, 7n * ONE, 12_000);
+  assert.equal(third!.current, (7n * ONE).toString());
+  assert.equal(third!.currentAt, 12_000);
+});
+
+await test("connected holders: the signed votes are noted, and stay noted", async () => {
+  const v = pubVotes[0]!;
+  const { saveBallot } = await import("../src/lib/vote/store");
+  await saveBallot(v.id, { voter: getAddress(topHolder), option: 0, choice: v.options[0]!, weight: topWei, timestamp: nowSec, signature: `0x${"cd".repeat(65)}`, receivedAt: NOW });
+  const rec = await holders.recordHolder(await holders.holderFacts(getAddress(topHolder)), null, 2_000);
+  assert.deepEqual(rec!.signed, [v.id]);
+  const csv = holders.holdersCsv([{ ...rec!, voted: rec!.signed }]);
+  assert.ok(csv.startsWith('"wallet","first_seen_utc"'));
+  assert.ok(csv.includes(getAddress(topHolder)) && csv.includes(topWei) && csv.includes('"yes"'));
+});
+
+await test("the seen route: balances from the server only, bad input refused, rate limited", async () => {
+  // whatever balance the browser claims is ignored
+  const res = await seenRoute.POST(seenReq({ address: carol.address, snapshot: (999n * ONE).toString(), current: (999n * ONE).toString(), eligible: true }));
+  assert.equal(res.status, 200);
+  const j = (await res.json()) as { data: { current: string | null; recorded: boolean } };
+  assert.equal(j.data.current, null, "no chain read in the self-test");
+  assert.equal(j.data.recorded, true);
+  const rec = await holders.getHolder(carol.address);
+  assert.equal(rec!.snapshot, "0");
+  assert.equal(rec!.current, null);
+  assert.equal(rec!.eligible, false);
+  // a team wallet is recorded as excluded
+  await seenRoute.POST(seenReq({ address: TEAM_WALLET }));
+  const t = await holders.getHolder(TEAM_WALLET);
+  assert.equal(t!.eligible, false);
+  assert.match(t!.excluded ?? "", /Team/);
+  // twice is still one record
+  await seenRoute.POST(seenReq({ address: carol.address }));
+  assert.equal((await holders.listHolders()).length, 2);
+  assert.equal((await holders.getHolder(carol.address))!.visits, 2);
+
+  for (const bad of [{}, { address: "nope" }, { address: 42 }, "not json"]) assert.equal((await seenRoute.POST(seenReq(bad))).status, 400);
+  assert.equal((await seenRoute.POST(seenReq({ address: `0x${"1".repeat(40)}`, pad: "x".repeat(600) }))).status, 413);
+  assert.equal("GET" in seenRoute, false, "the records are never served from a public route");
+  let last = 0;
+  for (let i = 0; i < 25; i++) last = (await seenRoute.POST(seenReq({ address: alice.address }, "203.0.113.21"))).status;
+  assert.equal(last, 429);
 });
 
 // ---------------------------------------------------------------- display
