@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { DailyChart } from "@/components/stats/DailyChart";
+import { TokenLogo } from "@/components/app/TokenLogo";
 import { getPublicStats, type PublicNetwork, type PublicStats } from "@/lib/publicStats";
 
 /**
@@ -108,7 +109,13 @@ function HeldList({ stats }: { stats: PublicStats }) {
       <ul className="divide-y divide-line border-y border-line">
         {rows.map((r) => (
           <li key={`${r.chainId}-${r.symbol}`} className="flex min-h-[60px] items-center gap-3 py-2.5">
-            <ChainMark chainId={r.chainId} size={24} />
+            {/* the token's own mark, with its network as a small badge */}
+            <span className="relative inline-block shrink-0" style={{ width: 28, height: 28 }}>
+              <TokenLogo id={r.symbol.toLowerCase().replace(/[^a-z0-9]/g, "")} symbol={r.symbol} size={28} />
+              <span className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-background">
+                <ChainMark chainId={r.chainId} size={12} />
+              </span>
+            </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] text-foreground">{r.symbol}</span>
               <span className="block truncate text-[12.5px] text-mute">{r.network}</span>
