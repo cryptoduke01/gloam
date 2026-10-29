@@ -223,12 +223,12 @@ export function Landing() {
             <FlowField />
             <CursorReveal />
             <div className="relative z-10 max-w-[760px]">
-              {/* the brand line stays, small; the headline leads with agents */}
+              {/* the brand line stays, small; the headline leads with apps and agents */}
               <p className="text-[15px] text-mute">Private money on public chains</p>
               <h1 className="t-display-xl mt-4">Privacy for your software</h1>
               <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft">
-                Gloam gives AI agents a private balance. Fund them, let them pay
-                and get paid, and keep what they hold off the public record.
+                Gloam gives apps and AI agents private balances. Fund them, let
+                them pay and get paid, and keep what they hold off the public record.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
                 <Link href="/agents#quickstart" className="btn btn-ink btn-lg">
