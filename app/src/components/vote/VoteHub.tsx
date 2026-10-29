@@ -43,6 +43,8 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
   };
 
   const onSigned = (id: string) => (b: Ballot) => {
+    // stay on this question for the thank-you; the next one is a tap away
+    setChosen((c) => c ?? step);
     recordBallot(id, b);
     void refresh();
   };
@@ -91,7 +93,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
                   <p className="mt-3 max-w-[56ch] text-[15px] leading-relaxed text-soft">
                     {wallet.address
                       ? active.every((v) => voted(v.id))
-                        ? `Your voice is counted in all ${active.length}. You can change any answer until ${whenPhrase(active[0]!.end)}.`
+                        ? `Your voice counts in ${active.length === 1 ? "this vote" : `all ${["", "", "two", "three", "four", "five"][active.length] ?? active.length}`}. You can change any answer until ${whenPhrase(active[0]!.end)}.`
                         : "Answer the rest whenever you like, until the votes close."
                       : "Connect your wallet to vote."}
                   </p>
@@ -154,15 +156,15 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
         <section id="results" className="mx-auto max-w-[760px] scroll-mt-20 px-5 pt-16 sm:px-7 sm:pt-24" aria-labelledby="results-title">
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
             <h2 id="results-title" className="t-display-m">
-              Live results
+              {active.length ? "Live results" : "Final results"}
             </h2>
-            <UpdatedAgo at={updatedAt} />
+            {active.length > 0 && <UpdatedAgo at={updatedAt} />}
           </div>
           <p className="mt-3 max-w-[58ch] text-[14.5px] leading-relaxed text-mute">
-            Weighted by $GLOAM at the snapshot. The darker bar is the answer leading right now.
+            Weighted by $GLOAM at the snapshot. The darker bar is the answer {active.length ? "leading right now" : "that won"}.
           </p>
           <div className="mt-6 flex flex-col gap-4">
-            {active.map((v) => (
+            {(active.length ? active : past).map((v) => (
               <ResultsCard key={v.id} s={v} mine={me?.votes[v.id]?.ballot ?? null} />
             ))}
           </div>
@@ -176,7 +178,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
         <HowItWorks block={block} firstId={votes[0]?.id} />
       </section>
 
-      {past.length > 0 && (
+      {active.length > 0 && past.length > 0 && (
         <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7" aria-labelledby="past-title">
           <h2 id="past-title" className="t-display-m">
             Past votes
