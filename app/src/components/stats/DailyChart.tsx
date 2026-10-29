@@ -67,7 +67,7 @@ export function DailyChart({ days }: { days: PublicDay[] }) {
       </p>
 
       <div className="relative mt-4">
-        <span className="tnum absolute right-0 top-0 -translate-y-full pb-1 text-[12px] text-mute">{intFmt.format(max)}</span>
+        <span className="tnum absolute right-0 top-0 -translate-y-full pb-1 text-[12px] text-mute">Busiest day: {intFmt.format(max)}</span>
         <div
           role="img"
           tabIndex={0}

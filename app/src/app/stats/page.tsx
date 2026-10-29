@@ -302,7 +302,7 @@ export default async function StatsPage() {
             {stats.daily.length > 0 && (
               <Section
                 title="Each day"
-                lead="Deposits, private transfers and cash-outs per UTC day, all four mainnets together. Point at a bar, or focus the chart and use the arrow keys."
+                lead="Deposits, private transfers and cash-outs per UTC day, all four mainnets together. Tap or point at a bar to read its day."
               >
                 <DailyChart days={stats.daily} />
                 {stats.undated > 0 && (
