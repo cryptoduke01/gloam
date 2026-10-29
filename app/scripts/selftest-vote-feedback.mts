@@ -6,7 +6,8 @@
  *    length and category checked; a note sent twice is kept once; three per
  *    wallet per day; the route limits each IP
  *  - /api/admin/votes: refused without an admin session; with one, every
- *    vote's tallies and ballots and every note, as JSON and CSV
+ *    vote's tallies and ballots, every note and every connected holder (with
+ *    the votes it has a ballot in), as JSON and CSV
  *  - Notes are never readable from a public route
  *
  * Uses the in-process store. Nothing is sent to any chain.
@@ -20,6 +21,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 process.env.GLOAM_PARTNERS_STORE = "memory";
 process.env.GLOAM_VOTE_NO_ENS = "1";
+process.env.GLOAM_VOTE_NO_CHAIN = "1";
 process.env.ADMIN_ACCESS_CODE = "a-long-random-admin-code-for-the-vote-test";
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -149,7 +151,7 @@ await test("the admin votes API needs an admin session", async () => {
   assert.equal(res.status, 401);
   (globalThis as { __testCookies?: Record<string, string> }).__testCookies = { [ADMIN_COOKIE]: "123.forged" };
   assert.equal((await adminRoute.GET(new Request("http://localhost/api/admin/votes"))).status, 401);
-  for (const q of ["?format=csv&kind=votes", "?format=csv&kind=feedback", "?download=1"]) {
+  for (const q of ["?format=csv&kind=votes", "?format=csv&kind=feedback", "?format=csv&kind=holders", "?download=1"]) {
     (globalThis as { __testCookies?: Record<string, string> }).__testCookies = {};
     assert.equal((await adminRoute.GET(new Request(`http://localhost/api/admin/votes${q}`))).status, 401);
   }
@@ -180,6 +182,36 @@ await test("with a session, the admin sees every ballot and note, and exports th
   assert.ok((await fbRes.text()).includes("Payroll in EURC, please."));
   const dl = await adminRoute.GET(new Request("http://localhost/api/admin/votes?download=1"));
   assert.match(dl.headers.get("content-disposition") ?? "", /attachment/);
+});
+
+await test("with a session, the admin sees every connected holder and who of them voted", async () => {
+  const holders = await import("../src/lib/vote/holders");
+  const v = VOTES[0]!;
+  // the holder connects, then votes: the admin row shows the vote though the record predates it
+  await holders.recordHolder({ address: holder.address, snapshot: (10n ** 18n).toString(), eligible: true, excluded: null, signed: [] }, null, NOW - 1000);
+  await holders.recordHolder({ address: stranger.address, snapshot: "0", eligible: false, excluded: null, signed: [] }, 5n, NOW);
+  await saveBallot(v.id, { voter: holder.address, option: 0, choice: v.options[0]!, weight: (10n ** 18n).toString(), timestamp: nowSec, signature: `0x${"ef".repeat(65)}`, receivedAt: NOW });
+
+  (globalThis as { __testCookies?: Record<string, string> }).__testCookies = {};
+  const denied = await adminRoute.GET(new Request("http://localhost/api/admin/votes"));
+  assert.equal(denied.status, 401);
+  assert.equal(JSON.stringify(await denied.json()).includes(holder.address), false);
+
+  (globalThis as { __testCookies?: Record<string, string> }).__testCookies = { [ADMIN_COOKIE]: createAdminSession()! };
+  const j = (await (await adminRoute.GET(new Request("http://localhost/api/admin/votes"))).json()) as {
+    data: { holders: { address: string; eligible: boolean; voted: string[]; current: string | null }[] };
+  };
+  assert.equal(j.data.holders.length, 2);
+  const h = j.data.holders.find((x) => x.address === holder.address)!;
+  assert.deepEqual(h.voted, [v.id]);
+  const s = j.data.holders.find((x) => x.address === stranger.address)!;
+  assert.deepEqual(s.voted, []);
+  assert.equal(s.current, "5");
+  const csvRes = await adminRoute.GET(new Request("http://localhost/api/admin/votes?format=csv&kind=holders"));
+  assert.match(csvRes.headers.get("content-type") ?? "", /text\/csv/);
+  assert.match(csvRes.headers.get("content-disposition") ?? "", /gloam-vote-holders-/);
+  const csv = await csvRes.text();
+  assert.ok(csv.includes(holder.address) && csv.includes(stranger.address) && csv.includes(v.id));
 });
 
 console.log(`\n${passed} passed`);

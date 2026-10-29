@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatGloam, percentOf, type Ballot } from "@/lib/vote/core";
 import type { VoteSummary } from "@/lib/vote/results";
 import type { Feedback } from "@/lib/vote/feedback";
+import type { HolderRecord } from "@/lib/vote/holders";
 import { DataTable, Kpi, Panel } from "./AdminDashboard";
 
 type Data = {
@@ -11,7 +12,13 @@ type Data = {
   kept: { ballots: string; feedback: string };
   votes: { summary: VoteSummary; ballots: Ballot[] }[];
   feedback: Feedback[];
+  holders?: (HolderRecord & { voted: string[] })[];
 };
+
+type HolderSort = "last" | "first" | "snapshot" | "current" | "voted";
+
+const big = (v: string | null) => (v ? BigInt(v) : -1n);
+const cmpBig = (a: bigint, b: bigint) => (a > b ? -1 : a < b ? 1 : 0);
 
 const REFRESH_MS = 60_000;
 const n = (v: number) => v.toLocaleString("en-US");
@@ -45,6 +52,7 @@ export function VotesPanel() {
   const [option, setOption] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
+  const [holderSort, setHolderSort] = useState<HolderSort>("last");
 
   useEffect(() => {
     let live = true;
@@ -89,6 +97,19 @@ export function VotesPanel() {
     return data.feedback.filter((f) => (category === "all" || f.category === category) && (!q || f.author.toLowerCase().includes(q) || f.message.toLowerCase().includes(q)));
   }, [data, category, query]);
 
+  const holders = useMemo(() => {
+    const list = [...(data?.holders ?? [])];
+    const q = query.trim().toLowerCase();
+    const by: Record<HolderSort, (a: (typeof list)[number], b: (typeof list)[number]) => number> = {
+      last: (a, b) => b.lastSeen - a.lastSeen,
+      first: (a, b) => a.firstSeen - b.firstSeen,
+      snapshot: (a, b) => cmpBig(BigInt(a.snapshot), BigInt(b.snapshot)),
+      current: (a, b) => cmpBig(big(a.current), big(b.current)),
+      voted: (a, b) => b.voted.length - a.voted.length || b.lastSeen - a.lastSeen,
+    };
+    return list.filter((h) => !q || h.address.toLowerCase().includes(q)).sort(by[holderSort]);
+  }, [data, query, holderSort]);
+
   if (err) {
     return (
       <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger" role="alert">
@@ -116,6 +137,63 @@ export function VotesPanel() {
         <Kpi label="Ballots" value={n(data.votes.reduce((s, v) => s + v.ballots.length, 0))} sub={`${n(data.votes.reduce((s, v) => s + v.ballots.filter((b) => b.receivedAt > dayAgo).length, 0))} in the last 24h`} />
         <Kpi label="Feedback notes" value={n(data.feedback.length)} sub={`${n(data.feedback.filter((f) => f.receivedAt > dayAgo).length)} in the last 24h`} />
       </section>
+
+      <Panel
+        title="Holders"
+        action={
+          <a href="/api/admin/votes?format=csv&kind=holders" className="btn btn-ghost btn-sm">
+            CSV
+          </a>
+        }
+      >
+        {(() => {
+          const all = data.holders ?? [];
+          const eligible = all.filter((h) => h.eligible).length;
+          const votedHolders = all.filter((h) => h.voted.length > 0).length;
+          return (
+            <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi label="Connected wallets" value={n(all.length)} sub={`${n(all.filter((h) => h.lastSeen > dayAgo).length)} seen in the last 24h`} />
+              <Kpi label="Eligible" value={n(eligible)} sub={`${n(all.filter((h) => h.excluded).length)} team or contract`} />
+              <Kpi label="Voted" value={n(votedHolders)} sub="connected wallets with a ballot" />
+              <Kpi label="Conversion" value={`${all.length ? percentOf(BigInt(votedHolders), BigInt(all.length)) : 0}%`} sub={`connected to voted (${eligible ? percentOf(BigInt(all.filter((h) => h.eligible && h.voted.length > 0).length), BigInt(eligible)) : 0}% of eligible)`} />
+            </div>
+          );
+        })()}
+        <div className="mb-4">
+          <Chips
+            label="Sort holders"
+            value={holderSort}
+            onChange={setHolderSort}
+            options={[
+              ["last", "Last seen"],
+              ["first", "First seen"],
+              ["snapshot", "Snapshot GLOAM"],
+              ["current", "GLOAM now"],
+              ["voted", "Votes signed"],
+            ]}
+          />
+        </div>
+        <DataTable
+          headers={["Wallet", "Snapshot GLOAM", "GLOAM now", "Eligible", "Voted in", "First seen (UTC)", "Last seen (UTC)"]}
+          rows={holders.map((h) => [
+            <span key="w" className="font-mono text-[12.5px]" title={h.address}>
+              {h.address}
+            </span>,
+            formatGloam(h.snapshot),
+            h.current === null ? <span key="c" className="text-mute">not read</span> : formatGloam(h.current),
+            h.excluded ? <span key="e" className="text-mute" title={h.excluded}>Excluded</span> : h.eligible ? "Yes" : "No",
+            h.voted.length ? h.voted.join(", ") : <span key="v" className="text-mute">none</span>,
+            new Date(h.firstSeen).toISOString().replace("T", " ").slice(0, 16),
+            new Date(h.lastSeen).toISOString().replace("T", " ").slice(0, 16),
+          ])}
+          empty={data.backend === "none" ? "Holder storage is not configured (set Upstash Redis)." : "No wallets have connected yet"}
+          minWidth={1100}
+        />
+        <p className="mt-4 text-[13px] leading-relaxed text-mute">
+          Every wallet that connected on a vote page and ran the $GLOAM check. Balances are worked out on the server (the snapshot file and a
+          Robinhood Chain read), never taken from the browser. The wallet filter under Every vote applies here too.
+        </p>
+      </Panel>
 
       <Panel
         title="Tallies"

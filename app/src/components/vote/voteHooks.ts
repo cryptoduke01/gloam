@@ -107,6 +107,32 @@ export function useMe(address: string | undefined) {
   return { me: current, failed: Boolean(address) && failed && !current, retry: () => setAttempt((a) => a + 1), recordBallot };
 }
 
+/**
+ * Notes this wallet as a connected holder (POST /api/vote/seen, once per
+ * wallet per page) and gives back its $GLOAM on Robinhood Chain right now:
+ * undefined while it loads, null when it couldn't be read. The server works
+ * out every balance itself; nothing here is trusted.
+ */
+export function useSeen(address: string | undefined): bigint | null | undefined {
+  const [seen, setSeen] = useState<{ address: string; current: bigint | null } | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let stop = false;
+    fetch("/api/vote/seen", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) })
+      .then((r) => r.json())
+      .then((j) => {
+        if (stop) return;
+        const raw = j?.ok ? (j.data?.current as string | null) : null;
+        setSeen({ address, current: typeof raw === "string" && /^\d+$/.test(raw) ? BigInt(raw) : null });
+      })
+      .catch(() => !stop && setSeen({ address, current: null }));
+    return () => {
+      stop = true;
+    };
+  }, [address]);
+  return seen && address && seen.address.toLowerCase() === address.toLowerCase() ? seen.current : undefined;
+}
+
 /** Live totals for a set of votes, polled while the tab is visible. */
 export function useLiveVotes(initial: VoteSummary[], source: "all" | string) {
   const [votes, setVotes] = useState(initial);

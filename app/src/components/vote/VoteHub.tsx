@@ -46,6 +46,16 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
     });
   };
 
+  // from the holder check: straight to the first question not answered yet, scrolled into view
+  const start = () => {
+    const to: number | "summary" = firstOpen === -1 ? "summary" : firstOpen;
+    setChosen(to);
+    window.requestAnimationFrame(() => {
+      (to === "summary" ? summaryRef.current : headingRef.current)?.focus({ preventScroll: true });
+      ballotTop.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    });
+  };
+
   const onSigned = (id: string) => (b: Ballot) => {
     // stay on this question for the thank-you; the next one is a tap away
     setChosen((c) => c ?? step);
@@ -93,7 +103,19 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
         <section className="mx-auto max-w-[760px] px-5 pt-10 sm:px-7" aria-label="Your ballot">
           {wallet.address && (
             <div className="mb-4">
-              <Welcome me={me} address={wallet.address} chainId={wallet.chainId} failed={failed} onRetry={retry} onDisconnect={wallet.disconnect} />
+              <Welcome
+                key={wallet.address}
+                me={me}
+                address={wallet.address}
+                chainId={wallet.chainId}
+                failed={failed}
+                onRetry={retry}
+                onDisconnect={wallet.disconnect}
+                block={block}
+                onResults={() => setDrawer(true)}
+                onStart={chosen === null ? start : undefined}
+                startLabel={firstOpen === -1 ? "See your answers" : anyVoted ? "Continue voting" : "Start voting"}
+              />
             </div>
           )}
 

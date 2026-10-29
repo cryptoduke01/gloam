@@ -49,7 +49,17 @@ export function VoteClient({ initial, others = [] }: { initial: VoteSummary; oth
       <section className="mx-auto max-w-[760px] px-5 pt-6 sm:px-7" aria-label="Your ballot">
         {wallet.address && (
           <div className="mb-4">
-            <Welcome me={me} address={wallet.address} chainId={wallet.chainId} failed={failed} onRetry={retry} onDisconnect={wallet.disconnect} focus={s.id} />
+            <Welcome
+              key={wallet.address}
+              me={me}
+              address={wallet.address}
+              chainId={wallet.chainId}
+              failed={failed}
+              onRetry={retry}
+              onDisconnect={wallet.disconnect}
+              focus={s.id}
+              block={s.snapshotBlock}
+            />
           </div>
         )}
         <BallotCard

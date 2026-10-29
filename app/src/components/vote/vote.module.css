@@ -167,3 +167,28 @@
 :global(body:has(textarea:focus)) .fab {
   display: none;
 }
+
+/* the holder check: a green ring turning round the GLOAM mark, then the answer rises in */
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.rise {
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin,
+  .rise {
+    animation: none;
+  }
+}
