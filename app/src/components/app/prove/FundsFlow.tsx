@@ -8,6 +8,7 @@ import {
   assetLabel,
   formatAssetAmount,
   parseAssetAmount,
+  updateLocalNote,
   type LocalNote,
 } from "@/lib/shield";
 import { amountTextError } from "@/lib/amountText";
@@ -151,6 +152,11 @@ export function FundsFlow({ notes, empty }: { notes: LocalNote[]; empty: ReactNo
     const expiresAt = expiresAtFor(expiry);
     try {
       const first = selected[0]!;
+      // The proof carries these balances' spend markers: a later cash out or swap moves each
+      // to a fresh balance first, so the proof can't point at it (lib/cashOutSplit spendPlanFor).
+      // Marked before proving, so no proof ever leaves without its balances marked.
+      const at = Date.now();
+      await Promise.all(selected.map((n) => updateLocalNote(n.id, { fundsProofAt: at })));
       const p = await proveFunds({
         chainId: first.chainId,
         pool: first.pool,
@@ -450,8 +456,10 @@ function FundsAside({
         note={
           <p>
             One thing to know: the proof carries a spend marker for each balance behind it. If you
-            later spend one of them, whoever has the proof can tell it was spent. Not where it went or
-            how much.
+            later spend one of them, whoever has the proof can tell it was spent, and when. Before a
+            cash out or swap, Gloam moves those balances to a fresh one first, so the proof
+            doesn&apos;t lead to where the money went or how much. The move and the cash out land
+            close together, so their timing can still hint at a link.
           </p>
         }
       />

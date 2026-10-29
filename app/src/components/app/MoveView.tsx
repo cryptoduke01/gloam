@@ -117,7 +117,7 @@ import {
   scheduledCashOutNotes,
   type CashOutWindow,
 } from "@/lib/cashOutLater";
-import { freshPath, networkOfNote, roundDownToWhole, splitForCashOut } from "@/lib/cashOutSplit";
+import { freshPath, networkOfNote, roundDownToWhole, spendPlanFor, splitForCashOut } from "@/lib/cashOutSplit";
 import {
   findCashOutLink,
   linkMessage,
@@ -1036,10 +1036,13 @@ export function MoveView() {
 
     let splitDone = false;
     try {
-      // A part of the balance: set it aside in its own private note first.
+      // A part of the balance: set it aside in its own private note first. A balance that
+      // backed a proof of funds moves whole to a fresh note first, so the proof can't point
+      // at this cash out (lib/cashOutSplit spendPlanFor).
       let target: LocalNote = selected;
       let path: PoseidonMerklePath | null;
-      if (amount < noteWei) {
+      const plan = spendPlanFor(selected, amount);
+      if (plan !== "direct") {
         const startPath = await pathForLeaf(selected.leafIndex!);
         if (!startPath) throw new Error("Could not read your private balance. Refresh and try again.");
         target = await splitForCashOut({
@@ -1048,6 +1051,7 @@ export function MoveView() {
           path: startPath as PoseidonMerklePath,
           owner: address as Address,
           relayOn,
+          allowWhole: plan === "move",
           sendWithWallet: (t) =>
             writeContractNow(wagmiConfig, {
               address: network.pool!,

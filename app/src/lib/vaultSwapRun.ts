@@ -29,7 +29,7 @@ import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { prepareBridgeNote } from "./bridgePrivate";
-import { freshPath, networkOfNote, splitForCashOut } from "./cashOutSplit";
+import { freshPath, networkOfNote, spendPlanFor, splitForCashOut } from "./cashOutSplit";
 import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
@@ -83,9 +83,11 @@ export async function runVaultSwap(args: {
   const noteWei = BigInt(note.amountWei);
   if (amount <= 0n || amount > noteWei) throw new Error("Pick an amount up to this balance.");
 
-  // The note to spend: the whole one, or the part set aside.
+  // The note to spend: the whole one, or the part set aside. A note that backed a proof
+  // of funds moves whole to a fresh note first, so the proof can't point at this swap.
   let target = note;
-  if (amount < noteWei) {
+  const spendPlan = spendPlanFor(note, amount);
+  if (spendPlan !== "direct") {
     const start = await args.pathFor(note);
     if (!start) throw new Error("Could not read your private balance. Refresh and try again.");
     target = await splitForCashOut({
@@ -95,6 +97,7 @@ export async function runVaultSwap(args: {
       owner: args.owner,
       // the split goes through the relay too: a swap never shows the wallet
       relayOn: true,
+      allowWhole: spendPlan === "move",
       sendWithWallet: () => Promise.reject(new Error("Swaps go through the Gloam relay.")),
       onStatus: args.onStatus,
     });

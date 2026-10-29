@@ -541,6 +541,12 @@ export function VaultTradePanel({
       setError("This balance is not ready in the vault yet.");
       return;
     }
+    // A trade here cashes the whole note out to this wallet. A note that backed a proof of
+    // funds would show that wallet to whoever holds the proof (lib/cashOutSplit spendPlanFor).
+    if (selected.fundsProofAt) {
+      setError("This balance backs a proof of funds you made. Trading it here would show your wallet to whoever has that proof. Swap it privately instead, or pick another balance.");
+      return;
+    }
     // need gas in wallet for proofs + txs
     if (ethBal && ethBal.value < 50_000_000_000_000n) {
       setError("Keep a little ETH in your open wallet for gas.");

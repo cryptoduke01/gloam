@@ -561,6 +561,13 @@ export type LocalNote = {
    * the vault has shown it.
    */
   unfunded?: boolean;
+  /**
+   * When this note last backed a proof of funds (ms). The proof carries the
+   * note's spend nullifier, which a cash out or swap of the whole note would
+   * emit next to where the money went and how much (GHSA-x8fx-frxx-7f66), so
+   * such a note is moved to a fresh note first (lib/cashOutSplit spendPlanFor).
+   */
+  fundsProofAt?: number;
   /** On the fresh note from securing a claim, or a cash-out split: the note it came from (settled together). */
   sweptFrom?: { id: string; nullifier: Hex };
   /**
@@ -963,7 +970,10 @@ export function saveLocalNote(note: LocalNote): Promise<void> {
 export function updateLocalNote(
   id: string,
   patch: Partial<
-    Pick<LocalNote, "leafIndex" | "txHash" | "status" | "secured" | "sweepPending" | "unfunded" | "cashOut" | "cashOutPlan">
+    Pick<
+      LocalNote,
+      "leafIndex" | "txHash" | "status" | "secured" | "sweepPending" | "unfunded" | "cashOut" | "cashOutPlan" | "fundsProofAt"
+    >
   >
 ): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
