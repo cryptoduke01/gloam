@@ -66,13 +66,13 @@ export const VOTES: VoteConfig[] = [
     published: true,
     question: "Which chain should Gloam go live on next?",
     description:
-      "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum, and the vault is EVM, so each of these is a chain we can ship to. The result is advisory, and the team will act on it.",
-    options: ["Arbitrum", "BNB Chain", "Polygon", "Optimism"],
+      "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum. The EVM chains reuse the same vault; Solana would be its own build, so it would take longer to ship. The result is advisory, and the team will act on it.",
+    options: ["Arbitrum", "BNB Chain", "Polygon", "Solana"],
     details: [
       "An Ethereum layer 2 with deep stablecoin and DeFi activity.",
       "A large EVM chain with heavy USDT use.",
       "An EVM chain used widely for payments and stablecoin transfers.",
-      "An Ethereum layer 2 built on the OP Stack, like Base.",
+      "The busiest non-EVM chain for stablecoin payments. Gloam would build a Solana version of the vault.",
     ],
     snapshotBlock: FIRST_BLOCK,
     start: FIRST_START,
