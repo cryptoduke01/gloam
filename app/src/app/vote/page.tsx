@@ -84,7 +84,13 @@ export default async function VotesPage() {
             {open.length > 0 && (
               <section className="mt-12" aria-labelledby="open-title">
                 <h2 id="open-title" className="text-[15px] text-foreground">
-                  {open.length === 1 ? "Open now" : `${open.length} votes open now`}
+                  {open.some((s) => s.status === "open")
+                    ? open.length === 1
+                      ? "Open now"
+                      : `${open.length} votes open now`
+                    : open.length === 1
+                      ? "Coming up"
+                      : `${open.length} votes coming up`}
                 </h2>
                 {open.length > 1 && (
                   <p className="mt-1.5 text-[14px] leading-relaxed text-mute">
