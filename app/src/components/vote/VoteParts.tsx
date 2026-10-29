@@ -18,7 +18,8 @@ import {
 } from "@/lib/vote/core";
 import type { VoteConfig } from "@/lib/vote/config";
 import type { VoteSummary } from "@/lib/vote/results";
-import { useNow, type Me, type Standing } from "./voteHooks";
+import { TokenLogo } from "@/components/app/TokenLogo";
+import { useNow, useSeen, type Me, type Standing } from "./voteHooks";
 import { OptionArt } from "./OptionArt";
 import m from "./vote.module.css";
 
@@ -82,7 +83,29 @@ export function ClosingLine({ s, className = "" }: { s: Pick<VoteSummary, "statu
 
 /* ------------------------------------------------------------------ welcome */
 
-/** A connected holder, greeted by name, with their weight and their share of the vote. */
+/** How long the check shows at least, so the answer reads as a result rather than a flicker. */
+const CHECK_MIN_MS = 900;
+
+/** The $GLOAM mark with a small green check that pops in on it. */
+function HolderMark() {
+  return (
+    <span className="relative grid h-12 w-12 shrink-0 place-items-center">
+      <span aria-hidden className={m.burst} />
+      <TokenLogo id="gloam" symbol="GLOAM" size={48} />
+      <span className={`${m.seal} absolute -bottom-1 -right-1 grid h-[22px] w-[22px] place-items-center rounded-full bg-sealed text-panel ring-2 ring-panel`}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden className={m.draw}>
+          <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A connected wallet, greeted by name, then a short check of its $GLOAM: what
+ * it held at the snapshot, its share of the vote, and what it holds now when
+ * that differs. Key it by address, so a new wallet gets a fresh check.
+ */
 export function Welcome({
   me,
   address,
@@ -91,6 +114,10 @@ export function Welcome({
   onRetry,
   onDisconnect,
   focus,
+  block,
+  onStart,
+  startLabel = "Start voting",
+  onResults,
 }: {
   me: Me | null;
   address: string;
@@ -100,9 +127,27 @@ export function Welcome({
   onDisconnect: () => void;
   /** The vote whose numbers to show; the first with a snapshot when not given. */
   focus?: string;
+  /** The snapshot block, for the notes about it. */
+  block?: number;
+  /** Takes a holder who can vote to the ballot. */
+  onStart?: () => void;
+  startLabel?: string;
+  /** Opens the live results. */
+  onResults?: () => void;
 }) {
   const standing = me ? (focus ? me.votes[focus] : Object.values(me.votes).find((x) => x !== null)) ?? null : null;
   const who = me?.name ?? shortAddress(address);
+  const current = useSeen(address);
+  const [minDone, setMinDone] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setMinDone(true), CHECK_MIN_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  const checking = !failed && (!standing || !minDone);
+  const held = standing ? BigInt(standing.held) : 0n;
+  const atBlock = block ? ` at block ${blockText(block)}` : "";
+  const now = current !== undefined && current !== null ? current : null;
+
   return (
     <section aria-label="Your wallet" className="gl-card p-5 sm:p-7">
       <div className="flex items-start justify-between gap-4">
@@ -113,35 +158,77 @@ export function Welcome({
           Disconnect
         </button>
       </div>
-      {failed ? (
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2" role="alert">
-          <p className="text-[14.5px] text-soft">We couldn&apos;t load your voting weight.</p>
-          <button type="button" onClick={onRetry} className="btn btn-quiet btn-sm">
-            Try again
-          </button>
-        </div>
-      ) : !standing ? (
-        <div className="mt-3 space-y-2" aria-hidden>
-          <div className="gl-skeleton h-4 w-64 max-w-full rounded" />
-          <div className="gl-skeleton h-4 w-48 max-w-full rounded" />
-        </div>
-      ) : standing.excluded ? (
-        <p className="mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft">
-          This address belongs to the Gloam team or one of its contracts, so it sits these votes out. {standing.excluded}.
-        </p>
-      ) : BigInt(standing.weight) === 0n ? (
-        <p className="mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft">
-          This wallet held no public $GLOAM at the snapshot, so it can&apos;t vote this time. If you hold GLOAM in another wallet, switch to it in
-          your wallet app. GLOAM kept privately inside Gloam stays private: it can vote once private voting arrives, which is next on the roadmap.
-        </p>
-      ) : (
-        <div className="mt-3 space-y-1.5 text-[15px] leading-relaxed">
-          <p className="tnum text-foreground">
-            Your {formatGloam(standing.weight)} GLOAM is {sharePercent(BigInt(standing.weight), BigInt(standing.eligibleWeight))} of the vote.
+      <div aria-live="polite">
+        {failed ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2" role="alert">
+            <p className="text-[14.5px] text-soft">We couldn&apos;t load your voting weight.</p>
+            <button type="button" onClick={onRetry} className="btn btn-quiet btn-sm">
+              Try again
+            </button>
+          </div>
+        ) : checking || !standing ? (
+          <div className="mt-5 flex items-center gap-3.5" role="status">
+            <span className="relative grid h-12 w-12 shrink-0 place-items-center">
+              <span aria-hidden className={`absolute inset-0 rounded-full border-2 border-sealed/20 border-t-sealed ${m.spin}`} />
+              <span className="opacity-60">
+                <TokenLogo id="gloam" symbol="GLOAM" size={34} />
+              </span>
+            </span>
+            <p className="text-[16px] text-soft">Checking your $GLOAM…</p>
+          </div>
+        ) : standing.excluded ? (
+          <p className={`${m.rise} mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft`}>
+            This address belongs to the Gloam team or one of its contracts, so it sits these votes out. {standing.excluded}.
           </p>
-          <p className="tnum text-soft">You&apos;re one of {standing.eligibleWallets.toLocaleString("en-US")} holders shaping what Gloam builds next.</p>
-        </div>
-      )}
+        ) : BigInt(standing.weight) === 0n ? (
+          <div className={`${m.rise} mt-4 max-w-[58ch] space-y-2.5 text-[14.5px] leading-relaxed text-soft`}>
+            <p className="text-[16.5px] leading-snug text-foreground">This wallet held no $GLOAM at the snapshot, so it can&apos;t vote this time.</p>
+            {now !== null && now > 0n ? (
+              <p className="tnum">
+                It holds {formatGloam(now)} GLOAM now. Votes count the balance{atBlock}, taken before voting opened, so GLOAM bought or
+                moved in since then doesn&apos;t count in these votes.
+              </p>
+            ) : (
+              <p>Votes count the $GLOAM each wallet held{atBlock}, taken before voting opened.</p>
+            )}
+            <p>
+              If you hold GLOAM in another wallet, switch to it in your wallet app. GLOAM kept privately inside Gloam can vote once private voting
+              arrives, which is next on the roadmap. The live results are open to everyone.
+            </p>
+            {onResults && (
+              <button type="button" onClick={onResults} className="btn btn-quiet btn-sm mt-1 min-h-10">
+                See the live results
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className={`${m.rise} mt-5`}>
+            <div className="flex items-center gap-4">
+              <HolderMark />
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-sealed">You can vote</p>
+                <p className="tnum mt-0.5 text-[24px] leading-tight tracking-[-0.02em] text-foreground sm:text-[28px]">You hold {formatGloam(held)} GLOAM</p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-1.5 text-[15px] leading-relaxed">
+              <p className="tnum text-soft">
+                That&apos;s <span className="text-foreground">{sharePercent(BigInt(standing.weight), BigInt(standing.eligibleWeight))}</span> of the vote. You&apos;re
+                one of {standing.eligibleWallets.toLocaleString("en-US")} holders shaping what Gloam builds next.
+              </p>
+              {now !== null && now !== held && (
+                <p className="tnum text-[13.5px] text-mute">
+                  {formatGloam(now)} GLOAM in this wallet now. Voting uses the balance{atBlock || " at the snapshot"}.
+                </p>
+              )}
+            </div>
+            {onStart && (
+              <button type="button" onClick={onStart} className="btn btn-ink btn-lg mt-5 w-full sm:w-auto">
+                {startLabel} <span aria-hidden>→</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {chainId !== undefined && chainId !== VOTE_CHAIN_ID && (
         <p className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-mute">
           Your wallet is on another network. That&apos;s fine: a vote is a signature, so it works from any network and nothing is sent on chain.
@@ -659,6 +746,7 @@ export function HowItWorks({ block, firstId }: { block: number; firstId?: string
     `Your weight is the $GLOAM your wallet held at Robinhood Chain block ${block ? blockText(block) : "(not set yet)"}. Buying or moving GLOAM after that changes nothing.`,
     "Voting is free: you sign a message, nothing is sent and no gas is paid. You can change your vote until it closes; your latest signature counts.",
     "Team wallets, Gloam's own contracts and the trading pools don't count.",
+    "When you connect, we note your wallet and its $GLOAM balance so we can count how many holders took part. Nothing else is kept.",
     "GLOAM held privately inside Gloam can't be counted in an open vote. Private voting, where you prove your balance without showing your wallet, is the next step on the roadmap.",
     "The results are advisory, and the team will act on them.",
   ];
