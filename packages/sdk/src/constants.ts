@@ -175,7 +175,8 @@ export type CeremonyKind = "dev" | "production";
 /**
  * Beta deposit limit for one asset, in its base units, as it was at launch.
  * The vault's owner changes limits through its timelock: read the current ones
- * with readDepositLimit (lib limits).
+ * with readDepositLimit (lib limits). The live read wins, and a live value of
+ * type(uint128).max means no limit (isNoLimit).
  */
 export interface DepositLimit {
   perDeposit: bigint;

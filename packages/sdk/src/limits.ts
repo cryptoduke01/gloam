@@ -10,6 +10,9 @@
  * When the read fails (an RPC down, a reader on the wrong chain), nothing is
  * refused here: the vault enforces its own limits, and a deposit over one
  * reverts on chain with nothing lost but gas.
+ *
+ * A limit set to type(uint128).max is how the owner lifts it: it reads as no
+ * limit (isNoLimit), never as a number to show.
  */
 import { formatUnits, type Address, type PublicClient } from "viem";
 import { NATIVE_ASSET, networkForChainId, networkName } from "./constants.js";
@@ -36,6 +39,18 @@ export const POOL_DEPOSIT_LIMIT_ABI = [
   },
 ] as const;
 
+/**
+ * A perDeposit or total at or above this (2^127) is no limit at all. The vault
+ * lifts a limit by setting it to type(uint128).max; anything this large is
+ * beyond any token's supply, so it is never a cap worth showing.
+ */
+export const NO_LIMIT_THRESHOLD = 1n << 127n;
+
+/** True when a perDeposit or total read from the vault is no limit (NO_LIMIT_THRESHOLD or more). */
+export function isNoLimit(value: bigint): boolean {
+  return value >= NO_LIMIT_THRESHOLD;
+}
+
 /** One asset's live limits on a vault. */
 export interface LiveDepositLimit {
   /** False when the vault has its limits off: any amount goes. */
@@ -46,8 +61,10 @@ export interface LiveDepositLimit {
   total: bigint;
   /** What the vault holds of this asset in deposits now. */
   deposited: bigint;
-  /** Room left under `total` now. */
+  /** Room left under `total` now. Huge when `total` is no limit: check `unlimited` or isNoLimit before showing it. */
   room: bigint;
+  /** True when nothing caps a deposit of this asset: limits off, or both perDeposit and total are no limit. */
+  unlimited: boolean;
 }
 
 /** The reads readDepositLimit makes; a viem PublicClient fits. */
@@ -65,7 +82,15 @@ export async function readDepositLimit(client: DepositLimitReader, pool: Address
   ]);
   const [perDeposit, total] = limit as readonly [bigint, bigint];
   const held = deposited as bigint;
-  return { on: Boolean(on), perDeposit, total, deposited: held, room: total > held ? total - held : 0n };
+  const isOn = Boolean(on);
+  return {
+    on: isOn,
+    perDeposit,
+    total,
+    deposited: held,
+    room: total > held ? total - held : 0n,
+    unlimited: !isOn || (isNoLimit(perDeposit) && isNoLimit(total)),
+  };
 }
 
 function amountText(v: bigint, decimals: number): string {
@@ -76,6 +101,7 @@ function amountText(v: bigint, decimals: number): string {
 /**
  * Why the vault would refuse a deposit of `amount` of `asset` under `limit`,
  * or null when it would take it. `symbol` and `decimals` only shape the words.
+ * A side set to no limit (isNoLimit) is not checked, so its value is never shown.
  */
 export function depositLimitProblem(
   limit: LiveDepositLimit,
@@ -86,10 +112,10 @@ export function depositLimitProblem(
 ): string | null {
   if (!limit.on) return null;
   if (limit.perDeposit === 0n) return `The ${where} vault takes no ${symbol} deposits.`;
-  if (amount > limit.perDeposit) {
+  if (!isNoLimit(limit.perDeposit) && amount > limit.perDeposit) {
     return `Over the beta limit on ${where}: at most ${amountText(limit.perDeposit, decimals)} ${symbol} per deposit.`;
   }
-  if (amount > limit.room) {
+  if (!isNoLimit(limit.total) && amount > limit.room) {
     return limit.room === 0n
       ? `The ${where} vault is full for ${symbol} during the beta. Try again once the limit is raised.`
       : `The ${where} vault has room for ${amountText(limit.room, decimals)} more ${symbol} during the beta.`;

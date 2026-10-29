@@ -16,6 +16,8 @@ import {
   assertDepositWithinLiveLimit,
   buildShieldBoundIntent,
   POOL_DEPOSIT_LIMIT_ABI,
+  NO_LIMIT_THRESHOLD,
+  isNoLimit,
   MAINNET_POOLS,
   RH_MAINNET_USDG,
   NATIVE_ASSET,
@@ -93,6 +95,48 @@ const raised = { on: true, limits: { [usdg]: [50_000n * SIX, 2_500_000n * SIX] }
   assert(after && after.perDeposit === 50_000n * SIX, "after the raise, 501 is taken");
   const i = await buildShieldBoundIntent({ chainId: RH, asset: RH_MAINNET_USDG, amountWei: 10_000n * SIX, prover, client: fakeVault(raised) });
   assert(i.exec.fn === "shieldBound" && i.exec.args[1] === 10_000n * SIX, "the builder makes a 10,000 deposit after the raise");
+}
+
+// ── no limit: type(uint128).max reads as none, never as a number ───────────
+{
+  const MAX = (1n << 128n) - 1n;
+  assert(NO_LIMIT_THRESHOLD === 1n << 127n, "the no-limit line is 2^127");
+  assert(isNoLimit(MAX) && isNoLimit(1n << 127n) && !isNoLimit((1n << 127n) - 1n) && !isNoLimit(2_500_000n * SIX), "isNoLimit");
+  const lifted = { on: true, limits: { [usdg]: [MAX, MAX] }, deposited: { [usdg]: 2_400_000n * SIX } };
+  const lim = await readDepositLimit(fakeVault(lifted), POOL, RH_MAINNET_USDG);
+  assert(lim.unlimited && lim.on && lim.perDeposit === MAX, "both sides at max: unlimited");
+  assert(lim.room === MAX - 2_400_000n * SIX, "room stays a plain bigint, no overflow");
+  const big = 10n ** 30n;
+  const ok = await assertDepositWithinLiveLimit(fakeVault(lifted), RH, RH_MAINNET_USDG, big);
+  assert(ok && ok.unlimited, "a deposit far over the old limits is taken");
+  assert(depositLimitProblem(lim, MAX + 1n, "Robinhood Chain", "USDG", 6) === null, "even an absurd amount never prints the max as a limit");
+  const raisedLim = await readDepositLimit(fakeVault(raised), POOL, RH_MAINNET_USDG);
+  assert(!raisedLim.unlimited, "a finite limit is not unlimited");
+  const off = await readDepositLimit(fakeVault({ on: false, limits: {} }), POOL, RH_MAINNET_USDG);
+  assert(off.unlimited, "limits off: unlimited");
+  // mixed: only the finite side is a limit
+  const perOnly = { on: true, limits: { [usdg]: [50_000n * SIX, MAX] }, deposited: { [usdg]: 0n } };
+  await rejects(
+    () => assertDepositWithinLiveLimit(fakeVault(perOnly), RH, RH_MAINNET_USDG, 50_001n * SIX),
+    /at most 50,000 USDG per deposit/,
+    "finite perDeposit under a max total still applies"
+  );
+  const perOnlyLim = await readDepositLimit(fakeVault(perOnly), POOL, RH_MAINNET_USDG);
+  assert(!perOnlyLim.unlimited, "one finite side: not unlimited");
+  const totalOnly = { on: true, limits: { [usdg]: [MAX, 2_500_000n * SIX] }, deposited: { [usdg]: 2_499_990n * SIX } };
+  await rejects(
+    () => assertDepositWithinLiveLimit(fakeVault(totalOnly), RH, RH_MAINNET_USDG, 11n * SIX),
+    /room for 10 more USDG/,
+    "finite total under a max perDeposit still applies"
+  );
+  const one = await assertDepositWithinLiveLimit(fakeVault(totalOnly), RH, RH_MAINNET_USDG, 10n * SIX);
+  assert(one !== null, "and what fits goes through");
+  const closed = { on: true, limits: { [usdg]: [0n, MAX] }, deposited: {} };
+  await rejects(
+    () => assertDepositWithinLiveLimit(fakeVault(closed), RH, RH_MAINNET_USDG, 1n),
+    /takes no USDG deposits/,
+    "perDeposit 0 is still closed"
+  );
 }
 
 // ── refused before any proof is made ────────────────────────────────────────
