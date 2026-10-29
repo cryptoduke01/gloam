@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useConnect, useDisconnect, useSignTypedData } from "wagmi";
+import { robinhood } from "@/lib/chain";
 import { WALLETCONNECT_ID, WALLETCONNECT_ENABLED, prefersWalletConnect } from "@/lib/walletConnect";
 import { formatGloam, formatUtc, percentOf, shortAddress, voteMessage, voteTypedData, type Ballot } from "@/lib/vote/core";
 import type { VoteConfig } from "@/lib/vote/config";
@@ -12,6 +13,7 @@ import type { VoteSummary, VoterStanding } from "@/lib/vote/results";
 const WalletConnectSheet = dynamic(() => import("@/components/app/WalletConnectSheet").then((m) => m.WalletConnectSheet), { ssr: false });
 
 const POLL_MS = 10_000;
+const explorer = (a: string) => `${robinhood.blockExplorers.default.url}/address/${a}`;
 const LIST_PAGE = 25;
 
 type Props = { initial: VoteSummary };
@@ -152,7 +154,7 @@ export function VoteClient({ initial }: Props) {
         setError(j?.error.message ?? "We couldn't save that vote. Try again.");
         return;
       }
-      setNotice(j.data.changed ? "Your vote is changed." : "Your vote is in.");
+      setNotice(j.data.changed ? `Changed to ${j.data.ballot.choice}.` : `Your vote is in: ${j.data.ballot.choice}.`);
       setStanding((s) => (s ? { ...s, ballot: j.data.ballot } : s));
       void refresh();
     } catch (e) {
@@ -212,14 +214,16 @@ export function VoteClient({ initial }: Props) {
                 } ${canVote ? "hover:border-line-strong" : "cursor-default"} disabled:opacity-100`}
               >
                 <span className="relative flex items-center gap-3.5">
-                  <span
-                    aria-hidden
-                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
-                      on ? "border-foreground bg-foreground text-panel" : "border-line-strong"
-                    } ${canVote ? "" : "opacity-0 max-sm:hidden"}`}
-                  >
-                    {on && <span className="h-1.5 w-1.5 rounded-full bg-panel" />}
-                  </span>
+                  {canVote && (
+                    <span
+                      aria-hidden
+                      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
+                        on ? "border-foreground bg-foreground" : "border-line-strong"
+                      }`}
+                    >
+                      {on && <span className="h-1.5 w-1.5 rounded-full bg-panel" />}
+                    </span>
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="block text-[16px] leading-snug text-foreground sm:text-[17px]">{o.label}</span>
                     {mine && (
@@ -392,9 +396,9 @@ export function VoteClient({ initial }: Props) {
             <ol className="mt-6 divide-y divide-line border-y border-line">
               {shown!.map((b) => (
                 <li key={b.voter} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 py-3.5 text-[14px]">
-                  <span className="tnum min-w-0 truncate text-foreground" title={b.voter}>
+                  <a href={explorer(b.voter)} target="_blank" rel="noopener noreferrer" className="tnum min-w-0 truncate text-foreground underline-offset-4 hover:underline" title={b.voter}>
                     {shortAddress(b.voter)}
-                  </span>
+                  </a>
                   <span className="tnum text-right text-foreground">{formatGloam(b.weight)} GLOAM</span>
                   <span className="min-w-0 truncate text-mute">{b.choice}</span>
                   <span className="tnum truncate text-right text-[12.5px] text-faint" title={b.signature}>
@@ -418,14 +422,14 @@ export function VoteClient({ initial }: Props) {
           Not counted
         </h2>
         <p className="mt-4 max-w-[60ch] text-[14px] leading-relaxed text-mute">
-          GLOAM in these addresses carries no weight. The team holds no tokens; its wallets are listed anyway.
+          GLOAM in these addresses carries no weight. The team&apos;s wallets hold no GLOAM to speak of; they are left out anyway.
         </p>
         <ul className="mt-6 divide-y divide-line border-y border-line">
           {s.excluded.map((e) => (
             <li key={e.address} className="grid grid-cols-1 gap-1 py-3.5 text-[14px] sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-6">
-              <span className="tnum text-foreground" title={e.address}>
+              <a href={explorer(e.address)} target="_blank" rel="noopener noreferrer" className="tnum w-fit text-foreground underline-offset-4 hover:underline" title={e.address}>
                 {shortAddress(e.address)}
-              </span>
+              </a>
               <span className="text-mute">{e.reason}</span>
             </li>
           ))}
