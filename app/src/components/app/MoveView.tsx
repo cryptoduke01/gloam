@@ -87,6 +87,7 @@ import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
 import {
   claimNetworkProblem,
+  isWalletRequest,
   readPaymentRequest,
   requestParamsFrom,
   type PaymentRequest,
@@ -2039,6 +2040,35 @@ export function MoveView() {
     selectMode("cashout");
   }
 
+  /**
+   * A request link to a 0x address or an ENS name (lib/paymentRequest) takes
+   * that same path on its own, once per request: when the address is known
+   * (an ENS name once it is found), Cash out opens with the wallet, the amount
+   * and the requested token's balance filled in. Nothing is sent: the payer
+   * still checks it and presses Cash out. Deferred like a claim link, so the
+   * mode reaches the URL after the first render has synced it.
+   */
+  const handedOffRequest = useRef<PaymentRequest | null>(null);
+  useEffect(() => {
+    if (!request || !isWalletRequest(request) || handedOffRequest.current === request) return;
+    if (mode !== "send" || !payWalletTo || recipientTag !== request.to) return;
+    const to = payWalletTo;
+    const amount = request.amount ?? "";
+    const t = window.setTimeout(() => {
+      handedOffRequest.current = request;
+      const h = cashOutHandoff(to, amount);
+      setCashOutDest(h.dest);
+      setOtherTo(h.to);
+      setCashOutInput(h.amount);
+      setMode("cashout");
+      setError(null);
+      setStatus(null);
+      setImportOk(null);
+      setClaimPreview(null);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [request, mode, payWalletTo, recipientTag]);
+
   // The URL and the mode follow each other. The app nav's Pay privately,
   // Receive and Cash out links only change ?mode= on a page already showing
   // Pay, so a new ?mode= switches the mode as a tab click would; and a mode
@@ -2153,7 +2183,7 @@ export function MoveView() {
             </p>
           )}
 
-          {mode === "send" && request && (
+          {request && (mode === "send" || (mode === "cashout" && isWalletRequest(request))) && (
             <PaymentRequestBanner
               request={request}
               contactLabel={requestContact}

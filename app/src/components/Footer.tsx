@@ -14,6 +14,7 @@ const groups: {
     title: "Product",
     links: [
       { href: "/app", label: "Open app" },
+      { href: "/agents", label: "For agents" },
       { href: "/app/payroll", label: "Payroll" },
       { href: "/app/vault", label: "Private balance" },
       { href: "/app/disclose", label: "Prove" },
@@ -26,7 +27,7 @@ const groups: {
     links: [
       { href: "/sdk", label: "SDK" },
       { href: "/docs", label: "Docs" },
-      { href: "/docs/agents", label: "Agents" },
+      { href: "/docs/agents", label: "Agents guide" },
       { href: "/partners", label: "Partners" },
       { href: "/token", label: "$GLOAM token" },
       { href: "/whitepaper", label: "Whitepaper" },

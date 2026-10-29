@@ -1,17 +1,30 @@
 /**
- * Payment requests: a link that asks someone to pay your Gloam address.
+ * Payment requests: a link that asks someone to pay an address.
  *
  *   https://gloam.trade/app/vault?tab=move&mode=pay#to=gloamr1.…&amount=1250
- *     &asset=0x…&note=Invoice+042&chain=robinhood&name=Robin
+ *     &asset=0x…&note=Invoice+042&chain=robinhood-mainnet&name=Robin
  *
- * The link only pre-fills the private send form on the payer's side. Nothing
- * about a request is posted on chain. The details sit in the URL fragment
- * (after #), which browsers never send to a server or put in a referrer, so
- * they stay between the two people who share the link. The same fields are
- * also read from the query string, so hand-made `?to=…&amount=…` links work.
- * The payer still checks the details and presses send, and every field is
- * validated before it is used. The note then travels inside the payment
- * itself, sealed so only the payee can read it (lib/paymentNote).
+ * `to` is one of:
+ *  - a Gloam address (gloamr1.…): Pay sends a private payment to it, and the
+ *    note travels inside the payment, sealed so only the payee can read it
+ *    (lib/paymentNote);
+ *  - a 0x address or an ENS name: the link opens Cash out to that wallet, the
+ *    same path as typing it into Pay and pressing "Pay this wallet"
+ *    (lib/payRecipient). The relay sends it from the private balance, so the
+ *    payer's wallet does not show; the amount and the receiving wallet are
+ *    public, like any transfer. The note is only shown to the payer.
+ *
+ * `chain` is a network key (lib/networks): `robinhood-mainnet`,
+ * `tempo-mainnet`, ... for mainnet; `robinhood`, `tempo`, `base`, `ethereum`
+ * are the testnets. `asset` is the token's address or symbol on that network.
+ *
+ * The link only pre-fills the form on the payer's side. Nothing about a
+ * request is posted on chain. The details sit in the URL fragment (after #),
+ * which browsers never send to a server or put in a referrer, so they stay
+ * between the two people who share the link. The same fields are also read
+ * from the query string, so hand-made `?to=…&amount=…` links work. The payer
+ * still checks the details and presses send, and every field is validated
+ * before it is used.
  */
 
 import { zeroAddress, type Address } from "viem";
@@ -19,6 +32,7 @@ import { NETWORK_KEYS, getNetwork, isNetworkKey, networkName, type NetworkKey } 
 import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { isValidReceiveTag } from "./receiveTag";
 import { readAmountText } from "./amountText";
+import { classifyPayRecipient } from "./payRecipient";
 import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 
 /** Same cap as the private note the payment carries (lib/paymentNote). */
@@ -203,9 +217,17 @@ export function requestParamsFrom(search: string, hash: string): URLSearchParams
 }
 
 /** A request read back from a link. Bad fields are dropped and explained in `problems`. */
+/** What a request's `to` is: a Gloam address (a private payment) or a wallet (Cash out to it). */
+export type RequestRecipientKind = "gloam" | "address" | "ens";
+
 export type PaymentRequest = {
-  /** Valid Gloam address to pay, or null when the link's one was missing or broken. */
+  /**
+   * Who to pay, or null when the link's one was missing or broken: a whole
+   * Gloam address, a checksum-valid 0x address, or a normalized ENS name.
+   */
   to: string | null;
+  /** What `to` is, or null with `to`. A wallet ("address", "ens") is paid through Cash out. */
+  toKind: RequestRecipientKind | null;
   /** Network the link names, or null when it names none (or an unknown one). */
   network: NetworkKey | null;
   asset: RequestAsset | null;
@@ -241,12 +263,32 @@ export function readPaymentRequest(
   const onNet = network ?? fallback;
 
   let to: string | null = null;
-  if (!rawTo?.trim()) {
-    problems.push("This link has no Gloam address in it. Ask them to send it again.");
-  } else if (isValidRequestTag(rawTo)) {
-    to = rawTo.trim();
+  let toKind: RequestRecipientKind | null = null;
+  const recipient = classifyPayRecipient(rawTo ?? "");
+  if (recipient.kind === "empty") {
+    problems.push("This link has no address to pay in it. Ask them to send it again.");
+  } else if (recipient.kind === "gloam") {
+    if (isValidRequestTag(rawTo ?? "")) {
+      to = (rawTo ?? "").trim();
+      toKind = "gloam";
+    } else {
+      problems.push("The Gloam address in this link is not complete, so it was left out. Ask them to send the link again.");
+    }
+  } else if (recipient.kind === "address") {
+    // Money sent to the zero address is gone for good.
+    if (recipient.address.toLowerCase() === zeroAddress) {
+      problems.push("This link asks to pay the zero address, which nobody can spend from, so it was left out.");
+    } else {
+      to = recipient.address;
+      toKind = "address";
+    }
+  } else if (recipient.kind === "ens") {
+    to = recipient.name;
+    toKind = "ens";
+  } else if (recipient.kind === "badAddress") {
+    problems.push("The 0x address in this link looks mistyped, so it was left out. Ask them to send the link again.");
   } else {
-    problems.push("The Gloam address in this link is not complete, so it was left out. Ask them to send the link again.");
+    problems.push("The address in this link is not a Gloam address, a 0x address or an ENS name, so it was left out.");
   }
 
   let asset: RequestAsset | null = null;
@@ -271,6 +313,7 @@ export function readPaymentRequest(
 
   return {
     to,
+    toKind,
     network,
     asset,
     amount,
@@ -278,6 +321,11 @@ export function readPaymentRequest(
     name: cleanRequestText(params.get("name"), REQUEST_NAME_MAX) || null,
     problems,
   };
+}
+
+/** A request that pays a wallet (0x address or ENS name) through Cash out, not a Gloam address. */
+export function isWalletRequest(r: Pick<PaymentRequest, "toKind"> | null | undefined): boolean {
+  return r?.toKind === "address" || r?.toKind === "ens";
 }
 
 /** "1,250 USDG", "USDG", or "" when the request names neither. */

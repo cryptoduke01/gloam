@@ -2,7 +2,8 @@
 
 /**
  * Payment requests (lib/paymentRequest): the "Request a payment" card on
- * Receive, and the banner the payer sees when a request link opens Pay.
+ * Receive, and the banner the payer sees when a request link opens Pay (or
+ * Cash out, for a request to a 0x address or an ENS name).
  * A request is only a link. Nothing about it is posted on chain or sent to a
  * Gloam server; the payer checks the pre-filled form and presses send. The
  * note then travels sealed inside the payment (lib/paymentNote).
@@ -12,12 +13,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getNetwork, networkName, type NetworkKey } from "@/lib/networks";
 import { amountTextError } from "@/lib/amountText";
+import { shortAddress } from "@/lib/chain";
 import {
   REQUEST_NAME_MAX,
   REQUEST_NOTE_MAX,
   buildPaymentRequestLink,
   cleanRequestText,
   formatRequestAmount,
+  isWalletRequest,
   normalizeRequestAmount,
   requestAssetsFor,
   type PaymentRequest,
@@ -353,6 +356,9 @@ export function PaymentRequestBanner({
     ? `${formatRequestAmount(request.amount)}${request.asset ? ` ${request.asset.symbol}` : ""}`
     : null;
   const wrongNet = request.network && request.network !== currentNetwork ? getNetwork(request.network) : null;
+  // A 0x address or an ENS name is paid through Cash out (lib/paymentRequest).
+  const toWallet = isWalletRequest(request);
+  const walletLabel = request.to && request.toKind === "address" ? shortAddress(request.to) : request.to;
 
   return (
     <section
@@ -383,6 +389,11 @@ export function PaymentRequestBanner({
             ) : (
               <>asked to be paid</>
             )}
+            {toWallet && walletLabel && (
+              <>
+                {" "}to <span className="tnum font-medium" title={request.to ?? undefined}>{walletLabel}</span>
+              </>
+            )}
             {request.note && <span className="text-mute"> · {request.note}</span>}
           </p>
         </div>
@@ -400,15 +411,17 @@ export function PaymentRequestBanner({
 
       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
         {PRIVACY_LINE}{" "}
-        {request.to
-          ? "Check the details below, then press Send privately."
-          : "Nothing was filled in for the address, so you cannot pay this link as it is."}
+        {!request.to
+          ? "Nothing was filled in for the address, so you cannot pay this link as it is."
+          : toWallet
+            ? "Gloam pays this wallet from your private balance. With Hide my wallet on, the relay sends it, so your wallet does not show. The amount and their wallet are public, like any transfer. Check the details below, then press Cash out to this address."
+            : "Check the details below, then press Send privately."}
       </p>
 
       {request.name && !contactLabel && request.to && (
         <p className="mt-2 text-[12.5px] leading-relaxed text-warn">
-          The name comes from the link, not your contacts. Check the Gloam
-          address with them before you pay.
+          The name comes from the link, not your contacts. Check the{" "}
+          {toWallet ? "address" : "Gloam address"} with them before you pay.
         </p>
       )}
 
