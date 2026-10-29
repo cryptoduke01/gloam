@@ -29,7 +29,8 @@ import {
   walletDisplayTokensFor,
   type OnchainToken,
 } from "@/lib/tokens";
-import { COINGECKO_MARKED, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
+import { COINGECKO_MARKED, hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import {
   privateHeadline,
   splitWalletRows,
@@ -207,8 +208,10 @@ export function PortfolioView() {
   // chain's own symbol rather than a hardcoded "ETH".
   const nativeSymbol = network.primaryAsset.symbol;
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
-  // $GLOAM and the swap tokens on Robinhood Chain mainnet, priced like Transparency does.
-  const { marks: geckoMarks, pending: geckoPending } = useCoingeckoMarks(network.chainId === 4663);
+  // $GLOAM and the swap tokens on Robinhood Chain mainnet, and BDX on Base and Ethereum, priced like Transparency does.
+  const { marks: geckoMarks, pending: geckoPending } = useCoingeckoMarks(hasCoingeckoMarks(network.chainId));
+  // BDX is offered to Add only once the vault's live limit for it is open.
+  const openGated = useOpenGatedTokens();
   // A mainnet stock token is worth the share price times its uiMultiplier / 1e18 per raw
   // token (splits and dividends move it; balances never rebase), as the private swap marks it.
   const multTokens = useMemo(
@@ -343,18 +346,18 @@ export function PortfolioView() {
         };
       })
       // A token Add doesn't take is listed only while held: 20-odd zero rows of stocks help no one.
-      .filter((p) => p.raw > BigInt(0) || (!settings.hideZeroBalances && isAddableToken(network.chainId, p)));
-  }, [network.chainId, walletTokenSet, tokenBals, markets, unitUsd, pricePending, settings.hideZeroBalances]);
+      .filter((p) => p.raw > BigInt(0) || (!settings.hideZeroBalances && isAddableToken(network.chainId, p, openGated)));
+  }, [network.chainId, walletTokenSet, tokenBals, markets, unitUsd, pricePending, settings.hideZeroBalances, openGated]);
 
   // The public balance to point at the vault: a dollar stablecoin first.
   const addSuggestion = useMemo(
     () =>
       pickAddAsset(
         positions
-          .filter((p) => p.raw > BigInt(0) && isAddableToken(network.chainId, p))
+          .filter((p) => p.raw > BigInt(0) && isAddableToken(network.chainId, p, openGated))
           .map((p) => ({ id: p.id, symbol: p.symbol, address: p.address, raw: p.raw, amount: p.amount, dollar: isDollarStable(p) }))
       ),
-    [positions, network.chainId]
+    [positions, network.chainId, openGated]
   );
 
   const shieldRows = useMemo(() => {
@@ -449,7 +452,7 @@ export function PortfolioView() {
       pending: p.pending,
       change24h: p.change24h,
       spark: p.spark,
-      addable: isAddableToken(network.chainId, p),
+      addable: isAddableToken(network.chainId, p, openGated),
     }));
     if (nativeWei > BigInt(0)) {
       const amount = Number(nativeWei) / 1e18;
@@ -472,7 +475,7 @@ export function PortfolioView() {
       });
     }
     return rows;
-  }, [network.chainId, positions, nativeWei, nativeSymbol, nativeUsdRate, marketsPending]);
+  }, [network.chainId, positions, nativeWei, nativeSymbol, nativeUsdRate, marketsPending, openGated]);
   const walletSplit = useMemo(() => splitWalletRows(walletRows), [walletRows]);
   const foldEmpty = walletSplit.held.length > 0 && walletSplit.empty.length > 0;
   const walletShown = foldEmpty && !showEmptyRows ? walletSplit.held : [...walletSplit.held, ...walletSplit.empty];

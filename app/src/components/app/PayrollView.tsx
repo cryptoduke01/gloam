@@ -24,7 +24,8 @@ import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { track } from "@/lib/track";
 import { countPerson } from "@/lib/people";
-import { shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import {
   NATIVE_ASSET,
   TRANSFER_GAS_LIMIT,
@@ -338,11 +339,13 @@ export function PayrollView() {
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
   const { loading: treeLoading, leafIndexForCommitment, refresh: refreshTree } = useShieldTree();
   const { writeContractAsync } = useWriteContract();
+  const openGated = useOpenGatedTokens();
 
   // ---------------------------------------------------------------- assets
   const assetOptions = useMemo<AssetOption[]>(() => {
     // Payroll leads with stablecoins (USDG on Robinhood Chain, PathUSD on Tempo).
-    const tokens = shieldTokensFor(network.chainId);
+    // BDX only once the vault takes it (its live deposit limit is open).
+    const tokens = addableTokensFor(network.chainId, openGated);
     const stable = tokens.filter((t) => t.kind === "stablecoin");
     const rest = tokens.filter((t) => t.kind !== "stablecoin");
     const opts: AssetOption[] = stable.map((t) => ({ address: t.address as Address, symbol: t.symbol, logoId: t.id }));
@@ -355,7 +358,7 @@ export function PayrollView() {
     }
     for (const t of rest) opts.push({ address: t.address as Address, symbol: t.symbol, logoId: t.id });
     return opts;
-  }, [network.chainId, network.primaryAsset.symbol]);
+  }, [network.chainId, network.primaryAsset.symbol, openGated]);
   const [assetChoice, setAsset] = useState<Address | null>(null);
   const token: AssetOption = assetOptions.find((o) => o.address === assetChoice) ??
     assetOptions[0] ?? { address: NATIVE_ASSET, symbol: "ETH", logoId: "eth" };

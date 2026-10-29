@@ -14,7 +14,8 @@ import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed } from "@/lib/shield";
-import { isDollarStable, knownTokens, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, isDollarStable, knownTokens, supportsNativeShield } from "@/lib/tokens";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { faucetFor } from "@/lib/faucet";
 import { bridgeVisible } from "@/lib/bridge";
 import {
@@ -43,8 +44,10 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   const live = isShieldDeployed() && Boolean(network.pool);
   const { byAsset, ready, balanceSyncing } = useLocalShieldNotes(address);
 
-  // The public side: what this wallet holds of what the vault takes.
-  const tokens = useMemo(() => shieldTokensFor(network.chainId), [network.chainId]);
+  // The public side: what this wallet holds of what the vault takes now (BDX
+  // only once its live deposit limit is open).
+  const openGated = useOpenGatedTokens();
+  const tokens = useMemo(() => addableTokensFor(network.chainId, openGated), [network.chainId, openGated]);
   const tokenAddrs = useMemo(() => tokens.map((t) => t.address), [tokens]);
   const tokenBals = useAppTokenBalances({
     tokens: tokenAddrs,
