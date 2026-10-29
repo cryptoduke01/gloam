@@ -9,9 +9,9 @@ import { ArrowUpRight } from "./ui/ArrowUpRight";
 import { ThemeSegmented, ThemeToggle } from "./ThemeToggle";
 
 export const MARKETING_LINKS = [
-  { href: "/#payroll", label: "Payroll" },
+  { href: "/agents", label: "Agents" },
   { href: "/#payments", label: "Payments" },
-  { href: "/docs/agents", label: "Agents" },
+  { href: "/#payroll", label: "Payroll" },
   { href: "/sdk", label: "Developers" },
   { href: "/docs", label: "Docs" },
 ];
@@ -20,7 +20,7 @@ export const MARKETING_LINKS = [
 function isCurrent(pathname: string, href: string) {
   if (href.startsWith("/#")) return false;
   if (href === "/docs") {
-    return pathname === "/docs" || (pathname.startsWith("/docs/") && !pathname.startsWith("/docs/agents"));
+    return pathname === "/docs" || pathname.startsWith("/docs/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

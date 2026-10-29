@@ -9,6 +9,7 @@ const SITE = "https://www.gloam.trade";
 const PAGES: { path: string; priority: number }[] = [
   { path: "/", priority: 1 },
   { path: "/app", priority: 0.9 },
+  { path: "/agents", priority: 0.9 },
   { path: "/mainnet", priority: 0.8 },
   { path: "/docs", priority: 0.8 },
   { path: "/whitepaper", priority: 0.8 },
