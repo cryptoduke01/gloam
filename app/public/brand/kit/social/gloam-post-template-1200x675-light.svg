@@ -21,6 +21,6 @@
 <text id="support" x="68" y="562.83" font-family="Aeonik" font-weight="400" font-size="19" fill="#34373C">One supporting sentence. Plain and specific.</text>
 <g id="footer" font-family="Aeonik" font-size="15">
   <text x="28" y="649.00" font-weight="500" fill="#0B0C0E">gloam.trade</text>
-  <text x="1172" y="649.00" text-anchor="end" font-weight="400" fill="#5F636A">Live on Robinhood Chain and Tempo</text>
+  <text x="1172" y="649.00" text-anchor="end" font-weight="400" fill="#5F636A">Live on Robinhood Chain, Tempo, Base and Ethereum</text>
 </g>
 </svg>
