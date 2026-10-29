@@ -19,6 +19,28 @@ import {
 import type { VoteConfig } from "@/lib/vote/config";
 import type { VoteSummary } from "@/lib/vote/results";
 import { useNow, type Me, type Standing } from "./voteHooks";
+import { OptionArt } from "./OptionArt";
+import m from "./vote.module.css";
+
+const AUTO_ADVANCE_MS = 1_900;
+const SPARKS = [0, 45, 90, 135, 180, 225, 270, 315];
+
+/** The thank-you mark: a green disc that bounces in, a check that draws itself, and a small burst of light. */
+function SealMark() {
+  return (
+    <span className="relative mt-0.5 grid h-10 w-10 shrink-0 place-items-center">
+      <span aria-hidden className={m.burst} />
+      {SPARKS.map((a) => (
+        <span key={a} aria-hidden className={m.spark} style={{ ["--a" as string]: `${a}deg` }} />
+      ))}
+      <span className={`${m.seal} grid h-10 w-10 place-items-center rounded-full bg-sealed text-panel`}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden className={m.draw}>
+          <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </span>
+  );
+}
 
 export const explorer = (a: string) => `${robinhood.blockExplorers.default.url}/address/${a}`;
 const blockText = (n: number) => n.toLocaleString("en-US");
@@ -46,13 +68,11 @@ export function ClosingLine({ s, className = "" }: { s: Pick<VoteSummary, "statu
   const target = Date.parse(upcoming ? s.start : s.end);
   const words = closed ? `Closed ${whenPhrase(s.end)}` : upcoming ? `Opens ${whenPhrase(s.start)}` : `Closes ${whenPhrase(s.end)}`;
   return (
-    <p className={`text-[14px] text-mute ${className}`}>
+    <p className={`flex flex-wrap items-center gap-2 text-[14px] ${className}`}>
       <span className={s.draft ? "text-warn" : "text-foreground"}>{s.draft ? `Draft. ${words}` : words}</span>
       {!closed && now !== null && target > now && (
-        <span className="tnum">
-          <span aria-hidden className="mx-2 text-faint">
-            ·
-          </span>
+        <span className="tnum inline-flex items-center gap-2 rounded-full border border-sealed/35 bg-sealed-soft px-3 py-1 text-[13px] text-foreground">
+          <span aria-hidden className={`h-1.5 w-1.5 rounded-full bg-sealed ${m.live}`} />
           {timeLeft(target - now)} {upcoming ? "to go" : "left"}
         </span>
       )}
@@ -172,7 +192,7 @@ export function BallotCard({
   wallet: Wallet;
   meFailed: boolean;
   onSigned: (b: Ballot) => void;
-  step?: { index: number; total: number; next?: () => void; nextLabel?: string; back?: () => void };
+  step?: { index: number; total: number; next?: () => void; nextLabel?: string; back?: () => void; auto?: boolean };
   headingRef?: React.Ref<HTMLHeadingElement>;
   headingLevel?: "h1" | "h2";
 }) {
@@ -192,9 +212,17 @@ export function BallotCard({
     if (picked === null) setPicked(mineOption);
   }
 
+  // after a vote, a short beat for the thank-you, then on to the next question (unless they chose to stay)
+  const [held, setHeld] = useState(false);
+  const advance = step?.auto && !held ? step.next : undefined;
   useEffect(() => {
-    if (phase.k === "done") doneRef.current?.focus();
-  }, [phase.k]);
+    if (phase.k !== "done") return;
+    doneRef.current?.focus({ preventScroll: true });
+    doneRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!advance) return;
+    const t = window.setTimeout(advance, AUTO_ADVANCE_MS);
+    return () => window.clearTimeout(t);
+  }, [phase.k, advance]);
 
   const accepting = s.accepting;
   const canVote = accepting && !!wallet.address && !!standing && !standing.excluded && BigInt(standing.weight) > 0n;
@@ -263,9 +291,11 @@ export function BallotCard({
             return (
               <label
                 key={label}
-                className={`relative flex min-h-[64px] items-start gap-4 rounded-[14px] border px-4 py-4 transition-colors sm:px-5 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-foreground ${
-                  on ? "border-foreground bg-surface" : "border-line bg-panel"
-                } ${locked ? "cursor-default" : "cursor-pointer hover:border-line-strong"}`}
+                className={`group relative flex min-h-[72px] items-center gap-4 rounded-[16px] border px-4 py-4 transition-[transform,box-shadow,border-color,background-color] duration-200 motion-reduce:transition-none sm:px-5 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-sealed ${
+                  on
+                    ? "-translate-y-0.5 border-sealed bg-sealed-soft shadow-[0_0_0_4px_color-mix(in_srgb,var(--sealed)_16%,transparent),0_14px_34px_-16px_color-mix(in_srgb,var(--sealed)_60%,transparent)]"
+                    : "border-line bg-panel"
+                } ${locked ? "cursor-default" : "cursor-pointer hover:-translate-y-0.5 hover:border-sealed/50 hover:shadow-card"}`}
               >
                 <input
                   type="radio"
@@ -279,24 +309,25 @@ export function BallotCard({
                   }}
                   className="sr-only"
                 />
-                <span
-                  aria-hidden
-                  className={`mt-0.5 grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border transition-colors ${
-                    on ? "border-foreground bg-foreground" : "border-line-strong"
-                  }`}
-                >
-                  <span className={`h-2 w-2 rounded-full bg-panel transition-transform duration-150 motion-reduce:transition-none ${on ? "scale-100" : "scale-0"}`} />
-                </span>
+                <OptionArt voteId={s.id} index={i} />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <span className="text-[16.5px] leading-snug text-foreground">{label}</span>
                     {isMine && (
-                      <span className="inline-flex items-center gap-1 text-[12.5px] text-sealed">
-                        <CheckIcon size={12} /> Your vote
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sealed px-2 py-0.5 text-[11.5px] font-medium text-panel">
+                        <CheckIcon size={11} stroke={2.4} /> Your vote
                       </span>
                     )}
                   </span>
                   {s.details[i] && <span className="mt-1 block text-[14px] leading-relaxed text-mute">{s.details[i]}</span>}
+                </span>
+                <span
+                  aria-hidden
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition-colors ${
+                    on ? `${m.pulse} border-sealed bg-sealed` : "border-line-strong group-hover:border-sealed/60"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full bg-panel transition-transform duration-200 motion-reduce:transition-none ${on ? "scale-100" : "scale-0"}`} />
                 </span>
               </label>
             );
@@ -341,11 +372,9 @@ export function BallotCard({
         ) : phase.k === "done" ? (
           <div ref={doneRef} tabIndex={-1} className="gl-settle outline-none">
             <div className="flex items-start gap-3">
-              <span className="gl-pop mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sealed text-panel">
-                <CheckIcon size={16} stroke={2.2} />
-              </span>
+              <SealMark />
               <div className="min-w-0">
-                <p className="text-[18px] leading-snug tracking-[-0.01em] text-foreground">
+                <p className="text-[19px] leading-snug tracking-[-0.01em] text-foreground">
                   {phase.changed ? "Your vote is changed. Thank you." : "Your vote is in. Thank you."}
                 </p>
                 <p className="mt-1 text-[14.5px] leading-relaxed text-soft">
@@ -353,8 +382,16 @@ export function BallotCard({
                 </p>
               </div>
             </div>
+            {step?.next && step.auto && !held && (
+              <div className="mt-5">
+                <p className="text-[13px] text-mute">Next question in a moment</p>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-2">
+                  <div className={`h-full rounded-full bg-sealed ${m.beat}`} style={{ ["--beat" as string]: `${AUTO_ADVANCE_MS}ms` }} />
+                </div>
+              </div>
+            )}
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-              <button type="button" onClick={() => setPhase({ k: "choose" })} className="btn btn-quiet btn-lg w-full sm:w-auto">
+              <button type="button" onClick={() => { setHeld(true); setPhase({ k: "choose" }); }} className="btn btn-quiet btn-lg w-full sm:w-auto">
                 Change my vote
               </button>
               {step?.next && (
@@ -413,21 +450,18 @@ export function BallotCard({
         )}
       </div>
 
-      {step && (step.back || (step.next && phase.k !== "done")) && (
-        <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-2 sm:px-5">
-          {step.back ? (
-            <button type="button" onClick={step.back} className="btn btn-quiet btn-sm min-h-10">
-              <span aria-hidden>←</span> Back
-            </button>
-          ) : (
-            <span />
-          )}
-          {step.next && phase.k !== "done" && (
-            <button type="button" onClick={step.next} className="btn btn-quiet btn-sm min-h-10">
-              {mine ? (step.nextLabel ?? "Next question") : "Skip for now"} <span aria-hidden>→</span>
-            </button>
-          )}
-        </div>
+      {step && (
+        <nav aria-label="Move between questions" className="flex items-center justify-between gap-3 border-t border-line px-3 py-2.5 sm:px-5">
+          <button type="button" onClick={step.back} disabled={!step.back} className="btn btn-quiet btn-sm min-h-11 disabled:opacity-40">
+            <span aria-hidden>←</span> Previous
+          </button>
+          <span className="tnum text-[12.5px] text-mute">
+            {step.index + 1} / {step.total}
+          </span>
+          <button type="button" onClick={step.next} disabled={!step.next} className="btn btn-quiet btn-sm min-h-11 disabled:opacity-40">
+            {step.nextLabel ?? "Next question"} <span aria-hidden>→</span>
+          </button>
+        </nav>
       )}
     </section>
   );
@@ -435,7 +469,7 @@ export function BallotCard({
 
 /* ------------------------------------------------------------------ progress */
 
-/** Which question you're on and which you've answered. Each step jumps to its question. */
+/** Which question you're on and which you've answered: a green fill that moves with you, and dots that light up. */
 export function Progress({
   votes,
   current,
@@ -447,39 +481,53 @@ export function Progress({
   voted: (id: string) => boolean;
   onJump: (i: number | "summary") => void;
 }) {
+  const at = current === "summary" ? votes.length : current;
+  const fill = current === "summary" ? 100 : ((at + 0.5) / votes.length) * 100;
   return (
-    <nav aria-label="Questions" className="flex items-center gap-2">
-      <ol className="flex flex-1 items-center gap-1.5">
+    <nav aria-label="Questions" className="px-1">
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-full rounded-full bg-sealed transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${fill}%` }} />
+      </div>
+      <ol className="mt-3 flex items-center justify-between gap-2">
         {votes.map((v, i) => {
           const done = voted(v.id);
           const here = current === i;
           return (
-            <li key={v.id} className="flex-1">
+            <li key={v.id}>
               <button
                 type="button"
                 onClick={() => onJump(i)}
                 aria-current={here ? "step" : undefined}
-                aria-label={`Question ${i + 1}: ${v.question}${done ? " (voted)" : ""}`}
-                className="group block w-full py-3"
+                aria-label={`Question ${i + 1}: ${v.question}${done ? " (answered)" : ""}`}
+                className="group flex min-h-11 items-center gap-2 rounded-full pr-2 text-[13px]"
               >
                 <span
-                  className={`block h-[5px] rounded-full transition-colors ${
-                    here ? "bg-foreground" : done ? "bg-foreground/45" : "bg-surface-2 group-hover:bg-line-strong"
+                  className={`grid h-7 w-7 place-items-center rounded-full border text-[12px] transition-all duration-300 motion-reduce:transition-none ${
+                    done
+                      ? "border-sealed bg-sealed text-panel shadow-[0_0_0_4px_color-mix(in_srgb,var(--sealed)_18%,transparent)]"
+                      : here
+                        ? "border-foreground text-foreground"
+                        : "border-line-strong text-mute group-hover:border-sealed group-hover:text-foreground"
                   }`}
-                />
+                >
+                  {done ? <CheckIcon size={13} stroke={2.6} /> : i + 1}
+                </span>
+                <span className={`hidden sm:inline ${here ? "text-foreground" : "text-mute"}`}>Question {i + 1}</span>
               </button>
             </li>
           );
         })}
+        <li>
+          <button
+            type="button"
+            onClick={() => onJump("summary")}
+            aria-current={current === "summary" ? "step" : undefined}
+            className={`min-h-11 rounded-full px-3 text-[13px] transition-colors hover:bg-surface ${current === "summary" ? "text-foreground" : "text-mute"}`}
+          >
+            Summary
+          </button>
+        </li>
       </ol>
-      <button
-        type="button"
-        onClick={() => onJump("summary")}
-        aria-current={current === "summary" ? "step" : undefined}
-        className={`min-h-10 shrink-0 rounded-full px-3 text-[13px] transition-colors hover:bg-surface ${current === "summary" ? "text-foreground" : "text-mute"}`}
-      >
-        Summary
-      </button>
     </nav>
   );
 }
@@ -493,30 +541,34 @@ export function ResultsCard({ s, mine, link = true }: { s: VoteSummary; mine?: B
   return (
     <article className="gl-card p-5 sm:p-7" aria-label={`Results: ${s.question}`}>
       <h3 className="text-[17px] leading-snug tracking-[-0.01em] text-foreground [text-wrap:balance] sm:text-[19px]">{s.question}</h3>
-      <ul className="mt-5 flex flex-col gap-4">
+      <ul className="mt-5 flex flex-col gap-2.5">
         {s.totals.options.map((o) => {
           const pct = percentOf(BigInt(o.weight), total);
           const leading = total > 0n && o.option === lead.option;
+          const yours = mine?.option === o.option;
           return (
-            <li key={o.option}>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="min-w-0 text-[15px] leading-snug text-foreground">
-                  {o.label}
-                  {mine?.option === o.option && (
-                    <span className="ml-2 inline-flex items-center gap-1 align-middle text-[12px] text-sealed">
-                      <CheckIcon size={11} /> You
-                    </span>
-                  )}
+            <li key={o.option} className={`-mx-2 rounded-[12px] px-2 py-1.5 ${yours ? "bg-sealed-soft" : ""}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <OptionArt voteId={s.id} index={o.option} size={20} />
+                  <span className="min-w-0 text-[15px] leading-snug text-foreground">
+                    {o.label}
+                    {yours && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-sealed px-1.5 py-px align-middle text-[11px] font-medium text-panel">
+                        <CheckIcon size={10} stroke={2.6} /> You
+                      </span>
+                    )}
+                  </span>
                 </span>
-                <span className="tnum shrink-0 text-[17px] text-foreground">{pct}%</span>
+                <span className={`tnum shrink-0 text-[17px] ${leading ? "text-foreground" : "text-soft"}`}>{pct}%</span>
               </div>
               <div
-                className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2"
+                className="mt-2 h-2.5 overflow-hidden rounded-full bg-surface-2"
                 role="img"
                 aria-label={`${o.label}: ${pct}% of the vote, ${formatGloam(o.weight)} GLOAM from ${o.wallets} ${o.wallets === 1 ? "wallet" : "wallets"}`}
               >
                 <div
-                  className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${leading ? "bg-foreground" : "bg-foreground/40"}`}
+                  className={`${m.grow} h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${leading ? "bg-sealed" : "bg-sealed/45"}`}
                   style={{ width: `${pct}%` }}
                 />
               </div>

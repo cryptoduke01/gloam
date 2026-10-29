@@ -5,7 +5,9 @@ import { useCallback, useRef, useState } from "react";
 import { whenPhrase, type Ballot } from "@/lib/vote/core";
 import type { VoteSummary } from "@/lib/vote/results";
 import { FeedbackBox } from "./FeedbackBox";
-import { BallotCard, CheckIcon, ClosingLine, HowItWorks, Progress, Recount, ResultsCard, ShareVoted, UpdatedAgo, Welcome } from "./VoteParts";
+import { ResultsButton, ResultsDrawer } from "./ResultsDrawer";
+import m from "./vote.module.css";
+import { BallotCard, CheckIcon, ClosingLine, HowItWorks, Progress, ResultsCard, ShareVoted, Welcome } from "./VoteParts";
 import { useLiveVotes, useMe, useVoteWallet } from "./voteHooks";
 
 const WalletConnectSheet = dynamic(() => import("@/components/app/WalletConnectSheet").then((m) => m.WalletConnectSheet), { ssr: false });
@@ -27,6 +29,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
   const firstOpen = active.findIndex((v) => !voted(v.id));
   const auto: number | "summary" = me && active.length > 0 && firstOpen === -1 ? "summary" : Math.max(0, firstOpen);
   const [chosen, setChosen] = useState<number | "summary" | null>(null);
+  const [drawer, setDrawer] = useState(false);
   const step = chosen ?? auto;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -58,15 +61,25 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
 
   return (
     <>
-      {/* welcome */}
-      <section className="mx-auto max-w-[760px] px-5 pt-12 sm:px-7 sm:pt-20">
-        <p className="text-[14px] text-mute">$GLOAM holder votes</p>
-        <h1 className="t-display-l mt-5 max-w-[16ch] [text-wrap:balance]">Help decide what Gloam builds next</h1>
-        <p className="mt-5 max-w-[54ch] text-[16px] leading-relaxed text-soft sm:text-[17px]">
-          {active.length > 1 ? `${["", "One", "Two", "Three", "Four", "Five"][active.length] ?? active.length} questions.` : "One question."} Each
-          answer is a free signature, weighted by the $GLOAM you held at block {block.toLocaleString("en-US")}.
-        </p>
-        {shared && <ClosingLine s={shared} className="mt-4" />}
+      {/* the welcome: a soft green light behind the title */}
+      <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
+        <div className="gl-panel relative overflow-hidden border border-line bg-panel px-5 pb-10 pt-14 sm:px-12 sm:pb-14 sm:pt-20">
+          <div aria-hidden className={m.glow} />
+          <div className="relative mx-auto max-w-[760px]">
+            <p className="inline-flex items-center gap-2 text-[14px] text-soft">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-sealed" />
+              $GLOAM holder votes
+            </p>
+            <h1 className="mt-5 max-w-[15ch] text-[clamp(40px,7.4vw,76px)] font-light leading-[0.98] tracking-[-0.035em] text-foreground [text-wrap:balance]">
+              Help decide what Gloam builds next
+            </h1>
+            <p className="mt-6 max-w-[52ch] text-[16.5px] leading-relaxed text-soft sm:text-[18px]">
+              {active.length > 1 ? `${["", "One", "Two", "Three", "Four", "Five"][active.length] ?? active.length} questions.` : "One question."} Each
+              answer is a free signature, weighted by the $GLOAM you held at block {block.toLocaleString("en-US")}.
+            </p>
+            {shared && <ClosingLine s={shared} className="mt-6" />}
+          </div>
+        </div>
       </section>
 
       {active.length === 0 ? (
@@ -125,9 +138,9 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
                     })}
                   </ol>
                   <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <a href="#results" className="btn btn-ink btn-lg w-full sm:w-auto">
+                    <button type="button" onClick={() => setDrawer(true)} className="btn btn-ink btn-lg w-full sm:w-auto">
                       See the live results
-                    </a>
+                    </button>
                     {anyVoted && <ShareVoted endPhrase={whenPhrase(active[0]!.end)} />}
                   </div>
                   {anyVoted && <p className="mt-3 text-[12.5px] text-mute">The post doesn&apos;t include your wallet address.</p>}
@@ -148,6 +161,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
                   onSigned={onSigned(active[step]!.id)}
                   headingRef={headingRef}
                   step={{
+                    auto: true,
                     index: step,
                     total: active.length,
                     back: step > 0 ? () => go(step - 1) : undefined,
@@ -161,27 +175,30 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
         </section>
       )}
 
-      {/* live results */}
+      {/* live results: in a drawer, opened from the sticky button */}
       {votes.length > 0 && (
-        <section id="results" className="mx-auto max-w-[760px] scroll-mt-20 px-5 pt-16 sm:px-7 sm:pt-24" aria-labelledby="results-title">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-            <h2 id="results-title" className="t-display-m">
-              {active.length ? "Live results" : "Final results"}
-            </h2>
-            {active.length > 0 && <UpdatedAgo at={updatedAt} />}
-          </div>
-          <p className="mt-3 max-w-[58ch] text-[14.5px] leading-relaxed text-mute">
-            Weighted by $GLOAM at the snapshot. The darker bar is the answer {active.length ? "leading right now" : "that won"}.
-          </p>
-          <div className="mt-6 flex flex-col gap-4">
-            {(active.length ? active : past).map((v) => (
-              <ResultsCard key={v.id} s={v} mine={me?.votes[v.id]?.ballot ?? null} />
-            ))}
-          </div>
-          <div className="mt-6">
-            <Recount votes={active.length ? active : votes} />
-          </div>
-        </section>
+        <>
+          <ResultsDrawer
+            votes={active.length ? active : votes}
+            mine={(id) => me?.votes[id]?.ballot ?? null}
+            updatedAt={updatedAt}
+            open={drawer}
+            onClose={() => setDrawer(false)}
+          />
+          {!drawer && <ResultsButton onOpen={() => setDrawer(true)} wallets={Math.max(0, ...(active.length ? active : votes).map((v) => v.totals.wallets))} />}
+          {active.length === 0 && (
+            <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7" aria-labelledby="final-title">
+              <h2 id="final-title" className="t-display-m">
+                Final results
+              </h2>
+              <div className="mt-6 flex flex-col gap-4">
+                {votes.map((v) => (
+                  <ResultsCard key={v.id} s={v} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-24">
@@ -201,7 +218,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
         </section>
       )}
 
-      <div className="pb-20 sm:pb-28" />
+      <div className="pb-32 sm:pb-36" />
       {wallet.sheetOpen && <WalletConnectSheet open={wallet.sheetOpen} onClose={wallet.closeSheet} />}
     </>
   );
