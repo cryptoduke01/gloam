@@ -155,7 +155,7 @@ export function friendlyProveError(e: unknown, what: "funds" | "payment" | "bala
     const name = what === "funds" ? "Proof of funds" : what === "payment" ? "Proof of payment" : "Exact balance";
     return { tone: "warn", text: `${name} is not switched on in this version of Gloam yet.` };
   }
-  if (/not a payment/i.test(msg)) return { tone: "warn", text: msg };
+  if (/not a payment|straight from a deposit/i.test(msg)) return { tone: "warn", text: msg };
   if (/reject|denied|cancel/i.test(msg)) {
     return { tone: "warn", text: "Stopped before the proof was made. Nothing was shared." };
   }
