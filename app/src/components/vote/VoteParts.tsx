@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useSignTypedData } from "wagmi";
+import { useSignMessage, useSignTypedData } from "wagmi";
 import { robinhood } from "@/lib/chain";
 import {
   VOTE_CHAIN_ID,
@@ -12,6 +12,7 @@ import {
   shortAddress,
   timeLeft,
   voteMessage,
+  voteText,
   voteTypedData,
   whenPhrase,
   type Ballot,
@@ -289,6 +290,7 @@ export function BallotCard({
   const [phase, setPhase] = useState<Phase>({ k: "choose" });
   const lastSent = useRef<{ voter: string; option: number; timestamp: number; signature: string } | null>(null);
   const { signTypedDataAsync } = useSignTypedData();
+  const { signMessageAsync } = useSignMessage();
   const doneRef = useRef<HTMLDivElement>(null);
 
   // the wallet's earlier vote arrives after the page: show it picked
@@ -316,7 +318,8 @@ export function BallotCard({
   const busy = phase.k === "signing" || phase.k === "saving";
   const locked = !accepting || busy || phase.k === "done";
 
-  async function send(body: { voter: string; option: number; timestamp: number; signature: string }) {
+  /** Sends a signed vote. With `quiet`, a refused signature returns its code instead of showing the failure. */
+  async function send(body: { voter: string; option: number; timestamp: number; signature: string }, quiet = false): Promise<string | null> {
     setPhase({ k: "saving" });
     try {
       const res = await fetch(`/api/vote/${s.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -328,27 +331,55 @@ export function BallotCard({
         lastSent.current = null;
         onSigned(j.data.ballot);
         setPhase({ k: "done", changed: j.data.changed });
-        return;
+        return null;
       }
       const code = j && !j.ok ? j.error.code : "";
+      if (quiet && code === "bad_signature") return code;
       // a store or network hiccup: the same signature can go again; anything else needs a fresh one
       const retry = !j || ["storage", "error", "busy", "rate_limited"].includes(code);
       setPhase({ k: "failed", message: j && !j.ok ? j.error.message : "We couldn't reach Gloam. Check your connection.", retry });
+      return code || "error";
     } catch {
       setPhase({ k: "failed", message: "We couldn't reach Gloam. Check your connection.", retry: true });
+      return "network";
     }
   }
 
   async function sign() {
     if (!wallet.address || picked === null || busy) return;
     setPhase({ k: "signing" });
+    const rejected = (e: unknown) => {
+      const name = e instanceof Error ? e.name : "";
+      const msg = e instanceof Error ? e.message : "";
+      return name === "UserRejectedRequestError" || /reject|denied|cancel/i.test(msg);
+    };
     try {
+      const account = wallet.address as `0x${string}`;
       const timestamp = Math.floor(Date.now() / 1000);
-      const message = voteMessage(asConfig(s), picked, wallet.address as `0x${string}`, timestamp);
-      const signature = await signTypedDataAsync({ ...voteTypedData(message), account: wallet.address as `0x${string}` });
+      const message = voteMessage(asConfig(s), picked, account, timestamp);
+      // Typed data first. Some wallets (OKX among them) can't sign it, or sign a
+      // changed form the server can't match: then the same vote goes as plain text.
+      const plain = async () => {
+        setPhase({ k: "signing" });
+        return signMessageAsync({ message: voteText(message), account });
+      };
+      let signature: string;
+      let usedPlain = false;
+      try {
+        signature = await signTypedDataAsync({ ...voteTypedData(message), account });
+      } catch (e) {
+        if (rejected(e)) throw e;
+        signature = await plain();
+        usedPlain = true;
+      }
       const body = { voter: wallet.address, option: picked, timestamp, signature };
       lastSent.current = body;
-      await send(body);
+      const code = await send(body, !usedPlain);
+      if (code === "bad_signature" && !usedPlain) {
+        const second = { ...body, signature: await plain() };
+        lastSent.current = second;
+        await send(second);
+      }
     } catch (e) {
       const name = e instanceof Error ? e.name : "";
       const msg = e instanceof Error ? e.message : "";
