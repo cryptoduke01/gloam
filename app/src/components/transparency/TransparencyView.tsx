@@ -26,7 +26,7 @@ import {
 } from "./ledger";
 import { NetworkPicker } from "./NetworkPicker";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
-import { RH_MAINNET_TOKENS } from "@/lib/tokens";
+import { holdableTokens, swapTokenPrice } from "@/lib/vaultAssets";
 import { vaultSwapRouter } from "@/lib/vaultSwap";
 
 /* ---------------------------------------------------------------- data */
@@ -100,10 +100,22 @@ function useLedger(key: NetworkKey | null) {
   };
 }
 
-type Prices = { ethUsd: number | null; byAddress: Map<string, number> };
+type Market = { id: string; source: string; mark: number; address?: string };
+type Prices = {
+  ethUsd: number | null;
+  /** Live marks by token address (the markets feed); for a stock this is a share price, not a token price. */
+  byAddress: Map<string, number>;
+  markets: Market[];
+  /** CoinGecko USD by CoinGecko id. */
+  gecko: Map<string, number>;
+};
 
-/** Vault tokens the markets feed does not price, priced live from CoinGecko instead ($GLOAM). */
-const COINGECKO_PRICED = RH_MAINNET_TOKENS.filter((t) => t.coingecko);
+/**
+ * Every CoinGecko id a vault token can be priced by: $GLOAM, and the tokens a
+ * private swap lands in on Robinhood Chain (cbBTC and the rest; a stock falls
+ * back to it when its live mark or multiplier is missing).
+ */
+const COINGECKO_IDS = [...new Set(holdableTokens(4663).flatMap((t) => (t.coingecko ? [t.coingecko] : [])))];
 
 /**
  * USD marks the app already uses (/api/markets), plus CoinGecko for the
@@ -122,10 +134,9 @@ function usePrices(): { prices: Prices | null; waiting: boolean } {
     let live = true;
     const markets = fetch("/api/markets", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null) as Promise<{ ethUsd?: number | null; markets?: { address?: string; mark?: number }[] } | null>;
-    const ids = COINGECKO_PRICED.map((t) => t.coingecko).join(",");
+      .catch(() => null) as Promise<{ ethUsd?: number | null; markets?: Partial<Market>[] } | null>;
     // display only: a slow CoinGecko never holds the other prices back
-    const gecko = fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`, {
+    const gecko = fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${COINGECKO_IDS.join(",")}&vs_currencies=usd`, {
       signal: AbortSignal.timeout(5_000),
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -133,14 +144,20 @@ function usePrices(): { prices: Prices | null; waiting: boolean } {
     void Promise.all([markets, gecko]).then(([d, g]) => {
       if (!live) return;
       const byAddress = new Map<string, number>();
+      const list: Market[] = [];
       for (const m of d?.markets ?? []) {
-        if (m.address && typeof m.mark === "number" && m.mark > 0) byAddress.set(m.address.toLowerCase(), m.mark);
+        if (typeof m.mark !== "number" || !(m.mark > 0)) continue;
+        if (m.address) byAddress.set(m.address.toLowerCase(), m.mark);
+        if (typeof m.id === "string" && typeof m.source === "string") {
+          list.push({ id: m.id, source: m.source, mark: m.mark, ...(m.address ? { address: m.address } : {}) });
+        }
       }
-      for (const t of COINGECKO_PRICED) {
-        const usd = g?.[t.coingecko!]?.usd;
-        if (typeof usd === "number" && usd > 0) byAddress.set(t.address.toLowerCase(), usd);
+      const geckoUsd = new Map<string, number>();
+      for (const id of COINGECKO_IDS) {
+        const usd = g?.[id]?.usd;
+        if (typeof usd === "number" && usd > 0) geckoUsd.set(id, usd);
       }
-      setPrices({ ethUsd: typeof d?.ethUsd === "number" ? d.ethUsd : null, byAddress });
+      setPrices({ ethUsd: typeof d?.ethUsd === "number" ? d.ethUsd : null, byAddress, markets: list, gecko: geckoUsd });
     });
     return () => {
       live = false;
@@ -172,12 +189,24 @@ function fmtUsd(n: number): string {
   return usdFmt.format(n);
 }
 
-function usdFor(h: VaultHolding, prices: Prices | null): number | null {
+/**
+ * A holding's dollar value, priced as the server's figures price it
+ * (lib/onchainMetrics usdOf): stablecoins $1, ETH and WETH at ETH's price, a
+ * Robinhood Chain stock at its share price times uiMultiplier / 1e18 (never the
+ * share price alone), anything else at its live mark or CoinGecko price. Null
+ * means no price: left out of the total and named, never counted as $0.
+ */
+function usdFor(h: VaultHolding, chainId: number, prices: Prices | null): number | null {
   const amount = units(h.raw, h.decimals);
   if (h.stable) return amount;
   if (!prices) return null;
-  if (!h.address) return prices.ethUsd != null ? amount * prices.ethUsd : null;
-  const mark = prices.byAddress.get(h.address.toLowerCase());
+  if (!h.address || h.id === "weth") return prices.ethUsd != null ? amount * prices.ethUsd : null;
+  if (chainId === 4663 && h.kind === "stock") {
+    const mult = h.uiMultiplier ? BigInt(h.uiMultiplier) : null;
+    const p = swapTokenPrice(chainId, { id: h.id, kind: h.kind }, prices.markets, mult, h.coingecko ? prices.gecko.get(h.coingecko) : undefined);
+    return p != null ? amount * p : null;
+  }
+  const mark = prices.byAddress.get(h.address.toLowerCase()) ?? (h.coingecko ? prices.gecko.get(h.coingecko) : undefined);
   return mark != null ? amount * mark : null;
 }
 
@@ -310,11 +339,12 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
 function HoldingsCard({ ledger, prices, waiting }: { ledger: Ledger; prices: Prices | null; waiting: boolean }) {
   const n = getNetwork(ledger.network);
-  const rows = ledger.holdings.map((h) => ({ h, amount: units(h.raw, h.decimals), usd: usdFor(h, prices) }));
+  const rows = ledger.holdings.map((h) => ({ h, amount: units(h.raw, h.decimals), usd: usdFor(h, n.chainId, prices) }));
   const held = rows
     .filter((r) => r.amount > 0)
     .sort((a, b) => (b.usd ?? -1) - (a.usd ?? -1) || b.amount - a.amount);
-  const empty = rows.filter((r) => r.amount === 0);
+  // Only what Add lists counts as "also accepted"; a token only a swap lands in shows while held.
+  const empty = rows.filter((r) => r.amount === 0 && r.h.listed !== false);
   const total = held.reduce((s, r) => s + (r.usd ?? 0), 0);
   const unpriced = held.filter((r) => r.usd == null);
   const pricesLoading = waiting && unpriced.length > 0;

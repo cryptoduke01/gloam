@@ -2,8 +2,10 @@
  * The public ledger behind /transparency: everything anyone can read about a
  * Gloam vault straight from the chain, with no keys and no Gloam server.
  *
- * - Holdings: balanceOf(vault) for each listed token, plus the native balance
- *   where the chain has one.
+ * - Holdings: balanceOf(vault) for every token the vault can hold (the listed
+ *   ones plus those a private swap lands in, lib/vaultAssets), plus the native
+ *   balance where the chain has one, and each stock token's uiMultiplier so it
+ *   is priced as the app prices it.
  * - Counts: Shielded / Transferred / Unshielded (and SealedSwapped) logs from
  *   the vault, PaymentMemo logs from the payment-message board, all since the
  *   vault's deploy block.
@@ -17,13 +19,15 @@
 
 import {
   createPublicClient,
+  parseAbi,
   parseAbiItem,
   toEventSelector,
   type Address,
   type PublicClient,
 } from "viem";
 import { getNetwork, type GloamNetwork, type NetworkKey } from "@/lib/networks";
-import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { erc20BalanceOfAbi, isDollarStable, shieldTokensFor, supportsNativeShield, type OnchainToken } from "@/lib/tokens";
+import { hasUiMultiplier, holdableTokens } from "@/lib/vaultAssets";
 import { getLogsSafe } from "@/lib/logRange";
 import { readTransport } from "@/lib/readTransport";
 
@@ -50,6 +54,14 @@ export type VaultHolding = {
   stable: boolean;
   /** Raw units held by the vault. */
   raw: string;
+  /** Absent on ledgers cached before swap-landed tokens were read. */
+  kind?: OnchainToken["kind"];
+  /** CoinGecko id, for a price where the markets feed has none. */
+  coingecko?: string;
+  /** Add lists it. False for a token only a private swap lands in (shown only while held). */
+  listed?: boolean;
+  /** A stock token's uiMultiplier (raw, 1e18 = 1), read with the balance; null when that read failed. */
+  uiMultiplier?: string | null;
 };
 
 export type Ledger = {
@@ -427,36 +439,68 @@ async function readLedger(key: NetworkKey, prev: Ledger | null, progress: Progre
   return ledger;
 }
 
+const UI_MULTIPLIER_ABI = parseAbi(["function uiMultiplier() view returns (uint256)"]);
+
+/**
+ * Each token's balance, and each stock's uiMultiplier. One Multicall3 call where
+ * the chain has it (Robinhood Chain mainnet reads about 50 values), else one
+ * call per value. A stock whose multiplier fails is left unpriced, never wrong;
+ * a failed balance fails the read, as before, so the last balances read are kept.
+ */
 async function readHoldings(n: GloamNetwork, c: PublicClient, vault: Address): Promise<VaultHolding[]> {
-  const tokens = shieldTokensFor(n.chainId);
-  const rows: Promise<VaultHolding>[] = tokens.map(async (t) => ({
-    id: t.id,
-    symbol: t.symbol,
-    address: t.address,
-    decimals: t.decimals,
-    stable: isDollarStable(t),
-    raw: String(
-      await gated(n.chainId, () =>
-        c.readContract({
-          address: t.address,
-          abi: erc20BalanceOfAbi,
-          functionName: "balanceOf",
-          args: [vault],
-        })
-      )
-    ),
-  }));
-  if (supportsNativeShield(n.chainId)) {
-    rows.push(
-      gated(n.chainId, () => c.getBalance({ address: vault })).then((v) => ({
-        id: "native",
-        symbol: n.primaryAsset.symbol,
-        address: null,
-        decimals: n.primaryAsset.decimals,
-        stable: false,
-        raw: String(v),
-      }))
-    );
+  const listed = new Set(shieldTokensFor(n.chainId).map((t) => t.address.toLowerCase()));
+  const tokens = holdableTokens(n.chainId);
+  const stocks = tokens.filter((t) => hasUiMultiplier(n.chainId, t));
+  const balanceCall = (t: OnchainToken) =>
+    ({ address: t.address, abi: erc20BalanceOfAbi, functionName: "balanceOf", args: [vault] }) as const;
+  const multCall = (t: OnchainToken) => ({ address: t.address, abi: UI_MULTIPLIER_ABI, functionName: "uiMultiplier" }) as const;
+
+  let balances: bigint[];
+  let mults: (bigint | null)[];
+  const batched = n.chain.contracts?.multicall3
+    ? await gated(n.chainId, () =>
+        c.multicall({ contracts: [...tokens.map(balanceCall), ...stocks.map(multCall)], allowFailure: true })
+      ).catch(() => null)
+    : null;
+  if (batched && batched.slice(0, tokens.length).every((r) => r.status === "success")) {
+    balances = batched.slice(0, tokens.length).map((r) => r.result as bigint);
+    mults = batched.slice(tokens.length).map((r) => (r.status === "success" ? (r.result as bigint) : null));
+  } else {
+    [balances, mults] = await Promise.all([
+      Promise.all(tokens.map((t) => gated(n.chainId, () => c.readContract(balanceCall(t))))),
+      Promise.all(stocks.map((t) => gated(n.chainId, () => c.readContract(multCall(t))).catch(() => null))),
+    ]);
   }
-  return Promise.all(rows);
+  const multOf = new Map(stocks.map((t, i) => [t.address.toLowerCase(), mults[i] ?? null]));
+
+  const rows: VaultHolding[] = tokens.map((t, i) => {
+    const a = t.address.toLowerCase();
+    const stock = multOf.has(a);
+    const mult = multOf.get(a);
+    return {
+      id: t.id,
+      symbol: t.symbol,
+      address: t.address,
+      decimals: t.decimals,
+      stable: isDollarStable(t),
+      raw: String(balances[i]),
+      kind: t.kind,
+      ...(t.coingecko ? { coingecko: t.coingecko } : {}),
+      listed: listed.has(a),
+      ...(stock ? { uiMultiplier: mult == null ? null : String(mult) } : {}),
+    };
+  });
+  if (supportsNativeShield(n.chainId)) {
+    const v = await gated(n.chainId, () => c.getBalance({ address: vault }));
+    rows.push({
+      id: "native",
+      symbol: n.primaryAsset.symbol,
+      address: null,
+      decimals: n.primaryAsset.decimals,
+      stable: false,
+      raw: String(v),
+      listed: true,
+    });
+  }
+  return rows;
 }
