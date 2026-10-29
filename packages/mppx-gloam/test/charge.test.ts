@@ -369,6 +369,38 @@ test("a payer that spends the payment back before the sweep gets nothing", async
   assert.equal(await frontRun.replay!.get(nf), undefined);
 });
 
+test("a sweep through a smart account that succeeds outside while the transfer inside reverts issues no receipt (GHSA-p2wm-6x89-63c2)", async () => {
+  const pool = mockPool();
+  const ch = await challengeFor(400n);
+  const paid = await pay(pool, ch, "push");
+  const replay = memoryReplayStore();
+  let outer = 0;
+  const bundles = new Set<string>();
+  const bundled = serverConfig(pool, {
+    replay,
+    chain: {
+      ...pool.chain,
+      waitForReceipt: async (h) => (bundles.has(h) ? { status: "success" } : pool.chain.waitForReceipt(h)),
+    },
+    // The payer spends the note back first; the bundle's inner sweep then reverts, and the bundle succeeds.
+    submit: async (intent) => {
+      const back = await buildPrivateSendIntent({
+        secretHex: paid.built.paymentNote.secret, amountInWei: 400n, amountPayWei: 400n, asset: USD,
+        path: (await pool.chain.pathForCommitment(paid.built.paymentNote.commitment))!, prove: stubProve, poolAddress: POOL, chainId: CHAIN_ID,
+      });
+      await pool.transfer(back.exec.args);
+      const inner = await pool.transfer(intent.exec.args);
+      assert.equal((await pool.chain.waitForReceipt(inner)).status, "reverted");
+      const h = `0x${"bb".repeat(30)}${(++outer).toString(16).padStart(4, "0")}` as Hex;
+      bundles.add(h);
+      return h;
+    },
+  });
+  await rejects(settle(ch, paid.credential.payload, bundled), /not in the pool|has not confirmed/, true);
+  // The retry sees the payer's spend and refuses for good.
+  await rejects(settle(ch, paid.credential.payload, serverConfig(pool, { replay })), /spent by someone else|do not grant/i);
+});
+
 test("pull: a transfer whose funding note was spent elsewhere is refused, and nothing is paid", async () => {
   const pool = mockPool();
   const ch = await challengeFor(200n);
