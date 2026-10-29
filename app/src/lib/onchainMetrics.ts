@@ -298,7 +298,7 @@ type ChainEvent = {
   f?: string;
 };
 
-type ScanState = {
+export type ScanState = {
   v: 1;
   pool: string;
   scannedTo: number;
@@ -1054,10 +1054,16 @@ function emptyState(n: GloamNetwork): ScanState {
  * (21 Oct 2026, 13:00 UTC), not from its deploy, so the team's own checks
  * before the doors opened stay out. Balances held are read live either way.
  */
-function counted(n: GloamNetwork, s: ScanState): ScanState {
+export function counted(n: Pick<GloamNetwork, "testnet">, s: ScanState): ScanState {
   if (n.testnet) return s;
   const from = Math.floor(MAINNET_LAUNCH_MS / 1000);
-  return { ...s, events: s.events.filter((e) => !e.ts || e.ts >= from) };
+  // An event not dated yet (Robinhood's logs carry no time; a pass dates the
+  // newest 250) counts only once it is surely after launch: at or after a block
+  // already dated after it. Until then it waits, so a fresh read never counts
+  // the team's checks from before launch.
+  let firstAfter = Infinity;
+  for (const e of s.events) if (e.ts >= from && e.b < firstAfter) firstAfter = e.b;
+  return { ...s, events: s.events.filter((e) => (e.ts ? e.ts >= from : e.b >= firstAfter)) };
 }
 
 async function readNetwork(n: GloamNetwork, days: string[], revenueDays: string[]) {
