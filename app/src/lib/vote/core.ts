@@ -3,9 +3,11 @@
  * and recount scripts, and the self-test. Nothing here touches storage or the
  * network, so anyone can run the same code to recount a vote.
  *
- * - Weight: a wallet's public $GLOAM balance at the vote's snapshot block on
- *   Robinhood Chain mainnet, read from the snapshot (lib/vote/snapshots),
- *   minus the excluded addresses (lib/vote/excluded), which weigh nothing.
+ * - Weight: a wallet's public $GLOAM balance on Robinhood Chain mainnet, minus
+ *   the excluded addresses (lib/vote/excluded), which weigh nothing. Which
+ *   balance depends on the vote's `weighting`: at its snapshot block (read
+ *   from lib/vote/snapshots), or at its closing block (the first block at or
+ *   after `end`; live balances stand in until then). See lib/vote/config.
  * - A vote is an EIP-712 signature (VOTE_DOMAIN, VOTE_TYPES): no transaction
  *   and no gas. It names the vote, the option and its label, the voter, the
  *   snapshot block and the time it was signed.
@@ -113,6 +115,48 @@ export type VoteSnapshot = {
 
 export type VoteStatus = "draft" | "upcoming" | "open" | "closed";
 
+export type Weighting = "snapshot" | "close";
+
+/** What sets a wallet's weight in this vote. A vote without the field weighs the snapshot, as before. */
+export function weightingOf(v: Pick<VoteConfig, "weighting">): Weighting {
+  return v.weighting === "close" ? "close" : "snapshot";
+}
+
+/**
+ * A close-weighted vote's final weights: every voter's $GLOAM at the closing
+ * block, worked out from the Transfer logs, and the count they give. Stored
+ * once, the first time results are asked for after the close; computing it
+ * again gives the same numbers (only `computedAt` moves).
+ */
+export type FinalWeights = {
+  voteId: string;
+  chainId: number;
+  token: string;
+  /** The vote's end, as configured. */
+  end: string;
+  /** The first block whose timestamp is at or after `end`. */
+  closeBlock: number;
+  closeBlockHash: string;
+  /** Seconds. */
+  closeBlockTime: number;
+  /** The checked block the Transfer replay started from (the snapshot), or 0 for a replay from launch. */
+  replayFrom: number;
+  /** How many Transfer logs were replayed after `replayFrom`. */
+  logs: number;
+  /** ISO time it was worked out. Not part of the result. */
+  computedAt: string;
+  /** Every voter's balance at `closeBlock`, lowercase address to wei, zeros included. */
+  balances: Record<string, string>;
+  /** All the GLOAM that could vote at `closeBlock`, less the excluded addresses. */
+  eligible: { weight: string; wallets: number };
+  /** Voters' balances read again with balanceOf at the block, when the RPC still had its state. */
+  checked: { balanceOf: number; mismatches: number } | null;
+  /** The ballots that count, with their final weights. */
+  counted: Ballot[];
+  problems: RecountProblem[];
+  totals: { weight: string; wallets: number; options: { option: number; label: string; weight: string; wallets: number }[] };
+};
+
 export const MAX_OPTIONS = 5;
 /** How far a signed timestamp may sit from the server's clock: behind, and ahead. */
 export const SIGNED_MAX_AGE_SEC = 15 * 60;
@@ -144,7 +188,8 @@ export function configProblems(v: VoteConfig): string[] {
   if (!/Z$/.test(v.start) || !/Z$/.test(v.end)) out.push(`${v.id}: start and end must be UTC (end in Z)`);
   if (!Number.isFinite(start) || !Number.isFinite(end)) out.push(`${v.id}: start or end is not a date`);
   else if (end <= start) out.push(`${v.id}: end must be after start`);
-  if (v.published && v.snapshotBlock === 0) out.push(`${v.id}: published without a snapshot block`);
+  if (v.weighting !== undefined && v.weighting !== "snapshot" && v.weighting !== "close") out.push(`${v.id}: weighting must be "snapshot" or "close"`);
+  if (v.published && v.snapshotBlock === 0 && weightingOf(v) === "snapshot") out.push(`${v.id}: published without a snapshot block`);
   for (const e of v.exclude ?? []) if (!isAddress(e.address, { strict: false })) out.push(`${v.id}: bad excluded address ${e.address}`);
   return out;
 }
@@ -249,12 +294,29 @@ export function tally(v: VoteConfig, ballots: Pick<Ballot, "option" | "weight">[
     const row = options[b.option];
     if (!row) continue;
     const w = BigInt(b.weight);
+    // a wallet that holds nothing now (it sold or moved its GLOAM) carries no weight
+    if (w === 0n) continue;
     row.weight += w;
     row.wallets++;
     weight += w;
     wallets++;
   }
   return { options, weight, wallets };
+}
+
+/**
+ * A close-weighted vote's live count: each wallet's latest ballot weighted by
+ * what it holds now (`now`, lowercase address to wei; a wallet whose balance
+ * couldn't be read keeps the weight it signed with). Excluded wallets and
+ * wallets holding nothing now count for nothing, but stay in the list.
+ */
+export function liveWeights(ballots: Ballot[], now: Map<string, bigint | null>, excluded: Map<string, Excluded>): Ballot[] {
+  return latestPerVoter(ballots).map((b) => {
+    const key = b.voter.toLowerCase();
+    if (excluded.has(key)) return { ...b, weight: "0" };
+    const held = now.get(key);
+    return held === undefined || held === null ? b : { ...b, weight: held.toString() };
+  });
 }
 
 /** Keeps each wallet's latest ballot (highest timestamp; a tie keeps the one taken first). */
@@ -272,9 +334,14 @@ export type RecountProblem = { voter: string; problem: string };
 
 /**
  * Recounts a published list of ballots from scratch: keeps each wallet's
- * latest, checks every signature, takes each weight from the snapshot again
+ * latest, checks every signature, takes each weight from the balances again
  * (never from the list), and drops excluded wallets and any vote outside the
  * window. Anyone can run this against the downloaded votes.
+ *
+ * `snapshot` is the balances the weights come from: the snapshot for a
+ * snapshot-weighted vote, or the balances at the closing block with
+ * `{ closeBlock }` for a close-weighted one. Then the weight a ballot listed
+ * when it was signed (that wallet's balance at the time) is not a problem.
  */
 export async function recount(
   v: VoteConfig,
@@ -282,10 +349,13 @@ export async function recount(
   excluded: Map<string, Excluded>,
   ballots: Ballot[],
   contractCheck?: (message: VoteMessage, signature: Hex) => Promise<boolean>,
+  opts: { closeBlock?: number } = {},
 ): Promise<{ tally: Tally; counted: Ballot[]; problems: RecountProblem[] }> {
   const problems: RecountProblem[] = [];
   const counted: Ballot[] = [];
-  if (snapshot.block !== v.snapshotBlock) problems.push({ voter: "-", problem: `snapshot is block ${snapshot.block}, the vote says ${v.snapshotBlock}` });
+  const atClose = opts.closeBlock !== undefined;
+  if (atClose && snapshot.block !== opts.closeBlock) problems.push({ voter: "-", problem: `balances are for block ${snapshot.block}, the vote closed at block ${opts.closeBlock}` });
+  if (!atClose && snapshot.block !== v.snapshotBlock) problems.push({ voter: "-", problem: `snapshot is block ${snapshot.block}, the vote says ${v.snapshotBlock}` });
   const startSec = Date.parse(v.start) / 1000;
   const endSec = Date.parse(v.end) / 1000;
   for (const b of latestPerVoter(ballots)) {
@@ -312,10 +382,10 @@ export async function recount(
       continue;
     }
     if (weight === 0n) {
-      problems.push({ voter: b.voter, problem: "held no GLOAM at the snapshot block" });
+      problems.push({ voter: b.voter, problem: atClose ? `held no GLOAM at the closing block ${snapshot.block}` : "held no GLOAM at the snapshot block" });
       continue;
     }
-    if (weight.toString() !== b.weight) problems.push({ voter: b.voter, problem: `listed weight ${b.weight}, snapshot says ${weight}` });
+    if (!atClose && weight.toString() !== b.weight) problems.push({ voter: b.voter, problem: `listed weight ${b.weight}, snapshot says ${weight}` });
     counted.push({ ...b, weight: weight.toString(), choice: v.options[b.option]! });
   }
   return { tally: tally(v, counted), counted, problems };
@@ -332,11 +402,16 @@ export const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11
  * so this is how a balance at an older block is worked out; the snapshot
  * script checks it against balanceOf at the block while that still answers.
  * The zero address goes negative by the minted supply and is left out.
+ *
+ * With `base` (every balance at an earlier, checked block, like a snapshot),
+ * the replay starts from those balances and takes only the logs after it.
  */
-export function replayTransfers(logs: TransferLog[], toBlock: number): Map<string, bigint> {
+export function replayTransfers(logs: TransferLog[], toBlock: number, base?: { block: number; balances: Record<string, string> }): Map<string, bigint> {
   const bal = new Map<string, bigint>();
+  if (base) for (const [addr, b] of Object.entries(base.balances)) bal.set(addr.toLowerCase(), BigInt(b));
   for (const l of logs) {
-    if (parseInt(l.blockNumber, 16) > toBlock) continue;
+    const n = parseInt(l.blockNumber, 16);
+    if (n > toBlock || (base && n <= base.block)) continue;
     if (l.topics[0]?.toLowerCase() !== TRANSFER_TOPIC || l.topics.length < 3) continue;
     const from = `0x${l.topics[1]!.slice(26)}`.toLowerCase();
     const to = `0x${l.topics[2]!.slice(26)}`.toLowerCase();

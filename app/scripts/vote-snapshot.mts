@@ -31,16 +31,15 @@ import { VOTES } from "../src/lib/vote/config";
 import {
   GLOAM_FIRST_BLOCK,
   GLOAM_TOKEN_ADDRESS,
-  TRANSFER_TOPIC,
   VOTE_CHAIN_ID,
   configProblems,
   eligibleTotal,
   formatGloam,
   replayTransfers,
-  type TransferLog,
   type VoteSnapshot,
 } from "../src/lib/vote/core";
 import { excludedFor } from "../src/lib/vote/excluded";
+import { allTransferLogs } from "../src/lib/vote/transferLogs";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -89,26 +88,7 @@ if (!Number.isSafeInteger(asked) || asked < GLOAM_FIRST_BLOCK || asked > head) {
 const block = await client.getBlock({ blockNumber: BigInt(asked) });
 console.log(`Block ${asked} (${new Date(Number(block.timestamp) * 1000).toISOString()}), head ${head}.`);
 
-/** Transfer logs in [from, to], halving the range whenever the RPC says it is too much. */
-async function transferLogs(from: number, to: number): Promise<TransferLog[]> {
-  try {
-    return (await client.request({
-      method: "eth_getLogs",
-      params: [{ address: GLOAM_TOKEN_ADDRESS, fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}`, topics: [TRANSFER_TOPIC] }],
-    })) as TransferLog[];
-  } catch (e) {
-    const text = String((e as Error)?.message ?? e);
-    if (from === to || !/limit|narrow|range|too many|exceed/i.test(text)) throw e;
-    const mid = Math.floor((from + to) / 2);
-    return [...(await transferLogs(from, mid)), ...(await transferLogs(mid + 1, to))];
-  }
-}
-
-const SPAN = 9_000_000;
-const logs: TransferLog[] = [];
-for (let from = GLOAM_FIRST_BLOCK; from <= asked; from += SPAN) {
-  logs.push(...(await transferLogs(from, Math.min(asked, from + SPAN - 1))));
-}
+const logs = await allTransferLogs((args) => client.request(args as never), GLOAM_FIRST_BLOCK, asked);
 const balances = replayTransfers(logs, asked);
 console.log(`${logs.length} Transfer logs, ${balances.size} holders.`);
 
