@@ -222,21 +222,20 @@ export function Landing() {
           <div className="gl-panel flex min-h-[max(520px,calc(100svh-8rem))] flex-col justify-end px-5 pb-8 pt-24 sm:px-10 sm:pb-10 lg:h-[calc(100svh-10rem)] lg:max-h-[980px] lg:min-h-[620px] lg:px-14 lg:pb-14">
             <FlowField />
             <CursorReveal />
-            <div className="relative z-10 max-w-[760px]">
-              {/* the brand line stays, small; the headline leads with apps and agents */}
-              <p className="text-[15px] text-mute">Private money on public chains</p>
-              <h1 className="t-display-xl mt-4">Privacy for your software</h1>
-              <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft">
-                Gloam gives apps and AI agents private balances. Fund them, let
-                them pay and get paid, and keep what they hold off the public record.
+            <div className="relative z-10 max-w-[720px]">
+              <h1 className="t-display-xl">Private money on public chains</h1>
+              <p className="mt-6 max-w-[46ch] text-[18px] leading-[1.55] text-soft sm:text-[18px]">
+                For people and teams paid in stablecoins, and the agents that
+                work for them. Hold, pay and get paid without putting amounts or
+                balances on the public record.
               </p>
-              <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
-                <Link href="/agents#quickstart" className="btn btn-ink btn-lg">
-                  Start in 10 minutes
-                </Link>
-                <AppLink href="/app" className="gl-arrowlink">
-                  Open app <span aria-hidden>→</span>
+              <div className="mt-8 flex flex-wrap gap-2">
+                <AppLink href="/app" className="btn btn-ink btn-lg">
+                  Open app
                 </AppLink>
+                <Link href="/docs" className="gl-arrowlink ml-4 self-center">
+                  Read the docs <span aria-hidden>→</span>
+                </Link>
               </div>
             </div>
             <a
