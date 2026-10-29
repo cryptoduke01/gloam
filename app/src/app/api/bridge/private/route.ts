@@ -14,6 +14,7 @@ import {
   type Chain,
   type Hex,
 } from "viem";
+import { isNoLimit } from "@gloamtrade/sdk";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { getNetwork, isNetworkKey } from "@/lib/networks";
 import {
@@ -167,11 +168,12 @@ export async function POST(req: Request) {
       client.readContract({ address: pool, abi: POOL_ABI, functionName: "shieldVerifier" }),
     ]);
     if (limitsOn) {
+      // A side set to type(uint128).max is no limit (isNoLimit): never checked or shown.
       const [perDeposit, total] = limit;
-      if (amount > perDeposit) {
+      if (!isNoLimit(perDeposit) && amount > perDeposit) {
         return fail(400, `During the beta, one private deposit can be up to ${units(perDeposit, dest.token.decimals)} ${dest.token.symbol}.`);
       }
-      if (deposited + amount > total) {
+      if (!isNoLimit(total) && deposited + amount > total) {
         const room = total > deposited ? total - deposited : BigInt(0);
         return fail(400, room > BigInt(0)
           ? `The vault has room for ${units(room, dest.token.decimals)} ${dest.token.symbol} more during the beta.`
