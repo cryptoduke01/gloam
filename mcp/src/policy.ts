@@ -23,14 +23,16 @@
  * asset unless the entry says "network": "robinhood-mainnet" / "tempo-mainnet" /
  * "base-mainnet" / "ethereum-mainnet". So a config written for testnet never
  * starts approving mainnet assets by itself. Mainnet-only symbols (USDC.e,
- * USDT0, GLOAM, USDT) and mainnet-only addresses (USDG on Robinhood
+ * USDT0, GLOAM, USDT, BDX) and mainnet-only addresses (USDG on Robinhood
  * Chain mainnet, USDC on Base, every Ethereum token) name the mainnet asset
- * directly. A symbol on two mainnets (USDT on Base and Ethereum) names the
- * first listed, Base; name "ethereum-mainnet" for Ethereum's.
+ * directly. A symbol on two mainnets (USDT and BDX on Base and Ethereum) names
+ * the first listed, Base; name "ethereum-mainnet" for Ethereum's. BDX sits at
+ * the same address on both, so its address alone names Base's too.
  */
 import { formatUnits, isAddress, parseUnits, type Address } from "viem";
 import { z } from "zod";
 import {
+  BASE_BDX,
   BASE_EURC,
   BASE_MAINNET_CHAIN_ID,
   BASE_SEPOLIA_CHAIN_ID,
@@ -38,6 +40,7 @@ import {
   BASE_SEPOLIA_USDC,
   BASE_USDC,
   BASE_USDT,
+  ETHEREUM_BDX,
   ETHEREUM_EURC,
   ETHEREUM_MAINNET_CHAIN_ID,
   ETHEREUM_PYUSD,
@@ -168,6 +171,7 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "EURC", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_EURC, decimals: 6, stable: true },
   { symbol: "USDT", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_USDT, decimals: 6, stable: true },
   { symbol: "ETH", chainId: BASE_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
+  { symbol: "BDX", chainId: BASE_MAINNET_CHAIN_ID, address: BASE_BDX, decimals: 9, stable: false },
   // Ethereum after Base, so "USDT" alone keeps naming Base's as before; name the network for Ethereum's.
   { symbol: "USDC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDC, decimals: 6, stable: true },
   { symbol: "USDT", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_USDT, decimals: 6, stable: true },
@@ -175,6 +179,7 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "PYUSD", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_PYUSD, decimals: 6, stable: true },
   { symbol: "EURC", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_EURC, decimals: 6, stable: true },
   { symbol: "ETH", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
+  { symbol: "BDX", chainId: ETHEREUM_MAINNET_CHAIN_ID, address: ETHEREUM_BDX, decimals: 9, stable: false },
 ];
 
 /** "Robinhood Chain", "Tempo testnet" and so on; "any network" for a limit that names none. */

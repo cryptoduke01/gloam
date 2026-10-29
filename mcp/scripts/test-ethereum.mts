@@ -19,7 +19,7 @@ import type { Spend } from "../src/policy.js";
 
 MAINNET_POOLS[1] = { pool: "0x00000000000000000000000000000000000000e1", deployBlock: 23_000_000n };
 
-const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, assertDepositWithinLiveLimit, approvalSteps, ethereumSepoliaPool } = await import("@gloamtrade/sdk");
+const { ETHEREUM_PYUSD, ETHEREUM_USDC, ETHEREUM_USDT, ETHEREUM_BDX, BASE_BDX, BASE_USDT, NATIVE_ASSET, assertDepositAllowed, assertDepositWithinLiveLimit, approvalSteps, ethereumSepoliaPool } = await import("@gloamtrade/sdk");
 const nets = await import("../src/networks.js");
 const { checkSpend, loadPolicy, resolveAgent } = await import("../src/policy.js");
 
@@ -77,6 +77,28 @@ test("deposits on Ethereum are checked against its listed assets and limits", as
   const down = { readContract: (async () => { throw new Error("rpc down"); }) as never };
   assert.equal(await assertDepositWithinLiveLimit(down, 1, ETHEREUM_USDT, 10n ** 30n), null, "an unreadable vault refuses nothing");
   assert.throws(() => assertDepositAllowed(1, BASE_USDT, 1n), /does not list/);
+});
+
+test("BDX: listed on Ethereum, refused while its live limit is 0, taken once it lands", async () => {
+  assert.doesNotThrow(() => assertDepositAllowed(1, ETHEREUM_BDX, 1n));
+  const vault = (per: bigint, total: bigint) => ({
+    readContract: (async ({ functionName }: { functionName: string }) =>
+      functionName === "depositLimitsOn" ? true : functionName === "depositLimit" ? [per, total] : 0n) as never,
+  });
+  await assert.rejects(assertDepositWithinLiveLimit(vault(0n, 0n), 1, ETHEREUM_BDX, 10n ** 9n), /The Ethereum vault takes no BDX deposits/);
+  await assertDepositWithinLiveLimit(vault(100_000n * 10n ** 9n, 2_000_000n * 10n ** 9n), 1, ETHEREUM_BDX, 100_000n * 10n ** 9n);
+});
+
+test("BDX in limits: 9 decimals, Base's when no network is named, Ethereum's when it is", () => {
+  const bare = resolveAgent("bot", { recipients: "any", maxPerPayment: "1000", maxPerDay: "5000", assets: ["BDX"] }, "test");
+  assert.deepEqual([bare.assets[0]!.address, bare.assets[0]!.chainId, bare.assets[0]!.decimals], [BASE_BDX, 8453, 9]);
+  assert.equal(bare.assets[0]!.maxPerPayment, 1000n * 10n ** 9n);
+  const eth = resolveAgent("bot", { recipients: "any", assets: { BDX: { network: "ethereum-mainnet", maxPerPayment: "1000", maxPerDay: "5000" } } }, "test");
+  assert.deepEqual([eth.assets[0]!.address, eth.assets[0]!.chainId], [ETHEREUM_BDX, 1]);
+  assert.equal(checkSpend(eth, spend({ asset: ETHEREUM_BDX, amountWei: 1000n * 10n ** 9n }), [], NOW), null);
+  assert.equal(checkSpend(eth, spend({ asset: ETHEREUM_BDX, amountWei: 1000n * 10n ** 9n + 1n }), [], NOW)?.code, "over_per_payment");
+  // Ethereum's BDX entry does not open Base's, though the address is the same
+  assert.equal(checkSpend(eth, spend({ network: "base-mainnet", chainId: 8453, asset: BASE_BDX, amountWei: 1n }), [], NOW)?.code, "asset_not_allowed");
 });
 
 test("a stale USDT allowance is cleared before the shield's approval", () => {
