@@ -764,6 +764,32 @@ await test("weight at close: a wallet that bought after the snapshot can vote, w
   assert.equal(r.ballot.weight, (7n * ONE).toString());
 });
 
+await test("weight at close: a post-snapshot buyer's plain-text signature (the wallet fallback) is accepted", async () => {
+  const v = closeVote;
+  const message = core.voteMessage(v, 2, dave.address, nowSec);
+  const signature = await dave.signMessage({ message: core.voteText(message) });
+  const held = { [lower(dave.address)]: 12n * ONE };
+  const { ballot } = await submitBallot({ voter: dave.address, option: 2, timestamp: nowSec, signature }, nowCtx(held));
+  assert.equal(ballot.weight, (12n * ONE).toString());
+  assert.equal(ballot.choice, "Blue");
+  // and a typed-data signature with a chainId the wallet added
+  const typed = await dave.signTypedData({ ...core.voteTypedData(core.voteMessage(v, 1, dave.address, nowSec + 1)), domain: { ...core.VOTE_DOMAIN, chainId: 4663 } });
+  const r = await submitBallot({ voter: dave.address, option: 1, timestamp: nowSec + 1, signature: typed }, nowCtx(held));
+  assert.equal(r.changed, true);
+  // a plain-text signature over another choice, or from someone else, still fails
+  await rejects(submitBallot({ voter: dave.address, option: 0, timestamp: nowSec + 2, signature: await dave.signMessage({ message: core.voteText(core.voteMessage(v, 1, dave.address, nowSec + 2)) }) }, nowCtx(held)), "bad_signature");
+  await rejects(submitBallot({ voter: dave.address, option: 0, timestamp: nowSec + 2, signature: await bob.signMessage({ message: core.voteText(core.voteMessage(v, 0, dave.address, nowSec + 2)) }) }, nowCtx(held)), "bad_signature");
+  // with nothing in the wallet, the fallback form is refused like any other
+  const carolText = await carol.signMessage({ message: core.voteText(core.voteMessage(v, 0, carol.address, nowSec)) });
+  await rejects(submitBallot({ voter: carol.address, option: 0, timestamp: nowSec, signature: carolText }, nowCtx({})), "no_balance");
+  // and the final count accepts the plain-text ballot from the store
+  const f = await final.computeFinal(v, await listBallots(v.id), excluded, null, {
+    chain: fakeChain({}, { logs: [tlog(B0 + 10, ZERO, dave.address, 12n * ONE)] }),
+  });
+  assert.deepEqual(f.problems, []);
+  assert.equal(f.totals.options[1]!.weight, (12n * ONE).toString());
+});
+
 await test("weight at close: an empty wallet is refused, and an unread balance never lets a vote through", async () => {
   try {
     await submitBallot(await sign(alice, 0, nowSec, closeVote), nowCtx({ [lower(alice.address)]: 0n }));
