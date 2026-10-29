@@ -709,6 +709,9 @@ export function TransparencyView() {
                 <a href="#private" className="gl-arrowlink">
                   What stays private <span aria-hidden>→</span>
                 </a>
+                <Link href="/stats" className="gl-arrowlink">
+                  Totals for every mainnet <span aria-hidden>→</span>
+                </Link>
               </div>
             </div>
 
