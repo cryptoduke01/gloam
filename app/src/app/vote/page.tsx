@@ -8,10 +8,16 @@ import { voteSummary } from "@/lib/vote/results";
 // read per request: the published flag and the live totals
 export const dynamic = "force-dynamic";
 
+const TITLE = "Holder votes · Gloam";
+const DESCRIPTION =
+  "$GLOAM holders vote on what Gloam builds next: private swaps, the next chain and the first integrations. Weighted by public balances, signed without gas, every vote published.";
+
 export const metadata: Metadata = {
-  title: "Holder votes",
-  description: "$GLOAM holders vote on what Gloam builds next. Open votes, weighted by public balances, with every signature published.",
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
   alternates: { canonical: "/vote" },
+  openGraph: { title: TITLE, description: DESCRIPTION, url: "/vote", siteName: "Gloam", type: "website" },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, site: "@gloamtrade" },
 };
 
 export default async function VotesPage() {

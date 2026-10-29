@@ -6,6 +6,7 @@ import { VoteClient } from "@/components/vote/VoteClient";
 import { voteStatus } from "@/lib/vote/core";
 import { excludedForVote, findVote, snapshotFor, visibleVotes } from "@/lib/vote/registry";
 import { voteSummary } from "@/lib/vote/results";
+import { voteTimeLine } from "@/lib/vote/timeLine";
 
 // read per request: the published flag, preview and the live totals
 export const dynamic = "force-dynamic";
@@ -16,10 +17,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
   const vote = findVote(id);
   if (!vote) return { title: "Holder vote", robots: { index: false, follow: false } };
+  const description = `${voteTimeLine(vote)}. ${vote.options.join(", ")}. A $GLOAM holder vote, signed without gas and published in full.`;
   return {
     title: vote.question,
-    description: vote.description || "A $GLOAM holder vote, held in the open.",
+    description,
     alternates: { canonical: `/vote/${vote.id}` },
+    openGraph: { title: vote.question, description, url: `/vote/${vote.id}`, siteName: "Gloam", type: "website" },
+    twitter: { card: "summary_large_image", title: vote.question, description, site: "@gloamtrade" },
     ...(vote.published ? {} : { robots: { index: false, follow: false } }),
   };
 }
