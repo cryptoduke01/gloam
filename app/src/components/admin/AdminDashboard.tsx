@@ -22,6 +22,7 @@ import { relayChainName } from "@/lib/bridge";
 import type { RelayVolume } from "@/lib/relayVolume";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
+import { VotesPanel } from "./AdminVotes";
 import { ActivityFeed, ChainCards, MovedHero, Stat, VolumeChart, type Moved, type VolumeDay } from "./AdminCharts";
 
 type MetricsPayload = {
@@ -53,7 +54,7 @@ type MetricsPayload = {
   error?: string;
 };
 
-type Tab = "overview" | "revenue" | "relay" | "users" | "events" | "partners" | "testers" | "bugs";
+type Tab = "overview" | "revenue" | "relay" | "users" | "events" | "partners" | "testers" | "bugs" | "votes";
 
 /** The two views: mainnet or the testnets. Never mixed. */
 type Env = "mainnet" | "testnet";
@@ -595,6 +596,7 @@ export function AdminDashboard() {
     ["partners", "Partners"],
     ["testers", "Testers"],
     ["bugs", "Bug reports"],
+    ["votes", "Votes"],
   ];
   const liveRelay = relay && "enabled" in relay && relay.enabled ? relay : null;
   // The public edges only: deposits and cash-outs carry amounts on chain; private payments never do.
@@ -1076,6 +1078,7 @@ export function AdminDashboard() {
         {shown === "partners" && <PartnersPanel />}
         {shown === "testers" && <TestersPanel />}
         {shown === "bugs" && <BugsPanel />}
+        {shown === "votes" && <VotesPanel />}
 
         <p className="tnum text-[12px] text-mute">
           Generated {data?.generatedAt ?? "not yet"} ·{" "}
@@ -1995,7 +1998,7 @@ function RelayPanel({
   );
 }
 
-function Kpi({
+export function Kpi({
   label,
   value,
   sub,
@@ -2015,7 +2018,7 @@ function Kpi({
   );
 }
 
-function Panel({
+export function Panel({
   title,
   children,
   action,
@@ -2066,7 +2069,7 @@ function BarChart({
   );
 }
 
-function DataTable({
+export function DataTable({
   headers,
   rows,
   empty,

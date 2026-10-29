@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useRef, useState } from "react";
 import { whenPhrase, type Ballot } from "@/lib/vote/core";
 import type { VoteSummary } from "@/lib/vote/results";
+import { FeedbackBox } from "./FeedbackBox";
 import { BallotCard, CheckIcon, ClosingLine, HowItWorks, Progress, Recount, ResultsCard, ShareVoted, UpdatedAgo, Welcome } from "./VoteParts";
 import { useLiveVotes, useMe, useVoteWallet } from "./voteHooks";
 
@@ -52,6 +53,8 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
   const shared = active.length > 0 && active.every((v) => v.end === active[0]!.end && v.start === active[0]!.start) ? active[0]! : null;
   const block = votes[0]?.snapshotBlock ?? 0;
   const anyVoted = active.some((v) => voted(v.id));
+  // the note is for holders who voted, while a vote they can vote in is open
+  const canNote = anyVoted && active.some((v) => v.accepting && BigInt(me?.votes[v.id]?.weight ?? "0") > 0n);
 
   return (
     <>
@@ -86,6 +89,7 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
 
             <div key={String(step)} className="gl-settle mt-2">
               {step === "summary" ? (
+                <>
                 <section aria-labelledby="summary-title" className="gl-card p-5 sm:p-8">
                   <h2 id="summary-title" ref={summaryRef} tabIndex={-1} className="text-[24px] leading-[1.2] tracking-[-0.02em] text-foreground outline-none sm:text-[30px]">
                     {active.every((v) => voted(v.id)) ? "Thank you for voting" : "Your answers so far"}
@@ -128,6 +132,12 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
                   </div>
                   {anyVoted && <p className="mt-3 text-[12.5px] text-mute">The post doesn&apos;t include your wallet address.</p>}
                 </section>
+                {canNote && wallet.address && (
+                  <div className="mt-4">
+                    <FeedbackBox address={wallet.address as `0x${string}`} />
+                  </div>
+                )}
+                </>
               ) : (
                 <BallotCard
                   key={active[step]!.id}

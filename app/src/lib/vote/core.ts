@@ -36,6 +36,42 @@ export const VOTE_TYPES = {
   ],
 } as const;
 
+/** Holder feedback is signed the same way: the wallet shows the whole note before it goes. */
+export const FEEDBACK_TYPES = {
+  Feedback: [
+    { name: "purpose", type: "string" },
+    { name: "category", type: "string" },
+    { name: "message", type: "string" },
+    { name: "author", type: "address" },
+    { name: "timestamp", type: "uint64" },
+  ],
+} as const;
+export const FEEDBACK_PURPOSE = "Private feedback to the Gloam team";
+export const FEEDBACK_CATEGORIES = ["Feature", "Bug", "Idea", "Other"] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+export const FEEDBACK_MAX = 1_000;
+
+/** A note as people type it, made safe to keep and show: no tags, no control characters, trimmed, capped. */
+export function cleanFeedback(raw: string): string {
+  return raw
+    .replace(/<\/?[a-zA-Z!][^>]*>/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, FEEDBACK_MAX);
+}
+
+export function feedbackTypedData(m: { category: string; message: string; author: Address; timestamp: number }) {
+  return {
+    domain: VOTE_DOMAIN,
+    types: FEEDBACK_TYPES,
+    primaryType: "Feedback" as const,
+    message: { purpose: FEEDBACK_PURPOSE, category: m.category, message: m.message, author: getAddress(m.author), timestamp: BigInt(m.timestamp) },
+  };
+}
+
 export type VoteMessage = {
   vote: string;
   option: number;
@@ -85,7 +121,7 @@ export const SIGNED_MAX_AHEAD_SEC = 2 * 60;
 export const MAX_SIGNATURE_HEX = 6_000;
 
 /** Paths under /api/vote that are not votes. */
-const RESERVED_IDS = new Set(["me", "all"]);
+const RESERVED_IDS = new Set(["me", "all", "feedback"]);
 const ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 /** What's wrong with a vote's configuration, or an empty list. */
