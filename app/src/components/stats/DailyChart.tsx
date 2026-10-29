@@ -22,6 +22,8 @@ function dayLabel(day: string, withYear = false): string {
   });
 }
 
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
 const totalOf = (d: PublicDay) => d.deposits + d.transfers + d.cashouts;
 
 export function DailyChart({ days }: { days: PublicDay[] }) {
@@ -53,13 +55,14 @@ export function DailyChart({ days }: { days: PublicDay[] }) {
       <p aria-live="polite" className="tnum flex min-h-[48px] flex-wrap items-baseline gap-x-5 gap-y-1 text-[14px] text-mute">
         <span className="text-foreground">{dayLabel(d.day, true)}</span>
         <span>
-          <span className="text-foreground">{intFmt.format(d.deposits)}</span> deposits
+          <span className="text-foreground">{intFmt.format(d.deposits)}</span> {plural(d.deposits, "deposit", "deposits")}
         </span>
         <span>
-          <span className="text-foreground">{intFmt.format(d.transfers)}</span> private transfers
+          <span className="text-foreground">{intFmt.format(d.transfers)}</span>{" "}
+          {plural(d.transfers, "private transfer", "private transfers")}
         </span>
         <span>
-          <span className="text-foreground">{intFmt.format(d.cashouts)}</span> cash-outs
+          <span className="text-foreground">{intFmt.format(d.cashouts)}</span> {plural(d.cashouts, "cash-out", "cash-outs")}
         </span>
       </p>
 

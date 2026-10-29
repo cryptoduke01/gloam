@@ -67,6 +67,12 @@ export type PublicStats = {
   networks: PublicNetwork[];
   /** One row per UTC day since launch, oldest first. */
   daily: PublicDay[];
+  /**
+   * Deposits, transfers and cash-outs in the totals but in no day yet: their
+   * blocks are still being dated. The page says so, so the chart never looks
+   * like it adds up when it does not.
+   */
+  undated: number;
 };
 
 /** How long a page waits for a fresh read before showing the last snapshot. */
@@ -112,6 +118,9 @@ export function toPublicStats(m: OnchainMetrics): PublicStats {
   });
 
   const sum = (f: (n: PublicNetwork) => number) => networks.reduce((a, n) => a + f(n), 0);
+  const daily = sinceLaunchRows(m).map((d) => ({ day: d.day, deposits: d.deposits, transfers: d.transfers, cashouts: d.cashouts }));
+  const actions = sum((n) => n.deposits + n.transfers + n.cashouts);
+  const dated = daily.reduce((a, d) => a + d.deposits + d.transfers + d.cashouts, 0);
   return {
     asOf: m.asOf,
     ageSec: m.ageSec,
@@ -126,7 +135,8 @@ export function toPublicStats(m: OnchainMetrics): PublicStats {
       memos: sum((n) => n.memos),
     },
     networks,
-    daily: sinceLaunchRows(m).map((d) => ({ day: d.day, deposits: d.deposits, transfers: d.transfers, cashouts: d.cashouts })),
+    daily,
+    undated: Math.max(0, actions - dated),
   };
 }
 

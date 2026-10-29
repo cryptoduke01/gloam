@@ -12,13 +12,16 @@
  *  - the daily rows start at the launch day; an old snapshot without
  *    `sinceLaunch` falls back to its 14 days, cut at launch
  *  - daysSince lists every UTC day from launch to today, once
+ *  - counted(): on mainnet, an event from before launch never counts, and one
+ *    not dated yet counts only once it is surely after launch
+ *  - actions in the totals but in no day yet are reported, not hidden
  *
  * Nothing reaches the network: the snapshot is built here.
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-public-stats.mts
  */
 import assert from "node:assert/strict";
 import { toPublicStats } from "../src/lib/publicStats";
-import { daysSince, type NetworkMetrics, type OnchainMetrics, type CombinedMetrics } from "../src/lib/onchainMetrics";
+import { counted, daysSince, type NetworkMetrics, type OnchainMetrics, type CombinedMetrics, type ScanState } from "../src/lib/onchainMetrics";
 import { MAINNET_LAUNCH_MS } from "../src/lib/mainnet";
 import { getNetwork, type NetworkKey } from "../src/lib/networks";
 
@@ -183,6 +186,29 @@ check("daysSince: every UTC day from the launch to today, once, in order", () =>
     assert.equal(Date.parse(`${days[i]}T00:00:00Z`) - Date.parse(`${days[i - 1]}T00:00:00Z`), 86_400_000);
   }
   assert.deepEqual(daysSince(MAINNET_LAUNCH_MS, MAINNET_LAUNCH_MS), [launchDay]);
+});
+
+check("counted(): before launch never counts; undated counts only when surely after launch", () => {
+  const L = Math.floor(MAINNET_LAUNCH_MS / 1000);
+  const state = (events: ScanState["events"]): ScanState => ({ v: 1, pool: "p", scannedTo: 0, memoScannedTo: 0, memos: 0, startTs: 0, events, fee: 1 });
+  const ev = (b: number, ts: number) => ({ k: "deposit" as const, b, i: 0, ts, tx: `0x${b}` });
+  const s = state([ev(10, 0), ev(20, L - 60), ev(30, 0), ev(40, L + 60), ev(50, 0), ev(60, L + 120)]);
+  assert.deepEqual(counted({ testnet: false }, s).events.map((e) => e.b), [40, 50, 60]);
+  // nothing dated after launch yet: nothing undated counts
+  assert.deepEqual(counted({ testnet: false }, state([ev(10, 0), ev(20, 0)])).events.length, 0);
+  // a testnet counts everything from its deploy
+  assert.equal(counted({ testnet: true }, s).events.length, 6);
+});
+
+check("actions in the totals but in no day yet are counted as undated", () => {
+  // totals: 54 deposits + 278 transfers + 144 cash-outs = 476; one day holds 18
+  assert.equal(pub.undated, 54 + 278 + 144 - 18);
+  const all = toPublicStats({
+    ...snapshot,
+    networks: [net("tempo-mainnet", { deposits: 2, transfers: 1, cashouts: 1 })],
+    mainnet: { ...snapshot.mainnet!, sinceLaunch: [{ day: launchDay, deposits: 2, transfers: 1, cashouts: 1, trades: 0, activeWallets: 1 }] },
+  });
+  assert.equal(all.undated, 0);
 });
 
 console.log(`selftest-public-stats: ${checks} checks passed`);
