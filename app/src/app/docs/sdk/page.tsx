@@ -393,8 +393,8 @@ for (const p of payments) {
 }`}</code>
       </pre>
       <p>
-        Every network has a payment-message board, Robinhood Chain and Tempo
-        mainnet included, so <code>scanIncomingPayments</code> finds payments to
+        Every network has a payment-message board, every mainnet included,
+        so <code>scanIncomingPayments</code> finds payments to
         your key on its own. A payer can also hand you the sealed code{" "}
         (<code>gloam2t.…</code>) their app shows after paying: check it with{" "}
         <code>openIncomingPayment</code>, which says whether the payment is

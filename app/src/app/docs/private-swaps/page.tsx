@@ -335,7 +335,7 @@ export default function DocsPrivateSwapsPage() {
           <code>{VAULT_SWAP_ROUTERS[4217]}</code>
         </li>
         <li>
-          <strong>Vault</strong>, the same address on both chains,{" "}
+          <strong>Vault</strong>, the same address on every mainnet,{" "}
           <code>{VAULT}</code>
         </li>
         <li>
