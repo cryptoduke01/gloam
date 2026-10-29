@@ -79,8 +79,8 @@ Gloam runs on four chains, each with a mainnet and a testnet. They are separate 
 | --- | --- | --- | --- | --- | --- |
 | Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (500 / 25,000), $GLOAM (25,000 / 250,000) | Final |
 | Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (500 / 25,000 each) | Final |
-| Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
-| Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10) | Final |
+| Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
+| Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 | Robinhood Chain testnet | `robinhood` | `46630` | `0x72406D9597807A46f730d8b4fDBC5aC45Dc1d740` | Test ETH, test USDG, stock tokens | Dev |
 | Tempo testnet (Moderato) | `tempo` | `42431` | `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` | PathUSD and other test stablecoins | Dev |
 
@@ -111,7 +111,7 @@ Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1,
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
-| Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10) | Final |
+| Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
 Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
@@ -122,7 +122,7 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- |
-| Ethereum | `ethereum-mainnet` | `1` | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10) | Final |
+| Ethereum | `ethereum-mainnet` | `1` | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 
 - **USDT approvals.** Tether's `approve()` refuses to change one non-zero allowance into another. Before a USDT deposit, ask `approvalSteps(chainId, token, allowance, amount)`: it returns the exact `approve(pool, value)` calls to send in order (`[0, amount]` when a stale allowance is in the way, `[]` when the allowance already covers it).
 - **EURC is a euro stablecoin.** Never count it as a dollar.
