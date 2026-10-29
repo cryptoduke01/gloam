@@ -41,9 +41,9 @@ export default function TermsPage() {
       <h2>2. Experimental software</h2>
       <p>
         Gloam is early-stage, beta software for interacting with blockchain
-        networks, including Tempo and Robinhood Chain. Features such as private
-        balances, private payments, payroll, proofs and private swaps may be
-        incomplete, unavailable, or change without notice. Stock tokens are on
+        networks, including Robinhood Chain, Tempo, Base and Ethereum. Features
+        such as private balances, private payments, payroll, proofs and
+        private swaps may be incomplete, unavailable, or change without notice. Stock tokens are on
         testnet only. A private swap trades on a public exchange, so its tokens
         and amounts are public. There is no guarantee of uptime, correctness,
         or fitness for any purpose.

@@ -312,7 +312,7 @@ export default function ClaimPage() {
             ? `This link is on ${realNet.label} mainnet.`
             : net
               ? "This link is on a testnet."
-              : "Gloam runs on Robinhood Chain and Tempo."}{" "}
+              : "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum."}{" "}
           <Link href="/docs/private-pay" className="underline underline-offset-4">
             How private payments work
           </Link>

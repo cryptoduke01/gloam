@@ -115,6 +115,22 @@ const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "ethereum-mainnet": '"ethereum-mainnet" (Ethereum mainnet: USDC, USDT, USDG, PYUSD, EURC, ETH)',
 };
 
+/** What each live mainnet takes as a deposit, for the networks tool. */
+const MAINNET_DEPOSITS_TEXT = (
+  [
+    ["tempo-mainnet", "USDC.e, pathUSD, USDT0 and OUSD on Tempo"],
+    ["robinhood-mainnet", "USDG and GLOAM on Robinhood Chain"],
+    ["base-mainnet", "USDC, EURC, USDT and ETH on Base"],
+    ["ethereum-mainnet", "USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum"],
+  ] as const
+)
+  .filter(([k]) => (NETWORK_KEYS as readonly string[]).includes(k))
+  .map(([, text]) => text)
+  .join("; ");
+
+/** The live mainnets as words: "Robinhood Chain, Tempo, Base and Ethereum". */
+const MAINNET_NAMES_TEXT = andList(NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => getNetwork(k).label));
+
 /** The testnets as a caller names them, for the mainnet-era description. */
 const TESTNET_CHOICES_TEXT = andList([
   '"tempo" (Tempo Moderato)',
@@ -196,7 +212,7 @@ export const TOOLS: Tool[] = [
     name: "gloam_networks",
     title: "Networks and assets",
     description: MAINNET_ENABLED
-      ? "The networks Gloam runs on, mainnets first, with each vault (pool) address, each mainnet's private swap router, the assets you can deposit (on mainnet: USDC.e, pathUSD, USDT0 and OUSD on Tempo, USDG and GLOAM on Robinhood Chain; on testnet: OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain), explorers, RPCs and the testnet faucets."
+      ? `The networks Gloam runs on, mainnets first, with each vault (pool) address, the private swap routers (Robinhood Chain and Tempo mainnet), the assets you can deposit (on mainnet: ${MAINNET_DEPOSITS_TEXT}; on testnet: OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain, and more on Base Sepolia and Ethereum Sepolia), explorers, RPCs and the testnet faucets.`
       : "The networks Gloam runs on, with each vault (pool) address, the assets you can deposit (OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain), explorers, RPCs and faucets.",
     inputSchema: {
       type: "object",
@@ -307,7 +323,9 @@ export const TOOLS: Tool[] = [
 
 function info(ctx: ToolContext) {
   return {
-    what: "Gloam is the privacy layer for onchain finance: shielded balances, private payments and proofs you choose to share, for people and AI agents. Private stablecoin payments on Tempo, and private balances on Robinhood Chain.",
+    what: MAINNET_ENABLED
+      ? `Gloam is the privacy layer for onchain finance: shielded balances, private payments and proofs you choose to share, for people and AI agents. Private stablecoin payments on ${MAINNET_NAMES_TEXT} mainnet, with testnets to practice on.`
+      : "Gloam is the privacy layer for onchain finance: shielded balances, private payments and proofs you choose to share, for people and AI agents. Private stablecoin payments on Tempo, and private balances on Robinhood Chain.",
     wantItDoneForYou: {
       agent: `Add the local Gloam server (${LOCAL_SERVER}) to this AI client and give it a capped spending key. Then the agent can deposit, pay privately and check proofs end to end, inside limits you set. gloam_connect_full_agent has the one-line setup.`,
       oneLink: "Or ask for a link per action: a payment request link opens Pay in the app already filled in, so you only check it and sign.",
