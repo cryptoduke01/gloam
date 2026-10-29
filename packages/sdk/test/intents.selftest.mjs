@@ -54,6 +54,16 @@ assert(isBytes32(u.exec.args[1]) && isBytes32(u.exec.args[2]), "unshield root+nu
 assert(u.exec.args[3] === NATIVE_ASSET && u.exec.args[4] === RECIPIENT, "unshield asset+to");
 assert(u.exec.args[5] === AMOUNT, "unshield amount");
 
+// GHSA-rvhx-3m36-4g8h: a cash out naming the vault itself is refused before proving, in any letter case
+for (const to of [SEALED_VAULT, SEALED_VAULT.toLowerCase(), SEALED_VAULT.toUpperCase().replace("0X", "0x")]) {
+  let proved = false;
+  const err = await buildUnshieldIntent({
+    secretHex, amountWei: AMOUNT, asset: NATIVE_ASSET, to, path,
+    prove: async (i) => { proved = true; return prove(i); },
+  }).then(() => null, (e) => e);
+  assert(err && /vault itself/.test(err.message) && !proved, `unshield to the vault (${to}) is refused before proving`);
+}
+
 // transfer(proof, root, nullifier, [c0, c1])
 const s = await buildPrivateSendIntent({ secretHex, amountInWei: AMOUNT, amountPayWei: 400000000000000n, asset: NATIVE_ASSET, path, prove });
 assert(s.intent === "private_send" && s.exec.fn === "transfer", "send kind/fn");
