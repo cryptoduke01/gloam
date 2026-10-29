@@ -368,7 +368,8 @@ export function BallotCard({
       const code = j && !j.ok ? j.error.code : "";
       if (quiet && code === "bad_signature") return code;
       // a store or network hiccup: the same signature can go again; anything else needs a fresh one
-      const retry = !j || ["storage", "error", "busy", "rate_limited"].includes(code);
+      // a balance that couldn't be read can go again with the same signature too
+      const retry = !j || ["storage", "error", "busy", "rate_limited", "balance_unavailable"].includes(code);
       setPhase({ k: "failed", message: j && !j.ok ? j.error.message : "We couldn't reach Gloam. Check your connection.", retry });
       return code || "error";
     } catch {
