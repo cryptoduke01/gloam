@@ -174,6 +174,28 @@ function NetworkRow({ n }: { n: PublicNetwork }) {
   );
 }
 
+/** Our own wallets, the same address on every chain, so anyone can take us out of the numbers. */
+const TEAM_WALLETS = [
+  { label: "Owner", address: "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8", note: "Runs the vaults and created $GLOAM. Most deposits so far are this wallet testing and paying people." },
+  { label: "Treasury", address: "0xB3900ac9350903218e4c7597bAb0f008F01B30B8", note: "Receives the cash-out and swap fees." },
+  { label: "Deployer", address: "0x891E74a11abC5D0eC2EE855B2BD521fF9D18F411", note: "Deployed the contracts." },
+  { label: "Relayer", address: "0xb1E994586E62994648a0b866BF33F2EDd942512e", note: "Sends private payments and cash-outs and pays their gas." },
+] as const;
+
+function TeamWallets() {
+  return (
+    <ul className="-mt-6 divide-y divide-line">
+      {TEAM_WALLETS.map((w) => (
+        <li key={w.label} className="py-6">
+          <span className="block text-[17px] text-foreground">{w.label}</span>
+          <span className="mt-1 block break-all font-mono text-[13px] text-foreground">{w.address}</span>
+          <span className="mt-2 block text-[14px] leading-relaxed text-mute">{w.note}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function HowWeCount({ stats }: { stats: PublicStats | null }) {
   const launch = Date.parse(stats?.countedSince ?? "2026-10-21T13:00:00Z");
   const later = (stats?.networks ?? []).filter((n) => n.openedMs && n.openedMs > launch);
@@ -323,6 +345,14 @@ export default async function StatsPage() {
             </Section>
           </>
         )}
+
+        <Section
+          id="team"
+          title="Our own wallets"
+          lead="Team activity counts in the totals above. These are our wallets, the same address on every network, so you can take us out of the numbers."
+        >
+          <TeamWallets />
+        </Section>
 
         <Section id="how" title="How we count">
           <HowWeCount stats={stats} />
