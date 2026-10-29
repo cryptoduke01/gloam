@@ -47,7 +47,7 @@ const ART: Record<string, Art[]> = {
     { marks: [{ id: "pons", symbol: "PONS" }, { id: "cashcat", symbol: "CASHCAT" }, { id: "virtual", symbol: "VIRTUAL" }] },
     { marks: [{ id: "usdc", symbol: "USDC" }, { id: "usdt", symbol: "USDT" }], badges: [chain(8453, "Base"), chain(1, "Ethereum")] },
   ],
-  "next-chain": [{ marks: [chain(42161, "Arbitrum")] }, { marks: [chain(56, "BNB Chain")] }, { marks: [chain(137, "Polygon")] }, { marks: [chain(10, "Optimism")] }],
+  "next-chain": [{ marks: [chain(42161, "Arbitrum")] }, { marks: [chain(56, "BNB Chain")] }, { marks: [chain(137, "Polygon")] }, { marks: [{ id: "chain-solana", symbol: "Solana", src: "/brand/tokens/sol.png" }] }],
   "first-integration": [{ icon: ICONS.trading }, { icon: ICONS.agents }, { icon: ICONS.payroll }, { icon: ICONS.shopping }],
 };
 

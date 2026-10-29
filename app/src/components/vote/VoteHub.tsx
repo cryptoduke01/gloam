@@ -62,8 +62,8 @@ export function VoteHub({ initial }: { initial: VoteSummary[] }) {
   return (
     <>
       {/* the welcome: a soft green light behind the title */}
-      <section className="mx-auto max-w-[1400px] px-4 pt-3 sm:px-7 sm:pt-6">
-        <div className="gl-panel relative overflow-hidden border border-line bg-panel px-5 pb-10 pt-14 sm:px-12 sm:pb-14 sm:pt-20">
+      <section className="mx-auto max-w-[760px] px-5 pt-3 sm:px-7 sm:pt-6">
+        <div className="gl-panel relative overflow-hidden border border-line bg-panel px-5 pb-10 pt-12 sm:px-9 sm:pb-12 sm:pt-16">
           <div aria-hidden className={m.glow} />
           <div className="relative mx-auto max-w-[760px]">
             <p className="inline-flex items-center gap-2 text-[14px] text-soft">
