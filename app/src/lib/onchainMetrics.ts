@@ -204,6 +204,12 @@ export type CombinedMetrics = {
   daily: DayRow[];
   /** Absent on snapshots cached before revenue tracking. */
   revenue?: CombinedRevenue;
+  /**
+   * Mainnets only: one row per UTC day from the public launch to today, so a
+   * public page can chart every day since launch (`daily` keeps 14). Absent on
+   * snapshots cached before it was added.
+   */
+  sinceLaunch?: DayRow[];
 };
 
 export type OnchainMetrics = {
@@ -783,6 +789,18 @@ function dailyRows(sources: ChainEvent[][], days: string[]): DayRow[] {
   });
 }
 
+/** Every UTC day from `startMs` to `now`, oldest first. */
+export function daysSince(startMs: number, now = Date.now()): string[] {
+  const out: string[] = [];
+  const end = utcDay(now);
+  for (let t = Date.parse(`${utcDay(startMs)}T00:00:00Z`); ; t += 86_400_000) {
+    const d = utcDay(t);
+    out.push(d);
+    if (d >= end || out.length > 3660) break;
+  }
+  return out;
+}
+
 function recentRows(n: GloamNetwork, events: ChainEvent[]): RecentRow[] {
   return events
     .slice(-RECENT_KEEP)
@@ -1196,7 +1214,13 @@ async function readAll(): Promise<OnchainMetrics> {
     prices: { ethUsd: prices.ethUsd, stocks: prices.stocks },
     networks,
     combined: all,
-    mainnet: part(false),
+    mainnet: {
+      ...part(false),
+      sinceLaunch: dailyRows(
+        reads.filter((_, i) => !networks[i]!.testnet).map((r) => r.state.events),
+        daysSince(MAINNET_LAUNCH_MS)
+      ),
+    },
     testnet: part(true),
     ...(creator ? { creator } : {}),
     recent: networks
@@ -1213,6 +1237,18 @@ let inflight: Promise<OnchainMetrics> | null = null;
 
 function aged(data: OnchainMetrics, source: OnchainMetrics["source"], at: number): OnchainMetrics {
   return { ...data, source, ageSec: Math.max(0, Math.round((Date.now() - at) / 1000)) };
+}
+
+/**
+ * The last snapshot read, however old (memory, then Redis, which keeps one for
+ * an hour), or null. Never reads a chain: for a page that must render fast, or
+ * at build time, and says how old the figures are.
+ */
+export async function lastOnchainSnapshot(): Promise<OnchainMetrics | null> {
+  if (snapshot) return aged(snapshot.data, "memory", snapshot.at);
+  const r = await cacheGetJson<{ at: number; data: OnchainMetrics }>(SNAPSHOT_KEY);
+  if (!r?.data) return null;
+  return aged(r.data, "redis", r.at);
 }
 
 /**
