@@ -176,7 +176,8 @@ export function firstPaySuggestion(
  * request and never shows the request banner.
  */
 export function firstPayHref(s: FirstPaySuggestion | null): string {
-  const base = "/app/vault?tab=move&mode=pay";
+  // Send is Pay's default mode; mode=pay is left to request links, whose preview it names.
+  const base = "/app/vault?tab=move";
   if (!s) return base;
   const p = new URLSearchParams({ suggest: s.amount, suggestAsset: s.asset });
   return `${base}&${p.toString()}`;

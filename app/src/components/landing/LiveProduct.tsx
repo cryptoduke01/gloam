@@ -181,7 +181,7 @@ function SendCard({ view }: { view: View }) {
           Private transfer <SealDots n={4} className="ml-1 text-foreground/60" />
         </span>
       </div>
-      <AppLink href="/app/vault?tab=move&mode=pay" className="btn btn-ink btn-sm btn-block mt-auto">
+      <AppLink href="/app/vault?tab=move" className="btn btn-ink btn-sm btn-block mt-auto">
         Send privately
       </AppLink>
     </Card>
