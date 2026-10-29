@@ -524,6 +524,33 @@ async function loadSwapTokenMarks(marketsRead: Promise<LiveMarkets>): Promise<Ma
 }
 
 /**
+ * Listed tokens outside Robinhood Chain that only CoinGecko prices: BDX on Base
+ * and Ethereum (one address on both, so listed once). Dollar stablecoins are $1
+ * and EURC is left unpriced, as before.
+ */
+const GECKO_LISTED = [8453, 1]
+  .flatMap((c) => shieldTokensFor(c))
+  .filter((t, i, all) => t.kind === "token" && t.coingecko && all.findIndex((x) => x.address.toLowerCase() === t.address.toLowerCase()) === i);
+
+/** USD per token for GECKO_LISTED, by address (lowercase); a token CoinGecko does not answer for is left out. */
+async function loadListedTokenMarks(): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const ids = [...new Set(GECKO_LISTED.map((t) => t.coingecko!))];
+  if (!ids.length) return out;
+  const g = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`, {
+    signal: AbortSignal.timeout(8_000),
+    cache: "no-store",
+  })
+    .then((r) => (r.ok ? (r.json() as Promise<Record<string, { usd?: number }>>) : null))
+    .catch(() => null);
+  for (const t of GECKO_LISTED) {
+    const usd = g?.[t.coingecko!]?.usd;
+    if (typeof usd === "number" && Number.isFinite(usd) && usd > 0) out.set(t.address.toLowerCase(), usd);
+  }
+  return out;
+}
+
+/**
  * ETH from CoinGecko, the stock tokens from live equity marks (the same source
  * as /api/markets, static fallbacks left out), $GLOAM from DEX Screener, and
  * the swap tokens as loadSwapTokenMarks says. Stablecoins count as $1, WETH as ETH. Cached five minutes in memory and Redis; the
@@ -542,11 +569,12 @@ async function loadPrices(): Promise<Prices> {
     return priceCache;
   }
   const marketsRead = withTimeout(loadLiveMarkets(), 25_000, [] as LiveMarkets);
-  const [ethUsd, markets, gloamUsd, swapMarks] = await Promise.all([
+  const [ethUsd, markets, gloamUsd, swapMarks, listedMarks] = await Promise.all([
     withTimeout(loadEthUsd(), 15_000, null),
     marketsRead,
     withTimeout(loadGloamUsd(), 10_000, null),
     withTimeout(loadSwapTokenMarks(marketsRead), 25_000, new Map<string, number>()),
+    withTimeout(loadListedTokenMarks(), 10_000, new Map<string, number>()),
   ]);
   const marks = new Map<string, number>();
   for (const m of markets) {
@@ -562,6 +590,12 @@ async function loadPrices(): Promise<Prices> {
     if (last != null && !swapMarks.has(a)) kept.set(a, last);
   }
   for (const [a, price] of swapMarks) kept.set(a, price);
+  // BDX and the like: the last price read is kept when CoinGecko misses a turn.
+  for (const t of GECKO_LISTED) {
+    const a = t.address.toLowerCase();
+    const price = listedMarks.get(a) ?? prev?.marks.get(a);
+    if (price != null) kept.set(a, price);
+  }
   const gloam = gloamUsd ?? (GLOAM ? prev?.marks.get(GLOAM) : undefined);
   if (GLOAM && gloam) kept.set(GLOAM, gloam);
   priceCache = {
@@ -570,7 +604,7 @@ async function loadPrices(): Promise<Prices> {
     marks: kept,
     stocks: stocksLive ? "live" : "unpriced",
   };
-  if (ethUsd != null || marks.size || gloamUsd != null || swapMarks.size) {
+  if (ethUsd != null || marks.size || gloamUsd != null || swapMarks.size || listedMarks.size) {
     await cacheSetJson(
       PRICE_KEY,
       { at: priceCache.at, ethUsd: priceCache.ethUsd, marks: [...priceCache.marks], stocks: priceCache.stocks },
