@@ -12,7 +12,7 @@
  * - One wallet, one weighted vote. A wallet can vote again until the end; the
  *   signature with the latest timestamp wins.
  */
-import { getAddress, isAddress, recoverTypedDataAddress, type Address, type Hex } from "viem";
+import { getAddress, isAddress, recoverMessageAddress, recoverTypedDataAddress, type Address, type Hex } from "viem";
 import type { VoteConfig } from "./config";
 import type { Excluded } from "./excluded";
 
@@ -179,13 +179,55 @@ export function voteTypedData(message: VoteMessage) {
   return { domain: VOTE_DOMAIN, types: VOTE_TYPES, primaryType: "Vote" as const, message };
 }
 
-/** The address an EOA signature recovers to, or null when it doesn't recover. */
-export async function recoverVoter(message: VoteMessage, signature: Hex): Promise<Address | null> {
-  try {
-    return await recoverTypedDataAddress({ ...voteTypedData(message), signature });
-  } catch {
-    return null;
+/**
+ * Chains some wallets (OKX among them) write into the domain on their own when
+ * the typed data has no chainId. A signature made that way is still this vote.
+ */
+export const WALLET_DOMAIN_CHAINS = [4663, 1, 8453, 4217, 56, 196, 42161, 10, 137, 43114, 59144, 324, 534352, 81457, 5000] as const;
+
+/**
+ * The same vote as plain text, for wallets that can't sign typed data: the
+ * page falls back to it, and it names everything the typed data does.
+ */
+export function voteText(message: VoteMessage): string {
+  return [
+    "Gloam holder vote",
+    `Vote: ${message.vote}`,
+    `Option: ${message.option}`,
+    `Choice: ${message.choice}`,
+    `Voter: ${message.voter}`,
+    `Snapshot block: ${message.snapshotBlock}`,
+    `Timestamp: ${message.timestamp}`,
+  ].join("\n");
+}
+
+/**
+ * Every address the signature recovers to under the forms a wallet may have
+ * signed: the typed data as given, the typed data with a chainId the wallet
+ * added, and the plain-text form.
+ */
+async function recoverCandidates(message: VoteMessage, signature: Hex): Promise<Address[]> {
+  const out: Address[] = [];
+  const add = async (f: () => Promise<Address>) => {
+    try {
+      out.push(await f());
+    } catch {
+      /* not this form */
+    }
+  };
+  await add(() => recoverTypedDataAddress({ ...voteTypedData(message), signature }));
+  await add(() => recoverMessageAddress({ message: voteText(message), signature }));
+  for (const chainId of WALLET_DOMAIN_CHAINS) {
+    await add(() => recoverTypedDataAddress({ ...voteTypedData(message), domain: { ...VOTE_DOMAIN, chainId }, signature }));
   }
+  return out;
+}
+
+/** The address an EOA signature recovers to, or null when it doesn't recover to the voter. */
+export async function recoverVoter(message: VoteMessage, signature: Hex): Promise<Address | null> {
+  const want = message.voter.toLowerCase();
+  const all = await recoverCandidates(message, signature);
+  return all.find((a) => a.toLowerCase() === want) ?? all[0] ?? null;
 }
 
 /**
