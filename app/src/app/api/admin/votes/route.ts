@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { kvBackend } from "@/lib/partnersKv";
 import { FEEDBACK_MAX_KEPT, feedbackCsv, listFeedback } from "@/lib/vote/feedback";
+import { holdersCsv, listHolders } from "@/lib/vote/holders";
 import { VOTES } from "@/lib/vote/config";
 import { configProblems } from "@/lib/vote/core";
 import { excludedForVote, snapshotFor } from "@/lib/vote/registry";
@@ -15,8 +16,9 @@ const noStore = { "Cache-Control": "no-store" };
 
 /**
  * Admin only: every vote (drafts too) with its tallies and every ballot, and
- * every feedback note. ?format=csv&kind=votes[&vote=<id>] or kind=feedback
- * downloads a spreadsheet; ?download=1 the whole JSON.
+ * every feedback note, and every connected wallet (holders) with the votes it
+ * has a ballot in. ?format=csv&kind=votes[&vote=<id>], kind=feedback or
+ * kind=holders downloads a spreadsheet; ?download=1 the whole JSON.
  */
 export async function GET(req: Request) {
   if (!(await isAdminAuthenticated())) {
@@ -33,10 +35,22 @@ export async function GET(req: Request) {
       })),
     );
     const feedback = backend === "none" ? [] : await listFeedback();
+    // which votes each wallet has a ballot in now (a wallet can vote after it was last seen)
+    const votedBy = new Map<string, Set<string>>();
+    for (const r of rows) for (const b of r.ballots) votedBy.set(b.voter.toLowerCase(), (votedBy.get(b.voter.toLowerCase()) ?? new Set()).add(r.summary.id));
+    const holders = (backend === "none" ? [] : await listHolders()).map((h) => ({
+      ...h,
+      voted: [...new Set([...h.signed, ...(votedBy.get(h.address.toLowerCase()) ?? [])])].sort(),
+    }));
 
     if (url.searchParams.get("format") === "csv") {
       const kind = url.searchParams.get("kind");
       const date = new Date().toISOString().slice(0, 10);
+      if (kind === "holders") {
+        return new Response(holdersCsv(holders), {
+          headers: { ...noStore, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="gloam-vote-holders-${date}.csv"` },
+        });
+      }
       if (kind === "feedback") {
         return new Response(feedbackCsv(feedback), {
           headers: { ...noStore, "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="gloam-feedback-${date}.csv"` },
@@ -50,7 +64,7 @@ export async function GET(req: Request) {
       });
     }
 
-    const data = { backend, kept: { ballots: "until deleted", feedback: `newest ${FEEDBACK_MAX_KEPT.toLocaleString("en-US")}` }, votes: rows, feedback };
+    const data = { backend, kept: { ballots: "until deleted", feedback: `newest ${FEEDBACK_MAX_KEPT.toLocaleString("en-US")}` }, votes: rows, feedback, holders };
     return NextResponse.json(
       { ok: true, data },
       { headers: { ...noStore, ...(url.searchParams.get("download") === "1" ? { "Content-Disposition": `attachment; filename="gloam-votes-and-feedback.json"` } : {}) } },
