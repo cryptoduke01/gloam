@@ -99,7 +99,7 @@ assert(test.payMemo === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "a memo bo
 assert(main.payMemo === (BASE_MAINNET_BOARD?.address ?? null), "Base mainnet's memo board, once it is filled in");
 if (!LIVE) assert(main.payMemo === null, "no memo board on Base mainnet before its deploy");
 assert(main.explorerUrl === "https://basescan.org" && test.explorerUrl === "https://sepolia.basescan.org", "Basescan");
-assert(main.assets.map((a) => a.symbol).join() === "USDC,EURC,USDT,ETH", "Base mainnet assets");
+assert(main.assets.map((a) => a.symbol).join() === "USDC,EURC,USDT,ETH,BDX", "Base mainnet assets, BDX last");
 assert(test.assets.map((a) => a.symbol).join() === "USDC,EURC,ETH", "Base Sepolia assets, no USDT");
 assert(baseSepoliaPool()?.pool === TEST_POOL, "baseSepoliaPool reads BASE_SEPOLIA_POOL");
 

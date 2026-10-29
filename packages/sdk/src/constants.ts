@@ -93,6 +93,13 @@ export const BASE_EURC: Address =
 /** USDT on Base mainnet: Tether bridged from Ethereum over Base's standard bridge, 6 decimals. */
 export const BASE_USDT: Address =
   "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2";
+/**
+ * Beldex's BDX on Base mainnet: a LayerZero OFT, 9 decimals, the same contract
+ * and address as on Ethereum (ETHEREUM_BDX). A plain ERC-20 (no transfer fee, no
+ * rebasing); Beldex's owner can mint and pause mint and burn, never transfers.
+ */
+export const BASE_BDX: Address =
+  "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181";
 /** Circle's test USDC on Base Sepolia, 6 decimals (faucet.circle.com). */
 export const BASE_SEPOLIA_USDC: Address =
   "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
@@ -119,6 +126,8 @@ export const ETHEREUM_PYUSD: Address =
 /** Circle's EURC on Ethereum, 6 decimals. A euro stablecoin, never a dollar. */
 export const ETHEREUM_EURC: Address =
   "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+/** Beldex's BDX on Ethereum: the same LayerZero OFT and address as on Base (BASE_BDX), 9 decimals. */
+export const ETHEREUM_BDX: Address = BASE_BDX;
 /** Circle's test USDC on Ethereum Sepolia, 6 decimals (faucet.circle.com). */
 export const ETHEREUM_SEPOLIA_USDC: Address =
   "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
@@ -313,15 +322,24 @@ export const TEMPO_MAINNET_ASSETS: GloamAsset[] = [
 /** Native ETH on Base: 0.2 per deposit and 10 in total, about the dollar value of the stablecoin limits. */
 const baseEthLimit: DepositLimit = { perDeposit: 2n * 10n ** 17n, total: units(10n, 18) };
 
-/** Base mainnet pool assets and their beta deposit limits. Native ETH is listed. */
+/**
+ * BDX: 100,000 per deposit and 2,000,000 in total (about $7,150 and $143,000 at
+ * $0.0715). Queued through the vault timelock on 2026-10-29 and 0 on chain until
+ * it lands, so the vault refuses BDX deposits before then:
+ * assertDepositWithinLiveLimit reads the live value and says so.
+ */
+const bdxLimit: DepositLimit = { perDeposit: units(100_000n, 9), total: units(2_000_000n, 9) };
+
+/** Base mainnet pool assets and their beta deposit limits. Native ETH is listed, then BDX. */
 export const BASE_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: BASE_USDC, decimals: 6, depositLimit: stableLimit },
   { symbol: "EURC", address: BASE_EURC, decimals: 6, depositLimit: stableLimit },
   { symbol: "USDT", address: BASE_USDT, decimals: 6, depositLimit: stableLimit },
   { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+  { symbol: "BDX", address: BASE_BDX, decimals: 9, depositLimit: bdxLimit },
 ];
 
-/** Ethereum mainnet pool assets and their beta deposit limits: five stablecoins, and ETH with Base's limit. */
+/** Ethereum mainnet pool assets and their beta deposit limits: five stablecoins, ETH with Base's limit, then BDX. */
 export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: ETHEREUM_USDC, decimals: 6, depositLimit: stableLimit },
   { symbol: "USDT", address: ETHEREUM_USDT, decimals: 6, depositLimit: stableLimit },
@@ -329,6 +347,7 @@ export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "PYUSD", address: ETHEREUM_PYUSD, decimals: 6, depositLimit: stableLimit },
   { symbol: "EURC", address: ETHEREUM_EURC, decimals: 6, depositLimit: stableLimit },
   { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: baseEthLimit },
+  { symbol: "BDX", address: ETHEREUM_BDX, decimals: 9, depositLimit: bdxLimit },
 ];
 
 /** Base Sepolia pool assets: Circle's test USDC and EURC, and ETH, with the same limits as Base mainnet. No USDT there. */

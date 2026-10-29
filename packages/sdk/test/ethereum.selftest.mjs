@@ -56,6 +56,7 @@ const USDT = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 const USDG = "0xe343167631d89B6Ffc58B88d6b7fB0228795491D";
 const PYUSD = "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8";
 const EURC = "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+const BDX = "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181";
 
 // ── before the pool is in ────────────────────────────────────────────────────────
 if (!FILLED) {
@@ -111,6 +112,8 @@ const {
   generateReceiveKey,
   NATIVE_ASSET,
   ETHEREUM_MAINNET_ASSETS,
+  ETHEREUM_BDX,
+  assertDepositWithinLiveLimit,
 } = sdk;
 if (FILLED) {
   const net = mainnetNetwork("ethereum");
@@ -126,10 +129,13 @@ if (FILLED) {
     assert(board === null, "no memo board on Ethereum before its deploy");
   }
   assert(net.explorerUrl === "https://etherscan.io" && net.rpcUrl === "https://rpc.mevblocker.io", "explorer and RPC");
-  assert(net.assets.map((a) => a.symbol).join() === "USDC,USDT,USDG,PYUSD,EURC,ETH", "assets in the deploy's order");
-  assert(net.assets.map((a) => a.address).join() === [USDC, USDT, USDG, PYUSD, EURC, NATIVE_ASSET].join(), "asset addresses as checked on chain");
+  assert(net.assets.map((a) => a.symbol).join() === "USDC,USDT,USDG,PYUSD,EURC,ETH,BDX", "assets in the deploy's order, then BDX");
+  assert(net.assets.map((a) => a.address).join() === [USDC, USDT, USDG, PYUSD, EURC, NATIVE_ASSET, BDX].join(), "asset addresses as checked on chain");
+  assert(ETHEREUM_BDX === BDX, "ETHEREUM_BDX");
   for (const a of ETHEREUM_MAINNET_ASSETS) {
-    if (a.symbol === "ETH") {
+    if (a.symbol === "BDX") {
+      assert(a.decimals === 9 && a.depositLimit.perDeposit === 100_000n * 10n ** 9n && a.depositLimit.total === 2_000_000n * 10n ** 9n, "BDX: 100,000 per deposit, 2,000,000 in total");
+    } else if (a.symbol === "ETH") {
       assert(a.decimals === 18 && a.depositLimit.perDeposit === 2n * 10n ** 17n && a.depositLimit.total === 10n * 10n ** 18n, "ETH: 0.2 per deposit, 10 in total");
     } else {
       assert(a.decimals === 6 && a.depositLimit.perDeposit === 500_000_000n && a.depositLimit.total === 25_000_000_000n, `${a.symbol}: 500 per deposit, 25,000 in total`);
@@ -147,6 +153,19 @@ if (FILLED) {
   assertDepositAllowed(1, USDG, 500_000_001n);
   assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n);
   throws(() => assertDepositAllowed(1, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 1n), /does not list/, "Base's USDC is not listed on Ethereum");
+  // BDX is listed, but the vault takes it only once its timelocked limit lands: read live.
+  assertDepositAllowed(1, BDX, 1n);
+  const vault = (per, total) => ({
+    readContract: async ({ functionName }) =>
+      functionName === "depositLimitsOn" ? true : functionName === "depositLimit" ? [per, total] : 0n,
+  });
+  await throwsAsync(() => assertDepositWithinLiveLimit(vault(0n, 0n), 1, BDX, 10n ** 9n), /The Ethereum vault takes no BDX deposits/, "BDX before its limit lands");
+  await assertDepositWithinLiveLimit(vault(100_000n * 10n ** 9n, 2_000_000n * 10n ** 9n), 1, BDX, 100_000n * 10n ** 9n);
+  await throwsAsync(
+    () => assertDepositWithinLiveLimit(vault(100_000n * 10n ** 9n, 2_000_000n * 10n ** 9n), 1, BDX, 100_000n * 10n ** 9n + 1n),
+    /at most 100,000 BDX per deposit/,
+    "BDX over its per-deposit limit, in BDX's 9 decimals"
+  );
 
   // builders
   const prover = async () => ({ proofBytes: "0x" + "ab".repeat(256), publicSignals: [] });

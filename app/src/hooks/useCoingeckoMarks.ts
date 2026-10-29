@@ -1,18 +1,25 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { RH_MAINNET_SWAP_TOKENS, RH_MAINNET_TOKENS } from "@/lib/tokens";
+import { BASE_MAINNET_TOKENS, ETHEREUM_MAINNET_TOKENS, RH_MAINNET_SWAP_TOKENS, RH_MAINNET_TOKENS } from "@/lib/tokens";
 
 /**
- * Robinhood Chain mainnet tokens the markets feed does not price ($GLOAM, and
- * the swap tokens such as cbBTC), priced from CoinGecko like Transparency does.
+ * Tokens the markets feed does not price, priced from CoinGecko like
+ * Transparency does: on Robinhood Chain mainnet $GLOAM and the swap tokens such
+ * as cbBTC, and on Base and Ethereum BDX (one address on both, listed once).
  * The list is fixed, never the viewer's holdings, so the request says nothing
  * about what this wallet holds. Stocks come from the markets feed, WETH from
  * ETH's price and dollar stablecoins are $1, so they are not asked for here.
  */
-export const COINGECKO_MARKED = [...RH_MAINNET_TOKENS, ...RH_MAINNET_SWAP_TOKENS].filter(
-  (t) => t.coingecko && t.kind === "token" && t.id !== "weth"
+export const COINGECKO_MARKED = [...RH_MAINNET_TOKENS, ...RH_MAINNET_SWAP_TOKENS, ...BASE_MAINNET_TOKENS, ...ETHEREUM_MAINNET_TOKENS].filter(
+  (t, i, all) =>
+    t.coingecko && t.kind === "token" && t.id !== "weth" && all.findIndex((x) => x.address.toLowerCase() === t.address.toLowerCase()) === i
 );
+
+/** Chains whose listed tokens include one priced here: Robinhood Chain, Base and Ethereum mainnet. */
+export function hasCoingeckoMarks(chainId: number): boolean {
+  return chainId === 4663 || chainId === 8453 || chainId === 1;
+}
 
 async function fetchMarks(): Promise<Map<string, number>> {
   const ids = [...new Set(COINGECKO_MARKED.map((t) => t.coingecko!))].join(",");

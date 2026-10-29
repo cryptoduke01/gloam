@@ -29,7 +29,8 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { approvalsBeforeDeposit, isDollarStable, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, approvalsBeforeDeposit, isDollarStable, supportsNativeShield } from "@/lib/tokens";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { surelyNotSent } from "@/lib/walletErrors";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
@@ -81,7 +82,10 @@ export function ShieldView() {
     refresh: refreshNotes,
   } = useLocalShieldNotes(address);
 
-  const tokens = shieldTokensFor(network.chainId);
+  // A token listed ahead of its deposit limit (BDX) shows only once the vault's
+  // live limit for it is open, so no one is offered a deposit it would refuse.
+  const openGated = useOpenGatedTokens();
+  const tokens = useMemo(() => addableTokensFor(network.chainId, openGated), [network.chainId, openGated]);
   const nativeOk = supportsNativeShield(network.chainId);
   // A link can pick the asset (?asset=usdg, from a Holdings row or the Vault
   // overview); that choice, or one made here, is never changed for you.
@@ -108,6 +112,15 @@ export function ShieldView() {
     if (!valid) setAssetChoice(nativeOk ? "eth" : tokens[0]?.id ?? "eth");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network.chainId]);
+  // A link to a token that opens with its live limit (?asset=bdx) is valid only
+  // once that limit is read open: then it is picked, unless one was picked by hand.
+  useEffect(() => {
+    if (!askedValid || pickedOn !== null || assetChoice === askedAsset) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the asked asset became addable after the first render
+    setAssetChoice(askedAsset as AssetChoice);
+    setPickedOn(network.chainId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askedValid]);
   const assetAddress: Address = selectedToken
     ? selectedToken.address
     : NATIVE_ASSET;

@@ -15,8 +15,11 @@ import {
   RH_MAINNET_SWAP_TOKENS,
   RH_MAINNET_TOKENS,
   TESTNET_STOCK_TOKENS,
+  addableTokensFor,
   hasUiMultiplier,
   isAddableToken,
+  limitGatedTokensFor,
+  openGatedFromReads,
   shieldTokensFor,
   swapDisplayTokensFor,
   walletDisplayTokensFor,
@@ -72,6 +75,50 @@ check("the mainnet stocks carry a uiMultiplier; the testnet stocks, WETH and sta
   const testnetStock = TESTNET_STOCK_TOKENS[0]!;
   assert.equal(hasUiMultiplier(46630, testnetStock), false);
   assert.equal(hasUiMultiplier(RH, testnetStock), false);
+});
+
+// BDX on Base and Ethereum is listed ahead of its deposit limit, which goes
+// through the vault's 3-day timelock: Add offers it only once the live limit
+// reads open, while the wallet card, names and balances know it all along.
+const BDX = "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181";
+const bdxLower = BDX.toLowerCase();
+
+check("BDX is listed on Base and Ethereum, gated by its live limit, and nowhere else", () => {
+  for (const id of [8453, 1]) {
+    const gated = limitGatedTokensFor(id);
+    assert.deepEqual(gated.map((t) => [t.symbol, t.address, t.decimals, t.kind, t.coingecko]), [["BDX", BDX, 9, "token", "beldex"]]);
+    assert.ok(shieldTokensFor(id).some((t) => t.id === "bdx"), "known to the chain's list");
+    assert.ok(walletDisplayTokensFor(id).some((t) => t.id === "bdx"), "the wallet card reads it");
+  }
+  for (const id of [4663, 4217, 84532, 11155111, 46630, 42431]) assert.deepEqual(limitGatedTokensFor(id), []);
+});
+
+check("Add leaves BDX out until its limit is read open", () => {
+  for (const id of [8453, 1]) {
+    const bdx = shieldTokensFor(id).find((t) => t.id === "bdx")!;
+    assert.ok(!addableTokensFor(id).some((t) => t.id === "bdx"), "no reads: not offered");
+    assert.ok(!addableTokensFor(id, new Set()).some((t) => t.id === "bdx"), "read closed: not offered");
+    assert.equal(isAddableToken(id, bdx), false);
+    assert.equal(isAddableToken(id, bdx, new Set([bdxLower])), true);
+    assert.ok(addableTokensFor(id, new Set([bdxLower])).some((t) => t.id === "bdx"), "read open: offered");
+    // the rest of the list is untouched either way
+    assert.deepEqual(
+      addableTokensFor(id).map((t) => t.id),
+      shieldTokensFor(id).filter((t) => t.id !== "bdx").map((t) => t.id)
+    );
+  }
+});
+
+check("the live reads open BDX only with a limit above 0, and never while unread", () => {
+  const gated = limitGatedTokensFor(8453);
+  const per = 100_000n * 10n ** 9n;
+  const total = 2_000_000n * 10n ** 9n;
+  assert.equal(openGatedFromReads(gated, undefined, [[per, total]]).size, 0, "depositLimitsOn unread");
+  assert.equal(openGatedFromReads(gated, true, [undefined]).size, 0, "the limit unread");
+  assert.equal(openGatedFromReads(gated, true, [[0n, 0n]]).size, 0, "queued, not landed: 0 / 0");
+  assert.equal(openGatedFromReads(gated, true, [[0n, total]]).size, 0, "a zero per-deposit limit takes nothing");
+  assert.deepEqual([...openGatedFromReads(gated, true, [[per, total]])], [bdxLower], "landed");
+  assert.deepEqual([...openGatedFromReads(gated, false, [undefined])], [bdxLower], "a pool with no limits takes it");
 });
 
 console.log(`selftest-wallet-tokens: ${n} checks passed`);

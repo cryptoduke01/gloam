@@ -113,9 +113,16 @@ type Prices = {
 /**
  * Every CoinGecko id a vault token can be priced by: $GLOAM, and the tokens a
  * private swap lands in on Robinhood Chain (cbBTC and the rest; a stock falls
- * back to it when its live mark or multiplier is missing).
+ * back to it when its live mark or multiplier is missing), and BDX on Base and
+ * Ethereum (stablecoins there are $1, and EURC stays unpriced).
  */
-const COINGECKO_IDS = [...new Set(holdableTokens(4663).flatMap((t) => (t.coingecko ? [t.coingecko] : [])))];
+const COINGECKO_IDS = [
+  ...new Set(
+    [...holdableTokens(4663), ...[8453, 1].flatMap((c) => holdableTokens(c).filter((t) => t.kind === "token"))].flatMap((t) =>
+      t.coingecko ? [t.coingecko] : []
+    )
+  ),
+];
 
 /**
  * USD marks the app already uses (/api/markets), plus CoinGecko for the

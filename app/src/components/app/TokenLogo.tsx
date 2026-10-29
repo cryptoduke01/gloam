@@ -45,7 +45,7 @@ const PNG_LOGO_IDS = new Set([
 ]);
 
 /** Round marks (a full disc): shown as a circle with no plate, so no white corners. */
-const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux", "usde", "u", "cbbtc"]);
+const DISC_LOGO_IDS = new Set(["usdg", "usdce", "usdc", "eurc", "usdt", "pyusd", "eth", "weth", "avgo", "mstr", "sbux", "usde", "u", "cbbtc", "bdx"]);
 
 /** True when the mark is a disc, so a pill can keep it round instead of clipping a tile. */
 export function logoIsDisc(id: string): boolean {
@@ -66,6 +66,8 @@ const SPECIAL_LOGOS: Record<string, string> = {
   eurc: "/brand/tokens/eurc.png",
   usdt: "/brand/tokens/usdt.png",
   pyusd: "/brand/tokens/pyusd.png",
+  // Beldex's BDX on Base and Ethereum: its round mark, from CoinGecko's listing (coins/images/5111)
+  bdx: "/brand/tokens/bdx.png",
   ousd: "/brand/logos/ousd.svg",
   pathusd: "/brand/logos/pathusd.svg",
   alphausd: "/brand/logos/alphausd.svg",

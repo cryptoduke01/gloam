@@ -46,6 +46,8 @@ import {
   BASE_USDC,
   BASE_EURC,
   BASE_USDT,
+  BASE_BDX,
+  ETHEREUM_BDX,
   BASE_SEPOLIA_USDC,
   BASE_SEPOLIA_EURC,
   RH_MAINNET_CHAIN_ID,
@@ -191,7 +193,7 @@ await throwsAsync(
 for (const [family, chainId, key, assets, native, memo] of [
   ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN], false, true],
   ["tempo", TEMPO_MAINNET_CHAIN_ID, "tempo-mainnet", [TEMPO_USDCE, TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD], false, true],
-  ["base", BASE_MAINNET_CHAIN_ID, "base-mainnet", [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET], true, false],
+  ["base", BASE_MAINNET_CHAIN_ID, "base-mainnet", [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET, BASE_BDX], true, false],
 ]) {
   const filled = mainnetPoolFor(chainId);
   const net = mainnetNetwork(family);
@@ -236,13 +238,19 @@ for (const [family, chainId, key, assets, native, memo] of [
 // Checked on the asset tables directly, so they hold before the pools are in too.
 {
   const { RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS, BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS } = await import("../dist/index.js");
-  const baseStables = [...BASE_MAINNET_ASSETS, ...BASE_SEPOLIA_ASSETS].filter((a) => a.symbol !== "ETH");
+  const baseStables = [...BASE_MAINNET_ASSETS, ...BASE_SEPOLIA_ASSETS].filter((a) => a.symbol !== "ETH" && a.symbol !== "BDX");
   for (const a of [...TEMPO_MAINNET_ASSETS, RH_MAINNET_ASSETS[0], ...baseStables]) {
     assert(a.decimals === 6 && a.depositLimit.perDeposit === 500_000_000n && a.depositLimit.total === 25_000_000_000n, `${a.symbol}: 500 per deposit, 25,000 total`);
   }
   const g = RH_MAINNET_ASSETS[1];
   assert(g.symbol === "GLOAM" && g.decimals === 18 && g.depositLimit.perDeposit === 25_000n * 10n ** 18n && g.depositLimit.total === 250_000n * 10n ** 18n, "GLOAM: 25,000 per deposit, 250,000 total");
-  assert(BASE_MAINNET_ASSETS.map((a) => a.address).join() === [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET].join(), "Base mainnet lists USDC, EURC, USDT and ETH");
+  assert(BASE_MAINNET_ASSETS.map((a) => a.address).join() === [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET, BASE_BDX].join(), "Base mainnet lists USDC, EURC, USDT, ETH and BDX");
+  // BDX (Beldex, LayerZero OFT): the same address on Base and Ethereum, 9 decimals,
+  // 100,000 per deposit and 2,000,000 in total once its timelocked limit lands.
+  assert(BASE_BDX === "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181" && ETHEREUM_BDX === BASE_BDX, "BDX: one address on Base and Ethereum");
+  const bdx = BASE_MAINNET_ASSETS.find((a) => a.symbol === "BDX");
+  assert(bdx.decimals === 9 && bdx.depositLimit.perDeposit === 100_000n * 10n ** 9n && bdx.depositLimit.total === 2_000_000n * 10n ** 9n, "BDX: 100,000 per deposit, 2,000,000 total");
+  assert(!BASE_SEPOLIA_ASSETS.some((a) => a.symbol === "BDX"), "no BDX on Base Sepolia");
   assert(BASE_SEPOLIA_ASSETS.map((a) => a.address).join() === [BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC, NATIVE_ASSET].join(), "Base Sepolia lists USDC, EURC and ETH (no USDT)");
   for (const list of [BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS]) {
     const eth = list.find((a) => a.symbol === "ETH");

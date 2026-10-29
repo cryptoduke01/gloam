@@ -20,6 +20,14 @@ export type OnchainToken = {
    * USDT on Ethereum), so a stale allowance goes to 0 before a deposit's approve.
    */
   approveResetFirst?: true;
+  /**
+   * Listed before the vault takes it: its deposit limit is queued through the
+   * vault's 3-day timelock and is 0 until it lands. Add (and every flow that
+   * starts from a deposit) offers it only once the pool's live
+   * depositLimit(token) is above 0 (hooks/useOpenGatedTokens). Balances, private
+   * sends and cash-outs never depend on the limit.
+   */
+  opensWithLimit?: true;
 };
 
 /** Worth one dollar each: a dollar stablecoin. EURC is a stablecoin, but not one of these. */
@@ -161,16 +169,39 @@ export const TEMPO_MAINNET_TOKENS: OnchainToken[] = [
 ];
 
 /**
+ * Beldex's BDX on Base and Ethereum: one LayerZero OFT at the same address on
+ * both, 9 decimals, checked on chain 2026-10-29 (Sourcify exact match,
+ * contracts/MyOFT.sol:BELDEX). A plain OpenZeppelin ERC-20: no transfer fee, no
+ * rebasing. Beldex's owner (a Safe) can mint, and pause, which stops only mint
+ * and burn, never transfers. Its limit (100,000 per deposit / 2,000,000 in
+ * total) goes through the vault timelock (contracts/script/QueueBDX.s.sol), so
+ * Add offers it only once that lands (opensWithLimit).
+ */
+const BDX: OnchainToken = {
+  id: "bdx",
+  symbol: "BDX",
+  name: "Beldex",
+  address: "0x6ad12E761b438beA3EA09F6C6266556Bb24C2181",
+  decimals: 9,
+  yahoo: "",
+  kind: "token",
+  coingecko: "beldex",
+  opensWithLimit: true,
+};
+
+/**
  * Base mainnet (8453): the stablecoins the mainnet pool lists, 6 decimals each,
  * checked on chain 2026-10-24. USDC and EURC are Circle's own (Circle can
  * blacklist an address); USDT is Tether bridged from Ethereum over Base's
  * standard bridge. Native ETH is listed too (supportsNativeShield). Beta limits:
- * 500 per deposit / 25,000 in total for each stablecoin, 0.2 / 10 ETH.
+ * 500 per deposit / 25,000 in total for each stablecoin, 0.2 / 10 ETH. Then BDX,
+ * taken once its limit lands.
  */
 export const BASE_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
   { id: "usdt", symbol: "USDT", name: "Tether USD", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6, yahoo: "", kind: "stablecoin" },
+  BDX,
 ];
 
 /**
@@ -190,7 +221,8 @@ export const BASE_SEPOLIA_TOKENS: OnchainToken[] = [
  * issuer can freeze an address. USDT's approve() and transfer() return nothing,
  * and approve() refuses to change one non-zero allowance into another. Native ETH
  * is listed too (supportsNativeShield). Beta limits: 500 per deposit / 25,000 in
- * total for each stablecoin, 0.2 / 10 ETH.
+ * total for each stablecoin, 0.2 / 10 ETH. Then BDX (9 decimals), taken once its
+ * limit lands.
  */
 export const ETHEREUM_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdc", symbol: "USDC", name: "USD Coin", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, yahoo: "", kind: "stablecoin" },
@@ -198,6 +230,7 @@ export const ETHEREUM_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdg", symbol: "USDG", name: "Global Dollar", address: "0xe343167631d89B6Ffc58B88d6b7fB0228795491D", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "pyusd", symbol: "PYUSD", name: "PayPal USD", address: "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8", decimals: 6, yahoo: "", kind: "stablecoin" },
   { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
+  BDX,
 ];
 
 /**
@@ -281,10 +314,52 @@ export function walletDisplayTokensFor(chainId: number): OnchainToken[] {
   });
 }
 
-/** Whether Add takes this token on the chain (it is in shieldTokensFor), compared by address. */
-export function isAddableToken(chainId: number, token: Pick<OnchainToken, "address">): boolean {
+/**
+ * The opensWithLimit tokens on a chain (BDX on Base and Ethereum): the ones whose
+ * live deposit limit decides whether Add offers them.
+ */
+export function limitGatedTokensFor(chainId: number): OnchainToken[] {
+  return shieldTokensFor(chainId).filter((t) => t.opensWithLimit);
+}
+
+/**
+ * Which opensWithLimit tokens are open, from the pool's live reads: `limitsOn`
+ * is depositLimitsOn() and `limits[i]` is depositLimit(gated[i]), each
+ * undefined while unread or when the read failed. With limits on, a token is
+ * open when its perDeposit and total are both above 0; with limits off (a pool
+ * from before them), every one is. Anything unread stays closed, so a deposit
+ * the vault would refuse is never offered.
+ */
+export function openGatedFromReads(
+  gated: readonly Pick<OnchainToken, "address">[],
+  limitsOn: boolean | undefined,
+  limits: readonly (readonly [bigint, bigint] | undefined)[]
+): Set<string> {
+  const open = new Set<string>();
+  if (limitsOn === undefined) return open;
+  gated.forEach((t, i) => {
+    const lim = limits[i];
+    if (!limitsOn || (lim && lim[0] > BigInt(0) && lim[1] > BigInt(0))) open.add(t.address.toLowerCase());
+  });
+  return open;
+}
+
+/**
+ * What Add offers on a chain now: shieldTokensFor, less any opensWithLimit token
+ * whose live limit is not known to be open. `open` holds the lowercase
+ * addresses read as open (useOpenGatedTokens); missing, nothing gated is offered.
+ */
+export function addableTokensFor(chainId: number, open?: ReadonlySet<string>): OnchainToken[] {
+  return shieldTokensFor(chainId).filter((t) => !t.opensWithLimit || Boolean(open?.has(t.address.toLowerCase())));
+}
+
+/**
+ * Whether Add takes this token on the chain now (addableTokensFor), compared by
+ * address. An opensWithLimit token counts only when `open` says its limit is open.
+ */
+export function isAddableToken(chainId: number, token: Pick<OnchainToken, "address">, open?: ReadonlySet<string>): boolean {
   const a = token.address.toLowerCase();
-  return shieldTokensFor(chainId).some((t) => t.address.toLowerCase() === a);
+  return addableTokensFor(chainId, open).some((t) => t.address.toLowerCase() === a);
 }
 
 /**
