@@ -10,15 +10,16 @@ license: MIT
 
 # Gloam
 
-Gloam gives the agent private stablecoin payments on Tempo and Robinhood Chain through the `gloam`
-MCP server: the public chain sees a shielded transfer, not who paid whom or how much.
+Gloam gives the agent private stablecoin payments on Tempo, Robinhood Chain, Base and Ethereum
+through the `gloam` MCP server: the public chain sees a shielded transfer, not who paid whom or how much.
 
 Each chain has a mainnet and a testnet, and tools take a `network`:
 
-- `tempo-mainnet` and `robinhood-mainnet` are **mainnet** (beta). Deposits are capped at 500 of
-  a stablecoin (25,000 GLOAM) per deposit during the beta. Deposits and private payments are free;
+- `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet` and `ethereum-mainnet` are **mainnet**
+  (beta). Deposits are capped at 500 of a stablecoin (0.2 ETH, 25,000 GLOAM) per deposit during
+  the beta. Deposits and private payments are free;
   cashing out costs 0.25%.
-- `tempo` and `robinhood` are the testnets.
+- `tempo`, `robinhood`, `base` (Base Sepolia) and `ethereum` (Ethereum Sepolia) are the testnets.
 
 `gloam_info` lists the networks this server has and its default. Always say which network a payment
 is on, and say plainly when it is mainnet.

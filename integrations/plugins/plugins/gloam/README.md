@@ -3,8 +3,8 @@
 Private stablecoin payments for AI agents. With this plugin an agent can pay for x402 and MPP
 resources from a private (shielded) balance, get paid, check payments and proofs, and report what
 it has spent, while amounts and counterparties stay off the public block explorer. Gloam runs on
-Tempo and Robinhood Chain mainnet (beta: deposits capped at 500 of a stablecoin each
-during the beta, cashing out costs 0.25%), and on their testnets.
+Tempo, Robinhood Chain, Base and Ethereum mainnet (beta: deposits capped at 500 of a stablecoin
+each during the beta, cashing out costs 0.25%), and on their testnets.
 Reviewed internally before launch; an external audit is planned.
 
 ## What it adds
@@ -19,7 +19,7 @@ Reviewed internally before launch; an external audit is planned.
   https://github.com/cryptoduke01/gloam/tree/main/mcp
 - **Reads:** settings from `~/.gloam/agent.env` on your machine (agent key, Tempo account,
   spending limits, note store key). Nothing secret is stored in the plugin's files.
-- **Contacts:** the public Tempo and Robinhood Chain RPC nodes (mainnet and testnet, or your own
+- **Contacts:** the public Tempo, Robinhood Chain, Base and Ethereum RPC nodes (mainnet and testnet, or your own
   with `GLOAM_RPC_URL_<chainId>`), Gloam's zero-knowledge circuit files at
   `https://www.gloam.trade/circuits` (checked against pinned SHA-256), Gloam's relay only if you turn it on, and
   the paid URLs you ask the agent to fetch. Private and local network addresses are refused by
