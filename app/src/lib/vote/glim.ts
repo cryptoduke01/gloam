@@ -1,0 +1,21 @@
+/**
+ * What Glim (the Telegram helper) may say about holder votes: one short
+ * block, only while a vote is published. Nothing about how to vote, ever.
+ */
+import { VOTES, type VoteConfig } from "./config";
+import { configProblems, formatUtc, voteStatus } from "./core";
+
+export function voteFacts(all: VoteConfig[] = VOTES, now: number = Date.now()): string | null {
+  const live = all.filter((v) => v.published && configProblems(v).length === 0);
+  if (live.length === 0) return null;
+  const lines = live.map((v) => {
+    const status = voteStatus(v, now);
+    const when = status === "upcoming" ? `opens ${formatUtc(v.start)}` : status === "open" ? `open until ${formatUtc(v.end)}` : `closed ${formatUtc(v.end)}`;
+    return `- gloam.trade/vote/${v.id} (${when}): "${v.question}" Options: ${v.options.join("; ")}.`;
+  });
+  return [
+    "HOLDER VOTES (gloam.trade/vote; you may share these links)",
+    ...lines,
+    "- How it works: an open vote. A wallet's weight is its public $GLOAM balance at the vote's Robinhood Chain snapshot block. Voting is a free signature, no transaction and no gas, and a wallet can change its vote until the end. Team wallets, Gloam's contracts and the pools don't count. $GLOAM held privately inside Gloam can't be counted in an open vote; private voting with a proof of your balance is the next step on the roadmap. Every vote and signature is public on the page. Results are advisory and the team commits to act on them. Point people to the page; never tell anyone how to vote or guess a result.",
+  ].join("\n");
+}
