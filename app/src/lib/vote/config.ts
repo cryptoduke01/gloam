@@ -36,16 +36,43 @@ export type VoteConfig = {
   exclude?: { address: string; reason: string }[];
 };
 
+/** The first three votes share one window and one snapshot block. */
+const FIRST_START = "2026-10-29T16:30:00Z";
+const FIRST_END = "2026-11-03T18:00:00Z";
+const FIRST_BLOCK = 101_022_464;
+
 export const VOTES: VoteConfig[] = [
   {
-    // DRAFT: a placeholder. The founder picks the real question before it goes live.
     id: "private-swaps-next",
-    published: false,
-    question: "Which should Gloam add to private swaps next?",
-    description: "Private swaps run from your private balance today. Pick what you want to swap into next.",
-    options: ["Stock tokens", "ETH", "More stablecoins"],
-    snapshotBlock: 0,
-    start: "2026-11-03T13:00:00Z",
-    end: "2026-11-10T13:00:00Z",
+    published: true,
+    question: "What should Gloam add to private swaps next?",
+    description:
+      "Private swaps hide who traded, while the token and the amount stay public. The winning option goes on the roadmap first: the result is advisory, and the team will act on it.",
+    options: ["More Robinhood stock tokens", "Popular Robinhood Chain tokens", "Stablecoin swaps on Base and Ethereum"],
+    snapshotBlock: FIRST_BLOCK,
+    start: FIRST_START,
+    end: FIRST_END,
+  },
+  {
+    id: "next-chain",
+    published: true,
+    question: "Which chain should Gloam go live on next?",
+    description:
+      "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum, and the vault is EVM, so each of these is a chain we can ship to. The result is advisory, and the team will act on it.",
+    options: ["Arbitrum", "BNB Chain", "Polygon", "Optimism"],
+    snapshotBlock: FIRST_BLOCK,
+    start: FIRST_START,
+    end: FIRST_END,
+  },
+  {
+    id: "first-integration",
+    published: true,
+    question: "Which kind of app should Gloam integrate first?",
+    description:
+      "Gloam is the privacy layer apps plug into, and this tells us where to spend partner time first. The result is advisory, and the team will act on it.",
+    options: ["Trading apps", "AI agent platforms", "Payroll and payout tools", "Shopping and cards"],
+    snapshotBlock: FIRST_BLOCK,
+    start: FIRST_START,
+    end: FIRST_END,
   },
 ];

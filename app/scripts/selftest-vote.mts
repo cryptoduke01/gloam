@@ -146,9 +146,21 @@ await test("every configured vote is valid, and a published one has its snapshot
   }
 });
 
-await test("the placeholder vote is an unpublished draft, so nothing goes live on merge", () => {
-  const draft = VOTES.find((v) => v.id === "private-swaps-next");
-  if (draft) assert.equal(draft.published, false);
+await test("the first three votes are published with one window and one snapshot block", () => {
+  const first = ["private-swaps-next", "next-chain", "first-integration"].map((id) => VOTES.find((v) => v.id === id));
+  for (const v of first) {
+    assert.ok(v, "configured");
+    assert.equal(v.published, true);
+    assert.ok(registry.snapshotFor(v), `${v.id} has its snapshot`);
+    assert.equal(registry.snapshotFor(v)!.checked?.mismatches, 0, "balanceOf check passed");
+    for (const text of [v.question, v.description, ...v.options]) {
+      assert.doesNotMatch(text, /\u2014|\u2013/, "no dashes");
+      assert.doesNotMatch(text, /price|moon|pump|airdrop/i, "no price talk");
+    }
+    assert.match(v.description, /advisory/);
+  }
+  assert.equal(new Set(first.map((v) => `${v!.snapshotBlock} ${v!.start} ${v!.end}`)).size, 1);
+  assert.equal(first[0]!.end, "2026-11-03T18:00:00Z");
 });
 
 await test("config problems are caught", () => {
@@ -404,9 +416,8 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const req = (id: string, init?: RequestInit, query = "") =>
   new Request(`http://localhost/api/vote/${id}${query}`, { ...init, headers: { "x-forwarded-for": "203.0.113.7", "content-type": "application/json", ...(init?.headers ?? {}) } });
 
-await test("routes: unknown and draft votes are 404 without preview", async () => {
-  const draftId = VOTES.find((v) => !v.published)?.id ?? "private-swaps-next";
-  for (const id of ["does-not-exist", draftId]) {
+await test("routes: unknown votes are 404", async () => {
+  for (const id of ["does-not-exist"]) {
     assert.equal((await route.GET(req(id), params(id))).status, 404);
     assert.equal((await route.POST(req(id, { method: "POST", body: "{}" }), params(id))).status, 404);
     assert.equal((await ballotsRoute.GET(req(`${id}/ballots`), params(id))).status, 404);
@@ -456,6 +467,58 @@ await test("Glim says nothing about votes until one is published, then gives the
   assert.doesNotMatch(text, /\u2014/, "no em dashes");
   assert.match(voteFacts([testVote], END)!, /closed/);
   if (!VOTES.some((v) => v.published)) assert.equal(voteFacts(), null, "nothing published, nothing said");
+  else for (const v of VOTES.filter((x) => x.published)) assert.ok(voteFacts()!.includes(`gloam.trade/vote/${v.id}`));
+});
+
+await test("routes: every published vote answers with its own snapshot and options", async () => {
+  for (const v of VOTES.filter((x) => x.published)) {
+    const res = await route.GET(req(v.id), params(v.id));
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { data: { id: string; options: string[]; snapshotReady: boolean; snapshotBlock: number; eligible: { wallets: number } } };
+    assert.equal(body.data.id, v.id);
+    assert.deepEqual(body.data.options, v.options);
+    assert.equal(body.data.snapshotReady, true);
+    assert.equal(body.data.snapshotBlock, v.snapshotBlock);
+    assert.ok(body.data.eligible.wallets > 100);
+  }
+});
+
+// ---------------------------------------------------------------- three votes at once
+
+await test("three votes at once: separate tallies, separate last-vote-wins, no signature crosses over", async () => {
+  const three = ["swaps", "chain", "apps"].map((id, i) => ({ ...testVote, id: `three-${id}`, options: [`${id} A`, `${id} B`, `${id} C`, `${id} D`].slice(0, 3 + (i % 2)) }));
+  const c = (v: VoteConfig) => ctx({ vote: v, snapshot: { ...snapshot, voteId: v.id } });
+  const [a, b, d] = three as [VoteConfig, VoteConfig, VoteConfig];
+  // alice votes in all three; bob only in two; alice changes her mind in one
+  await submitBallot(await sign(alice, 0, nowSec - 100, a), c(a));
+  await submitBallot(await sign(alice, 1, nowSec - 100, b), c(b));
+  await submitBallot(await sign(alice, 2, nowSec - 100, d), c(d));
+  await submitBallot(await sign(bob, 1, nowSec - 90, a), c(a));
+  await submitBallot(await sign(bob, 3, nowSec - 90, b), c(b));
+  const changed = await submitBallot(await sign(alice, 2, nowSec - 50, b), c(b));
+  assert.equal(changed.changed, true);
+  // a signature for one vote never counts in another
+  await rejects(submitBallot(await sign(bob, 0, nowSec - 40, a), c(d)), "bad_signature");
+  // an older alice ballot in vote a is refused there, though she signed later in vote b
+  await rejects(submitBallot(await sign(alice, 2, nowSec - 120, a), c(a)), "newer");
+
+  const ta = core.tally(a, await listBallots(a.id));
+  const tb = core.tally(b, await listBallots(b.id));
+  const td = core.tally(d, await listBallots(d.id));
+  assert.deepEqual(ta.options.map((o) => o.weight), [100n * ONE, 50n * ONE, 0n]);
+  assert.deepEqual(tb.options.map((o) => o.weight), [0n, 0n, 100n * ONE, 50n * ONE]);
+  assert.deepEqual(td.options.map((o) => o.weight), [0n, 0n, 100n * ONE]);
+  assert.deepEqual([ta.wallets, tb.wallets, td.wallets], [2, 2, 1]);
+  // each recounts clean on its own
+  for (const v of three) {
+    const r = await core.recount(v, snapshot, excluded, await listBallots(v.id));
+    assert.deepEqual(r.problems, []);
+  }
+  // alice's standing differs per vote
+  const { voterStanding } = await import("../src/lib/vote/results");
+  assert.equal((await voterStanding(a, snapshot, excluded, alice.address)).ballot?.option, 0);
+  assert.equal((await voterStanding(b, snapshot, excluded, alice.address)).ballot?.option, 2);
+  assert.equal((await voterStanding(d, snapshot, excluded, bob.address)).ballot, null);
 });
 
 // ---------------------------------------------------------------- display
