@@ -59,6 +59,7 @@ export function VoteClient({ initial, others = [] }: { initial: VoteSummary; oth
               onDisconnect={wallet.disconnect}
               focus={s.id}
               block={s.snapshotBlock}
+              closesAt={s.weighting === "close" ? s.end : undefined}
             />
           </div>
         )}
@@ -101,7 +102,7 @@ export function VoteClient({ initial, others = [] }: { initial: VoteSummary; oth
       <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-24" aria-labelledby="results-title">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
           <h2 id="results-title" className="t-display-m">
-            Live results
+            {s.basis === "final" ? "Final results" : "Live results"}
           </h2>
           <UpdatedAgo at={updatedAt} />
         </div>
@@ -147,7 +148,7 @@ export function VoteClient({ initial, others = [] }: { initial: VoteSummary; oth
       </section>
 
       <section className="mx-auto max-w-[760px] px-5 pt-16 sm:px-7 sm:pt-20">
-        <HowItWorks block={s.snapshotBlock} />
+        <HowItWorks block={s.snapshotBlock} closesAt={s.weighting === "close" ? s.end : undefined} />
       </section>
 
       <section id="not-counted" className="mx-auto max-w-[760px] scroll-mt-20 px-5 pb-20 pt-16 sm:px-7 sm:pb-28 sm:pt-20" aria-labelledby="excluded-title">

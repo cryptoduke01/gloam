@@ -102,9 +102,11 @@ function HolderMark() {
 }
 
 /**
- * A connected wallet, greeted by name, then a short check of its $GLOAM: what
- * it held at the snapshot, its share of the vote, and what it holds now when
- * that differs. Key it by address, so a new wallet gets a fresh check.
+ * A connected wallet, greeted by name, then a short check of its $GLOAM. In a
+ * snapshot-weighted vote: what it held at the snapshot, its share of the
+ * vote, and what it holds now when that differs. In a close-weighted vote:
+ * what it holds now, which is what counts if it is still there at the close.
+ * Key it by address, so a new wallet gets a fresh check.
  */
 export function Welcome({
   me,
@@ -118,6 +120,7 @@ export function Welcome({
   onStart,
   startLabel = "Start voting",
   onResults,
+  closesAt,
 }: {
   me: Me | null;
   address: string;
@@ -134,6 +137,8 @@ export function Welcome({
   startLabel?: string;
   /** Opens the live results. */
   onResults?: () => void;
+  /** When voting closes (ISO), for a close-weighted vote. */
+  closesAt?: string;
 }) {
   const standing = me ? (focus ? me.votes[focus] : Object.values(me.votes).find((x) => x !== null)) ?? null : null;
   const who = me?.name ?? shortAddress(address);
@@ -147,6 +152,8 @@ export function Welcome({
   const held = standing ? BigInt(standing.held) : 0n;
   const atBlock = block ? ` at block ${blockText(block)}` : "";
   const now = current !== undefined && current !== null ? current : null;
+  const basis = standing?.basis ?? "snapshot";
+  const closeWords = closesAt ? whenPhrase(closesAt) : "the end";
 
   return (
     <section aria-label="Your wallet" className="gl-card p-5 sm:p-7">
@@ -180,6 +187,23 @@ export function Welcome({
           <p className={`${m.rise} mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-soft`}>
             This address belongs to the Gloam team or one of its contracts, so it sits these votes out. {standing.excluded}.
           </p>
+        ) : BigInt(standing.weight) === 0n && basis !== "snapshot" ? (
+          <div className={`${m.rise} mt-4 max-w-[58ch] space-y-2.5 text-[14.5px] leading-relaxed text-soft`}>
+            <p className="text-[16.5px] leading-snug text-foreground">
+              {basis === "close" ? "This wallet held no $GLOAM when voting closed." : "You need $GLOAM in this wallet to vote"}
+            </p>
+            {basis === "now" && (
+              <p>
+                If you hold GLOAM in another wallet, switch to it in your wallet app. GLOAM kept privately inside Gloam can vote once private voting
+                arrives, which is next on the roadmap. The live results are open to everyone.
+              </p>
+            )}
+            {onResults && (
+              <button type="button" onClick={onResults} className="btn btn-quiet btn-sm mt-1 min-h-10">
+                See the live results
+              </button>
+            )}
+          </div>
         ) : BigInt(standing.weight) === 0n ? (
           <div className={`${m.rise} mt-4 max-w-[58ch] space-y-2.5 text-[14.5px] leading-relaxed text-soft`}>
             <p className="text-[16.5px] leading-snug text-foreground">This wallet held no $GLOAM at the snapshot, so it can&apos;t vote this time.</p>
@@ -206,10 +230,17 @@ export function Welcome({
             <div className="flex items-center gap-4">
               <HolderMark />
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-sealed">You can vote</p>
-                <p className="tnum mt-0.5 text-[24px] leading-tight tracking-[-0.02em] text-foreground sm:text-[28px]">You hold {formatGloam(held)} GLOAM</p>
+                <p className="text-[13px] font-medium text-sealed">{basis === "close" ? "Your final weight" : "You can vote"}</p>
+                <p className="tnum mt-0.5 text-[24px] leading-tight tracking-[-0.02em] text-foreground sm:text-[28px]">
+                  {basis === "close" ? `You held ${formatGloam(held)} GLOAM` : `You hold ${formatGloam(held)} GLOAM`}
+                </p>
               </div>
             </div>
+            {basis !== "snapshot" ? (
+              <p className="mt-4 text-[15px] leading-relaxed text-soft">
+                {basis === "close" ? "That was in this wallet when voting closed, and it is what your vote counted." : `Your vote counts what you hold when voting closes, ${closeWords}.`}
+              </p>
+            ) : (
             <div className="mt-4 space-y-1.5 text-[15px] leading-relaxed">
               <p className="tnum text-soft">
                 That&apos;s <span className="text-foreground">{sharePercent(BigInt(standing.weight), BigInt(standing.eligibleWeight))}</span> of the vote. You&apos;re
@@ -221,6 +252,7 @@ export function Welcome({
                 </p>
               )}
             </div>
+            )}
             {onStart && (
               <button type="button" onClick={onStart} className="btn btn-ink btn-lg mt-5 w-full sm:w-auto">
                 {startLabel} <span aria-hidden>→</span>
@@ -425,7 +457,10 @@ export function BallotCard({
       <div className="mt-6 border-t border-line px-5 py-6 sm:px-8" aria-live="polite">
         {s.status === "closed" ? (
           <p className="text-[15px] leading-relaxed text-soft">
-            This vote has closed and the results are final.{mine ? ` You voted ${mine.choice}. Thank you.` : ""}
+            {s.basis === "counting"
+              ? "This vote has closed. The final count, by what each wallet held when voting closed, is on its way."
+              : "This vote has closed and the results are final."}
+            {mine ? ` You voted ${mine.choice}. Thank you.` : ""}
           </p>
         ) : !s.snapshotReady ? (
           <p className="text-[15px] leading-relaxed text-soft">The balance snapshot for this vote isn&apos;t in yet, so it can&apos;t take votes.</p>
@@ -455,7 +490,11 @@ export function BallotCard({
         ) : standing.excluded ? (
           <p className="text-[15px] leading-relaxed text-soft">Team and contract addresses don&apos;t vote. You can still follow the results below.</p>
         ) : !canVote ? (
-          <p className="text-[15px] leading-relaxed text-soft">This wallet has no vote here, but the results below are open to everyone.</p>
+          <p className="text-[15px] leading-relaxed text-soft">
+            {s.weighting === "close"
+              ? "You need $GLOAM in this wallet to vote. The results below are open to everyone."
+              : "This wallet has no vote here, but the results below are open to everyone."}
+          </p>
         ) : phase.k === "done" ? (
           <div ref={doneRef} tabIndex={-1} className="gl-settle outline-none">
             <div className="flex items-start gap-3">
@@ -621,6 +660,14 @@ export function Progress({
 
 /* ------------------------------------------------------------------ results */
 
+/** Where a close-weighted vote's numbers come from, in one plain line. Nothing for a snapshot-weighted vote. */
+export function basisLine(s: Pick<VoteSummary, "basis" | "closeBlock">): string | null {
+  if (s.basis === "live") return "Live, final weights are counted when the vote closes.";
+  if (s.basis === "counting") return "Voting has closed. These are still live weights while the final count comes in.";
+  if (s.basis === "final") return `Final, weighted by the $GLOAM each wallet held when voting closed (block ${blockText(s.closeBlock ?? 0)}).`;
+  return null;
+}
+
 /** One vote's live totals: a bar per answer, its share, its weight and its wallets. */
 export function ResultsCard({ s, mine, link = true }: { s: VoteSummary; mine?: Ballot | null; link?: boolean }) {
   const total = BigInt(s.totals.weight);
@@ -677,6 +724,7 @@ export function ResultsCard({ s, mine, link = true }: { s: VoteSummary; mine?: B
           </Link>
         )}
       </div>
+      {basisLine(s) && <p className="mt-2 text-[12.5px] leading-relaxed text-mute">{basisLine(s)}</p>}
     </article>
   );
 }
@@ -740,10 +788,16 @@ export function ShareVoted({ endPhrase }: { endPhrase: string }) {
 
 /* ------------------------------------------------------------------ the plain rules */
 
-export function HowItWorks({ block, firstId }: { block: number; firstId?: string }) {
+export function HowItWorks({ block, firstId, closesAt }: { block: number; firstId?: string; /** For a close-weighted vote: when voting closes (ISO). */ closesAt?: string }) {
+  const weight = closesAt
+    ? [
+        `Any wallet holding $GLOAM can vote. Your weight is the $GLOAM in your wallet when voting closes, ${whenPhrase(closesAt)}, read on Robinhood Chain at the first block at or after that time.`,
+        "Until then the results are live: each vote counts what its wallet holds now. GLOAM can only be in one wallet when voting closes, so the same GLOAM can't be counted twice.",
+      ]
+    : [`Your weight is the $GLOAM your wallet held at Robinhood Chain block ${block ? blockText(block) : "(not set yet)"}. Buying or moving GLOAM after that changes nothing.`];
   const lines = [
     "This is an open vote. Every vote, with the wallet that cast it, is public.",
-    `Your weight is the $GLOAM your wallet held at Robinhood Chain block ${block ? blockText(block) : "(not set yet)"}. Buying or moving GLOAM after that changes nothing.`,
+    ...weight,
     "Voting is free: you sign a message, nothing is sent and no gas is paid. You can change your vote until it closes; your latest signature counts.",
     "Team wallets, Gloam's own contracts and the trading pools don't count.",
     "When you connect, we note your wallet and its $GLOAM balance so we can count how many holders took part. Nothing else is kept.",

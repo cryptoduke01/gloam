@@ -106,7 +106,14 @@ export function ResultsDrawer({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(20px,env(safe-area-inset-bottom))] pt-4 sm:px-6">
-          <p className="px-1 text-[13.5px] leading-relaxed text-mute">Weighted by $GLOAM at the snapshot. The brighter bar leads; your answers are marked.</p>
+          <p className="px-1 text-[13.5px] leading-relaxed text-mute">
+            {votes.some((v) => v.basis === "live" || v.basis === "counting")
+              ? "Live, final weights are counted when the vote closes."
+              : votes.some((v) => v.basis === "final")
+                ? "Final, weighted by the $GLOAM each wallet held when voting closed."
+                : "Weighted by $GLOAM at the snapshot."}{" "}
+            The brighter bar leads; your answers are marked.
+          </p>
           <div className="mt-4 flex flex-col gap-3">
             {votes.map((v) => (
               <ResultsCard key={v.id} s={v} mine={mine(v.id)} />
