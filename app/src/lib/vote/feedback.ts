@@ -24,8 +24,10 @@ import {
   cleanFeedback,
   feedbackTypedData,
   weightOf,
+  weightingOf,
   type FeedbackCategory,
 } from "./core";
+import { balanceNow } from "./chainReads";
 import type { VoteConfig } from "./config";
 import { acceptingVotes, excludedForVote, snapshotFor, visibleVotes } from "./registry";
 import { VoteError } from "./submit";
@@ -71,13 +73,16 @@ async function defaultVerify(author: `0x${string}`, typed: ReturnType<typeof fee
   }
 }
 
-/** The wallet's weight in the votes open now; feedback needs some. */
-export function feedbackWeight(author: string, votes: VoteConfig[] = visibleVotes(), now: number = Date.now()): bigint {
+/** The wallet's weight in the votes open now (its $GLOAM now in a close-weighted one); feedback needs some. */
+export async function feedbackWeight(author: string, votes: VoteConfig[] = visibleVotes(), now: number = Date.now()): Promise<bigint> {
   let best = 0n;
   for (const v of votes) {
     const snap = snapshotFor(v);
-    if (!acceptingVotes(v, snap, now) || !snap) continue;
-    const { weight } = weightOf(snap, excludedForVote(v), author);
+    if (!acceptingVotes(v, snap, now)) continue;
+    const excluded = excludedForVote(v);
+    let weight = 0n;
+    if (weightingOf(v) === "close") weight = excluded.has(author.toLowerCase()) ? 0n : ((await balanceNow(author, { now })) ?? 0n);
+    else if (snap) weight = weightOf(snap, excluded, author).weight;
     if (weight > best) best = weight;
   }
   return best;
@@ -85,7 +90,7 @@ export function feedbackWeight(author: string, votes: VoteConfig[] = visibleVote
 
 export async function submitFeedback(
   raw: unknown,
-  ctx: { now?: number; votes?: VoteConfig[]; verify?: Verify; weight?: (author: string) => bigint } = {},
+  ctx: { now?: number; votes?: VoteConfig[]; verify?: Verify; weight?: (author: string) => bigint | Promise<bigint> } = {},
 ): Promise<Feedback> {
   const now = ctx.now ?? Date.now();
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -108,7 +113,7 @@ export async function submitFeedback(
   }
 
   const who = getAddress(author);
-  if ((ctx.weight ? ctx.weight(who) : feedbackWeight(who, ctx.votes, now)) === 0n) {
+  if ((await (ctx.weight ? ctx.weight(who) : feedbackWeight(who, ctx.votes, now))) === 0n) {
     throw new VoteError(403, "not_holder", "Notes come from wallets that can vote in an open vote, so we know each one is from a holder.");
   }
   const typed = feedbackTypedData({ category, message, author: who, timestamp });

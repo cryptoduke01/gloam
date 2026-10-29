@@ -7,8 +7,9 @@
  * One record per wallet: when it was first and last seen, its $GLOAM at the
  * snapshot (from the snapshot file, never from the browser), its $GLOAM now
  * (read here from Robinhood Chain, when the read answers), whether it can
- * vote, whether it is a team or contract address, and which votes it has
- * signed. Nothing else: no IP address, no browser details.
+ * vote (by the snapshot, or for a close-weighted vote by its $GLOAM now),
+ * whether it is a team or contract address, and which votes it has signed.
+ * Nothing else: no IP address, no browser details.
  */
 import "server-only";
 import { createPublicClient, erc20Abi, getAddress, type Address, type PublicClient } from "viem";
@@ -16,7 +17,7 @@ import { robinhood } from "../chain";
 import { jsonOf, kv } from "../partnersKv";
 import { serverTransport } from "../serverRpc";
 import type { VoteConfig } from "./config";
-import { GLOAM_TOKEN_ADDRESS, weightOf } from "./core";
+import { GLOAM_TOKEN_ADDRESS, weightOf, weightingOf } from "./core";
 import { excludedForVote, snapshotFor, visibleVotes } from "./registry";
 import { getBallot } from "./store";
 
@@ -48,8 +49,12 @@ export type HolderRecord = {
 
 export type HolderFacts = Pick<HolderRecord, "address" | "snapshot" | "eligible" | "excluded" | "signed">;
 
-/** What the snapshot says about one wallet across the votes the site shows, and which of them it has signed. */
-export async function holderFacts(address: Address, votes: VoteConfig[] = visibleVotes()): Promise<HolderFacts> {
+/**
+ * What the snapshot says about one wallet across the votes the site shows,
+ * and which of them it has signed. In a close-weighted vote the wallet can
+ * vote when `current` (its $GLOAM now, read on the server) is above zero.
+ */
+export async function holderFacts(address: Address, votes: VoteConfig[] = visibleVotes(), current: bigint | null = null): Promise<HolderFacts> {
   let held = 0n;
   let eligible = false;
   let excluded: string | null = null;
@@ -57,11 +62,15 @@ export async function holderFacts(address: Address, votes: VoteConfig[] = visibl
   await Promise.all(
     votes.map(async (v) => {
       const snapshot = snapshotFor(v);
-      if (!snapshot) return;
-      const w = weightOf(snapshot, excludedForVote(v), address);
-      if (w.held > held) held = w.held;
-      if (w.weight > 0n) eligible = true;
-      if (w.excluded && !excluded) excluded = w.excluded.reason;
+      const ex = excludedForVote(v).get(address.toLowerCase());
+      if (ex && !excluded) excluded = ex.reason;
+      if (snapshot) {
+        const w = weightOf(snapshot, excludedForVote(v), address);
+        if (w.held > held) held = w.held;
+        if (w.weight > 0n && weightingOf(v) === "snapshot") eligible = true;
+      }
+      if (weightingOf(v) === "close" && !ex && current !== null && current > 0n) eligible = true;
+      if (!snapshot && weightingOf(v) === "snapshot") return;
       if (await getBallot(v.id, address)) signed.push(v.id);
     }),
   );

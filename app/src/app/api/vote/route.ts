@@ -6,6 +6,8 @@ import { voteSummary } from "@/lib/vote/results";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// the first request after a close-weighted vote ends works out its final count
+export const maxDuration = 60;
 
 const READS_PER_MINUTE = 120;
 
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
     );
   }
   try {
-    const votes = await Promise.all(visibleVotes().map((v) => voteSummary(v, snapshotFor(v), excludedForVote(v))));
+    const votes = await Promise.all(visibleVotes().map((v) => voteSummary(v, snapshotFor(v), excludedForVote(v), undefined, { finalize: true })));
     return NextResponse.json({ ok: true, data: { votes } }, { headers: { "Cache-Control": "public, s-maxage=5, stale-while-revalidate=15" } });
   } catch (e) {
     const storage = e instanceof KvUnavailableError;

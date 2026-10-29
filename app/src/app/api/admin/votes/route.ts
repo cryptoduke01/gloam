@@ -4,13 +4,14 @@ import { kvBackend } from "@/lib/partnersKv";
 import { FEEDBACK_MAX_KEPT, feedbackCsv, listFeedback } from "@/lib/vote/feedback";
 import { holdersCsv, listHolders } from "@/lib/vote/holders";
 import { VOTES } from "@/lib/vote/config";
-import { configProblems } from "@/lib/vote/core";
+import { configProblems, weightingOf } from "@/lib/vote/core";
 import { excludedForVote, snapshotFor } from "@/lib/vote/registry";
-import { ballotsCsv, voteSummary } from "@/lib/vote/results";
+import { ballotsCsv, finalBallots, finalFor, liveBallots, voteSummary } from "@/lib/vote/results";
 import { listBallots } from "@/lib/vote/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const noStore = { "Cache-Control": "no-store" };
 
@@ -19,6 +20,9 @@ const noStore = { "Cache-Control": "no-store" };
  * every feedback note, and every connected wallet (holders) with the votes it
  * has a ballot in. ?format=csv&kind=votes[&vote=<id>], kind=feedback or
  * kind=holders downloads a spreadsheet; ?download=1 the whole JSON.
+ *
+ * For a close-weighted vote each ballot also carries `live` (its wallet's
+ * $GLOAM now) and, once the vote is counted, `final` (at the closing block).
  */
 export async function GET(req: Request) {
   if (!(await isAdminAuthenticated())) {
@@ -29,10 +33,20 @@ export async function GET(req: Request) {
   try {
     const votes = VOTES.filter((v) => configProblems(v).length === 0);
     const rows = await Promise.all(
-      votes.map(async (v) => ({
-        summary: await voteSummary(v, snapshotFor(v), excludedForVote(v)),
-        ballots: backend === "none" ? [] : await listBallots(v.id),
-      })),
+      votes.map(async (v) => {
+        const snapshot = snapshotFor(v);
+        const excluded = excludedForVote(v);
+        const summary = await voteSummary(v, snapshot, excluded, undefined, { finalize: true });
+        const ballots = backend === "none" ? [] : await listBallots(v.id);
+        if (weightingOf(v) !== "close") return { summary, ballots };
+        const [live, final] = await Promise.all([liveBallots(v, ballots, excluded), finalFor(v, snapshot, excluded)]);
+        const liveBy = new Map(live.map((b) => [b.voter.toLowerCase(), b.weight]));
+        const finalBy = final ? new Map(finalBallots(ballots, final).map((b) => [b.voter.toLowerCase(), b.weight])) : null;
+        return {
+          summary,
+          ballots: ballots.map((b) => ({ ...b, live: liveBy.get(b.voter.toLowerCase()) ?? null, final: finalBy?.get(b.voter.toLowerCase()) ?? null })),
+        };
+      }),
     );
     const feedback = backend === "none" ? [] : await listFeedback();
     // which votes each wallet has a ballot in now (a wallet can vote after it was last seen)

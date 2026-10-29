@@ -34,7 +34,8 @@ export async function POST(req: Request) {
   } catch {
     return fail(400, "bad_address", "That wallet address doesn't look right.");
   }
-  const [facts, current] = await Promise.all([holderFacts(address).catch(() => null), readGloamNow(address)]);
+  const current = await readGloamNow(address);
+  const facts = await holderFacts(address, undefined, current).catch(() => null);
   let recorded = false;
   if (facts) {
     try {
