@@ -68,9 +68,11 @@ interface IERC20Meta {
  *   forge script $S --sig "status()" --rpc-url https://rpc.mainnet.chain.robinhood.com
  *   (and the same with each of the other three RPCs)
  *
- * Calls per chain (queue, cancelStale, execute each): Robinhood Chain 30,
- * Base 5, Ethereum 7, Tempo 4 (cancelStale: one fewer on Base and Ethereum,
- * where BDX has no older change queued). Gas measured on forks: queueChange
+ * Calls per chain (queue, cancelStale, execute each): Robinhood Chain 31,
+ * Base 5, Ethereum 7, Tempo 4 (cancelStale: one fewer on Robinhood Chain, for
+ * GRIFT, and on Base and Ethereum, for BDX: those have no older change queued).
+ * Robinhood Chain's RPC can report the nonce ahead of forge; pass --slow there
+ * so each queue waits for the one before it. Gas measured on forks: queueChange
  * ~54k, cancelChange ~27k, executeChange ~35k to 52k (Tempo's queueChange is
  * ~286k: a new storage slot costs more there). Ethereum is the tight one: the
  * owner holds about 0.0004 ETH, and the 7 queues are ~377k gas, so check
@@ -128,9 +130,9 @@ contract NoDepositLimits is Script {
     }
 
     /// @notice Robinhood Chain (4663): USDG, GLOAM, then the 28 swap assets
-    ///         (RaiseDepositLimits' order; stale = its 100x values).
+    ///         (RaiseDepositLimits' order; stale = its 100x values), then GRIFT.
     function _robinhood() internal pure returns (Asset[] memory a) {
-        a = new Asset[](30);
+        a = new Asset[](31);
         a[0] = Asset("USDG", 0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168, 6, 50_000e6, 2_500_000e6);
         a[1] = Asset("GLOAM", 0xDcD885F5c60b3aD49F6D58718696417314e8724d, 18, 2_500_000e18, 25_000_000e18);
         a[2] = Asset("WETH", 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, 18, 42e18, 1_000e18);
@@ -161,6 +163,9 @@ contract NoDepositLimits is Script {
         a[27] = Asset("GLD", 0xC9a981FEE1F9DEc688bb123ccDeCc63D0deBFC4e, 18, 270e18, 6_800e18);
         a[28] = Asset("QQQ", 0xD5f3879160bc7c32ebb4dC785F8a4F505888de68, 18, 140e18, 3_500e18);
         a[29] = Asset("MU", 0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD, 18, 110e18, 2_800e18);
+        // San Verano's $GRIFT: a plain OpenZeppelin ERC-20 from the Pons v2 launcher (verified on
+        // Sourcify), no transfer tax or rebase. New to the vault, so no older change to cancel.
+        a[30] = Asset("GRIFT", 0x9f4BA41F91a59A34e17eE8C9EB3A51363B11aBD5, 18, 0, 0);
     }
 
     /// @notice Base (8453): USDC, EURC, USDT, native ETH, and BDX.

@@ -68,6 +68,8 @@ const SPECIAL_LOGOS: Record<string, string> = {
   pyusd: "/brand/tokens/pyusd.png",
   // Beldex's BDX on Base and Ethereum: its round mark, from CoinGecko's listing (coins/images/5111)
   bdx: "/brand/tokens/bdx.png",
+  // San Verano's $GRIFT: the logo its token contract points at (logo(), on IPFS)
+  grift: "/brand/tokens/grift.png",
   ousd: "/brand/logos/ousd.svg",
   pathusd: "/brand/logos/pathusd.svg",
   alphausd: "/brand/logos/alphausd.svg",

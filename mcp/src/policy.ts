@@ -56,6 +56,7 @@ import {
   GLOAM_TOKEN,
   NATIVE_ASSET,
   RH_MAINNET_CHAIN_ID,
+  RH_MAINNET_GRIFT,
   RH_MAINNET_USDG,
   RH_USDG,
   TEMPO_MAINNET_CHAIN_ID,
@@ -163,6 +164,7 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   // Mainnet: exactly what the mainnet pools list.
   { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6, stable: true },
   { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18, stable: false },
+  { symbol: "GRIFT", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_GRIFT, decimals: 18, stable: false },
   { symbol: "USDC.e", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDCE, decimals: 6, stable: true },
   { symbol: "pathUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_PATHUSD, decimals: 6, stable: true },
   { symbol: "USDT0", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDT0, decimals: 6, stable: true },
