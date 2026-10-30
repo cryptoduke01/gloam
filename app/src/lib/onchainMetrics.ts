@@ -556,7 +556,7 @@ async function loadListedTokenMarks(): Promise<Map<string, number>> {
  * the swap tokens as loadSwapTokenMarks says. Stablecoins count as $1, WETH as ETH. Cached five minutes in memory and Redis; the
  * upstreams are slow, so this starts alongside the chain reads.
  */
-async function loadPrices(): Promise<Prices> {
+export async function loadPrices(): Promise<Prices> {
   if (priceCache && Date.now() - priceCache.at < PRICE_TTL_MS) return priceCache;
   const stored = await cacheGetJson<{ at: number; ethUsd: number | null; marks: [string, number][]; stocks?: Prices["stocks"] }>(PRICE_KEY);
   if (stored && Date.now() - stored.at < PRICE_TTL_MS) {
