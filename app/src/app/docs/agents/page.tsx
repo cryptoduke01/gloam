@@ -395,6 +395,12 @@ const hash = await wallet.writeContract({
         the <Link href="/docs/privacy-model">privacy model</Link> for what stays
         hidden and what does not.
       </p>
+      <p>
+        An economy that posts a merkle root of its records every night can keep
+        agent payments private and still checkable: each payment&apos;s receipt
+        becomes one leaf in that root. See{" "}
+        <Link href="/docs/agents/commitments">private commerce with commitments</Link>.
+      </p>
 
       <h2 id="check-before-paying">Check before paying (Agent Wormhole)</h2>
       <p>
