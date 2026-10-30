@@ -12,6 +12,18 @@ const MAX_PATH = 120;
 const MAX_SEGMENTS = 8;
 const REDACTED = ":redacted";
 
+/**
+ * A Wallet X-ray page: its path holds the wallet someone looked up, an address
+ * or an ENS name, and analytics never gets either. Unlike the other sensitive
+ * segments a name reads as an ordinary slug, so this goes by the route.
+ */
+const XRAY_PAGE = /\/xray\/[^/?#]+.*$/;
+
+/** A path or full URL with any looked-up wallet taken out. Runs in the browser, before anything is sent. */
+export function withoutLookup(pathOrUrl: string): string {
+  return pathOrUrl.replace(XRAY_PAGE, `/xray/${REDACTED}`);
+}
+
 /** A segment that could carry something private: a payment code, an address, a hash, a long number. */
 const SENSITIVE_SEGMENT = /gloam(?:r1|2t|1e|1)|0x[0-9a-f]{8,}|^[0-9a-f]{24,}$|^\d{6,}$/i;
 /** Readable slugs (blog posts, docs pages) are kept even when long. */
@@ -51,7 +63,7 @@ export function cleanPath(raw: unknown): string | null {
     .slice(0, MAX_SEGMENTS)
     .map((s) => (sensitive(s) ? REDACTED : s.replace(/[^A-Za-z0-9._~-]/g, "")))
     .filter(Boolean);
-  return `/${segments.join("/")}`.slice(0, MAX_PATH);
+  return withoutLookup(`/${segments.join("/")}`).slice(0, MAX_PATH);
 }
 
 /**

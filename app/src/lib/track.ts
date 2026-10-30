@@ -6,6 +6,7 @@
  * nothing.
  */
 
+import { withoutLookup } from "@/lib/analyticsClean";
 import { analyticsAllowed } from "@/lib/consent";
 import { readDemo } from "@/lib/demoFlag";
 import { getActiveNetwork } from "@/lib/networks";
@@ -64,8 +65,8 @@ export function track(
 
   send({
     t: event,
-    path: window.location.pathname,
-    ref: document.referrer || null,
+    path: withoutLookup(window.location.pathname),
+    ref: document.referrer ? withoutLookup(document.referrer) : null,
     meta: { ...networkMeta(), ...(meta ?? {}) },
     ts: Date.now(),
   });

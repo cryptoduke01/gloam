@@ -29,6 +29,7 @@ const LOCAL_BUCKETS = new Set([
   "markets",
   "activity",
   "vault-leaves",
+  "xray-card",
   "api-ip",
   "screen-policy",
   "tg-user",
