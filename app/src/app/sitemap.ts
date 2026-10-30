@@ -35,6 +35,7 @@ const PAGES: { path: string; priority: number }[] = [
   { path: "/docs/private-swaps", priority: 0.6 },
   { path: "/docs/proofs", priority: 0.6 },
   { path: "/docs/agents", priority: 0.6 },
+  { path: "/docs/agents/commitments", priority: 0.6 },
   { path: "/docs/virtuals", priority: 0.6 },
   { path: "/docs/bridge", priority: 0.6 },
   { path: "/docs/chain", priority: 0.6 },

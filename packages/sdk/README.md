@@ -28,6 +28,7 @@ Add shielded balances, private payments, and selective disclosure to any app or 
 - [Private agents](#private-agents)
 - [Private agent payments (x402)](#private-agent-payments-x402)
 - [Take payments and read their notes](#take-payments-and-read-their-notes)
+- [Commerce with commitments](#commerce-with-commitments)
 - [API reference](#api-reference)
 - [Framework integration](#framework-integration)
 - [Examples](#examples)
@@ -448,6 +449,57 @@ for (const p of payments) {
 
 **Every network has a board,** every mainnet included (since October 2026), so `scanIncomingPayments` finds payments to your key on its own. A payer can also hand you the sealed code (`gloam2t.…`) their app shows after paying; check it with `openIncomingPayment`, which says whether it is ready, has not landed yet, or was already spent. The full runnable version is [`examples/receive-and-credit.ts`](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts).
 
+## Commerce with commitments
+
+For an economy that already posts a merkle root of its records on chain (a game city, a marketplace, an agent network). Payments stay private, and each one becomes a leaf in that root that anyone holding the record can check later.
+
+1. **Pay privately.** `buildPrivatePaymentWithReceipt` builds the private send to the payee's receive tag, seals the payment to it, and returns the plan for its receipt. The agent signs `intent.exec` (and `memo`, so the payee finds it).
+2. **Prove.** Once the transfer lands, `buildPaymentReceipt` proves it with the receipt circuit, bound to a label you pick (a record id) and an expiry, and returns the record with its leaf.
+3. **Commit.** Put `record.leaf` in your nightly root; store the record (no secrets in it) off chain.
+4. **Check.** `checkPaymentReceipt` recomputes the leaf, checks the fields and the context, verifies the proof, and reads the chain: the vault had the root, and the transaction's `Transferred` event created this note as the payment.
+
+```ts
+import {
+  buildPrivatePaymentWithReceipt, buildPaymentReceipt, checkPaymentReceipt,
+  verifyGroth16, proveGroth16, POOL_TRANSFER_ABI, transferCallArgs, syncTree,
+} from "@gloamtrade/sdk";
+
+const pay = await buildPrivatePaymentWithReceipt({
+  payTo: supplierTag, chainId: net.chainId, asset: usdg.address, amountWei: parseUnits("25", 6),
+  from: { secretHex: note.secret, amountWei: note.amount, path },
+  prove: transferProver,
+  receipt: { verifier: "nightly-root:sale:8812" },
+});
+const txHash = await wallet.writeContract({
+  address: net.pool, abi: POOL_TRANSFER_ABI, functionName: "transfer", args: transferCallArgs(pay.intent),
+});
+if (pay.memo) await wallet.writeContract(pay.memo);
+
+const synced = await syncTree(client, { pool: net.pool, fromBlock: net.deployBlock });
+const record = await buildPaymentReceipt({
+  plan: pay.receiptPlan,
+  path: (await synced.pathForCommitment(pay.paymentNote.commitment))!,
+  txHash,
+  prove: (input) => proveGroth16(input, "receipt.wasm", "final/receipt_final.zkey"),
+});
+// record.leaf goes in your root
+
+const result = await checkPaymentReceipt(record, {
+  verifySnark: (signals, proof) => verifyGroth16(receiptVkey, signals, proof),
+  client,
+}); // result.ok, result.checks
+```
+
+The leaf, so a Solidity contract or any other language can recompute it:
+
+```
+keccak256(abi.encode("gloam.receipt-leaf.v1", uint256 chainId, address pool, bytes32 txHash, uint256[7] signals))
+```
+
+with `signals` the receipt's public signals in circuit order: `[root, commitment, asset, minAmount, reveal, shownAmount, context]`. `paymentReceiptLeaf` computes it and `verifyPaymentReceiptLeaf` recomputes and compares; the tests pin a vector that Solidity and `cast` reproduce. `agentSigningAllowlist({ chainId, assets })` lists every call an agent signs (token approvals of the vault, `shieldBound`, `transfer`, `unshield`, `postMemo`) with selectors from the ABIs the SDK signs with, for an economy that signs only from an allowlist.
+
+What it does not do: no contract verifies receipt proofs on chain; they are checked off chain (`verifyGroth16`, gloam.trade/verify, the partner API). A receipt shows a private payment of that asset and size was made by that transaction, not who received it. An agent that signs its own transfer is that transaction's sender; the relay (`relayIntent`, `relayMemo`) keeps its wallet out of it. Guide: [gloam.trade/docs/agents/commitments](https://gloam.trade/docs/agents/commitments).
+
 ## API reference
 
 Everything exports from one barrel. The crypto and math core is pure and runs anywhere. Proving (snarkjs plus artifacts) and storage (notes, keys) are injected, so the same core serves a browser app and a node signer.
@@ -577,6 +629,19 @@ cleanPaymentNote(s), PAYMENT_NOTE_MAX                         // the app's note 
 
 `IncomingPayment` carries `commitment`, `nullifier`, `amountWei`, `asset`, `note`, the `sealedTicket`, the opened `notePackage` (pass `notePackageToExport(notePackage)` to `sweepReceivedNote`), and where it was posted. Note packages now carry the payer's note under `n`, byte for byte like the app.
 
+### Commerce with commitments
+
+```ts
+buildPrivatePaymentWithReceipt(p): Promise<PrivatePaymentWithReceipt>  // private send to a tag + the receipt plan
+buildPaymentReceipt({ plan, path, txHash, prove }): Promise<PaymentReceiptRecord>
+paymentReceiptLeaf(fields): Hex / verifyPaymentReceiptLeaf(leaf, fields): boolean
+checkPaymentReceipt(record, { leaf?, verifySnark?, client?, now? }): Promise<ReceiptCheckResult>
+verifyGroth16(vkey, publicSignals, proof): Promise<boolean>    // off-chain proof check
+paymentProofText(record)                                       // gloampay1:… for /verify
+agentSigningAllowlist({ chainId?, assets? }): AgentSigningEntry[]
+GLOAM_VAULT_AGENT_ABI, PAY_MEMO_ABI, RECEIPT_LEAF_DOMAIN, cleanReceiptLabel
+```
+
 ### Merkle, rates, privacy, constants
 
 ```ts
@@ -625,6 +690,7 @@ Runnable references, one for each shape a builder starts from:
 | [pay-x402](https://github.com/cryptoduke01/gloam/tree/main/examples/pay-x402) | Node | A private agent payment over x402: price, pay sealed to the payee, sweep, serve. |
 | [web-shield](https://github.com/cryptoduke01/gloam/tree/main/examples/web-shield) | Browser | Shield in the browser, read the balance back from chain. |
 | [receive-and-credit](https://github.com/cryptoduke01/gloam/tree/main/packages/sdk/examples/receive-and-credit.ts) | Node | Take payments by request link, read each payment's note, secure it, credit the account it names. |
+| [san-verano](https://github.com/cryptoduke01/gloam/tree/main/examples/san-verano) | Node | Commerce with commitments: pay a supplier privately, sweep, prove, put the receipt leaf in a nightly root; a dry run by default. |
 
 ![Add money privately in the browser](https://raw.githubusercontent.com/cryptoduke01/gloam/main/app/public/media/readme-browser.jpg)
 

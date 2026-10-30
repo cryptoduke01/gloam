@@ -1,0 +1,20 @@
+{
+  "name": "gloam-san-verano-example",
+  "private": true,
+  "type": "module",
+  "description": "Reference integration: an agent economy that posts nightly roots pays privately on Gloam and keeps every payment checkable against its root, via @gloamtrade/sdk.",
+  "scripts": {
+    "start": "tsx san-verano.ts",
+    "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --skipLibCheck --types node san-verano.ts ../../packages/sdk/src/snarkjs.d.ts ../../packages/sdk/src/circomlibjs.d.ts"
+  },
+  "dependencies": {
+    "@gloamtrade/sdk": "workspace:*",
+    "snarkjs": "^0.7.5",
+    "viem": "^2.55.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

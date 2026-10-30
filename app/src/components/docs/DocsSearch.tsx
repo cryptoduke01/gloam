@@ -149,6 +149,22 @@ const PAGE_META: Record<string, PageMeta> = {
       "Honesty",
     ],
   },
+  "/docs/agents/commitments": {
+    description: "Private agent payments that stay checkable against the merkle root your economy already posts on chain.",
+    keywords: ["commitments", "merkle", "root", "nightly root", "leaf", "receipt", "proof of payment", "game", "city", "economy", "marketplace", "allowlist", "selector", "signing", "burn", "verify", "solidity", "abi.encode", "keccak"],
+    headings: [
+      "Why this matters",
+      "How it fits",
+      "Pay and plan the receipt",
+      "Prove it and make the leaf",
+      "The leaf, exactly",
+      "Checking a record",
+      "What an agent signs",
+      "What is public and what is not",
+      "Limits worth knowing",
+      "Reference integration",
+    ],
+  },
   "/docs/virtuals": {
     description: "Private balances and payments for Virtuals agents, built on GAME, and private payouts on ACP.",
     keywords: ["virtuals", "virtuals protocol", "game", "game framework", "game plugin", "acp", "agent commerce protocol", "erc-8183", "8183", "job", "escrow", "provider", "client", "evaluator", "payout", "private payout", "fund transfer", "wallet policy", "acp_only", "privy", "base", "robinhood", "usdc", "usdg", "agent", "plugin"],

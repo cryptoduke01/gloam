@@ -50,3 +50,19 @@ export function artifactProver(artifacts: Groth16Artifacts): Prover {
   return (circomInput) =>
     proveGroth16(circomInput, artifacts.wasm, artifacts.zkey);
 }
+
+/**
+ * Check a Groth16 proof against a checking key (a circuit's *_vkey.json), for
+ * the proofs that are checked off chain (receipt, funds, payroll). Loads
+ * snarkjs like proveGroth16. False, never a throw, for a malformed proof.
+ */
+export async function verifyGroth16(vkey: unknown, publicSignals: readonly string[], proof: unknown): Promise<boolean> {
+  if (!publicSignals.every((s) => typeof s === "string" && /^\d{1,78}$/.test(s))) return false;
+  if (!proof || typeof proof !== "object") return false;
+  const snarkjs = await import("snarkjs");
+  try {
+    return await snarkjs.groth16.verify(vkey, [...publicSignals], proof);
+  } catch {
+    return false;
+  }
+}

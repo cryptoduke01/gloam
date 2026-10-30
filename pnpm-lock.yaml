@@ -188,6 +188,28 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/san-verano:
+    dependencies:
+      '@gloamtrade/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      snarkjs:
+        specifier: ^0.7.5
+        version: 0.7.5
+      viem:
+        specifier: ^2.55.2
+        version: 2.55.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      tsx:
+        specifier: ^4
+        version: 4.23.1
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   examples/virtuals-acp-provider:
     dependencies:
       '@gloamtrade/game-plugin-gloam':

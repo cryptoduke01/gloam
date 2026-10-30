@@ -567,6 +567,38 @@ GLOAM_VS_ZONE, GLOAM_X402_SCHEME`}</code>
         example: <code>examples/pay-x402</code>.
       </p>
 
+      {/* ─────────────────────────  commerce  ───────────────────────── */}
+      <h2 id="commerce">Commerce with commitments</h2>
+      <p>
+        Pay privately, prove the payment with the receipt circuit, and put one{" "}
+        <code>bytes32</code> leaf per payment into a merkle root you already
+        post. Receipt proofs are checked off chain; no contract verifies them
+        today. Guide: <Link href="/docs/agents/commitments">private commerce with commitments</Link>.
+      </p>
+      <pre>
+        <code>{`// payer: private send to a receive tag + the plan for its receipt (does not broadcast)
+buildPrivatePaymentWithReceipt(p): Promise<PrivatePaymentWithReceipt>
+//   p: { payTo, chainId, poolAddress?, asset, amountWei, from: { secretHex, amountWei, path },
+//        prove, note?, receipt: { verifier, expiresAt?, reveal?, minAmountWei? } }
+//   returns { intent, paymentNote, changeNote, sealedTicket, memo, receiptPlan }
+
+// payer, once the transfer landed: the receipt proof and its leaf
+buildPaymentReceipt({ plan, path, txHash, prove }): Promise<PaymentReceiptRecord>
+
+// keccak256(abi.encode("gloam.receipt-leaf.v1", chainId, pool, txHash, uint256[7] signals))
+paymentReceiptLeaf({ chainId, pool, txHash, publicSignals }): Hex
+verifyPaymentReceiptLeaf(leaf, fields): boolean
+
+// anyone: leaf, fields, context, vault, snark, chain, root, payment
+checkPaymentReceipt(record, { leaf?, verifySnark?, client?, now? }): Promise<ReceiptCheckResult>
+verifyGroth16(vkey, publicSignals, proof): Promise<boolean>
+paymentProofText(record): string            // gloampay1:… for /verify and the partner API
+
+// every call an agent signs, for a signing allowlist
+agentSigningAllowlist({ chainId?, assets? }): AgentSigningEntry[]
+GLOAM_VAULT_AGENT_ABI, PAY_MEMO_ABI, RECEIPT_LEAF_DOMAIN, cleanReceiptLabel`}</code>
+      </pre>
+
       {/* ─────────────────────────  witness  ───────────────────────── */}
       <h2>Witness builders</h2>
       <p>
