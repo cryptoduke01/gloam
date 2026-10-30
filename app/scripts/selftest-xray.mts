@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { zeroAddress } from "viem";
-import { dedupeTransfers, factsFrom, spansFrom, type XrayToken, type XrayTransfer } from "../src/lib/xray/history";
+import { dedupeTransfers, factsFrom, spansFrom, stockTxs, type XrayToken, type XrayTransfer } from "../src/lib/xray/history";
 import { parseXrayQuery, shortAddress } from "../src/lib/xray/input";
 
 let n = 0;
@@ -172,6 +172,22 @@ eq(facts([]), {
   ]);
   eq(f.stockTrades, 0);
   eq(f.stocksTraded, []);
+}
+
+// a trade settled in a token off the list: the receipt shows it, and it counts towards nothing else
+{
+  const OFF_LIST = "0x00000000000000000000000000000000000000f0";
+  const bought = move(TSLA, POOL, WALLET, 1n, 10n, "0xoff");
+  const paid = move(OFF_LIST, WALLET, POOL, 900n, 10n, "0xoff");
+  const gift = move(TSLA, ALICE, WALLET, 1n, 20n, "0xgift2");
+  eq(stockTxs([gift, bought], tokens), ["0xoff", "0xgift2"], "oldest first, each transaction once");
+  eq(facts([bought]).stockTrades, 0, "with only the stock read, no trade can be claimed");
+  const f = factsFrom(WALLET, [bought, gift], tokens, usdOf, [paid]);
+  eq(f.stockTrades, 1);
+  eq(f.stocksTraded, ["TSLA"]);
+  eq(f.transfers, 2, "receipt moves are not transfers of the listed tokens");
+  eq(f.counterparties, 2, "POOL and ALICE, from the rows alone");
+  eq(f.biggestOut, undefined, "a token with no list entry can not be the biggest anything");
 }
 
 /* ------------------------------------------------------------------ spans */

@@ -19,15 +19,16 @@
  * Inbound first for each token: a wallet can only send what it has received, so
  * outbound is read only for a token that came in, and only from when it did.
  */
-import { createPublicClient, formatUnits, parseAbiItem, type Address, type PublicClient } from "viem";
+import { createPublicClient, formatUnits, parseAbiItem, toEventSelector, type Address, type PublicClient, type TransactionReceipt } from "viem";
 import { getLogsSafe, isRateLimit } from "@/lib/logRange";
 import { getNetwork } from "@/lib/networks";
 import { readTransport } from "@/lib/readTransport";
 import { nodeFailed } from "@/lib/rpcList";
 import { holdableTokens } from "@/lib/vaultAssets";
-import { factsFrom, spansFrom, type XrayFacts, type XrayToken, type XrayTransfer } from "./history";
+import { factsFrom, spansFrom, stockTxs, type XrayFacts, type XrayToken, type XrayTransfer } from "./history";
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+const TRANSFER_TOPIC = toEventSelector(TRANSFER);
 
 /**
  * One query at a time, with a short gap. Measured on the public RPC: one at a
@@ -42,6 +43,8 @@ const MAX_COOL_OFF_MS = 20_000;
 const MAX_WAITS = 6;
 /** More transfers than this is an exchange, a pool or a bot, not a wallet to total up in a browser tab. */
 const MAX_TRANSFERS = 20_000;
+/** Receipts read per wallet to see what its stocks were traded against. Past this the count says "at least". */
+const MAX_RECEIPTS = 60;
 /** A finished read is kept this long, in this tab's memory only. */
 const FRESH_MS = 5 * 60_000;
 /** Read straight after what the wallet holds: stablecoin and ETH sides of nearly every move here. */
@@ -68,6 +71,8 @@ export type XrayHistory = Omit<XrayFacts, "firstBlock" | "lastBlock" | "firstFun
   firstSeen: number | null;
   lastSeen: number | null;
   firstFunder?: { address: string; amount: string; symbol: string };
+  /** The wallet had more stock transactions than were checked, so stockTrades is a floor. */
+  stockTradesFloor: boolean;
 };
 
 export type XrayHistoryResult = { status: "read"; history: XrayHistory } | { status: "too_big" };
@@ -76,6 +81,28 @@ export type XrayHistoryResult = { status: "read"; history: XrayHistory } | { sta
 export type XrayProgress = { tokens: number; of: number; history: XrayHistory | null };
 
 class TooBig extends Error {}
+
+/** The wallet's token moves in a receipt, whichever token: a Transfer with three topics is an ERC-20 one. */
+function movesIn(receipt: TransactionReceipt, me: string): XrayTransfer[] {
+  const out: XrayTransfer[] = [];
+  for (const l of receipt.logs) {
+    const [topic, rawFrom, rawTo] = l.topics;
+    if (topic !== TRANSFER_TOPIC || l.topics.length !== 3 || !rawFrom || !rawTo || l.data.length !== 66) continue;
+    const from = `0x${rawFrom.slice(26)}`;
+    const to = `0x${rawTo.slice(26)}`;
+    if (from !== me && to !== me) continue;
+    out.push({
+      token: l.address.toLowerCase(),
+      from,
+      to,
+      value: BigInt(l.data),
+      block: receipt.blockNumber,
+      tx: receipt.transactionHash,
+      logIndex: l.logIndex ?? 0,
+    });
+  }
+  return out;
+}
 
 /**
  * At most IN_FLIGHT queries, started GAP_MS or more apart. When the node refuses,
@@ -153,6 +180,8 @@ async function read(
   const tokens = readingOrder(heldIds);
   const byAddress = new Map(tokens.map((t) => [t.address, t]));
   const rows: XrayTransfer[] = [];
+  const otherMoves: XrayTransfer[] = [];
+  let unchecked = 0;
 
   const readSide = async (token: XrayToken, side: "from" | "to", from: bigint, to: bigint) => {
     const logs = await getLogsSafe(
@@ -198,11 +227,17 @@ async function read(
 
   /** What the rows read so far show. */
   const history = async (): Promise<XrayHistory> => {
-    const facts = factsFrom(me, rows, byAddress, (r) => {
-      const amount = formatUnits(r.value, byAddress.get(r.token)!.decimals);
-      const mark = marks[r.token];
-      return { amount, usd: mark != null ? Number(amount) * mark : null };
-    });
+    const facts = factsFrom(
+      me,
+      rows,
+      byAddress,
+      (r) => {
+        const amount = formatUnits(r.value, byAddress.get(r.token)!.decimals);
+        const mark = marks[r.token];
+        return { amount, usd: mark != null ? Number(amount) * mark : null };
+      },
+      otherMoves
+    );
     const [firstSeen, lastSeen] = await Promise.all([stamp(facts.firstBlock), stamp(facts.lastBlock)]);
     const { firstBlock: _first, lastBlock: _last, firstFunder, ...rest } = facts;
     void _first;
@@ -211,6 +246,7 @@ async function read(
       ...rest,
       firstSeen,
       lastSeen,
+      stockTradesFloor: unchecked > 0,
       ...(firstFunder ? { firstFunder: { address: firstFunder.address, amount: firstFunder.amount, symbol: firstFunder.symbol } } : {}),
     };
   };
@@ -238,6 +274,13 @@ async function read(
       if (first !== undefined) await readSpans(t, "from", first);
       finished++;
       await show();
+    }
+
+    // What the stocks were traded against: a token off the list leaves no row, but it is in the receipt.
+    const txs = stockTxs(rows, byAddress);
+    unchecked = Math.max(0, txs.length - MAX_RECEIPTS);
+    for (const hash of txs.slice(-MAX_RECEIPTS)) {
+      otherMoves.push(...movesIn(await paced(() => client.getTransactionReceipt({ hash: hash as `0x${string}` })), me));
     }
     return { status: "read", history: await history() };
   } catch (e) {

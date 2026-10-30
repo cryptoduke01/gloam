@@ -37,11 +37,16 @@ export type XrayFacts = {
   /** Different addresses it has sent to or received from. */
   counterparties: number;
   topCounterparty?: { address: string; transfers: number };
-  /** Transactions swapping a stock token against another listed token. */
+  /** Transactions swapping a stock token against another token. */
   stockTrades: number;
   /** The stocks those trades touched, most traded first. */
   stocksTraded: string[];
 };
+
+/** Transactions in `rows` where a stock moved, oldest first: the ones worth reading a receipt for. */
+export function stockTxs(rows: readonly XrayTransfer[], tokens: ReadonlyMap<string, XrayToken>): string[] {
+  return [...new Set(dedupeTransfers(rows).filter((r) => tokens.get(r.token)?.stock).sort(byChainOrder).map((r) => r.tx))];
+}
 
 /** The widest span the Robinhood Chain RPC takes for one token and one address. */
 const SPAN = 10_000_000n;
@@ -74,10 +79,11 @@ function byChainOrder(a: XrayTransfer, b: XrayTransfer): number {
 
 /**
  * A stock trade: one transaction where the wallet's stock balance goes one way
- * and another listed token goes the other. Worked out from net moves, so a
- * transfer routed through the wallet in and straight out does not count, and a
- * stock simply received from someone is not a trade. A buy paid in plain ETH
- * shows no second token, so it is not counted either.
+ * and another token goes the other. Worked out from net moves, so a transfer
+ * routed through the wallet in and straight out does not count, and a stock
+ * simply received from someone is not a trade. Trades here often settle in a
+ * token Gloam does not list, so `rows` includes those moves where the caller has
+ * read them. A buy paid in plain ETH shows no second token, so it is not counted.
  */
 function stockTrades(wallet: string, rows: readonly XrayTransfer[], tokens: ReadonlyMap<string, XrayToken>) {
   const byTx = new Map<string, Map<string, bigint>>();
@@ -108,13 +114,16 @@ function stockTrades(wallet: string, rows: readonly XrayTransfer[], tokens: Read
 /**
  * The facts in `rows` for `wallet` (lowercase). `usdOf` prices a transfer at
  * today's price, null when nothing prices the token, and such a transfer can
- * not be ranked, so it is never the biggest.
+ * not be ranked, so it is never the biggest. `otherMoves` are the wallet's moves
+ * in tokens outside the list, read from receipts: they only show what a stock
+ * was traded against, and count towards nothing else.
  */
 export function factsFrom(
   wallet: string,
   rows: readonly XrayTransfer[],
   tokens: ReadonlyMap<string, XrayToken>,
-  usdOf: (r: XrayTransfer) => { usd: number | null; amount: string }
+  usdOf: (r: XrayTransfer) => { usd: number | null; amount: string },
+  otherMoves: readonly XrayTransfer[] = []
 ): XrayFacts {
   const moved = dedupeTransfers(rows).sort(byChainOrder);
   const counts = new Map<string, number>();
@@ -147,7 +156,7 @@ export function factsFrom(
       ? { address: first.from, amount: usdOf(first).amount, symbol: token.symbol, block: first.block }
       : undefined;
 
-  const trades = stockTrades(wallet, moved, tokens);
+  const trades = stockTrades(wallet, dedupeTransfers([...moved, ...otherMoves]), tokens);
   return {
     transfers: moved.length,
     firstBlock: moved[0]?.block ?? null,
