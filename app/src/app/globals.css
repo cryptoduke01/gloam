@@ -454,6 +454,17 @@ body {
   background: var(--surface);
   border-radius: 18px;
 }
+/* The Wallet X-ray's receipt: paper with a torn foot. The teeth are cut with a
+   mask, so the edge stays true on either theme with no drawn border. */
+.xr-paper {
+  --tooth: 9px;
+  --edge: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(2 * var(--tooth)) var(--tooth) repeat-x;
+  --body: linear-gradient(#000 0 0) top / 100% calc(100% - var(--tooth) + 1px) no-repeat;
+  background: var(--surface);
+  border-radius: 18px 18px 0 0;
+  -webkit-mask: var(--edge), var(--body);
+  mask: var(--edge), var(--body);
+}
 /* The glass rim around a panel: 8px of glass (p-2) around a 12px panel, so the
    outer corner is 12 + 8 and the two curves stay concentric. */
 .gl-glass {

@@ -34,6 +34,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // A Wallet X-ray page has the wallet in its path. Search engines stay out of
+        // the page and its preview image, and nothing it links to learns the address.
+        // Not a robots.txt rule: that would stop X's crawler reading the preview card.
+        source: "/xray/:wallet+",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
         // proving files: a day in the browser and on the CDN. The integrity check
         // revalidates each one (lib/circuitArtifacts), so a regenerated file is still caught.
         source: "/circuits/:file*",
