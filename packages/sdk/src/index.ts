@@ -29,6 +29,8 @@
  *   requests  payment request links (pay my Gloam address, with a private note)
  *   incoming  payee side: find payments sealed to your key and read their notes
  *   api       GloamApiClient: the partner API (relay with a key, proofs, links)
+ *   commerce  pay privately and put a receipt leaf in a merkle root you publish;
+ *             the calls an agent signs, for a signing allowlist
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
  *             testnet), assets + launch beta limits, cash-out fee, circuit files
  *   limits    the vault's beta deposit limits, read live
@@ -68,3 +70,4 @@ export { PAYMENT_NOTE_MAX, cleanPaymentNote } from "./paymentNote.js";
 export * from "./relay.js";
 export * from "./rpc.js";
 export * from "./api.js";
+export * from "./commerce.js";
