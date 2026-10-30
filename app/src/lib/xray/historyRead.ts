@@ -37,10 +37,10 @@ const TRANSFER_TOPIC = toEventSelector(TRANSFER);
  */
 const GAP_MS = 250;
 const IN_FLIGHT = 1;
-/** How long everything waits after the node refuses, doubling up to the most, and how many refusals one query takes. */
+/** How long everything waits after the node refuses, doubling up to the most, and how many refusals in a row end the read. */
 const COOL_OFF_MS = 4_000;
 const MAX_COOL_OFF_MS = 20_000;
-const MAX_WAITS = 6;
+const MAX_STRIKES = 5;
 /** More transfers than this is an exchange, a pool or a bot, not a wallet to total up in a browser tab. */
 const MAX_TRANSFERS = 20_000;
 /** Receipts read per wallet to see what its stocks were traded against. Past this the count says "at least". */
@@ -107,10 +107,11 @@ function movesIn(receipt: TransactionReceipt, me: string): XrayTransfer[] {
 /**
  * At most IN_FLIGHT queries, started GAP_MS or more apart. When the node refuses,
  * everything waits, longer each time it happens in a row, and the query goes
- * again. In a browser a 429 does not even look like one: the reply's CORS
- * header is doubled, so it arrives as a failed fetch. So any failure of the node
- * counts, and only what the node says about the query itself (a range too wide)
- * goes back to the caller.
+ * again, until MAX_STRIKES in a row ends the read, so a node that is down costs
+ * about a minute and not several. In a browser a 429 does not even look like
+ * one: the reply's CORS header is doubled, so it arrives as a failed fetch. So
+ * any failure of the node counts, and only what the node says about the query
+ * itself (a range too wide) goes back to the caller.
  */
 function pacer(signal?: AbortSignal) {
   let next = 0;
@@ -124,7 +125,7 @@ function pacer(signal?: AbortSignal) {
     while (active >= IN_FLIGHT) await new Promise<void>((r) => parked.push(r));
     active++;
     try {
-      for (let waits = 0; ; waits++) {
+      for (;;) {
         let at = Math.max(Date.now(), next, holdUntil);
         next = at + GAP_MS;
         // a refusal while waiting pushes this start back too
@@ -139,7 +140,7 @@ function pacer(signal?: AbortSignal) {
           strikes = 0;
           return answer;
         } catch (e) {
-          if (waits >= MAX_WAITS || !(nodeFailed(e) || isRateLimit(e))) throw e;
+          if (strikes >= MAX_STRIKES || !(nodeFailed(e) || isRateLimit(e))) throw e;
           holdUntil = Date.now() + Math.min(COOL_OFF_MS * 2 ** strikes, MAX_COOL_OFF_MS);
           strikes++;
         }
