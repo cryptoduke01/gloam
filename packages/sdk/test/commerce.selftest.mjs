@@ -26,6 +26,7 @@ import {
   checkPaymentReceipt,
   paymentProofText,
   agentSigningAllowlist,
+  verifyGroth16,
   GLOAM_VAULT_AGENT_ABI,
   PAY_MEMO_ABI,
   POOL_TRANSFER_ABI,
@@ -233,7 +234,10 @@ if (existsSync(join(circuits, "receipt_final.zkey")) && existsSync(join(circuits
   assert(record.leaf === paymentReceiptLeaf(record), "the record carries its own leaf");
   assert(verifyPaymentReceiptLeaf(record.leaf, { chainId, pool: SEALED_VAULT, txHash, publicSignals: record.publicSignals }), "the leaf recomputes from chain, pool, tx and signals");
 
-  const verifySnark = (signals, proof) => snarkjs.groth16.verify(vkey, signals, proof);
+  const verifySnark = (signals, proof) => verifyGroth16(vkey, signals, proof);
+  assert(await verifyGroth16(vkey, record.publicSignals, record.proof), "verifyGroth16: the receipt verifies");
+  assert(!(await verifyGroth16(vkey, record.publicSignals, null)), "verifyGroth16: no proof is false");
+  assert(!(await verifyGroth16(vkey, ["0x1"], record.proof)), "verifyGroth16: hex signals are false, not a throw");
   const transferredLog = (commitments) => ({
     address: SEALED_VAULT.toLowerCase(),
     topics: encodeEventTopics({
