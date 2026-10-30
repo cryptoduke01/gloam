@@ -16,12 +16,11 @@
  *
  * Run after build:  node test/examples.selftest.mjs
  */
-import { mkdtempSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import ts from "typescript";
-import { existsSync } from "fs";
 import { decodeFunctionData, erc20Abi, keccak256, stringToHex } from "viem";
 import { mainnetNetwork, RH_MAINNET_USDG, RH_MAINNET_GRIFT, GLOAM_TOKEN, verifyPaymentReceiptLeaf } from "../dist/index.js";
 
