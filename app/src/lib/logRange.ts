@@ -18,9 +18,9 @@ export function errText(e: unknown): string {
 
 /** The node refusing a span as too wide or too big (not a rate limit). */
 const RANGE_ERROR =
-  /block range|range (is )?too|exceeds? (the )?max|max(imum)? block|only \d+ are allowed|more than \d+ (results|logs)|too many (results|logs)|response size|query timeout|limit exceeded|exceeds limit of \d+|logs matched by query/i;
+  /block range|range (is )?too|exceeds? (the )?max|max(imum)? block|only \d+ are allowed|more than \d+ (results|logs)|too many (results|logs)|response size|query timeout|query timed out|limit exceeded|exceeds limit of \d+|logs matched by query/i;
 
-function isRateLimit(e: unknown): boolean {
+export function isRateLimit(e: unknown): boolean {
   const status = (e as { status?: number })?.status;
   return status === 429 || /429|too many requests|rate ?limit/i.test(errText(e));
 }
