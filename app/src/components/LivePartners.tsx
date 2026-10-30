@@ -1,8 +1,11 @@
+import Image from "next/image";
+
 /**
  * Partners already live on Gloam: a plain logo row on the landing page and /partners.
- * The marks are drawn inline so they follow the theme: Raeto's ring takes the
- * text colour, Agent Wormhole keeps its own dark disc. Static copies of both
- * live in public/brand/partners.
+ * Raeto and Agent Wormhole are drawn inline so they follow the theme: Raeto's ring
+ * takes the text colour, Agent Wormhole keeps its own dark disc. Zedkr's mark is a
+ * rendered file, so it ships as its own black and white PNGs and the theme picks
+ * one. Static copies of all three live in public/brand/partners.
  */
 
 /** Raeto's mark: an open ring, a centre dot and the green dot in the gap. */
@@ -46,6 +49,17 @@ export function AgentWormholeMark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** Zedkr's mark: their own files from zedkr.finance, black on light and white on dark. */
+export function ZedkrMark({ size = 40 }: { size?: number }) {
+  const width = Math.round((size * 230) / 256);
+  return (
+    <>
+      <Image src="/brand/partners/zedkr-mark.png" alt="" width={width} height={size} className="block dark:hidden" />
+      <Image src="/brand/partners/zedkr-mark-white.png" alt="" width={width} height={size} className="hidden dark:block" />
+    </>
+  );
+}
+
 type Partner = {
   name: string;
   href: string;
@@ -57,6 +71,7 @@ type Partner = {
 export const LIVE_PARTNERS: Partner[] = [
   { name: "Raeto", href: "https://raeto.cc", line: "Private agent funding", Mark: RaetoMark },
   { name: "Agent Wormhole", href: "https://agentwormhole.com", line: "Agent payments checked before they go", Mark: AgentWormholeMark },
+  { name: "Zedkr", href: "https://zedkr.finance", line: "Shop Amazon and eBay from a private balance", Mark: ZedkrMark },
 ];
 
 function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {
@@ -78,8 +93,8 @@ function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?
 
 /**
  * Landing page, right under the hero: who already runs on Gloam. A quiet line
- * and the real marks, centred on the page, so two partners sit balanced and a
- * longer list wraps into centred rows the same way.
+ * and the real marks, centred on the page, so a short list sits balanced and a
+ * longer one wraps into centred rows the same way.
  */
 export function LivePartnersStrip() {
   return (
