@@ -53,6 +53,7 @@
 
 import {
   encodeAbiParameters,
+  getAddress,
   keccak256,
   parseEventLogs,
   stringToHex,
@@ -650,7 +651,7 @@ function entry(
   purpose: string,
   rules: string[]
 ): AgentSigningEntry {
-  return { id, chainId, to, signature: signatureOf(fn), selector: toFunctionSelector(fn), value: "0", purpose, rules };
+  return { id, chainId, to: getAddress(to), signature: signatureOf(fn), selector: toFunctionSelector(fn), value: "0", purpose, rules };
 }
 
 /**
@@ -672,7 +673,7 @@ export function agentSigningAllowlist(opts: { chainId?: number; assets?: { symbo
   const [shieldBound, transfer, unshield] = GLOAM_VAULT_AGENT_ABI as unknown as [AbiFunction, AbiFunction, AbiFunction];
   const out: AgentSigningEntry[] = tokens.map((t) =>
     entry(`erc20.${t.symbol.toLowerCase()}.approve`, chainId, t.address, ERC20_APPROVE, `Let the vault pull ${t.symbol} for a deposit.`, [
-      `spender must be the vault ${pool}`,
+      `spender must be the vault ${getAddress(pool)}`,
       "amount should be the exact deposit, not unlimited",
     ])
   );
