@@ -10,13 +10,25 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-analytics-clean.mts
  */
 import assert from "node:assert/strict";
-import { cleanPath, cleanRef } from "../src/lib/analyticsClean";
+import { cleanPath, cleanRef, withoutLookup } from "../src/lib/analyticsClean";
 
 let n = 0;
 const eq = (a: unknown, b: unknown, msg?: string) => {
   assert.equal(a, b, msg);
   n++;
 };
+
+// a wallet looked up on the X-ray never reaches analytics, as an address or as a name
+eq(withoutLookup("/xray/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8"), "/xray/:redacted");
+eq(withoutLookup("/xray/vitalik.eth"), "/xray/:redacted");
+eq(withoutLookup("https://www.gloam.trade/xray/vitalik.eth"), "https://www.gloam.trade/xray/:redacted");
+eq(withoutLookup("https://www.gloam.trade/xray/vitalik.eth/"), "https://www.gloam.trade/xray/:redacted");
+eq(withoutLookup("/xray"), "/xray", "the empty page is a page");
+eq(withoutLookup("/docs/xray"), "/docs/xray");
+eq(cleanPath("/xray"), "/xray");
+eq(cleanPath("/xray/vitalik.eth"), "/xray/:redacted", "a name reads like a slug, so the intake goes by the route");
+eq(cleanPath("/xray/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8"), "/xray/:redacted");
+eq(cleanRef("https://www.gloam.trade/xray/vitalik.eth"), "https://www.gloam.trade/xray/:redacted");
 
 // ordinary routes are kept as they are
 eq(cleanPath("/"), "/");
