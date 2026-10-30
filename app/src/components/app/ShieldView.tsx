@@ -32,6 +32,7 @@ import { formatUsd } from "@/lib/markets";
 import { addableTokensFor, approvalsBeforeDeposit, isDollarStable, supportsNativeShield } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { surelyNotSent } from "@/lib/walletErrors";
+import { isNoLimit } from "@gloamtrade/sdk";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
 import { makeBoundNotePoseidon } from "@/lib/notePoseidon";
 import { createTxLog, depositAfterLostApproval, depositCall, networkMovedMessage, type DepositCall } from "@/lib/depositFlow";
@@ -258,9 +259,12 @@ export function ShieldView() {
     limitsOn && poolData?.[8]?.status === "success"
       ? (poolData[8].result as readonly [bigint, bigint])
       : null;
-  const limitPer = limit ? limit[0] : null;
+  // A side set to type(uint128).max is no limit (isNoLimit): never checked or shown.
+  const limitPer = limit && !isNoLimit(limit[0]) ? limit[0] : null;
   const limitRoom =
-    limit && poolSelected !== null ? (limit[1] > poolSelected ? limit[1] - poolSelected : BigInt(0)) : null;
+    limit && !isNoLimit(limit[1]) && poolSelected !== null
+      ? (limit[1] > poolSelected ? limit[1] - poolSelected : BigInt(0))
+      : null;
   // C1: when the pool enforces bound shields, plain shield() reverts and we must
   // prove commitment == Poseidon(secret, amount, asset) via shieldBound().
   // A demo takes that path without asking the chain (both live pools enforce it).

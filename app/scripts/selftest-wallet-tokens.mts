@@ -90,7 +90,20 @@ check("BDX is listed on Base and Ethereum, gated by its live limit, and nowhere 
     assert.ok(shieldTokensFor(id).some((t) => t.id === "bdx"), "known to the chain's list");
     assert.ok(walletDisplayTokensFor(id).some((t) => t.id === "bdx"), "the wallet card reads it");
   }
-  for (const id of [4663, 4217, 84532, 11155111, 46630, 42431]) assert.deepEqual(limitGatedTokensFor(id), []);
+  for (const id of [4217, 84532, 11155111, 46630, 42431]) assert.deepEqual(limitGatedTokensFor(id), []);
+});
+
+check("GRIFT is listed on Robinhood Chain mainnet only, gated by its live limit", () => {
+  const gated = limitGatedTokensFor(4663);
+  assert.deepEqual(
+    gated.map((t) => [t.symbol, t.address, t.decimals, t.kind, t.coingecko]),
+    [["GRIFT", "0x9f4BA41F91a59A34e17eE8C9EB3A51363B11aBD5", 18, "token", "grift-world"]]
+  );
+  assert.ok(walletDisplayTokensFor(4663).some((t) => t.id === "grift"), "the wallet card reads it");
+  const open = openGatedFromReads(gated, true, [[0n, 0n]]);
+  assert.equal(open.size, 0, "closed while its limit is 0");
+  const max = (1n << 128n) - 1n;
+  assert.ok(openGatedFromReads(gated, true, [[max, max]]).has(gated[0]!.address.toLowerCase()), "open at no limit");
 });
 
 check("Add leaves BDX out until its limit is read open", () => {
@@ -118,6 +131,8 @@ check("the live reads open BDX only with a limit above 0, and never while unread
   assert.equal(openGatedFromReads(gated, true, [[0n, 0n]]).size, 0, "queued, not landed: 0 / 0");
   assert.equal(openGatedFromReads(gated, true, [[0n, total]]).size, 0, "a zero per-deposit limit takes nothing");
   assert.deepEqual([...openGatedFromReads(gated, true, [[per, total]])], [bdxLower], "landed");
+  const MAX = (1n << 128n) - 1n;
+  assert.deepEqual([...openGatedFromReads(gated, true, [[MAX, MAX]])], [bdxLower], "no limit (uint128 max) is open");
   assert.deepEqual([...openGatedFromReads(gated, false, [undefined])], [bdxLower], "a pool with no limits takes it");
 });
 

@@ -39,6 +39,7 @@ import {
   NATIVE_ASSET,
   RH_MAINNET_USDG,
   GLOAM_TOKEN,
+  RH_MAINNET_GRIFT,
   TEMPO_USDCE,
   TEMPO_USDT0,
   TEMPO_PATHUSD,
@@ -191,7 +192,7 @@ await throwsAsync(
 );
 
 for (const [family, chainId, key, assets, native, memo] of [
-  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN], false, true],
+  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN, RH_MAINNET_GRIFT], false, true],
   ["tempo", TEMPO_MAINNET_CHAIN_ID, "tempo-mainnet", [TEMPO_USDCE, TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD], false, true],
   ["base", BASE_MAINNET_CHAIN_ID, "base-mainnet", [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET, BASE_BDX], true, false],
 ]) {

@@ -77,6 +77,14 @@ export const RH_MAINNET_USDG: Address =
 /** $GLOAM on Robinhood Chain mainnet, 18 decimals. */
 export const GLOAM_TOKEN: Address =
   "0xDcD885F5c60b3aD49F6D58718696417314e8724d";
+/**
+ * $GRIFT, San Verano's token, on Robinhood Chain mainnet, 18 decimals. A plain
+ * OpenZeppelin ERC-20 from the Pons v2 launcher (Sourcify exact match): no
+ * transfer fee, no rebasing. 0 on the vault until its limit lands through the
+ * timelock (contracts/script/NoDepositLimits.s.sol).
+ */
+export const RH_MAINNET_GRIFT: Address =
+  "0x9f4BA41F91a59A34e17eE8C9EB3A51363B11aBD5";
 /** Bridged USDC (USDC.e) on Tempo mainnet, TIP-20, 6 decimals. */
 export const TEMPO_USDCE: Address =
   "0x20c000000000000000000000b9537d11c60e8b50";
@@ -175,7 +183,8 @@ export type CeremonyKind = "dev" | "production";
 /**
  * Beta deposit limit for one asset, in its base units, as it was at launch.
  * The vault's owner changes limits through its timelock: read the current ones
- * with readDepositLimit (lib limits).
+ * with readDepositLimit (lib limits). The live read wins, and a live value of
+ * type(uint128).max means no limit (isNoLimit).
  */
 export interface DepositLimit {
   perDeposit: bigint;
@@ -305,10 +314,15 @@ export const ETHEREUM_SEPOLIA_HISTORY_RPC: HistoryRpc = {
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
-/** Robinhood Chain mainnet pool assets and their beta deposit limits. Native ETH is not listed. */
+/**
+ * Robinhood Chain mainnet pool assets and their beta deposit limits. Native ETH
+ * is not listed. GRIFT opens with no limit once its timelocked change lands; 0 on
+ * chain until then, so the vault refuses it and assertDepositWithinLiveLimit says so.
+ */
 export const RH_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDG", address: RH_MAINNET_USDG, decimals: 6, depositLimit: stableLimit },
   { symbol: "GLOAM", address: GLOAM_TOKEN, decimals: 18, depositLimit: { perDeposit: units(25_000n, 18), total: units(250_000n, 18) } },
+  { symbol: "GRIFT", address: RH_MAINNET_GRIFT, decimals: 18, depositLimit: { perDeposit: (1n << 128n) - 1n, total: (1n << 128n) - 1n } },
 ];
 
 /** Tempo mainnet pool assets (TIP-20, 6 decimals) and their beta deposit limits. */

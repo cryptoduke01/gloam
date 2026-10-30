@@ -469,7 +469,8 @@ circuitArtifactUrls(circuit, chainId, base?)                // { wasm, zkey } fo
 circuitArtifactFiles(circuit, ceremony), CIRCUIT_SHA256     // relative paths and SHA-256 to check a download
 GLOAM_ARTIFACTS_URL                                         // https://www.gloam.trade/circuits
 assertDepositAllowed(chainId, asset, amount)                // listed asset, no native on mainnet (amounts: read live, below)
-readDepositLimit(client, pool, asset)                       // the vault's live beta limit: { on, perDeposit, total, deposited, room } (0.4.2)
+readDepositLimit(client, pool, asset)                       // the vault's live beta limit: { on, perDeposit, total, deposited, room, unlimited } (0.4.2)
+isNoLimit(value), NO_LIMIT_THRESHOLD                        // a perDeposit or total of 2^127 or more (the owner sets uint128 max) is no limit
 assertDepositWithinLiveLimit(client, chainId, asset, amount, pool?)  // refuses over the live limit; refuses nothing if the vault can't be read
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
