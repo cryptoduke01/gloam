@@ -463,7 +463,7 @@ export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean
   const noBackup = r.state.on && !r.state.savedAt && !r.state.paused && !older;
   const stayUp = noBackup || (older && r.state.paused);
   const done = Boolean(r.message) && r.message?.tone !== "error" && !noBackup;
-  if (!r.active || !r.state.ready || (r.state.on && !done && !noBackup && !older) || (hidden && !stayUp) || (!hasBalance && !hasDeposits && !older)) return null;
+  if (!r.active || !r.state.ready || (r.state.on && !done && !noBackup && !older) || (hidden && !stayUp) || (!hasBalance && !hasDeposits && !older && !done)) return null;
 
   const source: RecoverySource | null = r.walletOk ? "wallet" : r.passkeyOk ? "passkey" : null;
   const busy = Boolean(r.busy);
