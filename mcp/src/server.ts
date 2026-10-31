@@ -411,7 +411,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         mainnet:
           `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
             ethNativeLimitText()
-          }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.`,
+          }). Direct deposits and private payments are free; cashing out costs 0.5%. Reviewed internally before launch; an external audit is planned, not done.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
           "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
@@ -559,7 +559,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Execute a private shield",
       description:
-        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). On mainnet the pool takes USDG or GLOAM on Robinhood Chain and USDC.e, pathUSD, USDT0 or OUSD on Tempo, at most 500 of a stablecoin (25,000 GLOAM) per deposit during the beta; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). On mainnet the pool takes USDG or GLOAM on Robinhood Chain and USDC.e, pathUSD, USDT0 or OUSD on Tempo, at most 500 of a stablecoin (25,000 GLOAM) per deposit during the beta; direct deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
       inputSchema: {
         amount: z
           .number()

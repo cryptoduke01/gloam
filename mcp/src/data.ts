@@ -58,7 +58,7 @@ export const PRIVACY_STATUS = {
   notLive: ["private trading", "an external audit (planned; the contracts and circuits were reviewed internally before launch, with no Critical or High findings open)"],
   mainnetLimits:
     "Beta deposit limits: 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for GLOAM. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026. Private payments and cash outs are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.",
-  fees: "Deposits and private payments are free. Cashing out costs 0.25%.",
+  fees: "Direct deposits and private payments are free. Cashing out costs 0.5%.",
   operator:
     "No admin withdraw: notes leave the pool only with an unshield proof. The pool owner is one wallet at launch (a multisig is planned). The Gloam relay, run by the team, only submits already-proven transactions and pays gas; it cannot move or redirect money.",
   whatIsPublic:

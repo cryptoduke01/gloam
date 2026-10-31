@@ -24,7 +24,7 @@ Every tool that touches a chain takes a `network`:
 On mainnet:
 
 - **Payments only, beta limits.** On the mainnet pools this server makes deposits, private payments and sweeps. It does not swap: private swaps are in the Gloam app (Vault > Swap) on Robinhood Chain and Tempo mainnet. A deposit is at most 500 of a stablecoin (0.2 ETH on Base and Ethereum, 25,000 GLOAM) during the beta, with a 100x raise queued behind the public 3-day timelock for around 1 November 2026, checked before anything is proved; private payments are never limited.
-- **Fees.** Deposits and private payments are free. Cashing out costs 0.25% (this server does not cash out; use the Gloam app or the SDK).
+- **Fees.** Direct deposits and private payments are free. Cashing out costs 0.5% (this server does not cash out; use the Gloam app or the SDK).
 - **Final keys.** Proofs for mainnet use the final keys of the 13-contributor trusted setup, downloaded from `https://www.gloam.trade/circuits/final` and checked against the SHA-256 the SDK pins. Testnet proofs use the dev keys. The two are cached apart.
 - **Beta software.** The contracts and circuits were reviewed internally before launch with no Critical or High findings open, and an independent review on 23 October found no new exploitable contract flaw (its app fixes are being merged). An external audit is planned, not done. The mainnet pools are new, so the crowd of notes to hide among is small at first. Start with small amounts.
 - **Pools come with the version.** A mainnet appears here once the SDK this package ships with has its pool. If `GLOAM_NETWORK` names a mainnet this version lacks, the server stops at startup and says so.
