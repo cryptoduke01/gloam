@@ -273,6 +273,7 @@ export function PortfolioView() {
   const {
     open: shieldNotes,
     waiting: waitingClaims,
+    heldRefunds,
     merged: allNotes,
     shieldedWei,
     byAsset,
@@ -281,7 +282,8 @@ export function PortfolioView() {
     refresh: refreshVault,
   } = useLocalShieldNotes(address);
   // Claimed payments the vault hasn't shown yet are listed after the balance, never counted in it.
-  const vaultRows = useMemo(() => [...shieldNotes, ...waitingClaims], [shieldNotes, waitingClaims]);
+  // Swap refunds held outside the vault too, and those first, as only six rows show.
+  const vaultRows = useMemo(() => [...heldRefunds, ...shieldNotes, ...waitingClaims], [heldRefunds, shieldNotes, waitingClaims]);
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   // The wallet card's zero balances, folded under "Show N more" until asked for.
@@ -710,13 +712,24 @@ export function PortfolioView() {
                           <span className="text-mute">{assetLabel(n.asset)}</span>
                         </p>
                         <p className="mt-0.5 truncate text-[12.5px] text-mute">
-                          {n.unfunded
-                            ? "Waiting for this payment to reach the vault. Not in your balance yet."
-                            : n.leafIndex != null
-                              ? "Ready to use"
-                              : "Confirming…"}
-                          {!n.unfunded && (isClaimedNote(n) || isSecuredClaim(n)) ? ", received" : ""}
+                          {n.refundHeld
+                            ? "Not in your balance yet"
+                            : n.unfunded
+                              ? "Waiting for this payment to reach the vault. Not in your balance yet."
+                              : n.swapProofAt
+                                ? "Moving to a fresh private balance"
+                                : n.leafIndex != null
+                                  ? "Ready to use"
+                                  : "Confirming…"}
+                          {!n.unfunded && !n.refundHeld && (isClaimedNote(n) || isSecuredClaim(n)) ? ", received" : ""}
                         </p>
+                        {n.refundHeld && (
+                          <p className="mt-0.5 text-[12.5px] text-warn">
+                            {n.refundHeld === "blocked"
+                              ? "A swap of this couldn't finish, and the vault isn't taking this token back right now. It stays held and comes back once the vault takes it again. Gloam tries each time you open the app."
+                              : "A swap of this couldn't finish, so it's on its way back to your private balance."}
+                          </p>
+                        )}
                         {isUnsecuredClaim(n) && !n.unfunded && (
                           <p className="mt-0.5 text-[12.5px] text-warn">
                             Not secured yet, so the sender can still take it back.{" "}

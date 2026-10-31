@@ -15,6 +15,7 @@ import {
   unfundedClaims,
   fetchChainShieldNotes,
   ghostEthNotes,
+  heldSwapRefunds,
   loadLocalNotes,
   markNoteRecovered,
   mergeNotes,
@@ -27,6 +28,9 @@ import {
 } from "@/lib/shield";
 import { useNetwork } from "@/components/app/NetworkProvider";
 import type { GloamNetwork } from "@/lib/networks";
+
+/** How often the page syncs while a note a reverted swap left behind waits to move. */
+const MOVE_SYNC_MS = 60_000;
 
 /**
  * Local notes + chain history. Balance only counts notes with a local secret
@@ -198,7 +202,18 @@ export function useLocalShieldNotes(address?: string | null) {
   );
   /** Claimed payments the vault hasn't shown yet: listed, never in `open` or the totals. */
   const waiting = useMemo(() => unfundedClaims(merged), [merged]);
+  /** Swap refunds whose money waits at the swap's escrow: listed, never in `open` or the totals. */
+  const heldRefunds = useMemo(() => heldSwapRefunds(merged), [merged]);
   const confirmed = useMemo(() => confirmedNotes(merged), [merged]);
+  // A note a reverted swap left behind is moved by the sync once the relay takes it
+  // (lib/claimSweep moveRevertedNotes): keep syncing while one waits, as nothing else
+  // would if this page is just left open.
+  const moveWaiting = useMemo(() => open.some((n) => n.swapProofAt), [open]);
+  useEffect(() => {
+    if (!moveWaiting) return;
+    const t = setInterval(refresh, MOVE_SYNC_MS);
+    return () => clearInterval(t);
+  }, [moveWaiting, refresh]);
   const byAsset = useMemo(() => sumByAsset(open), [open]);
   const shieldedWei = useMemo(() => sumEthWei(open), [open]);
   // Only a note with a secret here counts, and chain rows never carry one, so
@@ -212,6 +227,7 @@ export function useLocalShieldNotes(address?: string | null) {
     merged,
     open,
     waiting,
+    heldRefunds,
     confirmed,
     byAsset,
     shieldedWei,
