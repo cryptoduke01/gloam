@@ -6,7 +6,7 @@
  * could file 50 new backups of up to 512 KB a day, forever. Now:
  *   - saving to a backup that already exists is always let through and never
  *     counts against anything daily;
- *   - a new backup counts against its connection (5 a day, an IPv6 /64 as one)
+ *   - a new backup counts against its connection (5 a day, an IPv6 /48 as one)
  *     and against one daily budget for every new backup
  *     (GLOAM_RECOVERY_NEW_PER_DAY, 300 by default); past it, new backups are
  *     told to try again later, and the server logs it once;
@@ -32,6 +32,7 @@ M._resolveFilename = function (req: string, ...rest: unknown[]) {
 
 const { PUT, GET } = await import("../src/app/api/recovery/route");
 const { resetMemoryKv } = await import("../src/lib/partnersKv");
+const { clientIp, hitRateLimit, ipBucket } = await import("../src/lib/mcpRemote/rateLimit");
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -61,7 +62,7 @@ async function put(ip: string, id: string, n = 1, c = BLOB) {
   return { status: res.status, message: json.error?.message ?? "" };
 }
 
-await test("a new backup: 5 a day per connection, an IPv6 /64 as one; saving to one that exists always goes through", async () => {
+await test("a new backup: 5 a day per connection; saving to one that exists always goes through", async () => {
   const ids = Array.from({ length: 5 }, hex64);
   for (const id of ids) assert.equal((await put("203.0.113.10", id)).status, 200);
   const sixth = await put("203.0.113.10", hex64());
@@ -70,9 +71,57 @@ await test("a new backup: 5 a day per connection, an IPv6 /64 as one; saving to 
   for (let n = 2; n <= 40; n++) assert.equal((await put("203.0.113.10", ids[0]!, n)).status, 200, `update ${n}`);
   // another connection still makes its own
   assert.equal((await put("198.51.100.20", hex64())).status, 200);
-  // one /64 is one connection
-  for (let i = 1; i <= 5; i++) assert.equal((await put(`2001:db8:7:9::${i}`, hex64())).status, 200);
-  assert.equal((await put("2001:db8:7:9:ffff::1", hex64())).status, 429);
+});
+
+await test("an IPv6 /48 is one connection for new backups, however many /64s it rotates through", async () => {
+  for (let i = 1; i <= 5; i++) assert.equal((await put(`2001:db8:7:${i}::1`, hex64())).status, 200, `/64 number ${i}`);
+  const sixth = await put("2001:db8:7:ffff::1", hex64());
+  assert.equal(sixth.status, 429, "a sixth /64 in the same /48 waits for tomorrow");
+  assert.match(sixth.message, /this connection/);
+  // written differently, still the same /48
+  assert.equal((await put("2001:0DB8:0007:0::2", hex64())).status, 429);
+  // the next /48 along is someone else
+  assert.equal((await put("2001:db8:8::1", hex64())).status, 200);
+});
+
+await test("the /48 applies to new backups only: every other limit still counts an IPv6 /64, and clientIp is untouched", async () => {
+  assert.equal(ipBucket("2001:db8:7:9::1"), "2001:db8:7:9::/64", "the default");
+  assert.equal(ipBucket("2001:db8:7:9::1", 48), "2001:db8:7::/48");
+  assert.equal(ipBucket("2001:DB8:0007:0009:aaaa:bbbb:cccc:dddd", 48), "2001:db8:7::/48");
+  assert.equal(ipBucket("2001:db8::1", 48), "2001:db8:0::/48");
+  assert.equal(ipBucket("::1", 48), "0:0:0::/48");
+  assert.equal(ipBucket("203.0.113.10", 48), "203.0.113.10", "IPv4 is an address either way");
+  assert.equal(ipBucket("::ffff:203.0.113.10", 48), "203.0.113.10", "and so is IPv4 written as IPv6");
+  assert.equal(ipBucket("local", 48), "local");
+
+  const req = new Request("http://localhost/", { headers: { "x-forwarded-for": "2001:db8:7:9::1, 10.0.0.1" } });
+  assert.equal(clientIp(req), "2001:db8:7:9::1", "clientIp still gives the plain address");
+
+  // another limit, same two /64s in one /48: counted apart
+  for (let i = 0; i < 3; i++) assert.ok((await hitRateLimit("2001:db8:1:1::1", "recovery", 3)).allowed);
+  assert.equal((await hitRateLimit("2001:db8:1:1::2", "recovery", 3)).allowed, false, "same /64, spent");
+  assert.ok((await hitRateLimit("2001:db8:1:2::1", "recovery", 3)).allowed, "the next /64 has its own count");
+
+  // saving to a backup that exists is still not counted against anything daily
+  const id = hex64();
+  for (let i = 0; i < 2; i++) assert.equal((await put("2001:db8:9:1::1", i ? id : hex64())).status, 200);
+  for (let n = 2; n <= 8; n++) assert.equal((await put(`2001:db8:9:${n}::1`, id, n)).status, 200, `update ${n}`);
+});
+
+await test("a save says whether the id held anything, so a browser can tell its backup has gone", async () => {
+  const id = hex64();
+  const created = async (n: number) => {
+    const res = await PUT(
+      new Request("http://localhost/api/recovery", {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.70" },
+        body: JSON.stringify({ id, write: WRITE, c: BLOB, n }),
+      })
+    );
+    return ((await res.json()) as { data: { created: boolean } }).data.created;
+  };
+  assert.equal(await created(1), true);
+  assert.equal(await created(2), false);
 });
 
 await test("the daily budget for new backups: past it, new ones are told to try again later and it is logged once; existing ones keep saving", async () => {

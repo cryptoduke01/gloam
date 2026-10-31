@@ -17,11 +17,14 @@ const RATE_LIMIT = 60;
  */
 const SAVES_PER_BACKUP_PER_MIN = 60;
 /**
- * New backups per connection (an IPv4 address, or an IPv6 /64) per UTC day.
+ * New backups per connection (an IPv4 address, or an IPv6 /48) per UTC day.
  * A person makes one per sign-in method. Backups never expire, so this and
- * the daily budget below are what keep the store from being filled.
+ * the daily budget below are what keep the store from being filled. IPv6
+ * counts by /48 here, not the usual /64: /64s come cheap and in bulk, and
+ * each one would otherwise get its own share of the budget everyone relies on.
  */
 const NEW_BACKUPS_PER_DAY = 5;
+const NEW_BACKUPS_V6_BITS = 48;
 /** New backups a UTC day across everyone, unless GLOAM_RECOVERY_NEW_PER_DAY says otherwise. */
 const NEW_BACKUPS_ALL_PER_DAY = 300;
 const MAX_BODY = 600_000;
@@ -99,7 +102,7 @@ export async function PUT(req: Request) {
       const saves = await hitRateLimit(id, "recovery-save", SAVES_PER_BACKUP_PER_MIN, now);
       if (!saves.allowed) return fail(429, "Too many saves in a minute. Wait a moment.", { "Retry-After": String(saves.retryAfterSec) });
     } else {
-      const mine = await hitRateLimit(clientIp(req), "recovery-new", NEW_BACKUPS_PER_DAY, now, 86_400);
+      const mine = await hitRateLimit(clientIp(req), "recovery-new", NEW_BACKUPS_PER_DAY, now, 86_400, { v6Bits: NEW_BACKUPS_V6_BITS });
       if (!mine.allowed) {
         return fail(429, "Too many new backups from this connection today. Try again tomorrow.", {
           "Retry-After": String(mine.retryAfterSec),

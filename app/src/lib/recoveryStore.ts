@@ -101,11 +101,6 @@ export async function readBackup(id: string): Promise<BackupView | null> {
   return s ? { c: s.c, n: s.n, t: s.t } : null;
 }
 
-/**
- * Saves a backup. The first write sets the write token; later writes must
- * present the same token and a higher version number, so an older copy can
- * never replace a newer one.
- */
 /** Why this is not a backup that could be saved, or null. Checked before anything is counted or read. */
 export function backupInputProblem(p: { c: unknown; n: unknown }): string | null {
   if (typeof p.c !== "string" || !p.c || p.c.length > MAX_BACKUP_CHARS || !B64.test(p.c)) {
@@ -115,7 +110,18 @@ export function backupInputProblem(p: { c: unknown; n: unknown }): string | null
   return null;
 }
 
-export async function writeBackup(p: { id: string; write: string; c: string; n: number }): Promise<{ n: number; t: number }> {
+/**
+ * Saves a backup. The first write sets the write token; later writes must
+ * present the same token and a higher version number, so an older copy can
+ * never replace a newer one. `created` says this id held nothing before, which
+ * is how a browser learns that a backup it had saved to has gone.
+ */
+export async function writeBackup(p: {
+  id: string;
+  write: string;
+  c: string;
+  n: number;
+}): Promise<{ n: number; t: number; created: boolean }> {
   const problem = backupInputProblem(p);
   if (problem) throw new RecoveryError(400, problem);
 
@@ -129,7 +135,7 @@ export async function writeBackup(p: { id: string; write: string; c: string; n: 
     }
     const next: Stored = { w, c: p.c, n: p.n, t: Date.now() };
     await kv([["SET", keyFor(p.id), JSON.stringify(next)]]);
-    return { n: next.n, t: next.t };
+    return { n: next.n, t: next.t, created: !current };
   });
 }
 
