@@ -150,7 +150,7 @@ check("swap routers only where swaps run, each from lib/vaultSwap", () => {
     if (current) assert.ok(same(routers[0]!.address, current), e.key);
     else assert.equal(routers.length, 0, e.key);
   }
-  assert.equal(byKey["robinhood-mainnet"]!.rows.find((r) => r.role === "swap_router")?.contract, "GloamVaultSwapV4");
+  assert.equal(byKey["robinhood-mainnet"]!.rows.find((r) => r.role === "swap_router")?.contract, "GloamVaultSwapV4b");
   assert.equal(byKey["tempo-mainnet"]!.rows.find((r) => r.role === "swap_router")?.contract, "GloamVaultSwapTempo");
 });
 
@@ -234,6 +234,17 @@ check("the checks pass on the vault as it stands and name what differs", () => {
   const failed = off.filter((c) => !c.ok).map((c) => c.label);
   assert.deepEqual(failed, ["Setup is over", "Rule changes wait 3 days", "Owner as listed", "No handover pending", "Fees go to the treasury"]);
   assert.match(off.find((c) => c.label === "Owner as listed")!.detail, /0x000000000000000000000000000000000000dEaD/);
+
+  // The owner guard: a vault it holds passes, one still on the wallet passes, a stranger fails.
+  const guard = "0x00000000000000000000000000000000000000Aa" as Address;
+  const stranger = "0x000000000000000000000000000000000000dEaD" as Address;
+  assert.equal(dir.ownerCheck(dir.GLOAM_OWNER).ok, true);
+  assert.equal(dir.ownerCheck(guard, null).ok, false, "not listed while the guard's address is unset");
+  assert.equal(dir.ownerCheck(dir.GLOAM_OWNER, guard).ok, true, "a vault not moved yet");
+  assert.match(dir.ownerCheck(dir.GLOAM_OWNER, guard).detail, /names the owner above/);
+  assert.equal(dir.ownerCheck(guard, guard).ok, true, "a vault the guard holds");
+  assert.match(dir.ownerCheck(guard, guard).detail, /owner guard holds this vault/);
+  assert.equal(dir.ownerCheck(stranger, guard).ok, false);
   assert.equal(off.find((c) => c.label === "Rule changes wait 3 days")!.detail, "The vault's delay is 3600 seconds.");
 
   // The older testnet vaults have no fee or listed owner to check.

@@ -87,15 +87,15 @@ const FACTS: Fact[] = [
   },
   {
     title: "Three days of public notice",
-    body: "Setup is closed on every vault. A new proof checker, a new asset, a higher limit or a higher fee must be queued on chain and waits 3 days before it can run. Lowering a limit or the fee works at once.",
+    body: "Setup is closed on every vault. A new asset, a higher limit or a higher fee must be queued on chain and waits 3 days before it can run. So must a new proof checker, on a vault the owner guard does not hold yet; on one it holds, there can be no new proof checker at all. Lowering a limit or the fee works at once.",
   },
   {
     title: "Code that cannot change",
     body: "The vault is not a proxy and has no upgrade function, so its code is fixed. Only the settings above can change, and only in public.",
   },
   {
-    title: "One owner wallet, for now",
-    body: `${short(GLOAM_OWNER)} owns every mainnet vault. It is one wallet at launch, and a multisig is planned. A handover takes two steps on chain: the new owner has to accept it, and a pending one shows above.`,
+    title: "One owner wallet, then the owner guard",
+    body: `${short(GLOAM_OWNER)} owned every mainnet vault at launch. Each vault moves to the owner guard, a contract that forwards only deposit limit and fee changes and the sweep of coin sent by mistake, so it can then never get a new proof checker or a new owner. The checks above show which holds each vault. A handover takes two steps on chain: the new owner has to accept it, and a pending one shows above.`,
   },
   {
     title: "Keys from a public ceremony",

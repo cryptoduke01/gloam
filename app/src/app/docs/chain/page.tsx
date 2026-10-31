@@ -332,13 +332,18 @@ export default function DocsNetworksPage() {
         <li>
           <strong>Owner</strong>, <code>{GLOAM_OWNER}</code>. One wallet at
           launch; a multisig is planned. It cannot withdraw pooled funds: there
-          is no admin withdraw.
+          is no admin withdraw. Each vault&apos;s ownership moves to the owner
+          guard, which forwards only limit and fee changes and the sweep of
+          coin sent by mistake; read{" "}
+          <code>owner()</code> on a vault to see which holds it.
         </li>
         <li>
           <strong>Treasury</strong>, <code>{GLOAM_TREASURY}</code>. Cash-out
           fees go here since 24 October. Both swap routers also send what a swap
           does not use here; that address is fixed in each router and cannot
-          change. The routers have no owner, no admin and no upgrade.
+          change. The routers have no upgrade. Tempo&apos;s has no owner;
+          Robinhood Chain&apos;s owner can add a pool with 3 days of public
+          notice and take one off at once, and nothing else.
         </li>
         <li>
           <strong>Relayer</strong>, <code>{GLOAM_RELAYERS[0]}</code>. Run by the
