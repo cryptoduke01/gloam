@@ -2,14 +2,13 @@
   "name": "gloam-veya-receipt-example",
   "private": true,
   "type": "module",
-  "description": "The leaf VEYA anchors for one Gloam payment: paymentReceiptLeaf from @gloamtrade/sdk, passed to Veya.sol's storeCommitment.",
+  "description": "The leaf the Gloam MCP server sends VEYA for one payment: paymentReceiptLeaf from @gloamtrade/sdk. VEYA writes it to storeCommitment.",
   "scripts": {
     "start": "tsx veya-receipt.ts",
     "typecheck": "tsc --noEmit --strict --target es2022 --module nodenext --moduleResolution nodenext --skipLibCheck --types node veya-receipt.ts ../../packages/sdk/src/snarkjs.d.ts ../../packages/sdk/src/circomlibjs.d.ts"
   },
   "dependencies": {
-    "@gloamtrade/sdk": "workspace:*",
-    "viem": "^2.55.2"
+    "@gloamtrade/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -1,13 +1,10 @@
 # veya-receipt
 
-The leaf [VEYA](https://veyanet.tech) anchors for one Gloam payment: a receipt
-hashes into one `bytes32` with `paymentReceiptLeaf` from `@gloamtrade/sdk`, and
-that `bytes32` goes to `storeCommitment` on `Veya.sol`. The amount and the payee
-are not in the leaf.
-
-This is the record kept after a payment. The check before a payment is a
-separate thing, in the MCP server: see
-[Check the budget before paying](../../mcp/README.md#check-the-budget-before-paying-veya).
+The leaf the Gloam MCP server sends [VEYA](https://veyanet.tech) for one payment.
+A receipt hashes into one `bytes32` with `paymentReceiptLeaf` from
+`@gloamtrade/sdk`, the server posts that leaf and the agent id, and VEYA writes
+the leaf to `storeCommitment` on `Veya.sol`. The amount and the payee are not in
+the leaf.
 
 ## Run it
 
@@ -17,53 +14,44 @@ pnpm install
 npx tsx examples/veya-receipt/veya-receipt.ts
 ```
 
-That is a dry run on a sample record that is not a real payment: no keys, no
-network, nothing sent. It prints the `storeCommitment` call and the leaf. Pass a
-record of your own to hash that instead. A record comes from
-`buildPaymentReceipt`, and [`examples/san-verano`](../san-verano) makes one end
-to end:
+That hashes a sample record, which is not a real payment, and prints what would
+go to VEYA. It takes no key, uses no network and sends nothing. Pass a record of
+your own to hash that instead. A record comes from `buildPaymentReceipt`, and
+[`examples/san-verano`](../san-verano) makes one end to end:
 
 ```bash
-VEYA_ENVIRONMENT_UUID=0x... npx tsx examples/veya-receipt/veya-receipt.ts record.json
+npx tsx examples/veya-receipt/veya-receipt.ts record.json
 ```
 
-## Anchor for real
+## How it works in the MCP server
 
-The script takes no key and never sends. `anchorReceipt` takes anything with a
-`storeCommitment` method, and `EvmAnchor` from `@veyanet/sdk` has that method
-with these arguments. Run this on your own machine:
+Set `GLOAM_VEYA_ANCHOR_URL` next to the check's settings. The
+[MCP README](../../mcp/README.md#the-receipt-after-a-payment) has the details.
 
-```ts
-import { EvmAnchor } from "@veyanet/sdk";
-import { anchorReceipt } from "./veya-receipt.ts";
-
-const anchor = new EvmAnchor({ payerPrivateKey: process.env.VEYA_ANCHOR_KEY! });
-const { leaf, tx } = await anchorReceipt(anchor, environmentUuid, record);
-```
-
-`@veyanet/sdk` is not a dependency of this repo, so add it yourself. It is on
-mainnet unless you pass `network: "testnet"` or set `ROBINHOOD_NETWORK=testnet`.
-
-- **Use a throwaway wallet that holds only gas.** It signs every anchor, and each
-  anchor is a public transaction from that address. Never use the agent's wallet
-  or a wallet that holds funds, and do not fund it from the agent's wallet, or
-  the chain links the two.
-- **Anchor locally, with VEYA's SDK.** VEYA's hosted MCP write tools take a
-  private key (`payerPrivateKey`). Do not send one to a hosted tool, not even the
-  throwaway's, and never send a note secret anywhere.
+| Step | Who | What |
+| --- | --- | --- |
+| 1 | VEYA | Answers the check with an allow and a check id. |
+| 2 | MCP server | Pays privately. |
+| 3 | MCP server | Once the payment lands, proves it with the check id as the receipt's verifier, and keeps the record in its encrypted note store. |
+| 4 | MCP server | Posts `{"leaf": "0x…", "agent_id": "…"}` to `GLOAM_VEYA_ANCHOR_URL`, and nothing else. |
+| 5 | VEYA | Writes the leaf to `storeCommitment`. |
 
 ## What to know
 
-- **The environment comes first.** `storeCommitment` takes a `bytes16`
-  environment uuid that must already be registered (`EvmAnchor.registerEnvironment`).
-- **One leaf, one anchor.** `Veya.sol` keys commitments by their value, so
-  anchoring the same leaf twice reverts with `CommitmentAlreadyExists`.
-- **The time is public.** An anchor shows when it was sent. Sending it right after
-  a payment ties it to that moment, so batch or delay anchors if that matters.
+- **No anchoring wallet.** VEYA writes the leaf, so you hold no key for it and pay
+  no gas for it. VEYA's hosted MCP write tools take a private key
+  (`payerPrivateKey`); this flow does not use them, so never give them one, and
+  never send a note secret anywhere.
+- **`anchored` means VEYA took the leaf.** The server does not read the chain to
+  confirm the write.
+- **VEYA can't open a leaf.** It sees a hash and the agent id. Only someone
+  holding the record can recompute the leaf and see what it commits to.
+- **The time is public.** An anchor shows when it was written, shortly after the
+  payment.
 - **What a leaf proves.** Anyone holding the record can check it with
   `checkPaymentReceipt`: a private payment of that asset and at least that amount
-  was made by that transaction. It does not show who received it, because the
-  payer picks the payment note's key. `Veya.sol` does not check the leaf, it only
-  stores it.
+  was made by that transaction, for that check id. It does not show who received
+  it, because the payer picks the payment note's key. `Veya.sol` does not check
+  the leaf, it only stores it.
 - **Keep the record off chain.** It holds the transaction hash and the receipt's
-  public signals. Put only the leaf on chain.
+  public signals. Only the leaf goes to VEYA.
