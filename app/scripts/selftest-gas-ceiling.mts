@@ -142,6 +142,8 @@ function answer(r: RpcReq): { result?: unknown; error?: { code: number; message:
     case "eth_sendRawTransaction":
       raws.push((r.params as Hex[])[0]!);
       return { result: TX_HASH };
+    case "eth_getTransactionReceipt":
+      return { result: { status: "0x1" } };
     default:
       return { error: { code: -32601, message: `fake node: ${r.method} not handled` } };
   }
