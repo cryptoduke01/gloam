@@ -111,9 +111,6 @@ import {
   cancelCashOut,
   dismissReturnedCashOut,
   feeMoved,
-  feeRise,
-  feeRiseLine,
-  feeRiseNotice,
   reconcileCashOuts,
   releaseGoneCashOut,
   returnedCashOutNotes,
@@ -146,9 +143,9 @@ import {
   HowChoice,
   PieceLeftover,
   PiecesCard,
+  ScheduledCashOuts,
   SpreadOver,
   aboutTime,
-  scheduledLine,
 } from "./PrivateCashOut";
 import { cashOutPrivacyWarnings, cashOutSender, depositWallets, presetAmounts } from "@/lib/cashOutPrivacy";
 import { CashOutAmountChips, CashOutPrivacyLine, CashOutWarnings } from "./CashOutPrivacy";
@@ -858,8 +855,6 @@ export function MoveView() {
   const cashOutFeeUnknown =
     mode === "cashout" && !demoMode && !TESTNET_CHAIN_IDS.has(network.chainId) && typeof feeBpsRead !== "number";
   const cashOutFee = withdrawFeeOf(cashOutAmount, cashOutFeeBps);
-  /** Waiting cash outs set up at a lower fee than the vault charges now. */
-  const scheduledRises = scheduledRows.flatMap((n) => feeRise(n, liveFeeBps) ?? []);
   const cashOutInventoryShort =
     mode === "cashout" &&
     selected != null &&
@@ -3190,39 +3185,18 @@ export function MoveView() {
                     </div>
                   )}
 
-                  {scheduledRows.length > 0 && (
-                    <div className="rounded-[16px] bg-surface px-4 py-3">
-                      <p className="text-[13px] text-mute">Scheduled cash outs</p>
-                      {scheduledRises.length > 0 && (
-                        <p role="status" className="mt-2 rounded-xl bg-warn-soft px-3.5 py-3 text-[13px] leading-relaxed text-warn">
-                          {feeRiseNotice(scheduledRises, "cash out")}
-                        </p>
-                      )}
-                      <ul className="mt-1 divide-y divide-line">
-                        {scheduledRows.map((n) => {
-                          const rise = feeRise(n, liveFeeBps);
-                          return (
-                            <li key={n.id} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
-                              <span className="min-w-0">
-                                <span className="tnum block text-foreground">{formatAssetLabel(n.amountWei, n.asset)}</span>
-                                <span className="block truncate text-[12px] text-mute">{scheduledLine(n, undefined, gasHigh)}</span>
-                                {rise && <span className="tnum block text-[12px] leading-relaxed text-warn">{feeRiseLine(rise, n.asset)}</span>}
-                              </span>
-                              {n.cashOut?.state === "scheduled" && (
-                                <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => void cancelScheduled(n)}>
-                                  Cancel
-                                </button>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
+                  <ScheduledCashOuts rows={scheduledRows} liveFeeBps={liveFeeBps} gasHigh={gasHigh} onCancel={cancelScheduled} />
                 </div>
               )}
             </>
           ) : mode !== "receive" ? (
+            <>
+            {/* The whole balance can be waiting to go out: its rows, and Cancel, still show. */}
+            {mode === "cashout" && scheduledRows.length > 0 && (
+              <div className="mt-6">
+                <ScheduledCashOuts rows={scheduledRows} liveFeeBps={liveFeeBps} gasHigh={gasHigh} onCancel={cancelScheduled} />
+              </div>
+            )}
             <div className="mt-6 rounded-[16px] bg-surface px-5 py-9 text-center">
               <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-panel text-mute shadow-card">
                 <LockIcon />
@@ -3247,6 +3221,7 @@ export function MoveView() {
                 </button>
               </div>
             </div>
+            </>
           ) : null}
 
           {mode === "send" && shieldLive && <SentLinks onTakeBack={takeBackLink} />}
