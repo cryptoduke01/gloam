@@ -63,7 +63,7 @@ export interface McpNetwork {
   /** Block the pool was deployed at, for tree scans. */
   deployBlock: bigint;
   nativeCurrency: { name: string; symbol: string; decimals: number };
-  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base and Ethereum list ETH). */
+  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain, Base and Ethereum list ETH). */
   nativeShield: boolean;
   /** Default asset to shield: native ETH on Robinhood testnet, PathUSD on Tempo testnet, the first listed asset elsewhere (USDG, USDC.e, USDC). */
   defaultAsset: Address;

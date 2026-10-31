@@ -75,7 +75,7 @@ test("networks: older testnets always; a mainnet or Base Sepolia only once the S
     const older = n.family === "robinhood" || n.family === "tempo";
     assert.equal(n.ceremony, n.testnet && older ? "dev" : "production", `${n.key} proves with the right keys`);
     if (!n.testnet) {
-      assert.equal(n.nativeShield, n.family === "base" || n.family === "ethereum", `${n.key}: native deposits only on Base and Ethereum`);
+      assert.equal(n.nativeShield, n.family !== "tempo", `${n.key}: native deposits everywhere but Tempo`);
       assert.notEqual(n.defaultAsset, "0x0000000000000000000000000000000000000000");
     }
   }

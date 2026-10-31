@@ -40,6 +40,10 @@ import {
   RH_MAINNET_USDG,
   GLOAM_TOKEN,
   RH_MAINNET_GRIFT,
+  RH_MAINNET_PONS,
+  RH_MAINNET_CASHCAT,
+  RH_MAINNET_AI,
+  RH_MAINNET_ORBIO,
   TEMPO_USDCE,
   TEMPO_USDT0,
   TEMPO_PATHUSD,
@@ -192,7 +196,7 @@ await throwsAsync(
 );
 
 for (const [family, chainId, key, assets, native, memo] of [
-  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN, RH_MAINNET_GRIFT], false, true],
+  ["robinhood", RH_MAINNET_CHAIN_ID, "robinhood-mainnet", [RH_MAINNET_USDG, GLOAM_TOKEN, RH_MAINNET_GRIFT, NATIVE_ASSET, RH_MAINNET_PONS, RH_MAINNET_CASHCAT, RH_MAINNET_AI, RH_MAINNET_ORBIO], true, true],
   ["tempo", TEMPO_MAINNET_CHAIN_ID, "tempo-mainnet", [TEMPO_USDCE, TEMPO_PATHUSD, TEMPO_USDT0, TEMPO_OUSD], false, true],
   ["base", BASE_MAINNET_CHAIN_ID, "base-mainnet", [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET, BASE_BDX], true, false],
 ]) {
@@ -245,6 +249,21 @@ for (const [family, chainId, key, assets, native, memo] of [
   }
   const g = RH_MAINNET_ASSETS[1];
   assert(g.symbol === "GLOAM" && g.decimals === 18 && g.depositLimit.perDeposit === 25_000n * 10n ** 18n && g.depositLimit.total === 250_000n * 10n ** 18n, "GLOAM: 25,000 per deposit, 250,000 total");
+  // The limit queued for each of ETH, AI and ORBIO (contracts/script/QueueRobinhoodAssets.s.sol, 0 on chain
+  // until it lands), and the limit live on PONS and CASHCAT, open since 2026-10-27 with raises queued.
+  const whole = (n) => BigInt(n) * 10n ** 18n;
+  const rhLimits = {
+    ETH: [NATIVE_ASSET, 11, 110],
+    PONS: [RH_MAINNET_PONS, 3_900, 98_000],
+    CASHCAT: [RH_MAINNET_CASHCAT, 9_600, 240_000],
+    AI: [RH_MAINNET_AI, 400_000, 4_000_000],
+    ORBIO: [RH_MAINNET_ORBIO, 1_000_000, 10_000_000],
+  };
+  for (const [symbol, [address, per, total]] of Object.entries(rhLimits)) {
+    const a = RH_MAINNET_ASSETS.find((x) => x.symbol === symbol);
+    assert(a.address === address && a.decimals === 18, `${symbol}: its address, 18 decimals`);
+    assert(a.depositLimit.perDeposit === whole(per) && a.depositLimit.total === whole(total), `${symbol}: ${per} per deposit, ${total} total`);
+  }
   assert(BASE_MAINNET_ASSETS.map((a) => a.address).join() === [BASE_USDC, BASE_EURC, BASE_USDT, NATIVE_ASSET, BASE_BDX].join(), "Base mainnet lists USDC, EURC, USDT, ETH and BDX");
   // BDX (Beldex, LayerZero OFT): the same address on Base and Ethereum, 9 decimals,
   // 100,000 per deposit and 2,000,000 in total once its timelocked limit lands.
