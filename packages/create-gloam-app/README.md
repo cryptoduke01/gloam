@@ -23,8 +23,8 @@ Open http://localhost:3000, connect a wallet, and shield your first private USDG
 - **Mainnet** (default once the SDK has the mainnet pool): Robinhood Chain,
   chain id `4663`. You need USDG and a little ETH for gas. Gloam is
   beta software, with deposit limits of 500 USDG per deposit and 25,000 USDG
-  across the pool for now. Deposits and private payments are free; cashing out
-  costs 0.25%. Proofs use the final keys from the trusted setup.
+  across the pool for now. Direct deposits and private payments are free; cashing out
+  costs 0.5%. Proofs use the final keys from the trusted setup.
 - **Testnet**: Robinhood Chain testnet, chain id `46630`, on the dev keys.
   Run with `NEXT_PUBLIC_GLOAM_NETWORK=robinhood`. Get test
   ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com/)

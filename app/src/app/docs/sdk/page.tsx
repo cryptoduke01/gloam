@@ -130,8 +130,10 @@ npm install snarkjs   # optional peer, for proving`}</code>
           network&apos;s <code>assets</code> carry the <code>depositLimit</code>.
         </li>
         <li>
-          A mainnet cash out costs 0.25% (<code>CASH_OUT_FEE_BPS = 25</code>);{" "}
-          <code>cashOutFee(amount)</code> is what the pool keeps. Deposits and
+          A mainnet cash out costs 0.5% (<code>CASH_OUT_FEE_BPS = 50</code>);{" "}
+          <code>cashOutFee(amount)</code> is what the pool keeps. The pool takes
+          it when the cash out lands, so for a rate that matters read{" "}
+          <code>readCashOutFeeBps(client, pool)</code>. Direct deposits and
           private payments are free.
         </li>
       </ul>
@@ -432,7 +434,7 @@ for (const p of payments) {
       <h2>Guardrails</h2>
       <p>
         Mainnet ({MAINNET_IDS}) is beta software: final ceremony keys, beta
-        deposit limits, a 0.25% cash-out fee. It was reviewed internally before
+        deposit limits, a 0.5% cash-out fee. It was reviewed internally before
         launch; an external audit is planned. The Robinhood Chain and Tempo
         testnets (<code>46630</code>, <code>42431</code>) run on dev-ceremony
         keys with test funds; Base Sepolia (<code>84532</code>) and Ethereum

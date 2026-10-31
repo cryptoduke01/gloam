@@ -222,7 +222,7 @@ balance), the supplier's fresh note when it sweeps, the receipt leaf, every
 check against the chain, the record as JSON and as `gloampay1:…`.
 
 On mainnet (`GLOAM_NETWORK=robinhood-mainnet`) the same code proves with the
-final keys. Deposits and private payments are free; a cash out costs 0.25%.
+final keys. Direct deposits and private payments are free; a cash out costs 0.5%.
 
 See the [SDK docs](https://gloam.trade/docs/sdk) and
 [private commerce with commitments](https://gloam.trade/docs/agents/commitments).

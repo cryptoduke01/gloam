@@ -305,10 +305,12 @@ export default function DocsNetworksPage() {
           close deposits at once, which never stops a withdrawal.
         </li>
         <li>
-          <strong>Fees.</strong> Deposits and private payments are free. A cash
-          out costs 0.25%, kept by the pool. A private swap pays the same 0.25%
+          <strong>Fees.</strong> Direct deposits and private payments are free. A
+          cash out costs 0.5%, kept by the pool. A private swap pays the same 0.5%
           on the amount swapped, plus a price buffer (0.5% on Robinhood Chain,
-          0.1% on Tempo) whose unused part goes to the swap treasury.
+          0.1% on Tempo) whose unused part goes to the swap treasury. Money{" "}
+          <Link href="/docs/bridge#costs">bridged in from another chain</Link> pays
+          the bridge&apos;s fees.
         </li>
       </ul>
 
@@ -523,7 +525,7 @@ export default function DocsNetworksPage() {
         Base is an Ethereum L2 (OP Stack) where a lot of USDC already moves.
         Gloam on Base is the same vault as on the other mainnets:{" "}
         <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
-        deposit limits and the 0.25% cash-out fee. Base Sepolia, the testnet,
+        deposit limits and the 0.5% cash-out fee. Base Sepolia, the testnet,
         went live on 24 October 2026 and Base mainnet on 26 October 2026, on
         the same code.{" "}
         {BASE_MAINNET_LIVE
@@ -631,7 +633,7 @@ export default function DocsNetworksPage() {
       <p>
         Gloam on Ethereum mainnet is the same vault as on the other mainnets:{" "}
         <code>ShieldPoolPayments</code>, the ceremony&apos;s final keys, beta
-        deposit limits and the 0.25% cash-out fee. Its testnet is
+        deposit limits and the 0.5% cash-out fee. Its testnet is
         Ethereum Sepolia, below, on the same contract and keys.{" "}
         {ETHEREUM_LIVE
           ? "Ethereum mainnet is live as beta software."

@@ -4,7 +4,7 @@ Status: **live on Tempo mainnet (`4217`) from 21 October 2026, in beta.** Pool
 `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (`ShieldPoolPayments`, payments only, deploy block
 `45172561`) on the trusted setup's final keys, listing USDC.e, pathUSD,
 USDT0 and OUSD with beta deposit limits (500 per deposit, 25,000 in total for
-each). Deposits and private payments are free; a cash out costs 0.25%. It was
+each). Direct deposits and private payments are free; a cash out costs 0.5%. It was
 reviewed internally before launch; an external audit is planned. Tempo Moderato
 stays up as the testnet: current pool
 `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` (redeployed 2026-09-29, block

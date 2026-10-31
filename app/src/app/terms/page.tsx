@@ -20,7 +20,7 @@ export default function TermsPage() {
         Gloam runs on mainnet and on testnets. On mainnet (Robinhood Chain and
         Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) you use
         real assets, and you can lose them. Mainnet is beta software: deposits
-        have limits, a cash out costs 0.25% of its amount, and the contracts
+        have limits, a cash out costs 0.5% of its amount, and the contracts
         were reviewed internally before launch, with an external audit planned
         but not yet done. Only deposit what you can afford to lose.
       </p>

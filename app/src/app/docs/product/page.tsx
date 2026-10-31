@@ -64,7 +64,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Mainnet",
-            body: `Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC${LATER ? `, and on ${LATER} since 26 October 2026` : ""}, on the same vault, the final ceremony keys and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%.`,
+            body: `Live on Robinhood Chain and Tempo since 21 October 2026, 13:00 UTC${LATER ? `, and on ${LATER} since 26 October 2026` : ""}, on the same vault, the final ceremony keys and beta deposit limits. Direct deposits and private payments are free; a cash out costs 0.5%.`,
           },
           {
             n: "●",

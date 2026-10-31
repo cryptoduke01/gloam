@@ -181,7 +181,7 @@ export default function DocsPrivateSwapsPage() {
       <h2 id="costs">What it costs</h2>
       <ul>
         <li>
-          <strong>Vault fee, 0.25% of the amount you swap.</strong> A swap takes
+          <strong>Vault fee, 0.5% of the amount you swap.</strong> A swap takes
           the note out of the vault the same way a cash out does, so the vault
           keeps its usual cash-out fee.
         </li>
@@ -233,7 +233,7 @@ export default function DocsPrivateSwapsPage() {
       <p>
         So the money comes back to your private balance as a refund note, made
         in advance with the swap. You get back 99% of the note. The other 1%
-        covers the vault&apos;s cash-out fee (0.25% today), and what is left of
+        covers the vault&apos;s cash-out fee (0.5% today), and what is left of
         it goes to the Gloam treasury. The app finishes the refund by itself,
         through the relay, the next time it syncs your balance.
       </p>

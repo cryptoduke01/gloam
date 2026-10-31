@@ -37,8 +37,9 @@ export default function DisclosuresPage() {
         Base and Ethereum, and 25,000 per deposit and 250,000 in total for
         $GLOAM. A raise of these limits is queued behind the public three-day
         timelock. Cash outs and private payments are never limited.
-        Deposits and private payments are free; a cash out costs 0.25% of its
-        amount.
+        Direct deposits and private payments are free; a cash out costs 0.5% of
+        its amount. Money bridged in from another chain pays the bridge&apos;s
+        fees, shown before you send.
       </p>
       <p>
         The owner is a single wallet (a multisig is planned), cash-out fees go

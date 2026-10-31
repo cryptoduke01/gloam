@@ -44,8 +44,8 @@ export default function DocsOverviewPage() {
         Mainnet is <strong>beta software</strong>. It uses
         the final keys from a 13-contributor trusted setup, and beta deposit
         limits cap what goes in. The code was reviewed internally before
-        launch; an external audit is planned. Deposits and private payments are
-        free, and cashing out costs 0.25%. The Robinhood Chain and Tempo
+        launch; an external audit is planned. Direct deposits and private payments
+        are free, and cashing out costs 0.5%. The Robinhood Chain and Tempo
         testnets keep <strong>development proving keys</strong>; Base Sepolia
         and Ethereum Sepolia run the final keys. Details: <Link href="/docs/chain">Networks</Link>.
       </p>

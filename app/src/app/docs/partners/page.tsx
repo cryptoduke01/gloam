@@ -134,8 +134,8 @@ export default function DocsPartnersPage() {
         <code>&quot;charged&quot;: false</code>.
       </p>
       <p>
-        Gloam&apos;s own fee is separate. On mainnet a cash out costs 0.25%, kept
-        by the vault; deposits and private payments are free. Your partner fee is
+        Gloam&apos;s own fee is separate. On mainnet a cash out costs 0.5%, kept
+        by the vault; direct deposits and private payments are free. Your partner fee is
         not added on top of that yet.
       </p>
       <p>

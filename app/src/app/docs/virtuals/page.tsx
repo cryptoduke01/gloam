@@ -47,7 +47,7 @@ const FUNCTIONS: { name: string; args: string; does: string; chain: string }[] =
   {
     name: "gloam_cash_out",
     args: "amount, to, asset?",
-    does: "From the private balance to a public 0x address. The pool keeps 0.25%.",
+    does: "From the private balance to a public 0x address. The pool keeps 0.5%.",
     chain: "The cash out: asset, amount and recipient",
   },
   {
@@ -578,7 +578,7 @@ GLOAM_LIMITS_FILE=./limits.json
       </p>
       <h3>What does it cost?</h3>
       <p>
-        Adding money and paying privately are free. A cash out costs 0.25%. The
+        Adding money directly and paying privately are free. A cash out costs 0.5%. The
         payout provider charges 0.5%, at least 0.05, and ACP takes its own fees
         on what is escrowed.
       </p>

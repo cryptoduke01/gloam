@@ -203,7 +203,7 @@ export default function DocsThreatModelPage() {
         Once a swap is broadcast, its unshield proof is public. Anyone can send that step alone. The money then waits at the
         swap&apos;s escrow, which only the router can open, and only into the refund note
         the owner made with the swap. That refund holds 99% of the note: the vault keeps
-        its 0.25% cash-out fee and the rest of the 1% goes to the treasury. The
+        its 0.5% cash-out fee and the rest of the 1% goes to the treasury. The
         owner&apos;s app finishes the refund through the relay on its next sync. The
         attacker pays gas and gains nothing.
       </p>

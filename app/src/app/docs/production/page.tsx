@@ -113,8 +113,9 @@ export default function DocsProductionPage() {
           pooled funds. Notes leave only through an unshield proof.
         </li>
         <li>
-          <strong>Fees.</strong> Deposits and private payments are free. A cash
-          out costs 0.25%. Half of Gloam&apos;s fees buy back $GLOAM; half of
+          <strong>Fees.</strong> Direct deposits and private payments are free. A
+          cash out costs 0.5%. Money bridged in from another chain pays the
+          bridge&apos;s fees. Half of Gloam&apos;s fees buy back $GLOAM; half of
           that is burned and half goes to the treasury.
         </li>
       </ul>

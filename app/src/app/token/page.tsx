@@ -57,7 +57,7 @@ const USES = [
   {
     n: "02",
     title: "Buybacks",
-    body: "At mainnet, deposits and private payments are free and cash-outs carry a 0.25% fee. Half of Gloam's fees buy $GLOAM from the market: half of that is burned, half goes to the Gloam treasury.",
+    body: "At mainnet, direct deposits and private payments are free and cash-outs carry a 0.5% fee. Half of Gloam's fees buy $GLOAM from the market: half of that is burned, half goes to the Gloam treasury.",
     when: "Starts when fees go live",
   },
   {
@@ -87,7 +87,7 @@ const QUESTIONS = [
   },
   {
     q: "Then how is the team paid?",
-    a: "By the product, not the token. From mainnet a cash-out carries a 0.25% fee: half of Gloam's fees run the team and the service, half buy back $GLOAM. Orynth also pays a small creator fee on trades. Payroll and API fees come later.",
+    a: "By the product, not the token. From mainnet a cash-out carries a 0.5% fee: half of Gloam's fees run the team and the service, half buy back $GLOAM. Orynth also pays a small creator fee on trades. Payroll and API fees come later.",
   },
   {
     q: "Burned or kept?",
@@ -147,7 +147,7 @@ const LIVE_USES: typeof USES = [
   { ...USES[0], when: "First vote next" },
   {
     ...USES[1],
-    body: "On mainnet, deposits and private payments are free and cash-outs carry a 0.25% fee. Half of Gloam's fees buy $GLOAM from the market: half of that is burned, half goes to the Gloam treasury.",
+    body: "On mainnet, direct deposits and private payments are free and cash-outs carry a 0.5% fee. Half of Gloam's fees buy $GLOAM from the market: half of that is burned, half goes to the Gloam treasury.",
     when: "Fees live on mainnet",
   },
   RH_MAINNET
@@ -164,7 +164,7 @@ const LIVE_QUESTIONS: typeof QUESTIONS = QUESTIONS.map((x, i) =>
   i === 0 && RH_MAINNET
     ? { ...x, a: "Buybacks tie it to how much Gloam gets used, you can hold it privately in the Robinhood Chain mainnet vault, and holders get new features first." }
     : i === 2
-      ? { ...x, a: "By the product, not the token. On mainnet a cash-out carries a 0.25% fee: half of Gloam's fees run the team and the service, half buy back $GLOAM. Orynth also pays a small creator fee on trades. Payroll and API fees come later." }
+      ? { ...x, a: "By the product, not the token. On mainnet a cash-out carries a 0.5% fee: half of Gloam's fees run the team and the service, half buy back $GLOAM. Orynth also pays a small creator fee on trades. Payroll and API fees come later." }
       : x
 );
 
@@ -186,7 +186,7 @@ const LIVE_PHASES: Phase[] = [
     items: [
       `Gloam live on ${liveMainnetNames()} mainnet`,
       ...(RH_MAINNET ? ["Shield $GLOAM in the Robinhood Chain pool: 25,000 per deposit, 250,000 in total during beta"] : []),
-      "Fees on: deposits and payments free, 0.25% on cash-outs, and half of Gloam's fees set to buy back $GLOAM",
+      "Fees on: direct deposits and payments free, 0.5% on cash-outs, and half of Gloam's fees set to buy back $GLOAM",
     ],
   },
   {
