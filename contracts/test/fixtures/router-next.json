@@ -1,0 +1,4 @@
+{
+  "note": "What the app pins about GloamVaultSwapV4c (lib/vaultSwap): SwapEscrow2's creation code hash. VaultSwapV4c.t.sol and selftest-vault-swap check it.",
+  "escrowCodeHash": "0xa1780da0f59b3a91182d3b3ee00726136fbb782572fbf77864711fed5926d464"
+}
