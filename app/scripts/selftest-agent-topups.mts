@@ -1758,9 +1758,7 @@ await test("the copy says what shows, and promises nothing the chain can't keep"
   const mainnet = getNetwork("robinhood-mainnet");
   assert.match(agentGasLine(mainnet)!, /its own ETH for gas on Robinhood Chain/);
   assert.match(agentGasLine(mainnet)!, /stablecoins only/);
-  assert.match(agentGasLine(mainnet)!, /ETH isn't held in the vault there/);
   assert.match(agentGasLine(getNetwork("base-mainnet"))!, /its own ETH for gas on Base/);
-  assert.doesNotMatch(agentGasLine(getNetwork("base-mainnet"))!, /isn't held/, "ETH is a vault asset on Base");
   assert.equal(agentGasLine(getNetwork("tempo-mainnet")), null, "gas on Tempo is paid in stablecoins");
   const lines = [
     agentGasLine(mainnet)!,

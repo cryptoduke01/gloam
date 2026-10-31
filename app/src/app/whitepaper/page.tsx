@@ -598,8 +598,9 @@ export default function WhitepaperPage() {
         <li>Private payroll, scheduled payroll, and payment requests</li>
         <li>Proofs of funds, payment, and payroll totals, checked at /verify</li>
         <li>
-          Private swaps on Robinhood Chain and Tempo mainnet: USDG and $GLOAM
-          on Robinhood Chain, the four vault stablecoins on Tempo, sent by the
+          Private swaps on Robinhood Chain and Tempo mainnet: USDG, $GLOAM,
+          PONS, CASHCAT, WETH, stock tokens and more on Robinhood Chain, the four
+          vault stablecoins on Tempo, sent by the
           Gloam relay, with who swapped kept private and the amounts public
         </li>
         <li>

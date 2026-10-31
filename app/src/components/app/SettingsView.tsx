@@ -6,7 +6,8 @@ import { walletParamsForChain } from "@/lib/chain";
 import { exitDemo, useAppAccount } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { faucetFor } from "@/lib/faucet";
-import { shieldTokensFor } from "@/lib/tokens";
+import { addableTokensFor } from "@/lib/tokens";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import {
   exportNotesBackup,
   importNotesBackup,
@@ -311,6 +312,7 @@ function PasskeyCard({ demo }: { demo: boolean }) {
 /* ------------------------------------------------------------ view */
 
 export function SettingsView() {
+  const openGated = useOpenGatedTokens();
   const { address, isConnected, chainId, demo } = useAppAccount();
   const { disconnect: wagmiDisconnect } = useDisconnect();
   const disconnect = demo ? exitDemo : wagmiDisconnect;
@@ -525,7 +527,7 @@ export function SettingsView() {
                 {faucet ? (
                   <>Test funds: {faucet.assets}</>
                 ) : (
-                  <>Assets: {shieldTokensFor(network.chainId).map((t) => t.symbol).join(" · ")}</>
+                  <>Assets: {addableTokensFor(network.chainId, openGated).map((t) => t.symbol).join(" · ")}</>
                 )}
               </p>
             </div>

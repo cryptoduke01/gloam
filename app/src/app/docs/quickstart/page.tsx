@@ -107,8 +107,8 @@ circuitArtifactUrls("shield", 46630);  // dev keys, Robinhood Chain testnet`}</c
         (a Poseidon commitment binding your secret to the amount and asset) and
         generates the shield proof. You sign the resolved call. The{" "}
         <code>note.secret</code> it returns is your only spend authority, so persist
-        it. On mainnet the Robinhood Chain pool takes USDG and $GLOAM, not native
-        ETH, so you approve the token first.
+        it. On mainnet, tokens such as USDG on Robinhood Chain need an approval
+        first, so you approve the token before the deposit.
       </p>
       <pre>
         <code>{`import {

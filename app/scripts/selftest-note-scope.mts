@@ -297,8 +297,8 @@ await test("one repair pass reopens ETH notes the old cleanup marked spent, only
   await vault.setAllNotes(vault.getAllNotes().map((n) => (n.id === "ghost" ? { ...n, status: "recovered" as const } : n)));
   assert.equal(await reopenGhostEthNotes(env), false);
   assert.equal(reads, before);
-  // a vault that lists no ETH (Robinhood Chain mainnet) never runs it
-  assert.equal(await reopenGhostEthNotes({ ...(env as object), chainId: RH.chainId } as never), false);
+  // a vault with no ETH at all (Tempo mainnet) never runs it
+  assert.equal(await reopenGhostEthNotes({ ...(env as object), chainId: 4217 } as never), false);
 });
 
 console.log(`selftest-note-scope: ${passed} checks passed`);

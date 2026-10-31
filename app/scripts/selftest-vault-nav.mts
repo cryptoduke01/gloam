@@ -40,13 +40,13 @@ test("the nav links are the deep links the app already serves", () => {
   assert.equal(href.send, "/app/vault?tab=send");
 });
 
-test("every network lists Add, Pay, Receive, Cash out and Agent top-ups, in the order money moves", () => {
-  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: false })), ["shield", "pay", "receive", "cashout", "topups"]);
+test("every network lists Add, Pay, Receive, Cash out, Agent top-ups and Public send, in the order money moves", () => {
+  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false })), ["shield", "pay", "receive", "cashout", "topups", "send"]);
 });
 
-test("Swap, Trade and Public send appear only where the network has them", () => {
-  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: false, native: false })), ["shield", "pay", "receive", "swap", "cashout", "topups"]);
-  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: true, native: true })), [
+test("Swap and Trade appear only where the network has them", () => {
+  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: false })), ["shield", "pay", "receive", "swap", "cashout", "topups", "send"]);
+  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: true })), [
     "shield",
     "pay",
     "receive",
@@ -56,7 +56,6 @@ test("Swap, Trade and Public send appear only where the network has them", () =>
     "trade",
     "send",
   ]);
-  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: true })), ["shield", "pay", "receive", "cashout", "topups", "send"]);
 });
 
 test("Pay's mode from ?mode=: receive and cash out, anything else is Send", () => {
@@ -80,10 +79,11 @@ test("the marked nav entry matches what the Vault shows", () => {
 });
 
 test("a tab this network does not have opens the overview, which is what the Vault falls back to", () => {
-  const tempo = vaultActionsFor({ swap: false, stocks: false, native: false });
-  assert.equal(vaultActionFromParams("swap", null, tempo), null);
-  assert.equal(vaultActionFromParams("send", null, tempo), null);
-  assert.equal(vaultActionFromParams("move", "cashout", tempo), "cashout");
+  const base = vaultActionsFor({ swap: false, stocks: false });
+  assert.equal(vaultActionFromParams("swap", null, base), null);
+  assert.equal(vaultActionFromParams("trade", null, base), null);
+  assert.equal(vaultActionFromParams("send", null, base), "send");
+  assert.equal(vaultActionFromParams("move", "cashout", base), "cashout");
 });
 
 test("writing Pay's mode into the URL keeps the rest of the query", () => {

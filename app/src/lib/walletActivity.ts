@@ -37,8 +37,9 @@ const WITHDRAW_FEE = parseAbiItem("event WithdrawFee(bytes32 indexed nullifier, 
 
 /** Rows kept per wallet, newest first; the feed pages through them five at a time. */
 const KEEP = 40;
-// v3: native-coin deposits and cash-outs are read too, so a v2 copy (tokens only) is read again
-const CACHE_PREFIX = "gloam_wallet_activity_v3";
+// v4: Robinhood Chain lists ETH, PONS, CASHCAT, AI and ORBIO, and a copy only reads
+// on from where it stopped, so a v3 copy (without them) is read again from the start
+const CACHE_PREFIX = "gloam_wallet_activity_v4";
 /**
  * Robinhood's RPC takes millions of blocks for one token and one address, but
  * only 100k when several token addresses share a query; Tempo caps every query

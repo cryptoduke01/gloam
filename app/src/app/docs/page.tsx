@@ -105,11 +105,11 @@ export default function DocsOverviewPage() {
           limits
         </li>
         <li>
-          Send public balances (stablecoins and ETH, plus stock tokens on
-          Robinhood Chain testnet)
+          Send public balances: ETH and every token listed on the network
         </li>
         <li>
-          Shield into the vault: USDG and $GLOAM on Robinhood Chain mainnet;
+          Shield into the vault: USDG, $GLOAM, PONS and CASHCAT on Robinhood
+          Chain mainnet, with ETH, AI and ORBIO once their limits land;
           USDC.e, pathUSD, USDT0 and OUSD on Tempo mainnet;
           {BASE_LIVE ? " USDC, EURC, USDT and ETH on Base mainnet;" : ""}
           {ETHEREUM_LIVE ? " USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum mainnet;" : ""} test

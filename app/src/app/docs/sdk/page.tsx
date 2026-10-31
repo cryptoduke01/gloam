@@ -115,8 +115,12 @@ npm install snarkjs   # optional peer, for proving`}</code>
         </li>
         <li>
           On Robinhood Chain mainnet the pool takes USDG (
-          <code>RH_MAINNET_USDG</code>) and $GLOAM (<code>GLOAM_TOKEN</code>),
-          not native ETH. On Tempo mainnet it takes <code>TEMPO_USDCE</code>,{" "}
+          <code>RH_MAINNET_USDG</code>), $GLOAM (<code>GLOAM_TOKEN</code>), PONS (
+          <code>RH_MAINNET_PONS</code>) and CASHCAT (
+          <code>RH_MAINNET_CASHCAT</code>), then native ETH (
+          <code>NATIVE_ASSET</code>), AI (<code>RH_MAINNET_AI</code>) and ORBIO (
+          <code>RH_MAINNET_ORBIO</code>) once each limit lands through the
+          timelock. On Tempo mainnet it takes <code>TEMPO_USDCE</code>,{" "}
           <code>TEMPO_PATHUSD</code>, <code>TEMPO_USDT0</code> and{" "}
           <code>TEMPO_OUSD</code>.
         </li>

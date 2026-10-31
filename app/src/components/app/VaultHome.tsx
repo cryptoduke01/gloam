@@ -14,7 +14,7 @@ import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed } from "@/lib/shield";
-import { addableTokensFor, isDollarStable, knownTokens, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, isDollarStable, isNativeAddable, knownTokens } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { faucetFor } from "@/lib/faucet";
 import { bridgeVisible } from "@/lib/bridge";
@@ -45,8 +45,8 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   const live = isShieldDeployed() && Boolean(network.pool);
   const { byAsset, local, ready, balanceSyncing } = useLocalShieldNotes(address);
 
-  // The public side: what this wallet holds of what the vault takes now (BDX
-  // only once its live deposit limit is open).
+  // The public side: what this wallet holds of what the vault takes now (BDX, or
+  // ETH on Robinhood Chain, only once its live deposit limit is open).
   const openGated = useOpenGatedTokens();
   const tokens = useMemo(() => addableTokensFor(network.chainId, openGated), [network.chainId, openGated]);
   const tokenAddrs = useMemo(() => tokens.map((t) => t.address), [tokens]);
@@ -56,7 +56,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
     chainId: network.chainId,
     enabled: Boolean(address) && onNetwork,
   });
-  const nativeOk = supportsNativeShield(network.chainId);
+  const nativeOk = isNativeAddable(network.chainId, openGated);
   const { data: nativeBal } = useAppBalance({
     address,
     chainId: network.chainId,

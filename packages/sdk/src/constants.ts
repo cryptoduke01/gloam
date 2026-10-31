@@ -85,6 +85,32 @@ export const GLOAM_TOKEN: Address =
  */
 export const RH_MAINNET_GRIFT: Address =
   "0x9f4BA41F91a59A34e17eE8C9EB3A51363B11aBD5";
+/**
+ * $PONS on Robinhood Chain mainnet, 18 decimals. A plain ERC-20 from its own
+ * launcher (Sourcify match): fixed supply, no owner, no transfer fee, no rebasing;
+ * its launch limits ended at block 25,526,532.
+ */
+export const RH_MAINNET_PONS: Address =
+  "0x39dBED3a2bd333467115dE45665cC57F813C4571";
+/** $CASHCAT on Robinhood Chain mainnet, 18 decimals. A plain ERC-20 of the same kind as PONS (Sourcify match). */
+export const RH_MAINNET_CASHCAT: Address =
+  "0x020bfC650A365f8BB26819deAAbF3E21291018b4";
+/**
+ * Artificial Inu ($AI) on Robinhood Chain mainnet, 18 decimals: an immutable
+ * clone of Doppler's DopplerERC20V1 (Sourcify match on the implementation),
+ * no mint, no transfer fee, no rebasing. Its owner is Doppler's Airlock, which
+ * can only hand it on to 0xdead, so lockPool can't run again. 0 on the vault
+ * until its limit lands through the timelock.
+ */
+export const RH_MAINNET_AI: Address =
+  "0x2E8c31162b855A2ffa90F6F8634643Ad6F111e18";
+/**
+ * Orbio.so ($ORBIO) on Robinhood Chain mainnet, 18 decimals. A plain ERC-20 from
+ * the Pons v2 launcher (Sourcify exact match): no owner, no transfer fee, no
+ * rebasing. 0 on the vault until its limit lands through the timelock.
+ */
+export const RH_MAINNET_ORBIO: Address =
+  "0xAa07A0e9209e16aC99708C3EC70159c6eF3128A3";
 /** Bridged USDC (USDC.e) on Tempo mainnet, TIP-20, 6 decimals. */
 export const TEMPO_USDCE: Address =
   "0x20c000000000000000000000b9537d11c60e8b50";
@@ -315,14 +341,25 @@ const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimal
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
 /**
- * Robinhood Chain mainnet pool assets and their beta deposit limits. Native ETH
- * is not listed. GRIFT opens with no limit once its timelocked change lands; 0 on
- * chain until then, so the vault refuses it and assertDepositWithinLiveLimit says so.
+ * Robinhood Chain mainnet pool assets and their beta deposit limits. GRIFT opens
+ * with no limit once its timelocked change lands; 0 on chain until then, so the
+ * vault refuses it and assertDepositWithinLiveLimit says so.
+ *
+ * ETH, AI and ORBIO are the same: about $25,000 per deposit and $250,000 in total
+ * at the prices of 2026-10-31, queued through contracts/script/
+ * QueueRobinhoodAssets.s.sol, 0 on chain until each lands. PONS and CASHCAT were
+ * opened as swap assets on 2026-10-27, so their limits here are the ones live
+ * that day, with raises already queued. In every case the live read wins.
  */
 export const RH_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDG", address: RH_MAINNET_USDG, decimals: 6, depositLimit: stableLimit },
   { symbol: "GLOAM", address: GLOAM_TOKEN, decimals: 18, depositLimit: { perDeposit: units(25_000n, 18), total: units(250_000n, 18) } },
   { symbol: "GRIFT", address: RH_MAINNET_GRIFT, decimals: 18, depositLimit: { perDeposit: (1n << 128n) - 1n, total: (1n << 128n) - 1n } },
+  { symbol: "ETH", address: NATIVE_ASSET, decimals: 18, depositLimit: { perDeposit: units(11n, 18), total: units(110n, 18) } },
+  { symbol: "PONS", address: RH_MAINNET_PONS, decimals: 18, depositLimit: { perDeposit: units(3_900n, 18), total: units(98_000n, 18) } },
+  { symbol: "CASHCAT", address: RH_MAINNET_CASHCAT, decimals: 18, depositLimit: { perDeposit: units(9_600n, 18), total: units(240_000n, 18) } },
+  { symbol: "AI", address: RH_MAINNET_AI, decimals: 18, depositLimit: { perDeposit: units(400_000n, 18), total: units(4_000_000n, 18) } },
+  { symbol: "ORBIO", address: RH_MAINNET_ORBIO, decimals: 18, depositLimit: { perDeposit: units(1_000_000n, 18), total: units(10_000_000n, 18) } },
 ];
 
 /** Tempo mainnet pool assets (TIP-20, 6 decimals) and their beta deposit limits. */
@@ -401,7 +438,7 @@ export interface GloamNetwork {
   deployBlock: bigint;
   /** Encrypted payment-message board for this network, or null where there is none (Base mainnet and Ethereum mainnet so far). */
   payMemo: Address | null;
-  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain mainnet lists no native asset; Base and Ethereum list ETH). */
+  /** Whether native-value shields are allowed (Tempo blocks native msg.value; Robinhood Chain, Base and Ethereum list ETH). */
   nativeShield: boolean;
   /** Which chain this is, testnet or mainnet. */
   family: GloamChainFamily;
@@ -489,7 +526,7 @@ const MAINNET_SPECS: Partial<Record<
   { chainId: MainnetChainId; key: GloamNetworkKey; label: string; chain: Chain; payMemo: Address | null; nativeShield: boolean; assets: GloamAsset[] }
 >> = {
   // Payment-message boards on Robinhood Chain and Tempo deployed 2026-10-23 (no owner, never log the poster).
-  robinhood: { chainId: 4663, key: "robinhood-mainnet", label: "Robinhood Chain", chain: RH_MAINNET_CHAIN, payMemo: "0x01B3172d9900Cb26d57E986429b9b23854c74598", nativeShield: false, assets: RH_MAINNET_ASSETS },
+  robinhood: { chainId: 4663, key: "robinhood-mainnet", label: "Robinhood Chain", chain: RH_MAINNET_CHAIN, payMemo: "0x01B3172d9900Cb26d57E986429b9b23854c74598", nativeShield: true, assets: RH_MAINNET_ASSETS },
   tempo: { chainId: 4217, key: "tempo-mainnet", label: "Tempo", chain: TEMPO_MAINNET_CHAIN, payMemo: "0x342E3745967FDB4223902E196Ceb792c15d8C1c4", nativeShield: false, assets: TEMPO_MAINNET_ASSETS },
   // Base's payment-message board, deployed 26 Oct 2026 after the vault (no owner, never logs the poster).
   base: { chainId: 8453, key: "base-mainnet", label: "Base", chain: BASE_MAINNET_CHAIN, payMemo: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", nativeShield: true, assets: BASE_MAINNET_ASSETS },
@@ -734,8 +771,8 @@ const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
  * Tokens that are not in a network's `assets` because its pool doesn't take a
  * deposit of them, but a cash out could still be pointed at. On Robinhood Chain
  * mainnet: what a private swap can land in (the app's RH_SWAP_ASSETS_V2, past
- * the listed USDG and GLOAM). On its testnet: the faucet stock tokens. Kept out
- * of `assets` on purpose: assertDepositAllowed reads that list.
+ * the listed USDG, GLOAM, PONS and CASHCAT). On its testnet: the faucet stock
+ * tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
  */
 const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
   [RH_MAINNET_CHAIN_ID]: [
@@ -743,8 +780,6 @@ const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
     "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe
     "0xcE24439F2D9C6a2289F741120FE202248B666666", // U
     "0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4", // cbBTC
-    "0x39dBED3a2bd333467115dE45665cC57F813C4571", // PONS
-    "0x020bfC650A365f8BB26819deAAbF3E21291018b4", // CASHCAT
     "0xc6911796042b15d7Fa4F6CDe69e245DdCd3d9c31", // VIRTUAL
     "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C", // SPY
     "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", // NVDA

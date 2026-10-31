@@ -496,7 +496,7 @@ GLOAM_LIMITS_FILE=./limits.json
               </td>
               <td>Robinhood Chain mainnet</td>
               <td>Live, beta limits</td>
-              <td>USDG, GLOAM</td>
+              <td>USDG, GLOAM, PONS, CASHCAT; ETH, AI and ORBIO once their limits land</td>
             </tr>
             <tr>
               <td>

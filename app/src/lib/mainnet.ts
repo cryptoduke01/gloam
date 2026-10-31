@@ -17,7 +17,7 @@
  * The block number can be written plain (12345678) or as a bigint (12345678n).
  */
 export const MAINNET_POOLS: Record<MainnetChainId, MainnetPoolInput> = {
-  // Robinhood Chain mainnet (4663): USDG + GLOAM
+  // Robinhood Chain mainnet (4663)
   4663: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 94_194_599 },
   // Tempo mainnet (4217): USDC.e, pathUSD, USDT0, OUSD
   4217: { pool: "0x39e28cde55cab798874746ac52cb4b5cc99a0194", deployBlock: 45_172_561 },

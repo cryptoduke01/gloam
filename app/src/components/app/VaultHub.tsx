@@ -88,13 +88,11 @@ export function VaultHub() {
   // provider, which can settle first) so server and client HTML always match.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
-  // Tokenized stocks only trade on Robinhood Chain testnet, swaps only where a
-  // vault swap router is deployed, and a public send needs a native coin
-  // (Tempo has none), so those actions drop out elsewhere.
+  // Tokenized stocks only trade on Robinhood Chain testnet and swaps only where a
+  // vault swap router is deployed, so those actions drop out elsewhere.
   const actions = vaultActionsFor({
     swap: vaultSwapRouter(network.chainId) !== null && swapOpenTo(address),
     stocks: Boolean(network.stocks),
-    native: network.family !== "tempo",
   });
 
   // A claim link's fragment (#claim=…) opens Receive; Pay reads and clears it.

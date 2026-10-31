@@ -11,7 +11,7 @@
  *  - with --live: a real quote on Robinhood Chain and Tempo mainnet (read-only)
  *
  * Run: npx tsx scripts/selftest-vault-swap.mts [--live]
- *      (--live also quotes v2's pairs: USDG, GLOAM and WETH both ways, read-only)
+ *      (--live also quotes v2's pairs: USDG, GLOAM, WETH, PONS and CASHCAT both ways, read-only)
  */
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
@@ -420,6 +420,10 @@ if (process.argv.includes("--live")) {
       [USDG, tok("GLD"), 100_000_000n],
       [RH_WETH, tok("MU"), 2n * 10n ** 16n],
       [USDG, tok("cbBTC"), 100_000_000n],
+      [USDG, tok("PONS"), 100_000_000n],
+      [tok("PONS"), USDG, 400n * 10n ** 18n],
+      [USDG, tok("CASHCAT"), 100_000_000n],
+      [tok("CASHCAT"), USDG, 1_000n * 10n ** 18n],
     ];
     for (const [a, b, amt] of ask) {
       const q = await planVaultSwap(rh2 as never, 4663, { assetIn: a, assetOut: b, amountIn: amt, feeBps: 25 });

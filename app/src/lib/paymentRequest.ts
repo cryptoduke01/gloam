@@ -33,7 +33,7 @@ import { PAYMENT_NOTE_MAX, cleanText } from "./paymentNote";
 import { isValidReceiveTag } from "./receiveTag";
 import { readAmountText } from "./amountText";
 import { classifyPayRecipient } from "./payRecipient";
-import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
+import { isDollarStable, shieldTokensFor, supportsNativeShield, swapDisplayTokensFor } from "./tokens";
 
 /** Same cap as the private note the payment carries (lib/paymentNote). */
 export const REQUEST_NOTE_MAX = PAYMENT_NOTE_MAX;
@@ -102,10 +102,12 @@ export function findRequestAsset(key: NetworkKey, raw: string): RequestAsset | n
  * The mainnet vaults sit at the same address (and Base's and Ethereum's can
  * too), so the vault alone can't tell a Robinhood Chain code from a Tempo one;
  * the asset can. A code claimed on the wrong one would sit in the balance as
- * "not settled". ETH is the zero address on Base Sepolia, Base mainnet and
- * Ethereum alike, so a code now names its chain (NotePackage.chainId) and is
- * refused on any other; an older code without it is matched on vault and
- * asset, and its link's ?net= picks the network.
+ * "not settled". ETH is the zero address on Base Sepolia, Base mainnet,
+ * Ethereum and Robinhood Chain alike, so a code now names its chain
+ * (NotePackage.chainId) and is refused on any other; an older code without it is
+ * matched on vault and asset, and its link's ?net= picks the network. Robinhood
+ * Chain listed ETH long after codes began naming their chain, so an ETH code with
+ * no chain was never made there.
  */
 export function claimNetworkProblem(
   network: { key: NetworkKey; pool: string | null },
@@ -124,7 +126,10 @@ export function claimNetworkProblem(
     return "This payment is for a different vault or network.";
   }
   const asset = pack.asset.trim().toLowerCase();
-  if (!requestAssetsFor(network.key).some((a) => a.address.toLowerCase() === asset)) {
+  const olderEthCode = pack.chainId === undefined && here.chainId === 4663 && asset === zeroAddress;
+  // Also what a private swap lands in (WETH, the stocks): a note in one spends like any other.
+  const held = [...requestAssetsFor(network.key), ...swapDisplayTokensFor(here.chainId)];
+  if (olderEthCode || !held.some((a) => a.address.toLowerCase() === asset)) {
     return "This payment is on a different network. Switch network, then claim it again.";
   }
   return null;

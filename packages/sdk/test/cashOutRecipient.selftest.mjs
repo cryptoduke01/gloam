@@ -107,6 +107,21 @@ for (const a of [WETH, TSLA, MU]) {
   assert(refused, `${a} is still no deposit`);
   assert(!getGloamNetwork("robinhood-mainnet").assets.some((x) => x.address === a), `${a} is not a listed asset`);
 }
+// Listed tokens are refused as recipients through `assets`: PONS and CASHCAT moved there from the
+// unlisted list, and AI and ORBIO are new. Each is a deposit now, and still never a place to cash out to.
+const PONS = "0x39dBED3a2bd333467115dE45665cC57F813C4571";
+const CASHCAT = "0x020bfC650A365f8BB26819deAAbF3E21291018b4";
+const AI = "0x2E8c31162b855A2ffa90F6F8634643Ad6F111e18";
+const ORBIO = "0xAa07A0e9209e16aC99708C3EC70159c6eF3128A3";
+for (const a of [PONS, CASHCAT, AI, ORBIO]) {
+  is(cashOutTargetProblem(a, { chainId: 4663 }), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on Robinhood Chain`);
+  is(cashOutTargetProblem(a.toLowerCase(), { chainId: 4663 }), CASH_OUT_TO_TOKEN_MESSAGE, `${a} in lowercase`);
+  is(cashOutTargetProblem(a, { chainId: 8453 }), null, `${a} is nothing on Base`);
+  assertDepositAllowed(4663, a, 1n);
+}
+// ETH sits in `assets` as the zero address: still the zero-address answer, not "a token".
+is(cashOutTargetProblem("0x0000000000000000000000000000000000000000", { chainId: 4663 }), CASH_OUT_TO_ZERO_MESSAGE, "the zero address on Robinhood Chain");
+assertDepositAllowed(4663, "0x0000000000000000000000000000000000000000", 1n);
 is(cashOutTargetProblem(TESTNET_TSLA, { chainId: 46630 }), CASH_OUT_TO_TOKEN_MESSAGE, "a faucet stock token on the testnet");
 is(cashOutTargetProblem(TESTNET_TSLA, { chainId: 4663 }), null, "and nothing on mainnet");
 assert(!GLOAM_NETWORKS.robinhood.assets.some((x) => x.address === TESTNET_TSLA), "the faucet stock tokens stay out of the testnet's assets");

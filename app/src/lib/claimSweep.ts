@@ -625,9 +625,8 @@ const GHOST_REPAIR_KEY = "gloam.repair.ghostEth.v1";
 
 /**
  * One pass per vault, once: reopen ETH notes an older sync marked spent by
- * mistake. A sync begun on Robinhood Chain or Tempo mainnet (no ETH there, so
- * its ETH inventory read 0) could finish after a switch and mark the new
- * network's ETH notes spent. Only a note the vault still holds is reopened:
+ * mistake. A sync begun on a mainnet with no ETH in its vault (its ETH inventory
+ * read 0) could finish after a switch and mark the new network's ETH notes spent. Only a note the vault still holds is reopened:
  * its nullifier is unspent and the vault has seen its commitment. A payment
  * this browser made for someone else (pay-), a secured claim and anything not
  * on a payments vault that lists ETH are never touched. A pass where a read

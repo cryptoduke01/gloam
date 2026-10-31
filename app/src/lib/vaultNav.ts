@@ -18,8 +18,6 @@ export type VaultAction = {
   swapOnly?: boolean;
   /** Only where tokenized stocks trade (Robinhood Chain testnet). */
   stocksOnly?: boolean;
-  /** Sends the chain's native coin, which Tempo does not have. */
-  nativeOnly?: boolean;
 };
 
 /** In the order money moves: in, around, out. */
@@ -31,13 +29,13 @@ export const VAULT_ACTIONS: readonly VaultAction[] = [
   { id: "cashout", label: "Cash out", href: "/app/vault?tab=move&mode=cashout" },
   { id: "topups", label: "Agent top-ups", href: "/app/vault?tab=topups" },
   { id: "trade", label: "Trade", href: "/app/vault?tab=trade", stocksOnly: true },
-  { id: "send", label: "Public send", href: "/app/vault?tab=send", nativeOnly: true },
+  { id: "send", label: "Public send", href: "/app/vault?tab=send" },
 ];
 
 /** The actions this network and wallet have, the same rules the Vault's own tabs use. */
-export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: boolean }): VaultAction[] {
+export function vaultActionsFor(opts: { swap: boolean; stocks: boolean }): VaultAction[] {
   return VAULT_ACTIONS.filter(
-    (a) => !(a.swapOnly && !opts.swap) && !(a.stocksOnly && !opts.stocks) && !(a.nativeOnly && !opts.native)
+    (a) => !(a.swapOnly && !opts.swap) && !(a.stocksOnly && !opts.stocks)
   );
 }
 

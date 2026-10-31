@@ -17,7 +17,7 @@ import type { GloamNetwork } from "@/lib/networks";
 
 /** One short line per network: what it holds. Same length and shape for every row. */
 function assetLine(n: GloamNetwork): string {
-  if (n.key === "robinhood-mainnet") return "USDG and $GLOAM";
+  if (n.key === "robinhood-mainnet") return "USDG, $GLOAM, PONS and more";
   if (n.key === "tempo-mainnet") return "USDC.e, pathUSD, USDT0 and OUSD";
   if (n.key === "base-mainnet") return "USDC, EURC, USDT and ETH";
   if (n.key === "ethereum-mainnet") return "USDC, USDT, USDG, PYUSD, EURC and ETH";

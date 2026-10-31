@@ -1,25 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { formatEther, isAddress } from "viem";
+import { formatEther, formatUnits, isAddress } from "viem";
 import { formatEth, shortAddress } from "@/lib/chain";
 import {
   useAppAccount,
   useAppBalance,
   useAppSendTransaction,
+  useAppTokenBalance,
   useAppTxReceipt,
+  useAppWriteContract,
 } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
 import { useModalFocus } from "@/hooks/useModalFocus";
-import { safeParseEther } from "@/lib/amount";
+import { safeParseEther, safeParseUnits } from "@/lib/amount";
+import { erc20Abi } from "@/lib/dex";
 import { estimateMaxNativeSend, type MaxNativeSend } from "@/lib/nativeSend";
+import { NATIVE_CHOICE, hasNativeCoin, maxTokenSend, pickedToken, publicSendTargetProblem, publicSendTokens } from "@/lib/publicSend";
 import { getRhPublicClient } from "@/lib/rhClient";
+import { formatAssetAmount } from "@/lib/shield";
+import { isDollarStable } from "@/lib/tokens";
 import { amountTextError } from "@/lib/amountText";
-import { useEthPrice } from "@/hooks/useLiveMarkets";
+import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
+import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useTradingSettings } from "@/hooks/useTradingSettings";
 import { formatUsd } from "@/lib/markets";
+import { Select } from "@/components/ui/Select";
+import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { SuccessModal } from "./SuccessModal";
 
@@ -28,6 +37,9 @@ export function SendView() {
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
+  const { data: marketData } = useLiveMarkets();
+  // Tokens the markets feed has no price for, $GLOAM and PONS among them.
+  const { marks: geckoMarks } = useCoingeckoMarks(hasCoingeckoMarks(network.chainId));
   const { settings } = useTradingSettings();
   const { data: bal, refetch } = useAppBalance({
     address,
@@ -35,12 +47,30 @@ export function SendView() {
     enabled: Boolean(address),
   });
 
+  // Tempo has no native coin, so it starts on its first stablecoin. What is
+  // picked is worked out each render, so a network switch can't leave another
+  // chain's token in the form.
+  const tokens = useMemo(() => publicSendTokens(network.chainId), [network.chainId]);
+  const nativeOk = hasNativeCoin(network);
+  const [choice, setChoice] = useState(NATIVE_CHOICE);
+  const token = pickedToken(choice, network, tokens);
+  const symbol = token?.symbol ?? network.primaryAsset.symbol;
+  const decimals = token?.decimals ?? 18;
+  const { data: tokenBal, refetch: refetchToken } = useAppTokenBalance({
+    token: token?.address,
+    address,
+    chainId: network.chainId,
+    enabled: Boolean(token && onProduct),
+  });
+  const balance = token ? tokenBal : bal?.value;
+
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [sentAmount, setSentAmount] = useState("");
+  const [sentSymbol, setSentSymbol] = useState("");
   const [sentTo, setSentTo] = useState("");
   // What Max set aside the fee for: sending that value to that address asks
   // the wallet for exactly that gas and fee, so value + fee fits the balance.
@@ -52,15 +82,14 @@ export function SendView() {
   const review = useRef<HTMLDivElement>(null);
   useModalFocus(review, () => setShowPreview(false), { open: showPreview });
 
-  const {
-    sendTransaction,
-    data: hash,
-    isPending,
-    error: sendError,
-    reset,
-  } = useAppSendTransaction();
+  const native = useAppSendTransaction();
+  const tokenSend = useAppWriteContract();
+  // One of the two is in use: each send resets both first.
+  const hash = native.data ?? tokenSend.data;
+  const isPending = native.isPending || tokenSend.isPending;
+  const sendError = native.error ?? tokenSend.error;
 
-  const { isLoading: confirming, isSuccess } = useAppTxReceipt({
+  const { isLoading: confirming, isSuccess, data: receipt } = useAppTxReceipt({
     hash,
     chainId: network.chainId,
   });
@@ -72,23 +101,44 @@ export function SendView() {
     if (handledHash.current === hash) return;
     handledHash.current = hash;
     void refetch();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the transfer's receipt arrived: open the confirmation once per transaction
+    void refetchToken();
+    // A token can refuse a transfer (a frozen address, say): mined, but nothing moved.
+    if (receipt?.status === "reverted") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the transfer's receipt arrived: say it failed, once per transaction
+      setFormError(`This ${sentSymbol} transfer failed on chain, so nothing moved. Network fee only.`);
+      return;
+    }
     if (settings.confirmSends) setShowSuccess(true);
-  }, [isSuccess, hash, refetch, settings.confirmSends]);
+  }, [isSuccess, hash, receipt, sentSymbol, refetch, refetchToken, settings.confirmSends]);
+
+  /** The amount in the asset's base units, or null when it doesn't read as a number. */
+  function parseAmount(text: string): bigint | null {
+    return token ? safeParseUnits(text || "0", token.decimals) : safeParseEther(text || "0");
+  }
 
   function validate(): string | null {
     if (!isConnected || !onProduct) {
       return network.testnet ? "Connect and switch to testnet." : `Connect and switch to ${network.label}.`;
     }
     if (!isAddress(to)) return "Enter a valid address.";
-    const value = safeParseEther(amount || "0");
+    const lost = publicSendTargetProblem(to, network);
+    if (lost) return lost;
+    const value = parseAmount(amount);
     if (value === null) return "Invalid amount.";
     if (value <= BigInt(0)) return "Amount must be greater than zero.";
-    if (bal && value > bal.value) return network.testnet ? "Not enough testnet ETH." : "Not enough ETH.";
+    if (balance !== undefined && value > balance) return network.testnet ? `Not enough testnet ${symbol}.` : `Not enough ${symbol}.`;
     return null;
   }
 
   async function fillMax() {
+    if (token) {
+      // The network fee isn't paid in this token (Tempo aside, lib/publicSend), so nothing to estimate.
+      if (tokenBal === undefined) return;
+      maxRun.current++;
+      setFormError(null);
+      setAmount(formatUnits(maxTokenSend(tokenBal, token.decimals, network), token.decimals));
+      return;
+    }
     if (!address || !bal) return;
     if (!isAddress(to)) {
       setFormError("Enter the address first, so Max can set the network fee aside.");
@@ -118,23 +168,36 @@ export function SendView() {
       setFormError(err);
       return;
     }
-    const value = safeParseEther(amount);
+    const value = parseAmount(amount);
     if (value === null) {
       setFormError("Invalid amount.");
       return;
     }
     setFormError(null);
     setShowPreview(false);
-    reset();
+    native.reset();
+    tokenSend.reset();
     setShowSuccess(false);
     handledHash.current = null;
     setSentAmount(amount);
+    setSentSymbol(symbol);
     setSentTo(to);
+    if (token) {
+      // The wallet estimates the gas: a first transfer to an address costs more, and a token's own code varies.
+      tokenSend.writeContract({
+        address: token.address,
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [to as `0x${string}`, value],
+        chainId: network.chainId,
+      });
+      return;
+    }
     const fromMax =
       !demo && maxSend && maxSend.value === value && maxSend.to === to && maxSend.chainId === network.chainId
         ? { gas: maxSend.gas, ...maxSend.fees }
         : {};
-    sendTransaction({
+    native.sendTransaction({
       to: to as `0x${string}`,
       value,
       chainId: network.chainId,
@@ -159,37 +222,30 @@ export function SendView() {
     setShowPreview(true);
   }
 
-  // display only: Max reads the raw balance (lib/nativeSend), never this text
-  const balanceText = bal ? formatEth(bal.value, 6) : "0";
+  // display only: Max reads the raw balance (lib/nativeSend, lib/publicSend), never this text
+  const balanceText = token
+    ? balance !== undefined
+      ? formatAssetAmount(balance, token.address)
+      : "0"
+    : bal
+      ? formatEth(bal.value, 6)
+      : "0";
   const amtNum = Number(amount);
   // "1,25" or "-1" is refused out loud, never quietly turned into 125 or 1
-  const amountProblem = amountTextError(amount, 18);
+  const amountProblem = amountTextError(amount, decimals);
+  const usdEach = token
+    ? isDollarStable(token)
+      ? 1
+      : (marketData?.markets?.find((m) => m.id === token.id)?.mark ?? geckoMarks.get(token.address.toLowerCase()) ?? null)
+    : ethUsd;
   const usdHint =
-    ethUsd && Number.isFinite(amtNum) && amtNum > 0
-      ? formatUsd(amtNum * ethUsd)
+    usdEach && Number.isFinite(amtNum) && amtNum > 0
+      ? formatUsd(amtNum * usdEach)
       : null;
   const validPreview = !validate() && isAddress(to) && amtNum > 0;
 
   const connectedOk = isConnected && onProduct;
   const busy = isPending || confirming || estimatingMax;
-
-  // Tempo has no native coin to send (its nodes report a placeholder balance),
-  // so money there is stablecoins, which move privately from Move.
-  if (network.family === "tempo") {
-    return (
-      <div className="gl-card p-5 sm:p-7">
-        <h2 className="t-title text-foreground">Send on Tempo</h2>
-        <p className="mt-1 max-w-[56ch] text-[14px] leading-relaxed text-mute">
-          Tempo has no native coin to send. Money on Tempo is stablecoins like OUSD:
-          add them to your private balance and pay from Move, or send them from your
-          wallet app.
-        </p>
-        <Link href="/app/vault?tab=move" className="btn btn-ink mt-5 inline-flex">
-          Pay privately
-        </Link>
-      </div>
-    );
-  }
 
   return (
     <>
@@ -215,13 +271,13 @@ export function SendView() {
               </label>
               <button
                 type="button"
-                disabled={!isConnected || !onProduct || !bal || busy}
+                disabled={!isConnected || !onProduct || balance === undefined || busy}
                 onClick={() => void fillMax()}
-                title="Your balance, less the network fee for this send"
+                title={token ? "Your whole balance of this token" : "Your balance, less the network fee for this send"}
                 aria-busy={estimatingMax || undefined}
                 className="tnum -my-2 inline-flex min-h-10 items-center gap-1.5 text-mute transition-colors hover:text-foreground disabled:opacity-45"
               >
-                Balance {isConnected && onProduct ? balanceText : "0"} ETH
+                Balance {isConnected && onProduct ? balanceText : "0"} {symbol}
                 <span className="font-medium text-foreground">{estimatingMax ? "Max…" : "Max"}</span>
               </button>
             </div>
@@ -239,10 +295,33 @@ export function SendView() {
                 className="tnum min-w-0 flex-1 bg-transparent text-[40px] font-light leading-[1.15] tracking-[-0.02em] text-foreground outline-none! placeholder:text-faint sm:text-[46px]"
                 aria-label="Amount to send"
               />
-              <span className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-panel pl-1.5 pr-4 text-[15px] font-medium text-foreground shadow-card">
-                <EthMark />
-                ETH
-              </span>
+              <Select
+                variant="pill"
+                align="end"
+                className="shrink-0"
+                label="Asset to send"
+                value={token?.id ?? NATIVE_CHOICE}
+                // the send under way is for the asset it started with
+                disabled={busy}
+                onChange={(v) => {
+                  maxRun.current++;
+                  setChoice(v);
+                  setAmount("");
+                  setMaxSend(null);
+                  setFormError(null);
+                }}
+                options={[
+                  ...(nativeOk
+                    ? [{ value: NATIVE_CHOICE, label: network.primaryAsset.symbol, description: "Ether", icon: <EthMark /> }]
+                    : []),
+                  ...tokens.map((t) => ({
+                    value: t.id,
+                    label: t.symbol,
+                    description: t.name,
+                    icon: <TokenLogo id={t.id} symbol={t.symbol} size={30} />,
+                  })),
+                ]}
+              />
             </div>
             <p className={`tnum mt-1 min-h-5 text-[13px] ${amountProblem ? "text-danger" : "text-mute"}`} role={amountProblem ? "alert" : undefined}>
               {amountProblem ?? (usdHint ? `≈ ${usdHint}` : " ")}
@@ -272,7 +351,7 @@ export function SendView() {
               <div className="flex min-h-11 items-center justify-between gap-4 py-2">
                 <dt className="text-mute">Sending</dt>
                 <dd className="tnum text-right text-foreground">
-                  {amount} ETH
+                  {amount} {symbol}
                   {usdHint ? <span className="text-mute">, {usdHint}</span> : null}
                 </dd>
               </div>
@@ -359,7 +438,7 @@ export function SendView() {
               <div className="flex h-11 items-center justify-between gap-3">
                 <dt className="text-mute">Amount</dt>
                 <dd className="tnum truncate text-foreground">
-                  {amtNum > 0 ? `${amount} ETH` : "The full amount"}
+                  {amtNum > 0 ? `${amount} ${symbol}` : "The full amount"}
                 </dd>
               </div>
             </dl>
@@ -412,7 +491,7 @@ export function SendView() {
                 <div className="flex min-h-12 items-center justify-between gap-4 py-2">
                   <dt className="text-mute">Amount</dt>
                   <dd className="tnum text-right text-foreground">
-                    {amount} ETH
+                    {amount} {symbol}
                     {usdHint ? <span className="ml-1 text-mute">({usdHint})</span> : null}
                   </dd>
                 </div>
@@ -457,7 +536,7 @@ export function SendView() {
           <>
             <p>
               <span className="tnum font-medium text-foreground">
-                {sentAmount || "0"} ETH
+                {sentAmount || "0"} {sentSymbol}
               </span>{" "}
               to{" "}
               <span className="tnum text-foreground">

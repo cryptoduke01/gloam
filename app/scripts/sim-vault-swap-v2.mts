@@ -24,8 +24,12 @@
  *    holds real, backed WETH), then the swaps go through the router as the relay
  *    sends them, with the app's own quotes and routes.
  *
+ * With --listed, the cases are PONS and CASHCAT both ways against USDG: real
+ * shield proofs back each note the way the WETH one is, with the tokens moved to
+ * the depositor from the PoolManager (validation is off, so no key).
+ *
  * Run from app/ after `forge build` in contracts/:
- *   ../mcp/node_modules/.bin/tsx scripts/sim-vault-swap-v2.mts
+ *   ../mcp/node_modules/.bin/tsx scripts/sim-vault-swap-v2.mts [--listed]
  */
 import "./browser-shim.mts";
 import { readFileSync } from "node:fs";
@@ -70,6 +74,9 @@ const GLOAM: Address = "0xDcD885F5c60b3aD49F6D58718696417314e8724d";
 const WETH: Address = swapLib.RH_WETH;
 const SPY: Address = "0x117cc2133c37b721f49de2a7a74833232b3b4c0c";
 const AMZN: Address = "0x12f190a9f9d7d37a250758b26824b97ce941bf54";
+const PONS: Address = "0x39dBED3a2bd333467115dE45665cC57F813C4571";
+const CASHCAT: Address = "0x020bfC650A365f8BB26819deAAbF3E21291018b4";
+const LISTED = process.argv.includes("--listed");
 const RELAYER: Address = "0xb1E994586E62994648a0b866BF33F2EDd942512e";
 const STRANGER: Address = "0x000000000000000000000000000000000000dEaD";
 const DEPOSITOR: Address = "0x00000000000000000000000000000000De90517e";
@@ -86,6 +93,7 @@ const client = createPublicClient({ transport: http(RPC, { timeout: 90_000, retr
 const erc20 = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)",
+  "function transfer(address,uint256) returns (bool)",
   "function totalSupply() view returns (uint256)",
 ]);
 const wethAbi = parseAbi(["function deposit() payable"]);
@@ -119,6 +127,8 @@ const label: Record<string, [string, number]> = {
   [WETH.toLowerCase()]: ["WETH", 18],
   [SPY.toLowerCase()]: ["SPY", 18],
   [AMZN.toLowerCase()]: ["AMZN", 18],
+  [PONS.toLowerCase()]: ["PONS", 18],
+  [CASHCAT.toLowerCase()]: ["CASHCAT", 18],
 };
 const byId = (prefix: string) => {
   const k = [...swapLib.RH_SWAP_POOLS_V2, LATE_POOL].find((x) => swapLib.poolId(x).startsWith(prefix));
@@ -192,9 +202,16 @@ const shieldProof = (n: { commitment: string; secret: string }, amount: bigint, 
 
 // ── the synthetic input notes, one tree, one root ─────────────────────────────
 type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; forceRoute?: string[]; refund?: boolean };
-const CASES: Case[] = [
+const QUEUED_POOL_CASE: Case = { name: "Q. USDG -> WETH, a pool queued after deploy", assetIn: USDG, assetOut: WETH, amountIn: parseUnits("5", 6), forceRoute: ["0x3b0cbf06"] };
+const LISTED_CASES: Case[] = [
+  { name: "L1. USDG -> PONS", assetIn: USDG, assetOut: PONS, amountIn: parseUnits("20", 6) },
+  { name: "L2. PONS -> USDG", assetIn: PONS, assetOut: USDG, amountIn: parseUnits("400", 18) },
+  { name: "L3. USDG -> CASHCAT", assetIn: USDG, assetOut: CASHCAT, amountIn: parseUnits("20", 6) },
+  { name: "L4. CASHCAT -> USDG", assetIn: CASHCAT, assetOut: USDG, amountIn: parseUnits("1000", 18) },
+];
+const CASES: Case[] = LISTED ? [QUEUED_POOL_CASE, ...LISTED_CASES] : [
   // through the pool queued in block 1: refused there, through 3 days later
-  { name: "Q. USDG -> WETH, a pool queued after deploy", assetIn: USDG, assetOut: WETH, amountIn: parseUnits("5", 6), forceRoute: ["0x3b0cbf06"] },
+  QUEUED_POOL_CASE,
   { name: "A. USDG -> WETH", assetIn: USDG, assetOut: WETH, amountIn: parseUnits("5", 6) },
   { name: "B. WETH -> USDG", assetIn: WETH, assetOut: USDG, amountIn: parseUnits("0.004", 18) },
   // the same pair forced through native ETH (the 0.05% hub), so the unwrap path runs whatever the best pool is today
@@ -350,6 +367,15 @@ const ROOT = fieldToBytes32(tree.currentRoot);
 const depositAmount = parseUnits("0.02", 18);
 const depNote = await makeBoundNotePoseidon(depositAmount, WETH);
 const depProof = await shieldProof(depNote, depositAmount, WETH);
+// and with --listed, the PONS and CASHCAT that back the notes those cases spend
+const backing = LISTED
+  ? await Promise.all(
+      ([[PONS, parseUnits("1000", 18)], [CASHCAT, parseUnits("2000", 18)]] as const).map(async ([asset, amount]) => {
+        const note = await makeBoundNotePoseidon(amount, asset);
+        return { asset, amount, note, proof: await shieldProof(note, amount, asset) };
+      })
+    )
+  : [];
 
 // ── the simulation ─────────────────────────────────────────────────────────────
 type Call = { from: Address; to: Address; data: Hex; value?: Hex };
@@ -368,7 +394,7 @@ const limitCalls = (
   ] as const
 ).map(([a, per, total]) => encodeFunctionData({ abi: vaultGov, functionName: "setDepositLimit", args: [a, per, total] }));
 
-const ASSETS = [USDG, GLOAM, WETH, SPY, AMZN];
+const ASSETS = [USDG, GLOAM, WETH, SPY, AMZN, ...(LISTED ? [PONS, CASHCAT] : [])];
 console.log("\nQuotes, each made just before its own simulation, as the app prices a swap again just before it goes:");
 const first = await build(0);
 if (first.root.toLowerCase() !== ROOT.toLowerCase()) throw new Error("expected one root");
@@ -411,6 +437,11 @@ const block2Head: Call[] = [
   { from: DEPOSITOR, to: WETH, data: encodeFunctionData({ abi: wethAbi, functionName: "deposit" }), value: toHex(depositAmount) },
   { from: DEPOSITOR, to: WETH, data: encodeFunctionData({ abi: erc20, functionName: "approve", args: [VAULT, depositAmount] }) },
   { from: DEPOSITOR, to: VAULT, data: encodeFunctionData({ abi: vaultGov, functionName: "shieldBound", args: [WETH, depositAmount, depNote.commitment as Hex, depProof] }) },
+  ...backing.flatMap((b): Call[] => [
+    { from: POOL_MANAGER, to: b.asset, data: encodeFunctionData({ abi: erc20, functionName: "transfer", args: [DEPOSITOR.toLowerCase() as Address, b.amount] }) },
+    { from: DEPOSITOR, to: b.asset, data: encodeFunctionData({ abi: erc20, functionName: "approve", args: [VAULT, b.amount] }) },
+    { from: DEPOSITOR, to: VAULT, data: encodeFunctionData({ abi: vaultGov, functionName: "shieldBound", args: [b.asset, b.amount, b.note.commitment as Hex, b.proof] }) },
+  ]),
 ];
 
 let lastBase = 0n;
@@ -518,6 +549,11 @@ console.log(`  depositor wraps 0.02 ETH: ${ok(wrap!) ? "ok" : why(wrap!)}, appro
 let allGood =
   limitsQueued.every(ok) && queued.every(ok) && num(b1[iq]!) === 0n && !ok(early) && why(early).startsWith("PoolNotAllowed") && num(b1[iq + 2]!) === 1n;
 allGood &&= executed.every(ok) && ok(shield!);
+if (LISTED) {
+  const backed = head2.slice(NL + 3, NL + 3 + 3 * backing.length);
+  console.log(`  PONS and CASHCAT moved, approved and shielded with real proofs: ${backed.map((c) => (ok(c) ? "ok" : why(c))).join(", ")}`);
+  allGood &&= backed.length === 3 * backing.length && backed.every(ok);
+}
 allGood &&= [VAULT, TREASURY, POOL_MANAGER, WETH, vaultOwner].every((a, i) => addr(b1[iq + 3 + i]!) === a.toLowerCase());
 const S = ASSETS.length;
 for (let i = 0; i < CASES.length; i++) {
