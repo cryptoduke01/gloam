@@ -188,8 +188,8 @@ function appRows(n: GloamNetwork): DirectoryRow[] {
       name: "Treasury",
       contract: null,
       what: swapRoutersOn(n.chainId).length
-        ? "Receives the 0.25% cash-out fee and what a swap's price buffer does not use."
-        : "Receives the 0.25% cash-out fee.",
+        ? "Receives the cash-out fee and what a swap's price buffer does not use."
+        : "Receives the cash-out fee.",
       address: GLOAM_TREASURY,
       deployBlock: null,
       source: "app",

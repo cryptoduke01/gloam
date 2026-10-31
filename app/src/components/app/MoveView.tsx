@@ -110,6 +110,10 @@ import { surelyNotSent } from "@/lib/walletErrors";
 import {
   cancelCashOut,
   dismissReturnedCashOut,
+  feeMoved,
+  feeRise,
+  feeRiseLine,
+  feeRiseNotice,
   reconcileCashOuts,
   releaseGoneCashOut,
   returnedCashOutNotes,
@@ -840,19 +844,22 @@ export function MoveView() {
   // Cash-out fee (mainnet pools). The proof still spends the whole note; the
   // pool keeps the fee and pays the rest. Older pools fail this read: no fee.
   const demoMode = useDemo();
-  const { data: feeBpsRead } = useReadContract({
+  const { data: feeBpsRead, refetch: refetchFee } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
     functionName: "withdrawFeeBps",
     chainId: network.chainId,
     query: { enabled: Boolean(network.pool) && mode === "cashout" && !demoMode, refetchInterval: 60_000 },
   });
-  const cashOutFeeBps = typeof feeBpsRead === "number" ? feeBpsRead : 0;
+  const liveFeeBps = typeof feeBpsRead === "number" ? feeBpsRead : null;
+  const cashOutFeeBps = liveFeeBps ?? 0;
   // On mainnet the fee must be known before anyone confirms: a failed read must
   // not show the full amount when the pool will keep a fee. Testnet pools have no fee.
   const cashOutFeeUnknown =
     mode === "cashout" && !demoMode && !TESTNET_CHAIN_IDS.has(network.chainId) && typeof feeBpsRead !== "number";
   const cashOutFee = withdrawFeeOf(cashOutAmount, cashOutFeeBps);
+  /** Waiting cash outs set up at a lower fee than the vault charges now. */
+  const scheduledRises = scheduledRows.flatMap((n) => feeRise(n, liveFeeBps) ?? []);
   const cashOutInventoryShort =
     mode === "cashout" &&
     selected != null &&
@@ -1031,6 +1038,12 @@ export function MoveView() {
       return;
     }
     if (!(await checkCashOutTargets([to], selected.asset, to))) return;
+    const feeNote = await feeMoved(network, liveFeeBps);
+    if (feeNote) {
+      setError(feeNote);
+      void refetchFee();
+      return;
+    }
 
     setBusy(true);
     setPaidPrivately(false);
@@ -1085,7 +1098,7 @@ export function MoveView() {
         // Out of the balance while it waits; the chain settles it once it goes out. The
         // address shown is the one the relay holds, not the one asked for (and when this
         // money already has a cash out waiting, the note shows that one).
-        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow);
+        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, cashOutFeeBps);
         spentNoteId.current = null;
         countPerson("cashout", address, network.testnet);
         setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(target.amountWei, target.asset) });
@@ -1219,6 +1232,12 @@ export function MoveView() {
     }
     const targets = pieceTargets as Address[];
     if (!(await checkCashOutTargets(targets, selected.asset, cashOutTo))) return;
+    const feeNote = await feeMoved(network, liveFeeBps);
+    if (feeNote) {
+      setError(feeNote);
+      void refetchFee();
+      return;
+    }
 
     const note = selected;
     setBusy(true);
@@ -1238,6 +1257,7 @@ export function MoveView() {
         to: targets,
         window: planWindow,
         owner: address as Address,
+        feeBps: cashOutFeeBps,
         onStatus: setStatus,
         onPiece: (i, patch) => setPlanRun((rows) => rows && rows.map((row, j) => (j === i ? { ...row, ...patch } : row))),
       });
@@ -1310,7 +1330,7 @@ export function MoveView() {
     setBusy(true);
     setStatus("Proving privately, this takes 10 to 30 seconds…");
     try {
-      const job = await schedulePiece(n);
+      const job = await schedulePiece(n, {}, liveFeeBps ?? undefined);
       setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(n.amountWei, n.asset) });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not schedule this piece.");
@@ -3063,7 +3083,7 @@ export function MoveView() {
                         ? relayAvailable
                           ? "Later sends it at a random time in that window, so it doesn't go out right after a payment."
                           : "Cashing out later needs the Gloam relay, which is off right now."
-                        : "Your proof is made now and the Gloam relay sends it at a random time in that window. It can't change the amount or where it goes. If it can't go out, nothing moves and it comes back to your private balance."}
+                        : "Your proof is made now and the Gloam relay sends it at a random time in that window. It can't change the amount or where it goes. The vault takes its fee when it goes out, at the rate then. If it can't go out, nothing moves and it comes back to your private balance."}
                     </p>
                     {cashOutWhen !== "now" && (
                       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
@@ -3173,20 +3193,29 @@ export function MoveView() {
                   {scheduledRows.length > 0 && (
                     <div className="rounded-[16px] bg-surface px-4 py-3">
                       <p className="text-[13px] text-mute">Scheduled cash outs</p>
+                      {scheduledRises.length > 0 && (
+                        <p role="status" className="mt-2 rounded-xl bg-warn-soft px-3.5 py-3 text-[13px] leading-relaxed text-warn">
+                          {feeRiseNotice(scheduledRises, "cash out")}
+                        </p>
+                      )}
                       <ul className="mt-1 divide-y divide-line">
-                        {scheduledRows.map((n) => (
-                          <li key={n.id} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
-                            <span className="min-w-0">
-                              <span className="tnum block text-foreground">{formatAssetLabel(n.amountWei, n.asset)}</span>
-                              <span className="block truncate text-[12px] text-mute">{scheduledLine(n, undefined, gasHigh)}</span>
-                            </span>
-                            {n.cashOut?.state === "scheduled" && (
-                              <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => void cancelScheduled(n)}>
-                                Cancel
-                              </button>
-                            )}
-                          </li>
-                        ))}
+                        {scheduledRows.map((n) => {
+                          const rise = feeRise(n, liveFeeBps);
+                          return (
+                            <li key={n.id} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
+                              <span className="min-w-0">
+                                <span className="tnum block text-foreground">{formatAssetLabel(n.amountWei, n.asset)}</span>
+                                <span className="block truncate text-[12px] text-mute">{scheduledLine(n, undefined, gasHigh)}</span>
+                                {rise && <span className="tnum block text-[12px] leading-relaxed text-warn">{feeRiseLine(rise, n.asset)}</span>}
+                              </span>
+                              {n.cashOut?.state === "scheduled" && (
+                                <button type="button" className="btn btn-ghost btn-sm shrink-0" onClick={() => void cancelScheduled(n)}>
+                                  Cancel
+                                </button>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}

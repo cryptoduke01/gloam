@@ -247,7 +247,7 @@ export function SpreadOver({
       </div>
       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
         Each piece goes out at its own random time in that window, sent by the Gloam relay so your wallet stays out of
-        it. Once they are scheduled you can close Gloam.
+        it. The vault takes its fee as each one goes out, at the rate then. Once they are scheduled you can close Gloam.
       </p>
       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
         Each proof shows roughly when it was made, so pieces made together can be grouped. While Gloam is open it

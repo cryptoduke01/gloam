@@ -483,7 +483,7 @@ export function withdrawFeeOf(amount: bigint, bps: number): bigint {
   return (amount * BigInt(bps)) / 10_000n;
 }
 
-/** "0.25%" for 25 bps, "1%" for 100. */
+/** "0.5%" for 50 bps, "0.25%" for 25, "1%" for 100. */
 export function formatFeePercent(bps: number): string {
   return `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 }
@@ -639,6 +639,13 @@ export type CashOutMark = {
    */
   root?: Hex;
   provenAt?: number;
+  /**
+   * The cash-out fee the screen showed when this was set up, in basis points.
+   * The vault takes the fee when it goes out, at the rate that day, so the two
+   * can differ (lib/cashOutLater feeRise). Unset on one set up before the app
+   * kept it: those all showed 25.
+   */
+  feeBps?: number;
 };
 
 /** One piece of a private cash out ("cash out privately", lib/cashOutPrivately). */

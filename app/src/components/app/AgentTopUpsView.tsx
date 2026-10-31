@@ -8,6 +8,7 @@
  * cash out, and only where the money came from stays private.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CASH_OUT_FEE_BPS } from "@gloamtrade/sdk";
 import { isAddress, type Address } from "viem";
 import { useReadContract } from "wagmi";
 import { Select } from "@/components/ui/Select";
@@ -42,6 +43,7 @@ import {
   type VaultLeaves,
 } from "@/lib/agentTopUp";
 import { shortAddress } from "@/lib/chain";
+import { feeMoved, feeRise, feeRiseLine, feeRiseNotice } from "@/lib/cashOutLater";
 import { findCashOutLink, linkMessage } from "@/lib/cashOutPlan";
 import { cashOutPrivacyWarnings } from "@/lib/cashOutPrivacy";
 import { keepPiece, schedulePiece, unscheduledPieces } from "@/lib/cashOutPrivately";
@@ -75,7 +77,7 @@ import { WalletMenu } from "./WalletMenu";
 /** The older testnet pools carry no cash-out fee; every other network must report its fee first. */
 const NO_FEE_CHAINS = new Set<number>([46630, 42431]);
 /** What the recording demo shows: the mainnet fee, with no pool to read it from. */
-const DEMO_FEE_BPS = 25;
+const DEMO_FEE_BPS = CASH_OUT_FEE_BPS;
 /** How many past top-ups show. */
 const PAST_SHOWN = 12;
 
@@ -113,14 +115,15 @@ export function AgentTopUpsView() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertUrl, setAlertUrl] = useState("");
 
-  const { data: feeBpsRead } = useReadContract({
+  const { data: feeBpsRead, refetch: refetchFee } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
     functionName: "withdrawFeeBps",
     chainId: network.chainId,
     query: { enabled: Boolean(network.pool) && !demoMode, refetchInterval: 60_000 },
   });
-  const feeBps = demoMode ? DEMO_FEE_BPS : typeof feeBpsRead === "number" ? feeBpsRead : 0;
+  const liveFeeBps = !demoMode && typeof feeBpsRead === "number" ? feeBpsRead : null;
+  const feeBps = demoMode ? DEMO_FEE_BPS : (liveFeeBps ?? 0);
   const feeUnknown = !demoMode && !NO_FEE_CHAINS.has(network.chainId) && typeof feeBpsRead !== "number";
 
   useEffect(() => {
@@ -340,6 +343,12 @@ export function AgentTopUpsView() {
     setNotice(null);
     const to = agentClean as Address;
     if (!(await checkAgent(to, token.address))) return;
+    const feeNote = await feeMoved(network, liveFeeBps);
+    if (feeNote) {
+      setError(feeNote);
+      void refetchFee();
+      return;
+    }
     const label = formatAssetLabel(totals.total, token.address);
     await runSeries(
       count,
@@ -347,6 +356,7 @@ export function AgentTopUpsView() {
         setUpTopUps({
           note: source,
           owner: address as Address,
+          feeBps,
           agent: to,
           amount,
           every,
@@ -396,6 +406,7 @@ export function AgentTopUpsView() {
         finishTopUps({
           note,
           owner: address as Address,
+          feeBps: liveFeeBps ?? undefined,
           series: s,
           onStatus: setStatus,
           onPiece: (_, p) => p.state === "scheduled" && onScheduled(),
@@ -418,7 +429,7 @@ export function AgentTopUpsView() {
     setProgress({ done: 0, of: 1 });
     setStatus("Proving privately, this takes 10 to 30 seconds…");
     try {
-      const job = await schedulePiece(n);
+      const job = await schedulePiece(n, {}, liveFeeBps ?? undefined);
       setNotice(`Top-up scheduled for ${topUpDayLabel(job.sendAfter)}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not schedule this top-up.");
@@ -585,12 +596,17 @@ export function AgentTopUpsView() {
           {link && <CashOutLinkNote text={linkMessage(link, now)} />}
 
           {totals && token && !amountProblem && (
-            <dl className="rounded-[16px] bg-surface px-4 py-3 text-[13.5px]">
+            <div className="rounded-[16px] bg-surface px-4 py-3">
+            <dl className="text-[13.5px]">
               <SummaryRow label="Set aside now" value={formatAssetLabel(totals.total, token.address)} strong />
               <SummaryRow label={`Fee per top-up (${feeUnknown ? "reading" : formatFeePercent(feeBps)})`} value={formatAssetLabel(totals.feeEach, token.address)} />
               <SummaryRow label="Agent gets each" value={formatAssetLabel(totals.agentGets, token.address)} />
               <SummaryRow label="Dates" value={`${topUpDayLabel(midday(days[0]!))} to ${topUpDayLabel(midday(days.at(-1)!))}`} />
             </dl>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
+              That is at today&apos;s fee. The vault takes its fee as each top-up goes out, at the rate that day. If it goes up, this screen shows what each one will pay, and you can cancel any that haven&apos;t gone.
+            </p>
+            </div>
           )}
 
           <dl className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1.5 rounded-[14px] border border-line px-4 py-3 text-[12.5px] leading-relaxed">
@@ -733,7 +749,7 @@ export function AgentTopUpsView() {
           </div>
         )}
 
-        <Upcoming rows={ahead} setAside={setAside} now={now} onCancel={(list) => void onCancel(list)} />
+        <Upcoming rows={ahead} setAside={setAside} now={now} liveFeeBps={liveFeeBps} onCancel={(list) => void onCancel(list)} />
 
         {past.length > 0 && (
           <section className="gl-card p-5" aria-labelledby="topups-past">
@@ -757,16 +773,19 @@ function Upcoming({
   rows,
   setAside,
   now,
+  liveFeeBps,
   onCancel,
 }: {
   rows: TopUpRow[];
   setAside: string;
   now: number;
+  liveFeeBps: number | null;
   onCancel: (notes: LocalNote[]) => void;
 }) {
   const [asked, setAsked] = useState(false);
   const waiting = rows.filter((r) => r.state === "upcoming" && r.at > now).map((r) => r.note);
   const oneAgent = oneAgentOf(rows);
+  const rises = rows.flatMap((r) => feeRise(r.note, liveFeeBps) ?? []);
   return (
     <section className="gl-card p-5" aria-labelledby="topups-upcoming">
       <div className="flex items-baseline justify-between gap-3">
@@ -776,12 +795,24 @@ function Upcoming({
         {setAside && <p className="tnum min-w-0 truncate text-right text-[13px] text-mute">{setAside} set aside</p>}
       </div>
       {oneAgent && <p className="mt-0.5 text-[12.5px] text-mute">{`To ${shortAddress(oneAgent)}`}</p>}
+      {rises.length > 0 && (
+        <p role="status" className="mt-3 rounded-xl bg-warn-soft px-3.5 py-3 text-[13px] leading-relaxed text-warn">
+          {feeRiseNotice(rises, "top-up")}
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="mt-2 text-[13.5px] leading-relaxed text-mute">Nothing scheduled yet.</p>
       ) : (
         <ul className="mt-1 divide-y divide-line">
           {rows.map((r) => (
-            <Row key={r.note.id} row={r} now={now} showAgent={!oneAgent} onCancel={r.state === "upcoming" && r.at > now ? () => onCancel([r.note]) : undefined} />
+            <Row
+              key={r.note.id}
+              row={r}
+              now={now}
+              showAgent={!oneAgent}
+              liveFeeBps={liveFeeBps}
+              onCancel={r.state === "upcoming" && r.at > now ? () => onCancel([r.note]) : undefined}
+            />
           ))}
         </ul>
       )}
@@ -808,8 +839,21 @@ function oneAgentOf(rows: TopUpRow[]): Address | null {
   return to && rows.every((r) => r.note.cashOutPlan?.to.toLowerCase() === to.toLowerCase()) ? to : null;
 }
 
-function Row({ row, now, showAgent, onCancel }: { row: TopUpRow; now: number; showAgent: boolean; onCancel?: () => void }) {
+function Row({
+  row,
+  now,
+  showAgent,
+  liveFeeBps = null,
+  onCancel,
+}: {
+  row: TopUpRow;
+  now: number;
+  showAgent: boolean;
+  liveFeeBps?: number | null;
+  onCancel?: () => void;
+}) {
   const n = row.note;
+  const rise = feeRise(n, liveFeeBps);
   return (
     <li className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
       <span className="min-w-0">
@@ -817,6 +861,7 @@ function Row({ row, now, showAgent, onCancel }: { row: TopUpRow; now: number; sh
         <span className="block truncate text-[12px] text-mute">
           {showAgent ? `${topUpWhen(row, now)} · to ${shortAddress(n.cashOutPlan!.to)}` : topUpWhen(row, now)}
         </span>
+        {rise && <span className="tnum block text-[12px] leading-relaxed text-warn">{feeRiseLine(rise, n.asset)}</span>}
       </span>
       {onCancel && (
         <button type="button" className="btn btn-quiet btn-sm min-h-10 shrink-0" onClick={onCancel}>

@@ -21,6 +21,7 @@ import { useAppAccount } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { getRhPublicClient } from "@/lib/rhClient";
 import { relayFor } from "@/lib/relay/client";
+import { feeMoved } from "@/lib/cashOutLater";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
 import {
@@ -283,12 +284,12 @@ export function VaultSwapView() {
   // A scan of a few notes, so no memo: the note found is the same object each render.
   const note: LocalNote | null = pickSwapNote(held?.notes, amount);
 
-  const { data: feeRead } = useReadContract({
+  const { data: feeRead, refetch: refetchFee } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
     functionName: "withdrawFeeBps",
     chainId: network.chainId,
-    query: { enabled: Boolean(network.pool) },
+    query: { enabled: Boolean(network.pool), refetchInterval: 60_000 },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
   const { data: limit } = useReadContract({
@@ -428,6 +429,13 @@ export function VaultSwapView() {
     setDone(null);
     setReceipt(null);
     try {
+      // A quote made at the old fee would leave too little to buy what it promised.
+      const feeNote = await feeMoved(network, feeBps);
+      if (feeNote) {
+        setError(feeNote);
+        void refetchFee();
+        return;
+      }
       const { outNote, refunded, hash } = await runVaultSwap({
         network,
         router: router!,

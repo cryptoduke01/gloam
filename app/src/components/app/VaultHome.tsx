@@ -10,10 +10,12 @@
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import { formatUnits } from "viem";
+import { useReadContract } from "wagmi";
+import { feeRise, feeRiseNotice } from "@/lib/cashOutLater";
 import { formatEth } from "@/lib/chain";
-import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
+import { useAppAccount, useAppBalance, useAppTokenBalances, useDemo } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
-import { assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed } from "@/lib/shield";
+import { assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed, shieldPoolAbi } from "@/lib/shield";
 import { addableTokensFor, isDollarStable, isNativeAddable, knownTokens } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { faucetFor } from "@/lib/faucet";
@@ -121,6 +123,19 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
     () => [...topUpsSetAside(local)].map(([asset, wei]) => formatAssetLabel(wei, asset)).join(", "),
     [local]
   );
+  // A cash out or top-up can wait for days with the app closed: one that will pay less than it showed says so here.
+  const demoMode = useDemo();
+  const waiting = useMemo(() => local.filter((n) => n.cashOut?.state === "scheduled"), [local]);
+  const { data: feeRead } = useReadContract({
+    address: network.pool ?? undefined,
+    abi: shieldPoolAbi,
+    functionName: "withdrawFeeBps",
+    chainId: network.chainId,
+    query: { enabled: Boolean(network.pool) && waiting.length > 0 && !demoMode, refetchInterval: 60_000 },
+  });
+  const liveFeeBps = typeof feeRead === "number" ? feeRead : null;
+  const rises = waiting.flatMap((n) => feeRise(n, liveFeeBps) ?? []);
+  const risesTopUps = waiting.some((n) => n.cashOutPlan?.topUp && feeRise(n, liveFeeBps));
   const privateLoading = balancesVisible && (!ready || (balanceSyncing && !hasPrivate));
   const privateKnown = balancesVisible && ready && !balanceSyncing;
   const suggest = pickAddAsset(wallet);
@@ -255,6 +270,18 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
             }
           />
         </div>
+
+        {rises.length > 0 && (
+          <div role="status" className="mx-5 mt-4 rounded-xl bg-warn-soft px-4 py-3 text-[13px] leading-relaxed text-warn sm:mx-7">
+            <p>{feeRiseNotice(rises, "scheduled cash out")}</p>
+            <Link
+              href={`/app/vault${vaultActionSearch(risesTopUps ? "topups" : "cashout", "")}`}
+              className="mt-1 inline-flex min-h-10 items-center font-medium underline underline-offset-4"
+            >
+              See what each one pays
+            </Link>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7" aria-live="polite">
           <p className="min-w-0 text-[14px] leading-relaxed text-soft">{next.text}</p>
