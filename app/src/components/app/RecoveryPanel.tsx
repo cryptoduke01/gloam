@@ -7,6 +7,7 @@ import { useAppAccount } from "@/lib/demo";
 import { WALLET_BROWSER_NOTE, inWalletBrowser, passkeySupport } from "@/lib/passkey";
 import {
   RecoveryError,
+  VERSION1_SAVES_UNTIL,
   backupNow,
   bringInOlderBackup,
   connectRecovery,
@@ -14,6 +15,7 @@ import {
   passkeySecret,
   recoveryServerState,
   recoveryState,
+  restoreOlderBackup,
   restoreWithWallet,
   startRecoverySync,
   subscribeRecovery,
@@ -21,11 +23,12 @@ import {
   turnOnWithWallet,
   updateRecoveryKey,
   type RecoverySource,
+  type RecoveryState,
   type RecoveryWallet,
 } from "@/lib/recovery";
 import { isTempoWallet } from "@/lib/tempoWallet";
 
-type Busy = "on-wallet" | "on-passkey" | "restore-wallet" | "restore-passkey" | "save" | "off" | "update" | "older" | null;
+type Busy = "on-wallet" | "on-passkey" | "restore-wallet" | "restore-passkey" | "restore-older" | "save" | "off" | "update" | "older" | null;
 /** "wait": nothing went wrong and nothing is finished yet, so it is not shown as done. */
 type Message = { tone: "ok" | "wait" | "error"; text: string } | null;
 
@@ -36,6 +39,10 @@ function errorText(e: unknown): string {
     return "Signing was cancelled. Nothing changed.";
   }
   return e instanceof RecoveryError ? e.message : "Something went wrong. Nothing changed. Try again.";
+}
+
+function notFound(e: unknown): boolean {
+  return e instanceof RecoveryError && e.code === "notfound";
 }
 
 function plural(n: number, word: string) {
@@ -61,6 +68,17 @@ function nextTry(ts: number | null): string {
 
 const NO_BACKUP_YET = "Your private balance is only in this browser for now.";
 
+/** In UTC, so everyone reads the same day. */
+const OLDER_KEY_ENDS = new Date(VERSION1_SAVES_UNTIL).toLocaleDateString("en-GB", { timeZone: "UTC", dateStyle: "long" });
+const SIGN_THREE_TIMES = "Your wallet asks you to sign three times. It's free and sends nothing.";
+
+/** Where a version 1 key stands. */
+function olderKeyText(s: RecoveryState): string {
+  if (s.gone) return "Another device moved or removed this backup, so this browser stopped saving. Your balance stays here. Update so your devices share one backup again.";
+  if (s.paused) return `Backups from this browser stopped on ${OLDER_KEY_ENDS} and stay paused until you update. Your balance stays here.`;
+  return `Backups from this browser stop on ${OLDER_KEY_ENDS} unless you update.`;
+}
+
 /** What to say after turning on: "backed up" only when that is true. With no backup yet the card already says so, and why. */
 function turnedOn(added: number): Message {
   const s = recoveryState();
@@ -76,7 +94,11 @@ function restored(added: number, key: Awaited<ReturnType<typeof restoreWithWalle
     ? `Restored ${plural(added, "balance")}. Recovery is on for this browser too.`
     : "Your backup is connected. This browser already had everything in it.";
   if (key === "waiting") return `${done} The backup moves to the newer recovery key on its own as soon as it can.`;
-  if (key === "older") return `${done} The backup stays on the older recovery key for now. You can update it in Settings.`;
+  if (key === "older") {
+    return recoveryState().paused
+      ? `${done} Backups stay paused until you update your recovery key in Settings.`
+      : `${done} The backup stays on the older recovery key for now. Update it in Settings before ${OLDER_KEY_ENDS} to keep it saving.`;
+  }
   return done;
 }
 
@@ -89,6 +111,8 @@ function useRecovery() {
   const [walletBrowser, setWalletBrowser] = useState(false);
   const [busy, setBusy] = useState<Busy>(null);
   const [message, setMessage] = useState<Message>(null);
+  /** A wallet restore found nothing, so the older backup step is on offer. */
+  const [offerOlder, setOfferOlder] = useState(false);
 
   useEffect(() => {
     startRecoverySync();
@@ -135,11 +159,28 @@ function useRecovery() {
   const restore = (source: RecoverySource) =>
     run(source === "wallet" ? "restore-wallet" : "restore-passkey", async () => {
       if (source === "wallet") {
-        const { added, key } = await restoreWithWallet(wallet());
-        return restored(added, key);
+        try {
+          const { added, key } = await restoreWithWallet(wallet());
+          return restored(added, key);
+        } catch (e) {
+          setOfferOlder(notFound(e));
+          throw e;
+        }
       }
       const keys = await keysFromSecret("passkey", await passkeySecret("use"));
       return restored(await connectRecovery(keys, address, { mustExist: true }), "newest");
+    });
+
+  const restoreOlder = () =>
+    run("restore-older", async () => {
+      try {
+        const { added, key } = await restoreOlderBackup(wallet());
+        setOfferOlder(false);
+        return restored(added, key);
+      } catch (e) {
+        if (notFound(e)) setOfferOlder(false);
+        throw e;
+      }
     });
 
   const save = () =>
@@ -158,7 +199,7 @@ function useRecovery() {
     run("update", async () =>
       (await updateRecoveryKey(wallet())) === "newest"
         ? "Recovery key updated. Your backup moved across."
-        : { tone: "wait", text: "Your backup stays on the older key for now and keeps saving. It moves on its own as soon as it can." },
+        : { tone: "wait", text: "Your backup stays on the older key for now. It moves on its own as soon as it can." },
     );
 
   const older = () =>
@@ -169,7 +210,7 @@ function useRecovery() {
         : "Your older backup is merged in. This browser already had everything in it.";
     });
 
-  return { state, active, walletOk, passkeyOk, walletBrowser, busy, message, turnOn, restore, save, off, update, older };
+  return { state, active, walletOk, passkeyOk, walletBrowser, busy, message, offerOlder, turnOn, restore, restoreOlder, save, off, update, older };
 }
 
 function Note({ message }: { message: Message }) {
@@ -209,7 +250,7 @@ export function RecoverySettingsCard() {
   const r = useRecovery();
   const [confirmOff, setConfirmOff] = useState(false);
   const { state, busy } = r;
-  const noBackup = state.on && !state.savedAt;
+  const noBackup = state.on && !state.savedAt && !state.paused;
 
   return (
     <section id="recovery" className="gl-card scroll-mt-24">
@@ -235,8 +276,8 @@ export function RecoverySettingsCard() {
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div className="min-w-0">
                 <p className="flex items-center gap-2 text-[14px] text-foreground">
-                  <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${noBackup ? "bg-warn" : "bg-sealed"}`} />
-                  {noBackup ? "No backup yet" : "Recovery is on"}
+                  <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${noBackup || state.paused ? "bg-warn" : "bg-sealed"}`} />
+                  {state.paused ? "Backups are paused" : noBackup ? "No backup yet" : "Recovery is on"}
                 </p>
                 <p className="mt-0.5 text-[13px] text-mute">
                   {state.source === "passkey" ? "With a passkey" : "With your wallet"}
@@ -244,9 +285,11 @@ export function RecoverySettingsCard() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={r.save} disabled={Boolean(busy) || state.busy} className="btn btn-ghost btn-sm">
-                  {busy === "save" ? "Backing up…" : noBackup ? "Try now" : "Back up now"}
-                </button>
+                {!state.paused && (
+                  <button type="button" onClick={r.save} disabled={Boolean(busy) || state.busy} className="btn btn-ghost btn-sm">
+                    {busy === "save" ? "Backing up…" : noBackup ? "Try now" : "Back up now"}
+                  </button>
+                )}
                 {!confirmOff ? (
                   <button type="button" onClick={() => setConfirmOff(true)} disabled={Boolean(busy)} className="btn btn-ghost btn-sm">
                     Turn off
@@ -307,7 +350,7 @@ export function RecoverySettingsCard() {
             </Choice>
             <Choice
               label="Restore from your backup"
-              hint={`On a new device? Sign in the same way you did when you turned recovery on.${r.walletOk ? " Your wallet may ask you to sign up to three times." : ""}`}
+              hint="On a new device? Sign in the same way you did when you turned recovery on."
             >
               {r.walletOk && (
                 <button type="button" onClick={() => r.restore("wallet")} disabled={Boolean(busy)} className="btn btn-ghost btn-sm">
@@ -328,20 +371,32 @@ export function RecoverySettingsCard() {
                 <Note message={r.message} />
               </div>
             )}
+            {r.offerOlder && r.walletOk && (
+              <Choice
+                label="Older backup"
+                hint="If you turned on recovery before November 2026, your backup may use the older key. Your wallet asks you to sign up to three times. It's free and sends nothing."
+              >
+                <button type="button" onClick={r.restoreOlder} disabled={Boolean(busy)} className="btn btn-ghost btn-sm">
+                  {busy === "restore-older" ? "Check your wallet…" : "I have an older backup"}
+                </button>
+              </Choice>
+            )}
           </>
         )}
-        {state.olderKey && r.walletOk && (
+        {state.olderKey && r.active && (
           <Choice
-            label={state.gone ? "This backup moved" : "Newer recovery key"}
+            label={state.gone ? "This backup moved" : state.moving ? "Newer recovery key" : "Update your recovery key"}
             hint={
               state.moving
-                ? "Your backup is moving to the newer key. It finishes on its own and keeps saving until then."
-                : state.gone
-                  ? "Another device moved or removed this backup. Update here so your devices share one backup again. Your wallet asks you to sign three times."
-                  : "It names this site, so wallets that check can warn you if another site asks for it. Your wallet asks you to sign three times. It's free and sends nothing."
+                ? "Your backup is moving to the newer key. It finishes on its own."
+                : !r.walletOk
+                  ? `${olderKeyText(state)} Connect the wallet you turned recovery on with to update.`
+                  : state.paused
+                    ? `${olderKeyText(state)} ${SIGN_THREE_TIMES}`
+                    : `${olderKeyText(state)} The newer key names this site, so wallets that check can warn you if another site asks for it. ${SIGN_THREE_TIMES}`
             }
           >
-            {!state.moving && (
+            {!state.moving && r.walletOk && (
               <button type="button" onClick={r.update} disabled={Boolean(busy) || state.busy} className="btn btn-ghost btn-sm">
                 {busy === "update" ? "Check your wallet…" : "Update key"}
               </button>
@@ -395,16 +450,20 @@ function snoozeNudge() {
 /**
  * Portfolio: asks people with a private balance to turn recovery on, offers a
  * restore to people whose wallet made deposits this browser can't see, and
- * stays up (no snooze) while recovery is on with no backup to show for it.
+ * stays up (no snooze) while recovery is on with no backup to show for it. A
+ * browser on the older key is asked to update, whatever it holds, and once its
+ * backups have stopped that stays up too.
  */
 export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean; hasDeposits: boolean }) {
   const r = useRecovery();
   const hidden = useSyncExternalStore(subscribeNudge, nudgeSnapshot, nudgeServerSnapshot) === "hidden";
 
   const restoreMode = !hasBalance && hasDeposits;
-  const noBackup = r.state.on && !r.state.savedAt;
-  const done = r.message?.tone === "ok" && !noBackup;
-  if (!r.active || !r.state.ready || (r.state.on && !done && !noBackup) || (hidden && !noBackup) || (!hasBalance && !hasDeposits)) return null;
+  const older = r.state.olderKey && !r.state.moving;
+  const noBackup = r.state.on && !r.state.savedAt && !r.state.paused && !older;
+  const stayUp = noBackup || (older && r.state.paused);
+  const done = Boolean(r.message) && r.message?.tone !== "error" && !noBackup;
+  if (!r.active || !r.state.ready || (r.state.on && !done && !noBackup && !older) || (hidden && !stayUp) || (!hasBalance && !hasDeposits && !older && !done)) return null;
 
   const source: RecoverySource | null = r.walletOk ? "wallet" : r.passkeyOk ? "passkey" : null;
   const busy = Boolean(r.busy);
@@ -429,19 +488,33 @@ export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean
       <div className="flex min-w-0 flex-1 max-sm:flex-col max-sm:gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <h2 id="recovery-nudge-title" className="text-[15px] text-foreground">
-            {noBackup ? "No backup yet" : restoreMode ? "Restore your private balance" : "Don't lose your private balance"}
+            {older
+              ? r.state.gone
+                ? "This backup moved"
+                : r.state.paused
+                  ? "Backups are paused"
+                  : "Update your recovery key"
+              : done
+                ? "Recovery is on"
+                : noBackup
+                  ? "No backup yet"
+                  : restoreMode
+                    ? "Restore your private balance"
+                    : "Don't lose your private balance"}
           </h2>
           {done ? (
-            <p className="mt-0.5 max-w-[62ch] text-[13px] leading-relaxed text-sealed" role="status">
+            <p className={`mt-0.5 max-w-[62ch] text-[13px] leading-relaxed ${r.message?.tone === "wait" ? "text-warn" : "text-sealed"}`} role="status">
               {r.message?.text}
             </p>
           ) : (
             <p className="mt-0.5 max-w-[62ch] text-[13px] leading-relaxed text-mute">
-              {noBackup
-                ? `${NO_BACKUP_YET} This browser keeps trying on its own.`
-                : restoreMode
-                  ? "This wallet made deposits this browser can't see. Sign in to bring them back from your backup."
-                  : "Turn on recovery and you can get it back on any device by signing in."}
+              {older
+                ? `${olderKeyText(r.state)} ${r.walletOk ? SIGN_THREE_TIMES : "Connect the wallet you turned recovery on with to update."}`
+                : noBackup
+                  ? `${NO_BACKUP_YET} This browser keeps trying on its own.`
+                  : restoreMode
+                    ? "This wallet made deposits this browser can't see. Sign in to bring them back from your backup."
+                    : "Turn on recovery and you can get it back on any device by signing in."}
               {noBackup && r.state.error && r.message?.tone !== "error" && <span className="mt-1 block text-danger">{r.state.error}</span>}
               {r.message?.tone === "error" && <span className="mt-1 block text-danger">{r.message.text}</span>}
             </p>
@@ -449,22 +522,33 @@ export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean
         </div>
         {!done && (
           <div className="flex shrink-0 flex-wrap items-center gap-2 max-sm:self-start">
-            {noBackup ? (
+            {older ? (
+              r.walletOk && (
+                <button type="button" onClick={r.update} disabled={busy || r.state.busy} className="btn btn-ink btn-sm">
+                  {busy ? "Check your wallet…" : "Update key"}
+                </button>
+              )
+            ) : noBackup ? (
               <button type="button" onClick={r.save} disabled={busy || r.state.busy} className="btn btn-ink btn-sm">
                 {busy || r.state.busy ? "Backing up…" : label}
               </button>
             ) : source ? (
               <button type="button" onClick={() => action(source)} disabled={busy} className="btn btn-ink btn-sm">
-                {busy ? (source === "wallet" ? "Check your wallet…" : "Check your passkey…") : label}
+                {busy && r.busy !== "restore-older" ? (source === "wallet" ? "Check your wallet…" : "Check your passkey…") : label}
               </button>
             ) : null}
-            <Link href={!noBackup && restoreMode ? "/app/settings#backup" : "/app/settings#recovery"} className="btn btn-ghost btn-sm">
-              {noBackup ? "See recovery" : restoreMode ? "Use a backup file" : "Other ways"}
+            {r.offerOlder && r.walletOk && (
+              <button type="button" onClick={r.restoreOlder} disabled={busy} className="btn btn-ghost btn-sm">
+                {r.busy === "restore-older" ? "Check your wallet…" : "I have an older backup"}
+              </button>
+            )}
+            <Link href={!noBackup && !older && restoreMode ? "/app/settings#backup" : "/app/settings#recovery"} className="btn btn-ghost btn-sm">
+              {noBackup || older ? "See recovery" : restoreMode ? "Use a backup file" : "Other ways"}
             </Link>
           </div>
         )}
       </div>
-      {!noBackup && (
+      {!stayUp && (
         <button
           type="button"
           onClick={snoozeNudge}
