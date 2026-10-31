@@ -79,7 +79,7 @@ An ACP agent's Privy smart wallet can be the sender instead of a local key:
 | `gloam_add_privately` | Deposit from the wallet into the private balance | The deposit: wallet, asset, amount |
 | `gloam_pay_privately` | Pay a Gloam address (`gloamr1.…`), a payment request link, or by claim link | A shielded transfer only |
 | `gloam_receive` | `address`, `request` (a payment request link), `check` (pick up payments sent to it), `claim` (a claim link or a code sealed to the agent) | A shielded transfer only |
-| `gloam_cash_out` | Private balance to a 0x address (0.25% fee on mainnet and Base Sepolia) | The exit: asset, amount, recipient |
+| `gloam_cash_out` | Private balance to a 0x address (0.5% fee on mainnet, 0.25% on Base Sepolia) | The exit: asset, amount, recipient |
 | `gloam_prove_funds` | A proof it holds at least an amount, for one named reader | Nothing (the proof itself carries the backing notes' nullifiers) |
 | `gloam_verify_proof` | Check a `gloamfunds1:` or `gloampay1:` proof against the chain | Nothing |
 
