@@ -105,7 +105,7 @@ export default function DocsPrivateSwapsPage() {
         </table>
       </div>
       <p>
-        An example on Tempo: 1 pathUSD gets about 0.9964 USDC.e, after the
+        An example on Tempo: 1 pathUSD gets about 0.9937 USDC.e, after the
         vault fee and the price buffer below. Prices move, so the app always
         shows the live quote.
       </p>

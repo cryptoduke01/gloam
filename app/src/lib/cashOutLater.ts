@@ -86,19 +86,23 @@ export function markFor(job: OwnedCashOutJob, proof?: { root: Hex; at: number },
   };
 }
 
+/** What to say when the fee on screen is no longer the vault's. Null when it still is, or when either side isn't known. */
+export function feeMovedLine(shownBps: number | null, liveBps: unknown): string | null {
+  if (shownBps === null || typeof liveBps !== "number" || liveBps === shownBps) return null;
+  return `The cash-out fee just changed to ${formatFeePercent(liveBps)}. Check the new numbers, then confirm again.`;
+}
+
 /**
- * Asked right before anything moves: what to say when the fee on screen is no
- * longer the vault's, so nobody confirms a number that just changed. Null when
- * it still is, when the screen has no fee yet (null), or when the read fails:
- * the screen's own read, a minute old at most, stands.
+ * Asked right before anything moves, so nobody confirms a number that just
+ * changed. A failed read says nothing: the screen's own read, a minute old at
+ * most, stands.
  */
 export async function feeMoved(net: Pick<GloamNetwork, "chainId" | "chain" | "historyRpc" | "pool">, shownBps: number | null): Promise<string | null> {
   if (shownBps === null || !net.pool || readDemo()) return null;
   const live = await publicClientFor(net)
     .readContract({ address: net.pool, abi: shieldPoolAbi, functionName: "withdrawFeeBps" })
     .catch(() => null);
-  if (typeof live !== "number" || live === shownBps) return null;
-  return `The cash-out fee just changed to ${formatFeePercent(live)}. Check the new numbers, then confirm again.`;
+  return feeMovedLine(shownBps, live);
 }
 
 /** What every vault charged until 3 November 2026: a mark with no feeBps was set up at this. */

@@ -93,7 +93,7 @@ const {
   topUpWhen,
 } = await import("../src/lib/agentTopUp");
 const { checkPlan, schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
-const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, feeRise, feeRiseLine, feeRiseNotice, markFor, nextMark, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
+const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, feeMovedLine, feeRise, feeRiseLine, feeRiseNotice, markFor, nextMark, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
 const { HANDOVER_MS, RELAY_SPEND_LOCK_MS, activeSpendableNotes, exportNotesBackup, notesToMove, proofLoose, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import(
   "../src/lib/shield"
@@ -834,6 +834,13 @@ await test("a fee that rises after setup: each waiting job says what it pays now
   assert.match(one, /Cancel it before it goes/);
   assert.match(feeRiseNotice([old!, old!, old!], "top-up"), /after you set up 3 top-ups/);
   assert.match(feeRiseNotice([old!, old!], "cash out"), /they pay less than they showed/);
+});
+
+await test("a fee that changes under an open screen stops the confirm, with the new number", () => {
+  assert.equal(feeMovedLine(25, 50), "The cash-out fee just changed to 0.5%. Check the new numbers, then confirm again.");
+  assert.equal(feeMovedLine(50, 50), null, "the same fee goes ahead");
+  assert.equal(feeMovedLine(25, null), null, "a read that failed doesn't stop anyone: the screen's read stands");
+  assert.equal(feeMovedLine(null, 50), null, "no fee on screen yet");
 });
 
 await test("the fee a job showed stays on its mark, through the relay's updates and a job handed back", async () => {
