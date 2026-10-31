@@ -198,15 +198,17 @@ export function VaultSwapView() {
   const router = vaultSwapRouter(network.chainId);
   const openGated = useOpenGatedTokens();
   // A queued asset (lib/vaultSwap offeredSwapAssets) shows once the router says one of its pools is live.
-  const [livePool, setLivePool] = useState<{ is: (k: PoolKey) => boolean } | null>(null);
+  const [livePool, setLivePool] = useState<{ chainId: number; is: (k: PoolKey) => boolean } | null>(null);
   useEffect(() => {
     const r = swapRouterFor(network.chainId);
-    setLivePool(null);
     if (!r) return;
     let on = true;
-    const read = () => void livePools(publicClientFor(network), r).then((is) => on && setLivePool({ is }));
-    read();
-    const t = setInterval(read, 60_000);
+    const read = async () => {
+      const is = await livePools(publicClientFor(network), r);
+      if (on) setLivePool({ chainId: network.chainId, is });
+    };
+    void read();
+    const t = setInterval(() => void read(), 60_000);
     return () => {
       on = false;
       clearInterval(t);
@@ -218,7 +220,7 @@ export function VaultSwapView() {
         VAULT_SWAP_ASSETS[network.chainId] ?? [],
         swapRouterFor(network.chainId),
         openGated,
-        livePool?.is ?? null
+        livePool?.chainId === network.chainId ? livePool.is : null
       ),
     [network.chainId, openGated, livePool]
   );
