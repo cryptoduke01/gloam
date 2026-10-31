@@ -127,6 +127,7 @@ import {
   seededRandom,
 } from "@/lib/cashOutPlan";
 import {
+  cancelledPiece,
   keepPiece,
   readPrivatePref,
   runPrivateCashOut,
@@ -834,7 +835,7 @@ export function MoveView() {
   );
   const returnedRows = useMemo(() => returnedCashOutNotes(allLocal), [allLocal]);
   /** Pieces of a private cash out split off but not scheduled (a relay that was down, a closed tab). */
-  const leftoverRows = useMemo(() => unscheduledPieces(allLocal), [allLocal]);
+  const leftoverRows = useMemo(() => unscheduledPieces(allLocal).filter((n) => !n.cashOutPlan?.topUp), [allLocal]);
   // Cash-out fee (mainnet pools). The proof still spends the whole note; the
   // pool keeps the fee and pays the rest. Older pools fail this read: no fee.
   const demoMode = useDemo();
@@ -1322,7 +1323,7 @@ export function MoveView() {
     const result = await cancelCashOut(note.cashOut.job);
     if (result === "cancelled") {
       // Back in the balance as plain money: a cancelled piece is not one still to schedule.
-      updateLocalNote(note.id, { cashOut: undefined, cashOutPlan: undefined });
+      cancelledPiece(note.id);
     } else if (result === "over") {
       // It already ended without going out: back in the balance once the chain agrees.
       await reconcileCashOuts().catch(() => false);

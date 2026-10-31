@@ -76,7 +76,7 @@ A box inside a box takes the outer radius minus the padding between them.
 - The app frame (`AppShell`) is a floating sidebar on desktop and a top bar with a sheet on phones. Content sits in `max-w-[1120px]`. The page header is the title on the left, one short line under it, and at most one action on the right.
 - App navigation:
   - Portfolio
-  - Vault, with its actions listed under it: Add privately, Pay privately, Receive, Swap, Cash out, then Trade and Public send where the network has them
+  - Vault, with its actions listed under it: Add privately, Pay privately, Receive, Swap, Cash out, Agent top-ups, then Trade and Public send where the network has them
   - Payroll
   - Markets, on stock networks
   - Prove

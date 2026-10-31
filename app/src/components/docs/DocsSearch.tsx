@@ -135,12 +135,13 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/agents": {
     description: "Give an AI agent private payments, with spending kept under policy.",
-    keywords: ["ai", "agent", "bot", "mcp", "x402", "policy", "llm", "automation", "keys", "limits", "spending cap", "budget", "hosted", "connector", "url", "claude", "chatgpt", "cursor"],
+    keywords: ["ai", "agent", "bot", "mcp", "x402", "policy", "llm", "automation", "keys", "limits", "spending cap", "budget", "hosted", "connector", "url", "claude", "chatgpt", "cursor", "top up", "topup", "refill", "schedule"],
     headings: [
       "Why agents need this most",
       "Two ways in",
       "For Virtuals agents",
       "Connect by URL",
+      "Keep an agent topped up",
       "Reference agent (the SDK path)",
       "The MCP server",
       "Private agent payments (x402)",

@@ -219,6 +219,59 @@ export default function DocsAgentsPage() {
         does not check out is left blank, with the reason shown to the user.
       </p>
 
+      <h2 id="top-ups">Keep an agent topped up</h2>
+      <p>
+        An owner can refill an agent&apos;s wallet from their private balance on
+        a schedule, with Gloam closed. Open{" "}
+        <Link href="/app/vault?tab=topups">Agent top-ups</Link> in the Vault and
+        pick the agent&apos;s wallet, a stablecoin, an amount, how often (weekly
+        or every 2 weeks) and how many.
+      </p>
+      <p>
+        The whole total is paid for up front. Proofs are made in the browser, so
+        nothing can make one later on its own. The app splits the total into one
+        private balance per top-up, proves one cash out of each to the
+        agent&apos;s wallet, and hands each proof to the Gloam relay with its own
+        day. The relay picks a random time inside that UTC day and sends it. A
+        proof fixes the amount and the wallet, so the relay can send it as it is
+        or not at all, and it holds no key.
+      </p>
+      <ul>
+        <li>
+          <strong>Up to about 90 days ahead.</strong> That is 12 top-ups weekly,
+          or 7 every 2 weeks. Start a new series for longer.
+        </li>
+        <li>
+          <strong>Cancel any top-up before it goes.</strong> The money stays in
+          the vault until then, and a cancelled top-up goes back to your private
+          balance.
+        </li>
+        <li>
+          <strong>Setup takes about a minute per top-up,</strong> with the tab
+          open. If it stops, nothing is lost: what was scheduled still goes out,
+          the rest stays in your private balance, and you can finish the series
+          from the same screen.
+        </li>
+        <li>
+          <strong>Each top-up pays the usual 0.25% cash-out fee,</strong> taken
+          from that top-up when it goes out. On Ethereum one can wait for gas to
+          come down, for up to 3 days.
+        </li>
+      </ul>
+      <p>
+        Each top-up is a public cash out: its amount, the agent&apos;s wallet and
+        the time show on the explorer, and they all land in one wallet, so anyone
+        can add them up. Only where the money came from stays private. The agent
+        needs its own gas: top-ups send stablecoins only, so on Robinhood Chain,
+        where ETH isn&apos;t held in the vault, Base and Ethereum it needs ETH
+        from somewhere else.
+      </p>
+      <p>
+        Keep your backup current after setting one up. The proofs wait with the
+        relay, but the balances behind them, and the only way to cancel, are in
+        your browser.
+      </p>
+
       <h2>Reference agent (the SDK path)</h2>
       <p>
         <code>examples/agent-shield</code> is the smallest complete agent: it
