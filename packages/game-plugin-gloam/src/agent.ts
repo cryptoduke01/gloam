@@ -53,6 +53,7 @@ import {
   buildShieldBoundIntent,
   buildUnshieldIntent,
   cashOutFee,
+  cashOutTargetProblem,
   cleanPaymentNote,
   encodeNotePackage,
   generateReceiveKey,
@@ -1451,7 +1452,9 @@ export class GloamAgent {
     const amountWei = this.amount(args.amount, asset);
     const to = String(args.to ?? "").trim();
     if (!isAddress(to)) throw new Error("Cash out to a 0x address.");
-    if (to.toLowerCase() === this.network.pool.toLowerCase()) throw new Error("That address is the vault itself. Cash out to a wallet.");
+    // Here and not only in the builder: the split below would already have spent a note by then.
+    const problem = cashOutTargetProblem(to, this.network);
+    if (problem) throw new Error(problem);
     // The same cash out (address, asset, amount) whose answer was lost may still land: it is never paid twice.
     // Its notes carry this key: the split that makes the exact note, and the note being cashed out.
     const requestKey = this.requestKeyOf(`cash_out:${to.toLowerCase()}`, asset, amountWei);

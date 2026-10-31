@@ -32,7 +32,8 @@
  *   commerce  pay privately and put a receipt leaf in a merkle root you publish;
  *             the calls an agent signs, for a signing allowlist
  *   constants pool + verifier addresses, chain ids, networks (mainnet and
- *             testnet), assets + launch beta limits, cash-out fee, circuit files
+ *             testnet), assets + launch beta limits, cash-out fee and recipient
+ *             check, circuit files
  *   limits    the vault's beta deposit limits, read live
  *   mainnet   MAINNET_POOLS, BASE_SEPOLIA_POOL and ETHEREUM_SEPOLIA_POOL, the
  *             one place those pool addresses live
@@ -44,7 +45,7 @@
  * pools have no swap at all), so its on-chain path reverts today.
  */
 
-export const SDK_VERSION = "0.4.2";
+export const SDK_VERSION = "0.4.3";
 
 export * from "./intents.js";
 export * from "./rates.js";

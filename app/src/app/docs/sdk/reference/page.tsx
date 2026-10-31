@@ -155,6 +155,17 @@ export default function DocsSdkReferencePage() {
             </tr>
             <tr>
               <td>
+                <code>cashOutTargetProblem(to, net)</code>
+              </td>
+              <td>
+                Why a cash out to <code>to</code> would be lost (the vault, the
+                memo board, a token contract, a swap router, the zero address),
+                or <code>null</code>. <code>buildUnshieldIntent</code> checks it
+                before proving
+              </td>
+            </tr>
+            <tr>
+              <td>
                 <code>RH_MAINNET_CHAIN_ID</code> / <code>TEMPO_MAINNET_CHAIN_ID</code>
               </td>
               <td>

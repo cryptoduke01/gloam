@@ -87,6 +87,11 @@ A payment spends one note, so the most one payment can be is the largest note
 (`largestPayment` in the balance). A received payment counts only once it has
 been moved into a fresh note only this agent knows.
 
+A cash out to an address where the money would be lost is refused before
+anything is split or sent, on the wallet path as well as through the relay: the
+vault, the network's payment-message board, a token contract, a Gloam swap
+router and the zero address.
+
 The engine is `GloamAgent` (`plugin.agent`), usable without GAME: `add`, `pay`,
 `payByClaimLink`, `requestPayment`, `checkIncoming`, `claim`, `cashOut`,
 `proveFunds`, `provePayment`, `verifyProof`, `refresh`.

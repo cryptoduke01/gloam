@@ -24,7 +24,8 @@
  *  - cash outs to the vault or the memo board are refused before any chain
  *    call, on the server, in the shared check the app uses, and in the SDK;
  *    so are a listed token contract, a swap router and the zero address, while
- *    a wallet is never refused
+ *    a wallet is never refused. The SDK alone, with no list from the app, refuses
+ *    every one of them
  *  - Redis set but not answering: every send, cash out and payment message is
  *    refused relay_off before any chain call, logged once per outage; the
  *    per-spend lock never runs on memory then, nor in a production build with
@@ -74,6 +75,7 @@ const {
   cashOutTargetProblem,
 } = await import("../src/lib/cashOutTarget");
 const { swapRoutersOn } = await import("../src/lib/vaultSwap");
+const { cashOutTargetProblem: sdkCashOutTargetProblem } = await import("@gloamtrade/sdk");
 const { RH_MAINNET_SWAP_TOKENS, RH_MAINNET_TOKENS, TEMPO_MAINNET_TOKENS, shieldTokensFor } = await import("../src/lib/tokens");
 const { POST: relayPost } = await import("../src/app/api/relay/route");
 const { resetRpcChecks, serverTransport } = await import("../src/lib/serverRpc");
@@ -900,6 +902,21 @@ await test("shared check: the zero address, a listed token and a swap router are
   }
   // Both Robinhood Chain routers (the one new swaps use and the older one kept for refunds) and Tempo's are covered.
   assert.ok(swapRoutersOn(4663).length >= 2 && swapRoutersOn(4217).length >= 1);
+});
+
+await test("shared check: an agent on the SDK alone is refused every address the app refuses", () => {
+  for (const key of NETWORK_KEYS) {
+    const n = getNetwork(key);
+    const alone = (to: string) => sdkCashOutTargetProblem(to, { chainId: n.chainId });
+    const routers = swapRoutersOn(n.chainId);
+    const tokens = [...shieldTokensFor(n.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets, ...(r.weth ? [r.weth] : [])])];
+    if (n.chainId === 4663) tokens.push(...RH_MAINNET_SWAP_TOKENS.map((t) => t.address));
+    assert.ok(tokens.length > 0, key);
+    assert.equal(alone(n.pool!), CASH_OUT_TO_VAULT_MESSAGE, key);
+    assert.equal(alone(n.payMemo!.address), CASH_OUT_TO_BOARD_MESSAGE, key);
+    for (const r of routers) assert.equal(alone(r.address), CASH_OUT_TO_ROUTER_MESSAGE, `${r.address} on ${key}`);
+    for (const a of tokens) assert.equal(alone(a), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
+  }
 });
 
 await test("shared check: wallets are never refused, and a token of another chain is just an address", () => {
