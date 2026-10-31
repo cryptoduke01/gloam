@@ -19,8 +19,11 @@
  *      that would put it next to the swap on the explorer.
  *
  * The new notes are dropped only when the swap surely never went out (the
- * relay refused it before sending, or its transaction reverted). A send that
- * may have gone out keeps them, and the next sync settles them either way.
+ * relay refused it before sending). A send that may have gone out keeps them,
+ * and the next sync settles them either way. So does one that landed and
+ * reverted, but its unshield proof stays valid until the note is spent, so that
+ * note is marked (swapProofAt) and the sync moves it to a fresh note as soon as
+ * the relay takes it (lib/claimSweep moveRevertedNotes).
  */
 import { keccak256, type Address, type Hex } from "viem";
 import { buildPoseidonUnshieldWitness } from "./proverPoseidon";
@@ -29,7 +32,7 @@ import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { prepareBridgeNote } from "./bridgePrivate";
-import { freshPath, networkOfNote, spendPlanFor, splitForCashOut } from "./cashOutSplit";
+import { freshPath, networkOfNote, spendPlanFor, spendWaitMessage, splitForCashOut } from "./cashOutSplit";
 import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
@@ -52,12 +55,69 @@ export const SWAP_MAYBE_SENT =
   "The swap may have gone out. Your money is safe in the vault: refresh in a minute to see where it landed.";
 
 export const SWAP_REVERTED =
-  "The swap didn't go through on this try. Your money is safe in the vault: refresh in a minute, then get a new quote.";
+  "The swap didn't go through on this try. Your money is safe in the vault. It moves to a fresh private balance in about 3 minutes: keep Gloam open, or it finishes next time you open the app. Then get a new quote.";
+
+export const SWAP_SPENT =
+  "This try didn't go through, but another copy of the swap already spent this balance. Refresh in a minute to see where your money landed.";
 
 export const SWAP_REFUNDED =
   "The swap couldn't finish, so the money went back to your private balance, less up to 1%: the vault's cash-out fee, plus a safety margin that goes to the Gloam treasury.";
 
 export type SwapResult = { hash: Hex; outNote: LocalNote; refunded: boolean };
+
+/** What sendVaultSwap calls: the app's own below, a test's own in scripts/. */
+export type SwapSender = {
+  relay: typeof relayVaultSwap;
+  /** How the transaction ended. Throws when that can't be told yet (a slow network). */
+  wait: (hash: Hex) => Promise<"success" | "reverted">;
+  isSpent: (nullifier: Hex) => Promise<boolean>;
+};
+
+/**
+ * Hands a swap to the relay and follows it to the chain. Returns its hash once
+ * it landed without reverting; throws in plain words otherwise. `spentId` is the
+ * note the swap spends, and `outId` and `refund` the two saved for it.
+ */
+export async function sendVaultSwap(
+  call: Parameters<typeof relayVaultSwap>[0],
+  notes: { spentId: string; outId: string; refund: LocalNote },
+  send: SwapSender,
+  onSent?: () => void
+): Promise<Hex> {
+  let hash: Hex;
+  try {
+    hash = await send.relay(call);
+  } catch (e) {
+    if (e instanceof RelaySubmitError && MAYBE_SENT.has(e.code)) throw new Error(SWAP_MAYBE_SENT);
+    dropUnsentNote(notes.outId);
+    dropUnsentNote(notes.refund.id);
+    throw e;
+  }
+  // Kept in case this tab never hears how it ended (it closes, the wait gives
+  // up): a sync reads the receipt. The swap is out, so a failed save stops nothing.
+  const sent = { hash, at: Date.now() };
+  await updateLocalNote(notes.refund.id, { vaultSwap: { ...notes.refund.vaultSwap!, sent } }).catch(() => {});
+
+  onSent?.();
+  let outcome: "success" | "reverted";
+  try {
+    outcome = await send.wait(hash);
+  } catch {
+    // A slow network: it may still land, and the next sync settles it.
+    throw new Error(SWAP_MAYBE_SENT);
+  }
+  if (outcome === "reverted") {
+    // Not proof that nothing moved: a copy or a resend of this call may have
+    // landed first. Both notes stay saved, out of the balance; the sync settles them.
+    if ((await send.isSpent(call.spend.nullifier).catch(() => null)) === true) throw new Error(SWAP_SPENT);
+    // Its unshield proof (to this swap's escrow) is public now and stays valid
+    // until the note is spent: on disk before anyone hears of it, so a closed
+    // tab still moves the note on the next load.
+    await updateLocalNote(notes.spentId, { swapProofAt: sent.at }).catch(() => {});
+    throw new Error(SWAP_REVERTED);
+  }
+  return hash;
+}
 
 export async function runVaultSwap(args: {
   network: GloamNetwork;
@@ -78,13 +138,16 @@ export async function runVaultSwap(args: {
   const { network, note, amount, router } = args;
   if (!network.pool) throw new Error("This network has no vault yet.");
   assertNoteOnNetwork(note, network);
+  const moving = spendWaitMessage(note);
+  if (moving) throw new Error(moving);
   // every read of this swap, before and after the send, goes to its own network's chain
   const client = publicClientFor(network);
   const noteWei = BigInt(note.amountWei);
   if (amount <= 0n || amount > noteWei) throw new Error("Pick an amount up to this balance.");
 
   // The note to spend: the whole one, or the part set aside. A note that backed a proof
-  // of funds moves whole to a fresh note first, so the proof can't point at this swap.
+  // of funds moves whole to a fresh note first, so the proof can't point at this swap, and
+  // so does one whose last swap reverted, so that swap's proof can't be used.
   let target = note;
   const spendPlan = spendPlanFor(note, amount);
   if (spendPlan !== "direct") {
@@ -183,43 +246,26 @@ export async function runVaultSwap(args: {
   // on disk and read back before the swap is sent, or nothing is sent
   await saveLocalNote(outNote);
   await saveLocalNote(refundNote);
-  const dropBoth = () => {
-    dropUnsentNote(outNote.id);
-    dropUnsentNote(refundNote.id);
-  };
 
   // 4. Through the relay only.
   args.onStatus("Swapping through the Gloam relay…");
-  let hash: Hex;
-  try {
-    hash = await relayVaultSwap({
+  const hash = await sendVaultSwap(
+    {
       chainId: network.chainId,
       router,
       spend: { proof: proofBytes, root: fieldToBytes32(w.publicInputs.root), nullifier, asset: target.asset, amount: targetWei },
       deposit: { proof: out.proof, commitment: outNote.commitment, asset: args.assetOut, amount: plan.amountOut },
       refund: { proof: back.proof, commitment: refundNote.commitment, asset: target.asset, amount: BigInt(refundNote.amountWei) },
       route: plan.route,
-    });
-  } catch (e) {
-    if (e instanceof RelaySubmitError && MAYBE_SENT.has(e.code)) throw new Error(SWAP_MAYBE_SENT);
-    dropBoth();
-    throw e;
-  }
-
-  args.onStatus("Waiting for the swap to land…");
-  let outcome: "success" | "reverted";
-  try {
-    outcome = await waitForTx(hash, undefined, client);
-  } catch {
-    // A slow network: it may still land, and the next sync settles it.
-    throw new Error(SWAP_MAYBE_SENT);
-  }
-  if (outcome === "reverted") {
-    // Not proof that nothing moved: a copy or a resend of this call may have
-    // landed first, and its unshield proof (to this swap's escrow) is public now.
-    // Both notes stay saved, out of the balance; the sync settles them.
-    throw new Error(SWAP_REVERTED);
-  }
+    },
+    { spentId: target.id, outId: outNote.id, refund: refundNote },
+    {
+      relay: relayVaultSwap,
+      wait: (h) => waitForTx(h, undefined, client),
+      isSpent: (n) => client.readContract({ address: network.pool!, abi: shieldPoolAbi, functionName: "isSpent", args: [n] }),
+    },
+    () => args.onStatus("Waiting for the swap to land…")
+  );
 
   // Landed: the new note, or (if someone sent the unshield on its own first)
   // the refund note. Which one is read from the vault; if that read fails both
@@ -248,6 +294,8 @@ export async function runVaultSwap(args: {
 const UNUSED_PROOF = `0x${"00".repeat(64)}` as Hex;
 const UNUSED_ROOT = `0x${"00".repeat(32)}` as Hex;
 const RETRY_MS = 60_000;
+/** A vault that refused the refund is asked less often: each try is a proof, and its limit can stay closed for days. */
+const BLOCKED_RETRY_MS = 10 * 60_000;
 const lastTry = new Map<string, number>();
 
 /**
@@ -256,14 +304,16 @@ const lastTry = new Map<string, number>();
  * escrow (lib/claimSweep finds it and calls this). Proves the refund note's
  * shield again from its saved secret and sends the same swap call through the
  * relay; the router sees the note spent and makes the refund. At most one try
- * a minute per note; the next sync counts the note once it lands.
+ * a minute per note; the next sync counts the note once it lands. True when one
+ * was sent. A refund the vault refuses (a closed limit) throws the relay's
+ * refusal, and the note stays pending for the next sync (lib/claimSweep).
  */
-export async function finishVaultSwapRefund(note: LocalNote): Promise<void> {
+export async function finishVaultSwapRefund(note: LocalNote): Promise<boolean> {
   const info = note.vaultSwap;
   const from = note.sweptFrom;
-  if (!info || !from || !note.sweepPending) return;
+  if (!info || !from || !note.sweepPending) return false;
   const last = lastTry.get(note.id);
-  if (last !== undefined && Date.now() - last < RETRY_MS) return;
+  if (last !== undefined && Date.now() - last < (note.refundHeld === "blocked" ? BLOCKED_RETRY_MS : RETRY_MS)) return false;
   lastTry.set(note.id, Date.now());
 
   const { proofBytes } = await proveShieldInBrowser({
@@ -284,4 +334,5 @@ export async function finishVaultSwapRefund(note: LocalNote): Promise<void> {
   // the receipt is read on the note's own chain, whatever the page shows by now
   const net = networkOfNote(note);
   await waitForTx(hash, undefined, net ? publicClientFor(net) : undefined).catch(() => null);
+  return true;
 }

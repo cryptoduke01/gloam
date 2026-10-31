@@ -117,7 +117,7 @@ import {
   scheduledCashOutNotes,
   type CashOutWindow,
 } from "@/lib/cashOutLater";
-import { freshPath, networkOfNote, roundDownToWhole, spendPlanFor, splitForCashOut } from "@/lib/cashOutSplit";
+import { freshPath, networkOfNote, roundDownToWhole, spendPlanFor, spendWaitMessage, splitForCashOut } from "@/lib/cashOutSplit";
 import {
   findCashOutLink,
   linkMessage,
@@ -1008,6 +1008,11 @@ export function MoveView() {
       setError("Paste the address to cash out to.");
       return;
     }
+    const moving = spendWaitMessage(selected);
+    if (moving) {
+      setError(moving);
+      return;
+    }
     if (later && !relayAvailable) {
       setError("Cashing out later needs the Gloam relay, which is off right now. Cash out now instead.");
       return;
@@ -1038,7 +1043,7 @@ export function MoveView() {
     try {
       // A part of the balance: set it aside in its own private note first. A balance that
       // backed a proof of funds moves whole to a fresh note first, so the proof can't point
-      // at this cash out (lib/cashOutSplit spendPlanFor).
+      // at this cash out, and so does one whose last swap reverted (lib/cashOutSplit spendPlanFor).
       let target: LocalNote = selected;
       let path: PoseidonMerklePath | null;
       const plan = spendPlanFor(selected, amount);

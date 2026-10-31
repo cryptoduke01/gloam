@@ -568,6 +568,14 @@ export type LocalNote = {
    * such a note is moved to a fresh note first (lib/cashOutSplit spendPlanFor).
    */
   fundsProofAt?: number;
+  /**
+   * When a private swap of this note went out (ms), set once that swap is known
+   * to have landed and reverted. Its unshield proof stays valid until this note
+   * is spent, so the note moves whole to a fresh note as soon as the relay takes
+   * it (lib/claimSweep moveRevertedNotes), and anything else that spends it
+   * moves it first (lib/cashOutSplit spendPlanFor).
+   */
+  swapProofAt?: number;
   /** On the fresh note from securing a claim, or a cash-out split: the note it came from (settled together). */
   sweptFrom?: { id: string; nullifier: Hex };
   /**
@@ -596,6 +604,13 @@ export type LocalNote = {
    * money waits at the swap's escrow the note stays pending, never dead.
    */
   vaultSwap?: VaultSwapRefundInfo;
+  /**
+   * On a private swap's refund note, once a sync has found its money at the
+   * swap's escrow: "returning" while the refund is on its way, "blocked" while
+   * the vault won't take it (its limit for the asset is closed or full). The
+   * note stays pending and every sync tries again (heldSwapRefunds lists it).
+   */
+  refundHeld?: "returning" | "blocked";
 };
 
 export type CashOutMark = {
@@ -634,6 +649,18 @@ export function cashOutPending(n: Pick<LocalNote, "cashOut">): boolean {
   return n.cashOut?.state === "scheduled" || n.cashOut?.state === "sent";
 }
 
+/**
+ * How long the relay holds a spend's nullifier once it has sent it: until then
+ * it refuses any other spend of that note (lib/relay/inflight INFLIGHT_TTL_SEC,
+ * which this follows).
+ */
+export const RELAY_SPEND_LOCK_MS = 180_000;
+
+/** Ms until the relay takes a spend of a note whose swap reverted, 0 when it does (or none did). */
+export function swapProofWait(n: Pick<LocalNote, "swapProofAt">, now = Date.now()): number {
+  return n.swapProofAt ? Math.max(0, n.swapProofAt + RELAY_SPEND_LOCK_MS - now) : 0;
+}
+
 export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => Boolean(n.txHash) && n.status !== "recovered");
 }
@@ -654,6 +681,11 @@ export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
 /** Claimed payments waiting for the vault to show them: listed, never counted. */
 export function unfundedClaims(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => n.unfunded && holdsSecret(n));
+}
+
+/** Swap refunds whose money waits at the swap's escrow: listed, never counted, until they land. */
+export function heldSwapRefunds(notes: LocalNote[]): LocalNote[] {
+  return notes.filter((n) => n.refundHeld && n.sweepPending && holdsSecret(n));
 }
 
 /** Not spent, and this browser has its secret (a pending secured claim too). */
@@ -972,7 +1004,18 @@ export function updateLocalNote(
   patch: Partial<
     Pick<
       LocalNote,
-      "leafIndex" | "txHash" | "status" | "secured" | "sweepPending" | "unfunded" | "cashOut" | "cashOutPlan" | "fundsProofAt"
+      | "leafIndex"
+      | "txHash"
+      | "status"
+      | "secured"
+      | "sweepPending"
+      | "unfunded"
+      | "cashOut"
+      | "cashOutPlan"
+      | "fundsProofAt"
+      | "swapProofAt"
+      | "vaultSwap"
+      | "refundHeld"
     >
   >
 ): Promise<void> {

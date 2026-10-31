@@ -25,7 +25,16 @@ import { publicClientFor } from "./rhClient";
 import { readDemo } from "./demoFlag";
 import { demoLeafIndex } from "./demo/store";
 import { NETWORK_KEYS, getActiveNetwork, getNetwork, type GloamNetwork } from "./networks";
-import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
+import {
+  assertNoteOnNetwork,
+  dropUnsentNote,
+  saveLocalNote,
+  shieldPoolAbi,
+  swapProofWait,
+  updateLocalNote,
+  type CashOutPlanTag,
+  type LocalNote,
+} from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { surelyNotSent } from "./walletErrors";
 
@@ -151,11 +160,25 @@ async function seen(client: PublicClient, chainId: number, pool: Address, commit
  * spend nullifier, and a cash out or swap of it would show next to that
  * nullifier where the money went and how much (GHSA-x8fx-frxx-7f66). The
  * fresh note's nullifier is in no proof. The move and the cash out still land
- * close together, so their timing can hint at a link.
+ * close together, so their timing can hint at a link. A note whose swap landed
+ * and reverted (swapProofAt) moves first too: both other plans spend it through
+ * a transfer, which ends that swap's proof.
  */
-export function spendPlanFor(note: Pick<LocalNote, "amountWei" | "fundsProofAt">, amount: bigint): "direct" | "split" | "move" {
+export function spendPlanFor(note: Pick<LocalNote, "amountWei" | "fundsProofAt" | "swapProofAt">, amount: bigint): "direct" | "split" | "move" {
   if (amount < BigInt(note.amountWei)) return "split";
-  return note.fundsProofAt ? "move" : "direct";
+  return note.fundsProofAt || note.swapProofAt ? "move" : "direct";
+}
+
+/**
+ * Why this note can't be swapped or cashed out yet, or null. Right after its
+ * swap reverted the relay still holds its nullifier, so any spend through it
+ * would be refused (shield RELAY_SPEND_LOCK_MS).
+ */
+export function spendWaitMessage(note: Pick<LocalNote, "swapProofAt">, now = Date.now()): string | null {
+  const ms = swapProofWait(note, now);
+  if (ms <= 0) return null;
+  const minutes = Math.ceil(ms / 60_000);
+  return `Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in about ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`;
 }
 
 export type SplitArgs = {
