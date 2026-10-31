@@ -362,6 +362,7 @@ export function AgentTopUpsView() {
     }
     if (!(await checkAgent(tag.to, n.asset))) return;
     setBusy(true);
+    setProgress({ done: 0, of: 1 });
     setStatus("Proving privately, this takes 10 to 30 seconds…");
     try {
       const job = await schedulePiece(n);
@@ -371,6 +372,7 @@ export function AgentTopUpsView() {
     } finally {
       setBusy(false);
       setStatus(null);
+      setProgress(null);
       refresh();
     }
   }
@@ -573,10 +575,11 @@ export function AgentTopUpsView() {
       </div>
 
       <div className="min-w-0 space-y-6">
-        {(unfinished.length > 0 || leftovers.length > 0) && (
+        {/* Mid-run a top-up is between its split and its schedule, not stopped: these wait until it is over. */}
+        {!busy && (unfinished.length > 0 || leftovers.length > 0) && (
           <div className="space-y-3">
             {unfinished.map((s) => (
-              <div key={s.id} className="rounded-[16px] bg-surface px-4 py-3.5 text-[13px] leading-relaxed">
+              <div key={s.id} className="gl-card px-4 py-3.5 text-[13px] leading-relaxed">
                 <p className="text-foreground">
                   {`${s.scheduled} of ${s.of} top-ups to ${shortAddress(s.to)} are scheduled. ${s.missing.length} more ${s.missing.length === 1 ? "is" : "are"} still in your private balance.`}
                 </p>
@@ -591,7 +594,7 @@ export function AgentTopUpsView() {
               </div>
             ))}
             {leftovers.map((n) => (
-              <div key={n.id} className="rounded-[16px] bg-surface px-4 py-3.5 text-[13px] leading-relaxed">
+              <div key={n.id} className="gl-card px-4 py-3.5 text-[13px] leading-relaxed">
                 <p className="text-foreground">
                   {`A top-up of ${formatAssetLabel(n.amountWei, n.asset)} to ${shortAddress(n.cashOutPlan!.to)} wasn't scheduled. It's safe in your private balance.`}
                 </p>
