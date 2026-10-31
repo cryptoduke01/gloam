@@ -311,7 +311,7 @@ export function useAppTxReceipt(q: { hash?: Hex; chainId: GloamChainId }): {
   isSuccess: boolean;
   /** The wait gave up (a busy RPC, a timeout). The transaction may still land. */
   isError: boolean;
-  data: { logs: Log[] } | undefined;
+  data: { logs: Log[]; status?: "success" | "reverted" } | undefined;
 } {
   const demo = useDemo();
   useDemoStore();

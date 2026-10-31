@@ -80,7 +80,7 @@ function withCopy(a: VaultAction): VaultActionInfo {
 export const VAULT_ACTIONS: readonly VaultActionInfo[] = NAV_ACTIONS.map(withCopy);
 
 /** The actions this network and wallet have, the same as the app nav lists. */
-export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: boolean }): VaultActionInfo[] {
+export function vaultActionsFor(opts: { swap: boolean; stocks: boolean }): VaultActionInfo[] {
   return navActionsFor(opts).map(withCopy);
 }
 

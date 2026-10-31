@@ -1,5 +1,5 @@
 /**
- * Max for a public send of the chain's native coin (ETH on Robinhood Chain).
+ * Max for a public send of the chain's native coin (ETH). A token's is in lib/publicSend.
  *
  * A transfer of the whole balance can never be sent: the wallet needs value
  * plus gas times the fee per gas up front. So Max sets the network fee aside

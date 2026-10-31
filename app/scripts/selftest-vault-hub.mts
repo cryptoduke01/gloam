@@ -47,12 +47,12 @@ test("the five main actions come first, in the order money moves", () => {
 });
 
 test("each network gets the actions it has", () => {
-  // Robinhood Chain mainnet: swaps live, a native coin, no stocks
-  assert.deepEqual(ids({ swap: true, stocks: false, native: true }), ["shield", "pay", "receive", "swap", "cashout", "topups", "send"]);
-  // Tempo: no native coin to send, no swap router on the testnet
-  assert.deepEqual(ids({ swap: false, stocks: false, native: false }), ["shield", "pay", "receive", "cashout", "topups"]);
+  // Robinhood Chain mainnet: swaps live, no stocks
+  assert.deepEqual(ids({ swap: true, stocks: false }), ["shield", "pay", "receive", "swap", "cashout", "topups", "send"]);
+  // Tempo testnet: no swap router; Public send carries its stablecoins
+  assert.deepEqual(ids({ swap: false, stocks: false }), ["shield", "pay", "receive", "cashout", "topups", "send"]);
   // Robinhood Chain testnet: stocks
-  assert.deepEqual(ids({ swap: false, stocks: true, native: true }), ["shield", "pay", "receive", "cashout", "topups", "trade", "send"]);
+  assert.deepEqual(ids({ swap: false, stocks: true }), ["shield", "pay", "receive", "cashout", "topups", "trade", "send"]);
 });
 
 test("a URL opens its action, and the bare Vault opens the overview", () => {
@@ -102,10 +102,11 @@ test("a claim already taken stops marking Receive once the URL names another act
 });
 
 test("a tab this network does not have opens the overview, not a blank page", () => {
-  const tempo = vaultActionsFor({ swap: false, stocks: false, native: false });
-  assert.equal(vaultActionFromUrl("swap", null, "", tempo), null);
-  assert.equal(vaultActionFromUrl("send", null, "", tempo), null);
-  assert.equal(vaultActionFromUrl("move", "cashout", "", tempo), "cashout");
+  const base = vaultActionsFor({ swap: false, stocks: false });
+  assert.equal(vaultActionFromUrl("swap", null, "", base), null);
+  assert.equal(vaultActionFromUrl("trade", null, "", base), null);
+  assert.equal(vaultActionFromUrl("send", null, "", base), "send");
+  assert.equal(vaultActionFromUrl("move", "cashout", "", base), "cashout");
 });
 
 test("the overview says what agent top-ups hold out of the balance", () => {
