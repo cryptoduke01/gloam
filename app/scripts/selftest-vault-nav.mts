@@ -35,26 +35,28 @@ test("the nav links are the deep links the app already serves", () => {
   assert.equal(href.receive, "/app/vault?tab=move&mode=receive");
   assert.equal(href.cashout, "/app/vault?tab=move&mode=cashout");
   assert.equal(href.swap, "/app/vault?tab=swap");
+  assert.equal(href.topups, "/app/vault?tab=topups");
   assert.equal(href.trade, "/app/vault?tab=trade");
   assert.equal(href.send, "/app/vault?tab=send");
 });
 
-test("every network lists Add, Pay, Receive and Cash out, in the order money moves", () => {
-  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: false })), ["shield", "pay", "receive", "cashout"]);
+test("every network lists Add, Pay, Receive, Cash out and Agent top-ups, in the order money moves", () => {
+  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: false })), ["shield", "pay", "receive", "cashout", "topups"]);
 });
 
 test("Swap, Trade and Public send appear only where the network has them", () => {
-  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: false, native: false })), ["shield", "pay", "receive", "swap", "cashout"]);
+  assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: false, native: false })), ["shield", "pay", "receive", "swap", "cashout", "topups"]);
   assert.deepEqual(ids(vaultActionsFor({ swap: true, stocks: true, native: true })), [
     "shield",
     "pay",
     "receive",
     "swap",
     "cashout",
+    "topups",
     "trade",
     "send",
   ]);
-  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: true })), ["shield", "pay", "receive", "cashout", "send"]);
+  assert.deepEqual(ids(vaultActionsFor({ swap: false, stocks: false, native: true })), ["shield", "pay", "receive", "cashout", "topups", "send"]);
 });
 
 test("Pay's mode from ?mode=: receive and cash out, anything else is Send", () => {
@@ -73,6 +75,7 @@ test("the marked nav entry matches what the Vault shows", () => {
   assert.equal(vaultActionFromParams("move", "receive"), "receive");
   assert.equal(vaultActionFromParams("move", "cashout"), "cashout");
   assert.equal(vaultActionFromParams("swap", null), "swap");
+  assert.equal(vaultActionFromParams("topups", null), "topups");
   assert.equal(vaultActionFromParams("nope", null), null, "an unknown tab opens the overview");
 });
 

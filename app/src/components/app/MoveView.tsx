@@ -127,7 +127,9 @@ import {
   seededRandom,
 } from "@/lib/cashOutPlan";
 import {
+  cancelledPiece,
   keepPiece,
+  moveLooseProofs,
   readPrivatePref,
   runPrivateCashOut,
   savePrivatePref,
@@ -834,7 +836,7 @@ export function MoveView() {
   );
   const returnedRows = useMemo(() => returnedCashOutNotes(allLocal), [allLocal]);
   /** Pieces of a private cash out split off but not scheduled (a relay that was down, a closed tab). */
-  const leftoverRows = useMemo(() => unscheduledPieces(allLocal), [allLocal]);
+  const leftoverRows = useMemo(() => unscheduledPieces(allLocal).filter((n) => !n.cashOutPlan?.topUp), [allLocal]);
   // Cash-out fee (mainnet pools). The proof still spends the whole note; the
   // pool keeps the fee and pays the rest. Older pools fail this read: no fee.
   const demoMode = useDemo();
@@ -1327,7 +1329,7 @@ export function MoveView() {
     const result = await cancelCashOut(note.cashOut.job);
     if (result === "cancelled") {
       // Back in the balance as plain money: a cancelled piece is not one still to schedule.
-      updateLocalNote(note.id, { cashOut: undefined, cashOutPlan: undefined });
+      await cancelledPiece(note.id);
     } else if (result === "over") {
       // It already ended without going out: back in the balance once the chain agrees.
       await reconcileCashOuts().catch(() => false);
@@ -1343,6 +1345,10 @@ export function MoveView() {
       setError("The relay could not be reached. Try Cancel again in a moment.");
     }
     refreshNotes();
+    // its proof is still good until the note is spent: the note moves now, not at the next sync
+    void moveLooseProofs()
+      .catch(() => {})
+      .finally(refreshNotes);
   }
 
   async function onPrivateSend() {
@@ -2707,7 +2713,7 @@ export function MoveView() {
                   {returnedRows.map((n) => (
                     <div key={n.id} className="rounded-[16px] bg-surface px-4 py-3.5 text-[13px] leading-relaxed">
                       <p className="text-foreground">
-                        {`Your cash out of ${formatAssetLabel(n.amountWei, n.asset)} didn't go out, so nothing moved. It's back in your private balance: cash out again.`}
+                        {`Your cash out of ${formatAssetLabel(n.amountWei, n.asset)} didn't go out, so nothing moved. It moves to a fresh private balance first, so its proof can't be used, then shows in your balance.`}
                       </p>
                       <button
                         type="button"

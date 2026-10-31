@@ -13,7 +13,7 @@ import { formatUnits } from "viem";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
-import { assetLabel, formatAssetAmount, isNativeAsset, isShieldDeployed } from "@/lib/shield";
+import { assetLabel, formatAssetAmount, formatAssetLabel, isNativeAsset, isShieldDeployed } from "@/lib/shield";
 import { addableTokensFor, isDollarStable, knownTokens, supportsNativeShield } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { faucetFor } from "@/lib/faucet";
@@ -21,6 +21,7 @@ import { bridgeVisible } from "@/lib/bridge";
 import {
   addAssetHref,
   pickAddAsset,
+  topUpsSetAside,
   vaultActionBlocked,
   vaultActionSearch,
   compareHoldings,
@@ -42,7 +43,7 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   const { address, isConnected, chainId } = useAppAccount();
   const onNetwork = chainId === network.chainId;
   const live = isShieldDeployed() && Boolean(network.pool);
-  const { byAsset, ready, balanceSyncing } = useLocalShieldNotes(address);
+  const { byAsset, local, ready, balanceSyncing } = useLocalShieldNotes(address);
 
   // The public side: what this wallet holds of what the vault takes now (BDX
   // only once its live deposit limit is open).
@@ -115,6 +116,11 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
   }, [balancesVisible, byAsset, known]);
 
   const hasPrivate = privateRows.length > 0;
+  // Money set aside for agent top-ups is out of the balance, for months at times: say where it went.
+  const setAside = useMemo(
+    () => [...topUpsSetAside(local)].map(([asset, wei]) => formatAssetLabel(wei, asset)).join(", "),
+    [local]
+  );
   const privateLoading = balancesVisible && (!ready || (balanceSyncing && !hasPrivate));
   const privateKnown = balancesVisible && ready && !balanceSyncing;
   const suggest = pickAddAsset(wallet);
@@ -228,9 +234,11 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
             note={
               !balancesVisible
                 ? "Connect to see it. Only this browser can read it."
-                : hasPrivate
-                  ? "Only this browser can read it."
-                  : "Nothing here yet. Only you will see this number."
+                : setAside
+                  ? `${setAside} more is set aside for agent top-ups.`
+                  : hasPrivate
+                    ? "Only this browser can read it."
+                    : "Nothing here yet. Only you will see this number."
             }
           />
           <BalancePane
@@ -279,12 +287,12 @@ export function VaultHome({ actions }: { actions: readonly VaultActionInfo[] }) 
           </h2>
           <ul
             className={`gl-card divide-y divide-line overflow-hidden ${
-              extras.length > 1 ? "sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0" : ""
+              extras.length > 1 ? `sm:grid sm:divide-x sm:divide-y-0 ${extras.length > 2 ? "sm:grid-cols-3" : "sm:grid-cols-2"}` : ""
             }`}
           >
             {extras.map((a) => (
               <li key={a.id} className="min-w-0">
-                <ActionTile action={a} blocked={null} compact />
+                <ActionTile action={a} blocked={vaultActionBlocked(a, { known: privateKnown, hasPrivate })} compact />
               </li>
             ))}
           </ul>
@@ -490,6 +498,7 @@ export function VaultActionIcon({ id, size = 18 }: { id: VaultActionId; size?: n
       {id === "receive" && <path d="M17 7L7 17M15 17H7V9" {...p} />}
       {id === "swap" && <path d="M5 8.5h13m0 0l-3.5-3.5M18 8.5L14.5 12M19 15.5H6m0 0l3.5-3.5M6 15.5L9.5 19" {...p} />}
       {id === "cashout" && <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" {...p} />}
+      {id === "topups" && <path d="M12 7v5l3 2M20 12a8 8 0 1 1-2.5-5.8M20 3.5v3.2h-3.2" {...p} />}
       {id === "trade" && <path d="M4 17l4.5-5 3.5 3 7-8M15 7h4v4" {...p} />}
       {id === "send" && <path d="M4.5 11.5L19.5 4.5l-7 15-2-6-6-2z" {...p} />}
     </svg>

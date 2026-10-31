@@ -51,6 +51,7 @@ const {
   GIVE_UP_AFTER_MS,
   JOB_TTL_SEC,
   MAX_DELAY_MS,
+  liveTtlSec,
   MIN_DELAY_MS,
   SENDING_STALE_MS,
   REPROVE_MIN_LEAD_MS,
@@ -66,7 +67,7 @@ const {
 const { markFor, nextMark, reconcileCashOuts, releaseGoneCashOut } = await import("../src/lib/cashOutLater");
 const { roundDownToWhole, splitMaybeSent, splitNotes } = await import("../src/lib/cashOutSplit");
 const { findCashOutLink } = await import("../src/lib/cashOutPlan");
-const { activeSpendableNotes, cashOutPending, saveLocalNote } = await import("../src/lib/shield");
+const { activeSpendableNotes, cashOutPending, notesToMove, proofLoose, saveLocalNote } = await import("../src/lib/shield");
 const { getActiveNetwork, getNetwork } = await import("../src/lib/networks");
 const { getAllNotes } = await import("../src/lib/noteVault");
 const { RelaySubmitError } = await import("../src/lib/relay/client");
@@ -205,6 +206,7 @@ await test("send time is drawn inside the window, never right away", () => {
   assert.equal(MAX_DELAY_MS, 24 * 60 * 60 * 1000);
   // a job waiting its longest, then retrying until it gives up, is still on record
   assert.ok(JOB_TTL_SEC * 1000 > MAX_DELAY_MS + GIVE_UP_AFTER_MS);
+  assert.ok(liveTtlSec({ sendAfter: T0 + MAX_DELAY_MS }, T0) * 1000 > MAX_DELAY_MS + GIVE_UP_AFTER_MS);
 });
 
 // ---------------------------------------------------------------- the runner
@@ -469,7 +471,7 @@ await test("nextMark: each job status for the note", () => {
   assert.equal(nextMark(sentMark, view("sent", { updatedAt: T0 - 24 * 3_600_000 })), null);
 });
 
-await test("a waiting cash out is out of the balance; one that came back is spendable", () => {
+await test("a waiting cash out is out of the balance, and one that came back stays out until its note has moved", () => {
   const net = getActiveNetwork();
   const base = {
     chainId: net.chainId,
@@ -504,7 +506,13 @@ await test("a waiting cash out is out of the balance; one that came back is spen
     .map((x) => x.id)
     .filter((id) => id.startsWith("t-"))
     .sort();
-  assert.deepEqual(ids, ["t-1", "t-4", "t-5", "t-6"]);
+  // its proof is still good until the note is spent, however old the mark
+  assert.deepEqual(ids, ["t-1"]);
+  const moving = notesToMove(getAllNotes())
+    .map((x) => x.id)
+    .filter((id) => id.startsWith("t-"))
+    .sort();
+  assert.deepEqual(moving, ["t-4", "t-5", "t-6"]);
 });
 
 // ---------------------------------------------------------------- a different amount
@@ -986,10 +994,11 @@ await test("5. a note goes back only when its own chain shows it unspent", async
   assert.equal(await reconcileCashOuts(env), true);
   assert.equal(noteById(spentNote.id).cashOut!.state, "sent", "spent after all: on its way, the chain retires it");
   assert.equal(noteById(unread.id).cashOut!.state, "scheduled", "chain unread: left as it is");
-  assert.equal(noteById(unspent.id).cashOut!.state, "failed", "relay and chain agree: back in the balance");
+  assert.equal(noteById(unspent.id).cashOut!.state, "failed", "relay and chain agree: it came back");
+  assert.equal(proofLoose(noteById(unspent.id)), true, "and its note moves before it can be spent");
   assert.equal(noteById(elsewhere.id).cashOut!.state, "scheduled", "another network's note is not read on this one");
   const spendable = new Set(activeSpendableNotes(getAllNotes()).map((n) => n.id));
-  assert.deepEqual([spentNote, unread, unspent, elsewhere].map((n) => spendable.has(n.id)), [false, false, true, false]);
+  assert.deepEqual([spentNote, unread, unspent, elsewhere].map((n) => spendable.has(n.id)), [false, false, false, false]);
 });
 
 await test("5. sent but not landed: back only on a reverted receipt with the note unspent", async () => {
