@@ -13,10 +13,12 @@ import {
   BRIDGE_MAX_USD,
   BRIDGE_MIN_USD,
   SWAP_GAS_RESERVE_WEI,
+  bridgeFeeLines,
   chainLogo,
   expensiveRoute,
   privateBridgeable,
   swapSource,
+  type BridgeAppFee,
   type BridgeChain,
   type BridgeQuote,
   type BridgeStatus,
@@ -28,7 +30,7 @@ import { useAppBalance, useAppSendTransaction, useAppTxReceipt, useDemo } from "
 import { MAINNET_ENABLED, type GloamChainId } from "@/lib/networks";
 import { originChain } from "@/lib/originChains";
 import { useVaultStatus } from "@/lib/passkey";
-import { dropUnsentNote, saveLocalNote, updateLocalNote, type LocalNote } from "@/lib/shield";
+import { dropUnsentNote, formatFeePercent, saveLocalNote, updateLocalNote, type LocalNote } from "@/lib/shield";
 import { connectSolana, paySolana, useSolanaWallets, type SolanaAccount, type SolanaWallet } from "@/lib/solanaWallet";
 import { track } from "@/lib/track";
 import { failedBeforeSend, surelyNotSent, walletDeclined, walletErrorText } from "@/lib/walletErrors";
@@ -1283,10 +1285,12 @@ function BridgeSheet({
                   {Number(stage.quote.receive.minimum).toFixed(2)} {stage.quote.receive.symbol}
                 </dd>
               </div>
-              <div className="flex min-h-11 items-center justify-between gap-3">
-                <dt className="text-mute">Bridge fee</dt>
-                <dd className="tnum text-right text-foreground">about ${stage.quote.feeUsd.toFixed(2)}</dd>
-              </div>
+              {feeRows(stage.quote, "Bridge fee").map(([k, v]) => (
+                <div key={k} className="flex min-h-11 items-center justify-between gap-3">
+                  <dt className="text-mute">{k}</dt>
+                  <dd className="tnum text-right text-foreground">{v}</dd>
+                </div>
+              ))}
               <div className="flex min-h-11 items-center justify-between gap-3">
                 <dt className="text-mute">Arrives</dt>
                 <dd className="text-right text-foreground">
@@ -1422,7 +1426,7 @@ function PrivateReview({
       </span>,
     ],
     ["On", q.receive.chain],
-    [q.sameChain ? "Swap fee" : "Bridge fee", q.feeUsd < 0.01 ? "Under a cent" : `about $${fmtMoney(q.feeUsd)}`],
+    ...feeRows(q, q.sameChain ? "Swap fee" : "Bridge fee"),
     ...(q.gasUsd !== null && q.gasUsd >= 0.01
       ? ([["Network fee", `about $${fmtMoney(q.gasUsd)} on ${q.send.chain}`]] as [string, React.ReactNode][])
       : q.evmTxs
@@ -1638,12 +1642,12 @@ function SwapReview({
             {Number(quote.receive.minimum).toFixed(2)} {quote.receive.symbol}
           </dd>
         </div>
-        <div className="flex min-h-11 items-center justify-between gap-3">
-          <dt className="text-mute">Swap fee</dt>
-          <dd className="tnum text-right text-foreground">
-            {quote.feeUsd < 0.01 ? "Under a cent" : `about $${quote.feeUsd.toFixed(2)}`}
-          </dd>
-        </div>
+        {feeRows(quote, "Swap fee").map(([k, v]) => (
+          <div key={k} className="flex min-h-11 items-center justify-between gap-3">
+            <dt className="text-mute">{k}</dt>
+            <dd className="tnum text-right text-foreground">{v}</dd>
+          </div>
+        ))}
         <div className="flex min-h-11 items-center justify-between gap-3">
           <dt className="text-mute">Network fee</dt>
           <dd className="text-right text-foreground">A few cents of {quote.send.symbol}</dd>
@@ -1731,7 +1735,7 @@ function SwapPrice({ quote, from, to }: { quote: BridgeQuote | null; from: strin
     ],
     ["Rate", quote ? rateLine(quote) : wait],
     ["At least", quote ? `${fmtMoney(Number(quote.receive.minimum))} ${to}` : wait],
-    ["Swap fee", quote ? (quote.feeUsd < 0.01 ? "Under a cent" : `about $${fmtMoney(quote.feeUsd)}`) : wait],
+    ...(quote ? feeRows(quote, "Swap fee") : ([["Swap fee", wait]] as [string, React.ReactNode][])),
     ["Network fee", `A few cents of ${from}`],
   ];
   return (
@@ -1747,6 +1751,13 @@ function SwapPrice({ quote, from, to }: { quote: BridgeQuote | null; from: strin
       {quote && <CostWarning quote={quote} />}
     </>
   );
+}
+
+/** Relay's fee under `label`, then Gloam's own on a line of its own when it takes one (BRIDGE_FEE_BPS). */
+function feeRows(q: { feeUsd: number; appFee: BridgeAppFee | null }, label: string): [string, string][] {
+  const { relayUsd, app } = bridgeFeeLines(q);
+  const said = (usd: number) => (usd < 0.01 ? "Under a cent" : `about $${fmtMoney(usd)}`);
+  return [[label, said(relayUsd)], ...(app ? ([[`Gloam fee (${formatFeePercent(app.bps)})`, said(app.usd)]] as [string, string][]) : [])];
 }
 
 /**

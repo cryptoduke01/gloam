@@ -8,6 +8,11 @@
  * balance as usual. Nothing here touches the shielded pool: the bridge is a
  * public step, like any deposit.
  *
+ * What a bridge costs is Relay's fee, plus Gloam's own cut when BRIDGE_FEE_BPS
+ * and BRIDGE_FEE_RECIPIENT are set (bridgeFeeSetting, off by default). Both show
+ * as their own lines before anything is sent. A deposit made directly from a
+ * wallet on the vault's chain stays free.
+ *
  * Relay only delivers to mainnets, so the panel stays hidden while Gloam runs
  * on testnet. NEXT_PUBLIC_BRIDGE_PREVIEW=1 shows it anyway for local review.
  *
@@ -16,6 +21,7 @@
  * without a deposit address, which needs an API key). Logos are kept in
  * public/brand so a browser never calls a third party to draw them.
  */
+import { isAddress } from "viem";
 import type { ChainFamily, GloamNetwork } from "./networks";
 
 export type BridgeChainKind = "evm" | "svm" | "tvm" | "bvm";
@@ -199,6 +205,38 @@ export function validRefundAddress(kind: BridgeChainKind, v: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(v);
 }
 
+/** Gloam's cut of a quote, when it takes one: the rate, and what Relay priced it at in dollars. */
+export type BridgeAppFee = { bps: number; usd: number };
+
+/** Gloam's optional cut of a bridge, from the server's env: on only with a whole rate of 1 to 100 bps and a valid recipient. */
+export function bridgeFeeSetting(env: Record<string, string | undefined>): { bps: number; recipient: string } | null {
+  const bps = Number(env.BRIDGE_FEE_BPS ?? "");
+  const recipient = env.BRIDGE_FEE_RECIPIENT ?? "";
+  return Number.isInteger(bps) && bps > 0 && bps <= 100 && isAddress(recipient) ? { bps, recipient } : null;
+}
+
+/** The appFees Relay takes: left out when Gloam takes no cut. */
+export function relayAppFees(setting: { bps: number; recipient: string } | null): { recipient: string; fee: string }[] | undefined {
+  return setting ? [{ recipient: setting.recipient, fee: String(setting.bps) }] : undefined;
+}
+
+/**
+ * Gloam's cut as a quote should show it. It is what Relay says it charged; when
+ * Relay leaves it out, the rate on what is paid, so a cut that is on always has
+ * a line. Null with no cut.
+ */
+export function quotedAppFee(setting: { bps: number } | null, relayUsd: unknown, paidUsd: number): BridgeAppFee | null {
+  if (!setting) return null;
+  const said = Number(relayUsd ?? NaN);
+  const usd = Number.isFinite(said) && said > 0 ? said : Number.isFinite(paidUsd) ? (paidUsd * setting.bps) / 10_000 : 0;
+  return { bps: setting.bps, usd: Math.round(usd * 100) / 100 };
+}
+
+/** The fee lines of a quote: Relay's, then Gloam's when it takes one. `feeUsd` holds both. */
+export function bridgeFeeLines(q: { feeUsd: number; appFee: BridgeAppFee | null }): { relayUsd: number; app: BridgeAppFee | null } {
+  return { relayUsd: Math.max(Math.round((q.feeUsd - (q.appFee?.usd ?? 0)) * 100) / 100, 0), app: q.appFee };
+}
+
 export type BridgeQuote = {
   requestId: string;
   /** Empty for a swap, which the wallet signs as `tx` instead. */
@@ -206,7 +244,9 @@ export type BridgeQuote = {
   tx: { to: string; data: string; value: string; chainId: number } | null;
   send: { amount: string; symbol: string; chain: string; chainId: number; logo: string; usd: number | null };
   receive: { amount: string; minimum: string; symbol: string; chain: string; logo: string };
+  /** Everything taken in fees: Relay's, and Gloam's own when it takes one (appFee). */
   feeUsd: number;
+  appFee: BridgeAppFee | null;
   /** Relay's estimate in seconds; Bitcoin also waits for its own confirmations. */
   timeSec: number;
   bitcoin: boolean;
@@ -240,7 +280,9 @@ export type PrivateBridgeQuote = {
   receive: { amount: string; symbol: string; chain: string; logo: string };
   /** The swap's price buffer, back to the wallet as the stablecoin. */
   extra: string | null;
+  /** Everything taken in fees: Relay's, and Gloam's own when it takes one (appFee). */
   feeUsd: number;
+  appFee: BridgeAppFee | null;
   /** The paying chain's own network fee, when Relay prices it. */
   gasUsd: number | null;
   timeSec: number;
