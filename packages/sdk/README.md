@@ -104,7 +104,7 @@ What is different on mainnet:
 - **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
-The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
+The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below. The vault has the same address on every mainnet, so it can't say which chain you mean: from 0.4.4 a builder given a mainnet vault as `poolAddress` and no `chainId` throws and asks for it, before it proves.
 
 ### Base
 
@@ -556,7 +556,7 @@ ETHEREUM_SEPOLIA_USDC, ETHEREUM_SEPOLIA_USDG, ETHEREUM_SEPOLIA_PYUSD, ETHEREUM_S
 | `buildPrivateSendIntent(p)` | Transfer witness, then `transfer(...)`; returns payment + change notes | Live, mainnet and testnet |
 | `buildPrivateTradeIntent(p)` | Sealed-swap witness, then `sealedSwap(...)` | Retired; refused on mainnet |
 
-Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every builder takes `chainId` (default Robinhood Chain testnet) and `poolAddress` (default: Gloam's pool on that chain). `buildPrivateTradeIntent` produces a valid intent for the testnets, but the sealed trade is retired and switched off on every live pool, so its call reverts.
+Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every builder takes `chainId` (default Robinhood Chain testnet, required with a mainnet vault as `poolAddress`) and `poolAddress` (default: Gloam's pool on that chain). `buildPrivateTradeIntent` produces a valid intent for the testnets, but the sealed trade is retired and switched off on every live pool, so its call reverts.
 
 ### Notes
 
