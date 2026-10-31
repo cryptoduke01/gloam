@@ -1146,6 +1146,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       legacyNote?: { secret: string; amount: number; decimals?: number };
       mpp?: PaymentChallenge;
       quote?: string;
+      /** The URL the agent asked for: note labels name its host, not the payee's text. */
+      requested?: string;
     }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
@@ -1329,7 +1331,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           pending: "create",
           origin: "change",
           createdTx: null,
-          label: `change from paying ${paidLabel(req.resource)}`,
+          label: `change from paying ${paidLabel(opts.requested ?? req.resource)}`,
         });
       }
       // The payment note is the payee's money once it lands, and only this server
@@ -1350,7 +1352,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         pending: "create",
         origin: "payment",
         createdTx: null,
-        label: `payment for ${paidLabel(req.resource)}`,
+        label: `payment for ${paidLabel(opts.requested ?? req.resource)}`,
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
       header = encodePaymentHeader(payment.payload);
@@ -1736,7 +1738,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // For Agent Wormhole: the 402 body as the payee sent it, when the price came in it. A price in
       // a header is what gets paid whatever the body says, so the check reads that price, decoded.
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
-      const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}) });
+      const paid = await payPrivately(req, { handle: note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}) });
       if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
       // What to present: the MPP credential when paying an MPP challenge, else the x402 header.
       const presented = mpp ? paid.authorization : paid.header;
