@@ -127,6 +127,32 @@ test("a testnet limits config never approves mainnet assets by itself", () => {
   assert.equal(checkSpend(byAddress, spend({ network: "tempo-mainnet", chainId: 4217, asset: TEMPO_PATHUSD }), [], NOW)?.code, "asset_not_allowed");
 });
 
+test("Robinhood Chain mainnet's newer assets: their symbols name them, and ETH still needs the network named", () => {
+  const p = resolveAgent(
+    "bot",
+    {
+      recipients: [PAYEE],
+      assets: {
+        PONS: { maxPerPayment: "5", maxPerDay: "10" },
+        CASHCAT: { maxPerPayment: "5", maxPerDay: "10" },
+        AI: { maxPerPayment: "5", maxPerDay: "10" },
+        ORBIO: { maxPerPayment: "5", maxPerDay: "10" },
+        ETH: { network: "robinhood-mainnet", maxPerPayment: "1", maxPerDay: "2" },
+      },
+    },
+    "test"
+  );
+  assert.deepEqual(p.assets.map((a) => [a.symbol, a.chainId, a.decimals]), [
+    ["PONS", 4663, 18],
+    ["CASHCAT", 4663, 18],
+    ["AI", 4663, 18],
+    ["ORBIO", 4663, 18],
+    ["ETH", 4663, 18],
+  ]);
+  const bare = resolveAgent("bot", { recipients: [PAYEE], assets: { ETH: { maxPerPayment: "1", maxPerDay: "2" } } }, "test");
+  assert.equal(bare.assets[0]!.chainId, GLOAM_NETWORKS.robinhood.chainId, "a bare ETH stays the testnet's");
+});
+
 test("naming a mainnet network in limits allows exactly that asset there", () => {
   const p = resolveAgent(
     "bot",
