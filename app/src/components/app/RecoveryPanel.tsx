@@ -61,14 +61,11 @@ function nextTry(ts: number | null): string {
 
 const NO_BACKUP_YET = "Your private balance is only in this browser for now.";
 
-/** What to say after turning on: "backed up" only when that is true. */
-function turnedOn(added: number): Exclude<Message, null> {
+/** What to say after turning on: "backed up" only when that is true. With no backup yet the card already says so, and why. */
+function turnedOn(added: number): Message {
   const s = recoveryState();
+  if (!s.savedAt) return null;
   const back = added ? `${plural(added, "balance")} came back from your backup.` : "";
-  if (!s.savedAt) {
-    const text = `Recovery is set up, but there's no backup yet. ${NO_BACKUP_YET} This browser keeps trying on its own.`;
-    return { tone: "wait", text: back ? `${back} ${text}` : text };
-  }
   if (s.error) return { tone: "wait", text: `Recovery is on. ${back ? `${back} ` : ""}The latest save didn't go through, so this browser keeps trying.` };
   return { tone: "ok", text: `Recovery is on. ${back || "Your private balance is backed up."}` };
 }
@@ -112,7 +109,7 @@ function useRecovery() {
 
   const wallet = (): RecoveryWallet => ({ address: address as string, sign: (message) => signMessageAsync({ message }) });
 
-  async function run(kind: Exclude<Busy, null>, task: () => Promise<string | Exclude<Message, null>>) {
+  async function run(kind: Exclude<Busy, null>, task: () => Promise<string | Message>) {
     if (busy) return;
     setBusy(kind);
     setMessage(null);
@@ -242,7 +239,8 @@ export function RecoverySettingsCard() {
                   {noBackup ? "No backup yet" : "Recovery is on"}
                 </p>
                 <p className="mt-0.5 text-[13px] text-mute">
-                  {state.source === "passkey" ? "With a passkey" : "With your wallet"} · {state.busy ? "backing up…" : ago(state.savedAt)}
+                  {state.source === "passkey" ? "With a passkey" : "With your wallet"}
+                  {state.busy ? " · backing up…" : noBackup ? "" : ` · ${ago(state.savedAt)}`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

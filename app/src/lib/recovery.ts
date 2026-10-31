@@ -893,7 +893,8 @@ function schedule() {
 function resume() {
   if (!config || stopping) return;
   armRetry();
-  if (unfinished(config)) schedule();
+  // a wait in the settings has its own timer, and a save now would only go twice
+  if (unfinished(config) && !config.retryAt && !config.next) schedule();
 }
 
 let started = false;

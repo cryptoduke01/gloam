@@ -869,10 +869,13 @@ await test("refused for longer than the page is open: the next page load picks i
   // the hour goes by with the page closed
   localStorage.setItem(CONFIG_KEY, await vault.sealJson({ ...saved, retryAt: Date.now() - 1_000 }));
   fault = null;
+  const before = puts();
   const page = await openPage("later");
   page.startRecoverySync();
   await until(() => Boolean(page.recoveryState().savedAt), "it saved on load, with nobody asking");
   assert.deepEqual(await backupNotes(await v2Keys(ALICE)), ["note-a"]);
+  await sleep(2_700);
+  assert.equal(puts(), before + 1, "once: the wait's own timer is enough");
   await page.turnOffRecovery({ deleteBackup: false });
 });
 
