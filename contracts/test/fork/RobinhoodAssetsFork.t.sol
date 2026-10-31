@@ -254,6 +254,19 @@ contract RobinhoodAssetsForkTest is Test {
         _throughTheVault("ORBIO");
     }
 
+    /// The asset is a public input of the cash-out proof: a note can't leave as another asset.
+    function test_fork_a_note_cannot_leave_as_another_asset() public {
+        Case memory c = _case("PONS");
+        address other = fx.readAddress(_key("CASHCAT", ".address"));
+        uint256 cashcatHeld = IERC20F(other).balanceOf(address(VAULT));
+        _deposit(c);
+        _send(c);
+        vm.prank(relayer);
+        vm.expectRevert(ShieldPoolCore.InvalidProof.selector);
+        VAULT.unshield(fx.readBytes(_key("PONS", ".cashOut.proof")), fx.readBytes32(_key("PONS", ".cashOut.root")), fx.readBytes32(_key("PONS", ".cashOut.nullifier")), other, recipient, c.payment);
+        assertEq(IERC20F(other).balanceOf(address(VAULT)), cashcatHeld);
+    }
+
     /// ETH's stray sweep still cannot reach notes or owed fees once ETH is listed.
     function test_fork_sweep_cannot_touch_eth_notes() public {
         _landTheLimits();
