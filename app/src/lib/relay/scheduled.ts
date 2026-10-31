@@ -51,12 +51,18 @@
  * wait (liveTtlSec). Nobody is at the screen when one comes due, so a passing
  * problem gets a day (DATED_GIVE_UP_AFTER_MS), not 2 hours, and is tried every
  * few minutes (DATED_RETRY_MS) so it never crowds out what is due now.
- * Dated jobs are refused where they lose money (DATED_OFF_CHAINS).
+ * Dated jobs are refused where they lose money (DATED_OFF_CHAINS), and until the
+ * relay can seal them at rest (lib/relay/jobSeal).
+ *
+ * A dated job can carry a webhook. A run hands back what to tell it
+ * (takeNotices) and the route delivers that once every job is settled
+ * (lib/relay/webhook): a notice can't change what happens to a job.
  *
  * This file is the logic and an in-memory store (for tests and local runs);
  * lib/relay/scheduledStore.ts keeps jobs in Redis in production.
  */
 import type { Address, Hex } from "viem";
+import type { JobNotice } from "./webhook";
 
 /** The longest a cash out in a window may wait. A live job's record (liveTtlSec) outlasts it, give-up time included. */
 export const MAX_DELAY_MS = 24 * 60 * 60 * 1000;
@@ -77,6 +83,8 @@ export const MAX_DATED_DAYS = 90;
 const DATED_OFF_CHAINS: ReadonlySet<number> = new Set([1]);
 export const DATED_OFF_MESSAGE =
   "Agent top-ups aren't offered on Ethereum. Each one takes two relay transactions, and gas there costs more than the fee brings in.";
+/** A dated job is held for months, so it waits until the relay can seal it at rest. */
+export const DATED_KEY_OFF_MESSAGE = "Agent top-ups aren't switched on yet. Nothing was set aside.";
 
 export function datedOff(chainId: number): boolean {
   return DATED_OFF_CHAINS.has(chainId);
@@ -134,6 +142,10 @@ export type CashOutJob = {
   maybeSent?: boolean;
   /** Set for a day ahead, not a window: it gives up after DATED_GIVE_UP_AFTER_MS. */
   dated?: boolean;
+  /** Where to say this one failed or is held, and which series it is (lib/relay/webhook). Sealed at rest. */
+  webhook?: JobWebhook;
+  /** What the webhook was last told, so each is said once. */
+  notified?: JobNotice["body"]["status"];
   /** Waiting for gas: the runner looks at the job again no sooner than this (ms). */
   notBefore?: number;
   /**
@@ -144,6 +156,8 @@ export type CashOutJob = {
   /** A short, public reason when it failed (never a secret). */
   reason?: string;
 };
+
+export type JobWebhook = { url: string; series: string };
 
 /** What a person may read about a job: no proof, no inputs. */
 export type JobView = Pick<CashOutJob, "id" | "chainId" | "sendAfter" | "status" | "updatedAt" | "hash" | "reason">;
@@ -240,6 +254,10 @@ export interface JobStore {
   lock(id: string, ttlSec: number): Promise<(() => Promise<void>) | null>;
   /** Takes an id out of the due queue (its record is gone or over). */
   forget(id: string): Promise<void>;
+  /** Moves an id back in the queue without reading its record. */
+  defer?(id: string, at: number): Promise<void>;
+  /** Seals a few waiting jobs again under the current key, while an old one is kept. Returns how many. */
+  reseal?(limit: number): Promise<number>;
 }
 
 /** Jobs in this process only: for tests and a local dev server without Redis. */
@@ -360,6 +378,40 @@ export async function runDueJobs(store: JobStore, deps: RunDeps, limit = 20, bud
     }
     try {
       out.push({ id, status: await runOne(store, deps, id) });
+    } catch (e) {
+      // Sealed with a key the relay doesn't have: it can't be read, which is not the
+      // same as gone. It stays on record and behind what is due, until the key is back.
+      if ((e as Error)?.name !== "JobSealError") throw e;
+      await store.defer?.(id, deps.now() + DATED_RETRY_MS).catch(() => {});
+      out.push({ id, status: "skipped" });
+    } finally {
+      await release();
+    }
+  }
+  return out;
+}
+
+/**
+ * What a run has to tell webhooks: each job with one that ended unsent, or could
+ * not go out on time, once for each. Marked told before anything is sent, so a
+ * failed delivery is never tried on a later pass, and a job that is over drops
+ * its webhook here. Reads only what the run reports, so a job with none costs
+ * one extra read when it fails, and nothing when it goes out.
+ */
+export async function takeNotices(store: JobStore, results: RunResult[], now: number): Promise<JobNotice[]> {
+  const out: JobNotice[] = [];
+  for (const r of results) {
+    const status = r.status === "failed" || r.status === "expired" ? r.status : r.status === "scheduled" ? "held" : null;
+    if (!status) continue;
+    const release = await store.lock(r.id, 30).catch(() => null);
+    if (!release) continue;
+    try {
+      const job = await store.get(r.id);
+      if (!job?.webhook || job.notified === status) continue;
+      await store.put({ ...job, notified: status, webhook: status === "held" ? job.webhook : undefined });
+      out.push({ url: job.webhook.url, body: { status, series: job.webhook.series, at: new Date(now).toISOString() } });
+    } catch {
+      /* a notice is never worth a job's trouble */
     } finally {
       await release();
     }
@@ -373,7 +425,10 @@ export async function runDueJobs(store: JobStore, deps: RunDeps, limit = 20, bud
  * hash: kept, it would tie the person's visit to the cash out.
  */
 function retire(job: CashOutJob, status: JobStatus): CashOutJob {
-  return isLive(status) ? job : { ...job, proof: "0x", createdAt: 0 };
+  if (isLive(status)) return job;
+  // a webhook is kept only for the notice this ending owes it (takeNotices)
+  const owed = status === "failed" || status === "expired";
+  return { ...job, proof: "0x", createdAt: 0, webhook: owed ? job.webhook : undefined };
 }
 
 async function settle(store: JobStore, job: CashOutJob, status: JobStatus, now: number, extra: Partial<CashOutJob> = {}) {

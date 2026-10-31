@@ -38,6 +38,7 @@ delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
 delete process.env.CHAINALYSIS_API_KEY;
 process.env.GLOAM_RELAYER_PRIVATE_KEY = generatePrivateKey();
+process.env.GLOAM_RELAY_JOB_KEY = Buffer.alloc(32, 7).toString("hex");
 
 const {
   DATED_GIVE_UP_AFTER_MS,
@@ -65,15 +66,20 @@ const {
   runDueJobs,
   sendDayProblem,
 } = await import("../src/lib/relay/scheduled");
-const { scheduledStore } = await import("../src/lib/relay/scheduledStore");
+const { scheduledStore, unpackJob } = await import("../src/lib/relay/scheduledStore");
 const {
+  FUNDING_WAIT_LEAVES,
+  FUNDING_WAIT_MS,
   TOP_UPS_MAX,
   TOP_UP_EVERY,
   agentGasLine,
   cancelTopUp,
   finishTopUps,
+  fundingGate,
+  fundingWaitLine,
   largestTopUpNote,
   mostTopUps,
+  pickReadyNote,
   pickTopUpNote,
   reconcileTopUps,
   setUpTopUps,
@@ -87,7 +93,7 @@ const {
   topUpWhen,
 } = await import("../src/lib/agentTopUp");
 const { checkPlan, schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
-const { cashOutJobStatus, dismissReturnedCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
+const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
 const { HANDOVER_MS, RELAY_SPEND_LOCK_MS, activeSpendableNotes, exportNotesBackup, notesToMove, proofLoose, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import(
   "../src/lib/shield"
@@ -258,6 +264,13 @@ function fakeRedis() {
   return { kv, ttls, zset, exec };
 }
 
+/** The key of a job's spend pointer: it names the job, and carries a tag, not the nullifier. */
+function pointerOf(r: ReturnType<typeof fakeRedis>, j: CashOutJob): string {
+  const key = [...r.kv].find(([k, v]) => k.startsWith("gloam:cashout:nf:") && v === j.id)?.[0];
+  assert.ok(key, "a pointer exists");
+  return key;
+}
+
 /** Runs `fn` with the Redis store on, over the fake. */
 async function withRedis<T>(fn: (r: ReturnType<typeof fakeRedis>) => Promise<T>): Promise<T> {
   const r = fakeRedis();
@@ -281,7 +294,7 @@ await test("in Redis a job 90 days out keeps its record and its spend's pointer 
     const j = job({ sendAfter: Date.now() + lead, dated: true });
     await scheduledStore().create(j);
     const rec = `gloam:cashout:job:${j.id}`;
-    const nf = `gloam:cashout:nf:${j.chainId}:${j.nullifier}`;
+    const nf = pointerOf(r, j);
     assert.ok(r.ttls.get(rec)! * 1000 >= lead + GAS_WAIT_MAX_MS - 2_000, "record");
     assert.ok(r.ttls.get(nf)! * 1000 >= lead + GAS_WAIT_MAX_MS - 2_000, "pointer");
     assert.equal(r.zset.get(j.id), j.sendAfter, "in the queue for its own time");
@@ -299,9 +312,9 @@ await test("in Redis a proof swapped in months ahead does not cut the record bac
     assert.equal(out.ok, true);
     const rec = `gloam:cashout:job:${j.id}`;
     assert.ok(r.ttls.get(rec)! * 1000 > lead, `ttl ${r.ttls.get(rec)}s`);
-    assert.ok(r.ttls.get(`gloam:cashout:nf:${j.chainId}:${j.nullifier}`)! * 1000 > lead);
-    assert.equal(JSON.parse(r.kv.get(rec)!).dated, true, "still dated");
-    assert.equal(JSON.parse(r.kv.get(rec)!).sendAfter, j.sendAfter, "same send time");
+    assert.ok(r.ttls.get(pointerOf(r, j))! * 1000 > lead);
+    assert.equal(unpackJob(r.kv.get(rec)!)!.dated, true, "still dated");
+    assert.equal(unpackJob(r.kv.get(rec)!)!.sendAfter, j.sendAfter, "same send time");
   });
 });
 
@@ -313,7 +326,7 @@ await test("in Redis a finished job goes back to the short record, without its p
     assert.equal(await cancelJob(store, j.id, Date.now()), "cancelled");
     const rec = `gloam:cashout:job:${j.id}`;
     assert.equal(r.ttls.get(rec), JOB_DONE_TTL_SEC);
-    assert.equal(JSON.parse(r.kv.get(rec)!).proof, "0x");
+    assert.equal(unpackJob(r.kv.get(rec)!)!.proof, "0x");
     assert.equal(r.zset.has(j.id), false, "out of the queue");
   });
 });
@@ -686,7 +699,7 @@ function vaultNote(id: string, wei: bigint, over: Partial<LocalNote> = {}): Loca
     commitment: hex32(0x500000 + n),
     secret: hex32(0x600000 + n),
     nullifier: hex32(0x700000 + n),
-    createdAt: T0,
+    createdAt: Date.now() - 30 * DAY_MS,
     bound: true,
     scheme: "poseidon",
     status: "open",
@@ -697,6 +710,8 @@ function vaultNote(id: string, wei: bigint, over: Partial<LocalNote> = {}): Loca
   saveLocalNote(note);
   return note;
 }
+/** A vault long past any note here: only the tests of the rule itself use another. */
+const busyVault = { leafCount: 10_000_000, leafOf: () => undefined };
 const byId = (id: string) => getAllNotes().find((n) => n.id === id)!;
 const spendable = (ids: string[]) => activeSpendableNotes(getAllNotes()).filter((n) => ids.includes(n.id));
 const total = (ns: LocalNote[]) => sum(ns.map((n) => BigInt(n.amountWei)));
@@ -747,6 +762,7 @@ function deps(s: ReturnType<typeof fakeSplitter>, proveFailsOn?: number) {
     },
     schedule: scheduleNoteCashOut,
     newId: () => `series-${++planSeq}`,
+    vault: async () => busyVault,
   };
 }
 function reset() {
@@ -1011,8 +1027,8 @@ await test("the series comes out of the smallest note that covers it, never one 
     vaultNote("pick-9", 200n * U, { cashOut: { job: "j", at: T0, to: AGENT, state: "failed" } }),
   ];
   assert.equal(pickTopUpNote(notes, ASSET, 250n * U)!.id, "pick-2");
-  assert.equal(pickTopUpNote(notes, ASSET, 150n * U)!.id, "pick-9", "one that came back is plain money");
-  assert.equal(pickTopUpNote(notes, ASSET.toUpperCase().replace("0X", "0x"), 150n * U)!.id, "pick-9");
+  assert.equal(pickTopUpNote(notes, ASSET, 150n * U)!.id, "pick-2", "one that came back is blocked until it has moved");
+  assert.equal(pickTopUpNote(notes, ASSET.toUpperCase().replace("0X", "0x"), 150n * U)!.id, "pick-2");
   assert.equal(pickTopUpNote(notes, ASSET, 901n * U), null, "a series comes out of one note");
   assert.equal(largestTopUpNote(notes, ASSET), 900n * U);
 });
@@ -1493,23 +1509,207 @@ await test("while the move lands the money counts nowhere twice, and a relay tha
   await assertDead(sent);
 });
 
-await test("a top-up whose proof never left needs no move, and cash outs in a window keep their rule", async () => {
+await test("a top-up whose proof never left needs no move", async () => {
   // split off, then stopped before the proof went: plain money once kept, with no relay transaction
   const never = vaultNote("never-1", 50n * U, { cashOutPlan: { plan: "pn", piece: 1, of: 2, to: AGENT, window: "day", topUp: { day: tomorrow(), everyDays: 7 } } });
   assert.deepEqual(notesToMove([never]), []);
   keepPiece(never.id);
   assert.deepEqual(notesToMove([byId(never.id)]), []);
   assert.ok(activeSpendableNotes(getAllNotes()).some((n) => n.id === never.id));
+});
 
-  // an ordinary cash out later: unmarked, and spendable the moment it is cancelled, as before
+// ---------------------------------------------------------------- every cash out, not only a top-up
+
+/** A real note in the vault with a cash out in a window handed to the relay, tagged as a piece or not. */
+async function laterCashOut(piece: boolean) {
+  const h = await handedOver();
+  await updateLocalNote(h.note.id, { cashOutPlan: piece ? { plan: `lp-${realSeq}`, piece: 1, of: 2, to: AGENT, window: "6h" } : undefined });
+  const job = await scheduleNoteCashOut(byId(h.note.id), h.call, "6h");
+  return { ...h, job };
+}
+
+await test("a cash out later, and a private cash out's piece, go the same way: marked, leased, cancelled, moved, dead", async () => {
+  for (const piece of [false, true]) {
+    const { note, sent, job } = await laterCashOut(piece);
+    const held = byId(note.id);
+    assert.ok(held.proofOutAt, "marked");
+    assert.equal(held.handoverUntil, undefined, "the lease ended with the reply");
+    await checkUnshieldForLater(active, sent);
+    assert.equal(await cancelCashOut(job.id), "cancelled");
+    await cancelledPiece(note.id);
+    assert.equal(proofLoose(byId(note.id)), true);
+    assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), "blocked");
+    assert.equal(byId(note.id).cashOutPlan, undefined, "a piece stops being one");
+    await moveRevertedNotes(pool.env());
+    assertMoved(note);
+    await assertDead(sent);
+  }
+});
+
+await test("a refused, failed, expired or gone cash out in a window moves too, and a job the relay kept dies with it", async () => {
+  // refused: the relay saw the proof and said no
+  const refusedNow = await handedOver();
+  replies.push({ status: 429, body: { ok: false, code: "rate_limit", error: "Too many." } });
+  await assert.rejects(scheduleNoteCashOut(refusedNow.note, refusedNow.call, "hour"), /Too many/);
+  assert.equal(proofLoose(byId(refusedNow.note.id)), true);
+  await moveRevertedNotes(pool.env());
+  assertMoved(refusedNow.note);
+  await assertDead(refusedNow.sent);
+
+  for (const ending of ["failed", "expired", "gone"] as const) {
+    const { note, sent, job } = await laterCashOut(false);
+    if (ending === "gone") await store.forget(job.id);
+    else await store.put({ ...(await store.get(job.id))!, status: ending, proof: "0x", reason: "Nothing moved." });
+    if (ending === "gone") {
+      assert.equal(await releaseGoneCashOut(byId(note.id), cashEnv(job.id)), true, "the Cancel a job the relay lost");
+    } else {
+      await reconcileTopUps(cashEnv(job.id));
+      assert.equal(byId(note.id).cashOut!.state, ending);
+      assert.ok(returnedCashOutNotes().some((n) => n.id === note.id), "a plain cash out still shows its notice");
+      dismissReturnedCashOut(note.id);
+    }
+    assert.equal(proofLoose(byId(note.id)), true, ending);
+    await moveRevertedNotes(pool.env());
+    assertMoved(note);
+    await assertDead(sent);
+  }
+});
+
+await test("a cash out scheduled before the mark existed is caught when it comes back", async () => {
+  // a browser that scheduled this yesterday: a mark, and no proofOutAt
+  const { note, sent, job } = await laterCashOut(false);
+  await updateLocalNote(note.id, { proofOutAt: undefined });
+  assert.equal(byId(note.id).proofOutAt, undefined);
+  assert.equal(await cancelCashOut(job.id), "cancelled");
+  await cancelledPiece(note.id);
+  assert.ok(byId(note.id).proofOutAt, "the mark says a proof left, so clearing it keeps that");
+  assert.equal(proofLoose(byId(note.id)), true);
+  await moveRevertedNotes(pool.env());
+  assertMoved(note);
+  await assertDead(sent);
+});
+
+await test("a cash out now, which is no job, leaves no mark", () => {
+  const n = vaultNote("now-1", 5n * U);
+  assert.equal(n.proofOutAt, undefined);
+  assert.equal(proofLoose(n), false);
+  assert.ok(activeSpendableNotes(getAllNotes()).some((x) => x.id === n.id));
+});
+
+// ---------------------------------------------------------------- not from a fresh deposit
+
+const HOUR = 3_600_000;
+const NOW = T0 + 100 * DAY_MS;
+const quiet = (leafCount: number) => ({ leafCount, leafOf: () => undefined });
+const depositId = (at: number) => `${at}-0xabcdef12`;
+function note(id: string, createdAt: number, leafIndex: number | undefined, over: Partial<LocalNote> = {}): LocalNote {
+  return { id, chainId: active.chainId, pool: active.pool!, asset: ASSET, amountWei: (600n * U).toString(), commitment: hex32(BigInt(0x9000000) + BigInt(leafIndex ?? 7)), secret: hex32(1), createdAt, leafIndex, bound: true, scheme: "poseidon", status: "open", source: "local", ...over };
+}
+
+await test("a deposit needs 6 hours and 3 later leaves, both, and the boundary is exact", () => {
+  assert.equal(FUNDING_WAIT_MS, 6 * HOUR);
+  assert.equal(FUNDING_WAIT_LEAVES, 3);
+  const at = NOW - 6 * HOUR;
+  const n = note(depositId(at), at, 100);
+  assert.deepEqual(fundingGate(n, [n], quiet(104), NOW), { ok: true }, "6 hours and leaves 101, 102 and 103");
+  assert.deepEqual(fundingGate(n, [n], quiet(104), NOW - 1), { ok: false, from: NOW, leavesLeft: 0 }, "a moment short of the time");
+  assert.deepEqual(fundingGate(n, [n], quiet(103), NOW), { ok: false, from: NOW, leavesLeft: 1 }, "a leaf short");
+  assert.deepEqual(fundingGate(n, [n], quiet(101), NOW + 30 * DAY_MS), { ok: false, from: NOW, leavesLeft: 3 }, "any amount of time is not enough alone");
+  assert.deepEqual(fundingGate(n, [n], quiet(10_000), NOW - HOUR), { ok: false, from: NOW, leavesLeft: 0 }, "nor any number of leaves");
+});
+
+await test("the owner's own leaves don't count: a setup can't make its own room", () => {
+  const at = NOW - 7 * HOUR;
+  const n = note(depositId(at), at, 100);
+  const mine = [note("co-a", at, 101), note("chg-b", at, 102), note("co-c", at, 103, { leafIndex: undefined, commitment: hex32(0xc0c) })];
+  const vault = { leafCount: 104, leafOf: (c: string) => (c === hex32(0xc0c) ? 103 : undefined) };
+  assert.deepEqual(fundingGate(n, [n, ...mine], vault, NOW), { ok: false, from: NOW - HOUR, leavesLeft: 3 });
+  assert.deepEqual(fundingGate(n, [n, ...mine], { ...vault, leafCount: 106 }, NOW), { ok: false, from: NOW - HOUR, leavesLeft: 1 });
+  assert.deepEqual(fundingGate(n, [n, ...mine], { ...vault, leafCount: 107 }, NOW), { ok: true });
+});
+
+await test("a balance split or moved from a deposit answers for that deposit, however many steps back", () => {
+  const at = NOW - HOUR;
+  const dep = note(depositId(at), at, 100, { status: "recovered" });
+  const co = note("co-1", NOW - 20 * DAY_MS, 500, { status: "recovered", sweptFrom: { id: dep.id, nullifier: hex32(1) } });
+  const chg = note("chg-2", NOW - 20 * DAY_MS, 501, { sweptFrom: { id: co.id, nullifier: hex32(2) } });
+  const gate = fundingGate(chg, [dep, co, chg], quiet(10_000), NOW);
+  assert.equal(gate.ok, false, "its own age says nothing: the deposit behind it is an hour old");
+  assert.equal(!gate.ok && gate.from, at + FUNDING_WAIT_MS);
+  assert.deepEqual(fundingGate(chg, [dep, co, chg], quiet(10_000), NOW + 6 * HOUR), { ok: true });
+  // a reshield after a public swap is a deposit too
+  const vt = note("vt-9", at, 100);
+  assert.equal(fundingGate(vt, [vt], quiet(10_000), NOW).ok, false);
+});
+
+await test("a payment received has no deposit to point at, so it does not wait; neither does what came from it", () => {
+  const imp = note("imp-1", NOW - 60_000, 100);
+  assert.deepEqual(fundingGate(imp, [imp], quiet(101), NOW), { ok: true }, "a minute old, nothing after it");
+  const secured = note("swp-1", NOW - 30_000, 102, { sweptFrom: { id: imp.id, nullifier: hex32(1) } });
+  assert.deepEqual(fundingGate(secured, [imp, secured], quiet(103), NOW), { ok: true });
+  const chg = note("chg-3", NOW - 1_000, 103, { sweptFrom: { id: secured.id, nullifier: hex32(2) } });
+  assert.deepEqual(fundingGate(chg, [imp, secured, chg], quiet(104), NOW), { ok: true });
+});
+
+await test("where the trail stops short the last note found stands in, and a leaf that can't be placed counts as none later", () => {
+  // change from a private payment keeps no link, and old rows are trimmed
+  const chg = note("chg-4", NOW - HOUR, 100);
+  assert.equal(fundingGate(chg, [chg], quiet(10_000), NOW).ok, false, "fresh, and nothing says what it came from");
+  const orphan = note("chg-5", NOW - 30 * DAY_MS, 100, { sweptFrom: { id: "trimmed", nullifier: hex32(3) } });
+  assert.deepEqual(fundingGate(orphan, [orphan], quiet(10_000), NOW), { ok: true }, "old enough itself");
+  const nowhere = note("dep-1", NOW - 30 * DAY_MS, undefined);
+  assert.deepEqual(fundingGate(nowhere, [nowhere], quiet(10_000), NOW), { ok: false, from: nowhere.createdAt + FUNDING_WAIT_MS, leavesLeft: 3 });
+});
+
+await test("the rule is checked at setup against the chain: nothing moves, and an unread vault stops it", async () => {
   reset();
-  const plain = vaultNote("plain-later", 50n * U);
-  const job = await scheduleNoteCashOut(plain, { chainId: active.chainId, proof: PROOF, root: hex32(0x77), nullifier: plain.nullifier!, asset: ASSET, to: AGENT, amount: 50n * U }, "6h");
-  assert.equal(byId(plain.id).proofOutAt, undefined);
-  await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${job.id}`));
-  cancelledPiece(plain.id);
-  assert.equal(proofLoose(byId(plain.id)), false);
-  assert.ok(activeSpendableNotes(getAllNotes()).some((n) => n.id === plain.id));
+  const at = Date.now() - HOUR;
+  const fresh = vaultNote(depositId(at), 600n * U, { createdAt: at });
+  const s = fakeSplitter();
+  const d = deps(s);
+  await assert.rejects(start(fresh, s), (e: Error) => {
+    assert.match(e.message, /too recent to start from/);
+    assert.match(e.message, /after /);
+    return true;
+  });
+  assert.equal(s.calls(), 0, "nothing split");
+  assert.equal(asked.length, 0, "nothing asked of the relay");
+  assert.equal(byId(fresh.id).status, "open");
+  // the leaves come from what the chain says now, not from what the note knows
+  const old = vaultNote("dep-gate-1", 600n * U, { leafIndex: 50 });
+  const quietChain = { ...d, vault: async () => quiet(51) };
+  await assert.rejects(setUpTopUps({ note: old, owner: ME, agent: AGENT, amount: AMOUNT, every: "week", count: 2, deps: quietChain }), /3 more deposits or payments reach the vault/);
+  // unread: refused, never waved through
+  const down = { ...d, vault: async () => Promise.reject(new Error("Could not read the vault. Try again in a moment.")) };
+  await assert.rejects(setUpTopUps({ note: old, owner: ME, agent: AGENT, amount: AMOUNT, every: "week", count: 2, deps: down }), /Could not read the vault/);
+  assert.equal(s.calls(), 0);
+  // finishing a series goes through the same door
+  const series = { id: "s", to: AGENT, asset: ASSET, amount: AMOUNT, everyDays: 7, of: 4, rows: [], scheduled: 1, settling: false, missing: [{ piece: 2, day: tomorrow() }] };
+  await assert.rejects(finishTopUps({ note: fresh, owner: ME, series, deps: d }), /too recent/);
+  assert.equal(s.calls(), 0);
+});
+
+await test("a series takes the first balance it can start from, and says what the soonest one waits for", () => {
+  const fresher = note(depositId(NOW - HOUR), NOW - HOUR, 100, { amountWei: (600n * U).toString() });
+  const older = note(depositId(NOW - 9 * HOUR), NOW - 9 * HOUR, 90, { amountWei: (900n * U).toString() });
+  const all = [fresher, older];
+  assert.equal(pickReadyNote(all, all, quiet(10_000), NOW).note?.id, older.id, "skips the fresh one");
+  const both = pickReadyNote([fresher, note(depositId(NOW - 2 * HOUR), NOW - 2 * HOUR, 95)], all, quiet(10_000), NOW);
+  assert.equal(both.note, null);
+  assert.ok(both.wait && !both.wait.ok);
+  assert.equal(!both.wait!.ok && both.wait!.from, NOW + 4 * HOUR, "the sooner of the two");
+});
+
+await test("the wait reads plainly, with the time, the leaves, or both", () => {
+  const today = new Date(2027, 5, 15, 9, 0).getTime();
+  const later = new Date(2027, 5, 15, 16, 10).getTime();
+  const both = fundingWaitLine({ ok: false, from: later, leavesLeft: 2 }, today);
+  assert.match(both, /^This balance is too recent to start from: a top-up's proof could point back at your deposit\. You can start after 4:10\sPM, once 2 more deposits or payments reach the vault\.$/);
+  assert.match(fundingWaitLine({ ok: false, from: later, leavesLeft: 0 }, today), /You can start after 4:10\sPM\.$/);
+  assert.match(fundingWaitLine({ ok: false, from: today - 1, leavesLeft: 1 }, today), /You can start once 1 more deposit or payment reaches the vault\.$/);
+  assert.match(fundingWaitLine({ ok: false, from: new Date(2027, 5, 16, 2, 0).getTime(), leavesLeft: 0 }, today), /after tomorrow at 2:00\sAM\.$/);
+  assert.match(fundingWaitLine({ ok: false, from: new Date(2027, 5, 20, 2, 0).getTime(), leavesLeft: 0 }, today), /after Jun 20 at 2:00\sAM\.$/);
+  assert.doesNotMatch(both, /\u2014|anonymous|untraceable/i);
 });
 
 // ---------------------------------------------------------------- off on Ethereum mainnet
@@ -1544,7 +1744,7 @@ await test("the app refuses too, before anything moves, and the demo's pretend r
   reset();
   const eth = vaultNote("eth-1", 600n * U, { chainId: 1 });
   const s = fakeSplitter();
-  assert.throws(() => start(eth, s), /aren't offered on Ethereum/);
+  await assert.rejects(start(eth, s), /aren't offered on Ethereum/);
   assert.equal(s.calls(), 0, "nothing split");
   assert.equal(asked.length, 0, "nothing asked of the relay");
   assert.equal(byId(eth.id).status, "open");

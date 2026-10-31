@@ -234,7 +234,8 @@ export default function DocsAgentsPage() {
         agent&apos;s wallet, and hands each proof to the Gloam relay with its own
         day. The relay picks a random time inside that UTC day and sends it. A
         proof fixes the amount and the wallet, so the relay can send it as it is
-        or not at all, and it holds no key.
+        or not at all, and it holds no spending key. Proofs are kept encrypted, so
+        reading the relay&apos;s store alone gives nobody a proof to send.
       </p>
       <ul>
         <li>
@@ -249,6 +250,14 @@ export default function DocsAgentsPage() {
           money shows in your balance once the move lands.
         </li>
         <li>
+          <strong>Not from a fresh deposit.</strong> A proof carries the vault
+          root it was made against, and a top-up sent with Gloam closed keeps that
+          root. So a series can only start 6 hours after the deposit behind it,
+          once 3 more deposits or payments from others have reached the vault. The
+          screen says when you can start. A payment you received has no deposit of
+          yours to point at, so it does not wait.
+        </li>
+        <li>
           <strong>Setup takes about a minute per top-up,</strong> with the tab
           open. If it stops, nothing is lost: what was scheduled still goes out,
           the rest stays in your private balance, and you can finish the series
@@ -257,6 +266,13 @@ export default function DocsAgentsPage() {
         <li>
           <strong>Each top-up pays the usual 0.25% cash-out fee,</strong> taken
           from that top-up when it goes out.
+        </li>
+        <li>
+          <strong>An alert if one fails, if you want one.</strong> Give an https
+          address and the relay posts <code>status</code>, <code>series</code>{" "}
+          and <code>at</code> to it when a top-up fails or is held. Nothing else
+          is sent, but whoever runs that address learns when it happened. The
+          address is kept encrypted with the job.
         </li>
         <li>
           <strong>On Robinhood Chain, Tempo and Base.</strong> They aren&apos;t

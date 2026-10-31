@@ -23,11 +23,17 @@
  *    until the next sync settles them (lib/claimSweep), like any split.
  * A run stops at the first problem. It never guesses past one.
  *
+ * A proof stays valid until its note is spent, so a piece whose proof reached the
+ * relay and did not go out moves to a fresh note before it can be spent, however
+ * that came about (shield proofLoose): it is not one to schedule again.
+ *
  * A prepaid agent top-up (lib/agentTopUp) is the same run with more pieces,
  * each sent on a day of its own instead of inside a window.
  */
 import type { Address, Hex } from "viem";
-import { cashOutPending, endedPlan, proofLoose, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
+import { moveRevertedNotes, type ClaimEnv } from "./claimSweep";
+import { readDemo } from "./demoFlag";
+import { cashOutPending, endedPlan, markCleared, notesToMove, proofLoose, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
 import { getAllNotes } from "./noteVault";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { proveCashOut, type CashOutCall } from "./cashOutProof";
@@ -113,6 +119,8 @@ export type TopUpRun = {
   everyDays: number;
   /** The most pieces one run may take. */
   most: number;
+  /** Where the relay says this series failed or is held. */
+  webhook?: string;
 };
 
 /**
@@ -148,9 +156,9 @@ export async function runPrivateCashOut(args: {
     of: topUp?.of ?? n,
     to: to[i]!,
     window,
-    ...(topUp ? { topUp: { day: topUp.slots[i]!.day, everyDays: topUp.everyDays } } : {}),
+    ...(topUp ? { topUp: { day: topUp.slots[i]!.day, everyDays: topUp.everyDays, ...(topUp.webhook ? { webhook: topUp.webhook } : {}) } } : {}),
   });
-  const whenOf = (i: number): CashOutWhen => (topUp ? { day: topUp.slots[i]!.day } : window);
+  const whenOf = (i: number): CashOutWhen => (topUp ? { day: topUp.slots[i]!.day, webhook: topUp.webhook } : window);
   const jobs: OwnedCashOutJob[] = [];
   const stop = (i: number, e: unknown): PrivateCashOutResult => {
     piece(i, { state: "stopped" });
@@ -234,9 +242,41 @@ export function keepPiece(noteId: string) {
   updateLocalNote(noteId, { cashOutPlan: endedPlan(planOf(noteId), "kept") });
 }
 
-/** A cancelled cash out: plain money, not a piece still to schedule (a top-up's moves to a fresh note first). Settles once that is on disk. */
+/** A cancelled cash out: plain money, not a piece still to schedule, once it has moved to a fresh note. Settles once that is on disk. */
 export function cancelledPiece(noteId: string): Promise<void> {
-  return updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: endedPlan(planOf(noteId), "cancelled") });
+  const n = getAllNotes().find((x) => x.id === noteId);
+  return n ? updateLocalNote(noteId, { ...markCleared(n), cashOutPlan: endedPlan(n.cashOutPlan, "cancelled") }) : Promise.resolve();
+}
+
+let demoMoving = false;
+
+/** The recording demo has no tree to prove a move against: the app's own whole-note split, on the pretend relay. */
+async function demoMoveNotes(): Promise<void> {
+  if (demoMoving) return;
+  demoMoving = true;
+  try {
+    for (const n of notesToMove(getAllNotes())) {
+      const at = await freshPath(n.commitment).catch(() => null);
+      if (!at) continue;
+      await splitNote({
+        note: n,
+        amount: BigInt(n.amountWei),
+        allowWhole: true,
+        path: at.path,
+        owner: n.from as Address,
+        relayOn: true,
+        sendWithWallet: noWallet,
+        onStatus: () => {},
+      }).catch(() => {});
+    }
+  } finally {
+    demoMoving = false;
+  }
+}
+
+/** Starts moving every note whose proof is still out, so a cancel takes effect now, not at the next sync. */
+export function moveLooseProofs(env?: ClaimEnv): Promise<void> {
+  return readDemo() ? demoMoveNotes() : moveRevertedNotes(env);
 }
 
 // ---------------------------------------------------------------- the person's choice
@@ -286,5 +326,5 @@ export async function schedulePiece(note: LocalNote, deps: Partial<PrivateCashOu
   const path = await d.pathOf(note);
   if (!path) throw new Error(NO_PATH);
   const call = await d.prove(note, tag.to, path, note.chainId);
-  return d.schedule(note, call, tag.topUp ? { day: nextSendDay(tag.topUp.day, Date.now()) } : tag.window);
+  return d.schedule(note, call, tag.topUp ? { day: nextSendDay(tag.topUp.day, Date.now()), webhook: tag.topUp.webhook } : tag.window);
 }

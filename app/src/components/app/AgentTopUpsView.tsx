@@ -17,14 +17,17 @@ import {
   agentGasLine,
   cancelTopUp,
   finishTopUps,
+  fundingWaitLine,
   largestTopUpNote,
   mostTopUps,
   moveLooseProofs,
-  pickTopUpNote,
+  pickReadyNote,
+  readVaultLeaves,
   reconcileTopUps,
   setUpTopUps,
   topUpAhead,
   topUpAmountProblem,
+  topUpCandidates,
   topUpDayLabel,
   topUpDays,
   topUpMinutes,
@@ -36,6 +39,7 @@ import {
   type TopUpEvery,
   type TopUpRow,
   type TopUpSeries,
+  type VaultLeaves,
 } from "@/lib/agentTopUp";
 import { shortAddress } from "@/lib/chain";
 import { findCashOutLink, linkMessage } from "@/lib/cashOutPlan";
@@ -45,7 +49,8 @@ import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { useAppAccount, useDemo } from "@/lib/demo";
 import { countPerson } from "@/lib/people";
 import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
-import { DATED_OFF_MESSAGE, datedOff } from "@/lib/relay/scheduled";
+import { DATED_KEY_OFF_MESSAGE, DATED_OFF_MESSAGE, datedOff } from "@/lib/relay/scheduled";
+import { webhookUrlProblem } from "@/lib/relay/webhookUrl";
 import { publicClientFor } from "@/lib/rhClient";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
@@ -104,6 +109,9 @@ export function AgentTopUpsView() {
   const [relay, setRelay] = useState<RelayNetworkStatus | null>(null);
   const [relayChecked, setRelayChecked] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [vault, setVault] = useState<VaultLeaves | null>(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertUrl, setAlertUrl] = useState("");
 
   const { data: feeBpsRead } = useReadContract({
     address: network.pool ?? undefined,
@@ -190,7 +198,26 @@ export function AgentTopUpsView() {
   const amountBad = amountInput.trim() !== "" && amount === null;
   const totals = amount !== null ? topUpTotals(amount, count, feeBps) : null;
   const largest = token ? largestTopUpNote(open, token.address) : 0n;
-  const source = token && totals ? pickTopUpNote(open, token.address, totals.total) : null;
+  const covering = token && totals ? topUpCandidates(open, token.address, totals.total) : [];
+  const probe = covering[0] ?? null;
+  // The vault as the chain has it: the same check runs again when the series starts.
+  useEffect(() => {
+    if (!probe) return;
+    let live = true;
+    void readVaultLeaves(probe).then(
+      (v) => live && setVault(v),
+      () => live && setVault(null)
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [probe?.id, now]);
+  const pick = vault && covering.length ? pickReadyNote(covering, local, vault, now) : null;
+  const source = pick?.note ?? null;
+  const fundingWait = pick?.wait && !pick.wait.ok ? fundingWaitLine(pick.wait, now) : null;
+  const alertClean = alertUrl.trim();
+  const alertProblem = alertClean ? webhookUrlProblem(alertClean) : null;
   const days = topUpDays(now, every, count);
 
   const agentClean = agent.trim();
@@ -203,7 +230,7 @@ export function AgentTopUpsView() {
       ? topUpAmountProblem(amount, assetDecimals(token.address))
       : null;
   const shortOf =
-    totals && token && !source && !amountProblem
+    totals && token && covering.length === 0 && !amountProblem
       ? largest > 0n
         ? `A series comes out of one balance, and your largest is ${formatAssetLabel(largest, token.address)}.`
         : `Nothing to set aside in ${token.symbol} yet. Add some privately first.`
@@ -221,7 +248,11 @@ export function AgentTopUpsView() {
       })
     : [];
   // They all land in one public wallet, so the total is as visible as any one of them.
-  const link = totals && token ? (findCashOutLink(totals.total, local, token.address, now) ?? findCashOutLink(amount!, local, token.address, now)) : null;
+  // A deposit that is simply recent is not a note here: fundingWait stops the series instead.
+  const link =
+    totals && token
+      ? ([findCashOutLink(totals.total, local, token.address, now), findCashOutLink(amount!, local, token.address, now)].find((l) => l && l.kind !== "recent") ?? null)
+      : null;
 
   const rows = useMemo(() => topUpRows(local), [local]);
   const series = useMemo(() => topUpSeries(local, now), [local, now]);
@@ -234,9 +265,12 @@ export function AgentTopUpsView() {
   const setAside = [...topUpSetAside(rows)].map(([asset, wei]) => formatAssetLabel(wei, asset)).join(", ");
   const unfinished = series.filter((s) => s.missing.length > 0 && !s.settling);
 
+  const topUpsOn = Boolean(relay?.topUps);
   const ready =
     isConnected &&
     relayOk &&
+    topUpsOn &&
+    !alertProblem &&
     !gasHigh &&
     !feeUnknown &&
     HASH_SCHEME === "poseidon" &&
@@ -317,6 +351,7 @@ export function AgentTopUpsView() {
           amount,
           every,
           count,
+          webhook: alertClean || undefined,
           onStatus: setStatus,
           onPiece: (_, p) => p.state === "scheduled" && onScheduled(),
         }),
@@ -324,6 +359,8 @@ export function AgentTopUpsView() {
         setNotice(`${label} set aside for ${count} top-ups. You can close Gloam: the relay sends each one on its day.`);
         setAmountInput("");
         setAgent("");
+        setAlertUrl("");
+        setAlertOpen(false);
       }
     );
   }
@@ -337,9 +374,19 @@ export function AgentTopUpsView() {
       return;
     }
     const need = s.amount * BigInt(s.missing.length);
-    const note = pickTopUpNote(open, s.asset, need);
-    if (!note) {
+    const candidates = topUpCandidates(open, s.asset, need);
+    if (!candidates.length) {
       setError(`Setting up the rest needs ${formatAssetLabel(need, s.asset)} in one balance.`);
+      return;
+    }
+    const leaves = await readVaultLeaves(candidates[0]!).catch(() => null);
+    if (!leaves) {
+      setError("Could not read the vault. Try again in a moment.");
+      return;
+    }
+    const { note, wait } = pickReadyNote(candidates, local, leaves, now);
+    if (!note) {
+      if (wait && !wait.ok) setError(fundingWaitLine(wait, now));
       return;
     }
     if (!(await checkAgent(s.to, s.asset))) return;
@@ -534,6 +581,7 @@ export function AgentTopUpsView() {
             </p>
           )}
 
+          {fundingWait && <CashOutLinkNote text={fundingWait} />}
           {link && <CashOutLinkNote text={linkMessage(link, now)} />}
 
           {totals && token && !amountProblem && (
@@ -557,10 +605,45 @@ export function AgentTopUpsView() {
 
           {agentGasLine(network) && <p className="text-[12.5px] leading-relaxed text-mute">{agentGasLine(network)}</p>}
 
+          {alertOpen ? (
+            <div>
+              <label htmlFor="topup-alert" className="text-[13px] text-mute">
+                Alert address (optional)
+              </label>
+              <input
+                id="topup-alert"
+                className="gl-input mt-2 text-[14px]"
+                placeholder="https://"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={busy}
+                value={alertUrl}
+                onChange={(e) => setAlertUrl(e.target.value)}
+                aria-invalid={Boolean(alertProblem)}
+              />
+              {alertProblem && <p className="mt-1.5 text-[12.5px] leading-relaxed text-warn">{alertProblem}</p>}
+              <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                If a top-up fails or is held, the relay tells this address so. Whoever runs it learns when that happened.
+                It never gets an amount, an address or a proof.
+              </p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setAlertOpen(true)}
+              className="inline-flex min-h-10 items-center text-[13px] text-mute underline underline-offset-4 hover:text-foreground disabled:opacity-50"
+            >
+              Get an alert if a top-up fails
+            </button>
+          )}
+
           {shortOf && <p className="text-[12.5px] leading-relaxed text-warn">{shortOf}</p>}
           {relayChecked && !relayOk && (
             <p className="text-[12.5px] leading-relaxed text-warn">Top-ups need the Gloam relay, which is off right now.</p>
           )}
+          {relayChecked && relayOk && !topUpsOn && <p className="text-[12.5px] leading-relaxed text-warn">{DATED_KEY_OFF_MESSAGE}</p>}
 
           {busy && progress ? (
             <div aria-live="polite" className="rounded-[16px] bg-sealed-soft px-4 py-3.5">

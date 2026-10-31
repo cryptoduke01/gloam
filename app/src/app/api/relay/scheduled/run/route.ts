@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { webhookSecretOk } from "@/lib/telegramBot/rules";
-import { runDueJobs } from "@/lib/relay/scheduled";
+import { runDueJobs, takeNotices } from "@/lib/relay/scheduled";
+import { deliverNotices } from "@/lib/relay/webhook";
 import { scheduledStore, scheduledStoreReady } from "@/lib/relay/scheduledStore";
 import { networkForChain, readSpendState, relayGasHigh, sendUnshieldNow } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/** Jobs sealed again under the current key each pass, while an old key is kept. */
+const RESEAL_PER_PASS = 25;
 
 /**
  * Sends the scheduled cash outs that are due (lib/relay/scheduled). Vercel's
@@ -21,7 +25,8 @@ export async function GET(req: Request) {
   }
   // Without the shared store there is nothing to run: never treat that as "no jobs".
   if (!scheduledStoreReady()) return NextResponse.json({ ok: false, code: "later_off" }, { status: 503 });
-  const results = await runDueJobs(scheduledStore(), {
+  const store = scheduledStore();
+  const results = await runDueJobs(store, {
     now: () => Date.now(),
     readChain: (job) => readSpendState(networkForChain(job.chainId), job.root, job.nullifier),
     gasHigh: (job) => relayGasHigh(networkForChain(job.chainId)),
@@ -39,5 +44,11 @@ export async function GET(req: Request) {
   const tally: Record<string, number> = {};
   for (const r of results) tally[r.status] = (tally[r.status] ?? 0) + 1;
   if (results.length) console.info("gloam_cashout_later_run", JSON.stringify(tally));
+  // After every job is settled, and inside the function's limit: a notice can't touch a job.
+  const notices = await takeNotices(store, results, Date.now()).catch(() => []);
+  if (notices.length) console.info("gloam_cashout_later_notices", JSON.stringify(await deliverNotices(notices)));
+  // While an old key is kept. It logs nothing once there is nothing left to re-seal.
+  const resealed = (await store.reseal?.(RESEAL_PER_PASS).catch(() => 0)) ?? 0;
+  if (resealed) console.info("gloam_cashout_later_resealed", JSON.stringify({ resealed }));
   return NextResponse.json({ ok: true, data: tally });
 }

@@ -290,6 +290,15 @@ await test("status: gas high is said plainly, the relay stays on, and a spike do
   for (const other of all.filter((x) => x.chainId !== 1)) {
     assert.deepEqual([other.gasHigh, other.maxGasGwei, other.gasGwei], [false, null, null], `chain ${other.chainId} has no ceiling`);
   }
+  // top-ups: off everywhere until the relay can seal them, then off on Ethereum mainnet only
+  assert.ok(all.every((x) => x.topUps === false), "no job key: none");
+  process.env.GLOAM_RELAY_JOB_KEY = "11".repeat(32);
+  try {
+    const keyed = await relay.relayStatus();
+    for (const x of keyed) assert.equal(x.topUps, x.chainId !== 1, `chain ${x.chainId}`);
+  } finally {
+    delete process.env.GLOAM_RELAY_JOB_KEY;
+  }
 });
 
 await test("a cash out for later still schedules while gas is high (it waits; the send is checked then)", async () => {

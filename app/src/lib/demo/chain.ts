@@ -56,6 +56,7 @@ export function demoRelayStatus(): RelayNetworkStatus[] {
     gasHigh: false,
     maxGasGwei: null,
     gasGwei: null,
+    topUps: !datedOff(getNetwork(key).chainId),
   }));
 }
 

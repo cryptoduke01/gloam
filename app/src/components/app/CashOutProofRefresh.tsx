@@ -2,13 +2,14 @@
 
 /**
  * Renews the proofs of cash outs waiting with the relay while the app is open
- * (lib/cashOutReprove), on any app page: a little after it opens, when the tab
+ * (lib/cashOutReprove), and moves any note whose proof is still out, on any app page: a little after it opens, when the tab
  * comes back into view, and every couple of minutes while it is in view.
  * Draws nothing. A vault still locked behind its passkey is left alone: this
  * never asks for the unlock.
  */
 import { useEffect } from "react";
 import { reconcileCashOuts } from "@/lib/cashOutLater";
+import { moveLooseProofs } from "@/lib/cashOutPrivately";
 import { refreshWaitingProofs } from "@/lib/cashOutReprove";
 import { dataKeyLocked, unlockNoteVault } from "@/lib/noteVault";
 import { useNetwork } from "./NetworkProvider";
@@ -26,6 +27,8 @@ export function CashOutProofRefresh() {
         await unlockNoteVault();
         // Jobs that already went out or came back are settled first, so none is proven for nothing.
         await reconcileCashOuts().catch(() => false);
+        // One that came back can't be spent until it has moved, and that needs no one on the page.
+        await moveLooseProofs().catch(() => {});
         if (!stopped) await refreshWaitingProofs();
       } catch {
         /* the old proofs stay; a later tick tries again */

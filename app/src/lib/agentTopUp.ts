@@ -36,10 +36,17 @@
  *
  * What it shows: each cash out's amount, the agent's wallet and the time are
  * public, and all of a series land in one wallet, so anyone can add them up.
- * Only where the money came from stays private.
+ * Only where the money came from stays private, so a series can't start from a
+ * deposit that is still fresh. A proof carries the vault root it was made
+ * against, and one that goes out with the app closed keeps that root, which
+ * would otherwise date the series to right after the deposit (fundingGate).
+ *
+ * A series can name a webhook, for the relay to say when a top-up fails or is
+ * held (lib/relay/webhook). Whoever runs that address learns when, and no more.
  */
 import type { Address } from "viem";
-import { moveRevertedNotes, type ClaimEnv } from "./claimSweep";
+import { networkOfNote } from "./cashOutSplit";
+import { moneyInKind } from "./cashOutPlan";
 import {
   cancelCashOut,
   appCashOutEnv,
@@ -51,6 +58,7 @@ import {
 } from "./cashOutLater";
 import {
   cancelledPiece,
+  moveLooseProofs,
   runPrivateCashOut,
   unscheduledPieces,
   type PieceProgress,
@@ -58,13 +66,15 @@ import {
   type PrivateCashOutResult,
   type TopUpRun,
 } from "./cashOutPrivately";
-import { freshPath, splitNote } from "./cashOutSplit";
-import { readDemo } from "./demoFlag";
 import { getAllNotes } from "./noteVault";
 import { DATED_OFF_MESSAGE, DAY_MS, MAX_DATED_DAYS, datedOff, dayOf, nextSendDay } from "./relay/scheduled";
-import { activeSpendableNotes, notesToMove, proofLoose, updateLocalNote, withdrawFeeOf, type LocalNote } from "./shield";
+import { publicClientFor } from "./rhClient";
+import { activeSpendableNotes, proofLoose, updateLocalNote, withdrawFeeOf, type LocalNote } from "./shield";
 import { supportsNativeShield } from "./tokens";
+import { syncShieldTree } from "./treeSync";
 import { topUpsSetAside } from "./vaultHub";
+
+export { moveLooseProofs };
 
 /** How often, in days. */
 export const TOP_UP_EVERY = { week: 7, "2weeks": 14 } as const;
@@ -129,13 +139,103 @@ export function largestTopUpNote(notes: LocalNote[], asset: string): bigint {
   return sourceNotes(notes, asset).reduce((max, n) => (BigInt(n.amountWei) > max ? BigInt(n.amountWei) : max), 0n);
 }
 
-/** The smallest note that covers `total`, so big balances stay whole; null when none does. */
+/** Every note that covers `total`, smallest first, so big balances stay whole. */
+export function topUpCandidates(notes: LocalNote[], asset: string, total: bigint): LocalNote[] {
+  return sourceNotes(notes, asset)
+    .filter((n) => BigInt(n.amountWei) >= total)
+    .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1));
+}
+
+/** The smallest note that covers `total`; null when none does. */
 export function pickTopUpNote(notes: LocalNote[], asset: string, total: bigint): LocalNote | null {
-  return (
-    sourceNotes(notes, asset)
-      .filter((n) => BigInt(n.amountWei) >= total)
-      .sort((a, b) => (BigInt(a.amountWei) < BigInt(b.amountWei) ? -1 : 1))[0] ?? null
-  );
+  return topUpCandidates(notes, asset, total)[0] ?? null;
+}
+
+// ---------------------------------------------------------------- not from a fresh deposit
+
+/** How long a deposit must sit before a series can start from it. */
+export const FUNDING_WAIT_MS = 6 * 60 * 60 * 1000;
+/** And how many leaves other people's money must add to the vault after it. */
+export const FUNDING_WAIT_LEAVES = 3;
+
+/** The vault tree as the chain has it now. */
+export type VaultLeaves = { leafCount: number; leafOf: (commitment: string) => number | undefined };
+
+export type FundingGate = { ok: true } | { ok: false; from: number; leavesLeft: number };
+
+/**
+ * The note a balance's public trail starts from, following its own moves back. A
+ * deposit is the answer. A payment received has no deposit of this person's to
+ * point at: only the payer knows when it landed, and they know that already, so
+ * null. Where the trail stops short (change from a payment keeps no link, and old
+ * rows are trimmed) the last note found stands in for the deposit: it can only
+ * make a series wait a little longer.
+ */
+function fundingNote(n: LocalNote, notes: LocalNote[]): LocalNote | null {
+  let at = n;
+  for (let hop = 0; hop < 64; hop++) {
+    const kind = moneyInKind(at);
+    if (kind === "deposit") return at;
+    if (kind === "received") return null;
+    const up = at.sweptFrom && notes.find((x) => x.id === at.sweptFrom!.id);
+    if (!up) return at;
+    at = up;
+  }
+  return at;
+}
+
+/**
+ * Whether a series can start from `note` now: at least FUNDING_WAIT_MS since its
+ * deposit, and FUNDING_WAIT_LEAVES later leaves in the vault that are not this
+ * browser's own, so the owner's own setup can't count towards it. A leaf that
+ * can't be placed counts as none later.
+ */
+export function fundingGate(note: LocalNote, notes: LocalNote[], vault: VaultLeaves, now: number): FundingGate {
+  const funding = fundingNote(note, notes);
+  if (!funding) return { ok: true };
+  const leafOf = (n: LocalNote) => n.leafIndex ?? vault.leafOf(n.commitment);
+  const leaf = leafOf(funding);
+  let later = 0;
+  if (leaf != null) {
+    const own = new Set(notes.map(leafOf).filter((i): i is number => i != null && i > leaf));
+    later = Math.max(0, vault.leafCount - 1 - leaf - own.size);
+  }
+  const from = funding.createdAt + FUNDING_WAIT_MS;
+  const leavesLeft = Math.max(0, FUNDING_WAIT_LEAVES - later);
+  return now >= from && leavesLeft === 0 ? { ok: true } : { ok: false, from, leavesLeft };
+}
+
+/** The first of these a series can start from now, or what the soonest one waits for. */
+export function pickReadyNote(candidates: LocalNote[], notes: LocalNote[], vault: VaultLeaves, now: number): { note: LocalNote | null; wait: FundingGate | null } {
+  let wait: FundingGate | null = null;
+  for (const note of candidates) {
+    const gate = fundingGate(note, notes, vault, now);
+    if (gate.ok) return { note, wait: null };
+    if (!wait || wait.ok || gate.leavesLeft < wait.leavesLeft || (gate.leavesLeft === wait.leavesLeft && gate.from < wait.from)) wait = gate;
+  }
+  return { note: null, wait };
+}
+
+/** When the owner can start, in plain words. */
+export function fundingWaitLine(gate: Exclude<FundingGate, { ok: true }>, now: number): string {
+  const clock = new Date(gate.from).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const on = new Date(gate.from).toDateString();
+  const day = on === new Date(now).toDateString() ? "" : on === new Date(now + DAY_MS).toDateString() ? "tomorrow at " : `${dayWords(gate.from)} at `;
+  const when = [
+    gate.from > now ? `after ${day}${clock}` : null,
+    gate.leavesLeft > 0 ? `once ${gate.leavesLeft} more ${gate.leavesLeft === 1 ? "deposit or payment reaches" : "deposits or payments reach"} the vault` : null,
+  ].filter(Boolean);
+  return `This balance is too recent to start from: a top-up's proof could point back at your deposit. You can start ${when.join(", ")}.`;
+}
+
+const VAULT_UNREAD = "Could not read the vault. Try again in a moment.";
+
+/** The vault tree on `note`'s own network, read from the chain. */
+export async function readVaultLeaves(note: Pick<LocalNote, "chainId" | "pool">): Promise<VaultLeaves> {
+  const net = networkOfNote(note);
+  const tree = net ? await syncShieldTree(publicClientFor(net), net).catch(() => null) : null;
+  if (!tree) throw new Error(VAULT_UNREAD);
+  return { leafCount: tree.leafCount, leafOf: (c) => tree.indexByCommitment.get(c.toLowerCase()) };
 }
 
 // ---------------------------------------------------------------- setting up
@@ -145,11 +245,15 @@ type RunArgs = {
   owner: Address;
   onStatus?: (s: string) => void;
   onPiece?: (i: number, p: Partial<PieceProgress>) => void;
-  deps?: Partial<PrivateCashOutDeps>;
+  deps?: Partial<PrivateCashOutDeps> & { vault?: typeof readVaultLeaves };
 };
 
-function run(a: RunArgs, agent: Address, amount: bigint, topUp: TopUpRun): Promise<PrivateCashOutResult> {
+async function run(a: RunArgs, agent: Address, amount: bigint, topUp: TopUpRun): Promise<PrivateCashOutResult> {
   if (datedOff(a.note.chainId)) throw new Error(DATED_OFF_MESSAGE);
+  // Against the chain, here at the last moment, whatever the screen last read.
+  const now = Date.now();
+  const gate = fundingGate(a.note, getAllNotes(), await (a.deps?.vault ?? readVaultLeaves)(a.note), now);
+  if (!gate.ok) throw new Error(fundingWaitLine(gate, now));
   const n = topUp.slots.length;
   return runPrivateCashOut({
     ...a,
@@ -166,8 +270,8 @@ function run(a: RunArgs, agent: Address, amount: bigint, topUp: TopUpRun): Promi
  * each scheduled for its day. Resolves with what was scheduled and, when it
  * stopped early, where and why (lib/cashOutPrivately).
  */
-export function setUpTopUps(
-  a: RunArgs & { agent: Address; amount: bigint; every: TopUpEvery; count: number; now?: number }
+export async function setUpTopUps(
+  a: RunArgs & { agent: Address; amount: bigint; every: TopUpEvery; count: number; now?: number; webhook?: string }
 ): Promise<PrivateCashOutResult> {
   if (a.count < TOP_UPS_MIN || a.count > mostTopUps(a.every)) {
     throw new Error(`Pick ${TOP_UPS_MIN} to ${mostTopUps(a.every)} top-ups.`);
@@ -178,6 +282,7 @@ export function setUpTopUps(
     of: a.count,
     everyDays: TOP_UP_EVERY[a.every],
     most: TOP_UPS_MAX,
+    webhook: a.webhook,
   });
 }
 
@@ -191,6 +296,7 @@ export function finishTopUps(a: RunArgs & { series: TopUpSeries; now?: number })
     of: series.of,
     everyDays: series.everyDays,
     most: TOP_UPS_MAX,
+    webhook: series.webhook,
   });
 }
 
@@ -274,6 +380,8 @@ export type TopUpSeries = {
   settling: boolean;
   /** Slots a stopped run never reached whose day has not passed: their money is still in the balance. */
   missing: { piece: number; day: number }[];
+  /** Where the relay says this series failed or is held, when the owner asked it to. */
+  webhook?: string;
 };
 
 /** The series in these notes, soonest first, with the slots still to set up. */
@@ -306,6 +414,7 @@ export function topUpSeries(notes: LocalNote[], now: number): TopUpSeries[] {
       scheduled: rows.filter((r) => r.state === "upcoming" || r.state === "going" || r.state === "sent").length,
       settling: rows.some((r) => r.state === "landing"),
       missing,
+      webhook: tag.topUp!.webhook,
     };
   });
 }
@@ -378,37 +487,6 @@ export async function cancelTopUp(n: LocalNote, env?: CashOutEnv): Promise<strin
     return "The relay no longer holds this top-up, and the network could not confirm it is unspent. Refresh in a moment.";
   }
   return "The relay could not be reached. Try Cancel again in a moment.";
-}
-
-let demoMoving = false;
-
-/** The recording demo has no tree to prove a move against: the app's own whole-note split, on the pretend relay. */
-async function demoMoveNotes(): Promise<void> {
-  if (demoMoving) return;
-  demoMoving = true;
-  try {
-    for (const n of notesToMove(getAllNotes())) {
-      const at = await freshPath(n.commitment).catch(() => null);
-      if (!at) continue;
-      await splitNote({
-        note: n,
-        amount: BigInt(n.amountWei),
-        allowWhole: true,
-        path: at.path,
-        owner: n.from as Address,
-        relayOn: true,
-        sendWithWallet: () => Promise.reject(new Error("This move goes through the Gloam relay.")),
-        onStatus: () => {},
-      }).catch(() => {});
-    }
-  } finally {
-    demoMoving = false;
-  }
-}
-
-/** Starts moving every note whose proof is still out, so a cancel takes effect now, not at the next sync. */
-export function moveLooseProofs(env?: ClaimEnv): Promise<void> {
-  return readDemo() ? demoMoveNotes() : moveRevertedNotes(env);
 }
 
 /**

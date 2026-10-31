@@ -129,6 +129,7 @@ import {
 import {
   cancelledPiece,
   keepPiece,
+  moveLooseProofs,
   readPrivatePref,
   runPrivateCashOut,
   savePrivatePref,
@@ -1344,6 +1345,10 @@ export function MoveView() {
       setError("The relay could not be reached. Try Cancel again in a moment.");
     }
     refreshNotes();
+    // its proof is still good until the note is spent: the note moves now, not at the next sync
+    void moveLooseProofs()
+      .catch(() => {})
+      .finally(refreshNotes);
   }
 
   async function onPrivateSend() {
@@ -2708,7 +2713,7 @@ export function MoveView() {
                   {returnedRows.map((n) => (
                     <div key={n.id} className="rounded-[16px] bg-surface px-4 py-3.5 text-[13px] leading-relaxed">
                       <p className="text-foreground">
-                        {`Your cash out of ${formatAssetLabel(n.amountWei, n.asset)} didn't go out, so nothing moved. It's back in your private balance: cash out again.`}
+                        {`Your cash out of ${formatAssetLabel(n.amountWei, n.asset)} didn't go out, so nothing moved. It moves to a fresh private balance first, so its proof can't be used, then shows in your balance.`}
                       </p>
                       <button
                         type="button"

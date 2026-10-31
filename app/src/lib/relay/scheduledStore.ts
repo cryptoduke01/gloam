@@ -5,8 +5,17 @@
  *
  *   gloam:cashout:job:<id>                 the job, JSON, kept past its send time while live (liveTtlSec), JOB_DONE_TTL_SEC after
  *   gloam:cashout:due                      sorted set of live job ids by when the runner next looks (dueAt)
- *   gloam:cashout:nf:<chainId>:<nullifier> the job scheduled for that spend
+ *   gloam:cashout:nf:<chainId>:<tag>       the job scheduled for that spend: a keyed tag of its nullifier
  *   gloam:cashout:lock:<id>                a short lock while one run works on it
+ *   gloam:cashout:reseal                   how far the re-seal has got, while an old key is kept
+ *
+ * With GLOAM_RELAY_JOB_KEY set, a record's proof, public inputs and webhook are
+ * sealed (lib/relay/jobSeal), and the pointer's key carries a tag instead of the
+ * nullifier, so reading Redis gives nobody a proof to send or a spend to watch.
+ * What stays readable is what the queue needs: its id, chain, times and status. A
+ * record written before that stays readable as it is and is sealed when it is
+ * next saved; a pointer under a bare nullifier is still found, and expires with
+ * its job. Without the key a dated job is refused here too, whatever the route did.
  *
  * A new job is written in one step (CREATE_SCRIPT): the spend's pointer is
  * taken only while no other job holds it, so two requests for one spend can't
@@ -19,10 +28,12 @@
 import { randomUUID } from "crypto";
 import type { Hex } from "viem";
 import { redisConfigured } from "@/lib/tractionStore";
+import { JobSealError, jobKeyReady, pointerTags, rotating, seal, sealedWithOldKey, unseal } from "./jobSeal";
 import { JOB_DONE_TTL_SEC, dueAt, isLive, liveTtlSec, memoryJobStore, type CashOutJob, type JobStore } from "./scheduled";
 
 const PREFIX = "gloam:cashout:";
 const DUE = `${PREFIX}due`;
+const RESEAL_AT = `${PREFIX}reseal`;
 const REDIS_TIMEOUT_MS = 4_000;
 
 async function redis(args: (string | number)[]): Promise<unknown> {
@@ -57,26 +68,55 @@ export const CREATE_SCRIPT = [
   "return ARGV[1]",
 ].join("\n");
 
-function nfKey(chainId: number, nullifier: Hex) {
+function bareNfKey(chainId: number, nullifier: Hex) {
   return `${PREFIX}nf:${chainId}:${nullifier.toLowerCase()}`;
+}
+
+/** Where a spend's pointer is written: under its tag, or with no key as it always was. */
+function nfKey(chainId: number, nullifier: Hex) {
+  const [tag] = pointerTags(nullifier);
+  return tag ? `${PREFIX}nf:${chainId}:${tag}` : bareNfKey(chainId, nullifier);
+}
+
+/** A job as it is kept: sealed when the relay holds a key. A dated job is never written in the clear. */
+export function packJob(job: CashOutJob): string {
+  if (!jobKeyReady()) {
+    if (job.dated) throw new JobSealError("a dated job needs the job key");
+    return JSON.stringify(job);
+  }
+  const { proof, root, nullifier, asset, to, amount, webhook, ...rest } = job;
+  return JSON.stringify({ ...rest, sealed: seal(JSON.stringify({ proof, root, nullifier, asset, to, amount, webhook }), sealBound(job)) });
+}
+
+/** The seal belongs to this job on this chain, and can't be copied onto another. */
+function sealBound(job: Pick<CashOutJob, "id" | "chainId">): string {
+  return `${job.id}:${job.chainId}`;
+}
+
+/** A job from what is kept. Null when it isn't one; JobSealError when it is sealed and can't be opened. */
+export function unpackJob(raw: string): CashOutJob | null {
+  let stored: CashOutJob & { sealed?: string };
+  try {
+    stored = JSON.parse(raw) as typeof stored;
+  } catch {
+    return null;
+  }
+  if (typeof stored.sealed !== "string") return stored;
+  const { sealed, ...rest } = stored;
+  return { ...rest, ...(JSON.parse(unseal(sealed, sealBound(rest))) as Partial<CashOutJob>) };
 }
 
 function redisJobStore(): JobStore {
   return {
     async get(id) {
       const raw = await redis(["GET", `${PREFIX}job:${id}`]);
-      if (typeof raw !== "string") return null;
-      try {
-        return JSON.parse(raw) as CashOutJob;
-      } catch {
-        return null;
-      }
+      return typeof raw === "string" ? unpackJob(raw) : null;
     },
     async put(job) {
       const live = isLive(job.status);
       // Worked out on every save: a job set for months ahead keeps all of it through a proof swap.
       const ttl = liveTtlSec(job, Date.now());
-      await redis(["SET", `${PREFIX}job:${job.id}`, JSON.stringify(job), "EX", live ? ttl : JOB_DONE_TTL_SEC]);
+      await redis(["SET", `${PREFIX}job:${job.id}`, packJob(job), "EX", live ? ttl : JOB_DONE_TTL_SEC]);
       if (live) {
         await redis(["ZADD", DUE, dueAt(job), job.id]);
         await redis(["SET", nfKey(job.chainId, job.nullifier), job.id, "EX", ttl]);
@@ -93,7 +133,7 @@ function redisJobStore(): JobStore {
         `${PREFIX}job:${job.id}`,
         DUE,
         job.id,
-        JSON.stringify(job),
+        packJob(job),
         liveTtlSec(job, Date.now()),
         dueAt(job),
         replace ?? "",
@@ -106,10 +146,14 @@ function redisJobStore(): JobStore {
       return Array.isArray(ids) ? ids.map(String) : [];
     },
     async byNullifier(chainId, nullifier) {
-      const id = await redis(["GET", nfKey(chainId, nullifier)]);
-      if (typeof id !== "string") return null;
-      const job = await this.get(id);
-      return job && isLive(job.status) ? id : null;
+      const keys = [...pointerTags(nullifier).map((tag) => `${PREFIX}nf:${chainId}:${tag}`), bareNfKey(chainId, nullifier)];
+      for (const key of keys) {
+        const id = await redis(["GET", key]);
+        if (typeof id !== "string") continue;
+        const job = await this.get(id);
+        if (job && isLive(job.status)) return id;
+      }
+      return null;
     },
     async lock(id, ttlSec) {
       const key = `${PREFIX}lock:${id}`;
@@ -125,6 +169,38 @@ function redisJobStore(): JobStore {
     },
     async forget(id) {
       await redis(["ZREM", DUE, id]);
+    },
+    async defer(id, at) {
+      await redis(["ZADD", DUE, at, id]);
+    },
+    async reseal(limit) {
+      if (!rotating()) return 0;
+      const from = Number((await redis(["GET", RESEAL_AT])) ?? 0);
+      const ids = await redis(["ZRANGE", DUE, from, from + limit - 1]);
+      const list = Array.isArray(ids) ? ids.map(String) : [];
+      let done = 0;
+      for (const id of list) {
+        // under the job's lock, or an older copy could land on a run's newer save
+        const release = await this.lock(id, 30);
+        if (!release) continue;
+        try {
+          const key = `${PREFIX}job:${id}`;
+          const raw = await redis(["GET", key]);
+          if (typeof raw !== "string") continue;
+          const sealed = (JSON.parse(raw) as { sealed?: string }).sealed;
+          if (sealed && !sealedWithOldKey(sealed)) continue;
+          const job = unpackJob(raw);
+          if (!job) continue;
+          await redis(["SET", key, packJob(job), "KEEPTTL"]);
+          done++;
+        } catch {
+          /* it stays as it is: the old key still opens it, and the next round tries again */
+        } finally {
+          await release();
+        }
+      }
+      await redis(["SET", RESEAL_AT, list.length < limit ? 0 : from + limit, "EX", 3_600]);
+      return done;
     },
   };
 }

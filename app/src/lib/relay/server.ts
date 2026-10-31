@@ -76,6 +76,8 @@ import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, takeInflight } from "@/lib/relay/inflight";
+import { jobKeyReady } from "@/lib/relay/jobSeal";
+import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
@@ -1015,6 +1017,8 @@ export type RelayNetworkStatus = {
   maxGasGwei: string | null;
   /** The gas price in gwei when the chain has a ceiling, else null. */
   gasGwei: string | null;
+  /** Dated jobs can be taken here: the chain has them, and the relay can seal them at rest. */
+  topUps: boolean;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -1091,6 +1095,7 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
         gasHigh: gas.high,
         maxGasGwei: gas.ceilingWei === null ? null : formatGwei(gas.ceilingWei),
         gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
+        topUps: jobKeyReady() && !datedOff(net.chainId),
       };
     })
   );

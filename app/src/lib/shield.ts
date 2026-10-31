@@ -578,11 +578,11 @@ export type LocalNote = {
    */
   swapProofAt?: number;
   /**
-   * When a proof of a cash out of this note left this browser (ms), on disk
-   * before it goes: a prepaid top-up's (lib/agentTopUp). That proof stays valid
-   * until the note is spent, whatever the relay does with its copy, so once no
-   * cash out waits on it the note can't be spent until it has moved to a fresh
-   * note (proofLoose, lib/claimSweep moveRevertedNotes).
+   * When a proof of a cash out of this note left this browser for the relay to
+   * send later (ms), on disk before it goes. That proof stays valid until the note
+   * is spent, whatever the relay does with its copy, so once no cash out waits on
+   * it the note can't be spent until it has moved to a fresh note (proofLoose,
+   * lib/claimSweep moveRevertedNotes).
    */
   proofOutAt?: number;
   /** Until when (ms) that proof is on its way to the relay: see HANDOVER_MS. */
@@ -665,6 +665,8 @@ export type TopUpTag = {
   everyDays: number;
   /** It went back to being plain money in the balance, and how. */
   ended?: "cancelled" | "returned" | "kept";
+  /** Where the relay says this series failed or is held, when the owner asked it to (lib/relay/webhook). */
+  webhook?: string;
 };
 
 /** A piece's tag once it stops being one: gone, or on a top-up, kept for the record of how it ended. */
@@ -703,7 +705,14 @@ export const HANDOVER_MS = 120_000;
  * it, so the note stays out of the balance until the move ends that proof.
  */
 export function proofLoose(n: Pick<LocalNote, "proofOutAt" | "cashOut" | "status">): boolean {
-  return Boolean(n.proofOutAt) && n.status !== "recovered" && !cashOutPending(n);
+  if (n.status === "recovered" || cashOutPending(n)) return false;
+  // a mark that came back says the same, for a cash out scheduled before proofOutAt was kept
+  return Boolean(n.proofOutAt) || Boolean(n.cashOut);
+}
+
+/** What clears a note's cash-out mark. The fact that its proof left is kept, or the note would skip its move. */
+export function markCleared(n: Pick<LocalNote, "proofOutAt" | "cashOut">): Pick<LocalNote, "cashOut" | "proofOutAt"> {
+  return { cashOut: undefined, proofOutAt: n.proofOutAt ?? (n.cashOut ? Date.now() : undefined) };
 }
 
 export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
