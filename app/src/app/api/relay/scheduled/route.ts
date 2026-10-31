@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import {
+  DATED_OFF_MESSAGE,
   DELAY_WINDOWS,
   REPROVE_MIN_LEAD_MS,
   cancelJob,
+  datedOff,
   drawSendAfter,
   drawSendOn,
   isLive,
@@ -91,7 +93,8 @@ function fail(e: unknown) {
  * Schedule a cash out the relay sends later: the same body as a relayed cash
  * out ({ chainId, proof, root, nullifier, asset, to, amount }) plus
  * { window: "hour" | "6h" | "day" } or, for a dated one, { day } (the first
- * millisecond of a UTC day, up to 90 days ahead). It is checked and dry-run
+ * millisecond of a UTC day, up to 90 days ahead, refused on Ethereum mainnet:
+ * lib/relay/scheduled DATED_OFF_CHAINS). It is checked and dry-run
  * now; the send time is drawn at random inside the window or the day. Returns
  * { id, sendAfter, to }. Asking again for the same spend returns the job already waiting; asking with
  * another address (or amount) is a 409 already_scheduled with that job.
@@ -110,6 +113,8 @@ export async function POST(req: Request) {
       throw new RelayError("Pick within an hour, 6 hours or a day.");
     }
     const net = networkForChain(body.chainId);
+    // Before any count or dry run: this is the chain's rule, whatever the app says.
+    if (dated && datedOff(net.chainId)) throw new RelayError(DATED_OFF_MESSAGE, 400, "dated_off");
     const ip = clientIp(req);
     await checkRateLimit(ip);
     const allowed = dated

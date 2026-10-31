@@ -27,7 +27,7 @@
  * each sent on a day of its own instead of inside a window.
  */
 import type { Address, Hex } from "viem";
-import { cashOutPending, endedPlan, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
+import { cashOutPending, endedPlan, proofLoose, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
 import { getAllNotes } from "./noteVault";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { proveCashOut, type CashOutCall } from "./cashOutProof";
@@ -95,7 +95,7 @@ export function checkPlan(note: LocalNote, pieces: bigint[], to: Address[], most
   if (pieces.some((p) => p <= 0n)) throw new Error("Each piece needs an amount.");
   const total = pieces.reduce((s, p) => s + p, 0n);
   if (total > BigInt(note.amountWei)) throw new Error("The pieces add up to more than this balance.");
-  if (note.status === "recovered" || note.sweepPending || cashOutPending(note)) {
+  if (note.status === "recovered" || note.sweepPending || cashOutPending(note) || proofLoose(note)) {
     throw new Error("This balance is busy. Refresh and try again.");
   }
   const moving = spendWaitMessage(note);
@@ -216,10 +216,13 @@ export async function runPrivateCashOut(args: {
  * Pieces of a private cash out that are in the private balance but not
  * scheduled: split off, then stopped (a relay that was down, a closed tab). A
  * piece whose cash out came back shows that notice instead, and one still
- * landing shows once the sync settles it.
+ * landing shows once the sync settles it. A top-up whose proof already left is
+ * not one of these: it moves to a fresh note instead (shield proofLoose).
  */
 export function unscheduledPieces(notes: LocalNote[] = getAllNotes()): LocalNote[] {
-  return notes.filter((n) => n.cashOutPlan && !n.cashOutPlan.topUp?.ended && n.status !== "recovered" && !n.sweepPending && !n.cashOut);
+  return notes.filter(
+    (n) => n.cashOutPlan && !n.cashOutPlan.topUp?.ended && n.status !== "recovered" && !n.sweepPending && !n.cashOut && !n.proofOutAt
+  );
 }
 
 function planOf(noteId: string): CashOutPlanTag | undefined {
@@ -231,9 +234,9 @@ export function keepPiece(noteId: string) {
   updateLocalNote(noteId, { cashOutPlan: endedPlan(planOf(noteId), "kept") });
 }
 
-/** A cancelled cash out: back in the balance as plain money, not a piece still to schedule. */
-export function cancelledPiece(noteId: string) {
-  updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: endedPlan(planOf(noteId), "cancelled") });
+/** A cancelled cash out: plain money, not a piece still to schedule (a top-up's moves to a fresh note first). Settles once that is on disk. */
+export function cancelledPiece(noteId: string): Promise<void> {
+  return updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: endedPlan(planOf(noteId), "cancelled") });
 }
 
 // ---------------------------------------------------------------- the person's choice

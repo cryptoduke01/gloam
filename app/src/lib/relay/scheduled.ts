@@ -51,6 +51,7 @@
  * wait (liveTtlSec). Nobody is at the screen when one comes due, so a passing
  * problem gets a day (DATED_GIVE_UP_AFTER_MS), not 2 hours, and is tried every
  * few minutes (DATED_RETRY_MS) so it never crowds out what is due now.
+ * Dated jobs are refused where they lose money (DATED_OFF_CHAINS).
  *
  * This file is the logic and an in-memory store (for tests and local runs);
  * lib/relay/scheduledStore.ts keeps jobs in Redis in production.
@@ -68,6 +69,18 @@ export const MIN_DELAY_MS = 2 * 60 * 1000;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 /** How many days ahead a dated cash out may be set for. */
 export const MAX_DATED_DAYS = 90;
+/**
+ * Chains that take no dated jobs. A top-up is two relay transactions paid for
+ * out of a 0.25% fee, and at Ethereum mainnet's gas that loses money on any
+ * amount the vault takes. Its testnet keeps them.
+ */
+const DATED_OFF_CHAINS: ReadonlySet<number> = new Set([1]);
+export const DATED_OFF_MESSAGE =
+  "Agent top-ups aren't offered on Ethereum. Each one takes two relay transactions, and gas there costs more than the fee brings in.";
+
+export function datedOff(chainId: number): boolean {
+  return DATED_OFF_CHAINS.has(chainId);
+}
 /** A job that keeps failing for a passing reason (a busy relay, a slow node) gives up this long after its time. */
 export const GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
 /** The same for a dated job: nobody is waiting at the screen to send it again, so it keeps trying for longer. */

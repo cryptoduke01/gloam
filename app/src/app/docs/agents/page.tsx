@@ -243,8 +243,10 @@ export default function DocsAgentsPage() {
         </li>
         <li>
           <strong>Cancel any top-up before it goes.</strong> The money stays in
-          the vault until then, and a cancelled top-up goes back to your private
-          balance.
+          the vault until then. A proof stays valid until its private balance is
+          spent, so a cancelled top-up, or one the relay can&apos;t send, first
+          moves to a fresh private balance. That ends the old proof, and the
+          money shows in your balance once the move lands.
         </li>
         <li>
           <strong>Setup takes about a minute per top-up,</strong> with the tab
@@ -254,8 +256,12 @@ export default function DocsAgentsPage() {
         </li>
         <li>
           <strong>Each top-up pays the usual 0.25% cash-out fee,</strong> taken
-          from that top-up when it goes out. On Ethereum one can wait for gas to
-          come down, for up to 3 days.
+          from that top-up when it goes out.
+        </li>
+        <li>
+          <strong>On Robinhood Chain, Tempo and Base.</strong> They aren&apos;t
+          offered on Ethereum: each one takes two relay transactions, and gas
+          there costs more than the fee brings in.
         </li>
       </ul>
       <p>
@@ -263,8 +269,8 @@ export default function DocsAgentsPage() {
         the time show on the explorer, and they all land in one wallet, so anyone
         can add them up. Only where the money came from stays private. The agent
         needs its own gas: top-ups send stablecoins only, so on Robinhood Chain,
-        where ETH isn&apos;t held in the vault, Base and Ethereum it needs ETH
-        from somewhere else.
+        where ETH isn&apos;t held in the vault, and on Base it needs ETH from
+        somewhere else.
       </p>
       <p>
         Keep your backup current after setting one up. The proofs wait with the

@@ -23,15 +23,23 @@
  *  - a split that may have gone out keeps both its notes out of the balance
  *    until the next sync settles them (lib/claimSweep).
  *
- * The money stays in the vault until each top-up goes out, and a cancelled one
- * makes its note spendable again. A note's tag (LocalNote.cashOutPlan.topUp)
- * outlives its job, so a top-up that ended still shows where it went.
+ * The money stays in the vault until each top-up goes out. Each proof stays
+ * valid until its note is spent, whatever the relay does with its copy, so a
+ * top-up cancelled, refused or given up on moves to a fresh note before it can
+ * be spent (shield proofLoose, lib/claimSweep moveRevertedNotes). The mark that
+ * says so is on disk before the proof leaves, so a closed tab changes nothing.
+ * A note's tag (LocalNote.cashOutPlan.topUp) outlives its job, so a top-up that
+ * ended still shows where it went.
+ *
+ * Not offered on Ethereum mainnet, where gas costs more than the fee brings in
+ * (lib/relay/scheduled DATED_OFF_CHAINS): the relay refuses it as well.
  *
  * What it shows: each cash out's amount, the agent's wallet and the time are
  * public, and all of a series land in one wallet, so anyone can add them up.
  * Only where the money came from stays private.
  */
 import type { Address } from "viem";
+import { moveRevertedNotes, type ClaimEnv } from "./claimSweep";
 import {
   cancelCashOut,
   appCashOutEnv,
@@ -50,8 +58,11 @@ import {
   type PrivateCashOutResult,
   type TopUpRun,
 } from "./cashOutPrivately";
-import { DAY_MS, MAX_DATED_DAYS, dayOf, nextSendDay } from "./relay/scheduled";
-import { activeSpendableNotes, updateLocalNote, withdrawFeeOf, type LocalNote } from "./shield";
+import { freshPath, splitNote } from "./cashOutSplit";
+import { readDemo } from "./demoFlag";
+import { getAllNotes } from "./noteVault";
+import { DATED_OFF_MESSAGE, DAY_MS, MAX_DATED_DAYS, datedOff, dayOf, nextSendDay } from "./relay/scheduled";
+import { activeSpendableNotes, notesToMove, proofLoose, updateLocalNote, withdrawFeeOf, type LocalNote } from "./shield";
 import { supportsNativeShield } from "./tokens";
 import { topUpsSetAside } from "./vaultHub";
 
@@ -138,6 +149,7 @@ type RunArgs = {
 };
 
 function run(a: RunArgs, agent: Address, amount: bigint, topUp: TopUpRun): Promise<PrivateCashOutResult> {
+  if (datedOff(a.note.chainId)) throw new Error(DATED_OFF_MESSAGE);
   const n = topUp.slots.length;
   return runPrivateCashOut({
     ...a,
@@ -205,6 +217,8 @@ export function topUpState(n: LocalNote): TopUpState {
   if (ended === "cancelled" || ended === "kept" || mark?.state === "cancelled") return "cancelled";
   if (ended === "returned" || mark?.state === "expired" || mark?.state === "failed") return "returned";
   if (mark) return n.status === "recovered" ? "sent" : mark.state === "sent" ? "going" : "upcoming";
+  // its proof went to the relay and never became a job: refused, or the reply was lost
+  if (n.proofOutAt) return "returned";
   // spent some other way before it was ever scheduled
   if (n.status === "recovered") return "cancelled";
   return n.sweepPending ? "landing" : "unscheduled";
@@ -223,6 +237,8 @@ export type TopUpRow = {
   of: number;
   /** When it goes or went (ms): the relay's time once there is one, else midday on its day. */
   at: number;
+  /** On its way back to a fresh note, which ends its proof. Out of the balance until then. */
+  moving: boolean;
 };
 
 /** Every top-up in these notes, soonest first. */
@@ -231,7 +247,14 @@ export function topUpRows(notes: LocalNote[]): TopUpRow[] {
     .filter((n) => n.cashOutPlan?.topUp)
     .map((note) => {
       const tag = note.cashOutPlan!;
-      return { note, state: topUpState(note), piece: tag.piece, of: tag.of, at: note.cashOut?.at ?? tag.topUp!.day + DAY_MS / 2 };
+      return {
+        note,
+        state: topUpState(note),
+        piece: tag.piece,
+        of: tag.of,
+        at: note.cashOut?.at ?? tag.topUp!.day + DAY_MS / 2,
+        moving: proofLoose(note),
+      };
     })
     .sort((a, b) => a.at - b.at);
 }
@@ -264,7 +287,8 @@ export function topUpSeries(notes: LocalNote[], now: number): TopUpSeries[] {
     const anchor = rows[0]!.note;
     const tag = anchor.cashOutPlan!;
     const { day, everyDays } = tag.topUp!;
-    const known = new Set(rows.map((r) => r.piece));
+    // one that came back ahead of its day can be set up again; a cancelled one stays cancelled
+    const known = new Set(rows.filter((r) => r.state !== "returned").map((r) => r.piece));
     const missing: TopUpSeries["missing"] = [];
     for (let piece = 1; piece <= tag.of; piece++) {
       const at = day + (piece - tag.piece) * everyDays * DAY_MS;
@@ -288,7 +312,7 @@ export function topUpSeries(notes: LocalNote[], now: number): TopUpSeries[] {
 
 /** What is set aside now, by asset: money waiting with the relay, out of the balance. A piece not scheduled is still in it. */
 export function topUpSetAside(rows: TopUpRow[]): Map<string, bigint> {
-  return topUpsSetAside(rows.map((r) => r.note));
+  return topUpsSetAside(rows.filter((r) => topUpAhead(r.state)).map((r) => r.note));
 }
 
 function dayWords(at: number): string {
@@ -301,7 +325,7 @@ export function topUpDayLabel(at: number): string {
 }
 
 /** The second line of a row: when, in plain words. */
-export function topUpWhen(r: Pick<TopUpRow, "state" | "at">, now: number): string {
+export function topUpWhen(r: Pick<TopUpRow, "state" | "at"> & { moving?: boolean }, now: number): string {
   const day = dayWords(r.at);
   const clock = new Date(r.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   switch (r.state) {
@@ -316,24 +340,25 @@ export function topUpWhen(r: Pick<TopUpRow, "state" | "at">, now: number): strin
     case "sent":
       return `Sent ${day}`;
     case "returned":
-      return `Didn't go out on ${day}. Nothing moved`;
+      return r.moving ? "Didn't go out. Moving back to your balance" : `Didn't go out on ${day}. Nothing moved`;
     case "cancelled":
-      return `Cancelled, was ${day}`;
+      return r.moving ? "Cancelled. Moving back to your balance" : `Cancelled, was ${day}`;
   }
 }
 
 // ---------------------------------------------------------------- after setup
 
 /**
- * Cancels a waiting top-up. Its note is spendable again and its row stays as
- * cancelled. Returns what to tell the owner when it could not be, else null.
+ * Cancels a waiting top-up. Its row stays as cancelled, and its note moves to a
+ * fresh one (moveLooseProofs) before it can be spent. Returns what to tell the
+ * owner when it could not be cancelled, else null.
  */
 export async function cancelTopUp(n: LocalNote, env?: CashOutEnv): Promise<string | null> {
   const mark = n.cashOut;
   if (!mark) return null;
   const result = await cancelCashOut(mark.job);
   if (result === "cancelled") {
-    cancelledPiece(n.id);
+    await cancelledPiece(n.id);
     return null;
   }
   if (result === "over") {
@@ -347,12 +372,43 @@ export async function cancelTopUp(n: LocalNote, env?: CashOutEnv): Promise<strin
   }
   if (result === "gone") {
     if (await releaseGoneCashOut(n, env).catch(() => false)) {
-      cancelledPiece(n.id);
+      await cancelledPiece(n.id);
       return null;
     }
     return "The relay no longer holds this top-up, and the network could not confirm it is unspent. Refresh in a moment.";
   }
   return "The relay could not be reached. Try Cancel again in a moment.";
+}
+
+let demoMoving = false;
+
+/** The recording demo has no tree to prove a move against: the app's own whole-note split, on the pretend relay. */
+async function demoMoveNotes(): Promise<void> {
+  if (demoMoving) return;
+  demoMoving = true;
+  try {
+    for (const n of notesToMove(getAllNotes())) {
+      const at = await freshPath(n.commitment).catch(() => null);
+      if (!at) continue;
+      await splitNote({
+        note: n,
+        amount: BigInt(n.amountWei),
+        allowWhole: true,
+        path: at.path,
+        owner: n.from as Address,
+        relayOn: true,
+        sendWithWallet: () => Promise.reject(new Error("This move goes through the Gloam relay.")),
+        onStatus: () => {},
+      }).catch(() => {});
+    }
+  } finally {
+    demoMoving = false;
+  }
+}
+
+/** Starts moving every note whose proof is still out, so a cancel takes effect now, not at the next sync. */
+export function moveLooseProofs(env?: ClaimEnv): Promise<void> {
+  return readDemo() ? demoMoveNotes() : moveRevertedNotes(env);
 }
 
 /**

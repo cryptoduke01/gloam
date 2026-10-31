@@ -577,6 +577,16 @@ export type LocalNote = {
    * spends it moves it first (lib/cashOutSplit spendPlanFor).
    */
   swapProofAt?: number;
+  /**
+   * When a proof of a cash out of this note left this browser (ms), on disk
+   * before it goes: a prepaid top-up's (lib/agentTopUp). That proof stays valid
+   * until the note is spent, whatever the relay does with its copy, so once no
+   * cash out waits on it the note can't be spent until it has moved to a fresh
+   * note (proofLoose, lib/claimSweep moveRevertedNotes).
+   */
+  proofOutAt?: number;
+  /** Until when (ms) that proof is on its way to the relay: see HANDOVER_MS. */
+  handoverUntil?: number;
   /** On the fresh note from securing a claim, or a cash-out split: the note it came from (settled together). */
   sweptFrom?: { id: string; nullifier: Hex };
   /**
@@ -679,6 +689,23 @@ export function swapProofWait(n: Pick<LocalNote, "swapProofAt">, now = Date.now(
   return n.swapProofAt ? Math.max(0, n.swapProofAt + RELAY_SPEND_LOCK_MS - now) : 0;
 }
 
+/**
+ * How long a proof gets to reach the relay and come back as a job: twice the
+ * route's 60-second limit. Until the reply says how it went the note is not
+ * moved, by this tab or another, or a sync would end a healthy top-up. It can't
+ * be spent meanwhile either, and a tab closed mid-way simply lets this run out.
+ */
+export const HANDOVER_MS = 120_000;
+
+/**
+ * A proof of this note left the browser and no cash out waits on it any more:
+ * cancelled, refused, given up on or lost. Whoever holds a copy could still send
+ * it, so the note stays out of the balance until the move ends that proof.
+ */
+export function proofLoose(n: Pick<LocalNote, "proofOutAt" | "cashOut" | "status">): boolean {
+  return Boolean(n.proofOutAt) && n.status !== "recovered" && !cashOutPending(n);
+}
+
 export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => Boolean(n.txHash) && n.status !== "recovered");
 }
@@ -689,11 +716,24 @@ export function confirmedNotes(notes: LocalNote[]): LocalNote[] {
  * Excludes recovered and chain-history-only rows without a secret.
  * Excludes historic sender payment rows (id pay-*), a secured claim's fresh
  * note until its move lands (the claimed note still counts until then), a
- * claimed payment the vault has not shown yet, and a note whose cash out is
- * scheduled or on its way.
+ * claimed payment the vault has not shown yet, a note whose cash out is
+ * scheduled or on its way, and a note whose proof is still out (proofLoose).
+ * Every spend picks its notes here, so that is what blocks them.
  */
 export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
-  return notes.filter((n) => holdsSecret(n) && !n.sweepPending && !n.unfunded && !cashOutPending(n));
+  return notes.filter((n) => holdsSecret(n) && !n.sweepPending && !n.unfunded && !cashOutPending(n) && !proofLoose(n));
+}
+
+/** Notes the sync moves now to end a proof still out: a top-up's, and a reverted swap's once the relay takes it. */
+export function notesToMove(notes: LocalNote[], now = Date.now()): LocalNote[] {
+  return notes.filter(
+    (n) =>
+      holdsSecret(n) &&
+      !n.sweepPending &&
+      !n.unfunded &&
+      !cashOutPending(n) &&
+      (proofLoose(n) ? (n.handoverUntil ?? 0) <= now : Boolean(n.swapProofAt) && swapProofWait(n, now) === 0)
+  );
 }
 
 /** Claimed payments waiting for the vault to show them: listed, never counted. */
@@ -1032,6 +1072,8 @@ export function updateLocalNote(
       | "cashOutPlan"
       | "fundsProofAt"
       | "swapProofAt"
+      | "proofOutAt"
+      | "handoverUntil"
       | "vaultSwap"
       | "refundHeld"
     >

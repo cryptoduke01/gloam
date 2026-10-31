@@ -1328,7 +1328,7 @@ export function MoveView() {
     const result = await cancelCashOut(note.cashOut.job);
     if (result === "cancelled") {
       // Back in the balance as plain money: a cancelled piece is not one still to schedule.
-      cancelledPiece(note.id);
+      await cancelledPiece(note.id);
     } else if (result === "over") {
       // It already ended without going out: back in the balance once the chain agrees.
       await reconcileCashOuts().catch(() => false);

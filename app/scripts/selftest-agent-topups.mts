@@ -18,6 +18,13 @@
  * stopped series; cancelling; and a job the relay no longer holds after months
  * away.
  *
+ * A proof stays valid until its note is spent, so a top-up cancelled, refused or
+ * given up on moves to a fresh note before it can be spent. Those tests run the
+ * real move (the SDK sweep, on a real Poseidon tree) and then send the old proof
+ * through the relay's own checks: it passes before the move and fails after it,
+ * across a reload too. Then top-ups off on Ethereum mainnet, in the relay as well
+ * as the app.
+ *
  * Relay keys are throwaways made here; fetch is stubbed.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-agent-topups.mts
@@ -34,6 +41,7 @@ process.env.GLOAM_RELAYER_PRIVATE_KEY = generatePrivateKey();
 
 const {
   DATED_GIVE_UP_AFTER_MS,
+  DATED_OFF_MESSAGE,
   DATED_RETRY_MS,
   DAY_MS,
   DELAY_WINDOWS,
@@ -45,6 +53,7 @@ const {
   MAX_DELAY_MS,
   MIN_DELAY_MS,
   cancelJob,
+  datedOff,
   dayOf,
   drawSendAfter,
   drawSendOn,
@@ -77,13 +86,20 @@ const {
   topUpTotals,
   topUpWhen,
 } = await import("../src/lib/agentTopUp");
-const { schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
-const { dismissReturnedCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
+const { checkPlan, schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
+const { cashOutJobStatus, dismissReturnedCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
-const { RELAY_SPEND_LOCK_MS, activeSpendableNotes, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import("../src/lib/shield");
+const { HANDOVER_MS, RELAY_SPEND_LOCK_MS, activeSpendableNotes, exportNotesBackup, notesToMove, proofLoose, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import(
+  "../src/lib/shield"
+);
 const { getAllNotes } = await import("../src/lib/noteVault");
 const { getActiveNetwork, getNetwork } = await import("../src/lib/networks");
-const { reconcileClaims } = await import("../src/lib/claimSweep");
+const { moveRevertedNotes, reconcileClaims } = await import("../src/lib/claimSweep");
+const { RelayError, checkUnshieldForLater, sendUnshieldNow } = await import("../src/lib/relay/server");
+const { demoScheduleCashOut } = await import("../src/lib/demo/chain");
+const { IncrementalMerkleTreePoseidon, fieldToHex, hexToField, noteCommitmentPoseidon, noteNullifierPoseidon, randomSecretField } = await import(
+  "@gloamtrade/sdk"
+);
 const route = await import("../src/app/api/relay/scheduled/route");
 type CashOutJob = import("../src/lib/relay/scheduled").CashOutJob;
 type ChainView = import("../src/lib/relay/scheduled").ChainView;
@@ -463,6 +479,9 @@ const BLOCK = {
   transactions: [],
   uncles: [],
 };
+/** What the chain shows spent: the fake node answers from it and the vault below writes to it. */
+const chainSpent = new Set<string>();
+let rpcCalls = 0;
 type RpcReq = { id: number; method: string; params?: unknown[] };
 function answer(r: RpcReq): { result?: unknown; error?: { code: number; message: string } } {
   switch (r.method) {
@@ -482,8 +501,9 @@ function answer(r: RpcReq): { result?: unknown; error?: { code: number; message:
     case "eth_estimateGas":
       return { result: "0x1b7740" };
     case "eth_call": {
-      const sel = String((r.params?.[0] as { data?: string }).data).slice(0, 10);
-      if (sel === SEL.spent) return { result: word(false) };
+      const data = String((r.params?.[0] as { data?: string }).data);
+      const sel = data.slice(0, 10);
+      if (sel === SEL.spent) return { result: word(chainSpent.has(`0x${data.slice(10, 74)}`.toLowerCase())) };
       if (sel === SEL.isKnownRoot) return { result: word(true) };
       return { error: { code: -32000, message: `fake node: unknown call ${sel}` } };
     }
@@ -514,6 +534,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     if (method === "GET") return route.GET(callRoute(method, url, init));
     throw new Error(`selftest: unexpected ${method} ${url}`);
   }
+  rpcCalls++;
   if (url.replace(/\/$/, "") !== RPC.replace(/\/$/, "")) throw new Error(`selftest: no network (${url})`);
   const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
   const list = Array.isArray(body) ? body : [body];
@@ -742,6 +763,7 @@ const accounted = (s: ReturnType<typeof fakeSplitter>) => {
     balance: total(activeSpendableNotes(mine)),
     waiting: total(mine.filter(cashOutPending)),
     landing: total(mine.filter((n) => n.sweepPending)),
+    moving: total(mine.filter(proofLoose)),
   };
 };
 
@@ -764,7 +786,7 @@ await test("12 top-ups from a note of exactly that much: 11 splits, each to the 
   assert.deepEqual(rows.map((x) => x.piece), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   assert.ok(rows.every((x) => x.state === "upcoming" && x.of === 12));
   assert.equal(new Set(rows.map((x) => x.note.cashOutPlan!.plan)).size, 1, "one series");
-  assert.deepEqual(accounted(s), { balance: 0n, waiting: 600n * U, landing: 0n }, "nothing counted while it waits");
+  assert.deepEqual(accounted(s), { balance: 0n, waiting: 600n * U, landing: 0n, moving: 0n }, "nothing counted while it waits");
   assert.equal(topUpSetAside(rows).get(ASSET.toLowerCase()), 600n * U);
   assert.deepEqual(unscheduledPieces().filter((n) => s.created.includes(n.id)), []);
 });
@@ -776,7 +798,7 @@ await test("from a bigger note: one split each, and the rest stays plain money i
   const r = await start(src, s, 4);
   assert.equal(r.stoppedAt, null);
   assert.equal(s.calls(), 4);
-  assert.deepEqual(accounted(s), { balance: 800n * U, waiting: 200n * U, landing: 0n });
+  assert.deepEqual(accounted(s), { balance: 800n * U, waiting: 200n * U, landing: 0n, moving: 0n });
   const left = spendable(s.created);
   assert.equal(left.length, 1);
   assert.equal(left[0]!.cashOutPlan, undefined, "the rest is not a top-up");
@@ -793,7 +815,7 @@ await test("a split refused midway: the earlier ones still go, nothing lost, and
   assert.equal(r.maybeSent, false);
   assert.match(r.error!, /busy/);
   assert.equal(s.calls(), 6, "nothing tried past the problem");
-  assert.deepEqual(accounted(s), { balance: 350n * U, waiting: 250n * U, landing: 0n }, "every coin accounted for, once");
+  assert.deepEqual(accounted(s), { balance: 350n * U, waiting: 250n * U, landing: 0n, moving: 0n }, "every coin accounted for, once");
 
   const series = topUpSeries(getAllNotes(), Date.now()).find((x) => x.rows.some((y) => s.created.includes(y.note.id)))!;
   assert.deepEqual(series.missing.map((m) => m.piece), [6, 7, 8, 9, 10, 11, 12]);
@@ -848,7 +870,7 @@ await test("a split that may have gone out: both notes kept out of the balance, 
   assert.equal(r.maybeSent, true);
   assert.equal(r.error, SPLIT_MAYBE_SENT);
   // the note it spends still counts until the sync settles it; the two it made stay out of the balance
-  assert.deepEqual(accounted(s), { balance: 450n * U, waiting: 150n * U, landing: 450n * U });
+  assert.deepEqual(accounted(s), { balance: 450n * U, waiting: 150n * U, landing: 450n * U, moving: 0n });
   const rows = topUpRows(getAllNotes()).filter((x) => s.created.includes(x.note.id));
   assert.equal(rows.find((x) => x.piece === 4)!.state, "landing");
   assert.equal(topUpSetAside(rows).get(ASSET.toLowerCase()), 150n * U, "still landing: not called set aside yet");
@@ -860,7 +882,7 @@ await test("a split that may have gone out: both notes kept out of the balance, 
   assert.deepEqual([series.scheduled, series.settling], [3, true]);
 });
 
-await test("the relay down at scheduling: the top-up stays in the balance, shows, and goes for its own day when scheduled again", async () => {
+await test("the relay down at scheduling: the proof may be out, so the top-up moves back, and its slot can be set up again", async () => {
   reset();
   const src = vaultNote("dep-5", 600n * U);
   const s = fakeSplitter();
@@ -873,20 +895,14 @@ await test("the relay down at scheduling: the top-up stays in the balance, shows
   const r = await setUpTopUps({ note: src, owner: ME, agent: AGENT, amount: AMOUNT, every: "week", count: 12, deps: { ...r0, schedule } });
   assert.equal(r.stoppedAt, 2);
   assert.equal(r.error, "Could not reach the relay. Check your connection.");
-  const left = unscheduledPieces().filter((x) => s.created.includes(x.id));
-  assert.deepEqual(left.map((x) => x.cashOutPlan!.piece), [3]);
-  assert.deepEqual(accounted(s), { balance: 500n * U, waiting: 100n * U, landing: 0n });
-  assert.equal(topUpState(left[0]!), "unscheduled");
+  const third = s.created.map(byId).find((x) => x.cashOutPlan?.piece === 3)!;
+  assert.ok(third.proofOutAt, "marked before the proof went, and nothing says it did not arrive");
+  assert.equal(topUpState(third), "returned");
+  assert.deepEqual(unscheduledPieces().filter((x) => s.created.includes(x.id)), [], "not offered to schedule: it moves");
+  assert.deepEqual(accounted(s), { balance: 450n * U, waiting: 100n * U, landing: 0n, moving: 50n * U }, "every coin, once");
   const series = topUpSeries(getAllNotes(), Date.now()).find((x) => x.rows.some((y) => s.created.includes(y.note.id)))!;
-  assert.equal(series.scheduled, 2, "a top-up not handed to the relay is not called scheduled");
-
-  const day = left[0]!.cashOutPlan!.topUp!.day;
-  const job = await schedulePiece(left[0]!, { pathOf: async () => PATH, prove: r0.prove });
-  assert.equal(asked.at(-1)!.day, day);
-  assert.equal(asked.at(-1)!.window, undefined);
-  assert.ok(job.sendAfter >= day && job.sendAfter < day + DAY_MS);
-  assert.equal(topUpState(byId(left[0]!.id)), "upcoming");
-  assert.deepEqual(accounted(s), { balance: 450n * U, waiting: 150n * U, landing: 0n });
+  assert.equal(series.scheduled, 2, "a top-up the relay does not hold is not called scheduled");
+  assert.deepEqual(series.missing.map((m) => m.piece), [3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "its slot comes back");
 });
 
 await test("a top-up scheduled again after its day passed goes tomorrow, not never", async () => {
@@ -898,16 +914,30 @@ await test("a top-up scheduled again after its day passed goes tomorrow, not nev
   assert.ok(job.sendAfter >= dayOf(Date.now()) + DAY_MS);
 });
 
-await test("a proof that fails, and a rate limit midway: each stops the run with the money safe", async () => {
+await test("a proof that fails never left: the top-up stays one to schedule, for its own day", async () => {
   reset();
   const src = vaultNote("dep-7", 600n * U);
   const s = fakeSplitter();
   const r = await start(src, s, 12, 3);
   assert.equal(r.stoppedAt, 2);
   assert.equal(r.jobs.length, 2);
-  assert.deepEqual(unscheduledPieces().filter((x) => s.created.includes(x.id)).map((x) => x.cashOutPlan!.piece), [3]);
-  assert.deepEqual(accounted(s), { balance: 500n * U, waiting: 100n * U, landing: 0n });
+  const left = unscheduledPieces().filter((x) => s.created.includes(x.id));
+  assert.deepEqual(left.map((x) => x.cashOutPlan!.piece), [3]);
+  assert.equal(left[0]!.proofOutAt, undefined);
+  assert.equal(topUpState(left[0]!), "unscheduled");
+  assert.deepEqual(accounted(s), { balance: 500n * U, waiting: 100n * U, landing: 0n, moving: 0n });
+  assert.deepEqual(notesToMove([left[0]!]), [], "no proof out, so nothing to move");
 
+  const day = left[0]!.cashOutPlan!.topUp!.day;
+  const job = await schedulePiece(left[0]!, { pathOf: async () => PATH, prove: deps(s).prove });
+  assert.equal(asked.at(-1)!.day, day);
+  assert.equal(asked.at(-1)!.window, undefined);
+  assert.ok(job.sendAfter >= day && job.sendAfter < day + DAY_MS);
+  assert.equal(topUpState(byId(left[0]!.id)), "upcoming");
+  assert.deepEqual(accounted(s), { balance: 450n * U, waiting: 150n * U, landing: 0n, moving: 0n });
+});
+
+await test("a rate limit midway: the relay saw that proof, so that top-up moves back and the rest is safe", async () => {
   reset();
   const src2 = vaultNote("dep-8", 600n * U);
   const s2 = fakeSplitter();
@@ -920,7 +950,7 @@ await test("a proof that fails, and a rate limit midway: each stops the run with
   const r2 = await setUpTopUps({ note: src2, owner: ME, agent: AGENT, amount: AMOUNT, every: "week", count: 12, deps: { ...d, schedule } });
   assert.equal(r2.stoppedAt, 8);
   assert.match(r2.error!, /Too many/);
-  assert.deepEqual(accounted(s2), { balance: 200n * U, waiting: 400n * U, landing: 0n });
+  assert.deepEqual(accounted(s2), { balance: 150n * U, waiting: 400n * U, landing: 0n, moving: 50n * U });
 });
 
 await test("a closed tab mid-split: the notes are kept, the next sync lands them, and the top-up shows as not scheduled", async () => {
@@ -999,24 +1029,29 @@ async function live(count = 3) {
   return { s, rows: topUpRows(getAllNotes()).filter((x) => s.created.includes(x.note.id)) };
 }
 
-await test("cancelling a top-up makes its note spendable again, and it stays on the list as cancelled", async () => {
+await test("cancelling a top-up keeps it out of the balance until it has moved, and it stays on the list as cancelled", async () => {
   const { s, rows } = await live(3);
   const target = rows[1]!.note;
+  assert.ok(target.proofOutAt, "marked when it went to the relay");
   assert.equal(await cancelTopUp(target), null);
   const after = byId(target.id);
   assert.equal(after.cashOut, undefined);
   assert.equal(topUpState(after), "cancelled");
-  assert.deepEqual(spendable(s.created).map((n) => n.id), [target.id], "spendable, once");
+  assert.deepEqual(spendable(s.created).map((n) => n.id), [], "nothing can spend it yet");
   assert.ok(!unscheduledPieces().some((n) => n.id === target.id), "not a top-up still to schedule");
+  assert.deepEqual(notesToMove([after]).map((n) => n.id), [target.id], "and the sync moves it");
   assert.equal(accounted(s).waiting, 100n * U);
-  assert.equal(topUpSetAside(topUpRows(getAllNotes()).filter((x) => s.created.includes(x.note.id))).get(ASSET.toLowerCase()), 100n * U);
+  assert.equal(accounted(s).moving, 50n * U);
+  const left = topUpRows(getAllNotes()).filter((x) => s.created.includes(x.note.id));
+  assert.equal(topUpSetAside(left).get(ASSET.toLowerCase()), 100n * U, "on its way back is not set aside");
+  const row = left.find((x) => x.note.id === target.id)!;
+  assert.equal(row.moving, true);
+  assert.equal(topUpWhen(row, Date.now()), "Cancelled. Moving back to your balance");
   // the relay holds no proof for it any more
   assert.equal((await store.get(rows[1]!.note.cashOut!.job))!.proof, "0x");
   // a series with a cancelled slot does not offer it back
   const series = topUpSeries(getAllNotes(), Date.now()).find((x) => x.rows.some((y) => s.created.includes(y.note.id)))!;
   assert.deepEqual(series.missing, []);
-  // and that note can fund a new series
-  assert.equal(pickTopUpNote(spendable(s.created), ASSET, 50n * U)!.id, target.id);
 });
 
 await test("cancel from Pay does the same; an ordinary piece still drops its tag", async () => {
@@ -1074,6 +1109,7 @@ function env(views: Record<string, unknown>, spent: Record<string, boolean | nul
 }
 const dated = (id: string, wei: bigint, mark: Partial<NonNullable<LocalNote["cashOut"]>>) =>
   vaultNote(id, wei, {
+    proofOutAt: T0,
     cashOutPlan: { plan: "pg", piece: 1, of: 2, to: AGENT, window: "day", topUp: { day: dayOf(T0), everyDays: 7 } },
     cashOut: { job: `job-${id}`, at: T0, to: AGENT, state: "scheduled", ...mark },
   });
@@ -1091,8 +1127,9 @@ await test("back after months: a top-up the relay no longer holds is settled fro
 
   assert.equal(byId(unspent.id).cashOut!.state, "failed", "it can never go out now, and nothing moved");
   assert.equal(topUpState(byId(unspent.id)), "returned");
-  assert.ok(activeSpendableNotes(getAllNotes()).some((n) => n.id === unspent.id), "back in the balance");
-  assert.ok(returnedCashOutNotes().some((n) => n.id === unspent.id), "with the usual notice");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === unspent.id), "its proof was out for months: it moves first");
+  assert.ok(notesToMove(getAllNotes()).some((n) => n.id === unspent.id));
+  assert.ok(!returnedCashOutNotes().some((n) => n.id === unspent.id), "it shows on its own screen, and is not back yet");
   assert.equal(byId(spent.id).cashOut!.state, "sent", "the chain shows it went out");
   assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === spent.id));
   assert.equal(byId(unread.id).cashOut!.state, "scheduled", "chain unread: left as it is");
@@ -1107,7 +1144,8 @@ await test("a top-up that came back stays on the record after its notice is dism
   assert.equal(byId(n.id).cashOut, undefined);
   assert.equal(topUpState(byId(n.id)), "returned");
   assert.ok(!unscheduledPieces().some((x) => x.id === n.id), "not one still to schedule");
-  assert.ok(activeSpendableNotes(getAllNotes()).some((x) => x.id === n.id));
+  assert.equal(proofLoose(byId(n.id)), true, "and dismissing it does not let the note skip its move");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((x) => x.id === n.id));
 });
 
 await test("each state of a top-up reads plainly, and sent means the chain shows it", () => {
@@ -1124,6 +1162,7 @@ await test("each state of a top-up reads plainly, and sent means the chain shows
     [{ cashOut: { ...mark, state: "cancelled" } }, "cancelled"],
     [{ sweepPending: true }, "landing"],
     [{}, "unscheduled"],
+    [{ proofOutAt: T0 }, "returned"],
     [{ status: "recovered" }, "cancelled"],
     [{ cashOutPlan: { ...tag, topUp: { ...tag.topUp, ended: "cancelled" } } }, "cancelled"],
     [{ cashOutPlan: { ...tag, topUp: { ...tag.topUp, ended: "kept" } } }, "cancelled"],
@@ -1131,7 +1170,388 @@ await test("each state of a top-up reads plainly, and sent means the chain shows
   ];
   for (const [over, want] of cases) assert.equal(topUpState({ ...base, ...over }), want, JSON.stringify(over));
   assert.equal(topUpWhen({ state: "upcoming", at: T0 - 1 }, T0), "Going out now");
+  assert.equal(topUpWhen({ state: "returned", at: T0, moving: true }, T0), "Didn't go out. Moving back to your balance");
   assert.match(topUpWhen({ state: "upcoming", at: T0 + DAY_MS }, T0), /^[A-Z][a-z]{2} \d+, about /);
+});
+
+// ---------------------------------------------------------------- the proof dies with the note
+
+const lc = (h: string) => h.toLowerCase();
+
+/** The vault: a real Poseidon tree, so the move below is the real sweep and its proofs line up. */
+function mockVault() {
+  const tree = new IncrementalMerkleTreePoseidon();
+  const index = new Map<string, number>();
+  const roots = new Set<string>();
+  const receipts = new Map<string, "success" | "reverted">();
+  let n = 0;
+  async function insert(c: Hex) {
+    index.set(lc(c), await tree.insert(hexToField(c)));
+    roots.add(lc(fieldToHex(tree.currentRoot)));
+  }
+  const vault = {
+    insert,
+    transfers: 0,
+    env(over: Partial<ClaimEnv> = {}): ClaimEnv {
+      return {
+        chainId: active.chainId,
+        pool: active.pool!,
+        chain: {
+          isSpent: async (nf) => chainSpent.has(lc(nf)),
+          isCommitmentSeen: async (c) => index.has(lc(c)),
+          pathForCommitment: async (c) => {
+            const i = index.get(lc(c));
+            return i == null ? null : ((await tree.path(i)) as PoseidonMerklePath);
+          },
+          waitForReceipt: async (h) => ({ status: receipts.get(h) ?? "reverted" }),
+        },
+        prove: async () => ({ proofBytes: "0xdeadbeef" }),
+        relay: async (t) => {
+          vault.transfers++;
+          const hash = `0x${(++n).toString(16).padStart(64, "0")}` as Hex;
+          const ok = roots.has(lc(t.root)) && !chainSpent.has(lc(t.nullifier));
+          if (ok) {
+            chainSpent.add(lc(t.nullifier));
+            for (const c of t.commitments) await insert(c);
+          }
+          receipts.set(hash, ok ? "success" : "reverted");
+          return hash;
+        },
+        leafIndexOf: async (c) => index.get(lc(c)),
+        stateAt: async (nf, c) => ({ spent: nf ? chainSpent.has(lc(nf)) : null, seen: index.has(lc(c)), block: 1n }),
+        ...over,
+      };
+    },
+  };
+  return vault;
+}
+const pool = mockVault();
+
+let realSeq = 0;
+/** A real note in the vault, tagged as a top-up, and its cash out handed to the relay: the proof as it left the browser comes back. */
+async function handedOver(value = AMOUNT) {
+  reset();
+  const secret = await randomSecretField();
+  const commitment = fieldToHex(await noteCommitmentPoseidon(secret, value, ASSET));
+  const day = tomorrow() + 7 * DAY_MS;
+  const note: LocalNote = {
+    id: `co-real-${++realSeq}`,
+    chainId: active.chainId,
+    pool: active.pool!,
+    asset: ASSET,
+    amountWei: value.toString(),
+    commitment,
+    secret: fieldToHex(secret),
+    nullifier: fieldToHex(await noteNullifierPoseidon(secret, hexToField(commitment))),
+    bound: true,
+    scheme: "poseidon",
+    from: ME,
+    createdAt: Date.now(),
+    status: "open",
+    source: "local",
+    cashOutPlan: { plan: `real-${realSeq}`, piece: 1, of: 2, to: AGENT, window: "day", topUp: { day, everyDays: 7 } },
+  };
+  await saveLocalNote(note);
+  await pool.insert(commitment);
+  const call = { chainId: active.chainId, proof: PROOF, root: hex32(0x77), nullifier: note.nullifier!, asset: ASSET, to: AGENT, amount: value };
+  return { note, call, day, sent: { ...call, amount: value.toString() } as Record<string, unknown> };
+}
+async function scheduled(value = AMOUNT) {
+  const h = await handedOver(value);
+  const job = await scheduleNoteCashOut(h.note, h.call, { day: h.day });
+  return { ...h, job };
+}
+const moves = (n: LocalNote) => getAllNotes().filter((x) => x.sweptFrom?.id === n.id);
+const refused = (e: unknown) => e instanceof RelayError && e.code === "AlreadySpent";
+/** The old proof, sent every way there is: the relay's checks, a send, and scheduling it again. */
+async function assertDead(sent: Record<string, unknown>) {
+  await assert.rejects(checkUnshieldForLater(active, sent), refused, "the relay's checks");
+  await assert.rejects(sendUnshieldNow(active, sent), refused, "a send");
+  const again = await post({ ...sent, day: tomorrow() + 14 * DAY_MS }, `10.2.1.${++realSeq % 250}`);
+  assert.deepEqual([again.status, again.json.code], [409, "AlreadySpent"], "scheduling it again");
+}
+function assertMoved(n: LocalNote) {
+  const made = moves(n);
+  assert.equal(made.length, 1, "one fresh note");
+  assert.equal(byId(n.id).status, "recovered");
+  assert.ok(chainSpent.has(lc(n.nullifier!)), "the old nullifier is spent");
+  assert.equal(BigInt(made[0]!.amountWei), BigInt(n.amountWei), "all of it");
+  assert.ok(activeSpendableNotes(getAllNotes()).some((x) => x.id === made[0]!.id), "and it is in the balance");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((x) => x.id === n.id), "once");
+  assert.equal(made[0]!.proofOutAt, undefined, "no proof of the fresh note has ever left");
+  assert.equal(made[0]!.cashOutPlan, undefined, "plain money");
+}
+
+let copies = 0;
+/** The note store and the sync a reload starts with: over the same disk, remembering no tries. */
+async function reloaded() {
+  const v = (await import(`../src/lib/noteVault.ts?tab=${++copies}`)) as typeof import("../src/lib/noteVault");
+  await v.unlockNoteVault();
+  await v.syncFromDisk();
+  const sync = (await import(`../src/lib/claimSweep.ts?tab=${++copies}`)) as typeof import("../src/lib/claimSweep");
+  return { store: v, sync };
+}
+
+await test("a cancelled top-up's proof passes until the note moves, then fails against the spent nullifier", async () => {
+  const { note, sent, job } = await scheduled();
+  await checkUnshieldForLater(active, sent); // the control: this proof really is live
+  assert.equal(await cancelTopUp(byId(note.id)), null);
+  assert.equal((await store.get(job.id))!.status, "cancelled");
+  // the relay dropped its copy, and the proof is exactly as good as it was: this is why the note has to move
+  await checkUnshieldForLater(active, sent);
+
+  const held = byId(note.id);
+  assert.equal(proofLoose(held), true);
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), "nothing can spend it");
+  assert.equal(pickTopUpNote([held], ASSET, U), null, "not even a new series");
+  assert.throws(() => checkPlan(held, [U, U], [AGENT, AGENT]), /busy/);
+
+  await moveRevertedNotes(pool.env());
+  assertMoved(note);
+  await assertDead(sent);
+  const row = topUpRows(getAllNotes()).find((x) => x.note.id === note.id)!;
+  assert.deepEqual([row.state, row.moving], ["cancelled", false]);
+});
+
+await test("the same across a reload: the mark is on disk, the block holds, and the next load finishes the move", async () => {
+  const { note, sent } = await scheduled();
+  assert.equal(await cancelTopUp(byId(note.id)), null);
+  const { store: tab, sync } = await reloaded();
+  const onDisk = tab.getAllNotes().find((n) => n.id === note.id)!;
+  assert.equal(proofLoose(onDisk), true, "from disk, in a tab that saw none of this");
+  assert.ok(!activeSpendableNotes(tab.getAllNotes()).some((n) => n.id === note.id));
+  await checkUnshieldForLater(active, sent); // still live: nothing has moved it yet
+  assert.ok((await exportNotesBackup(ME)).notes.find((n) => n.id === note.id)?.proofOutAt, "a backup carries the mark too");
+  await sync.moveRevertedNotes(pool.env());
+  await reloaded(); // and whatever that tab wrote is what the next one reads
+  assertMoved(note);
+  await assertDead(sent);
+});
+
+await test("a tab closed after the relay cancelled but before the note heard: the next load finds out and moves it", async () => {
+  const { note, sent, job } = await scheduled();
+  // the DELETE reached the relay, and this tab closed before writing anything
+  await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${job.id}`));
+  assert.equal(byId(note.id).cashOut!.state, "scheduled");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), "still out of the balance");
+  await reconcileTopUps(cashEnv(job.id));
+  assert.equal(byId(note.id).cashOut!.state, "cancelled");
+  assert.equal(proofLoose(byId(note.id)), true, "came back, and still can't be spent");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id));
+  await moveRevertedNotes(pool.env());
+  assertMoved(note);
+  await assertDead(sent);
+});
+
+/** The relay's real answer for this one job: every waiting note of every earlier test would use up the status limit. */
+function cashEnv(job: string, now = Date.now()): CashOutEnv {
+  return {
+    chainId: active.chainId,
+    pool: active.pool!,
+    now: () => now,
+    status: async (id) => (id === job ? cashOutJobStatus(id) : null),
+    isSpent: async (nf) => chainSpent.has(lc(nf)),
+    receipt: async () => null,
+  };
+}
+
+await test("a top-up the relay gave up on, found expired, or no longer holds: each moves, and each proof dies", async () => {
+  for (const ending of ["failed", "expired", "gone"] as const) {
+    const { note, sent, job } = await scheduled();
+    if (ending === "gone") await store.forget(job.id);
+    else await store.put({ ...(await store.get(job.id))!, status: ending, proof: "0x", reason: "Nothing moved." });
+    await reconcileTopUps(cashEnv(job.id, job.sendAfter + DAY_MS));
+    assert.equal(byId(note.id).cashOut!.state, ending === "expired" ? "expired" : "failed", ending);
+    assert.equal(topUpState(byId(note.id)), "returned", ending);
+    assert.equal(proofLoose(byId(note.id)), true, ending);
+    assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === note.id), ending);
+    await moveRevertedNotes(pool.env());
+    assertMoved(note);
+    await assertDead(sent);
+  }
+});
+
+await test("a refusal at scheduling, and a reply that never came: the mark is on disk first, and a job the relay did keep dies with the note", async () => {
+  // the mark is on disk at the moment the proof goes
+  const h = await handedOver();
+  const seen: (number | undefined)[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).startsWith("/api/relay/scheduled") && init?.method === "POST") {
+      const { store: tab } = await reloaded();
+      seen.push(tab.getAllNotes().find((n) => n.id === h.note.id)?.proofOutAt);
+    }
+    return real(input, init);
+  }) as typeof fetch;
+  try {
+    replies.push({ status: 429, body: { ok: false, code: "rate_limit", error: "Too many." } });
+    await assert.rejects(scheduleNoteCashOut(h.note, h.call, { day: h.day }), /Too many/);
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0], "on disk, read back by another tab, as the proof left");
+  assert.equal(topUpState(byId(h.note.id)), "returned");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === h.note.id));
+  await moveRevertedNotes(pool.env());
+  assertMoved(h.note);
+  await assertDead(h.sent);
+
+  // the relay took it and the reply was lost: a live job this browser knows nothing of
+  const lost = await handedOver();
+  const made = await post({ ...lost.sent, day: lost.day }, "10.2.0.40");
+  assert.equal(made.status, 200);
+  replies.push("down");
+  await assert.rejects(scheduleNoteCashOut(lost.note, lost.call, { day: lost.day }), /Could not reach/);
+  await moveRevertedNotes(pool.env());
+  assertMoved(lost.note);
+  const sends: string[] = [];
+  const alone = memoryJobStore();
+  await alone.put((await store.get(made.json.id!))!);
+  const due = await runDueJobs(alone, {
+    now: () => made.json.sendAfter!,
+    readChain: async (j) => ({ spent: chainSpent.has(lc(j.nullifier)), knownRoot: true }),
+    send: async (j) => {
+      sends.push(j.id);
+      return hex32(1);
+    },
+  });
+  assert.deepEqual(due, [{ id: made.json.id!, status: "spent" }], "it comes due and finds the note spent");
+  assert.deepEqual(sends, [], "nothing moved");
+});
+
+await test("a proof on its way to the relay is not moved from under it, by this tab or another, and a closed tab lets go", async () => {
+  // the sync fires, here and in a second tab, while the POST is out
+  const h = await handedOver();
+  const before = pool.transfers;
+  const real = globalThis.fetch;
+  let during: { blocked: boolean; held: number } | null = null;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).startsWith("/api/relay/scheduled") && init?.method === "POST") {
+      const { store: tab, sync } = await reloaded();
+      const onDisk = tab.getAllNotes().find((n) => n.id === h.note.id)!;
+      during = { blocked: proofLoose(onDisk), held: notesToMove([onDisk]).length };
+      await moveRevertedNotes(pool.env());
+      await sync.moveRevertedNotes(pool.env());
+    }
+    return real(input, init);
+  }) as typeof fetch;
+  let job;
+  try {
+    job = await scheduleNoteCashOut(h.note, h.call, { day: h.day });
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.deepEqual(during, { blocked: true, held: 0 }, "can't be spent, and isn't moved");
+  assert.equal(pool.transfers, before, "nothing moved it");
+  assert.ok(!chainSpent.has(lc(h.note.nullifier!)), "so the top-up is alive");
+  assert.equal(byId(h.note.id).cashOut!.job, job.id);
+  assert.equal(byId(h.note.id).handoverUntil, undefined, "the lease ends with the reply");
+  await checkUnshieldForLater(active, h.sent);
+
+  // a refusal ends the lease at once: the owner's money isn't held up for it
+  const refusedNow = await handedOver();
+  replies.push({ status: 429, body: { ok: false, code: "rate_limit", error: "Too many." } });
+  await assert.rejects(scheduleNoteCashOut(refusedNow.note, refusedNow.call, { day: refusedNow.day }));
+  assert.deepEqual(notesToMove([byId(refusedNow.note.id)]).map((n) => n.id), [refusedNow.note.id]);
+
+  // the tab closed with the POST out: nothing says how it ended, so the lease runs out and then it moves
+  const closed = await handedOver();
+  await updateLocalNote(closed.note.id, { proofOutAt: Date.now(), handoverUntil: Date.now() + HANDOVER_MS });
+  const held = byId(closed.note.id);
+  assert.equal(proofLoose(held), true, "blocked throughout");
+  assert.ok(!activeSpendableNotes(getAllNotes()).some((n) => n.id === held.id));
+  assert.deepEqual(notesToMove([held]), [], "not yet");
+  assert.deepEqual(notesToMove([held], held.handoverUntil! - 1), []);
+  assert.deepEqual(notesToMove([held], held.handoverUntil!).map((n) => n.id), [held.id], "once it runs out");
+});
+
+await test("while the move lands the money counts nowhere twice, and a relay that is off leaves it blocked", async () => {
+  const { note, sent } = await scheduled();
+  await cancelTopUp(byId(note.id));
+  const counted = () => activeSpendableNotes(getAllNotes()).filter((n) => n.id === note.id || n.sweptFrom?.id === note.id);
+
+  const before = pool.transfers;
+  await moveRevertedNotes(pool.env({ relayReady: async () => false }));
+  assert.equal(pool.transfers, before, "nothing tried while the relay is off");
+  assert.equal(proofLoose(byId(note.id)), true);
+  assert.deepEqual(counted(), [], "still blocked");
+
+  // the relay is back: mid-send the old note and the fresh one both stay out, and afterwards exactly one counts
+  const { sync } = await reloaded();
+  const env = pool.env();
+  await sync.moveRevertedNotes({
+    ...env,
+    relay: async (t) => {
+      assert.deepEqual(counted(), [], "neither counts mid-send");
+      assert.equal(moves(note)[0]?.sweepPending, true, "the fresh note's secret is saved before the move goes");
+      return env.relay(t);
+    },
+  });
+  await reloaded();
+  assert.deepEqual(counted().map((n) => n.id), [moves(note)[0]!.id]);
+  await assertDead(sent);
+});
+
+await test("a top-up whose proof never left needs no move, and cash outs in a window keep their rule", async () => {
+  // split off, then stopped before the proof went: plain money once kept, with no relay transaction
+  const never = vaultNote("never-1", 50n * U, { cashOutPlan: { plan: "pn", piece: 1, of: 2, to: AGENT, window: "day", topUp: { day: tomorrow(), everyDays: 7 } } });
+  assert.deepEqual(notesToMove([never]), []);
+  keepPiece(never.id);
+  assert.deepEqual(notesToMove([byId(never.id)]), []);
+  assert.ok(activeSpendableNotes(getAllNotes()).some((n) => n.id === never.id));
+
+  // an ordinary cash out later: unmarked, and spendable the moment it is cancelled, as before
+  reset();
+  const plain = vaultNote("plain-later", 50n * U);
+  const job = await scheduleNoteCashOut(plain, { chainId: active.chainId, proof: PROOF, root: hex32(0x77), nullifier: plain.nullifier!, asset: ASSET, to: AGENT, amount: 50n * U }, "6h");
+  assert.equal(byId(plain.id).proofOutAt, undefined);
+  await route.DELETE(callRoute("DELETE", `/api/relay/scheduled?id=${job.id}`));
+  cancelledPiece(plain.id);
+  assert.equal(proofLoose(byId(plain.id)), false);
+  assert.ok(activeSpendableNotes(getAllNotes()).some((n) => n.id === plain.id));
+});
+
+// ---------------------------------------------------------------- off on Ethereum mainnet
+
+await test("top-ups are off on Ethereum mainnet and nowhere else", () => {
+  assert.equal(getNetwork("ethereum-mainnet").chainId, 1);
+  assert.equal(datedOff(1), true);
+  for (const key of ["robinhood-mainnet", "tempo-mainnet", "base-mainnet", "robinhood", "tempo", "base", "ethereum"] as const) {
+    assert.equal(datedOff(getNetwork(key).chainId), false, key);
+  }
+  assert.match(DATED_OFF_MESSAGE, /aren't offered on Ethereum/);
+  assert.match(DATED_OFF_MESSAGE, /gas there costs more than the fee/);
+  assert.doesNotMatch(DATED_OFF_MESSAGE, /\u2014|anonymous|untraceable/i);
+});
+
+await test("the relay refuses a dated job on Ethereum mainnet itself, before any count or chain read, and takes the same job elsewhere", async () => {
+  const before = rpcCalls;
+  const r = await post(scheduleBody({ chainId: 1, day: tomorrow() + 7 * DAY_MS }), "10.2.0.50");
+  assert.deepEqual([r.status, r.json.code, r.json.error], [400, "dated_off", DATED_OFF_MESSAGE]);
+  assert.equal(rpcCalls, before, "nothing read the chain");
+  // a bad day is refused first or not, it is refused all the same; and the app's checks are not what stopped it
+  assert.equal((await post(scheduleBody({ chainId: 1, day: 123 }), "10.2.0.50")).status, 400);
+  // the same request on a chain that takes them
+  const elsewhere = await post(scheduleBody({ day: tomorrow() + 7 * DAY_MS }), "10.2.0.50");
+  assert.equal(elsewhere.status, 200, JSON.stringify(elsewhere.json));
+  // an ordinary cash out on Ethereum is none of this rule's business
+  const window = await post(scheduleBody({ chainId: 1, window: "6h" }), "10.2.0.51");
+  assert.notEqual(window.json.code, "dated_off");
+});
+
+await test("the app refuses too, before anything moves, and the demo's pretend relay keeps the same rule", async () => {
+  reset();
+  const eth = vaultNote("eth-1", 600n * U, { chainId: 1 });
+  const s = fakeSplitter();
+  assert.throws(() => start(eth, s), /aren't offered on Ethereum/);
+  assert.equal(s.calls(), 0, "nothing split");
+  assert.equal(asked.length, 0, "nothing asked of the relay");
+  assert.equal(byId(eth.id).status, "open");
+  const r = await demoScheduleCashOut({ chainId: 1, nullifier: hex32(1), asset: ASSET, to: AGENT, amount: U, day: tomorrow() });
+  assert.deepEqual(r.ok ? "taken" : r.code, "dated_off");
+  const held = await demoScheduleCashOut({ chainId: 8453, nullifier: hex32(2), asset: ASSET, to: AGENT, amount: U, day: tomorrow() });
+  assert.equal(held.ok, true, "Base keeps them");
 });
 
 await test("the copy says what shows, and promises nothing the chain can't keep", () => {

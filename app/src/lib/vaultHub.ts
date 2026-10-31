@@ -89,11 +89,13 @@ export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: 
  * (lib/agentTopUp). It left the private balance when it was set aside and can
  * stay out for months, so the overview says where it went.
  */
-export function topUpsSetAside(notes: readonly Pick<LocalNote, "asset" | "amountWei" | "status" | "cashOut" | "cashOutPlan">[]): Map<string, bigint> {
+export function topUpsSetAside(notes: readonly Pick<LocalNote, "asset" | "amountWei" | "status" | "cashOut" | "cashOutPlan" | "proofOutAt">[]): Map<string, bigint> {
   const out = new Map<string, bigint>();
   for (const n of notes) {
     const state = n.cashOut?.state;
-    if (!n.cashOutPlan?.topUp || n.status === "recovered" || (state !== "scheduled" && state !== "sent")) continue;
+    const waits = state === "scheduled" || state === "sent";
+    // one on its way back to a fresh note is out of the balance too, until it lands
+    if (!n.cashOutPlan?.topUp || n.status === "recovered" || (!waits && !n.proofOutAt)) continue;
     const k = n.asset.toLowerCase();
     out.set(k, (out.get(k) ?? BigInt(0)) + BigInt(n.amountWei));
   }

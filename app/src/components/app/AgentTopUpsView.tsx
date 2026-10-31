@@ -19,6 +19,7 @@ import {
   finishTopUps,
   largestTopUpNote,
   mostTopUps,
+  moveLooseProofs,
   pickTopUpNote,
   reconcileTopUps,
   setUpTopUps,
@@ -44,6 +45,7 @@ import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { useAppAccount, useDemo } from "@/lib/demo";
 import { countPerson } from "@/lib/people";
 import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
+import { DATED_OFF_MESSAGE, datedOff } from "@/lib/relay/scheduled";
 import { publicClientFor } from "@/lib/rhClient";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenWallets } from "@/lib/screeningClient";
@@ -84,7 +86,7 @@ const PACES: [TopUpEvery, string][] = [
 
 export function AgentTopUpsView() {
   const { address, isConnected } = useAppAccount();
-  const { network } = useNetwork();
+  const { network, setNetworkKey } = useNetwork();
   const demoMode = useDemo();
   const { open, local, refresh } = useLocalShieldNotes(address);
 
@@ -133,7 +135,11 @@ export function AgentTopUpsView() {
   useEffect(() => {
     void reconcileTopUps()
       .then((changed) => changed && refresh())
-      .catch(() => false);
+      .catch(() => false)
+      // a cancel the tab closed on: nothing can spend that note until this has moved it
+      .then(() => moveLooseProofs())
+      .catch(() => {})
+      .finally(refresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network.key]);
 
@@ -380,14 +386,34 @@ export function AgentTopUpsView() {
   async function onCancel(list: LocalNote[]) {
     setError(null);
     setNotice(null);
+    let cancelled = 0;
     for (const n of list) {
       const problem = await cancelTopUp(n);
       if (problem) {
         setError(problem);
         break;
       }
+      cancelled++;
     }
     refresh();
+    if (cancelled === 0) return;
+    setNotice(`Cancelled. ${cancelled === 1 ? "It moves" : "They move"} to a fresh private balance first, so the old proof can't be used, then ${cancelled === 1 ? "shows" : "show"} in your balance.`);
+    void moveLooseProofs()
+      .catch(() => {})
+      .finally(refresh);
+  }
+
+  if (datedOff(network.chainId)) {
+    return (
+      <div className="gl-card max-w-[640px] p-5 sm:p-7">
+        <h2 className="t-title">Agent top-ups</h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-soft">{DATED_OFF_MESSAGE}</p>
+        <p className="mt-2 text-[14px] leading-relaxed text-mute">They work on Robinhood Chain, Tempo and Base.</p>
+        <button type="button" className="btn btn-ghost mt-5" onClick={() => setNetworkKey("base-mainnet")}>
+          Switch to Base
+        </button>
+      </div>
+    );
   }
 
   return (

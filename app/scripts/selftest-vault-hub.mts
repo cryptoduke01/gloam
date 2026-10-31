@@ -120,8 +120,9 @@ test("the overview says what agent top-ups hold out of the balance", () => {
     n("failed"), // back in the balance
     n(null), // not scheduled: still in the balance
     n("scheduled", { cashOutPlan: { ...tag, topUp: undefined } }), // an ordinary piece
+    n("failed", { proofOutAt: 1 }), // on its way back to a fresh note: out of the balance until it lands
   ]);
-  assert.deepEqual([...got], [[USDC, 10_000_000n]]);
+  assert.deepEqual([...got], [[USDC, 15_000_000n]]);
   assert.equal(topUpsSetAside([]).size, 0);
 });
 

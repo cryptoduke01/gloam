@@ -16,7 +16,7 @@ import { hexToField } from "@/lib/poseidon";
 import type { RelayNetworkStatus } from "@/lib/relay/client";
 import { TEMPO_STABLE_TOKENS } from "@/lib/tokens";
 import type { SyncedTree } from "@/lib/treeSync";
-import { drawSendAfter, drawSendOn, type DelayWindow } from "@/lib/relay/scheduled";
+import { DATED_OFF_MESSAGE, datedOff, drawSendAfter, drawSendOn, type DelayWindow } from "@/lib/relay/scheduled";
 import {
   DEMO_MS,
   creditDemoWallet,
@@ -105,6 +105,7 @@ export async function demoScheduleCashOut(p: {
   day?: number;
 }): Promise<{ ok: true; job: DemoOwnedJob } | { ok: false; code: string; error: string; job?: DemoOwnedJob }> {
   await sleep(jitter(DEMO_MS.relay));
+  if (p.day !== undefined && datedOff(p.chainId)) return { ok: false, code: "dated_off", error: DATED_OFF_MESSAGE };
   const live = demoCashOutJobs().find(
     (j) => j.chainId === p.chainId && j.nullifier.toLowerCase() === p.nullifier.toLowerCase() && j.status === "scheduled"
   );

@@ -10,7 +10,9 @@
  * settled by the chain like any spend (the note's nullifier shows spent). One
  * that came back unsent (refused, a root the vault never knew, or cancelled)
  * makes the note spendable again, but only once the note's own chain shows it
- * unspent: nothing moved. A job that is going out, or may have gone out, never
+ * unspent: nothing moved. A prepaid top-up's note moves to a fresh note first,
+ * since its proof has been out for months (shield proofLoose). A job that is
+ * going out, or may have gone out, never
  * puts its note back; neither does a relay that can't be read or no longer
  * holds the job. The chain settles those.
  */
@@ -23,7 +25,7 @@ import { getAllNotes } from "./noteVault";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { publicClientFor } from "./rhClient";
-import { endedPlan, shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
+import { HANDOVER_MS, endedPlan, shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
 import type { DelayWindow } from "./relay/scheduled";
 
 /** The windows the relay offers (lib/relay/scheduled DELAY_WINDOWS): about an hour, 6 hours or a day. */
@@ -173,15 +175,22 @@ export async function cancelCashOut(id: string): Promise<CancelResult> {
  * waiting to another address, the note is marked with that one and this throws.
  */
 export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, when: CashOutWhen): Promise<OwnedCashOutJob> {
+  // On disk before the proof goes: however this ends, a closed tab included, the
+  // note can't be spent past that proof. The lease keeps any tab's sync from moving
+  // it until the reply says how it went (shield HANDOVER_MS).
+  const dated = typeof when !== "string";
+  if (dated) await updateLocalNote(note.id, { proofOutAt: Date.now(), handoverUntil: Date.now() + HANDOVER_MS });
+  const lease = dated ? { handoverUntil: undefined } : {};
   let job: OwnedCashOutJob;
   try {
     job = await scheduleCashOut({ ...call, ...(typeof when === "string" ? { window: when } : when) });
   } catch (e) {
-    if (e instanceof CashOutLaterError && e.job) updateLocalNote(note.id, { cashOut: markFor(e.job) });
+    if (e instanceof CashOutLaterError && e.job) await updateLocalNote(note.id, { cashOut: markFor(e.job), ...lease });
+    else if (dated) await updateLocalNote(note.id, lease);
     throw e;
   }
   // The relay may hand back the job already waiting for this money: its proof's root is not this one.
-  updateLocalNote(note.id, { cashOut: markFor(job, job.existing ? undefined : { root: call.root, at: Date.now() }) });
+  await updateLocalNote(note.id, { cashOut: markFor(job, job.existing ? undefined : { root: call.root, at: Date.now() }), ...lease });
   return job;
 }
 
@@ -215,10 +224,10 @@ export function scheduledCashOutNotes(notes: LocalNote[] = getAllNotes()): Local
   return notes.filter((n) => n.status !== "recovered" && (n.cashOut?.state === "scheduled" || n.cashOut?.state === "sent"));
 }
 
-/** Notes whose scheduled cash out came back unsent, for a one-time notice. */
+/** Notes whose scheduled cash out came back unsent, for a one-time notice. A top-up shows on its own screen, and is not back yet. */
 export function returnedCashOutNotes(notes: LocalNote[] = getAllNotes()): LocalNote[] {
   return notes.filter(
-    (n) => n.status !== "recovered" && (n.cashOut?.state === "expired" || n.cashOut?.state === "failed")
+    (n) => n.status !== "recovered" && !n.cashOutPlan?.topUp && (n.cashOut?.state === "expired" || n.cashOut?.state === "failed")
   );
 }
 
