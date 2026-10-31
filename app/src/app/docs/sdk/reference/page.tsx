@@ -354,6 +354,7 @@ cashOutFee(500_000_000n);                     // what the pool keeps on a 500 US
   amountWei: bigint;          // wei (native) or token base units
   asset?: Address;            // default NATIVE_ASSET (zero address, testnet only)
   chainId?: number;           // default RH_TESTNET_CHAIN_ID; pass a mainnet one explicitly
+                              // (required when poolAddress is a mainnet vault)
   poolAddress?: Address;      // default: the pool for chainId (refused for a mainnet
                               // chain whose pool is not in the SDK yet)
   agentAddress?: Address | null;
