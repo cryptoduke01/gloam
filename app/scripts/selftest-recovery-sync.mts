@@ -73,7 +73,7 @@ async function test(name: string, fn: () => Promise<void>) {
   console.log(`ok  ${name}`);
 }
 
-const keys = await keysFromSecret("wallet", crypto.getRandomValues(new Uint8Array(32)));
+const keys = await keysFromSecret("passkey", crypto.getRandomValues(new Uint8Array(32)));
 
 await test("turn off and delete waits for the save on its way, and the backup stays gone", async () => {
   await connectRecovery(keys, null);
