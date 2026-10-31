@@ -256,6 +256,8 @@ A spend needs a membership path, which needs the current tree. `syncTree` rebuil
 
 On mainnet the pool keeps a 0.25% cash-out fee: cashing out `amount` sends `amount - cashOutFee(amount)` to `to`. The note is spent in full either way.
 
+From 0.4.3 `buildUnshieldIntent` refuses an address where the money would be lost, before it proves: the vault, the network's payment-message board, a token contract, a Gloam swap router and the zero address. The Gloam relay refuses the same ones, and this covers a cash out you send from your own wallet too. Each list is for that chain only, so an address that is a router on one chain is an ordinary recipient on another. To check an address before anything else happens (a split, say), call `cashOutTargetProblem(to, network)`: it returns the reason, or null.
+
 ```ts
 import { buildUnshieldIntent, artifactProver, circuitArtifactUrls, syncTree, cashOutFee } from "@gloamtrade/sdk";
 
@@ -525,6 +527,7 @@ readDepositLimit(client, pool, asset)                       // the vault's live 
 isNoLimit(value), NO_LIMIT_THRESHOLD                        // a perDeposit or total of 2^127 or more (the owner sets uint128 max) is no limit
 assertDepositWithinLiveLimit(client, chainId, asset, amount, pool?)  // refuses over the live limit; refuses nothing if the vault can't be read
 CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
+cashOutTargetProblem(to, net): string | null                // why a cash out to `to` would be lost, or null (0.4.3). `net` is a GloamNetwork, or { chainId, pool? }
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
 BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia pool, null until it is in
 ETHEREUM_SEPOLIA_POOL, ethereumSepoliaPool(), ethereumSepoliaPayMemo()  // Ethereum Sepolia's pool and board (0.4.0), null until in

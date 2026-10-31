@@ -13,18 +13,22 @@
  *
  * Token contracts and routers are matched on their own chain only: an address
  * is nobody's wallet on a chain where it is just an address.
+ *
+ * The rule and its messages are the SDK's, so an agent sending from its own
+ * wallet gets the same answer. The app adds its own token and router lists on
+ * top, so one added here is refused from that moment, whatever the SDK knows.
  */
+import { cashOutTargetProblem as sdkCashOutTargetProblem } from "@gloamtrade/sdk";
 import { shieldTokensFor } from "./tokens";
 import { swapRoutersOn } from "./vaultSwap";
 
-export const CASH_OUT_TO_VAULT_MESSAGE = "That address is the vault itself. Cash out to a wallet you control.";
-export const CASH_OUT_TO_BOARD_MESSAGE =
-  "That address is Gloam's payment message board. Cash out to a wallet you control.";
-export const CASH_OUT_TO_TOKEN_MESSAGE =
-  "That address is a token contract, not a wallet. Money sent there would be lost. Cash out to a wallet you control.";
-export const CASH_OUT_TO_ROUTER_MESSAGE =
-  "That address is Gloam's swap router, not a wallet. Money sent there goes to the treasury. Cash out to a wallet you control.";
-export const CASH_OUT_TO_ZERO_MESSAGE = "That is the zero address, which nobody controls. Cash out to a wallet you control.";
+export {
+  CASH_OUT_TO_BOARD_MESSAGE,
+  CASH_OUT_TO_ROUTER_MESSAGE,
+  CASH_OUT_TO_TOKEN_MESSAGE,
+  CASH_OUT_TO_VAULT_MESSAGE,
+  CASH_OUT_TO_ZERO_MESSAGE,
+} from "@gloamtrade/sdk";
 
 type VaultAddresses = {
   chainId: number;
@@ -32,21 +36,15 @@ type VaultAddresses = {
   payMemo?: { address: string } | null;
 };
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-function same(a: string, b: string | null | undefined): boolean {
-  return Boolean(b) && a.trim().toLowerCase() === b!.trim().toLowerCase();
-}
-
 /** Why a cash out to `to` on this network would be lost, or null when it is fine. */
 export function cashOutTargetProblem(to: string, net: VaultAddresses): string | null {
-  if (same(to, net.pool)) return CASH_OUT_TO_VAULT_MESSAGE;
-  if (same(to, net.payMemo?.address)) return CASH_OUT_TO_BOARD_MESSAGE;
-  if (same(to, ZERO_ADDRESS)) return CASH_OUT_TO_ZERO_MESSAGE;
   const routers = swapRoutersOn(net.chainId);
-  if (routers.some((r) => same(to, r.address))) return CASH_OUT_TO_ROUTER_MESSAGE;
-  // The tokens Gloam lists here, and what a swap can end in (WETH, the stock tokens), listed or not.
-  const tokens = [...shieldTokensFor(net.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets, ...(r.weth ? [r.weth] : [])])];
-  if (tokens.some((a) => same(to, a))) return CASH_OUT_TO_TOKEN_MESSAGE;
-  return null;
+  return sdkCashOutTargetProblem(to, {
+    chainId: net.chainId,
+    pool: net.pool,
+    payMemo: net.payMemo?.address,
+    routers: routers.map((r) => r.address),
+    // The tokens Gloam lists here, and what a swap can end in (WETH, the stock tokens), listed or not.
+    tokens: [...shieldTokensFor(net.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets, ...(r.weth ? [r.weth] : [])])],
+  });
 }
