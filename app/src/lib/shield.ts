@@ -680,13 +680,14 @@ export function cashOutPending(n: Pick<LocalNote, "cashOut">): boolean {
 }
 
 /**
- * How long the relay holds a spend's nullifier once it has sent it: until then
- * it refuses any other spend of that note (lib/relay/inflight INFLIGHT_TTL_SEC,
- * which this follows).
+ * The longest the relay holds a spend's nullifier once it has sent it: until
+ * then it can refuse any other spend of that note (lib/relay/inflight
+ * INFLIGHT_TTL_SEC, which this follows). It lets go sooner when it reads a
+ * reverted receipt for that send, which is the usual end of a reverted swap.
  */
 export const RELAY_SPEND_LOCK_MS = 180_000;
 
-/** Ms until the relay takes a spend of a note whose swap reverted, 0 when it does (or none did). */
+/** Ms until the relay is sure to take a spend of a note whose swap reverted, 0 when it is (or none did). */
 export function swapProofWait(n: Pick<LocalNote, "swapProofAt">, now = Date.now()): number {
   return n.swapProofAt ? Math.max(0, n.swapProofAt + RELAY_SPEND_LOCK_MS - now) : 0;
 }
@@ -733,7 +734,7 @@ export function activeSpendableNotes(notes: LocalNote[]): LocalNote[] {
   return notes.filter((n) => holdsSecret(n) && !n.sweepPending && !n.unfunded && !cashOutPending(n) && !proofLoose(n));
 }
 
-/** Notes the sync moves now to end a proof still out: a top-up's, and a reverted swap's once the relay takes it. */
+/** Notes the sync moves now to end a proof still out: a top-up's, and a reverted swap's. */
 export function notesToMove(notes: LocalNote[], now = Date.now()): LocalNote[] {
   return notes.filter(
     (n) =>
@@ -741,7 +742,7 @@ export function notesToMove(notes: LocalNote[], now = Date.now()): LocalNote[] {
       !n.sweepPending &&
       !n.unfunded &&
       !cashOutPending(n) &&
-      (proofLoose(n) ? (n.handoverUntil ?? 0) <= now : Boolean(n.swapProofAt) && swapProofWait(n, now) === 0)
+      (proofLoose(n) ? (n.handoverUntil ?? 0) <= now : Boolean(n.swapProofAt))
   );
 }
 

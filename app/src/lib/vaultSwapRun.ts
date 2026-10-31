@@ -22,9 +22,10 @@
  * relay refused it before sending). A send that may have gone out keeps them,
  * and the next sync settles them either way. So does one that landed and
  * reverted, but its unshield proof stays valid until the note is spent, so that
- * note is marked (swapProofAt) and the sync moves it to a fresh note as soon as
- * the relay takes it (lib/claimSweep moveRevertedNotes). A swap with no saved
- * hash that shows nothing for an hour goes the same way (SWAP_UNSEEN_MS).
+ * note is marked (swapProofAt) and moved to a fresh note right away, and the
+ * sync keeps trying if that try fails (lib/claimSweep moveRevertedNotes). A swap
+ * with no saved hash that shows nothing for an hour goes the same way
+ * (SWAP_UNSEEN_MS).
  */
 import { keccak256, type Address, type Hex } from "viem";
 import { buildPoseidonUnshieldWitness } from "./proverPoseidon";
@@ -33,6 +34,7 @@ import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { prepareBridgeNote } from "./bridgePrivate";
+import { moveRevertedNotes } from "./claimSweep";
 import { freshPath, networkOfNote, spendPlanFor, spendWaitMessage, splitForCashOut } from "./cashOutSplit";
 import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
@@ -56,7 +58,7 @@ export const SWAP_MAYBE_SENT =
   "The swap may have gone out. Your money is safe in the vault: refresh in a minute to see where it landed.";
 
 export const SWAP_REVERTED =
-  "The swap didn't go through on this try. Your money is safe in the vault. It moves to a fresh private balance in about 3 minutes: keep Gloam open, or it finishes next time you open the app. Then get a new quote.";
+  "The swap didn't go through on this try. Your money is safe in the vault. It moves to a fresh private balance in about a minute: keep Gloam open, or it finishes next time you open the app. Then get a new quote.";
 
 export const SWAP_SPENT =
   "This try didn't go through, but another copy of the swap already spent this balance. Refresh in a minute to see where your money landed.";
@@ -72,6 +74,8 @@ export type SwapSender = {
   /** How the transaction ended. Throws when that can't be told yet (a slow network). */
   wait: (hash: Hex) => Promise<"success" | "reverted">;
   isSpent: (nullifier: Hex) => Promise<boolean>;
+  /** Starts moving a note whose swap just reverted, without waiting for the move. */
+  moveNote: () => void;
 };
 
 /**
@@ -115,6 +119,7 @@ export async function sendVaultSwap(
     // until the note is spent: on disk before anyone hears of it, so a closed
     // tab still moves the note on the next load.
     await updateLocalNote(notes.spentId, { swapProofAt: sent.at }).catch(() => {});
+    send.moveNote();
     throw new Error(SWAP_REVERTED);
   }
   return hash;
@@ -264,6 +269,7 @@ export async function runVaultSwap(args: {
       relay: relayVaultSwap,
       wait: (h) => waitForTx(h, undefined, client),
       isSpent: (n) => client.readContract({ address: network.pool!, abi: shieldPoolAbi, functionName: "isSpent", args: [n] }),
+      moveNote: () => void moveRevertedNotes().catch(() => {}),
     },
     () => args.onStatus("Waiting for the swap to land…")
   );

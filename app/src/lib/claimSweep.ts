@@ -492,10 +492,11 @@ async function moveReverted(id: string, env: ClaimEnv): Promise<void> {
 /**
  * Moves each note a reverted swap left behind (swapProofAt), and each whose
  * top-up proof is still out (proofLoose), whole to a fresh note through the
- * relay, so that proof can't be used. A swap's note waits until the relay takes
- * it (swapProofWait). Nothing is tried while the relay is off. A failed try
- * changes nothing: the note stays marked, a reverted swap's in the balance and
- * a top-up's out of it, and the next sync tries again. Each note goes through
+ * relay, so that proof can't be used. A swap's note goes at once: the relay lets
+ * go of it when it reads the reverted receipt, and by the time the proof is made
+ * it has. Nothing is tried while the relay is off. A failed try changes nothing:
+ * the note stays marked, a reverted swap's in the balance and a top-up's out of
+ * it, and a later sync tries again (moveDue). Each note goes through
  * its own network, whichever one the page shows; `env` is a test's, and limits
  * this to its network.
  */

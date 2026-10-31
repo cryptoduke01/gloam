@@ -240,7 +240,7 @@ export default function DocsPrivateSwapsPage() {
       <p>
         If a swap simply doesn&apos;t go through, for example because the price
         moved past the buffer, nothing moved and your money is safe in the
-        vault. About 3 minutes later the app moves it to a fresh private
+        vault. About a minute later the app moves it to a fresh private
         balance, through the relay. Then get a new quote. If you close the app
         first, the move finishes the next time you open it.
       </p>

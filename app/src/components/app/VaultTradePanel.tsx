@@ -549,7 +549,7 @@ export function VaultTradePanel({
     }
     // This cash out has no step to move the note first; the sync is already moving it (lib/claimSweep).
     if (selected.swapProofAt) {
-      setError("Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in a few minutes, or pick another balance.");
+      setError("Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in a minute, or pick another balance.");
       return;
     }
     // need gas in wallet for proofs + txs

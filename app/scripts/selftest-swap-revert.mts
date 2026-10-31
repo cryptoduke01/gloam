@@ -10,7 +10,7 @@
  * the refund out of the escrow, which a closed deposit limit refuses, and the
  * swap itself landing late, which the router refuses once the note is spent.
  * Proofs are not checked here. Covers: what does and doesn't mark a note, the
- * wait for the relay's lock, the retry after a reload, a relay that is down,
+ * move starting as soon as the revert is known, the retry after a reload, a relay that is down,
  * refuses or loses its reply, a tab closed before the receipt, a swap with no
  * hash that shows nothing for an hour (and that same swap landing after all,
  * before or after the move), the unshield landing first or during the move, a
@@ -257,6 +257,7 @@ async function swap(pool: Vault, amount: bigint, over: Partial<Sender> = {}) {
     },
     wait: async (h) => pool.receipts.get(h)!,
     isSpent: async (nf) => pool.spent.has(lc(nf)),
+    moveNote: () => {},
     ...over,
   };
   const { source, out, refund } = notes;
@@ -387,9 +388,8 @@ await test("the tab closed before the receipt: the sync reads it, and marks the 
 
 // ---------------------------------------------------------------- the move
 
-await test("nothing is tried while the relay holds the note, then the sync moves it and the proof is dead", async () => {
+await test("the move starts as soon as the revert is known, with no sync and no wait, and the proof is dead", async () => {
   const pool = mockVault();
-  const { source, out, refund } = await swap(pool, 20_000_000n);
   let sends = 0;
   const env = pool.env({
     relay: (t) => {
@@ -397,15 +397,18 @@ await test("nothing is tried while the relay holds the note, then the sync moves
       return pool.transfer([t.proof, t.root, t.nullifier, t.commitments]);
     },
   });
-  await reconcileClaims(env);
-  await tick();
-  assert.equal(pool.state.proofs, 0, "no proof wasted on a send the relay would refuse");
-  assert.equal(sends, 0);
-  assert.ok(swapProofWait(note(source.id)) > 0);
-
-  passLock();
-  await reconcileClaims(env);
+  let started = 0;
+  const { source, out, refund, error } = await swap(pool, 20_000_000n, {
+    moveNote: () => {
+      started++;
+      assert.ok(getAllNotes().some((n) => n.swapProofAt), "the mark is on the note before the move starts");
+      void moveRevertedNotes(env);
+    },
+  });
+  assert.equal(error!.message, SWAP_REVERTED);
+  assert.equal(started, 1);
   await until(() => note(source.id).status === "recovered", "the move to land");
+  assert.ok(swapProofWait(note(source.id)) > 0, "well before the relay's lock could have run out");
   assert.equal(sends, 1);
   assert.equal(pool.spent.has(lc(source.nullifier!)), true, "the old nullifier is spent");
   assert.equal(pool.replay(source), false, "so the swap's proof can't be used");
@@ -424,6 +427,65 @@ await test("nothing is tried while the relay holds the note, then the sync moves
   assert.equal(note(refund.id).status, "recovered");
   assert.deepEqual(countedIds(source), [moved.id]);
   assert.equal(sends, 1, "no second move");
+});
+
+await test("the sync that first reads a revert starts the move in the same pass", async () => {
+  const pool = mockVault();
+  const { source, refund } = await swap(pool, 20_000_000n, { wait: async () => Promise.reject(new Error("slow")) });
+  assert.equal(note(source.id).swapProofAt, undefined);
+  pool.receipts.set(note(refund.id).vaultSwap!.sent!.hash, "reverted");
+  await reconcileClaims(pool.env());
+  await until(() => note(source.id).status === "recovered", "the move to land");
+  assert.equal(total(source), 20_000_000n);
+});
+
+await test("only a swap known to have reverted starts a move", async () => {
+  const pool = mockVault();
+  let started = 0;
+  const moveNote = () => {
+    started++;
+  };
+  await swap(pool, 20_000_000n, { moveNote, wait: async () => "success" });
+  await swap(pool, 20_000_000n, { moveNote, wait: async () => Promise.reject(new Error("slow")) });
+  await swap(pool, 20_000_000n, {
+    moveNote,
+    relay: async () => {
+      throw new RelaySubmitError("This may have gone out already.", "maybe_sent");
+    },
+  });
+  await swap(pool, 20_000_000n, {
+    moveNote,
+    relay: async () => {
+      throw new RelaySubmitError("The price moved since the quote.", "OverInput");
+    },
+  });
+  await swap(pool, 20_000_000n, { moveNote, isSpent: async () => true });
+  assert.equal(started, 0);
+});
+
+await test("a relay still holding the note turns the first try away, and a later sync moves it", async () => {
+  const pool = mockVault();
+  const { source } = await swap(pool, 20_000_000n);
+  let held = true;
+  let tries = 0;
+  const env = pool.env({
+    relay: async (t) => {
+      tries++;
+      if (held) throw new RelaySubmitError("This payment is already being sent.", "in_flight");
+      return pool.transfer([t.proof, t.root, t.nullifier, t.commitments]);
+    },
+  });
+  await moveRevertedNotes(env);
+  assert.equal(tries, 1);
+  assert.equal(moves(source).length, 0);
+  assert.deepEqual(countedIds(source), [source.id]);
+  await moveRevertedNotes(env);
+  assert.equal(tries, 1, "not again at once: each try is a proof");
+  held = false;
+  after(61_000);
+  await moveRevertedNotes(env);
+  assert.equal(note(source.id).status, "recovered");
+  assert.equal(total(source), 20_000_000n);
 });
 
 await test("after a reload the move is tried again, from what is on disk", async () => {
@@ -955,8 +1017,8 @@ await test("a marked note can't be swapped or cashed out until the relay takes i
   const { source } = await swap(pool, 20_000_000n);
   const marked = note(source.id);
   const amount = BigInt(marked.amountWei);
-  assert.match(spendWaitMessage(marked)!, /Try again in about 3 minutes/);
-  assert.match(spendWaitMessage({ swapProofAt: Date.now() - RELAY_SPEND_LOCK_MS + 30_000 })!, /about a minute/);
+  assert.match(spendWaitMessage(marked)!, /Try again in a minute/);
+  assert.match(spendWaitMessage({ swapProofAt: Date.now() - RELAY_SPEND_LOCK_MS + 30_000 })!, /Try again in a minute/);
   assert.throws(() => checkPlan(marked, [amount / 2n, amount / 2n], [ME, ME]), /moving to a fresh private balance/);
   passLock();
   assert.equal(spendWaitMessage(marked), null);
