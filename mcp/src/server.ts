@@ -1108,6 +1108,21 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         authorization?: string;
       };
 
+  /**
+   * What a note label says about a paid resource. The resource is the payee's own text and labels go
+   * back to the model in later sessions, so only a host is kept, never free text.
+   */
+  const paidLabel = (resource: string): string => {
+    if (/^[a-z0-9.-]{1,80}(:\d{1,5})?$/i.test(resource)) return resource;
+    try {
+      const { protocol, host } = new URL(resource);
+      if ((protocol === "http:" || protocol === "https:") && host.length <= 80) return host;
+    } catch {
+      // Not a URL.
+    }
+    return "a paid resource";
+  };
+
   /** The payment request as Agent Wormhole reads it: the price itself, decoded (an MPP challenge's request, else the x402 requirements). */
   const quoteText = (req: GloamPaymentRequirements, mpp?: PaymentChallenge | null): string =>
     JSON.stringify(
@@ -1314,7 +1329,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           pending: "create",
           origin: "change",
           createdTx: null,
-          label: `change from paying ${req.resource}`,
+          label: `change from paying ${paidLabel(req.resource)}`,
         });
       }
       // The payment note is the payee's money once it lands, and only this server
@@ -1335,7 +1350,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         pending: "create",
         origin: "payment",
         createdTx: null,
-        label: `payment for ${req.resource}`,
+        label: `payment for ${paidLabel(req.resource)}`,
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
       header = encodePaymentHeader(payment.payload);
@@ -1540,12 +1555,19 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
   );
 
+  /** The encoded requirements in a 402's headers, or null. They win over anything in the body. */
+  function requirementsHeader(headers: Headers): string | null {
+    for (const name of ["x-payment-required", "payment-required"]) {
+      const h = headers.get(name)?.trim();
+      if (h?.startsWith("gloamx402req1:")) return h;
+    }
+    return null;
+  }
+
   /** Pull Gloam requirements out of a 402 response: a header, the body, or an x402 `accepts` list. */
   function requirementsFrom402(headers: Headers, body: string): GloamPaymentRequirements | string {
-    for (const name of ["x-payment-required", "payment-required"]) {
-      const h = headers.get(name);
-      if (h?.trim().startsWith("gloamx402req1:")) return decodeRequirements(h.trim());
-    }
+    const header = requirementsHeader(headers);
+    if (header) return decodeRequirements(header);
     const t = body.trim();
     if (t.startsWith("gloamx402req1:")) return decodeRequirements(t);
     let json: unknown;
@@ -1654,6 +1676,17 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         });
       }
 
+      // A 402 from another origin, reached through a redirect. The paid retry goes to `url` and the
+      // redirect drops the payment on the way there, so paying would strand the money.
+      if (first.url && new URL(first.url).origin !== new URL(url).origin) {
+        return text({
+          status: "refused",
+          code: "cross_origin_402",
+          httpStatus: 402,
+          message: `${new URL(url).origin} redirected to ${new URL(first.url).origin}, which asked for payment. Nothing was paid: a payment cannot follow a redirect to another origin. Call that origin directly if you trust it.`,
+        });
+      }
+
       // MPP first: a gloam/charge challenge in WWW-Authenticate. Otherwise x402.
       let req: GloamPaymentRequirements | string;
       const mpp = gloamChallenges(first.headers.get("www-authenticate"))[0] ?? null;
@@ -1700,8 +1733,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           });
         }
       }
-      // For Agent Wormhole: the 402 body as the payee sent it, when the price came in it.
-      const quote = !mpp && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
+      // For Agent Wormhole: the 402 body as the payee sent it, when the price came in it. A price in
+      // a header is what gets paid whatever the body says, so the check reads that price, decoded.
+      const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
       const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}) });
       if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
       // What to present: the MPP credential when paying an MPP challenge, else the x402 header.

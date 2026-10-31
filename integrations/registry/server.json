@@ -20,7 +20,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@gloamtrade/mcp",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "transport": {
         "type": "stdio"
       },
