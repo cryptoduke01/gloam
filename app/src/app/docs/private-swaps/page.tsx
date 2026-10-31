@@ -253,6 +253,11 @@ export default function DocsPrivateSwapsPage() {
         ends the old swap for good, and so does spending the same money on
         anything else, such as a send.
       </p>
+      <p>
+        If the app never hears how a swap ended, it waits an hour. If nothing
+        has landed by then, it makes the same move. Only one of the two can
+        ever land, so your money is counted once either way.
+      </p>
 
       <h2 id="trust">What the router can and cannot do</h2>
       <ul>

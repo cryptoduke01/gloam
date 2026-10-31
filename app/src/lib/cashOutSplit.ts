@@ -160,9 +160,9 @@ async function seen(client: PublicClient, chainId: number, pool: Address, commit
  * spend nullifier, and a cash out or swap of it would show next to that
  * nullifier where the money went and how much (GHSA-x8fx-frxx-7f66). The
  * fresh note's nullifier is in no proof. The move and the cash out still land
- * close together, so their timing can hint at a link. A note whose swap landed
- * and reverted (swapProofAt) moves first too: both other plans spend it through
- * a transfer, which ends that swap's proof.
+ * close together, so their timing can hint at a link. A note whose swap
+ * reverted (swapProofAt) moves first too: both other plans spend it through a
+ * transfer, which ends that swap's proof.
  */
 export function spendPlanFor(note: Pick<LocalNote, "amountWei" | "fundsProofAt" | "swapProofAt">, amount: bigint): "direct" | "split" | "move" {
   if (amount < BigInt(note.amountWei)) return "split";

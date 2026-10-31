@@ -23,7 +23,8 @@
  * and the next sync settles them either way. So does one that landed and
  * reverted, but its unshield proof stays valid until the note is spent, so that
  * note is marked (swapProofAt) and the sync moves it to a fresh note as soon as
- * the relay takes it (lib/claimSweep moveRevertedNotes).
+ * the relay takes it (lib/claimSweep moveRevertedNotes). A swap with no saved
+ * hash that shows nothing for an hour goes the same way (SWAP_UNSEEN_MS).
  */
 import { keccak256, type Address, type Hex } from "viem";
 import { buildPoseidonUnshieldWitness } from "./proverPoseidon";

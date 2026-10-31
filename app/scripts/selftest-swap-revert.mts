@@ -7,12 +7,15 @@
  * it. Runs the app's own code (note store, sweep, reconcile) against an
  * in-memory vault that follows transfer's rules, as selftest-claim-sweep does,
  * plus that unshield sent on its own (the money goes to the swap's escrow) and
- * the refund out of the escrow, which a closed deposit limit refuses. Proofs
- * are not checked here. Covers: what does and doesn't mark a note, the wait for
- * the relay's lock, the retry after a reload, a relay that is down, refuses or
- * loses its reply, a tab closed before the receipt, the unshield landing first
- * or during the move, a refund held on a closed limit, two tabs, a backup, and
- * what spends a marked note. Throughout, no note may be lost or counted twice.
+ * the refund out of the escrow, which a closed deposit limit refuses, and the
+ * swap itself landing late, which the router refuses once the note is spent.
+ * Proofs are not checked here. Covers: what does and doesn't mark a note, the
+ * wait for the relay's lock, the retry after a reload, a relay that is down,
+ * refuses or loses its reply, a tab closed before the receipt, a swap with no
+ * hash that shows nothing for an hour (and that same swap landing after all,
+ * before or after the move), the unshield landing first or during the move, a
+ * refund held on a closed limit, two tabs, a backup, and what spends a marked
+ * note. Throughout, no note may be lost or counted twice.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-swap-revert.mts
  */
@@ -43,7 +46,9 @@ const {
 } = await import("../src/lib/shield");
 const { spendPlanFor, spendWaitMessage } = await import("../src/lib/cashOutSplit");
 const { checkPlan } = await import("../src/lib/cashOutPrivately");
-const { MOVE_LAND_MS, appClaimEnv, backupSpentCheck, moveRevertedNotes, reconcileClaims } = await import("../src/lib/claimSweep");
+const { MOVE_LAND_MS, SWAP_UNSEEN_MS, appClaimEnv, backupSpentCheck, moveRevertedNotes, reconcileClaims } = await import(
+  "../src/lib/claimSweep"
+);
 const { SWAP_MAYBE_SENT, SWAP_REVERTED, SWAP_SPENT, sendVaultSwap } = await import("../src/lib/vaultSwapRun");
 const { RelaySubmitError } = await import("../src/lib/relay/client");
 const { INFLIGHT_TTL_SEC } = await import("../src/lib/relay/inflight");
@@ -54,6 +59,8 @@ type SwapCall = Parameters<Sender["relay"]>[0];
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
+  // each starts on an empty store: an old test's pending swap would soon be over an hour old
+  await setAllNotes([]);
   await fn();
   passed++;
   console.log(`ok  ${name}`);
@@ -124,6 +131,17 @@ function mockVault() {
       const hash = newHash();
       receipts.set(hash, (await apply(args)) ? "success" : "reverted");
       return hash;
+    },
+    /**
+     * The swap call itself landing. With the note unspent the new note lands. With
+     * it spent and nothing at the escrow the router reverts (BadRefund, the swap's
+     * contract test test_a_note_spent_elsewhere_has_nothing_to_refund): nothing moves.
+     */
+    async landSwap(source: LocalNote, out: LocalNote): Promise<boolean> {
+      if (spent.has(lc(source.nullifier!))) return false;
+      spent.add(lc(source.nullifier!));
+      await insert(out.commitment);
+      return true;
     },
     /** The swap's unshield sent on its own. False when the vault refuses it: the note is already spent. */
     replay(note: LocalNote): boolean {
@@ -549,6 +567,162 @@ await test("a lost move that never lands gets a second one, and the first is ret
   assert.equal(total(source), 20_000_000n);
 });
 
+// ---------------------------------------------------------------- a swap with no hash, after an hour
+
+/** A swap whose reply was lost: its notes are saved, no hash is. A swap from before hashes were saved looks the same. */
+const lostSwap = (pool: Vault, amount: bigint) =>
+  swap(pool, amount, {
+    relay: async () => {
+      throw new RelaySubmitError("This may have gone out already.", "maybe_sent");
+    },
+  });
+
+await test("a swap with no hash under an hour old is left alone", async () => {
+  assert.equal(SWAP_UNSEEN_MS, 3_600_000, "the rule is one hour");
+  const pool = mockVault();
+  const { source, out, refund } = await lostSwap(pool, 20_000_000n);
+  after(SWAP_UNSEEN_MS - 60_000);
+  assert.equal(await reconcileClaims(pool.env()), false);
+  await tick();
+  assert.equal(note(source.id).swapProofAt, undefined);
+  assert.equal(pool.state.proofs, 0);
+  assert.equal(pool.spent.has(lc(source.nullifier!)), false);
+  assert.equal(spendPlanFor(note(source.id), BigInt(source.amountWei)), "direct");
+  assert.equal(note(out.id).sweepPending, true, "it can still land");
+  assert.equal(note(refund.id).sweepPending, true);
+  assert.deepEqual(countedIds(source), [source.id]);
+});
+
+await test("over an hour with nothing landed: marked and moved like a proven revert", async () => {
+  const pool = mockVault();
+  const { source, out, refund } = await lostSwap(pool, 20_000_000n);
+  after(SWAP_UNSEEN_MS + 1);
+  const env = pool.env();
+  assert.equal(await reconcileClaims(env), true);
+  assert.equal(note(source.id).swapProofAt, refund.createdAt, "marked with when the swap was made");
+  assert.equal(swapProofWait(note(source.id)), 0, "long past the relay's lock");
+  assert.equal(spendWaitMessage(note(source.id)), null);
+  assert.equal(spendPlanFor(note(source.id), BigInt(source.amountWei)), "move");
+  await until(() => note(source.id).status === "recovered", "the move to land");
+  assert.equal(pool.replay(source), false, "the swap's proof is dead");
+  const [moved] = moves(source);
+  assert.deepEqual(countedIds(source), [moved!.id]);
+  await reconcileClaims(env);
+  assert.equal(note(out.id).status, "recovered");
+  assert.equal(note(refund.id).status, "recovered");
+  assert.deepEqual(countedIds(source), [moved!.id]);
+  assert.equal(total(source), 20_000_000n);
+});
+
+await test("the hour isn't enough on its own: the vault must show the note unspent", async () => {
+  const pool = mockVault();
+  const { source } = await lostSwap(pool, 20_000_000n);
+  after(SWAP_UNSEEN_MS + 1);
+  const env = pool.env();
+  // unread: nothing is marked on a guess about the guess
+  await reconcileClaims(pool.env({ chain: { ...env.chain, isSpent: () => Promise.reject(new Error("rpc down")) } }));
+  assert.equal(note(source.id).swapProofAt, undefined);
+  // spent, with the escrow unread, so the sync can't settle it yet: nothing to move
+  pool.spent.add(lc(source.nullifier!));
+  await reconcileClaims(pool.env({ escrowWaiting: async () => null }));
+  assert.equal(note(source.id).swapProofAt, undefined);
+});
+
+await test("with a saved hash only the receipt decides, however old the swap is", async () => {
+  const pool = mockVault();
+  const { source, refund } = await swap(pool, 20_000_000n, {
+    relay: async () => pool.newHash(),
+    wait: async () => {
+      throw new Error("Timed out while waiting for transaction");
+    },
+  });
+  after(SWAP_UNSEEN_MS * 24);
+  await reconcileClaims(pool.env());
+  assert.equal(note(source.id).swapProofAt, undefined, "no receipt: no mark");
+  pool.receipts.set(note(refund.id).vaultSwap!.sent!.hash, "reverted");
+  await reconcileClaims(pool.env({ relayReady: async () => false }));
+  assert.equal(note(source.id).swapProofAt, note(refund.id).vaultSwap!.sent!.at, "the proven path, unchanged");
+});
+
+await test("only a swap counts: an old pending split marks nothing", async () => {
+  const pool = mockVault();
+  const source = await makeNote("co", 20_000_000n);
+  await pool.insert(source.commitment);
+  await makeNote("chg", 5_000_000n, { sweptFrom: { id: source.id, nullifier: source.nullifier! }, sweepPending: true });
+  after(SWAP_UNSEEN_MS * 24);
+  await reconcileClaims(pool.env());
+  assert.equal(note(source.id).swapProofAt, undefined);
+});
+
+await test("the swap lands after the move: it reverts, nothing moves, and the money is counted once", async () => {
+  const pool = mockVault();
+  const { source, out, refund } = await lostSwap(pool, 20_000_000n);
+  after(SWAP_UNSEEN_MS + 1);
+  await reconcileClaims(pool.env());
+  await until(() => note(source.id).status === "recovered", "the move to land");
+  assert.equal(await pool.landSwap(source, out), false, "the second spend fails");
+  assert.equal(pool.index.has(lc(out.commitment)), false);
+  await reconcileClaims(pool.env());
+  const [moved] = moves(source);
+  assert.equal(note(out.id).status, "recovered");
+  assert.equal(note(refund.id).status, "recovered");
+  assert.deepEqual(countedIds(source), [moved!.id]);
+  assert.equal(total(source), 20_000_000n);
+});
+
+await test("the swap lands before the move does: the move fails, the swap stands, counted once", async () => {
+  const pool = mockVault();
+  const { source, out, refund } = await lostSwap(pool, 20_000_000n);
+  after(SWAP_UNSEEN_MS + 1);
+  let refused = 0;
+  const env = pool.env({
+    relay: async (t) => {
+      assert.equal(await pool.landSwap(source, out), true, "the swap gets there first");
+      const hash = await pool.transfer([t.proof, t.root, t.nullifier, t.commitments]);
+      refused += pool.receipts.get(hash) === "reverted" ? 1 : 0;
+      return hash;
+    },
+  });
+  await reconcileClaims(env);
+  await until(() => note(source.id).status === "recovered", "the note to be retired");
+  assert.equal(refused, 1, "the second spend fails on chain");
+  await reconcileClaims(pool.env());
+  for (const m of moves(source)) assert.equal(note(m.id).status, "recovered", "the move can never land");
+  assert.equal(note(out.id).sweepPending, false);
+  assert.equal(note(out.id).status, "open");
+  assert.equal(note(refund.id).status, "recovered");
+  assert.deepEqual(countedIds(source), [out.id], "the swap's note, and nothing else");
+  assert.ok(note(source.id).secret.length > 10, "history keeps its secret");
+});
+
+await test("the swap landed before the sync ever looked: nothing is marked or moved", async () => {
+  const pool = mockVault();
+  const { source, out, refund } = await lostSwap(pool, 20_000_000n);
+  assert.equal(await pool.landSwap(source, out), true);
+  after(SWAP_UNSEEN_MS + 1);
+  await reconcileClaims(pool.env());
+  await tick();
+  assert.equal(pool.state.proofs, 0);
+  assert.equal(moves(source).length, 0);
+  assert.equal(note(source.id).swapProofAt, undefined);
+  assert.equal(note(refund.id).status, "recovered");
+  assert.deepEqual(countedIds(source), [out.id]);
+});
+
+await test("the unshield landed first, an hour on: the refund finishes and counts once", async () => {
+  const pool = mockVault();
+  const { source, refund } = await lostSwap(pool, 20_000_000n);
+  assert.equal(pool.replay(source), true);
+  after(SWAP_UNSEEN_MS + 1);
+  const env = pool.env();
+  await reconcileClaims(env);
+  assert.equal(note(source.id).swapProofAt, undefined, "spent, and its money is at the escrow: nothing to move");
+  await until(() => pool.index.has(lc(refund.commitment)), "the refund to land");
+  await reconcileClaims(env);
+  assert.equal(pool.state.proofs, 0);
+  assert.deepEqual(countedIds(source), [refund.id]);
+});
+
 // ---------------------------------------------------------------- the proof used first
 
 await test("the unshield landed first: the note is retired, and the refund note finishes and counts once", async () => {
@@ -793,7 +967,6 @@ await test("a marked note can't be swapped or cashed out until the relay takes i
 
 await test("the balance by asset never holds a swap's pending notes or a held refund", async () => {
   const pool = mockVault();
-  await setAllNotes([]);
   const { source } = await swap(pool, 20_000_000n);
   assert.equal(sumByAsset(getAllNotes()).get(lc(ASSET)), 20_000_000n);
   pool.replay(source);

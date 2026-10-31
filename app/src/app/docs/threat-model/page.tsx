@@ -215,7 +215,10 @@ export default function DocsThreatModelPage() {
         which one landed. It also moves the note to a fresh one through the relay, which
         ends those proofs: about 3 minutes after the swap, once the relay takes the note,
         or on the owner&apos;s next visit if the app was closed by then. Until that move
-        lands the proofs stay usable.
+        lands the proofs stay usable. A swap the app never heard back about moves its note
+        the same way once an hour has passed with nothing landed. If that swap lands
+        first, the move fails and the swap stands; if the move lands first, the swap
+        reverts.
       </p>
       <p>
         <strong>Limits and blocks.</strong> The new note and the refund note are deposits,

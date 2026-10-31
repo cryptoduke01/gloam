@@ -508,16 +508,34 @@ export async function moveRevertedNotes(env?: ClaimEnv): Promise<void> {
 }
 
 /**
- * A swap this tab never heard the end of (it closed, or the wait gave up): once
- * the chain shows it landed and reverted, marks the note it spends, as the swap
- * itself would have. True when it did.
+ * How long a swap with no saved hash may show nothing before its note is treated
+ * as if the swap had reverted: sent before hashes were saved, or the relay's
+ * reply was lost. A guess, as nothing says how it ended, but one that can only
+ * cost a transfer: if the swap can still land, whichever spends the note first
+ * wins, the other fails on chain, and the sync retires the notes that can't land.
+ */
+export const SWAP_UNSEEN_MS = 60 * 60_000;
+
+/**
+ * Marks the note a pending swap spends, for a swap this tab didn't see revert.
+ * With a saved hash (the tab closed, or the wait gave up) only the receipt
+ * decides. With none, the swap's refund note must have sat for SWAP_UNSEEN_MS
+ * with the vault showing that note unspent. True when it marked one.
  */
 async function markRevertedSwap(env: ClaimEnv, refund: LocalNote): Promise<boolean> {
-  const sent = refund.vaultSwap?.sent;
-  const spent = refund.sweptFrom && getAllNotes().find((n) => n.id === refund.sweptFrom!.id);
-  if (!sent || !spent || spent.swapProofAt || spent.status === "recovered" || !env.txOutcome) return false;
-  if ((await env.txOutcome(sent.hash).catch(() => null)) !== "reverted") return false;
-  await updateLocalNote(spent.id, { swapProofAt: sent.at }).catch(() => {});
+  const info = refund.vaultSwap;
+  const from = refund.sweptFrom;
+  const spent = from && getAllNotes().find((n) => n.id === from.id);
+  if (!info || !from || !spent || spent.swapProofAt || spent.status === "recovered") return false;
+  let at = refund.createdAt;
+  if (info.sent) {
+    if (!env.txOutcome || (await env.txOutcome(info.sent.hash).catch(() => null)) !== "reverted") return false;
+    at = info.sent.at;
+  } else {
+    if (Date.now() - refund.createdAt <= SWAP_UNSEEN_MS) return false;
+    if ((await env.chain.isSpent(from.nullifier).catch(() => null)) !== false) return false;
+  }
+  await updateLocalNote(spent.id, { swapProofAt: at }).catch(() => {});
   return true;
 }
 

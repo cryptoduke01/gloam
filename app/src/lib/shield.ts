@@ -570,10 +570,11 @@ export type LocalNote = {
   fundsProofAt?: number;
   /**
    * When a private swap of this note went out (ms), set once that swap is known
-   * to have landed and reverted. Its unshield proof stays valid until this note
-   * is spent, so the note moves whole to a fresh note as soon as the relay takes
-   * it (lib/claimSweep moveRevertedNotes), and anything else that spends it
-   * moves it first (lib/cashOutSplit spendPlanFor).
+   * to have landed and reverted, or has shown nothing for an hour with no hash
+   * to read (lib/claimSweep SWAP_UNSEEN_MS). Its unshield proof stays valid until
+   * this note is spent, so the note moves whole to a fresh note as soon as the
+   * relay takes it (lib/claimSweep moveRevertedNotes), and anything else that
+   * spends it moves it first (lib/cashOutSplit spendPlanFor).
    */
   swapProofAt?: number;
   /** On the fresh note from securing a claim, or a cash-out split: the note it came from (settled together). */
