@@ -101,7 +101,7 @@ What is different on mainnet:
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
 - **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
 - **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. Those are the launch values. On Robinhood Chain, ETH, AI and ORBIO are 0 on the vault until each one's timelocked limit lands, so a deposit reverts until then and `assertDepositWithinLiveLimit` says so. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026, so from 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`). Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
-- **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
+- **Fees.** Direct deposits and private payments are free. A cash out costs 0.5%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
 The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below. The vault has the same address on every mainnet, so it can't say which chain you mean: from 0.4.4 a builder given a mainnet vault as `poolAddress` and no `chainId` throws and asks for it, before it proves.
@@ -115,7 +115,7 @@ Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1,
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets, beta limits and 0.25% cash-out fee as Base mainnet, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets and beta limits as Base mainnet and a 0.25% cash-out fee (Base mainnet's is 0.5%), so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
 
 ### Ethereum
 
@@ -254,7 +254,7 @@ You always sign and broadcast yourself. The SDK never holds a key.
 
 A spend needs a membership path, which needs the current tree. `syncTree` rebuilds it from chain (replaying `Shielded`, `Transferred`, and `SealedSwapped` leaves in order, so the root stays correct after any transfer). Then `buildUnshieldIntent` builds the witness and the proof. On exit, the amount, asset, and recipient become public. The source note stays unlinkable via the nullifier.
 
-On mainnet the pool keeps a 0.25% cash-out fee: cashing out `amount` sends `amount - cashOutFee(amount)` to `to`. The note is spent in full either way.
+On mainnet the pool keeps a 0.5% cash-out fee: cashing out `amount` sends `amount - cashOutFee(amount)` to `to`. The note is spent in full either way. The pool takes the fee when the cash out lands, at its rate that day, and the proof doesn't fix it, so a proof held back pays whatever the rate is then. For the rate now, `readCashOutFeeBps(client, pool)`, then `cashOutFee(amount, bps)`.
 
 From 0.4.3 `buildUnshieldIntent` refuses an address where the money would be lost, before it proves: the vault, the network's payment-message board, a token contract, a Gloam swap router and the zero address. The Gloam relay refuses the same ones, and this covers a cash out you send from your own wallet too. Each list is for that chain only, so an address that is a router on one chain is an ordinary recipient on another. To check an address before anything else happens (a split, say), call `cashOutTargetProblem(to, network)`: it returns the reason, or null.
 
@@ -526,7 +526,8 @@ assertDepositAllowed(chainId, asset, amount)                // listed asset, no 
 readDepositLimit(client, pool, asset)                       // the vault's live beta limit: { on, perDeposit, total, deposited, room, unlimited } (0.4.2)
 isNoLimit(value), NO_LIMIT_THRESHOLD                        // a perDeposit or total of 2^127 or more (the owner sets uint128 max) is no limit
 assertDepositWithinLiveLimit(client, chainId, asset, amount, pool?)  // refuses over the live limit; refuses nothing if the vault can't be read
-CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 25 bps on mainnet, rounded down like the pool
+CASH_OUT_FEE_BPS, cashOutFee(amount, bps?)                  // 50 bps on mainnet, rounded down like the pool
+readCashOutFeeBps(client, pool)                             // the rate a vault charges now: Base Sepolia and Ethereum Sepolia are still at 25 (0.4.6)
 cashOutTargetProblem(to, net): string | null                // why a cash out to `to` would be lost, or null (0.4.3). `net` is a GloamNetwork, or { chainId, pool? }
 MAINNET_POOLS, mainnetPoolFor(chainId)                      // the one place mainnet pool addresses live
 BASE_SEPOLIA_POOL, baseSepoliaPool()                        // the Base Sepolia pool, null until it is in

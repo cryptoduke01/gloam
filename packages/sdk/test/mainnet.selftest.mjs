@@ -129,10 +129,13 @@ for (const set of [CIRCUIT_SHA256.wasm, CIRCUIT_SHA256.zkey.dev, CIRCUIT_SHA256.
 }
 
 // ── fees ────────────────────────────────────────────────────────────────────────
-assert(CASH_OUT_FEE_BPS === 25, "0.25% cash-out fee");
-assert(cashOutFee(100_000_000n) === 250_000n, "0.25% of 100 USDC.e is 0.25");
-assert(cashOutFee(399n) === 0n, "rounds down in the user's favour");
-assert(cashOutFee(10_001n, 25) === 25n, "matches the contract's split formula");
+assert(CASH_OUT_FEE_BPS === 50, "0.5% cash-out fee");
+assert(cashOutFee(100_000_000n) === 500_000n, "0.5% of 100 USDC.e is 0.5");
+assert(cashOutFee(199n) === 0n, "rounds down in the user's favour");
+assert(cashOutFee(399n) === 1n, "rounds down, not to the nearest");
+assert(cashOutFee(10_001n) === 50n, "matches the contract's split formula");
+assert(cashOutFee(100_000_000n, 25) === 250_000n, "a pool still at 0.25%, such as Base Sepolia");
+assert(cashOutFee(10_001n, 25) === 25n, "the same formula at 25 bps");
 assert(cashOutFee(1_000n, 0) === 0n, "fee off");
 throws(() => cashOutFee(-1n), /negative/, "negative amount");
 
