@@ -431,7 +431,7 @@ function mainnetLiveFacts(): string {
       : "- The swap routers have no owner, no admin and no upgrade, and the vault itself did not change. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps.",
     "",
     "BUYBACKS (the current state; overrides any line below)",
-    "- Buybacks have not started yet. Cash-out fees switched on with mainnet, and since 24 October they go to their own treasury wallet, so every buyback can be followed on-chain. Buybacks will run on a regular schedule and the team posts each one's transaction. Half of Gloam's fees are set to buy $GLOAM; half of what is bought is burned, half goes to the treasury. Never give a buyback date, amount or size, and never say buybacks are live.",
+    "- The first buyback is done (31 October 2026): 183.01 GLOAM, bought with collected fees plus a $200 team top-up, all sent to the burn address 0x000000000000000000000000000000000000dEaD. Burn transaction: https://robin.etherscan.io/tx/0x4ed0e963486d72b4444236428a74732db37d6977145834a8ccf924c26af1dd6b. That round was all burned instead of half burned and half to the treasury. The contract's total supply still reads 500,000 because $GLOAM has no burn function: burned tokens sit at the dead address and can never move, so circulating supply goes down. Cash-out fees go to their own treasury wallet since 24 October, so every buyback can be followed on-chain, and the team posts each one's transaction. From here half of Gloam's fees are set to buy $GLOAM; half of what is bought is burned, half goes to the treasury. Never give a future buyback's date, amount or size, and never say buybacks are live.",
     "",
     "CLAIM LINKS ON MAINNET",
     "- To claim: open the link, connect a wallet on the chain it names (Robinhood Chain for most), and tap Claim and secure. Or open Vault > Pay > Receive and paste it under Claim a payment: the box takes the whole link, the code alone, or a message with the link in it.",
@@ -472,19 +472,19 @@ function liveSwaps(): [string, string][] {
     [
       "$GLOAM listed in the mainnet pool, ready for deploy. Next (mainnet): Gloam goes live on Tempo and Robinhood Chain mainnet; shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); fees switch on and half of them start buying back $GLOAM; the first holder vote, in the open.",
       rh
-        ? `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); private swaps from the private balance on Robinhood Chain and Tempo; fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: beta deposit limits raised 100x (queued behind the public three-day timelock); buybacks start; the first holder vote, in the open.`
-        : `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); buybacks start; the first holder vote, in the open.`,
+        ? `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); private swaps from the private balance on Robinhood Chain and Tempo; fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: beta deposit limits raised 100x (queued behind the public three-day timelock); the first buyback is done; the first holder vote, in the open.`
+        : `$GLOAM listed in the mainnet pool; Gloam live on ${liveMainnetCountWords()} (${names}); fees on, paid to a dedicated treasury wallet; $GLOAM listed on CoinGecko. Next: shield $GLOAM in the Robinhood Chain pool (25,000 per deposit, 250,000 in total during beta); the first buyback is done; the first holder vote, in the open.`,
     ],
     ["gloam.trade/app (the testnet app)", "gloam.trade/app (the app: mainnet and testnet)"],
     // fees, the relay and what you can do read as now, not as "at mainnet"
     ["- Fees at mainnet:", "- Fees on mainnet:"],
     [
       "Half of Gloam's fees buy back $GLOAM once fees switch on at mainnet",
-      "Half of Gloam's fees are set to buy back $GLOAM (buybacks have not started yet, see BUYBACKS)",
+      "Half of Gloam's fees are set to buy back $GLOAM (the first buyback is done, see BUYBACKS)",
     ],
     [
       "half of Gloam's fees buy $GLOAM from the market once fees switch on at mainnet.",
-      "half of Gloam's fees are set to buy $GLOAM from the market. They have not started yet: see BUYBACKS at the top.",
+      "half of Gloam's fees are set to buy $GLOAM from the market. The first buyback is done: see BUYBACKS at the top.",
     ],
     ["From mainnet a cash out carries a 0.25% fee", "On mainnet a cash out carries a 0.25% fee"],
     ["(2) Buybacks: at mainnet, adding money", "(2) Buybacks: on mainnet, adding money"],
