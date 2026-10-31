@@ -30,6 +30,8 @@ type Stored = { w: string; c: string; n: number; t: number };
 
 export type BackupView = { c: string; n: number; t: number };
 
+export const BACKUP_GONE = "This backup isn't on the server any more.";
+
 export class RecoveryError extends Error {
   constructor(
     readonly status: number,
@@ -114,13 +116,17 @@ export function backupInputProblem(p: { c: unknown; n: unknown }): string | null
  * Saves a backup. The first write sets the write token; later writes must
  * present the same token and a higher version number, so an older copy can
  * never replace a newer one. `created` says this id held nothing before, which
- * is how a browser learns that a backup it had saved to has gone.
+ * is how builds that don't send `mustExist` learn that a backup has gone.
+ *
+ * With `mustExist`, an id holding nothing is refused with a 410. The check is
+ * under the lock, so a backup deleted a moment ago can't come back this way.
  */
 export async function writeBackup(p: {
   id: string;
   write: string;
   c: string;
   n: number;
+  mustExist?: boolean;
 }): Promise<{ n: number; t: number; created: boolean }> {
   const problem = backupInputProblem(p);
   if (problem) throw new RecoveryError(400, problem);
@@ -128,6 +134,7 @@ export async function writeBackup(p: {
   return withBackupLock(p.id, async () => {
     const [raw] = await kv([["GET", keyFor(p.id)]]);
     const current = jsonOf<Stored>(raw);
+    if (!current && p.mustExist) throw new RecoveryError(410, BACKUP_GONE);
     const w = sha256(p.write);
     if (current) {
       if (!sameHash(current.w, w)) throw new RecoveryError(403, "This backup belongs to a different key.");
