@@ -5,7 +5,7 @@
  * are findable without knowing they sit inside the Vault.
  */
 
-export type VaultActionId = "shield" | "pay" | "receive" | "swap" | "cashout" | "trade" | "send";
+export type VaultActionId = "shield" | "pay" | "receive" | "swap" | "cashout" | "topups" | "trade" | "send";
 
 /** Pay's three modes (components/app/MoveView). */
 export type MoveMode = "send" | "receive" | "cashout";
@@ -29,6 +29,7 @@ export const VAULT_ACTIONS: readonly VaultAction[] = [
   { id: "receive", label: "Receive", href: "/app/vault?tab=move&mode=receive" },
   { id: "swap", label: "Swap", href: "/app/vault?tab=swap", swapOnly: true },
   { id: "cashout", label: "Cash out", href: "/app/vault?tab=move&mode=cashout" },
+  { id: "topups", label: "Agent top-ups", href: "/app/vault?tab=topups" },
   { id: "trade", label: "Trade", href: "/app/vault?tab=trade", stocksOnly: true },
   { id: "send", label: "Public send", href: "/app/vault?tab=send", nativeOnly: true },
 ];
@@ -59,7 +60,7 @@ export function vaultActionFromParams(
   if (tab === "move") {
     const m = moveModeFromParam(mode);
     id = m === "send" ? "pay" : m;
-  } else if (tab === "shield" || tab === "swap" || tab === "trade" || tab === "send") {
+  } else if (tab === "shield" || tab === "swap" || tab === "topups" || tab === "trade" || tab === "send") {
     id = tab;
   } else {
     id = null;

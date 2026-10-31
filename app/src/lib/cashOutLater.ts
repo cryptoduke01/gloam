@@ -23,11 +23,13 @@ import { getAllNotes } from "./noteVault";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { publicClientFor } from "./rhClient";
-import { shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
+import { endedPlan, shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
 import type { DelayWindow } from "./relay/scheduled";
 
 /** The windows the relay offers (lib/relay/scheduled DELAY_WINDOWS): about an hour, 6 hours or a day. */
 export type CashOutWindow = DelayWindow;
+/** When the relay sends it: at a random time in a window from now, or on a day ahead (a prepaid top-up). */
+export type CashOutWhen = CashOutWindow | { day: number };
 
 export type CashOutJobView = {
   id: string;
@@ -78,8 +80,9 @@ export function markFor(job: OwnedCashOutJob, proof?: { root: Hex; at: number })
 
 /**
  * Hands a proven cash out to the relay to send at a random time inside
- * `window`. Asking again for the same money returns the job already waiting;
- * when that one pays another address, a CashOutLaterError carries it.
+ * `window`, or inside the UTC day `day`. Asking again for the same money
+ * returns the job already waiting; when that one pays another address, a
+ * CashOutLaterError carries it.
  */
 export async function scheduleCashOut(p: {
   chainId: number;
@@ -89,7 +92,8 @@ export async function scheduleCashOut(p: {
   asset: Address;
   to: Address;
   amount: bigint;
-  window: CashOutWindow;
+  window?: CashOutWindow;
+  day?: number;
 }): Promise<OwnedCashOutJob> {
   // Recording demo: the pretend relay keeps the job (lib/demo/chain), by the same rules.
   if (readDemo()) {
@@ -168,10 +172,10 @@ export async function cancelCashOut(id: string): Promise<CancelResult> {
  * relay holds, not the one asked for: when this money already has a cash out
  * waiting to another address, the note is marked with that one and this throws.
  */
-export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, window: CashOutWindow): Promise<OwnedCashOutJob> {
+export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, when: CashOutWhen): Promise<OwnedCashOutJob> {
   let job: OwnedCashOutJob;
   try {
-    job = await scheduleCashOut({ ...call, window });
+    job = await scheduleCashOut({ ...call, ...(typeof when === "string" ? { window: when } : when) });
   } catch (e) {
     if (e instanceof CashOutLaterError && e.job) updateLocalNote(note.id, { cashOut: markFor(e.job) });
     throw e;
@@ -364,10 +368,25 @@ export async function releaseGoneCashOut(n: LocalNote, env: CashOutEnv = appCash
 }
 
 /**
+ * A prepaid top-up can wait months and the app can stay closed for longer than
+ * the relay keeps a finished job, so "gone" can only mean it is over. The note
+ * is settled from its own chain: spent, it went out; unspent, the relay can no
+ * longer send it, so it comes back with the usual notice. True when it was.
+ */
+export async function settleGoneCashOut(n: LocalNote, env: CashOutEnv = appCashOutEnv()): Promise<boolean> {
+  if (!n.cashOut || !onEnvChain(n, env)) return false;
+  const unspent = await unspentOnChain(n, env);
+  if (unspent === null) return false;
+  updateLocalNote(n.id, { cashOut: { ...n.cashOut, state: unspent ? "failed" : "sent" } });
+  return true;
+}
+
+/**
  * Clears the notice on a note whose cash out came back, once it was shown or
  * it is spent again. A private cash out's piece stops being one too: it is
  * plain money in the balance from here, not a piece still to schedule.
  */
 export function dismissReturnedCashOut(noteId: string) {
-  updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: undefined });
+  const tag = getAllNotes().find((n) => n.id === noteId)?.cashOutPlan;
+  updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: endedPlan(tag, "returned") });
 }

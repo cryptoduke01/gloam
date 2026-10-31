@@ -627,7 +627,24 @@ export type CashOutPlanTag = {
   to: Address;
   /** The window it was meant to go out in. */
   window: DelayWindow;
+  /** On a prepaid agent top-up (lib/agentTopUp): the day it goes out instead. */
+  topUp?: TopUpTag;
 };
+
+/** What a top-up remembers, so it can be scheduled again and still shows once it is over. */
+export type TopUpTag = {
+  /** The UTC day it goes out (ms at the start of that day). */
+  day: number;
+  /** Days between top-ups: the rest of the series' days follow from this one. */
+  everyDays: number;
+  /** It went back to being plain money in the balance, and how. */
+  ended?: "cancelled" | "returned" | "kept";
+};
+
+/** A piece's tag once it stops being one: gone, or on a top-up, kept for the record of how it ended. */
+export function endedPlan(tag: CashOutPlanTag | undefined, how: NonNullable<TopUpTag["ended"]>): CashOutPlanTag | undefined {
+  return tag?.topUp ? { ...tag, topUp: { ...tag.topUp, ended: how } } : undefined;
+}
 
 /** A cash out is waiting or on its way: the note will be spent, so it is not counted. */
 export function cashOutPending(n: Pick<LocalNote, "cashOut">): boolean {

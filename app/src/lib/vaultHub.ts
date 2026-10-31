@@ -12,6 +12,7 @@
  * cashing out are public transfers, a private payment hides who paid whom and
  * how much, and a swap hides who swapped but not its tokens or amounts.
  */
+import type { LocalNote } from "./shield";
 import {
   VAULT_ACTIONS as NAV_ACTIONS,
   vaultActionFromParams,
@@ -28,7 +29,7 @@ export type VaultActionInfo = VaultAction & {
   /** One plain line: what it does, and what shows. */
   line: string;
   /** The Vault tab it opens (?tab=), and Pay's part (?mode=) for Receive and Cash out. */
-  tab: "shield" | "move" | "swap" | "trade" | "send";
+  tab: "shield" | "move" | "swap" | "topups" | "trade" | "send";
   mode?: "receive" | "cashout";
   /** Spends the private balance, so it waits until there is one. */
   spends?: boolean;
@@ -54,6 +55,12 @@ const COPY: Record<VaultActionId, Pick<VaultActionInfo, "short" | "line" | "spen
     spends: true,
     line: "Back to any public wallet. The cash out itself shows on the explorer.",
   },
+  topups: {
+    short: "Top-ups",
+    spends: true,
+    extra: true,
+    line: "Refill an agent's wallet on a schedule, with Gloam closed. Each top-up shows on the explorer.",
+  },
   trade: { short: "Trade", extra: true, line: "Tokenized stocks, on the Robinhood Chain testnet." },
   send: { short: "Public send", extra: true, line: "A regular transfer from your wallet. It shows on the explorer." },
 };
@@ -69,12 +76,28 @@ function withCopy(a: VaultAction): VaultActionInfo {
   };
 }
 
-/** In the order money moves: in, around, out; then Trade and Public send. */
+/** In the order money moves: in, around, out; then Agent top-ups, Trade and Public send. */
 export const VAULT_ACTIONS: readonly VaultActionInfo[] = NAV_ACTIONS.map(withCopy);
 
 /** The actions this network and wallet have, the same as the app nav lists. */
 export function vaultActionsFor(opts: { swap: boolean; stocks: boolean; native: boolean }): VaultActionInfo[] {
   return navActionsFor(opts).map(withCopy);
+}
+
+/**
+ * What prepaid agent top-ups hold out of the balance now, by asset
+ * (lib/agentTopUp). It left the private balance when it was set aside and can
+ * stay out for months, so the overview says where it went.
+ */
+export function topUpsSetAside(notes: readonly Pick<LocalNote, "asset" | "amountWei" | "status" | "cashOut" | "cashOutPlan">[]): Map<string, bigint> {
+  const out = new Map<string, bigint>();
+  for (const n of notes) {
+    const state = n.cashOut?.state;
+    if (!n.cashOutPlan?.topUp || n.status === "recovered" || (state !== "scheduled" && state !== "sent")) continue;
+    const k = n.asset.toLowerCase();
+    out.set(k, (out.get(k) ?? BigInt(0)) + BigInt(n.amountWei));
+  }
+  return out;
 }
 
 /** Why a spending action waits, in the words the Vault uses everywhere. */

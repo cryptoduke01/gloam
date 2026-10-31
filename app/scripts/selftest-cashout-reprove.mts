@@ -9,7 +9,8 @@
  * root and time), and every way it can fail with the old proof kept: a refusal,
  * an unreachable relay, a failed proof, a slow proof, a mark that moved on, the
  * person proving something themselves, and another network. Plus scheduling
- * records the root only for a job made with this proof.
+ * records the root only for a job made with this proof. A prepaid top-up more
+ * than a day off is renewed once a day, and reads nothing on the passes between.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-cashout-reprove.mts
  */
@@ -17,7 +18,7 @@ import assert from "node:assert/strict";
 import "./browser-shim.mjs";
 import type { Address, Hex } from "viem";
 
-const { LAST_STRETCH_MS, REFRESH_EVERY_MS, REPROVE_MIN_LEAD_MS, refreshWaitingProofs, reproveDue } = await import(
+const { FAR_REFRESH_MS, LAST_STRETCH_MS, REFRESH_EVERY_MS, REPROVE_MIN_LEAD_MS, refreshWaitingProofs, reproveDue } = await import(
   "../src/lib/cashOutReprove"
 );
 const { scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
@@ -144,6 +145,39 @@ function fake(over: Partial<ReproveEnv> = {}, answer?: (job: string, call: CashO
   return { env, proved, replaced, clock };
 }
 const byJob = (job: string) => getAllNotes().find((n) => n.cashOut?.job === job)!;
+
+await test("a proof waiting further off than any window is renewed once a day, and every window keeps its pace", () => {
+  const far = T0 + 30 * 24 * 3_600_000;
+  assert.equal(reproveDue(mark({ at: far, provenAt: T0 - REFRESH_EVERY_MS }), T0, NEW_ROOT), false, "ten minutes is too soon");
+  assert.equal(reproveDue(mark({ at: far, provenAt: T0 - FAR_REFRESH_MS + 1 }), T0, NEW_ROOT), false);
+  assert.equal(reproveDue(mark({ at: far, provenAt: T0 - FAR_REFRESH_MS }), T0, NEW_ROOT), true);
+  // a cash out in the longest window, a day off: as before
+  const day = T0 + 24 * 3_600_000;
+  assert.equal(reproveDue(mark({ at: day, provenAt: T0 - REFRESH_EVERY_MS }), T0, NEW_ROOT), true);
+  assert.equal(reproveDue(mark({ at: day, provenAt: T0 - REFRESH_EVERY_MS + 1 }), T0, NEW_ROOT), false);
+});
+
+await test("twelve far-off top-ups stay well inside the relay's hourly limit, and read nothing between renewals", async () => {
+  clearBoard();
+  const series = Array.from({ length: 12 }, (_, i) => waiting({ at: T0 + (i + 2) * 7 * 24 * 3_600_000, provenAt: T0 - FAR_REFRESH_MS }));
+  let reads = 0;
+  const f = fake({
+    pathOf: async () => {
+      reads++;
+      return { leafIndex: 1, leaf: 1n, pathElements: [], pathIndices: [], root: BigInt(NEW_ROOT) } as PoseidonMerklePath;
+    },
+  });
+  assert.equal((await refreshWaitingProofs(f.env)).replaced, 12);
+  assert.equal(reads, 12);
+  // the app ticks every 2 minutes: the next day's worth of passes before the renewal is due
+  for (let t = 2; t < 60; t += 2) {
+    f.clock.now = T0 + t * MIN;
+    assert.deepEqual(await refreshWaitingProofs(f.env), { replaced: 0, kept: 0, skipped: 12 });
+  }
+  assert.equal(reads, 12, "no tree read on a pass with nothing due");
+  assert.equal(f.proved.length, 12, "twelve proofs in that hour, against REPROVE_PER_HOUR of 60");
+  assert.equal(series.length, 12);
+});
 
 await test("a waiting cash out gets a fresh proof of the same cash out: only the mark's root and time change", async () => {
   clearBoard();

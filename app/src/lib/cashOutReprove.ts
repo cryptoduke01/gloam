@@ -15,7 +15,9 @@
  * recipient, amount, asset and send time. It runs every so often, then once
  * more in the last stretch before the send time, so a cash out whose app
  * stays open goes out with a root from around its own time. One that goes out
- * while the app is closed keeps the root of its last proof.
+ * while the app is closed keeps the root of its last proof. A prepaid top-up
+ * more than a day off is renewed once a day (FAR_REFRESH_MS): twelve of them
+ * every ten minutes would go past the relay's limit for no gain.
  *
  * It stays in the background:
  *  - one proof at a time, and never while the person is proving something
@@ -33,7 +35,7 @@ import type { PoseidonMerklePath } from "./merklePoseidon";
 import { getActiveNetwork } from "./networks";
 import { getAllNotes } from "./noteVault";
 import { fieldToBytes32, provingNow } from "./proveClient";
-import { REPROVE_MIN_LEAD_MS } from "./relay/scheduled";
+import { MAX_DELAY_MS, REPROVE_MIN_LEAD_MS } from "./relay/scheduled";
 import { updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
 
 export { REPROVE_MIN_LEAD_MS };
@@ -41,6 +43,8 @@ export { REPROVE_MIN_LEAD_MS };
 export const REFRESH_EVERY_MS = 10 * 60 * 1000;
 /** And once more inside this stretch before its send time. */
 export const LAST_STRETCH_MS = 15 * 60 * 1000;
+/** A waiting proof further off than any window (a prepaid top-up) is renewed at most this often. */
+export const FAR_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Whether a waiting cash out is due a fresh proof now, against `root` (the
@@ -55,7 +59,7 @@ export function reproveDue(mark: CashOutMark, now: number, root: Hex | null): bo
   const last = mark.provenAt ?? 0;
   // Inside the last stretch: once, so the root is from around its own send time.
   if (lead <= LAST_STRETCH_MS) return last < mark.at - LAST_STRETCH_MS;
-  return now - last >= REFRESH_EVERY_MS;
+  return now - last >= (lead > MAX_DELAY_MS ? FAR_REFRESH_MS : REFRESH_EVERY_MS);
 }
 
 /** What a refresh reads and does: the app's own paths, swapped for fakes in the selftest. */
@@ -115,6 +119,11 @@ async function run(e: ReproveEnv): Promise<ReproveSummary> {
     const mark = n.cashOut!;
     const tried = refusedAt.get(mark.job);
     if (mark.at - e.now() < REPROVE_MIN_LEAD_MS || (tried && e.now() - tried < REFRESH_EVERY_MS)) {
+      out.skipped++;
+      continue;
+    }
+    // Not due whatever the root: nothing to read (a series of top-ups would read the tree twelve times a pass).
+    if (!reproveDue(mark, e.now(), null)) {
       out.skipped++;
       continue;
     }
