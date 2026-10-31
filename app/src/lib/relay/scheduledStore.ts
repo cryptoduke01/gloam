@@ -3,7 +3,7 @@
  * locks use (lib/relay/inflight, Upstash REST). A job outlives a redeploy and
  * is seen by every instance, so the cron finds it whichever one runs.
  *
- *   gloam:cashout:job:<id>                 the job, JSON, kept JOB_TTL_SEC while live, JOB_DONE_TTL_SEC after
+ *   gloam:cashout:job:<id>                 the job, JSON, kept past its send time while live (liveTtlSec), JOB_DONE_TTL_SEC after
  *   gloam:cashout:due                      sorted set of live job ids by when the runner next looks (dueAt)
  *   gloam:cashout:nf:<chainId>:<nullifier> the job scheduled for that spend
  *   gloam:cashout:lock:<id>                a short lock while one run works on it
@@ -19,7 +19,7 @@
 import { randomUUID } from "crypto";
 import type { Hex } from "viem";
 import { redisConfigured } from "@/lib/tractionStore";
-import { JOB_DONE_TTL_SEC, JOB_TTL_SEC, dueAt, isLive, memoryJobStore, type CashOutJob, type JobStore } from "./scheduled";
+import { JOB_DONE_TTL_SEC, dueAt, isLive, liveTtlSec, memoryJobStore, type CashOutJob, type JobStore } from "./scheduled";
 
 const PREFIX = "gloam:cashout:";
 const DUE = `${PREFIX}due`;
@@ -74,10 +74,12 @@ function redisJobStore(): JobStore {
     },
     async put(job) {
       const live = isLive(job.status);
-      await redis(["SET", `${PREFIX}job:${job.id}`, JSON.stringify(job), "EX", live ? JOB_TTL_SEC : JOB_DONE_TTL_SEC]);
+      // Worked out on every save: a job set for months ahead keeps all of it through a proof swap.
+      const ttl = liveTtlSec(job, Date.now());
+      await redis(["SET", `${PREFIX}job:${job.id}`, JSON.stringify(job), "EX", live ? ttl : JOB_DONE_TTL_SEC]);
       if (live) {
         await redis(["ZADD", DUE, dueAt(job), job.id]);
-        await redis(["SET", nfKey(job.chainId, job.nullifier), job.id, "EX", JOB_TTL_SEC]);
+        await redis(["SET", nfKey(job.chainId, job.nullifier), job.id, "EX", ttl]);
       } else {
         await redis(["ZREM", DUE, job.id]);
       }
@@ -92,7 +94,7 @@ function redisJobStore(): JobStore {
         DUE,
         job.id,
         JSON.stringify(job),
-        JOB_TTL_SEC,
+        liveTtlSec(job, Date.now()),
         dueAt(job),
         replace ?? "",
       ]);

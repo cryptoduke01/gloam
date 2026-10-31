@@ -6,11 +6,13 @@ import {
   REPROVE_MIN_LEAD_MS,
   cancelJob,
   drawSendAfter,
+  drawSendOn,
   isLive,
   jobView,
   replaceJobProof,
   sameCashOut,
   scheduleJob,
+  sendDayProblem,
   type CashOutJob,
   type DelayWindow,
   type ReplaceRefusal,
@@ -24,6 +26,15 @@ export const dynamic = "force-dynamic";
 
 /** New scheduled cash outs per sender per hour. */
 const SCHEDULE_PER_HOUR = 20;
+/**
+ * New dated cash outs (prepaid top-ups) per sender, counted apart from the
+ * above so a batch of 12 is never cut short by a cash out made in the same
+ * hour, and never uses up what those need. Two full batches an hour, with a
+ * cap per day because these stay on record for months, not hours. Each one
+ * still needs a real unspent note and a proof that passes the dry run.
+ */
+const DATED_PER_HOUR = 24;
+const DATED_PER_DAY = 48;
 /** New scheduled cash outs per spend per hour (asking again for a waiting one returns it). */
 const SCHEDULE_PER_SPEND = 6;
 /** Status reads per sender per minute (the app checks each job now and then). */
@@ -79,9 +90,10 @@ function fail(e: unknown) {
 /**
  * Schedule a cash out the relay sends later: the same body as a relayed cash
  * out ({ chainId, proof, root, nullifier, asset, to, amount }) plus
- * { window: "hour" | "6h" | "day" }. It is checked and dry-run now; the send time is
- * drawn at random inside the window. Returns { id, sendAfter, to }. Asking
- * again for the same spend returns the job already waiting; asking with
+ * { window: "hour" | "6h" | "day" } or, for a dated one, { day } (the first
+ * millisecond of a UTC day, up to 90 days ahead). It is checked and dry-run
+ * now; the send time is drawn at random inside the window or the day. Returns
+ * { id, sendAfter, to }. Asking again for the same spend returns the job already waiting; asking with
  * another address (or amount) is a 409 already_scheduled with that job.
  */
 export async function POST(req: Request) {
@@ -90,15 +102,21 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const window = body.window as DelayWindow;
-    if (typeof window !== "string" || !Object.hasOwn(DELAY_WINDOWS, window)) {
+    const dated = body.day !== undefined;
+    if (dated) {
+      const problem = body.window === undefined ? sendDayProblem(body.day, Date.now()) : "Pick a window or a day, not both.";
+      if (problem) throw new RelayError(problem);
+    } else if (typeof window !== "string" || !Object.hasOwn(DELAY_WINDOWS, window)) {
       throw new RelayError("Pick within an hour, 6 hours or a day.");
     }
     const net = networkForChain(body.chainId);
     const ip = clientIp(req);
     await checkRateLimit(ip);
-    if (!(await hitRateLimit(ip, "cashout-later", SCHEDULE_PER_HOUR, Date.now(), 3600)).allowed) {
-      throw new RelayError("Too many scheduled cash outs from this device. Wait a while.", 429, "rate_limit");
-    }
+    const allowed = dated
+      ? (await hitRateLimit(ip, "cashout-dated", DATED_PER_HOUR, Date.now(), 3600)).allowed &&
+        (await hitRateLimit(ip, "cashout-dated-day", DATED_PER_DAY, Date.now(), 86400)).allowed
+      : (await hitRateLimit(ip, "cashout-later", SCHEDULE_PER_HOUR, Date.now(), 3600)).allowed;
+    if (!allowed) throw new RelayError("Too many scheduled cash outs from this device. Wait a while.", 429, "rate_limit");
 
     const store = scheduledStore();
     const call = await checkUnshieldForLater(net, body);
@@ -123,10 +141,11 @@ export async function POST(req: Request) {
       to,
       amount: amount.toString(),
       createdAt: now,
-      sendAfter: drawSendAfter(now, window),
+      sendAfter: dated ? drawSendOn(now, body.day as number) : drawSendAfter(now, window),
       status: "scheduled",
       attempts: 0,
       updatedAt: now,
+      ...(dated ? { dated: true } : {}),
     };
     // Saved in one step; a request for the same spend at the same moment gets this one back.
     const saved = await scheduleJob(store, job);

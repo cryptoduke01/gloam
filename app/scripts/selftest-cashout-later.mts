@@ -51,6 +51,7 @@ const {
   GIVE_UP_AFTER_MS,
   JOB_TTL_SEC,
   MAX_DELAY_MS,
+  liveTtlSec,
   MIN_DELAY_MS,
   SENDING_STALE_MS,
   REPROVE_MIN_LEAD_MS,
@@ -205,6 +206,7 @@ await test("send time is drawn inside the window, never right away", () => {
   assert.equal(MAX_DELAY_MS, 24 * 60 * 60 * 1000);
   // a job waiting its longest, then retrying until it gives up, is still on record
   assert.ok(JOB_TTL_SEC * 1000 > MAX_DELAY_MS + GIVE_UP_AFTER_MS);
+  assert.ok(liveTtlSec({ sendAfter: T0 + MAX_DELAY_MS }, T0) * 1000 > MAX_DELAY_MS + GIVE_UP_AFTER_MS);
 });
 
 // ---------------------------------------------------------------- the runner

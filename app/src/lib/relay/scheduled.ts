@@ -44,23 +44,39 @@
  * try and never uses up the give-up time: once gas comes down, the 2 hours a
  * passing problem gets start from the end of the wait.
  *
+ * A job can also be dated: set for a day up to MAX_DATED_DAYS ahead instead of
+ * a window (a prepaid agent top-up, lib/agentTopUp). Its send time is drawn at
+ * random inside that UTC day, so a weekly top-up never lands like clockwork.
+ * Everything above holds for it, and its record lasts as long as it has to
+ * wait (liveTtlSec). Nobody is at the screen when one comes due, so a passing
+ * problem gets a day (DATED_GIVE_UP_AFTER_MS), not 2 hours, and is tried every
+ * few minutes (DATED_RETRY_MS) so it never crowds out what is due now.
+ *
  * This file is the logic and an in-memory store (for tests and local runs);
  * lib/relay/scheduledStore.ts keeps jobs in Redis in production.
  */
 import type { Address, Hex } from "viem";
 
-/** The longest a cash out may wait. A live job's record (JOB_TTL_SEC) outlasts it, give-up time included. */
+/** The longest a cash out in a window may wait. A live job's record (liveTtlSec) outlasts it, give-up time included. */
 export const MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 /** The windows the app offers. */
 export const DELAY_WINDOWS = { hour: 60 * 60 * 1000, "6h": 6 * 60 * 60 * 1000, day: MAX_DELAY_MS } as const;
 export type DelayWindow = keyof typeof DELAY_WINDOWS;
 /** No earlier than this after it is scheduled, so even the shortest draw is not "right away". */
 export const MIN_DELAY_MS = 2 * 60 * 1000;
+/** One UTC day: a dated cash out goes out at a random time inside the day it is set for. */
+export const DAY_MS = 24 * 60 * 60 * 1000;
+/** How many days ahead a dated cash out may be set for. */
+export const MAX_DATED_DAYS = 90;
 /** A job that keeps failing for a passing reason (a busy relay, a slow node) gives up this long after its time. */
 export const GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000;
+/** The same for a dated job: nobody is waiting at the screen to send it again, so it keeps trying for longer. */
+export const DATED_GIVE_UP_AFTER_MS = 24 * 60 * 60 * 1000;
+/** A dated job that hit a passing problem is looked at again this often, behind what is due now. */
+export const DATED_RETRY_MS = 5 * 60 * 1000;
 /** A job marked "sending" longer than this is read again: the send may have died with its instance. */
 export const SENDING_STALE_MS = 5 * 60 * 1000;
-/** How long a live job record is kept (refreshed on every save). */
+/** How long a live job record is kept past its send time (refreshed on every save, so a job waiting for gas outlasts this). */
 export const JOB_TTL_SEC = 3 * 24 * 60 * 60;
 /** How long a finished job is kept, without its proof, so the app can still read what happened. */
 export const JOB_DONE_TTL_SEC = 7 * 24 * 60 * 60;
@@ -103,6 +119,8 @@ export type CashOutJob = {
   hash?: Hex;
   /** A send may have reached the node: from now on only the chain settles the job. */
   maybeSent?: boolean;
+  /** Set for a day ahead, not a window: it gives up after DATED_GIVE_UP_AFTER_MS. */
+  dated?: boolean;
   /** Waiting for gas: the runner looks at the job again no sooner than this (ms). */
   notBefore?: number;
   /**
@@ -133,6 +151,39 @@ export function jobView(j: CashOutJob): JobView {
 export function drawSendAfter(now: number, window: DelayWindow, random: () => number = Math.random): number {
   const span = DELAY_WINDOWS[window];
   return now + MIN_DELAY_MS + Math.floor(random() * (span - MIN_DELAY_MS));
+}
+
+/** The UTC day `t` falls on, as the first millisecond of that day. */
+export function dayOf(t: number): number {
+  return t - (t % DAY_MS);
+}
+
+/** Why a job can't be set for `day` (the first millisecond of a UTC day) at `now`, or null when it can. */
+export function sendDayProblem(day: unknown, now: number): string | null {
+  if (typeof day !== "number" || !Number.isSafeInteger(day) || day <= 0 || day % DAY_MS !== 0) return "Pick a day to send it.";
+  if (day + DAY_MS <= now + MIN_DELAY_MS) return "That day has passed. Pick a later one.";
+  if (day > dayOf(now) + MAX_DATED_DAYS * DAY_MS) return `Pick a day within ${MAX_DATED_DAYS} days.`;
+  return null;
+}
+
+/** A send time drawn uniformly inside the UTC day `day`, never sooner than MIN_DELAY_MS. */
+export function drawSendOn(now: number, day: number, random: () => number = Math.random): number {
+  const from = Math.max(day, now + MIN_DELAY_MS);
+  return from + Math.floor(random() * Math.max(1, day + DAY_MS - from));
+}
+
+/** The day to set a dated cash out for now: the one it was meant for, or tomorrow once that has passed. */
+export function nextSendDay(day: number, now: number): number {
+  return day + DAY_MS > now + MIN_DELAY_MS ? day : dayOf(now) + DAY_MS;
+}
+
+/**
+ * How long a live job's record must last from `now`: until its send time, then
+ * JOB_TTL_SEC past it. Refreshed on every save, so a job that retries or waits
+ * for gas keeps its record, and a proof swapped in months ahead never cuts it short.
+ */
+export function liveTtlSec(job: Pick<CashOutJob, "sendAfter">, now: number): number {
+  return Math.ceil(Math.max(0, job.sendAfter - now) / 1000) + JOB_TTL_SEC;
 }
 
 export function isLive(status: JobStatus): boolean {
@@ -341,8 +392,8 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     // The node did not answer. One that may be out stays "sending" and is read again later;
     // one that never reached the node tries again next pass, or gives up when long overdue.
     if (mayBeOut) return settle(store, job, "sending", now, { maybeSent: true });
-    if (now - giveUpFrom(job) > GIVE_UP_AFTER_MS) return settle(store, job, "failed", now, { reason: "The network could not be read in time." });
-    return settle(store, job, "scheduled", now);
+    if (now - giveUpFrom(job) > giveUpAfter(job)) return settle(store, job, "failed", now, { reason: "The network could not be read in time." });
+    return settle(store, job, "scheduled", now, retryLater(job, now));
   }
   // Spent: by this job on an earlier pass whose result was lost, or elsewhere.
   if (chain.spent) return settle(store, job, job.hash || mayBeOut ? "sent" : "spent", now);
@@ -386,15 +437,25 @@ async function runOne(store: JobStore, deps: RunDeps, id: string): Promise<JobSt
     if (PERMANENT.has(code) || (REVERTED.has(code) && !REVERTED_PASSING.has(code))) {
       return settle(store, sending, "failed", t, { reason });
     }
-    if (t - giveUpFrom(job) > GIVE_UP_AFTER_MS) return settle(store, sending, "failed", t, { reason });
+    if (t - giveUpFrom(job) > giveUpAfter(job)) return settle(store, sending, "failed", t, { reason });
     // A passing refusal (busy, out of gas for a moment, the vault short for now): again next pass.
-    return settle(store, sending, "scheduled", t, { reason });
+    return settle(store, sending, "scheduled", t, { reason, ...retryLater(job, t) });
   }
 }
 
-/** Where the 2-hour give-up counts from: the send time, or the end of a wait for gas after it. */
+/** Where the give-up counts from: the send time, or the end of a wait for gas after it. */
 function giveUpFrom(job: CashOutJob): number {
   return Math.max(job.sendAfter, job.gasHeldAt ?? 0);
+}
+
+/** How long past that a job keeps trying through a passing problem. */
+function giveUpAfter(job: CashOutJob): number {
+  return job.dated ? DATED_GIVE_UP_AFTER_MS : GIVE_UP_AFTER_MS;
+}
+
+/** A dated job tries again in a few minutes, not on the next pass: it has a day, and retrying every pass would sit at the front of the queue. */
+function retryLater(job: CashOutJob, now: number): Partial<CashOutJob> {
+  return job.dated ? { notBefore: now + DATED_RETRY_MS } : {};
 }
 
 /** Whether to hold a due job for gas. A check that fails holds it too: better late than paid blind. */
