@@ -459,9 +459,33 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       <p>
         This server enforces the check, off-chain. The vault does not know about
         it, so it binds the agent only while the notes and the key are held by
-        this server and nowhere else. VEYA is not told how a payment ended, so if
-        one fails after an allow, VEYA&apos;s running budget may sit ahead of what
-        was really paid.
+        this server and nowhere else. If a payment fails after an allow,
+        VEYA&apos;s running budget may sit ahead of what was really paid.
+      </p>
+      <h3>The receipt after a payment</h3>
+      <p>
+        VEYA&apos;s allow carries a check id. Set{" "}
+        <code>GLOAM_VEYA_ANCHOR_URL</code> as well, and the server proves each
+        payment once it lands, with that id as the receipt&apos;s verifier, and
+        hashes the proof into one <code>bytes32</code> leaf. VEYA gets that leaf
+        and the agent id, nothing else: never the record, the proof, the amount,
+        the payee, a note or the transaction hash. VEYA writes the leaf to{" "}
+        <code>storeCommitment</code>, so you need no anchoring wallet.
+      </p>
+      <p>
+        With receipts on, an allow without a usable check id does not pay,
+        because a payment can&apos;t be undone and it could never get its
+        receipt. After a payment, nothing can undo it: a receipt or an anchor
+        that fails leaves the payment paid, with a status of{" "}
+        <code>anchor_failed</code> or <code>receipt_failed</code> in the result,
+        and <code>gloam_retry_veya_receipts</code> tries again without paying
+        anything. <code>anchored</code> means VEYA took the leaf; the server does
+        not read the chain to confirm the write.
+      </p>
+      <p>
+        The server keeps the full record in its encrypted note store. It shows
+        the asset, the minimum amount and the transaction hash, so no tool hands
+        it to the agent. See <code>examples/veya-receipt</code>.
       </p>
 
       <h2>Spending limits</h2>

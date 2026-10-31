@@ -100,6 +100,7 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 | `gloam_verify_payment` | server | Open a presented payment (x402 or MPP) with this server's receive key, verify it, sweep it into a fresh note, and say whether to grant access |
 | `gloam_get_limits` | read | This agent's spending limits: tools, assets, per payment, per day, recipients, expiry |
 | `gloam_get_spending_report` | read | Spent and left in the last 24 hours per asset, recent payments, refused attempts |
+| `gloam_retry_veya_receipts` | execute | Offered with VEYA receipts on: retry a receipt or anchor that failed. Pays nothing |
 
 `gloam_execute_shield` is the private-execution rail: the agent ends up with a shielded balance only this server can spend. The agent sees a note handle such as `n-k3x9p2qw7m`, never the note's secret. When no signer is configured, every execute tool returns a plan instead of acting, and we never return a fake private fill.
 
@@ -163,10 +164,21 @@ A Gloam note is spent with a proof, so wallet rules can't stop a payment. A budg
 - **Both checks on.** Agent Wormhole goes first, then VEYA, and both must allow. A request Agent Wormhole refuses never reaches VEYA.
 - **VEYA's reason.** A `reason` is untrusted text. Before the agent or the spending log sees it, it is stripped to letters, digits and `_.:-` and cut to 40 characters, so spaces go: VEYA's reasons read best as short codes like `daily_budget_exceeded`.
 - **This server enforces it, off-chain.** The vault does not know about this check. It binds the agent only while the notes and the key are held by this server and nowhere else: anything else holding them can spend without asking VEYA.
-- **A payment can fail after an allow.** VEYA is not told how a payment ended. If the proof, the send or the note fails after an allow, VEYA's running budget may sit ahead of what was really paid, and a retry is checked again as a new payment. Compare with `gloam_get_spending_report` if the numbers matter.
+- **A payment can fail after an allow.** VEYA is not told how a payment ended. If the proof, the send or the note fails after an allow, VEYA's running budget may sit ahead of what was really paid, and paying again is checked as a new payment. Compare with `gloam_get_spending_report` if the numbers matter.
 - **Settings.** `GLOAM_VEYA_TIMEOUT_MS` (default 5000, 500 to 30000). `GLOAM_VEYA_URL` must be https, or http on localhost; a key with an unusable URL or agent id refuses every payment rather than quietly turning the check off.
 
-To anchor a receipt with VEYA after the payment, see [`examples/veya-receipt`](../examples/veya-receipt).
+### The receipt after a payment
+
+VEYA's allow carries a check id (`attestation`). With `GLOAM_VEYA_ANCHOR_URL` set as well, this server proves each payment once it lands, with that id as the receipt's verifier, hashes the proof into one `bytes32` leaf, and sends VEYA the leaf. VEYA writes it to `storeCommitment` on `Veya.sol`, so you need no anchoring wallet. [`examples/veya-receipt`](../examples/veya-receipt) shows the leaf.
+
+- **Off by default.** No `GLOAM_VEYA_ANCHOR_URL`, no receipt. It must be https, or http on localhost, and an unusable one refuses every payment rather than quietly turning receipts off.
+- **What VEYA gets.** `{"leaf": "0x…", "agent_id": "…"}` with the same key and timeout as the check, and nothing else: never the record, the proof, the amount, the payee, a note or the transaction hash. VEYA can't open a leaf.
+- **The check id.** Letters, digits and `_.:-`, at most 80 characters, with no wallet address in it. It is sealed into the proof as written, so it is checked, not cleaned.
+- **No usable id, no payment.** With receipts on, an allow without a usable id does not pay: the tool answers `veya_refused`, decision `unchecked`, and nothing is spent. A payment can't be undone, and without the id it could never get its receipt. VEYA's running budget may already count that allow. With receipts off the id is optional, and a bad one is ignored.
+- **It never changes the payment.** The money has moved by then, so the result is still `paid`, with `veya.receipt` holding `status`, `leaf`, `checkId`, `note` and a `message`. `anchored` means VEYA answered 200; this server does not read the chain to confirm the write. `anchor_failed` means the receipt is built and kept, and the leaf is in the result. `receipt_failed` means there is no leaf yet. The answer waits at most 30 seconds for all this (`GLOAM_VEYA_RECEIPT_TIMEOUT_MS`, 500 to 30000), then says `receipt_failed` while the work may still finish.
+- **Retrying.** `gloam_retry_veya_receipts`, offered only with receipts on, builds a missing receipt and sends its leaf. It pays nothing and does not ask for a new check. It sends the same leaf again after an `anchor_failed`, and never sends one VEYA took. For a payment that landed with no answer, call `gloam_list_notes` with `refresh` first.
+- **The record stays here.** The full record is kept on the payment's note in the encrypted note store. It shows the asset, the minimum amount and the transaction hash, so no tool returns it.
+- **Keys.** The receipt circuit's files are fetched and pinned like the others, on the key set that network's verifiers hold: the final keys on mainnet, dev keys on the older testnets.
 
 ## Spending limits
 

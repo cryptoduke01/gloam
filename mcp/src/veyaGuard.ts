@@ -16,12 +16,18 @@
  * missing or unusable all mean: do not pay. VEYA's reason is untrusted text, so
  * only a stripped, capped copy of it goes any further.
  *
+ * An allow carries a check id. With GLOAM_VEYA_ANCHOR_URL set, the payment's
+ * receipt is bound to that id afterwards (veyaReceipt.ts), so an allow without a
+ * usable id does not pay: a payment can't be undone, and without the id it could
+ * never get its receipt. With receipts off the id is optional.
+ *
  * VEYA is never told how a payment it allowed ended, so if one fails afterwards
  * its running budget can sit ahead of what was really paid.
  *
- * VEYA's real endpoint has not arrived yet. Its format is veyaRequest and
- * readAnswer below and nowhere else, so a change to it stays in those two.
+ * VEYA confirmed this format, but nothing here has run against its live endpoint
+ * yet. Its format is the block below and nowhere else, so a change stays there.
  */
+import { cleanReceiptLabel } from "@gloamtrade/sdk";
 import { guardBody, guardTimeoutMs, keyMayGoTo, plainText, postToGuard, type GuardEndpoint } from "./guardCall.js";
 
 type Env = Record<string, string | undefined>;
@@ -30,6 +36,8 @@ export const VEYA_TIMEOUT_MS = 5_000;
 
 export interface VeyaConfig extends GuardEndpoint {
   agentId: string;
+  /** Where receipt leaves go; null with receipts off. */
+  anchorUrl: string | null;
 }
 
 /** The payment being checked. */
@@ -46,7 +54,14 @@ export interface VeyaPayment {
 }
 
 export type VeyaOutcome =
-  | { pay: true; decision: "allow" }
+  | {
+      pay: true;
+      decision: "allow";
+      /** VEYA's check id, when it sent a usable one. */
+      checkId: string | null;
+      /** What this payment's receipt is bound to. Null with receipts off. */
+      receipt: { checkId: string; agentId: string } | null;
+    }
   | {
       pay: false;
       /** "refuse" only when VEYA said so; "unchecked" for everything that is not an answer. */
@@ -56,6 +71,9 @@ export type VeyaOutcome =
       /** One line for the agent: plain, says not to pay. */
       message: string;
     };
+
+/** A wallet address anywhere in the value, with or without 0x. A private key is longer and matches too. */
+const WALLET_SHAPED = /(?:0x)?[0-9a-f]{40}/i;
 
 // ── VEYA's format ─────────────────────────────────────────────────────────────
 
@@ -75,23 +93,39 @@ function veyaRequest(agentId: string, p: VeyaPayment) {
 /** The only HTTP status that can carry an answer. */
 const ANSWER_STATUS = 200;
 
-/** {"decision": "allow" | "refuse", "reason"?: string}. Only an exact allow pays; null is not an answer. */
-function readAnswer(body: Record<string, unknown> | null): { allow: true } | { allow: false; reason: string | null } | null {
+/**
+ * An allow's "attestation": VEYA's check id, sealed as written into a receipt's
+ * verifier. So it is checked and never cleaned: an id that would change is no id.
+ */
+function readCheckId(raw: unknown): string | null {
+  if (typeof raw !== "string" || !/^[A-Za-z0-9_.:-]+$/.test(raw) || WALLET_SHAPED.test(raw)) return null;
+  try {
+    return cleanReceiptLabel(raw) === raw ? raw : null;
+  } catch {
+    return null; // over the label limit
+  }
+}
+
+/** {"decision": "allow" | "refuse", "reason"?: string, "attestation"?: string}. Only an exact allow pays; null is not an answer. */
+function readAnswer(body: Record<string, unknown> | null): { allow: true; checkId: string | null } | { allow: false; reason: string | null } | null {
   if (!body) return null;
-  if (body.decision === "allow") return { allow: true };
+  if (body.decision === "allow") return { allow: true, checkId: readCheckId(body.attestation) };
   if (body.decision === "refuse") return { allow: false, reason: plainText(body.reason) || null };
   return null;
 }
 
+/** POST <GLOAM_VEYA_ANCHOR_URL>. Only these two: never the record, proof, amount, payee, note or transaction hash. */
+function anchorRequest(leaf: string, agentId: string) {
+  return { leaf, agent_id: agentId };
+}
+
 // ── the check ─────────────────────────────────────────────────────────────────
 
-/** A wallet address anywhere in the value, with or without 0x. A private key is longer and matches too. */
-const WALLET_SHAPED = /(?:0x)?[0-9a-f]{40}/i;
-
 /**
- * Off (null) unless GLOAM_VEYA_KEY is set. A key with an unusable GLOAM_VEYA_URL
- * or GLOAM_VEYA_AGENT_ID is an error, so a typo can't quietly turn the check off.
- * The errors name the setting and never repeat its value.
+ * Off (null) unless GLOAM_VEYA_KEY is set. A key with an unusable GLOAM_VEYA_URL,
+ * GLOAM_VEYA_AGENT_ID or GLOAM_VEYA_ANCHOR_URL is an error, so a typo can't quietly
+ * turn the check or the receipts off. The errors name the setting and never repeat
+ * its value.
  */
 export function veyaConfig(env: Env): VeyaConfig | { error: string } | null {
   const key = env.GLOAM_VEYA_KEY?.trim();
@@ -108,7 +142,19 @@ export function veyaConfig(env: Env): VeyaConfig | { error: string } | null {
   const agentId = env.GLOAM_VEYA_AGENT_ID?.trim();
   if (!agentId) return { error: "GLOAM_VEYA_AGENT_ID is not set." };
   if (WALLET_SHAPED.test(agentId)) return { error: "GLOAM_VEYA_AGENT_ID looks like a wallet address. Set an opaque id, so a wallet never goes out as the id." };
-  return { key, url: url.toString(), timeoutMs: guardTimeoutMs(env.GLOAM_VEYA_TIMEOUT_MS, VEYA_TIMEOUT_MS), agentId };
+  const rawAnchor = env.GLOAM_VEYA_ANCHOR_URL?.trim();
+  let anchorUrl: string | null = null;
+  if (rawAnchor) {
+    let anchor: URL;
+    try {
+      anchor = new URL(rawAnchor);
+    } catch {
+      return { error: "GLOAM_VEYA_ANCHOR_URL is not a URL." };
+    }
+    if (!keyMayGoTo(anchor)) return { error: `GLOAM_VEYA_ANCHOR_URL must be https (or http on localhost), not ${anchor.protocol}//${anchor.host}.` };
+    anchorUrl = anchor.toString();
+  }
+  return { key, url: url.toString(), timeoutMs: guardTimeoutMs(env.GLOAM_VEYA_TIMEOUT_MS, VEYA_TIMEOUT_MS), agentId, anchorUrl };
 }
 
 /**
@@ -137,5 +183,24 @@ export async function checkVeyaBudget(payment: VeyaPayment, env: Env, fetchImpl:
   if (!answer.allow) {
     return refuse(answer.reason ? `VEYA refused this payment (${answer.reason}).` : "VEYA refused this payment.", "refuse", answer.reason);
   }
-  return { pay: true, decision: "allow" };
+  // A payment can't be undone, and without the id it could never get its receipt.
+  if (config.anchorUrl && !answer.checkId) {
+    return refuse("VEYA allowed this payment without a usable check id, and receipts are on, so it could never get its receipt.");
+  }
+  return {
+    pay: true,
+    decision: "allow",
+    checkId: answer.checkId,
+    receipt: config.anchorUrl && answer.checkId ? { checkId: answer.checkId, agentId: config.agentId } : null,
+  };
+}
+
+/** Send VEYA a receipt's leaf. Taken only on the answer status; anything else can be retried. Never throws. */
+export async function anchorLeaf(leaf: string, agentId: string, env: Env, fetchImpl: typeof fetch = fetch): Promise<{ anchored: true } | { anchored: false; why: string }> {
+  const config = veyaConfig(env);
+  if (config === null || "error" in config || !config.anchorUrl) return { anchored: false, why: "receipts are not set up on this server" };
+  const call = await postToGuard({ ...config, url: config.anchorUrl }, anchorRequest(leaf, agentId), fetchImpl);
+  if ("failed" in call) return { anchored: false, why: call.failed === "timeout" ? `it did not answer within ${config.timeoutMs / 1000}s` : "it could not be reached" };
+  if (call.res.status !== ANSWER_STATUS) return { anchored: false, why: `it answered HTTP ${call.res.status}` };
+  return { anchored: true };
 }
