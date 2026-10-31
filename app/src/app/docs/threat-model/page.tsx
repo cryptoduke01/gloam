@@ -32,7 +32,7 @@ const ACTORS: { who: string; can: string; cannot: string }[] = [
   },
   {
     who: "Anyone who sees a swap go out",
-    can: "Send its first step alone, so the swap fails and refunds 99% of the note. Send a swap that reverted again later, which lands exactly as it was made if the price allows.",
+    can: "Send its first step alone, so the swap fails and refunds 99% of the note. Send a swap that reverted again, until the owner's app has moved its note, which lands exactly as it was made if the price allows.",
     cannot: "Redirect the money, change the new note or the refund note, or keep any of it.",
   },
   {
@@ -212,12 +212,19 @@ export default function DocsThreatModelPage() {
         Its proofs stay valid, so anyone can send the same call again, and it lands if the price comes back
         within the buffer. It lands exactly as the owner made it: the same output, into
         the owner&apos;s new note. The app keeps both new notes until the chain shows
-        which one landed.
+        which one landed. It also moves the note to a fresh one through the relay, which
+        ends those proofs: about 3 minutes after the swap, once the relay takes the note,
+        or on the owner&apos;s next visit if the app was closed by then. Until that move
+        lands the proofs stay usable. A swap the app never heard back about moves its note
+        the same way once an hour has passed with nothing landed. If that swap lands
+        first, the move fails and the swap stands; if the move lands first, the swap
+        reverts.
       </p>
       <p>
         <strong>Limits and blocks.</strong> The new note and the refund note are deposits,
         so the beta deposit limits apply. If the vault is full for that token, a refund
-        waits at the escrow until there is room. If a token issuer blocks the treasury,
+        waits at the escrow until there is room. The app shows it as held, outside the
+        balance, and keeps trying on each sync. If a token issuer blocks the treasury,
         what it cannot take stays in the router; it never stops a swap or a refund.
       </p>
 

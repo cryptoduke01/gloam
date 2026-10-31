@@ -31,7 +31,7 @@ import { cashOutPending, endedPlan, updateLocalNote, type CashOutPlanTag, type L
 import { getAllNotes } from "./noteVault";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { proveCashOut, type CashOutCall } from "./cashOutProof";
-import { freshPath, networkOfNote, SPLIT_MAYBE_SENT, splitNote, type SplitArgs } from "./cashOutSplit";
+import { freshPath, networkOfNote, SPLIT_MAYBE_SENT, spendWaitMessage, splitNote, type SplitArgs } from "./cashOutSplit";
 import { scheduleNoteCashOut, type CashOutWhen, type CashOutWindow, type OwnedCashOutJob } from "./cashOutLater";
 import { MAX_PIECES, MIN_PIECES } from "./cashOutPlan";
 import { nextSendDay } from "./relay/scheduled";
@@ -98,6 +98,8 @@ export function checkPlan(note: LocalNote, pieces: bigint[], to: Address[], most
   if (note.status === "recovered" || note.sweepPending || cashOutPending(note)) {
     throw new Error("This balance is busy. Refresh and try again.");
   }
+  const moving = spendWaitMessage(note);
+  if (moving) throw new Error(moving);
 }
 
 /** A run of prepaid top-ups: which slots of the series it sets up, and the series they belong to. */

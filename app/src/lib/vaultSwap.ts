@@ -404,6 +404,8 @@ export type VaultSwapRefundInfo = {
   amountIn: string;
   out: { commitment: Hex; asset: Address; amount: string };
   route: PoolKey[];
+  /** The relay's send of this swap, once it answered: a sync reads how it ended if this tab never heard. */
+  sent?: { hash: Hex; at: number };
 };
 
 /** The escrow key for a refund note, from what it keeps. */

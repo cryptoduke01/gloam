@@ -240,16 +240,23 @@ export default function DocsPrivateSwapsPage() {
       <p>
         If a swap simply doesn&apos;t go through, for example because the price
         moved past the buffer, nothing moved and your money is safe in the
-        vault. Refresh in a minute, then get a new quote.
+        vault. About 3 minutes later the app moves it to a fresh private
+        balance, through the relay. Then get a new quote. If you close the app
+        first, the move finishes the next time you open it.
       </p>
       <p>
-        A swap that didn&apos;t go through isn&apos;t cancelled, though. Its
+        Until then, a swap that didn&apos;t go through isn&apos;t cancelled. Its
         proofs stay valid, so anyone can send it again, and it lands if the
         price comes back within the buffer. It can only land exactly as you
         made it: the same output, into your new note. The app keeps that note
-        until the chain settles it and counts it the moment it lands. Spending
-        the same money on anything else, such as a new swap, a send or a
-        cash-out, ends the old swap for good.
+        until the chain settles it and counts it the moment it lands. That move
+        ends the old swap for good, and so does spending the same money on
+        anything else, such as a send.
+      </p>
+      <p>
+        If the app never hears how a swap ended, it waits an hour. If nothing
+        has landed by then, it makes the same move. Only one of the two can
+        ever land, so your money is counted once either way.
       </p>
 
       <h2 id="trust">What the router can and cannot do</h2>

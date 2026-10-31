@@ -547,6 +547,11 @@ export function VaultTradePanel({
       setError("This balance backs a proof of funds you made. Trading it here would show your wallet to whoever has that proof. Swap it privately instead, or pick another balance.");
       return;
     }
+    // This cash out has no step to move the note first; the sync is already moving it (lib/claimSweep).
+    if (selected.swapProofAt) {
+      setError("Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in a few minutes, or pick another balance.");
+      return;
+    }
     // need gas in wallet for proofs + txs
     if (ethBal && ethBal.value < 50_000_000_000_000n) {
       setError("Keep a little ETH in your open wallet for gas.");

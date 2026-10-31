@@ -80,7 +80,7 @@ const {
 const { schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
 const { dismissReturnedCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
-const { activeSpendableNotes, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import("../src/lib/shield");
+const { RELAY_SPEND_LOCK_MS, activeSpendableNotes, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import("../src/lib/shield");
 const { getAllNotes } = await import("../src/lib/noteVault");
 const { getActiveNetwork, getNetwork } = await import("../src/lib/networks");
 const { reconcileClaims } = await import("../src/lib/claimSweep");
@@ -947,6 +947,25 @@ await test("a closed tab mid-split: the notes are kept, the next sync lands them
   // the slots never reached show too, and the change is what can finish them
   const series = topUpSeries(getAllNotes(), Date.now()).find((x) => x.rows.some((y) => s.created.includes(y.note.id)))!;
   assert.equal(series.missing.length, 11);
+});
+
+await test("a note whose swap just reverted waits, like any cash out, then a series moves it to fresh notes", async () => {
+  reset();
+  const held = vaultNote("swap-1", 200n * U, { swapProofAt: Date.now() });
+  const s = fakeSplitter();
+  await assert.rejects(start(held, s, 4), /moving to a fresh private balance/);
+  assert.equal(s.calls(), 0, "nothing moved");
+  assert.equal(byId(held.id).status, "open");
+  assert.equal(asked.length, 0);
+
+  // once the relay takes it: every top-up comes from a split, which ends that swap's proof
+  const ready = vaultNote("swap-2", 200n * U, { swapProofAt: Date.now() - RELAY_SPEND_LOCK_MS - 1 });
+  const s2 = fakeSplitter();
+  const r = await start(ready, s2, 4);
+  assert.equal(r.stoppedAt, null, r.error ?? "");
+  assert.equal(s2.calls(), 3);
+  assert.equal(byId(ready.id).status, "recovered");
+  assert.ok(s2.created.map(byId).every((n) => !n.swapProofAt), "the proof stays behind on the spent note");
 });
 
 await test("the series comes out of the smallest note that covers it, never one that's busy", () => {

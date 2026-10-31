@@ -21,6 +21,10 @@
  * left out of the balance until it lands; it is never dropped, because a send
  * that looked failed can still land. reconcileClaims settles it from what the
  * chain shows.
+ *
+ * A note whose private swap landed and reverted moves the same way, with no one
+ * asking (moveRevertedNotes): that swap's proof stays valid until the note is
+ * spent, so the note is spent by moving it. Every sync tries until it has moved.
  */
 import {
   sweepReceivedNote,
@@ -31,14 +35,26 @@ import {
   type SweepResult,
 } from "@gloamtrade/sdk";
 import type { Address, Hex, PublicClient } from "viem";
+import { networkOfNote, splitMaybeSent } from "./cashOutSplit";
 import { NETWORK_KEYS, getActiveNetwork, getNetwork, type GloamNetwork } from "./networks";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { proveTransferInBrowser } from "./proveClient";
-import { relayTransfer, waitForTx } from "./relay/client";
+import { RelaySubmitError, relayFor, relayTransfer, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
-import { dataKeyLocked, getAllNotes, unlockNoteVault } from "./noteVault";
-import { isNativeAsset, saveLocalNote, shieldPoolAbi, updateLocalNote, type BackupSeenCheck, type BackupSpentCheck, type LocalNote } from "./shield";
+import { dataKeyLocked, getAllNotes, syncFromDisk, unlockNoteVault } from "./noteVault";
+import {
+  activeSpendableNotes,
+  dropUnsentNote,
+  isNativeAsset,
+  saveLocalNote,
+  shieldPoolAbi,
+  swapProofWait,
+  updateLocalNote,
+  type BackupSeenCheck,
+  type BackupSpentCheck,
+  type LocalNote,
+} from "./shield";
 import { syncShieldTree } from "./treeSync";
 import { escrowHolds } from "./vaultSwap";
 import { supportsNativeShield } from "./tokens";
@@ -98,8 +114,12 @@ export type ClaimEnv = {
    * `block` (the block stateAt read)? Null: unread.
    */
   escrowWaiting?: (n: LocalNote, block: bigint) => Promise<boolean | null>;
-  /** Puts a swap's waiting money back as its refund note (lib/vaultSwapRun). */
-  finishRefund?: (n: LocalNote) => Promise<void>;
+  /** Puts a swap's waiting money back as its refund note (lib/vaultSwapRun). True when one was sent. */
+  finishRefund?: (n: LocalNote) => Promise<boolean | void>;
+  /** How a transaction ended. Null when the chain shows no receipt yet, or the read failed. */
+  txOutcome?: (hash: Hex) => Promise<"success" | "reverted" | null>;
+  /** Whether the relay can send on this network now. Left out: it is simply tried. */
+  relayReady?: () => Promise<boolean>;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -136,12 +156,11 @@ async function findLeaf(client: PublicClient, net: GloamNetwork, commitment: Hex
   return null;
 }
 
-/** The app's vault on the active network, read over its own RPC. */
-export function appClaimEnv(onStage?: (text: string) => void): ClaimEnv {
+/** The app's vault on `net` (the active network when left out), read over its own RPC. */
+export function appClaimEnv(onStage?: (text: string) => void, net: GloamNetwork = getActiveNetwork()): ClaimEnv {
   // One network for the whole claim: every read goes to its chain, even if the
   // page switches halfway (the vaults share one address, so a read on another
   // chain would answer for this one without failing).
-  const net = getActiveNetwork();
   const pool = net.pool;
   const client = publicClientFor(net);
   return {
@@ -174,7 +193,16 @@ export function appClaimEnv(onStage?: (text: string) => void): ClaimEnv {
     },
     finishRefund: async (n) => {
       const { finishVaultSwapRefund } = await import("./vaultSwapRun");
-      await finishVaultSwapRefund(n);
+      return finishVaultSwapRefund(n);
+    },
+    txOutcome: async (hash) => {
+      const receipt = await client.getTransactionReceipt({ hash }).catch(() => null);
+      if (!receipt) return null;
+      return receipt.status === "success" ? "success" : "reverted";
+    },
+    relayReady: async () => {
+      const relay = await relayFor(net.chainId);
+      return Boolean(relay?.enabled) && !relay?.gasHigh;
     },
   };
 }
@@ -265,7 +293,7 @@ function securedResult(fresh: LocalNote, hash: Hex | null): SweepResult {
 }
 
 export type SecureParams = {
-  /** The claimed note (an unsecured `imp-` note on the active network). */
+  /** The claimed note (an unsecured `imp-` note on the active network), or a note moveRevertedNotes moves. */
   note: LocalNote;
   /** Send through the Gloam relay, so the wallet never shows and needs no gas. */
   relay: boolean;
@@ -273,7 +301,18 @@ export type SecureParams = {
   sendWithWallet: (call: { pool: Address; args: readonly [Hex, Hex, Hex, readonly [Hex, Hex]] }) => Promise<Hex>;
   /** Progress, in plain words. */
   onStage?: (text: string) => void;
+  /**
+   * A move the app started by itself, with no one waiting on it
+   * (moveRevertedNotes). A send the relay turned away leaves no note behind (the
+   * next try makes its own), and a tree that couldn't be read marks nothing.
+   */
+  background?: boolean;
 };
+
+/** The relay turned this very send away, so it never went out. `in_flight` is about another send of the note. */
+function sendTurnedAway(e: unknown): boolean {
+  return e instanceof RelaySubmitError && (e.code === "in_flight" || !splitMaybeSent(e, true));
+}
 
 /**
  * Move a claimed note into a fresh note only this browser knows. `final` is
@@ -298,6 +337,7 @@ export async function secureClaim(
   const landed = await settleEarlier(env, note.id);
   if (landed) return securedResult(landed, null);
   let fresh: LocalNote | null = null;
+  const send = { turnedAway: false };
 
   p.onStage?.("Proving privately…");
   const result = await sweepReceivedNote({
@@ -341,13 +381,18 @@ export async function secureClaim(
       const args = transferCallArgs(intent);
       if (p.relay) {
         p.onStage?.("Securing it through the Gloam relay…");
-        return env.relay({
-          chainId: note.chainId,
-          proof: args[0],
-          root: args[1],
-          nullifier: args[2],
-          commitments: args[3],
-        });
+        return env
+          .relay({
+            chainId: note.chainId,
+            proof: args[0],
+            root: args[1],
+            nullifier: args[2],
+            commitments: args[3],
+          })
+          .catch((e: unknown) => {
+            send.turnedAway = sendTurnedAway(e);
+            throw e;
+          });
       }
       p.onStage?.("Confirm in your wallet to secure it…");
       return p.sendWithWallet({ pool, args });
@@ -359,7 +404,7 @@ export async function secureClaim(
     await finalize(env, out, result.hash);
   } else if (result.status === "not_settled") {
     // not in the vault: out of the balance until it is (reconcileUnfunded)
-    updateLocalNote(note.id, { unfunded: true });
+    if (!p.background) updateLocalNote(note.id, { unfunded: true });
   } else if (result.status === "already_spent") {
     updateLocalNote(note.id, { status: "recovered" });
     // Spent by someone else, unless one of our own moves landed: ask the chain.
@@ -368,8 +413,143 @@ export async function secureClaim(
   }
   // failed / unconfirmed: the fresh note stays pending until the chain says
   // what happened (reconcileClaims). A relay that lost its reply may still
-  // have sent it.
+  // have sent it. One the relay turned away never went out, and a background
+  // try makes its own note next time.
+  if (p.background && send.turnedAway && out) dropUnsentNote(out.id);
   return result;
+}
+
+/** The first retry of a move, doubling up to the most: each try is a proof. */
+const MOVE_RETRY_MS = 60_000;
+const MOVE_RETRY_MAX_MS = 15 * 60_000;
+/** A move sent but not seen yet gets this long to land before another goes out. */
+export const MOVE_LAND_MS = 5 * 60_000;
+const MOVE_LOCK = "gloam-move-reverted:";
+
+/** In memory only, so a reload tries straight away. */
+const moveTries = new Map<string, { at: number; count: number }>();
+const moveRunning = new Set<string>();
+
+type MoveLocks = {
+  request: (name: string, opts: { ifAvailable: boolean }, fn: (lock: unknown) => Promise<void>) => Promise<void>;
+};
+
+/** One tab at a time. Without Web Locks two tabs can both send: only one can land, the sync retires the other. */
+function inOneTab(id: string, fn: () => Promise<void>): Promise<void> {
+  const locks = (globalThis.navigator as { locks?: MoveLocks } | undefined)?.locks;
+  if (!locks?.request) return fn();
+  return locks.request(MOVE_LOCK + id, { ifAvailable: true }, async (lock) => {
+    if (lock) await fn();
+  });
+}
+
+function moveDue(id: string, now: number): boolean {
+  const last = moveTries.get(id);
+  return !last || now - last.at >= Math.min(MOVE_RETRY_MS * 2 ** (last.count - 1), MOVE_RETRY_MAX_MS);
+}
+
+/** A move of this note already sent, still inside the time it gets to land. */
+function moveOnItsWay(id: string, now: number): boolean {
+  return getAllNotes().some(
+    (n) =>
+      n.id.startsWith(SECURED_PREFIX) &&
+      n.sweepPending &&
+      n.status !== "recovered" &&
+      n.sweptFrom?.id === id &&
+      now - n.createdAt < MOVE_LAND_MS
+  );
+}
+
+/** One try at moving a note whose swap reverted, if one is due. */
+async function moveReverted(id: string, env: ClaimEnv): Promise<void> {
+  const now = Date.now();
+  if (moveRunning.has(id) || !moveDue(id, now) || moveOnItsWay(id, now)) return;
+  if (env.relayReady && !(await env.relayReady().catch(() => false))) return;
+  moveRunning.add(id);
+  moveTries.set(id, { at: now, count: (moveTries.get(id)?.count ?? 0) + 1 });
+  try {
+    await inOneTab(id, async () => {
+      // what is on disk now: another tab may have moved it or sent a move
+      await syncFromDisk();
+      const note = getAllNotes().find((n) => n.id === id);
+      if (!note || activeSpendableNotes([note]).length === 0 || moveOnItsWay(id, Date.now())) return;
+      await secureClaim(
+        {
+          note,
+          relay: true,
+          background: true,
+          sendWithWallet: () => Promise.reject(new Error("This move goes through the Gloam relay.")),
+        },
+        env
+      );
+    });
+  } finally {
+    moveRunning.delete(id);
+  }
+}
+
+/**
+ * Moves each note a reverted swap left behind (swapProofAt) whole to a fresh
+ * note through the relay, so that swap's proof can't be used. Nothing is tried
+ * until the relay takes the note (swapProofWait), or while it is off. A failed
+ * try changes nothing: the note stays marked and in the balance, and the next
+ * sync tries again. Each note goes through its own network, whichever one the
+ * page shows; `env` is a test's, and limits this to its network.
+ */
+export async function moveRevertedNotes(env?: ClaimEnv): Promise<void> {
+  if (typeof window === "undefined" || dataKeyLocked()) return;
+  const due = activeSpendableNotes(getAllNotes()).filter((n) => n.swapProofAt && swapProofWait(n) === 0);
+  for (const n of due) {
+    const net = env ? null : networkOfNote(n);
+    const e = env ?? (net ? appClaimEnv(undefined, net) : null);
+    if (!e?.pool || n.chainId !== e.chainId || n.pool.toLowerCase() !== e.pool.toLowerCase()) continue;
+    await moveReverted(n.id, e).catch(() => {});
+  }
+}
+
+/**
+ * How long a swap with no saved hash may show nothing before its note is treated
+ * as if the swap had reverted: sent before hashes were saved, or the relay's
+ * reply was lost. A guess, as nothing says how it ended, but one that can only
+ * cost a transfer: if the swap can still land, whichever spends the note first
+ * wins, the other fails on chain, and the sync retires the notes that can't land.
+ */
+export const SWAP_UNSEEN_MS = 60 * 60_000;
+
+/**
+ * Marks the note a pending swap spends, for a swap this tab didn't see revert.
+ * With a saved hash (the tab closed, or the wait gave up) only the receipt
+ * decides. With none, the swap's refund note must have sat for SWAP_UNSEEN_MS
+ * with the vault showing that note unspent. True when it marked one.
+ */
+async function markRevertedSwap(env: ClaimEnv, refund: LocalNote): Promise<boolean> {
+  const info = refund.vaultSwap;
+  const from = refund.sweptFrom;
+  const spent = from && getAllNotes().find((n) => n.id === from.id);
+  if (!info || !from || !spent || spent.swapProofAt || spent.status === "recovered") return false;
+  let at = refund.createdAt;
+  if (info.sent) {
+    if (!env.txOutcome || (await env.txOutcome(info.sent.hash).catch(() => null)) !== "reverted") return false;
+    at = info.sent.at;
+  } else {
+    if (Date.now() - refund.createdAt <= SWAP_UNSEEN_MS) return false;
+    if ((await env.chain.isSpent(from.nullifier).catch(() => null)) !== false) return false;
+  }
+  await updateLocalNote(spent.id, { swapProofAt: at }).catch(() => {});
+  return true;
+}
+
+/** Refusals that mean the vault won't take the refund for now, not that the relay had a bad moment. */
+const REFUND_BLOCKED = new Set(["OverDepositLimit", "swap_asset", "swap_router", "no_swap", "BadRoute"]);
+
+/** Tries to finish a held refund and says on the note if the vault won't take it. The note stays pending either way. */
+async function finishHeldRefund(env: ClaimEnv, n: LocalNote): Promise<void> {
+  try {
+    const sent = await env.finishRefund?.(n);
+    if (sent && n.refundHeld === "blocked") await updateLocalNote(n.id, { refundHeld: "returning" });
+  } catch (e) {
+    if (e instanceof RelaySubmitError && REFUND_BLOCKED.has(e.code)) await updateLocalNote(n.id, { refundHeld: "blocked" }).catch(() => {});
+  }
 }
 
 /**
@@ -528,28 +708,33 @@ function remarkSecured(): boolean {
 
 /**
  * Settle secured claims whose move was sent but not confirmed here (a closed
- * tab, a lost reply, another device's backup), and mark claims secured again
- * where a restore unmarked them (remarkSecured). Returns true when something
- * changed.
+ * tab, a lost reply, another device's backup), mark claims secured again where
+ * a restore unmarked them (remarkSecured), and start moving any note a reverted
+ * swap left behind (moveRevertedNotes). Returns true when something changed.
  */
 export async function reconcileClaims(env?: ClaimEnv): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  const remarked = remarkSecured();
+  let changed = remarkSecured();
   const pending = getAllNotes().filter((n) => n.sweepPending && n.status !== "recovered");
-  if (!pending.length) return remarked;
-  const e = env ?? appClaimEnv();
-  const pool = e.pool;
-  if (!pool) return remarked;
-  let changed = remarked;
-  for (const fresh of pending) {
-    if (fresh.chainId !== e.chainId || fresh.pool.toLowerCase() !== pool.toLowerCase()) continue;
-    const state = await settlePending(e, fresh);
-    if (state === "refund") {
-      // proving and relaying take a while: the sync doesn't wait, the next one counts it
-      void e.finishRefund?.(fresh).catch(() => {});
-      continue;
+  const e = pending.length ? (env ?? appClaimEnv()) : null;
+  const pool = e?.pool;
+  if (e && pool) {
+    for (const fresh of pending) {
+      if (fresh.chainId !== e.chainId || fresh.pool.toLowerCase() !== pool.toLowerCase()) continue;
+      const state = await settlePending(e, fresh);
+      if (state === "refund") {
+        if (!fresh.refundHeld) {
+          await updateLocalNote(fresh.id, { refundHeld: "returning" }).catch(() => {});
+          changed = true;
+        }
+        // proving and relaying take a while: the sync doesn't wait, the next one counts it
+        void finishHeldRefund(e, fresh);
+        continue;
+      }
+      if (state !== "pending" || (await markRevertedSwap(e, fresh))) changed = true;
     }
-    if (state !== "pending") changed = true;
   }
+  // the same: the move's note counts once it lands, and the sync after that shows it
+  void moveRevertedNotes(env).catch(() => {});
   return changed;
 }
