@@ -22,6 +22,9 @@
  *
  * A seal that can't be opened throws JobSealError. It is never "no such job":
  * that would drop a waiting job from the queue, and tell the app it is gone.
+ * If the key is lost for good, a sealed job can't send or be cancelled until its
+ * record runs out, 3 days past its send time (JOB_TTL_SEC). The app then reads it
+ * as gone and moves the note, so what is lost is the schedule, not the money.
  */
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "crypto";
 

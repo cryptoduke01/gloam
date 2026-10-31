@@ -8,9 +8,10 @@
  * dated job is refused, at the route and at the store. Jobs stored in plain text
  * run out their life and are sealed when next saved. A job sealed with a key the
  * relay lacks is never "gone": it stays on record and in the queue, the app is
- * told nothing changed, and it doesn't hold up what is behind it. Then rotation:
- * an old key keeps opening what it sealed, the cron re-seals under the new one
- * without losing a TTL or a run's newer save.
+ * told nothing changed, and it doesn't hold up what is behind it. If that key
+ * never comes back the job runs out on the TTL it had, and the app reads it as
+ * gone. Then rotation: an old key keeps opening what it sealed, the cron re-seals
+ * under the new one without losing a TTL or a run's newer save.
  *
  * fetch is stubbed; keys are made here.
  *
@@ -149,6 +150,9 @@ function fakeRedis() {
       }
       case "GET":
         return kv.get(String(a[1])) ?? null;
+      case "EXPIRE":
+        ttls.set(String(a[1]), Number(a[2]));
+        return 1;
       case "ZADD":
         zset.set(String(a[3]), Number(a[2]));
         return 1;
@@ -477,6 +481,31 @@ await test("an unreadable job answers as a relay that can't say, never as unknow
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+await test("a key lost for good strands nothing: its job runs out on the TTL it had, reads as gone and leaves the queue", async () => {
+  setKeys(KEY_A);
+  await withRedis(async (r, store) => {
+    const lost = job({ dated: true, sendAfter: T0 });
+    await store.create(lost);
+    const ttl = r.ttls.get(rec(lost));
+    const sealedText = r.kv.get(rec(lost));
+    setKeys(KEY_B); // a new key, and the old one is nowhere
+    let now = T0 + 10;
+    const deps = { now: () => now, readChain: async () => ({ spent: false, knownRoot: true }), send: async () => hex32(1) };
+    for (let pass = 0; pass < 3; pass++, now += 6 * 60 * 1000) assert.equal((await runDueJobs(store, deps))[0]?.status, "skipped");
+    assert.equal(r.ttls.get(rec(lost)), ttl, "waiting never extends it, or a lost key would hold this note for ever");
+    assert.equal(r.kv.get(rec(lost)), sealedText, "and never rewrites it");
+    assert.equal(r.zset.has(lost.id), true);
+    r.kv.delete(rec(lost)); // the TTL runs out
+    const read = await route.GET(call("GET", lost.id));
+    assert.deepEqual([read.status, ((await read.json()) as { code: string }).code], [404, "not_found"]);
+    await runDueJobs(store, deps);
+    assert.equal(r.zset.has(lost.id), false, "and the queue lets it go");
+    // what the app makes of that answer: gone, which sets it moving the note
+    globalThis.fetch = (async () => new Response(JSON.stringify({ ok: false, code: "not_found" }), { status: 404 })) as typeof fetch;
+    assert.equal(await cashOutJobStatus(lost.id), "gone");
+  });
 });
 
 await test("a memory store is unchanged: local runs and tests keep their plain jobs", async () => {
