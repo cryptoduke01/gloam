@@ -852,36 +852,42 @@ export const GLOAM_ARTIFACTS_URL = "https://www.gloam.trade/circuits";
 /** The pool circuits: deposit, private send, cash out. */
 export type PoolCircuit = "shield" | "transfer" | "unshield";
 
+/** Every circuit pinned here: the pool's, and the receipt circuit behind a proof of payment, which is checked off chain. */
+export type GloamCircuit = PoolCircuit | "receipt";
+
 /**
  * SHA-256 of each circuit file, to check a download before proving with it.
  * The .wasm files are the same for both key sets; the zkeys differ.
  */
 export const CIRCUIT_SHA256: {
-  wasm: Record<PoolCircuit, string>;
-  zkey: Record<CeremonyKind, Record<PoolCircuit, string>>;
+  wasm: Record<GloamCircuit, string>;
+  zkey: Record<CeremonyKind, Record<GloamCircuit, string>>;
 } = {
   wasm: {
     shield: "58157ec90f8af891acfa998bd599511b4d5cd06803cea32ab28a6eea8a9b2336",
     transfer: "081929509c3477ee264cb2422183018c23122d59952ed4a61c4932c95d360872",
     unshield: "84ac0942b1618c6112a10bfe82ff0a62a80b7a14881565781eb513e9e581c480",
+    receipt: "14733e0d4f598d6b392ce8e955eae5624ace80932aa9acdb9298d26c6d1a8fc1",
   },
   zkey: {
     dev: {
       shield: "e4d42271b99faa218faebb38a06f69b5ccf01e328d3dea4381ab567e9fbd2481",
       transfer: "f75bc324f12e1f467f5779a7275737aa0fa514a6c317e3d775f1dba8f0234666",
       unshield: "f4b4c5bfa315cef38634eec1b64b8d9ad1d28725f61fde5e169fef1896360b63",
+      receipt: "600652865c27f9b1dafa4edfe65da7c4f8b7c9c6099bf0c85da0151d91830a9a",
     },
     production: {
       shield: "3054877c35e2e0e9f76c43aa4791ac2b3ac51b8967d51be2215e89c0a5fbb512",
       transfer: "bdbae966705bc85e76571b4945da74a43fc4503a955fd4e3799358bcff749cdb",
       unshield: "5a12073f3f84b52f794feaf862fb1d48301124319db95a9c6d0dc58277fa54ed",
+      receipt: "b6b2352ecb393c7f0709177f89168d9d4fef53282fb24a98c1c08d9adb7cdd86",
     },
   },
 };
 
 /** One circuit's files for a key set, as paths relative to the artifacts root, with their SHA-256. */
 export function circuitArtifactFiles(
-  circuit: PoolCircuit,
+  circuit: GloamCircuit,
   ceremony: CeremonyKind
 ): { wasm: string; zkey: string; sha256: { wasm: string; zkey: string } } {
   return {
@@ -898,7 +904,7 @@ export function circuitArtifactFiles(
  * (snarkjs proves from local paths there) and check CIRCUIT_SHA256.
  */
 export function circuitArtifactUrls(
-  circuit: PoolCircuit,
+  circuit: GloamCircuit,
   chainId: number,
   base: string = GLOAM_ARTIFACTS_URL
 ): { wasm: string; zkey: string } {

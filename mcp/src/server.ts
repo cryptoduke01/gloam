@@ -39,6 +39,7 @@ import {
   approveNeedsReset,
   buildShieldBoundIntent,
   artifactProver,
+  proveGroth16,
   NATIVE_ASSET,
   buildGloamPaymentRequirements,
   buildGloamPayment,
@@ -75,6 +76,7 @@ import {
   type GloamPaymentRequirements,
   type NoteExport,
   type Prover,
+  type ReceiptProver,
   type RelayOptions,
   type SweepChain,
 } from "@gloamtrade/sdk";
@@ -82,7 +84,7 @@ import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
 import { getPublicClient, getSigner, signerSetup, type Signer } from "./signer.js";
 import { checkAccessKey } from "./accessKey.js";
 import { packageVersion } from "./version.js";
-import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+import { receiptArtifacts, shieldArtifacts, transferArtifacts } from "./artifacts.js";
 import {
   allNetworks,
   defaultNetworkKey,
@@ -100,6 +102,8 @@ import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type No
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
+import { checkVeyaBudget } from "./veyaGuard.js";
+import { plannedReceipt, settleReceiptInTime, type ReceiptContext, type ReceiptOutcome } from "./veyaReceipt.js";
 import {
   credentialField,
   credentialFromPayment,
@@ -145,6 +149,7 @@ export interface ServerDeps {
   /** The prover for `net`'s key set: dev keys on testnet, the ceremony's final keys on mainnet. */
   shieldProver(net?: McpNetwork): Promise<Prover>;
   transferProver(net?: McpNetwork): Promise<Prover>;
+  receiptProver(net?: McpNetwork): Promise<ReceiptProver>;
   syncTree: typeof syncTree;
   relay(intent: GloamIntent, opts: RelayOptions): Promise<Hex>;
   fetch: typeof fetch;
@@ -157,6 +162,10 @@ function defaultDeps(env: Env): ServerDeps {
     publicClient: (net) => getPublicClient(net),
     shieldProver: async (net) => artifactProver(await shieldArtifacts(net?.ceremony ?? "dev")),
     transferProver: async (net) => artifactProver(await transferArtifacts(net?.ceremony ?? "dev")),
+    receiptProver: async (net) => {
+      const { wasm, zkey } = await receiptArtifacts(net?.ceremony ?? "dev");
+      return (input) => proveGroth16(input, wasm, zkey);
+    },
     syncTree,
     relay: relayIntent,
     fetch: guardedFetch(env),
@@ -1060,6 +1069,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const { req, mpp } = priced;
       const netForReq = networkByChainId(Number(req.network));
       const tagOk = isReceiveTag(String(req.payTo ?? ""));
+      const guardsBeforePay = [
+        ...(env.GLOAM_WORMHOLE_KEY?.trim() ? ["Agent Wormhole checks this payment request first (GLOAM_WORMHOLE_KEY). Only an allow pays."] : []),
+        ...(env.GLOAM_VEYA_KEY?.trim()
+          ? ["VEYA checks this payment against the agent's budget (GLOAM_VEYA_KEY) and sees the agent id, asset, amount, payee, resource host and payment request. Only an allow pays."]
+          : []),
+        ...(env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()
+          ? ["Once it lands, this server proves the payment and sends VEYA only the receipt's leaf and the agent id (GLOAM_VEYA_ANCHOR_URL)."]
+          : []),
+      ];
       return text({
         status: "plan",
         intent: "private_pay_x402",
@@ -1090,9 +1108,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           "Self-custodial: this server signs and broadcasts the shielded transfer. Only the payee can open the payment note; the public sees only that a shielded transfer occurred.",
         notVsZone: GLOAM_VS_ZONE,
         sourceNote: note ?? "the smallest note that covers the amount",
-        ...(env.GLOAM_WORMHOLE_KEY?.trim()
-          ? { checkBeforePay: "Agent Wormhole checks this payment request first (GLOAM_WORMHOLE_KEY). Only an allow pays." }
-          : {}),
+        ...(guardsBeforePay.length ? { checkBeforePay: guardsBeforePay.join(" ") } : {}),
       });
     }
   );
@@ -1108,11 +1124,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         authorization?: string;
       };
 
-  /**
-   * What a note label says about a paid resource. The resource is the payee's own text and labels go
-   * back to the model in later sessions, so only a host is kept, never free text.
-   */
-  const paidLabel = (resource: string): string => {
+  /** The host a resource names, or null when it names none. The resource is the payee's own text, so never more than a host. */
+  const resourceHost = (resource: string): string | null => {
     if (/^[a-z0-9.-]{1,80}(:\d{1,5})?$/i.test(resource)) return resource;
     try {
       const { protocol, host } = new URL(resource);
@@ -1120,8 +1133,20 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch {
       // Not a URL.
     }
-    return "a paid resource";
+    return null;
   };
+
+  /** What a note label says about a paid resource. Labels go back to the model in later sessions, so only a host is kept, never free text. */
+  const paidLabel = (resource: string): string => resourceHost(resource) ?? "a paid resource";
+
+  const receiptContext = (net: McpNetwork, notes: NoteStore): ReceiptContext => ({
+    net,
+    client: (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as ReceiptContext["client"],
+    syncTree: deps.syncTree,
+    prover: () => deps.receiptProver(net),
+    notes,
+    env,
+  });
 
   /** The payment request as Agent Wormhole reads it: the price itself, decoded (an MPP challenge's request, else the x402 requirements). */
   const quoteText = (req: GloamPaymentRequirements, mpp?: PaymentChallenge | null): string =>
@@ -1136,7 +1161,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * the MPP credential when `mpp` is the challenge being paid (push mode: this
    * server broadcasts, so limits and the note store work exactly as for x402).
    * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request as the payee sent
-   * it) goes to Agent Wormhole after the spend gate, and only an allow pays.
+   * it) goes to Agent Wormhole after the spend gate, and only an allow pays. With
+   * GLOAM_VEYA_KEY set the payment then goes to VEYA, and only an allow pays.
+   * `resourceHost` is the host this server really fetched, when it fetched one.
+   * With GLOAM_VEYA_ANCHOR_URL set too, the payment's receipt is built once it
+   * lands; that never changes the payment.
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
@@ -1146,6 +1175,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       legacyNote?: { secret: string; amount: number; decimals?: number };
       mpp?: PaymentChallenge;
       quote?: string;
+      resourceHost?: string;
     }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
@@ -1260,8 +1290,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
 
     const gate = authorizeSpend(spend, env);
     if (!gate.ok) return fail(gate.refusal);
+    const content = opts.quote ?? quoteText(req, opts.mpp);
     // Agent Wormhole, when the operator turned it on: it sees the payment request only, and anything but allow stops here.
-    const wormhole = await checkBeforePay(opts.quote ?? quoteText(req, opts.mpp), env);
+    const wormhole = await checkBeforePay(content, env);
     if (wormhole && !wormhole.pay) {
       settleSpend(gate, "failed", { reason: `Agent Wormhole: ${wormhole.decision}${wormhole.findings.length ? ` (${wormhole.findings.map((f) => f.code).join(", ")})` : ""}` });
       return fail({
@@ -1269,6 +1300,27 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         code: "wormhole_refused",
         message: wormhole.message,
         wormhole: { decision: wormhole.decision, findings: wormhole.findings, attestation: wormhole.attestation, signature: wormhole.signature },
+      });
+    }
+    // VEYA, when the operator turned it on: last, so a request Agent Wormhole stopped never counts against the budget.
+    const veya = await checkVeyaBudget(
+      {
+        chainId: net.chainId,
+        asset: spend.asset,
+        amountWei: spend.amountWei,
+        payee: String(req.payTo ?? ""),
+        resourceHost: opts.resourceHost ?? resourceHost(String(req.resource ?? "")),
+        content,
+      },
+      env
+    );
+    if (veya && !veya.pay) {
+      settleSpend(gate, "failed", { reason: `VEYA: ${veya.decision}${veya.reason ? ` (${veya.reason})` : ""}` });
+      return fail({
+        status: "refused",
+        code: "veya_refused",
+        message: veya.message,
+        veya: { decision: veya.decision, reason: veya.reason },
       });
     }
     if (input.handle) {
@@ -1351,6 +1403,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         origin: "payment",
         createdTx: null,
         label: `payment for ${paidLabel(req.resource)}`,
+        ...(veya?.receipt ? { receipt: plannedReceipt(veya.receipt) } : {}),
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
       header = encodePaymentHeader(payment.payload);
@@ -1432,6 +1485,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           mppWarning = `Paid, but the MPP credential could not be built (${errMsg(e)}). The x402 header still carries the payment.`;
         }
       }
+      // The receipt VEYA anchors. Never throws: the money has moved, so nothing here can fail the payment.
+      let veyaReceipt: ReceiptOutcome | undefined;
+      if (sent?.receipt) veyaReceipt = await settleReceiptInTime({ ...sent, receipt: sent.receipt, createdTx: sentHash }, receiptContext(net, notes));
       const noteWarning = storeWarnings.filter(Boolean).join(" ") || undefined;
       return {
         ok: true,
@@ -1441,6 +1497,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           status: "paid",
           ...(opts.mpp ? { protocol: "mpp" } : {}),
           ...(wormhole ? { wormhole: { decision: wormhole.decision, attestation: wormhole.attestation, signature: wormhole.signature } } : {}),
+          ...(veya ? { veya: { decision: veya.decision, ...(veya.checkId ? { checkId: veya.checkId } : {}), ...(veyaReceipt ? { receipt: veyaReceipt } : {}) } } : {}),
           ...(mppWarning ? { mppWarning } : {}),
           ...(logWarning ? { logWarning } : {}),
           ...(noteWarning ? { noteWarning } : {}),
@@ -1494,6 +1551,43 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           : {}),
       });
     }
+  }
+
+  if (env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()) {
+    server.registerTool(
+      "gloam_retry_veya_receipts",
+      {
+        title: "Retry VEYA receipts",
+        description:
+          "Retry the receipts of payments that already went through, after a result said anchor_failed or receipt_failed. Spends nothing and pays nothing: it builds a missing receipt and sends VEYA its leaf. A leaf VEYA already took is not sent again. Returns each payment's note handle, leaf and status, never the record.",
+        inputSchema: {
+          note: z.string().optional().describe("Handle of one payment's note. Omit for every receipt VEYA has not taken."),
+        },
+      },
+      async ({ note }) => {
+        const opened = openStore();
+        if (!opened.ok) return text({ status: "error", error: opened.error });
+        const notes = opened.store;
+        const listed = notes.list().filter((n) => n.receipt && (note ? n.handle === note : n.receipt.status !== "anchored"));
+        if (note && !listed.length) return text({ status: "error", error: `There is no payment with a receipt under "${note}".` });
+        const receipts: (ReceiptOutcome | { status: "not_landed"; note: string; checkId: string; leaf: null; message: string })[] = [];
+        for (const n of listed) {
+          const net = networkByChainId(n.chainId);
+          if (!net || n.status !== "spent" || !n.createdTx) {
+            receipts.push({
+              status: "not_landed",
+              note: n.handle,
+              checkId: n.receipt!.checkId,
+              leaf: null,
+              message: "This payment has not shown as landed. Call gloam_list_notes with refresh first.",
+            });
+            continue;
+          }
+          receipts.push(await settleReceiptInTime({ ...n, receipt: n.receipt! }, receiptContext(net, notes)));
+        }
+        return text({ status: "ok", receipts, ...(receipts.length ? {} : { message: "Nothing to retry." }) });
+      }
+    );
   }
 
   const PAY_SHAPE = {
@@ -1736,7 +1830,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // For Agent Wormhole: the 402 body as the payee sent it, when the price came in it. A price in
       // a header is what gets paid whatever the body says, so the check reads that price, decoded.
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
-      const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}) });
+      // For VEYA: the host that really asked for this payment. What the price says about itself is the payee's word.
+      const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), resourceHost: new URL(url).host });
       if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
       // What to present: the MPP credential when paying an MPP challenge, else the x402 header.
       const presented = mpp ? paid.authorization : paid.header;
