@@ -709,6 +709,113 @@ export function assertDepositAllowed(chainId: number, asset: Address, amount: bi
   }
 }
 
+// ── Cash-out recipients ───────────────────────────────────────────────────────
+
+export const CASH_OUT_TO_VAULT_MESSAGE = "That address is the vault itself. Cash out to a wallet you control.";
+export const CASH_OUT_TO_BOARD_MESSAGE =
+  "That address is Gloam's payment message board. Cash out to a wallet you control.";
+export const CASH_OUT_TO_TOKEN_MESSAGE =
+  "That address is a token contract, not a wallet. Money sent there would be lost. Cash out to a wallet you control.";
+export const CASH_OUT_TO_ROUTER_MESSAGE =
+  "That address is Gloam's swap router, not a wallet. Money sent there goes to the treasury. Cash out to a wallet you control.";
+export const CASH_OUT_TO_ZERO_MESSAGE = "That is the zero address, which nobody controls. Cash out to a wallet you control.";
+
+/**
+ * Gloam's swap routers, by chain: GloamVaultSwapV4b and GloamVaultSwapV4 (kept
+ * for refunds) on Robinhood Chain, GloamVaultSwapTempo on Tempo. Base and
+ * Ethereum have none. How swaps run is the app's (app/src/lib/vaultSwap.ts).
+ */
+const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
+  [RH_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
+  [TEMPO_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+};
+
+/**
+ * Tokens that are not in a network's `assets` because its pool doesn't take a
+ * deposit of them, but a cash out could still be pointed at. On Robinhood Chain
+ * mainnet: what a private swap can land in (the app's RH_SWAP_ASSETS_V2, past
+ * the listed USDG and GLOAM). On its testnet: the faucet stock tokens. Kept out
+ * of `assets` on purpose: assertDepositAllowed reads that list.
+ */
+const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
+  [RH_MAINNET_CHAIN_ID]: [
+    "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", // WETH
+    "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe
+    "0xcE24439F2D9C6a2289F741120FE202248B666666", // U
+    "0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4", // cbBTC
+    "0x39dBED3a2bd333467115dE45665cC57F813C4571", // PONS
+    "0x020bfC650A365f8BB26819deAAbF3E21291018b4", // CASHCAT
+    "0xc6911796042b15d7Fa4F6CDe69e245DdCd3d9c31", // VIRTUAL
+    "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C", // SPY
+    "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", // NVDA
+    "0x322F0929c4625eD5bAd873c95208D54E1c003b2d", // TSLA
+    "0x12f190a9F9d7D37a250758b26824B97CE941bF54", // AMZN
+    "0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa", // SPCX
+    "0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5", // CRCL
+    "0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35", // META
+    "0xec262a75e413fAfD0dF80480274532C79D42da09", // MSTR
+    "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3", // GOOGL
+    "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9", // AAPL
+    "0xe93237C50D904957Cf27E7B1133b510C669c2e74", // MSFT
+    "0x894E1EC2D74FFE5AEF8Dc8A9e84686acCB964F2A", // PLTR
+    "0x86923f96303D656E4aa86D9d42D1e57ad2023fdC", // AMD
+    "0x6330D8C3178a418788dF01a47479c0ce7CCF450b", // COIN
+    "0x05a3d1Cd21d0C88145E82600E62e7E496e0F222B", // AMC
+    "0xCceE82fE024c36fA15E1005edE3E9e4787e23D09", // HIMS
+    "0xc72b96e0E48ecd4DC75E1e45396e26300BC39681", // INTC
+    "0x58FfE4a942d3885bAa22D7520691F611EF09e7AA", // TSM
+    "0xC9a981FEE1F9DEc688bb123ccDeCc63D0deBFC4e", // GLD
+    "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD", // MU
+  ],
+  [RH_TESTNET_CHAIN_ID]: [
+    "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E", // TSLA
+    "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02", // AMZN
+    "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0", // PLTR
+    "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93", // NFLX
+    "0x71178BAc73cBeb415514eB542a8995b82669778d", // AMD
+  ],
+};
+
+/** The network a cash out is on. A GloamNetwork fits as it is. */
+export interface CashOutTargetNetwork {
+  chainId: number;
+  /** The vault being cashed out of. The network's own vault is refused either way. */
+  pool?: string | null;
+  /** A payment-message board, on top of the network's own. */
+  payMemo?: string | null;
+  /** Swap routers to refuse on top of the ones the SDK knows. */
+  routers?: readonly string[];
+  /** Token contracts to refuse on top of the ones the SDK knows. */
+  tokens?: readonly string[];
+}
+
+/**
+ * Why a cash out to `to` on this network would be lost, or null when it is fine.
+ * buildUnshieldIntent checks this before proving, and the Gloam app and relay
+ * use it too, so an agent that sends from its own wallet gets the same answer.
+ *
+ * Refused: the vault, where the money stays put and its books go down; the
+ * payment-message board and a token contract, which can never pay it out; a swap
+ * router, which sends what it holds to the treasury; and the zero address. Only
+ * the note's owner picks the address, so this guards against a slip, not an attack.
+ *
+ * Each list is matched on its own chain only, because the same address can be
+ * a wallet somewhere else: 0xfCa1...F2DC is a router on Robinhood Chain and
+ * Tempo, the board on Base, and just an address on Ethereum.
+ */
+export function cashOutTargetProblem(to: string, net: CashOutTargetNetwork): string | null {
+  const target = to.trim().toLowerCase();
+  const isTarget = (a: string | null | undefined) => a?.trim().toLowerCase() === target;
+  const known = networkForChainId(net.chainId);
+  if ([net.pool, known?.pool].some(isTarget)) return CASH_OUT_TO_VAULT_MESSAGE;
+  if ([net.payMemo, known?.payMemo].some(isTarget)) return CASH_OUT_TO_BOARD_MESSAGE;
+  if (isTarget(zeroAddress)) return CASH_OUT_TO_ZERO_MESSAGE;
+  const routers = [...(VAULT_SWAP_ROUTERS[net.chainId] ?? []), ...(net.routers ?? [])];
+  if (routers.some(isTarget)) return CASH_OUT_TO_ROUTER_MESSAGE;
+  const tokens = [...(known?.assets ?? []).map((a) => a.address), ...(UNLISTED_TOKENS[net.chainId] ?? []), ...(net.tokens ?? [])];
+  return tokens.some(isTarget) ? CASH_OUT_TO_TOKEN_MESSAGE : null;
+}
+
 /** Tokens whose approve() refuses to change one non-zero allowance into another, by chain. */
 const APPROVE_RESET_FIRST: Record<number, Address[]> = {
   [ETHEREUM_MAINNET_CHAIN_ID]: [ETHEREUM_USDT],

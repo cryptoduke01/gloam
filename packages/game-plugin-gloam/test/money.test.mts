@@ -211,6 +211,51 @@ test("the sweep reader names its chain, so a claim through an RPC on another cha
   assert.equal(sent.length, 0);
 });
 
+test("a cash out to an address that cannot pay it on is refused before anything is split or sent", { timeout: 120_000 }, async () => {
+  const chain = fakeChain();
+  const sent: unknown[] = [];
+  const sender: CallSender = {
+    address: "0x00000000000000000000000000000000000000a1",
+    async sendCalls(calls) {
+      sent.push(calls);
+      throw new Error("The ACP wallet did not answer in time.");
+    },
+  };
+  const agent = agentOn(chain.client, sender);
+  await agent.add({ amount: "10" });
+  chain.seen.add(agent.store.list()[0]!.commitment.toLowerCase());
+  await agent.refresh();
+  assert.deepEqual(view(agent), ["shield:10:unspent"]);
+  const deposited = sent.length;
+  const refused: [string, RegExp][] = [
+    [POOL, /vault itself/],
+    ["0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194", /vault itself/],
+    ["0x01B3172d9900Cb26d57E986429b9b23854c74598", /message board/],
+    [BASE_SEPOLIA_USDC, /token contract/],
+    ["0x0000000000000000000000000000000000000000", /zero address/],
+  ];
+  // 4 of a 10 note would need a split first: that split is what must not run.
+  for (const [to, why] of refused) await assert.rejects(agent.cashOut({ amount: "4", to }), why);
+  assert.equal(sent.length, deposited, "no split and no cash out went out");
+  assert.deepEqual(view(agent), ["shield:10:unspent"], "the note was not touched");
+});
+
+test("on Robinhood Chain a cash out to a swap router or a token a swap lands in is refused, and neither means anything on Base", async () => {
+  const onRh = agentOn(fakeChain({ chainId: 4663 }).client, undefined, {
+    network: "robinhood-mainnet",
+    limits: { recipients: "any" as const, assets: { USDG: { maxPerPayment: "25", maxPerDay: "100" } } },
+  });
+  for (const r of ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"]) {
+    await assert.rejects(onRh.cashOut({ amount: "4", to: r }), /swap router/);
+  }
+  await assert.rejects(onRh.cashOut({ amount: "4", to: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73" }), /token contract/);
+  // Base Sepolia has no router and no WETH on the list: past the guard, this agent simply has no note.
+  const onBase = agentOn(fakeChain().client);
+  const out = await onBase.cashOut({ amount: "4", to: "0x34AB06208586A737Bf1607fa996Bc9162271c52d" });
+  assert.equal(out.status, "error");
+  assert.doesNotMatch(String(out.message), /swap router|token contract/);
+});
+
 test("balances stay out of what the planner reads unless the owner shares them", async () => {
   const chain = fakeChain();
   const dir = mkdtempSync(join(tmpdir(), "gloam-money-env-"));
