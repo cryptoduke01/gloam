@@ -26,10 +26,14 @@ import {
   refundFits,
   RH_SWAP_POOLS,
   RH_SWAP_POOLS_V2,
+  RH_SWAP_POOLS_V2_QUEUED,
+  RH_SWAP_ASSETS_V2_QUEUED,
   RH_WETH,
   VAULT_SWAP_ASSETS,
   VAULT_SWAP_V2_ROUTER,
   isSwapAsset,
+  livePools,
+  offeredSwapAssets,
   poolId,
   routeCurrencies,
   swapRouterFor,
@@ -69,7 +73,7 @@ const RH_V1 = "0x34AB06208586A737Bf1607fa996Bc9162271c52d" as Address;
 const RH_V2 = "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC" as Address;
 assert.equal(VAULT_SWAP_V2_ROUTER[4663], RH_V2, "v2 is switched on");
 assert.equal(vaultSwapRouter(4663), RH_V2);
-assert.deepEqual(VAULT_SWAP_ASSETS[4663], RH_SWAP_ASSETS_V2, "on: v2's tokens");
+assert.deepEqual(VAULT_SWAP_ASSETS[4663], [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED], "on: v2's tokens, and the two queued ones");
 assert.equal(swapRouterFor(4663)!.version, 2);
 assert.equal(swapRouterFor(4663, RH_V1)!.version, 1, "the relay still knows v1 for its refunds");
 assert.equal(vaultSwapRouter(4217), "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC");
@@ -279,7 +283,7 @@ n += 4;
   assert.equal(v2.maxHops, 3);
   assert.equal(v2.weth, WETH);
   assert.equal(v1.version, 1, "v1 still known, for its refunds");
-  assert.deepEqual(v2.assets, RH_SWAP_ASSETS_V2);
+  assert.deepEqual(v2.assets, [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED]);
   assert.ok(isSwapAsset(4663, WETH) && isSwapAsset(4663, WETH, V2));
   assert.ok(!isSwapAsset(4663, WETH, V1), "v1 never had WETH");
   n += 8;
@@ -335,6 +339,53 @@ n += 4;
   assert.ok(MAX_QUOTED_ROUTES >= 12);
   n += 6;
   assert.equal(routesBetween(USDG, GLOAM, v1).length, 2, "v1's routes as before");
+
+  // AI and ORBIO: the four pools queued on v2, with the ids the router holds (rh-assets), never in its deploy list
+  const [AI, ORBIO] = RH_SWAP_ASSETS_V2_QUEUED as [Address, Address];
+  assert.deepEqual(
+    RH_SWAP_POOLS_V2_QUEUED.map(poolId),
+    [
+      "0x592e3fb7ea947506b36481025abc15baada8e1839a50fded46ecf08b3182fa96",
+      "0x7aebd80541bfaaf23dbb6e99ce13d4d31c1a84c91414f971eadbff7db5f85995",
+      "0xea9f200e13055b82f175f44f592c4c13dd8c9d9320a66487d3c5cd90d68550ef",
+      "0xc761f7de760d2b73cc3e3cc3d729916a4ed2f7fc6b0aa3872e2ced4258961e92",
+    ],
+    "the queued pools' ids"
+  );
+  for (const k of RH_SWAP_POOLS_V2_QUEUED) {
+    assert.ok(k.currency0.toLowerCase() < k.currency1.toLowerCase(), "sorted as a v4 key");
+    assert.ok(!fixture.poolIds.includes(poolId(k)), "not in the list v2 deployed with");
+  }
+  const queuedIds = new Set(RH_SWAP_POOLS_V2_QUEUED.map(poolId));
+  const notQueued = (k: (typeof RH_SWAP_POOLS_V2)[number]) => !queuedIds.has(poolId(k));
+  assert.equal(routesBetween(USDG, AI, v2).length, 2, "both AI pools, directly, once live");
+  assert.equal(routesBetween(ORBIO, USDG, v2).length, 2, "both ORBIO pools");
+  assert.equal(routesBetween(USDG, AI, v2, notQueued).length, 0, "nothing routes through a pool that isn't live");
+  assert.equal(routesBetween(AI, ORBIO, v2, notQueued).length, 0);
+  assert.ok(routesBetween(AI, ORBIO, v2).length === 4, "AI to ORBIO through USDG");
+  assert.ok(routesBetween(USDG, GLOAM, v2, notQueued).length === routesBetween(USDG, GLOAM, v2).filter((r) => r.every(notQueued)).length);
+  n += 15;
+
+  // the picker: a queued asset shows only with a live pool and an open vault limit
+  const all = [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED];
+  const none = new Set<string>();
+  const open = new Set([AI.toLowerCase(), ORBIO.toLowerCase()]);
+  assert.deepEqual(offeredSwapAssets(all, v2, none, null), RH_SWAP_ASSETS_V2, "unread: not offered");
+  assert.deepEqual(offeredSwapAssets(all, v2, open, null), RH_SWAP_ASSETS_V2, "pools unread: not offered");
+  assert.deepEqual(offeredSwapAssets(all, v2, none, () => true), RH_SWAP_ASSETS_V2, "the vault doesn't take them yet");
+  assert.deepEqual(offeredSwapAssets(all, v2, open, notQueued), RH_SWAP_ASSETS_V2, "the router hasn't let them in yet");
+  assert.deepEqual(offeredSwapAssets(all, v2, open, () => true), all, "both live");
+  const aiOnly = (k: (typeof RH_SWAP_POOLS_V2)[number]) => notQueued(k) || poolId(k).startsWith("0x7aebd805");
+  assert.deepEqual(offeredSwapAssets(all, v2, open, aiOnly), [...RH_SWAP_ASSETS_V2, AI], "one pool is enough, for its own asset");
+  assert.deepEqual(offeredSwapAssets(all, null, open, () => true), RH_SWAP_ASSETS_V2, "no router, no queued asset");
+  n += 7;
+
+  // a failed read of the allowlist keeps what was listed at deploy, never a queued pool
+  const noRpc = { multicall: () => Promise.reject(new Error("rpc down")) } as never;
+  const failed = await livePools(noRpc, v2);
+  assert.equal(failed(RH_SWAP_POOLS_V2[0]!), true);
+  for (const k of RH_SWAP_POOLS_V2_QUEUED) assert.equal(failed(k), false, "a queued pool needs the router's word");
+  n += 5;
   // a removed pool (livePools) is never routed through
   const noLaunch = routesBetween(WETH, GLOAM, v2, (k) => poolId(k) !== poolId(ethGloam));
   assert.ok(noLaunch.length > 0 && noLaunch.every((r) => !r.some((k) => poolId(k) === poolId(ethGloam))));
