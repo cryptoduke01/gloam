@@ -427,6 +427,43 @@ const hash = await wallet.writeContract({
         a balance, the wallet or a key.
       </p>
 
+      <h2 id="check-budget-before-paying">Check the budget before paying (VEYA)</h2>
+      <p>
+        A Gloam note is spent with a proof, so wallet rules can&apos;t stop a
+        payment. A budget only holds before the payment, on the server that
+        keeps the notes. The MCP server can ask{" "}
+        <a href="https://veyanet.tech" target="_blank" rel="noreferrer">
+          VEYA
+        </a>{" "}
+        whether the agent&apos;s budget covers each payment, and only an allow
+        pays. A refusal, any other answer, an error, a bad setting or no answer
+        within five seconds all mean the agent does not pay, and nothing is
+        spent. With Agent Wormhole on too, it goes first, and both must allow.
+      </p>
+      <p>
+        It is off until you turn it on. Put these in the server&apos;s settings
+        (<code>~/.gloam/agent.env</code>) or its environment. The agent id is
+        one you choose, and a wallet address is refused:
+      </p>
+      <pre>
+        <code>{`GLOAM_VEYA_KEY=your-veya-key
+GLOAM_VEYA_URL=veya-check-endpoint
+GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
+      </pre>
+      <p>
+        With this on, VEYA sees the agent id, asset, amount and payee during the
+        check, along with the chain, the resource&apos;s host and the payment
+        request. It never sees a note, a secret, a balance, a wallet or a key.
+        What VEYA keeps after the check is VEYA&apos;s to say.
+      </p>
+      <p>
+        This server enforces the check, off-chain. The vault does not know about
+        it, so it binds the agent only while the notes and the key are held by
+        this server and nowhere else. VEYA is not told how a payment ended, so if
+        one fails after an allow, VEYA&apos;s running budget may sit ahead of what
+        was really paid.
+      </p>
+
       <h2>Spending limits</h2>
       <p>
         An agent that can sign can spend, so the owner sets its limits and every

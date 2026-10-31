@@ -151,6 +151,23 @@ A 402 is text the payee wrote, and the agent reads it before it pays. With `GLOA
 - **Attestation.** A paid result carries Agent Wormhole's `attestation` and `signature` under `wormhole`. They are kept for you to check, not verified here yet: Agent Wormhole has not published the canonical form of a `/check` attestation.
 - **Settings.** `GLOAM_WORMHOLE_TIMEOUT_MS` (default 5000, 500 to 30000). `GLOAM_WORMHOLE_URL` points somewhere else (it must be https, or http on localhost); a key with an unusable URL refuses every payment rather than quietly turning the check off.
 
+## Check the budget before paying (VEYA)
+
+A Gloam note is spent with a proof, so wallet rules can't stop a payment. A budget only holds before the payment, on the server that keeps the notes. With `GLOAM_VEYA_KEY` set, `gloam_execute_private_pay` and `gloam_fetch_paid` ask [VEYA](https://veyanet.tech) whether this agent's budget covers the payment, after the spending limits and Agent Wormhole pass and before anything is proved. Only an exact `allow` pays.
+
+- **Off by default.** No key, no call. To turn it on, set all three in `~/.gloam/agent.env` or the environment: `GLOAM_VEYA_KEY=<your key>`, `GLOAM_VEYA_URL=<VEYA's check endpoint>` and `GLOAM_VEYA_AGENT_ID=<an id you choose>`.
+- **What VEYA sees.** With this on, VEYA sees the agent id, asset, amount and payee during the check, along with the chain, the resource's host and the payment request Agent Wormhole gets: `{"agent_id", "chain_id", "asset", "amount", "payee", "resource_host", "content"}`. `amount` is base units as a decimal string, and `resource_host` is `null` when the request names no host. Never a note, a secret, a balance, a wallet or a key. What VEYA keeps after the check is VEYA's to say; this server can't limit it.
+- **The agent id is opaque.** Pick any id that means nothing outside your setup. A value with a wallet address in it is refused, so a wallet never goes out as the id.
+- **The resource host.** From `gloam_fetch_paid` it is the host this server really fetched. From `gloam_execute_private_pay` it is what the price names, which is the payee's word.
+- **It fails closed.** Only a `200` with `{"decision": "allow"}` pays. `refuse`, any other answer, any other status, a redirect, an unreadable answer, no answer within 5 seconds, or a missing or unusable setting: the tool answers `status: "refused"`, `code: "veya_refused"`, the spend is settled as failed, and nothing is spent. The note stays spendable.
+- **Both checks on.** Agent Wormhole goes first, then VEYA, and both must allow. A request Agent Wormhole refuses never reaches VEYA.
+- **VEYA's reason.** A `reason` is untrusted text. Before the agent or the spending log sees it, it is stripped to letters, digits and `_.:-` and cut to 40 characters, so spaces go: VEYA's reasons read best as short codes like `daily_budget_exceeded`.
+- **This server enforces it, off-chain.** The vault does not know about this check. It binds the agent only while the notes and the key are held by this server and nowhere else: anything else holding them can spend without asking VEYA.
+- **A payment can fail after an allow.** VEYA is not told how a payment ended. If the proof, the send or the note fails after an allow, VEYA's running budget may sit ahead of what was really paid, and a retry is checked again as a new payment. Compare with `gloam_get_spending_report` if the numbers matter.
+- **Settings.** `GLOAM_VEYA_TIMEOUT_MS` (default 5000, 500 to 30000). `GLOAM_VEYA_URL` must be https, or http on localhost; a key with an unusable URL or agent id refuses every payment rather than quietly turning the check off.
+
+To anchor a receipt with VEYA after the payment, see [`examples/veya-receipt`](../examples/veya-receipt).
+
 ## Spending limits
 
 An agent that can sign can spend, so every tool that moves money checks the owner's limits first: `gloam_execute_private_pay` and `gloam_fetch_paid` (pay), `gloam_execute_transfer` (send) and `gloam_execute_shield` (shield). A spend that breaks a limit is refused before anything is proved or signed, with a plain reason the agent can act on, for example:
