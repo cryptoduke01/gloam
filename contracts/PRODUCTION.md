@@ -105,6 +105,8 @@ Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
 - [ ] Independent external review of pool, verifiers, circuits
 - [x] Fix critical/high findings from the internal review
 - [ ] Threat model sign-off (anonymity set, owner keys, note custody)
+- [ ] Outside review of `src/VaultOwnerGuard.sol`, then the handover on all four
+      chains (the owner guard section of [`DEPLOY.md`](../DEPLOY.md)). It is one-way
 
 ## 4. Ops
 
@@ -116,5 +118,8 @@ Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
 
 - No external audit yet: reviewed internally, an external audit is planned
 - Mainnet is beta software: deposit limits on, one owner wallet until the multisig
+- Until the owner guard holds a vault, its owner can replace a proof checker through
+  the 3-day timelock: read `owner()`. After that a proof checker cannot be patched,
+  only left behind for a new vault
 - Private trading is not on mainnet (`ShieldPoolPayments` has no swap code)
 - Dev zkeys must not be used on mainnet

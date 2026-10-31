@@ -66,7 +66,7 @@ export default function DocsProductionPage() {
           {
             n: "5",
             title: "Private swap routers (deployed)",
-            body: "One router each on Robinhood Chain and Tempo mainnet, with no owner, no admin and no upgrade. They use only the vault's normal release and deposit calls, so the vault did not change. Reviewed internally before deploy, not externally audited.",
+            body: "One router each on Robinhood Chain and Tempo mainnet, with no upgrade. Tempo's has no owner; Robinhood Chain's owner can add a pool with 3 days of public notice and take one off at once, and nothing else. They use only the vault's normal release and deposit calls, so the vault did not change. Reviewed internally before deploy, not externally audited.",
           },
         ]}
       />
@@ -148,6 +148,15 @@ export default function DocsProductionPage() {
           fees go to the treasury (
           <code>0xB3900ac9350903218e4c7597bAb0f008F01B30B8</code>) since 24
           October. A multisig is planned.
+        </li>
+        <li>
+          <strong>Owner guard.</strong> Ownership of each mainnet vault moves
+          to VaultOwnerGuard, which forwards deposit limit and fee changes
+          and the sweep of coin sent by mistake, and nothing else. It applies to a vault from the moment the guard accepts it,
+          after outside review: from then on that vault&apos;s proof checkers
+          and ownership can never change. Read <code>owner()</code> on the
+          vault to see whether it has. What that costs is in the{" "}
+          <Link href="/docs/threat-model">threat model</Link>.
         </li>
         <li>
           <strong>Relayer.</strong> The Gloam team runs it at launch. It only
