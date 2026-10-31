@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner guard handover</title>
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --ink:#0b0c0e; --mute:#5f636a; --line:#e4e6e9; --sealed:#2e7d53; --warn:#9a5b00; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui,-apple-system,sans-serif; padding:48px 16px; }
+  main { max-width:660px; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-weight:400; font-size:32px; letter-spacing:-.02em; margin:0 0 4px; }
+  h2 { font-weight:500; font-size:20px; margin:16px 0 0; }
+  p { margin:0; color:var(--mute); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px; display:flex; flex-direction:column; gap:12px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .name { font-weight:600; }
+  code, input, select { font:13px ui-monospace,Menlo,monospace; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  button { background:var(--ink); color:#fff; border:0; border-radius:10px; padding:11px 16px; font-size:15px; font-weight:500; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button:disabled { opacity:.4; cursor:default; }
+  .status { font-size:14px; color:var(--mute); word-break:break-all; }
+  .facts { font-size:14px; color:var(--mute); display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
+  .facts b { font-weight:500; color:var(--ink); word-break:break-all; }
+  .ok { color:var(--sealed); }
+  .bad { color:var(--warn); }
+  a { color:var(--sealed); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Owner guard handover</h1>
+  <p>Hands each vault to VaultOwnerGuard, which forwards only deposit limit and fee changes and the sweep of stray native coin. After step 2 on a chain, nobody can replace that vault's proof checkers or move its ownership, ever, this wallet included. There is no undo. Run it from the runbook in <code>DEPLOY.md</code>, smallest vault first. Connect <code>0x76b7…D4D8</code>. Neither step moves funds.</p>
+
+  <div class="card">
+    <span class="name">Guard address</span>
+    <code id="guard">reading this checkout's compile…</code>
+    <div class="status" id="guard-note">Worked out from this checkout's compile, never typed or linked in. It must equal the address the deploy script printed. Both steps stay shut unless the code there matches byte for byte and no controller handover is pending.</div>
+    <div class="row"><button class="ghost" id="refresh">Read the chains again</button></div>
+  </div>
+
+  <div class="card" data-chain="4217">
+    <div class="row"><span class="name">Tempo</span><span class="status">gas: under a cent of pathUSD</span></div>
+    <div class="facts"></div>
+    <div class="row"><button data-act="offer">1. Offer the vault</button><button data-act="accept">2. Accept through the guard</button></div>
+    <div class="status" aria-live="polite"></div>
+  </div>
+
+  <div class="card" data-chain="1">
+    <div class="row"><span class="name">Ethereum</span><span class="status">gas: about 100,000 in all</span></div>
+    <div class="facts"></div>
+    <div class="row"><button data-act="offer">1. Offer the vault</button><button data-act="accept">2. Accept through the guard</button></div>
+    <div class="status" aria-live="polite"></div>
+  </div>
+
+  <div class="card" data-chain="8453">
+    <div class="row"><span class="name">Base</span><span class="status">gas: a fraction of a cent of ETH</span></div>
+    <div class="facts"></div>
+    <div class="row"><button data-act="offer">1. Offer the vault</button><button data-act="accept">2. Accept through the guard</button></div>
+    <div class="status" aria-live="polite"></div>
+  </div>
+
+  <div class="card" data-chain="4663">
+    <div class="row"><span class="name">Robinhood Chain</span><span class="status">gas: a few cents of ETH</span></div>
+    <div class="facts"></div>
+    <div class="row"><button data-act="offer">1. Offer the vault</button><button data-act="accept">2. Accept through the guard</button></div>
+    <div class="status" aria-live="polite"></div>
+  </div>
+
+  <h2>After the handover</h2>
+  <p>What the controller does from here, on a chain where the guard holds the vault.</p>
+
+  <div class="card" id="ops">
+    <label class="name" for="ops-chain">Network</label>
+    <select id="ops-chain">
+      <option value="4217">Tempo</option><option value="1">Ethereum</option><option value="8453">Base</option><option value="4663">Robinhood Chain</option>
+    </select>
+
+    <label class="name" for="ops-call">Queue, execute or cancel a change</label>
+    <input id="ops-call" placeholder="0x… the setDepositLimit or setWithdrawFee call" autocomplete="off" spellcheck="false">
+    <div class="row"><button class="ghost" data-op="queue">Queue</button><button class="ghost" data-op="execute">Execute</button><button class="ghost" data-op="cancel">Cancel</button></div>
+
+    <label class="name" for="ops-asset">Close deposits for one asset, now</label>
+    <input id="ops-asset" placeholder="0x… asset; 0x0000000000000000000000000000000000000000 is the native coin" autocomplete="off" spellcheck="false">
+    <div class="row"><button class="ghost" data-op="close">Close deposits</button></div>
+
+    <label class="name" for="ops-bps">Lower the cash-out fee, now (basis points, 0 is off)</label>
+    <input id="ops-bps" placeholder="0" inputmode="numeric" autocomplete="off">
+    <div class="row"><button class="ghost" data-op="fee">Lower the fee</button></div>
+
+    <div class="status" id="ops-out" aria-live="polite"></div>
+  </div>
+</main>
+<script>
+const VAULT = "0x39e28cde55cab798874746ac52cb4b5cc99a0194";
+const OWNER = "0x76b7e410a227c888abd2bdc24ee32e094b0fd4d8";
+const VERIFIER = "0x1421353d471df6c847713aee391db38978fe714a";
+const SHIELD_VERIFIER = "0x69fa6d2de0a66da718df022cee98485afdb03465";
+const CHAINS = {
+  4217: { chainId: "0x1079", chainName: "Tempo", nativeCurrency: { name: "US Dollar", symbol: "USD", decimals: 18 },
+          rpcUrls: ["https://rpc.tempo.xyz"], blockExplorerUrls: ["https://explore.tempo.xyz"] },
+  1: { chainId: "0x1", chainName: "Ethereum", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://ethereum-rpc.publicnode.com"], blockExplorerUrls: ["https://etherscan.io"] },
+  8453: { chainId: "0x2105", chainName: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] },
+  4663: { chainId: "0x1237", chainName: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"], blockExplorerUrls: ["https://robin.etherscan.io"] },
+};
+const SEL = {
+  // the vault
+  owner: "8da5cb5b", pendingOwner: "e30c3978", setupMode: "13bf8126", verifier: "2b7ac3f3", shieldVerifier: "c044d789",
+  transferOwnership: "f2fde38b", depositLimit: "ff98c1e7", withdrawFeeBps: "7aca2b59",
+  // the guard
+  vault: "fbfa77cf", controller: "f77c4791", pendingController: "a2cab3a1", acceptVaultOwnership: "429a651b",
+  isAllowedChange: "af420e98", queueChange: "81a0a4aa", executeChange: "8b4a9202", cancelChange: "1dc19020",
+  lowerDepositLimit: "558692db", lowerWithdrawFee: "e514de23",
+};
+const isAddr = (v) => /^0x[0-9a-fA-F]{40}$/.test(v);
+const word = (hex) => hex.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+const addrOf = (ret) => "0x" + ret.slice(-40).toLowerCase();
+/** abi.encode of one `bytes` argument after a selector. */
+function withBytes(selector, hexBytes) {
+  const b = hexBytes.replace(/^0x/, "");
+  return "0x" + selector + word("20") + word((b.length / 2).toString(16)) + b.padEnd(Math.ceil(b.length / 64) * 64, "0");
+}
+const guardEl = document.getElementById("guard");
+let expected = null;
+const guardAddr = () => (expected ? expected.address : "");
+
+async function rpc(chain, method, params) {
+  const res = await fetch(CHAINS[chain].rpcUrls[0], { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.result;
+}
+const call = (chain, to, data) => rpc(chain, "eth_call", [{ to, data }, "latest"]);
+
+/** The one address and the one runtime code this page will sign for. */
+async function loadExpected() {
+  const res = await fetch("/guard/expected");
+  if (!res.ok) throw new Error(await res.text());
+  const { address, runtime } = await res.json();
+  expected = { address: address.toLowerCase(), runtime: runtime.toLowerCase() };
+  guardEl.textContent = expected.address;
+}
+
+async function ensureWallet(chain, wantController) {
+  if (!window.ethereum) throw new Error("No wallet found in this browser. Open this page in the browser with your wallet extension.");
+  const [account] = await window.ethereum.request({ method: "eth_requestAccounts" });
+  if (account.toLowerCase() !== wantController) throw new Error("Your wallet is on " + account + ". Switch to " + wantController + " and press again.");
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAINS[chain].chainId }] });
+  } catch (e) {
+    if (e && (e.code === 4902 || /unrecognized|not added|unknown chain/i.test(e.message || ""))) {
+      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [CHAINS[chain]] });
+    } else throw e;
+  }
+  // The guard's address and calldata are the same on every chain, so a wallet left on
+  // another network would send the step there. Adding a network does not always switch.
+  const on = await window.ethereum.request({ method: "eth_chainId" });
+  if (Number(on) !== chain) throw new Error("Your wallet is on chain " + Number(on) + ", not " + CHAINS[chain].chainName + ". Switch it and press again.");
+  return account;
+}
+const send = (chain, from, to, data) =>
+  window.ethereum.request({ method: "eth_sendTransaction", params: [{ from, to, data, chainId: CHAINS[chain].chainId }] });
+const link = (chain, hash) => '<a href="' + CHAINS[chain].blockExplorerUrls[0] + "/tx/" + hash + '" target="_blank" rel="noopener">' + hash + "</a>";
+
+const refreshers = [];
+for (const card of document.querySelectorAll(".card[data-chain]")) {
+  const chain = Number(card.dataset.chain);
+  const facts = card.querySelector(".facts");
+  const out = card.querySelector(".status[aria-live]");
+  const offerBtn = card.querySelector('[data-act="offer"]');
+  const acceptBtn = card.querySelector('[data-act="accept"]');
+  const say = (msg, cls = "") => { out.className = "status " + cls; out.innerHTML = msg; };
+  let st = null;
+
+  async function refresh() {
+    offerBtn.disabled = acceptBtn.disabled = true;
+    const g = guardAddr();
+    try {
+      const [owner, pending, setup, ver, shield] = await Promise.all([
+        call(chain, VAULT, "0x" + SEL.owner), call(chain, VAULT, "0x" + SEL.pendingOwner), call(chain, VAULT, "0x" + SEL.setupMode),
+        call(chain, VAULT, "0x" + SEL.verifier), call(chain, VAULT, "0x" + SEL.shieldVerifier),
+      ]);
+      st = { owner: addrOf(owner), pending: addrOf(pending), setup: BigInt(setup) !== 0n, ver: addrOf(ver), shield: addrOf(shield), codeOk: false, wired: false, controller: null };
+      const checkersOk = st.ver === VERIFIER && st.shield === SHIELD_VERIFIER;
+      let guardLine = "reading this checkout's compile";
+      if (isAddr(g)) {
+        const code = await rpc(chain, "eth_getCode", [g, "latest"]);
+        if (code === "0x") guardLine = "not deployed on this chain";
+        else {
+          st.codeOk = code.toLowerCase() === expected.runtime;
+          if (!st.codeOk) guardLine = "code differs from this checkout's compile: stop";
+          else {
+            const [v, c, p] = await Promise.all([
+              call(chain, g, "0x" + SEL.vault), call(chain, g, "0x" + SEL.controller), call(chain, g, "0x" + SEL.pendingController),
+            ]);
+            st.controller = addrOf(c);
+            st.pendingController = addrOf(p);
+            st.wired = addrOf(v) === VAULT && BigInt(st.pendingController) === 0n;
+            guardLine = addrOf(v) !== VAULT ? "guards another vault: stop"
+              : BigInt(st.pendingController) !== 0n ? "controller handover pending to " + st.pendingController + ": stop"
+              : "code matches, controller " + st.controller;
+          }
+        }
+      }
+      const held = isAddr(g) && st.owner === g;
+      facts.innerHTML =
+        "<span>Vault owner</span><b>" + st.owner + (held ? " (the guard)" : st.owner === OWNER ? " (the wallet)" : "") + "</b>" +
+        "<span>Offered to</span><b>" + (BigInt(st.pending) === 0n ? "nobody" : st.pending) + "</b>" +
+        "<span>Setup</span><b>" + (st.setup ? "OPEN: stop" : "over") + "</b>" +
+        "<span>Proof checkers</span><b>" + (checkersOk ? "as deployed" : "CHANGED: stop") + "</b>" +
+        "<span>Guard</span><b>" + guardLine + "</b>";
+      const ready = st.codeOk && st.wired && !st.setup && checkersOk && st.controller === OWNER;
+      offerBtn.disabled = !(ready && st.owner === OWNER && BigInt(st.pending) === 0n);
+      acceptBtn.disabled = !(ready && st.owner === OWNER && st.pending === g);
+      if (held) say("Done: the guard holds this vault. Now run the script's check() for this chain.", "ok");
+    } catch (e) {
+      facts.innerHTML = "<span>Read failed</span><b>" + ((e && e.message) || e) + "</b>";
+    }
+  }
+
+  async function run(act) {
+    const g = guardAddr();
+    offerBtn.disabled = acceptBtn.disabled = true;
+    try {
+      await refresh();
+      if (act === "offer" && offerBtn.disabled) return say("Not ready: read the lines above.", "bad");
+      if (act === "accept" && acceptBtn.disabled) return say("Not ready: read the lines above.", "bad");
+      if (act === "accept" && !window.confirm("Last step on " + CHAINS[chain].chainName + ". After this nobody can replace this vault's proof checkers or move its ownership, ever. There is no undo. Go on?")) return say("Stopped. Nothing was sent.");
+      const account = await ensureWallet(chain, OWNER);
+      say("Confirm the transaction in your wallet…");
+      const hash = act === "offer"
+        ? await send(chain, account, VAULT, "0x" + SEL.transferOwnership + word(g))
+        : await send(chain, account, g, "0x" + SEL.acceptVaultOwnership);
+      say("Sent: " + link(chain, hash) + ". Waiting for it to land…");
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        await refresh();
+        if (act === "offer" && st.pending === g) return say("Offered. Sent as " + link(chain, hash) + ". Press 2 when you are sure.", "ok");
+        if (act === "accept" && st.owner === g) return say("Done: the guard holds this vault. Sent as " + link(chain, hash) + ". Now run the script's check() for this chain.", "ok");
+      }
+      say("Sent, still waiting to confirm. Keep this hash and check it on the explorer: " + hash, "bad");
+    } catch (e) {
+      say("Stopped: " + ((e && e.message) || e), "bad");
+    } finally {
+      await refresh();
+    }
+  }
+
+  offerBtn.addEventListener("click", () => run("offer"));
+  acceptBtn.addEventListener("click", () => run("accept"));
+  refreshers.push(refresh);
+}
+
+/* After the handover: the three things the controller signs. */
+const ops = document.getElementById("ops");
+const opsOut = document.getElementById("ops-out");
+const opsSay = (msg, cls = "") => { opsOut.className = "status " + cls; opsOut.innerHTML = msg; };
+
+async function runOp(op) {
+  const g = guardAddr();
+  const chain = Number(document.getElementById("ops-chain").value);
+  try {
+    if (!isAddr(g)) return opsSay("The guard address has not loaded: run forge build and reload.", "bad");
+    const [owner, c, code] = await Promise.all([
+      call(chain, VAULT, "0x" + SEL.owner), call(chain, g, "0x" + SEL.controller), rpc(chain, "eth_getCode", [g, "latest"]),
+    ]);
+    if (code.toLowerCase() !== expected.runtime) return opsSay("The code at the guard address differs from this checkout's compile. Stop.", "bad");
+    if (addrOf(owner) !== g) return opsSay("The guard does not hold the vault on this chain.", "bad");
+    let data;
+    if (op === "queue" || op === "execute" || op === "cancel") {
+      const change = document.getElementById("ops-call").value.trim();
+      if (!/^0x([0-9a-fA-F]{2})+$/.test(change)) return opsSay("Paste the change as 0x hex.", "bad");
+      const allowed = BigInt(await call(chain, g, withBytes(SEL.isAllowedChange, change))) !== 0n;
+      if (!allowed) return opsSay("The guard refuses this change. Only setDepositLimit and setWithdrawFee go through.", "bad");
+      data = withBytes({ queue: SEL.queueChange, execute: SEL.executeChange, cancel: SEL.cancelChange }[op], change);
+    } else if (op === "close") {
+      const asset = document.getElementById("ops-asset").value.trim();
+      if (!isAddr(asset)) return opsSay("Paste the asset's address.", "bad");
+      data = "0x" + SEL.lowerDepositLimit + word(asset) + word("0") + word("0");
+    } else {
+      const raw = document.getElementById("ops-bps").value.trim() || "0";
+      if (!/^\d+$/.test(raw) || Number(raw) > 100) return opsSay("Basis points from 0 to 100.", "bad");
+      data = "0x" + SEL.lowerWithdrawFee + word(Number(raw).toString(16));
+    }
+    const account = await ensureWallet(chain, addrOf(c));
+    opsSay("Confirm the transaction in your wallet…");
+    const hash = await send(chain, account, g, data);
+    opsSay("Sent: " + link(chain, hash), "ok");
+  } catch (e) {
+    opsSay("Stopped: " + ((e && e.message) || e), "bad");
+  }
+}
+for (const b of ops.querySelectorAll("button[data-op]")) b.addEventListener("click", () => runOp(b.dataset.op));
+
+document.getElementById("refresh").addEventListener("click", () => refreshers.forEach((r) => r()));
+loadExpected()
+  .then(() => refreshers.forEach((r) => r()))
+  .catch((e) => { guardEl.textContent = "Could not read the compile: " + ((e && e.message) || e); });
+</script>
+</body>
+</html>
