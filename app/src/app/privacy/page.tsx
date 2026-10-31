@@ -177,7 +177,7 @@ export default function PrivacyPage() {
       </p>
       <p>
         Beyond the transaction itself, which is public on chain, the relay
-        keeps only a hashed rate-limit count and, for about three minutes, a
+        keeps only a hashed rate-limit count and, for up to about three minutes, a
         lock on each spend so the same proof is not sent twice. The relay pays
         the network fee for what it submits. On mainnet, Gloam takes 0.25% of a
         cash out, kept by the vault. A private swap pays the same 0.25% on the

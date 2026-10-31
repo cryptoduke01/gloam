@@ -213,8 +213,9 @@ export default function DocsThreatModelPage() {
         within the buffer. It lands exactly as the owner made it: the same output, into
         the owner&apos;s new note. The app keeps both new notes until the chain shows
         which one landed. It also moves the note to a fresh one through the relay, which
-        ends those proofs: about 3 minutes after the swap, once the relay takes the note,
-        or on the owner&apos;s next visit if the app was closed by then. Until that move
+        ends those proofs: about a minute after the swap, a few minutes if the relay
+        hasn&apos;t confirmed the revert, or on the owner&apos;s next visit if the app was
+        closed by then. Until that move
         lands the proofs stay usable. A swap the app never heard back about moves its note
         the same way once an hour has passed with nothing landed. If that swap lands
         first, the move fails and the swap stands; if the move lands first, the swap
