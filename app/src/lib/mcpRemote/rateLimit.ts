@@ -60,11 +60,18 @@ export function clientIp(req: Request): string {
 }
 
 /**
- * The unit a limit counts. An IPv4 address counts on its own. An IPv6 address
- * counts by its /64 network, because one household or server can rotate
- * through billions of addresses inside its /64 and dodge a per-address limit.
+ * How much of an IPv6 address a limit counts. /64 is one household or server.
+ * /48 is one site or rented block, which holds 65,536 of those /64s.
  */
-export function ipBucket(ip: string): string {
+export type V6Bits = 48 | 64;
+
+/**
+ * The unit a limit counts. An IPv4 address counts on its own. An IPv6 address
+ * counts by its network, /64 unless the limit asks for /48, because one
+ * household or server can rotate through billions of addresses inside its /64
+ * and dodge a per-address limit.
+ */
+export function ipBucket(ip: string, v6Bits: V6Bits = 64): string {
   const raw = ip.trim().toLowerCase().split("%")[0] ?? "";
   if (!raw.includes(":")) return raw;
   const mapped = raw.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -78,11 +85,11 @@ export function ipBucket(ip: string): string {
   } else {
     groups = raw.split(":");
   }
-  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+  return `${groups.slice(0, v6Bits / 16).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/${v6Bits}`;
 }
 
-function ipKey(ip: string): string {
-  return createHash("sha256").update(`gloam-mcp|${ipBucket(ip)}`).digest("hex").slice(0, 32);
+function ipKey(ip: string, v6Bits?: V6Bits): string {
+  return createHash("sha256").update(`gloam-mcp|${ipBucket(ip, v6Bits)}`).digest("hex").slice(0, 32);
 }
 
 function memCounts(): Map<string, { n: number; exp: number }> {
@@ -154,6 +161,7 @@ async function redisIncr(key: string, windowSec: number): Promise<number> {
  * 86400 for a UTC day). When Redis fails, the in-memory count decides, and
  * this never throws; with `failClosed` (the relay's sends) it throws
  * SharedCountUnavailable instead, and also in a production build with no Redis.
+ * `v6Bits` widens what one IPv6 client counts as, for this limit only.
  */
 export async function hitRateLimit(
   ip: string,
@@ -161,13 +169,13 @@ export async function hitRateLimit(
   limit: number,
   now = Date.now(),
   windowSec = WINDOW_SEC,
-  opts: { failClosed?: boolean } = {},
+  opts: { failClosed?: boolean; v6Bits?: V6Bits } = {},
 ): Promise<RateResult> {
   const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
   const window = Math.floor(now / 1000 / span);
   // one-minute keys keep their old shape; longer windows name their length
   const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
-  const key = `${PREFIX}${bucket}:${ipKey(ip)}:${slot}`;
+  const key = `${PREFIX}${bucket}:${ipKey(ip, opts.v6Bits)}:${slot}`;
   let n: number;
   if (redisConfigured() && !LOCAL_BUCKETS.has(bucket)) {
     try {
