@@ -182,9 +182,14 @@ export default function DocsSdkReferencePage() {
             </tr>
             <tr>
               <td>
-                <code>RH_MAINNET_USDG</code>, <code>GLOAM_TOKEN</code>
+                <code>RH_MAINNET_USDG</code>, <code>GLOAM_TOKEN</code>, <code>RH_MAINNET_PONS</code>,{" "}
+                <code>RH_MAINNET_CASHCAT</code>, <code>RH_MAINNET_AI</code>, <code>RH_MAINNET_ORBIO</code>
               </td>
-              <td>Robinhood Chain mainnet pool assets (native ETH is not one)</td>
+              <td>
+                Robinhood Chain mainnet pool assets, with <code>RH_MAINNET_GRIFT</code> and native ETH
+                (<code>NATIVE_ASSET</code>). ETH, AI, ORBIO and GRIFT take deposits once each timelocked
+                limit lands (0.4.5)
+              </td>
             </tr>
             <tr>
               <td>
@@ -719,7 +724,7 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
               <td>
                 <code>NATIVE_ASSET</code>
               </td>
-              <td>Zero address, meaning native ETH (a pool asset on testnet only)</td>
+              <td>Zero address, meaning native ETH (a pool asset on every network but Tempo)</td>
             </tr>
             <tr>
               <td>

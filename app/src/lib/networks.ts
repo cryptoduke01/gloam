@@ -433,7 +433,7 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
     status: "live",
     // GloamPayMemo, deployed 2026-10-23 (no owner, holds nothing, never logs the poster)
     payMemo: { address: "0x01B3172d9900Cb26d57E986429b9b23854c74598", deployBlock: 95_494_392n, emitsPoster: false },
-    note: "Mainnet: private USDG payments, and $GLOAM held privately.",
+    note: "Mainnet: private USDG payments, and $GLOAM, PONS and CASHCAT held privately.",
     explorerTx: (hash) => `${robinhood.blockExplorers.default.url}/tx/${hash}`,
     explorerAddress: (addr) => `${robinhood.blockExplorers.default.url}/address/${addr}`,
   },

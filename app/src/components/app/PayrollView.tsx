@@ -24,7 +24,7 @@ import { useShieldTree } from "@/hooks/useShieldTree";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { track } from "@/lib/track";
 import { countPerson } from "@/lib/people";
-import { addableTokensFor, shieldTokensFor, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, isNativeAddable, shieldTokensFor } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import {
   NATIVE_ASSET,
@@ -344,12 +344,12 @@ export function PayrollView() {
   // ---------------------------------------------------------------- assets
   const assetOptions = useMemo<AssetOption[]>(() => {
     // Payroll leads with stablecoins (USDG on Robinhood Chain, PathUSD on Tempo).
-    // BDX only once the vault takes it (its live deposit limit is open).
+    // BDX, or ETH on Robinhood Chain, only once the vault takes it (its live deposit limit is open).
     const tokens = addableTokensFor(network.chainId, openGated);
     const stable = tokens.filter((t) => t.kind === "stablecoin");
     const rest = tokens.filter((t) => t.kind !== "stablecoin");
     const opts: AssetOption[] = stable.map((t) => ({ address: t.address as Address, symbol: t.symbol, logoId: t.id }));
-    if (supportsNativeShield(network.chainId)) {
+    if (isNativeAddable(network.chainId, openGated)) {
       opts.push({
         address: NATIVE_ASSET,
         symbol: network.primaryAsset.symbol,
@@ -367,7 +367,7 @@ export function PayrollView() {
   const [moreAssets, setMoreAssets] = useState(false);
   const leadCount =
     shieldTokensFor(network.chainId).filter((t) => t.kind === "stablecoin").length +
-    (supportsNativeShield(network.chainId) ? 1 : 0);
+    (isNativeAddable(network.chainId, openGated) ? 1 : 0);
 
   /** Spendable private balance per asset (only entries the vault tree knows). */
   const balances = useMemo(() => {

@@ -110,7 +110,7 @@ const TESTNET_PROP_TEXT = `Gloam network: ${andList([
 
 const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
   "tempo-mainnet": '"tempo-mainnet" (Tempo mainnet: USDC.e, pathUSD, USDT0, OUSD)',
-  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG and GLOAM)',
+  "robinhood-mainnet": '"robinhood-mainnet" (Robinhood Chain mainnet: USDG, GLOAM, PONS, CASHCAT; ETH, AI and ORBIO once their limits land)',
   "base-mainnet": '"base-mainnet" (Base mainnet: USDC, EURC, USDT, ETH)',
   "ethereum-mainnet": '"ethereum-mainnet" (Ethereum mainnet: USDC, USDT, USDG, PYUSD, EURC, ETH)',
 };
@@ -119,7 +119,7 @@ const MAINNET_PROP_TEXT: Partial<Record<NetworkKey, string>> = {
 const MAINNET_DEPOSITS_TEXT = (
   [
     ["tempo-mainnet", "USDC.e, pathUSD, USDT0 and OUSD on Tempo"],
-    ["robinhood-mainnet", "USDG and GLOAM on Robinhood Chain"],
+    ["robinhood-mainnet", "USDG, GLOAM, PONS and CASHCAT on Robinhood Chain, then ETH, AI and ORBIO once their limits land"],
     ["base-mainnet", "USDC, EURC, USDT and ETH on Base"],
     ["ethereum-mainnet", "USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum"],
   ] as const
@@ -735,7 +735,7 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
           ? n.testnet
             ? { import: "ETHEREUM_SEPOLIA_USDC", line: "      currency: ETHEREUM_SEPOLIA_USDC, decimals: 6,       // or ETHEREUM_SEPOLIA_PYUSD, _USDG, _EURC" }
             : { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
-          : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN with decimals: 18" };
+          : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN, RH_MAINNET_PONS, RH_MAINNET_CASHCAT with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
   const sdkVersion = family === "ethereum" ? "0.4.0" : family === "base" ? "0.3.0" : "0.1.0";
   const netLines = `const net = ${getter}("${family}");                   // null until the pool is published

@@ -29,8 +29,9 @@ import { erc20Abi } from "@/lib/dex";
 import { useEthPrice, useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { formatUsd } from "@/lib/markets";
-import { addableTokensFor, approvalsBeforeDeposit, isDollarStable, supportsNativeShield } from "@/lib/tokens";
+import { addableTokensFor, approvalsBeforeDeposit, isDollarStable, isNativeAddable } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
+import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { surelyNotSent } from "@/lib/walletErrors";
 import { isNoLimit } from "@gloamtrade/sdk";
 import { APPROVE_GAS_LIMIT, gasFor, HASH_SCHEME, NATIVE_ASSET, SHIELD_GAS_LIMIT, SHIELD_BOUND_GAS_LIMIT, type LocalNote, assetDecimals, assetLabel, dropUnsentNote, formatAssetAmount, isNativeAsset, isShieldDeployed, makeNoteMaterial, markAllNotesRecovered, saveLocalNote, shieldPoolAbi } from "@/lib/shield";
@@ -74,6 +75,8 @@ export function ShieldView() {
   const onProduct = chainId === network.chainId;
   const { ethUsd } = useEthPrice();
   const { data: marketData } = useLiveMarkets();
+  // $GLOAM, PONS, AI and the like: the markets feed has no price for them.
+  const { marks: geckoMarks } = useCoingeckoMarks(hasCoingeckoMarks(network.chainId));
   const deployed = isShieldDeployed() && Boolean(network.pool);
   const {
     open: openNotes,
@@ -83,11 +86,12 @@ export function ShieldView() {
     refresh: refreshNotes,
   } = useLocalShieldNotes(address);
 
-  // A token listed ahead of its deposit limit (BDX) shows only once the vault's
-  // live limit for it is open, so no one is offered a deposit it would refuse.
+  // An asset listed ahead of its deposit limit (BDX, ETH on Robinhood Chain) shows
+  // only once the vault's live limit for it is open, so no one is offered a deposit
+  // it would refuse.
   const openGated = useOpenGatedTokens();
   const tokens = useMemo(() => addableTokensFor(network.chainId, openGated), [network.chainId, openGated]);
-  const nativeOk = supportsNativeShield(network.chainId);
+  const nativeOk = isNativeAddable(network.chainId, openGated);
   // A link can pick the asset (?asset=usdg, from a Holdings row or the Vault
   // overview); that choice, or one made here, is never changed for you.
   const searchParams = useSearchParams();
@@ -380,7 +384,7 @@ export function ShieldView() {
   const mark = selectedToken
     ? isDollarStable(selectedToken)
       ? 1
-      : (marketData?.markets?.find((m) => m.id === selectedToken.id)?.mark ?? 0)
+      : (marketData?.markets?.find((m) => m.id === selectedToken.id)?.mark ?? geckoMarks.get(selectedToken.address.toLowerCase()) ?? 0)
     : ethUsd ?? 0;
 
   useEffect(() => {
@@ -1054,6 +1058,11 @@ export function ShieldView() {
                 : "Over the beta limit"
               : null;
   const faucet = network.testnet ? faucetFor(network.key) : null;
+  // A long list reads worse than a short one: name the first two and say there are more.
+  const sendable =
+    tokens.length > 3
+      ? `${tokens[0]?.symbol}, ${tokens[1]?.symbol} or another asset the vault takes`
+      : tokens.map((t) => t.symbol).join(" or ");
 
   const ctaLabel = checking
     ? "Checking…"
@@ -1269,8 +1278,8 @@ export function ShieldView() {
                   {faucet
                     ? "Nothing to add yet. Get testnet funds first."
                     : bridgeVisible(network)
-                      ? `Nothing to add yet. Send ${tokens.map((t) => t.symbol).join(" or ")} to this wallet, or bring money over from another chain.`
-                      : `Nothing to add yet. Send ${tokens.map((t) => t.symbol).join(" or ")} to this wallet first.`}
+                      ? `Nothing to add yet. Send ${sendable} to this wallet, or bring money over from another chain.`
+                      : `Nothing to add yet. Send ${sendable} to this wallet first.`}
                 </p>
                 {faucet &&
                   (network.key === "tempo" ? (

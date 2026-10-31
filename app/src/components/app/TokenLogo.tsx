@@ -70,6 +70,10 @@ const SPECIAL_LOGOS: Record<string, string> = {
   bdx: "/brand/tokens/bdx.png",
   // San Verano's $GRIFT: the logo its token contract points at (logo(), on IPFS)
   grift: "/brand/tokens/grift.png",
+  // Artificial Inu: the image its token contract points at (tokenURI(), then image_hash, on IPFS)
+  ai: "/brand/tokens/ai.png",
+  // Orbio.so: the logo its token contract points at (logo(), on IPFS)
+  orbio: "/brand/tokens/orbio.png",
   ousd: "/brand/logos/ousd.svg",
   pathusd: "/brand/logos/pathusd.svg",
   alphausd: "/brand/logos/alphausd.svg",

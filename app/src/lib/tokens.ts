@@ -108,10 +108,19 @@ export const RH_STABLE_TOKENS: OnchainToken[] = [
 export const PAXOS_FAUCET_URL = "https://faucet.paxos.com/";
 
 /**
- * Robinhood Chain mainnet (4663): exactly what the mainnet pool lists, USDG
- * and $GLOAM, then San Verano's $GRIFT once its limit lands. Native ETH is not listed there, so it can't be added privately.
- * Beta limits: 500 USDG per deposit / 25,000 in total; 25,000 GLOAM per
- * deposit / 250,000 in total (the app reads them from the pool, see ShieldView).
+ * $PONS and $CASHCAT: launcher ERC-20s the vault has held limits for since they
+ * opened as swap assets on 2026-10-27. Listed in Add and still swap tokens, so
+ * one record serves both lists.
+ */
+const PONS: OnchainToken = { id: "pons", symbol: "PONS", name: "Pons", address: "0x39dBED3a2bd333467115dE45665cC57F813C4571", decimals: 18, yahoo: "", kind: "token", coingecko: "pons" };
+const CASHCAT: OnchainToken = { id: "cashcat", symbol: "CASHCAT", name: "Cash Cat", address: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", decimals: 18, yahoo: "", kind: "token", coingecko: "cash-cat" };
+
+/**
+ * Robinhood Chain mainnet (4663): exactly what the mainnet pool lists. USDG and
+ * $GLOAM, San Verano's $GRIFT once its limit lands, PONS and CASHCAT (open now),
+ * then AI and ORBIO once theirs land. Native ETH is listed too (supportsNativeShield)
+ * and opens the same way (isNativeAddable). The app reads every limit from the pool
+ * (see ShieldView); the values are in RH_MAINNET_ASSETS (packages/sdk).
  */
 export const RH_MAINNET_TOKENS: OnchainToken[] = [
   { id: "usdg", symbol: "USDG", name: "Global Dollar", address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6, yahoo: "", kind: "stablecoin" },
@@ -120,12 +129,19 @@ export const RH_MAINNET_TOKENS: OnchainToken[] = [
   // transfer fee or rebasing. Its limit goes through the timelock (NoDepositLimits), so Add offers it
   // only once that lands (opensWithLimit).
   { id: "grift", symbol: "GRIFT", name: "grift.world", address: "0x9f4BA41F91a59A34e17eE8C9EB3A51363B11aBD5", decimals: 18, yahoo: "", kind: "token", coingecko: "grift-world", opensWithLimit: true },
+  PONS,
+  CASHCAT,
+  // Artificial Inu: a clone of Doppler's DopplerERC20V1, no mint, no transfer fee, no rebasing. Its
+  // limit goes through the timelock (QueueRobinhoodAssets), so Add offers it only once that lands.
+  { id: "ai", symbol: "AI", name: "Artificial Inu", address: "0x2E8c31162b855A2ffa90F6F8634643Ad6F111e18", decimals: 18, yahoo: "", kind: "token", coingecko: "artificial-inu-3", opensWithLimit: true },
+  // Orbio.so: a plain OpenZeppelin ERC-20 (Pons v2 launcher, Sourcify exact match), no owner. Same as AI.
+  { id: "orbio", symbol: "ORBIO", name: "Orbio.so", address: "0xAa07A0e9209e16aC99708C3EC70159c6eF3128A3", decimals: 18, yahoo: "", kind: "token", coingecko: "orbio-so", opensWithLimit: true },
 ];
 
 /**
- * Robinhood Chain mainnet tokens a private swap can land in that Add does not
- * list (lib/vaultSwap RH_SWAP_ASSETS_V2): named here so a note in one shows
- * with its symbol and decimals everywhere. WETH is the chain's canonical
+ * Robinhood Chain mainnet tokens a private swap can land in past USDG and $GLOAM
+ * (lib/vaultSwap RH_SWAP_ASSETS_V2): named here so a note in one shows with its
+ * symbol and decimals everywhere. Add lists only PONS and CASHCAT of these. WETH is the chain's canonical
  * wrapped ETH (Arbitrum's aeWETH), the form ETH takes in the vault. The stock
  * tokens are Robinhood's: balances never rebase, but each has a uiMultiplier
  * (splits, dividends) that wallets show balances with, so one raw token is
@@ -136,8 +152,8 @@ export const RH_MAINNET_SWAP_TOKENS: OnchainToken[] = [
   { id: "usde", symbol: "USDe", name: "USDe", address: "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", decimals: 18, yahoo: "", kind: "stablecoin", coingecko: "ethena-usde" },
   { id: "u", symbol: "U", name: "United Stables", address: "0xcE24439F2D9C6a2289F741120FE202248B666666", decimals: 18, yahoo: "", kind: "stablecoin", coingecko: "united-stables" },
   { id: "cbbtc", symbol: "cbBTC", name: "Coinbase Wrapped BTC", address: "0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4", decimals: 8, yahoo: "", kind: "token", coingecko: "coinbase-wrapped-btc" },
-  { id: "pons", symbol: "PONS", name: "Pons", address: "0x39dBED3a2bd333467115dE45665cC57F813C4571", decimals: 18, yahoo: "", kind: "token", coingecko: "pons" },
-  { id: "cashcat", symbol: "CASHCAT", name: "Cash Cat", address: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", decimals: 18, yahoo: "", kind: "token", coingecko: "cash-cat" },
+  PONS,
+  CASHCAT,
   { id: "virtual", symbol: "VIRTUAL", name: "Virtuals Protocol", address: "0xc6911796042b15d7Fa4F6CDe69e245DdCd3d9c31", decimals: 18, yahoo: "", kind: "token", coingecko: "virtual-protocol" },
   { id: "spy", symbol: "SPY", name: "SPDR S&P 500 ETF Trust", address: "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C", decimals: 18, yahoo: "SPY", kind: "stock", coingecko: "spdr-s-p-500-etf-trust-robinhood-tokenized-stock" },
   { id: "nvda", symbol: "NVDA", name: "NVIDIA", address: "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC", decimals: 18, yahoo: "NVDA", kind: "stock", coingecko: "nvidia-robinhood-tokenized-stock" },
@@ -326,8 +342,24 @@ export function limitGatedTokensFor(chainId: number): OnchainToken[] {
   return shieldTokensFor(chainId).filter((t) => t.opensWithLimit);
 }
 
+/** The vault's name for the chain's native coin. */
+const NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 /**
- * Which opensWithLimit tokens are open, from the pool's live reads: `limitsOn`
+ * Chains whose vault lists the native coin ahead of its deposit limit, as
+ * opensWithLimit does for a token. On Robinhood Chain mainnet ETH's limit is 0
+ * until it lands through the timelock (QueueRobinhoodAssets).
+ */
+const NATIVE_OPENS_WITH_LIMIT: ReadonlySet<number> = new Set([4663]);
+
+/** Everything whose live limit decides what Add offers: limitGatedTokensFor, plus the native coin where it opens the same way. */
+export function limitGatedAssetsFor(chainId: number): Pick<OnchainToken, "address">[] {
+  const tokens = limitGatedTokensFor(chainId);
+  return NATIVE_OPENS_WITH_LIMIT.has(chainId) ? [{ address: NATIVE_ADDRESS }, ...tokens] : tokens;
+}
+
+/**
+ * Which gated assets (limitGatedAssetsFor) are open, from the pool's live reads: `limitsOn`
  * is depositLimitsOn() and `limits[i]` is depositLimit(gated[i]), each
  * undefined while unread or when the read failed. With limits on, a token is
  * open when its perDeposit and total are both above 0; with limits off (a pool
@@ -400,13 +432,23 @@ export function knownTokens(chainId?: number): OnchainToken[] {
 }
 
 /**
- * Whether the chain's native coin can be added privately. Tempo (testnet 42431,
- * mainnet 4217) has no native coin and blocks native msg.value, and the
- * Robinhood Chain mainnet pool (4663) does not list ETH. Base (8453, 84532)
- * and Ethereum (1) list ETH.
+ * Whether the vault on a chain lists its native coin, so holds and reports it.
+ * Tempo (testnet 42431, mainnet 4217) has no native coin and blocks native
+ * msg.value. Robinhood Chain, Base and Ethereum list ETH. Add offers it only when
+ * isNativeAddable says so.
  */
 export function supportsNativeShield(chainId: number): boolean {
-  return chainId !== 42431 && chainId !== 4217 && chainId !== 4663;
+  return chainId !== 42431 && chainId !== 4217;
+}
+
+/**
+ * Whether Add takes the chain's native coin now. Where it opens with its live
+ * limit (Robinhood Chain mainnet), `open` must hold it (useOpenGatedTokens), the
+ * rule addableTokensFor applies to a token: missing, it is not offered.
+ */
+export function isNativeAddable(chainId: number, open?: ReadonlySet<string>): boolean {
+  if (!supportsNativeShield(chainId)) return false;
+  return !NATIVE_OPENS_WITH_LIMIT.has(chainId) || Boolean(open?.has(NATIVE_ADDRESS));
 }
 
 export const erc20BalanceOfAbi = [

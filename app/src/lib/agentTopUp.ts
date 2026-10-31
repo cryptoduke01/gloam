@@ -70,7 +70,6 @@ import { getAllNotes } from "./noteVault";
 import { DATED_OFF_MESSAGE, DAY_MS, MAX_DATED_DAYS, datedOff, dayOf, nextSendDay } from "./relay/scheduled";
 import { publicClientFor } from "./rhClient";
 import { activeSpendableNotes, proofLoose, updateLocalNote, withdrawFeeOf, type LocalNote } from "./shield";
-import { supportsNativeShield } from "./tokens";
 import { syncShieldTree } from "./treeSync";
 import { topUpsSetAside } from "./vaultHub";
 
@@ -116,11 +115,9 @@ export function topUpMinutes(count: number): number {
 }
 
 /** Whether the agent needs gas of its own here, in plain words. Tempo pays gas in stablecoins, so there it needs none. */
-export function agentGasLine(net: { chainId: number; family: string; label: string }): string | null {
+export function agentGasLine(net: { family: string; label: string }): string | null {
   if (net.family === "tempo") return null;
-  return supportsNativeShield(net.chainId)
-    ? `The agent needs its own ETH for gas on ${net.label}. Top-ups send stablecoins only.`
-    : `The agent needs its own ETH for gas on ${net.label}. Top-ups send stablecoins only, and ETH isn't held in the vault there.`;
+  return `The agent needs its own ETH for gas on ${net.label}. Top-ups send stablecoins only.`;
 }
 
 // ---------------------------------------------------------------- picking the note

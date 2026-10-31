@@ -524,13 +524,22 @@ async function loadSwapTokenMarks(marketsRead: Promise<LiveMarkets>): Promise<Ma
 }
 
 /**
- * Listed tokens outside Robinhood Chain that only CoinGecko prices: BDX on Base
- * and Ethereum (one address on both, so listed once). Dollar stablecoins are $1
- * and EURC is left unpriced, as before.
+ * Listed tokens only CoinGecko prices that loadSwapTokenMarks does not reach: BDX
+ * on Base and Ethereum (one address on both, so listed once), and GRIFT, AI and
+ * ORBIO on Robinhood Chain. $GLOAM is priced from DEX Screener, dollar stablecoins
+ * are $1 and EURC is left unpriced, as before.
  */
-const GECKO_LISTED = [8453, 1]
+const SWAP_MARKED = new Set((SWAP_LANDABLE[4663] ?? []).map((t) => t.address.toLowerCase()));
+const GECKO_LISTED = [4663, 8453, 1]
   .flatMap((c) => shieldTokensFor(c))
-  .filter((t, i, all) => t.kind === "token" && t.coingecko && all.findIndex((x) => x.address.toLowerCase() === t.address.toLowerCase()) === i);
+  .filter(
+    (t, i, all) =>
+      t.kind === "token" &&
+      t.coingecko &&
+      t.id !== "gloam" &&
+      !SWAP_MARKED.has(t.address.toLowerCase()) &&
+      all.findIndex((x) => x.address.toLowerCase() === t.address.toLowerCase()) === i
+  );
 
 /** USD per token for GECKO_LISTED, by address (lowercase); a token CoinGecko does not answer for is left out. */
 async function loadListedTokenMarks(): Promise<Map<string, number>> {
@@ -590,7 +599,7 @@ export async function loadPrices(): Promise<Prices> {
     if (last != null && !swapMarks.has(a)) kept.set(a, last);
   }
   for (const [a, price] of swapMarks) kept.set(a, price);
-  // BDX and the like: the last price read is kept when CoinGecko misses a turn.
+  // BDX, AI and the like: the last price read is kept when CoinGecko misses a turn.
   for (const t of GECKO_LISTED) {
     const a = t.address.toLowerCase();
     const price = listedMarks.get(a) ?? prev?.marks.get(a);

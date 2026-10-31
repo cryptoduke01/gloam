@@ -3,21 +3,22 @@
 import { useMemo } from "react";
 import { useReadContract, useReadContracts } from "wagmi";
 import { isShieldDeployed, shieldPoolAbi } from "@/lib/shield";
-import { limitGatedTokensFor, openGatedFromReads } from "@/lib/tokens";
+import { limitGatedAssetsFor, openGatedFromReads } from "@/lib/tokens";
 import { useNetwork } from "@/components/app/NetworkProvider";
 
 const NONE: ReadonlySet<string> = new Set();
 
 /**
- * The opensWithLimit tokens (BDX on Base and Ethereum) whose deposit limit is
- * open on the active network's vault, as lowercase addresses, read live from
- * the pool every minute. Pass it to addableTokensFor / isAddableToken. Empty
- * while unread, on a read error, and on a chain with no such token, so Add never
- * offers a token the vault would refuse.
+ * The gated assets (BDX on Base and Ethereum; GRIFT, AI, ORBIO and native ETH on
+ * Robinhood Chain) whose deposit limit is open on the active network's vault, as
+ * lowercase addresses, read live from the pool every minute. Pass it to
+ * addableTokensFor / isAddableToken / isNativeAddable. Empty while unread, on a
+ * read error, and on a chain with no such asset, so Add never offers an asset the
+ * vault would refuse.
  */
 export function useOpenGatedTokens(): ReadonlySet<string> {
   const { network } = useNetwork();
-  const gated = useMemo(() => limitGatedTokensFor(network.chainId), [network.chainId]);
+  const gated = useMemo(() => limitGatedAssetsFor(network.chainId), [network.chainId]);
   const pool = network.pool;
   const enabled = gated.length > 0 && Boolean(pool) && isShieldDeployed();
   const query = { enabled, refetchInterval: 60_000 };

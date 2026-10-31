@@ -58,6 +58,8 @@ const FIRST_IDS = ["usdg", "weth"];
 const FIRST_BLOCK: Readonly<Record<string, bigint>> = {
   "0xdcd885f5c60b3ad49f6d58718696417314e8724d": 39_918_259n, // GLOAM
   "0x9f4ba41f91a59a34e17ee8c9eb3a51363b11abd5": 64_691_488n, // GRIFT
+  "0x2e8c31162b855a2ffa90f6f8634643ad6f111e18": 9_721_433n, // AI (checked 2026-10-31)
+  "0xaa07a0e9209e16ac99708c3ec70159c6ef3128a3": 51_223_088n, // ORBIO (checked 2026-10-31)
   "0xce24439f2d9c6a2289f741120fe202248b666666": 56_765_550n, // U
   "0xcec185eb182c47d1ba1efc84e6959e18cd620be4": 36_577_714n, // cbBTC
   "0x39dbed3a2bd333467115de45665cc57f813c4571": 8_963_150n, // PONS
