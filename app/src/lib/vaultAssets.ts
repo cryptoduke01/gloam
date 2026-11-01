@@ -8,7 +8,7 @@
 import { RH_MAINNET_SWAP_TOKENS, shieldTokensFor, type OnchainToken } from "./tokens";
 
 /**
- * Tokens a private swap can land in that Add does not list, per chain. Only
+ * Tokens a private swap can land in past Add's first ones, per chain. Only
  * Robinhood Chain mainnet has any (lib/vaultSwap RH_SWAP_ASSETS_V2): Tempo's
  * swap assets are its four listed stablecoins, and Base and Ethereum have no
  * private swap yet.

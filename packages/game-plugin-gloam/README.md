@@ -15,7 +15,7 @@ with options, one getter per `GameFunction`, and `getWorker()`.
 | `GLOAM_NETWORK` | Network | Assets |
 |---|---|---|
 | `base` (default) | Base Sepolia, testnet | USDC, EURC, ETH |
-| `robinhood-mainnet` | Robinhood Chain, mainnet | USDG, GLOAM |
+| `robinhood-mainnet` | Robinhood Chain, mainnet | USDG, GLOAM, PONS, CASHCAT; ETH, AI, ORBIO and GRIFT once each limit lands |
 | `base-mainnet` | Base, mainnet, once Gloam's Base vault is live | USDC, EURC, USDT, ETH |
 
 The same vault address on each: `0x39e28cde55cab798874746ac52cb4b5cc99a0194`.

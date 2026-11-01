@@ -426,7 +426,7 @@ export default function DocsComparePage() {
         <li>
           <strong>Rule changes.</strong> There is no admin withdraw, and rule
           changes are timelocked: the owner can swap verifiers only after a
-          3-day public delay.
+          3-day public delay, and not at all on a vault the owner guard holds.
         </li>
       </ul>
       <p>

@@ -19,6 +19,7 @@ import {
   loadLocalNotes,
   markNoteRecovered,
   mergeNotes,
+  proofLoose,
   purgeSenderPaymentNotes,
   visibleNotes,
   shieldPoolAbi,
@@ -205,10 +206,10 @@ export function useLocalShieldNotes(address?: string | null) {
   /** Swap refunds whose money waits at the swap's escrow: listed, never in `open` or the totals. */
   const heldRefunds = useMemo(() => heldSwapRefunds(merged), [merged]);
   const confirmed = useMemo(() => confirmedNotes(merged), [merged]);
-  // A note a reverted swap left behind is moved by the sync once the relay takes it
-  // (lib/claimSweep moveRevertedNotes): keep syncing while one waits, as nothing else
-  // would if this page is just left open.
-  const moveWaiting = useMemo(() => open.some((n) => n.swapProofAt), [open]);
+  // A note a reverted swap left behind moves right away, and the sync tries again if that
+  // try fails (lib/claimSweep moveRevertedNotes): keep syncing while one waits, as nothing else
+  // would if this page is just left open. A top-up's note with its proof still out waits the same way.
+  const moveWaiting = useMemo(() => open.some((n) => n.swapProofAt) || merged.some(proofLoose), [open, merged]);
   useEffect(() => {
     if (!moveWaiting) return;
     const t = setInterval(refresh, MOVE_SYNC_MS);

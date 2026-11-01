@@ -26,7 +26,7 @@ import {
   type PaymentRequest,
   type RequestAsset,
 } from "@/lib/paymentRequest";
-import { isAddableToken, shieldTokensFor } from "@/lib/tokens";
+import { isAddableToken, isNativeAddable, shieldTokensFor } from "@/lib/tokens";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { Select } from "@/components/ui/Select";
 import { useNetwork } from "./NetworkProvider";
@@ -47,10 +47,10 @@ type Created = {
 /** Receive → Request a payment: amount, token and note in, link + QR out. */
 export function RequestPaymentCard({ tag }: { tag: string }) {
   const { network } = useNetwork();
-  // A token whose deposit limit has not landed (BDX) can't be held privately yet, so it can't be asked for.
+  // An asset whose deposit limit has not landed (BDX, ETH on Robinhood Chain) can't be held privately yet, so it can't be asked for.
   const openGated = useOpenGatedTokens();
   const assets = useMemo(
-    () => requestAssetsFor(network.key).filter((a) => a.native || isAddableToken(network.chainId, a, openGated)),
+    () => requestAssetsFor(network.key).filter((a) => (a.native ? isNativeAddable(network.chainId, openGated) : isAddableToken(network.chainId, a, openGated))),
     [network.key, network.chainId, openGated]
   );
   const [assetId, setAssetId] = useState("");

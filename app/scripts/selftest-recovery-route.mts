@@ -10,7 +10,8 @@
  *     and against one daily budget for every new backup
  *     (GLOAM_RECOVERY_NEW_PER_DAY, 300 by default); past it, new backups are
  *     told to try again later, and the server logs it once;
- *   - a request that is not a valid backup is refused before it counts.
+ *   - a request that is not a valid backup is refused before it counts;
+ *   - a save flagged mustExist makes no new backup, and spends none of the above.
  *
  * Uses the in-process store (GLOAM_PARTNERS_STORE=memory) and the real route.
  *
@@ -50,12 +51,12 @@ const hex64 = () => (++k).toString(16).padStart(64, "0");
 const WRITE = "b".repeat(64);
 const BLOB = Buffer.from("sealed backup").toString("base64");
 
-async function put(ip: string, id: string, n = 1, c = BLOB) {
+async function put(ip: string, id: string, n = 1, c = BLOB, extra: Record<string, unknown> = {}) {
   const res = await PUT(
     new Request("http://localhost/api/recovery", {
       method: "PUT",
       headers: { "content-type": "application/json", "x-forwarded-for": ip },
-      body: JSON.stringify({ id, write: WRITE, c, n }),
+      body: JSON.stringify({ id, write: WRITE, c, n, ...extra }),
     })
   );
   const json = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -170,6 +171,45 @@ await test("a full-size backup still fits", async () => {
   const big = "A".repeat(511_996) + "AA==";
   assert.equal((await put("203.0.113.60", hex64(), 1, big)).status, 200);
   assert.equal((await put("203.0.113.60", hex64(), 1, big + "AAAA")).status, 400);
+});
+
+const held = async (id: string) =>
+  (await GET(new Request(`http://localhost/api/recovery?id=${id}`, { headers: { "x-forwarded-for": "203.0.113.90" } }))).status === 200;
+
+await test("mustExist with nothing there: a 410, nothing written, and no new backup spent", async () => {
+  const ip = "203.0.113.80";
+  for (let i = 0; i < 12; i++) {
+    const id = hex64();
+    assert.equal((await put(ip, id, 2, BLOB, { mustExist: true })).status, 410);
+    assert.equal(await held(id), false, "the id still holds nothing");
+  }
+  // the connection still has all five of its new backups
+  for (let i = 0; i < 5; i++) assert.equal((await put(ip, hex64())).status, 200);
+});
+
+await test("mustExist goes by its own answer when the day's budget is spent, and is limited per connection", async () => {
+  process.env.GLOAM_RECOVERY_NEW_PER_DAY = "1";
+  assert.equal((await put("192.0.2.40", hex64())).status, 200);
+  assert.equal((await put("192.0.2.41", hex64())).status, 429, "the budget is spent");
+  assert.equal((await put("192.0.2.42", hex64(), 2, BLOB, { mustExist: true })).status, 410, "this one is told the backup is gone");
+  for (let i = 0; i < 59; i++) await put("192.0.2.43", hex64(), 2, BLOB, { mustExist: true });
+  const last = await put("192.0.2.43", hex64(), 2, BLOB, { mustExist: true });
+  assert.equal(last.status, 410);
+  assert.equal((await put("192.0.2.43", hex64(), 2, BLOB, { mustExist: true })).status, 429, "past a minute's limit it waits");
+});
+
+await test("mustExist with a backup there: it saves as usual", async () => {
+  const id = hex64();
+  assert.equal((await put("203.0.113.81", id)).status, 200);
+  assert.equal((await put("203.0.113.81", id, 2, BLOB, { mustExist: true })).status, 200);
+  const r = await put("203.0.113.81", id, 2, BLOB, { mustExist: true });
+  assert.equal(r.status, 409, "a stale version is still refused");
+});
+
+await test("a save without the flag still makes a new backup, as builds already out there expect", async () => {
+  const id = hex64();
+  assert.equal((await put("203.0.113.82", id, 2, BLOB, { mustExist: "yes" })).status, 200, "only true counts");
+  assert.equal(await held(id), true);
 });
 
 console.log(`\nrecovery route: ${passed} passed`);

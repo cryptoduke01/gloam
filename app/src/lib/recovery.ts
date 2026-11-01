@@ -18,9 +18,12 @@
  * The wallet message has two versions, and each gives a different key. Version
  * 1 is plain text, which a wallet can't tie to a site. Version 2 is a Sign-In
  * with Ethereum message naming Gloam's host, so a wallet that checks can warn
- * when any other site asks for it. New recovery uses version 2. Backups under
- * version 1 keep working, and move across when they are restored or when the
- * person updates the key in Settings (see moveBackup).
+ * when any other site asks for it. Turning on and restoring use version 2. A
+ * version 1 signature is only asked for when the person says they have an older
+ * backup (restoreOlderBackup), or to update the key in Settings; either way the
+ * backup moves across (see moveBackup). A browser still on version 1 saves to it
+ * until VERSION1_SAVES_UNTIL. Version 1 backups stay on the server after that,
+ * and can always be opened.
  */
 import { getAddress, hexToBytes, keccak256, type Address, type Hex } from "viem";
 import { readDemo } from "./demoFlag";
@@ -46,6 +49,12 @@ export const RECOVERY_MESSAGE = [
   "",
   "Version 1",
 ].join("\n");
+
+/**
+ * When a browser still on version 1 stops saving. Nothing is deleted then, and
+ * updating the key works the same after this as before it.
+ */
+export const VERSION1_SAVES_UNTIL = Date.parse("2026-12-01T00:00:00Z");
 
 /**
  * The one host version 2 of the message names, in its domain and its URI.
@@ -495,12 +504,13 @@ async function fetchRemote(id: string): Promise<Remote | null> {
   return json.data;
 }
 
-async function putBackup(keys: RecoveryKeys, c: string, n: number): Promise<Response> {
+/** With `mustExist`, the server answers 410 and writes nothing when no backup is there. */
+async function putBackup(keys: RecoveryKeys, c: string, n: number, mustExist = false): Promise<Response> {
   try {
     return await fetch("/api/recovery", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: keys.id, write: keys.write, c, n }),
+      body: JSON.stringify({ id: keys.id, write: keys.write, c, n, ...(mustExist ? { mustExist } : {}) }),
     });
   } catch {
     throw new RecoveryError("No connection. Your balance is safe here and backs up when you're back online.");
@@ -543,6 +553,15 @@ function isVersion1(c: Config): boolean {
   return c.source === "wallet" && !c.wallet;
 }
 
+/**
+ * This browser no longer saves to its version 1 backup: the backup left the
+ * server, or the end date passed. Everything stays here, and updating the key
+ * starts saving again.
+ */
+function savesPaused(c: Config): boolean {
+  return isVersion1(c) && (Boolean(c.gone) || Date.now() >= VERSION1_SAVES_UNTIL);
+}
+
 export type RecoveryState = {
   /** The saved settings have been read. */
   ready: boolean;
@@ -562,6 +581,8 @@ export type RecoveryState = {
   moving: boolean;
   /** Another device moved or deleted this version 1 backup. */
   gone: boolean;
+  /** On with a version 1 wallet key that no longer saves, until it is updated. */
+  paused: boolean;
 };
 
 const OFF: RecoveryState = {
@@ -576,6 +597,7 @@ const OFF: RecoveryState = {
   newerKey: false,
   moving: false,
   gone: false,
+  paused: false,
 };
 
 let config: Config | null = null;
@@ -614,6 +636,7 @@ function shownState(c: Config | null): Partial<RecoveryState> {
     newerKey: Boolean(c?.wallet),
     moving: Boolean(c?.next),
     gone: Boolean(c?.gone),
+    paused: c ? savesPaused(c) : false,
   };
 }
 
@@ -691,19 +714,20 @@ function retryDelay(e: unknown, tries: number): number {
 async function upload(c: Config): Promise<void> {
   let current = c;
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (!stillOn(current)) return;
+    if (!stillOn(current) || savesPaused(current)) return;
     const blob = await seal(current, await collect());
     if (!stillOn(current)) return;
-    const res = await putBackup(current, blob, current.n + 1);
+    const res = await putBackup(current, blob, current.n + 1, isVersion1(current) && current.n > 0);
     if (res.ok) {
-      const { data } = (await res.json()) as { data: { n: number; t: number; created?: boolean } };
+      const { data } = (await res.json()) as { data: { n: number; t: number } };
       // Turned off while this was saving: it stays off.
-      if (stillOn(current)) {
-        // Saved to before, yet the server held nothing. The save stands, so
-        // nothing is lost, and the panel asks to bring the devices back together.
-        const gone = data.created && current.n > 0 && isVersion1(current);
-        await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined, ...(gone ? { gone } : {}) });
-      }
+      if (stillOn(current)) await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined });
+      return;
+    }
+    if (res.status === 410) {
+      // Saved to before, yet the server holds nothing, and nothing was written.
+      // This browser keeps its copy, and the panel asks to bring the devices back together.
+      if (stillOn(current)) await saveConfig({ ...config!, retryAt: undefined, gone: true });
       return;
     }
     if (res.status === 409 && attempt === 0) {
@@ -755,7 +779,7 @@ async function retireOld(c: Config): Promise<void> {
  *  5. delete it
  *
  * A failure before step 4 leaves the old backup as it was, and this browser
- * keeps saving to it. The new keys wait in the settings, so the move finishes
+ * keeps saving to it until the end date. The new keys wait in the settings, so the move finishes
  * later on its own with no wallet prompt: the new copy is a new backup, which
  * the server can refuse for the day. A page closed between 4 and 5 finishes the
  * delete on its next load. Always runs alone (see `alone`).
@@ -809,7 +833,8 @@ function retryIn(ms: number) {
 /** Sets the timer for the next wait in the settings. A page load calls this too, so waits outlive the page. */
 function armRetry() {
   if (!config || stopping) return;
-  const times = [config.retryAt, config.next?.retryAt].filter((t): t is number => Boolean(t));
+  // a wait for a save that won't happen has nothing to come back for
+  const times = [savesPaused(config) ? undefined : config.retryAt, config.next?.retryAt].filter((t): t is number => Boolean(t));
   if (times.length) retryIn(Math.max(0, Math.min(...times) - Date.now()));
 }
 
@@ -841,9 +866,16 @@ async function alone<T>(job: () => Promise<T>): Promise<T> {
   }
 }
 
+const SAVES_PAUSED = "This browser has stopped saving. Update your recovery key to start again.";
+
 /** A save went unfinished, so a retry should make one. A retry that is only for a move should not. */
 function saveOwed(c: Config): boolean {
   return !c.savedAt || Boolean(c.retryAt) || failures > 0;
+}
+
+/** The end date can pass with a page open. */
+function showPause(c: Config) {
+  if (savesPaused(c) !== state.paused) setState(shownState(c));
 }
 
 /**
@@ -858,12 +890,15 @@ async function runSync(trigger: "change" | "retry" | "button"): Promise<Recovery
     again = true;
     return null;
   }
-  const save = trigger === "button" || (!holding(c) && (trigger === "change" || saveOwed(c)));
+  showPause(c);
+  const save = !savesPaused(c) && (trigger === "button" || (!holding(c) && (trigger === "change" || saveOwed(c))));
+  // Back up now must not read as saved when this browser no longer saves.
+  const unsaved = () => (trigger === "button" && config && savesPaused(config) ? new RecoveryError(SAVES_PAUSED) : null);
   if (!save && !moveDue(c) && !c.retire) {
     // A timer can run a moment before the wait ends, since it doesn't share the
     // wall clock. Setting it again keeps the retry from being dropped here.
     armRetry();
-    return null;
+    return unsaved();
   }
   return alone(async () => {
     try {
@@ -874,7 +909,7 @@ async function runSync(trigger: "change" | "retry" | "button"): Promise<Recovery
       }
       await finishMove();
       armRetry();
-      return null;
+      return unsaved();
     } catch (e) {
       const failed = e instanceof RecoveryError ? e : new RecoveryError("The backup didn't save. It will try again.");
       await waitToRetry(failed);
@@ -892,6 +927,7 @@ function schedule() {
 /** Picks up anything left to do: on load, back online, or back on this tab. */
 function resume() {
   if (!config || stopping) return;
+  showPause(config);
   armRetry();
   // a wait in the settings has its own timer, and a save now would only go twice
   if (unfinished(config) && !config.retryAt && !config.next) schedule();
@@ -989,28 +1025,45 @@ function moveNow(to: WalletKeys, owner?: string | null): Promise<"newest" | "wai
 }
 
 /**
- * Restores with the wallet. Version 2 first, one signature, and the backup it
- * finds is the proof that the key holds. With none there, version 1: a second
- * signature, and a third on version 2 before the backup can move. Getting the
- * money back comes first, so nothing after the restore can undo it. `key` says
- * where the backup ended up: "newest" on version 2, "waiting" on its way there
- * by itself, "older" staying on version 1 (the third signature was declined or
- * didn't match), where it keeps working and can be updated from Settings.
+ * Where a restored backup ended up: "newest" on version 2, "waiting" on its way
+ * there by itself, "older" staying on version 1, where it can be updated from
+ * Settings.
  */
-export async function restoreWithWallet(wallet: RecoveryWallet): Promise<{ added: number; key: "newest" | "waiting" | "older" }> {
-  const to = await version2Keys(wallet);
-  if (await fetchRemote(to.id)) return { added: await connectRecovery(to, wallet.address, { mustExist: true }), key: "newest" };
-  const added = await connectRecovery(await version1Keys(wallet), wallet.address, { mustExist: true, save: false });
+type Restored = { added: number; key: "newest" | "waiting" | "older" };
+
+/**
+ * Restores with the wallet: version 2, one signature, and the backup it finds is
+ * the proof that the key holds. With none there it says so, and asks for nothing
+ * else. Someone with a version 1 backup takes the next step: restoreOlderBackup.
+ */
+export async function restoreWithWallet(wallet: RecoveryWallet): Promise<Restored> {
+  return { added: await connectRecovery(await version2Keys(wallet), wallet.address, { mustExist: true }), key: "newest" };
+}
+
+/**
+ * Restores a version 1 backup, for someone who says they have one. It opens with
+ * one signature, then version 2 is signed twice before the backup can move.
+ * Getting the money back comes first, so nothing after the restore can undo it:
+ * if those two are declined or don't match, it stays on version 1 ("older").
+ * This works on any date.
+ */
+export async function restoreOlderBackup(wallet: RecoveryWallet): Promise<Restored> {
+  const from = await version1Keys(wallet);
+  if (!(await fetchRemote(from.id))) throw new RecoveryError(NO_OLDER_BACKUP, "notfound");
+  const added = await connectRecovery(from, wallet.address, { mustExist: true, save: false });
+  let to: WalletKeys;
   try {
+    to = await version2Keys(wallet);
     await checkSteady(wallet, to);
   } catch {
-    // from here it is a browser with version 1 on: it saves as those always have
+    // from here it is a browser with version 1 on: it saves as those do, until the end date
     schedule();
     return { added, key: "older" };
   }
   return { added, key: await moveNow(to, wallet.address) };
 }
 
+const NO_OLDER_BACKUP = "No older backup found for this wallet.";
 const WRONG_WALLET = "This isn't the wallet recovery was turned on with. Connect that wallet and try again. Nothing changed.";
 
 /**
@@ -1043,7 +1096,7 @@ export async function bringInOlderBackup(wallet: RecoveryWallet): Promise<number
   const from = await version1Keys(wallet);
   return alone(async () => {
     const remote = await fetchRemote(from.id);
-    if (!remote) throw new RecoveryError("No older backup found for this wallet.", "notfound");
+    if (!remote) throw new RecoveryError(NO_OLDER_BACKUP, "notfound");
     const old = await open(from, remote.c);
     const added = await absorb(old, wallet.address);
     const saved = await saveConfirmed(c, old, wallet.address);

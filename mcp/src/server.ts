@@ -1176,6 +1176,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       mpp?: PaymentChallenge;
       quote?: string;
       resourceHost?: string;
+      /** The URL the agent asked for: note labels name its host, not the payee's text. */
+      requested?: string;
     }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
@@ -1381,7 +1383,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           pending: "create",
           origin: "change",
           createdTx: null,
-          label: `change from paying ${paidLabel(req.resource)}`,
+          label: `change from paying ${paidLabel(opts.requested ?? req.resource)}`,
         });
       }
       // The payment note is the payee's money once it lands, and only this server
@@ -1402,7 +1404,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         pending: "create",
         origin: "payment",
         createdTx: null,
-        label: `payment for ${paidLabel(req.resource)}`,
+        label: `payment for ${paidLabel(opts.requested ?? req.resource)}`,
         ...(veya?.receipt ? { receipt: plannedReceipt(veya.receipt) } : {}),
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
@@ -1831,7 +1833,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // a header is what gets paid whatever the body says, so the check reads that price, decoded.
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
       // For VEYA: the host that really asked for this payment. What the price says about itself is the payee's word.
-      const paid = await payPrivately(req, { handle: note, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), resourceHost: new URL(url).host });
+      const paid = await payPrivately(req, { handle: note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), resourceHost: new URL(url).host });
       if (!paid.ok) return text({ ...paid.result, httpStatus: 402, resource: req.resource });
       // What to present: the MPP credential when paying an MPP challenge, else the x402 header.
       const presented = mpp ? paid.authorization : paid.header;

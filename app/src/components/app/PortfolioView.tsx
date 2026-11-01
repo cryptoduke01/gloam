@@ -24,7 +24,7 @@ import {
   isDollarStable,
   knownTokens,
   shieldTokensFor,
-  supportsNativeShield,
+  isNativeAddable,
   swapDisplayTokensFor,
   walletDisplayTokensFor,
   type OnchainToken,
@@ -210,7 +210,7 @@ export function PortfolioView() {
   const nativeUsdRate: number | null = isTempo ? 1 : ethUsd;
   // $GLOAM and the swap tokens on Robinhood Chain mainnet, and BDX on Base and Ethereum, priced like Transparency does.
   const { marks: geckoMarks, pending: geckoPending } = useCoingeckoMarks(hasCoingeckoMarks(network.chainId));
-  // BDX is offered to Add only once the vault's live limit for it is open.
+  // BDX, or ETH on Robinhood Chain, is offered to Add only once the vault's live limit for it is open.
   const openGated = useOpenGatedTokens();
   // A mainnet stock token is worth the share price times its uiMultiplier / 1e18 per raw
   // token (splits and dividends move it; balances never rebase), as the private swap marks it.
@@ -921,9 +921,9 @@ export function PortfolioView() {
                         </div>
                         <div className="flex gap-1 @max-xl:w-full @max-xl:justify-start @max-xl:pl-[46px] @max-xl:empty:hidden @xl:w-[200px] @xl:justify-end">
                           {r.native ? (
-                            // The gas coin. Where the pool doesn't take it (Robinhood Chain
-                            // mainnet), swap it into the stablecoin it does.
-                            shieldLive && supportsNativeShield(network.chainId) ? (
+                            // The gas coin. Until the pool takes it (Robinhood Chain mainnet,
+                            // before ETH's limit lands), swap it into the stablecoin it does.
+                            shieldLive && isNativeAddable(network.chainId, openGated) ? (
                               <Link href={addAssetHref("eth")} className="btn btn-ghost btn-sm h-10">
                                 Add privately
                               </Link>

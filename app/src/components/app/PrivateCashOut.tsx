@@ -27,12 +27,14 @@ function clock(at: number): string {
   return new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/** "about 15:40" today, "tomorrow at about 09:12", or "Sat at about 09:12" later on. */
+/** "about 15:40" today, "tomorrow at about 09:12", "Sat at about 09:12" this week, or "Nov 14 at about 09:12" past it. */
 export function aboutTime(at: number, now = Date.now()): string {
   const day = (t: number) => new Date(t).toDateString();
   if (day(at) === day(now)) return `about ${clock(at)}`;
   if (day(at) === day(now + 86_400_000)) return `tomorrow at about ${clock(at)}`;
-  return `${new Date(at).toLocaleDateString("en-US", { weekday: "short" })} at about ${clock(at)}`;
+  // a prepaid top-up can be weeks off, where a weekday alone says nothing
+  const far = at - now >= 6 * 86_400_000;
+  return `${new Date(at).toLocaleDateString("en-US", far ? { month: "short", day: "numeric" } : { weekday: "short" })} at about ${clock(at)}`;
 }
 
 function capital(s: string): string {
@@ -305,7 +307,7 @@ export function PieceLeftover({
  * whose time has come waits for it to come down.
  */
 export function scheduledLine(n: LocalNote, now = Date.now(), gasWait = false): string {
-  const piece = n.cashOutPlan ? `Piece ${n.cashOutPlan.piece} of ${n.cashOutPlan.of} · ` : "";
+  const piece = n.cashOutPlan ? `${n.cashOutPlan.topUp ? "Top-up" : "Piece"} ${n.cashOutPlan.piece} of ${n.cashOutPlan.of} · ` : "";
   const waiting = gasWait && n.cashOut?.state === "scheduled" && n.cashOut.at <= now;
   const when = n.cashOut?.state === "sent" ? "On its way" : waiting ? "Waiting for gas to come down" : capital(aboutTime(n.cashOut!.at, now));
   return `${piece}${when} · to ${shortAddress(n.cashOut!.to)}`;

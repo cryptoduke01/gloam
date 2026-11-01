@@ -78,7 +78,7 @@ Gloam runs on four chains, each with a mainnet and a testnet. They are separate 
 
 | Network | Key | Chain id | Pool | Assets (beta limit per deposit / total) | Keys |
 | --- | --- | --- | --- | --- | --- |
-| Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (500 / 25,000), $GLOAM (25,000 / 250,000) | Final |
+| Robinhood Chain | `robinhood-mainnet` | `4663` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `94194599`) | USDG (500 / 25,000), $GLOAM (25,000 / 250,000), PONS (3,900 / 98,000), CASHCAT (9,600 / 240,000); once its timelocked limit lands: ETH (11 / 110), AI (400,000 / 4,000,000), ORBIO (1,000,000 / 10,000,000), GRIFT (no limit) | Final |
 | Tempo | `tempo-mainnet` | `4217` | `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (block `45172561`) | USDC.e, pathUSD, USDT0, OUSD (500 / 25,000 each) | Final |
 | Base | `base-mainnet` | `8453` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `53109632`) | USDC, EURC, USDT (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 | Ethereum | `ethereum-mainnet` | `1` | `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (block `26276183`) | USDC, USDT, USDG, PYUSD, EURC (500 / 25,000 each), ETH (0.2 / 10), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
@@ -100,11 +100,11 @@ What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
 - **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
-- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. Those are the launch values. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026, so from 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`). Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
+- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin, 0.2 and 10 for ETH on Base and Ethereum, 25,000 and 250,000 for $GLOAM. Those are the launch values. On Robinhood Chain, ETH, AI and ORBIO are 0 on the vault until each one's timelocked limit lands, so a deposit reverts until then and `assertDepositWithinLiveLimit` says so. A 100x raise is queued behind the public 3-day timelock for around 1 November 2026, so from 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`). Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
 - **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
 
-The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below.
+The builders still default to Robinhood Chain testnet when you pass no `chainId`, so code written for 0.0.x keeps working. For mainnet, pass the network explicitly, as below. The vault has the same address on every mainnet, so it can't say which chain you mean: from 0.4.4 a builder given a mainnet vault as `poolAddress` and no `chainId` throws and asks for it, before it proves.
 
 ### Base
 
@@ -191,7 +191,7 @@ const hash = await wallet.writeContract({
 saveSecret(intent.note.commitment, intent.note.secret);
 ```
 
-On Robinhood Chain mainnet use `mainnetNetwork("robinhood")` with `RH_MAINNET_USDG` (or `GLOAM_TOKEN`). Gas is ETH on Robinhood Chain and a USD stablecoin on Tempo.
+On Robinhood Chain mainnet use `mainnetNetwork("robinhood")` with `RH_MAINNET_USDG` (or `GLOAM_TOKEN`, `RH_MAINNET_PONS`, `RH_MAINNET_CASHCAT`, `RH_MAINNET_AI`, `RH_MAINNET_ORBIO`, or `NATIVE_ASSET` for ETH). Gas is ETH on Robinhood Chain and a USD stablecoin on Tempo.
 
 To practice for free first, use a testnet: `GLOAM_NETWORKS.tempo` (test PathUSD from the Tempo faucet) or `GLOAM_NETWORKS.robinhood` (test ETH and test USDG). The same code works with that network's `chainId`, `pool` and assets, and `circuitArtifactUrls` picks the dev keys.
 
@@ -536,6 +536,7 @@ BASE_MAINNET_CHAIN, BASE_SEPOLIA_CHAIN                      // viem's Base chain
 RH_MAINNET_ASSETS, TEMPO_MAINNET_ASSETS                     // assets with beta deposit limits
 BASE_MAINNET_ASSETS, BASE_SEPOLIA_ASSETS                    // Base: USDC, EURC, USDT (mainnet only), ETH
 RH_MAINNET_USDG, GLOAM_TOKEN, TEMPO_USDCE, TEMPO_USDT0, TEMPO_PATHUSD, TEMPO_OUSD
+RH_MAINNET_GRIFT, RH_MAINNET_PONS, RH_MAINNET_CASHCAT, RH_MAINNET_AI, RH_MAINNET_ORBIO  // 18 decimals each (the last four from 0.4.5)
 BASE_USDC, BASE_EURC, BASE_USDT, BASE_SEPOLIA_USDC, BASE_SEPOLIA_EURC
 RH_MAINNET_CHAIN_ID (4663), TEMPO_MAINNET_CHAIN_ID (4217), MAINNET_POSEIDON_T3
 BASE_MAINNET_CHAIN_ID (8453), BASE_SEPOLIA_CHAIN_ID (84532)
@@ -556,7 +557,7 @@ ETHEREUM_SEPOLIA_USDC, ETHEREUM_SEPOLIA_USDG, ETHEREUM_SEPOLIA_PYUSD, ETHEREUM_S
 | `buildPrivateSendIntent(p)` | Transfer witness, then `transfer(...)`; returns payment + change notes | Live, mainnet and testnet |
 | `buildPrivateTradeIntent(p)` | Sealed-swap witness, then `sealedSwap(...)` | Retired; refused on mainnet |
 
-Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every builder takes `chainId` (default Robinhood Chain testnet) and `poolAddress` (default: Gloam's pool on that chain). `buildPrivateTradeIntent` produces a valid intent for the testnets, but the sealed trade is retired and switched off on every live pool, so its call reverts.
+Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every builder takes `chainId` (default Robinhood Chain testnet, required with a mainnet vault as `poolAddress`) and `poolAddress` (default: Gloam's pool on that chain). `buildPrivateTradeIntent` produces a valid intent for the testnets, but the sealed trade is retired and switched off on every live pool, so its call reverts.
 
 ### Notes
 

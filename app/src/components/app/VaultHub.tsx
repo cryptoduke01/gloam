@@ -24,8 +24,8 @@ import {
  * URL it opens on the overview (VaultHome), which shows the private balance
  * next to the public wallet and names every action with one line. An action
  * opens under a row that switches between them: Add privately, Pay
- * privately, Receive, Swap and Cash out, then Trade and Public send where the
- * network has them. The URL (?tab=, and ?mode= for Pay's parts) says which,
+ * privately, Receive, Swap and Cash out, then Agent top-ups, and Trade and
+ * Public send where the network has them. The URL (?tab=, and ?mode= for Pay's parts) says which,
  * so links and the old /app/shield, /app/move and /app/send redirects keep
  * working (lib/vaultHub).
  */
@@ -73,6 +73,10 @@ const SendView = dynamic(() => import("./SendView").then((m) => m.SendView), {
   ssr: false,
   loading: PanelSkeleton,
 });
+const AgentTopUpsView = dynamic(() => import("./AgentTopUpsView").then((m) => m.AgentTopUpsView), {
+  ssr: false,
+  loading: PanelSkeleton,
+});
 
 export function VaultHub() {
   const router = useRouter();
@@ -84,13 +88,11 @@ export function VaultHub() {
   // provider, which can settle first) so server and client HTML always match.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
-  // Tokenized stocks only trade on Robinhood Chain testnet, swaps only where a
-  // vault swap router is deployed, and a public send needs a native coin
-  // (Tempo has none), so those actions drop out elsewhere.
+  // Tokenized stocks only trade on Robinhood Chain testnet and swaps only where a
+  // vault swap router is deployed, so those actions drop out elsewhere.
   const actions = vaultActionsFor({
     swap: vaultSwapRouter(network.chainId) !== null && swapOpenTo(address),
     stocks: Boolean(network.stocks),
-    native: network.family !== "tempo",
   });
 
   // A claim link's fragment (#claim=…) opens Receive; Pay reads and clears it.
@@ -156,6 +158,7 @@ export function VaultHub() {
           {current.id === "trade" && <TradeView />}
           {current.id === "swap" && <VaultSwapView />}
           {current.id === "send" && <SendView />}
+          {current.id === "topups" && <AgentTopUpsView />}
           {current.tab === "move" && <MoveView />}
         </Suspense>
       </div>
@@ -166,7 +169,7 @@ export function VaultHub() {
 /**
  * The row of actions on every action page. On a phone the five main ones sit
  * side by side, each a mark and a short name; from a tablet up it is one
- * track of names, with Trade and Public send after them where they exist.
+ * track of names, with Agent top-ups, Trade and Public send after them.
  * One tab stop for the row (the open action); the arrows, Home and End move
  * along it, and Enter or Space opens one.
  */
@@ -181,8 +184,8 @@ function ActionRow({
 }) {
   const row = useRef<HTMLDivElement>(null);
   const core = actions.filter((a) => !a.extra).length;
-  // On a phone only the main actions fit, so Trade and Public send are left
-  // out, except the one that is open: it takes a slot, so the row always
+  // On a phone only the main actions fit, so Agent top-ups, Trade and Public
+  // send are left out, except the one that is open: it takes a slot, so the row always
   // marks where you are and keeps its tab stop.
   const extraOpen = actions.some((a) => a.extra && a.id === current);
   const phoneCols = core + (extraOpen ? 1 : 0);

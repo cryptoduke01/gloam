@@ -171,14 +171,13 @@ export function spendPlanFor(note: Pick<LocalNote, "amountWei" | "fundsProofAt" 
 
 /**
  * Why this note can't be swapped or cashed out yet, or null. Right after its
- * swap reverted the relay still holds its nullifier, so any spend through it
- * would be refused (shield RELAY_SPEND_LOCK_MS).
+ * swap reverted the app is moving it, and a spend that gets in the way could
+ * find the relay still holding its nullifier (shield RELAY_SPEND_LOCK_MS). The
+ * move is usually done within the minute: the fresh note has no wait.
  */
 export function spendWaitMessage(note: Pick<LocalNote, "swapProofAt">, now = Date.now()): string | null {
-  const ms = swapProofWait(note, now);
-  if (ms <= 0) return null;
-  const minutes = Math.ceil(ms / 60_000);
-  return `Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in about ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`;
+  if (swapProofWait(note, now) <= 0) return null;
+  return "Your last swap of this balance didn't go through, so it's moving to a fresh private balance first. Try again in a minute.";
 }
 
 export type SplitArgs = {

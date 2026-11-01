@@ -70,8 +70,8 @@ export default function DocsNetworksPage() {
         Gloam is not a chain. It is a shielded-pool contract plus verifiers,
         deployed to the chains where the money already moves. The same circuits,
         the same vault design, and the same SDK run on every network. What
-        differs is the asset each chain leads with: USDG and $GLOAM on Robinhood
-        Chain, dollar stablecoins on Tempo, USDC, EURC, USDT and ETH on Base and
+        differs is the asset each chain leads with: USDG, $GLOAM, PONS and CASHCAT
+        on Robinhood Chain, dollar stablecoins on Tempo, USDC, EURC, USDT and ETH on Base and
         Ethereum, with USDG and PYUSD on Ethereum too. The app switches networks at runtime
         and points at the right pool for each.
       </p>
@@ -200,14 +200,14 @@ export default function DocsNetworksPage() {
             </tr>
             <tr>
               <td>Swaps on</td>
-              <td>Uniswap v4 (USDG and $GLOAM)</td>
+              <td>Uniswap v4 (USDG, $GLOAM, PONS, CASHCAT, WETH, stock tokens and more)</td>
               <td>Tempo&apos;s stablecoin exchange (the four stablecoins)</td>
               <td>Not yet</td>
               <td>Not yet</td>
             </tr>
             <tr>
               <td>Gas</td>
-              <td>ETH (gas only, not a pool asset)</td>
+              <td>ETH, also a pool asset once its limit lands</td>
               <td>Paid in stablecoins</td>
               <td>ETH, also a pool asset</td>
               <td>ETH, also a pool asset; the relay waits while gas is above {DEFAULT_MAX_GAS_GWEI[1]} gwei</td>
@@ -270,7 +270,7 @@ export default function DocsNetworksPage() {
                   <td>{t.decimals}</td>
                 </tr>
               ))}
-            {[BASE_MAINNET_LIVE ? "Base" : null, ETHEREUM_LIVE ? "Ethereum" : null]
+            {["Robinhood Chain", BASE_MAINNET_LIVE ? "Base" : null, ETHEREUM_LIVE ? "Ethereum" : null]
               .filter((c): c is string => c !== null)
               .map((c) => (
                 <tr key={`eth-native-${c}`}>
@@ -287,8 +287,9 @@ export default function DocsNetworksPage() {
         <li>
           <strong>Beta deposit limits.</strong> Each stablecoin: 500 per deposit
           and 25,000 in total. ETH on Base and Ethereum: 0.2 per deposit and 10
-          in total. $GLOAM: 25,000 per deposit and 250,000 in total. The app
-          shows the room left before you sign.
+          in total. $GLOAM: 25,000 per deposit and 250,000 in total. PONS: 3,900
+          and 98,000. CASHCAT: 9,600 and 240,000. The app shows the room left
+          before you sign.
         </li>
         <li>
           <strong>Higher limits queued.</strong> A 100x raise of the beta
@@ -332,13 +333,18 @@ export default function DocsNetworksPage() {
         <li>
           <strong>Owner</strong>, <code>{GLOAM_OWNER}</code>. One wallet at
           launch; a multisig is planned. It cannot withdraw pooled funds: there
-          is no admin withdraw.
+          is no admin withdraw. Each vault&apos;s ownership moves to the owner
+          guard, which forwards only limit and fee changes and the sweep of
+          coin sent by mistake; read{" "}
+          <code>owner()</code> on a vault to see which holds it.
         </li>
         <li>
           <strong>Treasury</strong>, <code>{GLOAM_TREASURY}</code>. Cash-out
           fees go here since 24 October. Both swap routers also send what a swap
           does not use here; that address is fixed in each router and cannot
-          change. The routers have no owner, no admin and no upgrade.
+          change. The routers have no upgrade. Tempo&apos;s has no owner;
+          Robinhood Chain&apos;s owner can add a pool with 3 days of public
+          notice and take one off at once, and nothing else.
         </li>
         <li>
           <strong>Relayer</strong>, <code>{GLOAM_RELAYERS[0]}</code>. Run by the
@@ -371,9 +377,19 @@ export default function DocsNetworksPage() {
           <strong>Mainnet pool</strong>, <MainnetPoolAddress chainId={4663} />
         </li>
         <li>
-          <strong>Mainnet assets</strong>, USDG and $GLOAM to add privately.
-          Stock tokens, ETH (held as WETH) and the other listed tokens come in
-          through a private swap. Native ETH pays gas.
+          <strong>Mainnet assets</strong>, USDG, $GLOAM, PONS and CASHCAT to add
+          privately, with beta limits of 3,900 PONS per deposit and 98,000 in
+          total, and 9,600 CASHCAT per deposit and 240,000 in total, the limits
+          live now. Stock tokens, WETH and the other swap tokens come in through a
+          private swap.
+        </li>
+        <li>
+          <strong>Opening next</strong>, native ETH (11 per deposit, 110 in total),
+          Artificial Inu ($AI, 400,000 and 4,000,000) and Orbio.so ($ORBIO, 1,000,000
+          and 10,000,000), each set through the vault&apos;s 3-day timelock. Add offers
+          each one once its limit is live on chain. ETH and WETH are separate
+          balances in the vault: a private swap uses WETH, and native ETH notes
+          can&apos;t go through the swap router.
         </li>
         <li>
           <strong>Mainnet swap router</strong> (GloamVaultSwapV4, Uniswap v4),{" "}

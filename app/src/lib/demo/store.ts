@@ -581,7 +581,11 @@ export function demoWriteEffect(call: {
     case "unshield":
       return { wallet: [[args[3] as Address, args[5] as bigint]], activity };
     case "transfer":
-      // newCommitments[0] is the payment; the change lands with its note.
+      // An ERC-20's transfer(to, amount): a public send from the wallet.
+      if (args.length === 2) {
+        return { wallet: [[call.to, -(args[1] as bigint)]], activity: { to: args[0] as Address, valueWei: args[1] as bigint } };
+      }
+      // The vault's: newCommitments[0] is the payment; the change lands with its note.
       return { activity, sent: [(args[3] as readonly Hex[])[0]] };
     case undefined:
       // A plain send of the native coin.

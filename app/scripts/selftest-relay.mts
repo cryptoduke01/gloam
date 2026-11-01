@@ -11,6 +11,10 @@
  *    refused with a 409, the spent check runs before the dry run on sends and
  *    cash outs, the lock is dropped when nothing went out and kept once
  *    something did (or may have)
+ *  - a sent transaction: a reverted receipt for that very send drops the lock
+ *    and lets the note move, after the hash is back; a successful one, a
+ *    missing one, a failed read or a send with no hash keeps it, and copies
+ *    sent meanwhile are refused without a second send
  *  - a send that may have reached a node (a dropped connection, a 502, a
  *    private RPC that took it and never answered) is reported maybe_sent and
  *    never sent again, with the public RPC never handed the raw send; only a
@@ -65,7 +69,7 @@ const {
   sendFailure,
 } = await import("../src/lib/relay/server");
 const relayClient = await import("../src/lib/relay/client");
-const { INFLIGHT_TTL_SEC, inflightKey, takeInflight } = await import("../src/lib/relay/inflight");
+const { INFLIGHT_TTL_SEC, inflightKey, releaseIfReverted, takeInflight } = await import("../src/lib/relay/inflight");
 const {
   CASH_OUT_TO_BOARD_MESSAGE,
   CASH_OUT_TO_ROUTER_MESSAGE,
@@ -127,10 +131,14 @@ function nullifier(): Hex {
  * public RPC, where it already landed, calls it a nonce too low).
  */
 type SendMode = "ok" | "reject" | "drop" | "http502" | "known" | "nonce_once" | "private_took";
-const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode };
+/** What the node says about the send's receipt: how it ended, "none" yet, or a failed read. */
+type ReceiptMode = "success" | "reverted" | "none" | "error";
+const chain = { spent: false, known: true, seen: true, send: "ok" as SendMode, receipt: "success" as ReceiptMode };
 const calls: string[] = [];
 /** Which RPC got each raw send. */
 const sends: ("public" | "private" | "wrong")[] = [];
+/** Reads of the send's receipt: they run on their own after a send, so they stay out of `calls`. */
+const receiptReads: string[] = [];
 /** A fake Upstash REST endpoint: "up" answers, "down" drops the connection. */
 const REDIS_URL = "https://redis.selftest.invalid";
 const redisState = { mode: "up" as "up" | "down", data: new Map<string, string>(), commands: [] as string[] };
@@ -216,6 +224,25 @@ const BLOCK = {
 
 type RpcReq = { id: number; method: string; params?: unknown[] };
 
+function receiptFor(hash: string, status: "success" | "reverted") {
+  return {
+    transactionHash: hash,
+    transactionIndex: "0x0",
+    blockHash: BLOCK.hash,
+    blockNumber: "0x1",
+    from: "0x" + "00".repeat(20),
+    to: POOL,
+    cumulativeGasUsed: "0x1",
+    gasUsed: "0x1",
+    effectiveGasPrice: "0x1",
+    contractAddress: null,
+    logs: [],
+    logsBloom: BLOCK.logsBloom,
+    status: status === "success" ? "0x1" : "0x0",
+    type: "0x2",
+  };
+}
+
 function answer(r: RpcReq): { result?: unknown; error?: { code: number; message: string } } {
   switch (r.method) {
     case "eth_chainId":
@@ -239,6 +266,9 @@ function answer(r: RpcReq): { result?: unknown; error?: { code: number; message:
       if (sel === SEL.commitmentSeen) return { result: word(chain.seen) };
       return { error: { code: -32000, message: `fake chain: unknown call ${sel}` } };
     }
+    case "eth_getTransactionReceipt":
+      if (chain.receipt === "error") return { error: { code: -32000, message: "fake chain: receipt read failed" } };
+      return { result: chain.receipt === "none" ? null : receiptFor(String(r.params?.[0]), chain.receipt) };
     case "eth_sendRawTransaction":
       if (chain.send === "reject") return { error: { code: -32000, message: "insufficient funds for gas * price + value" } };
       if (chain.send === "known") return { error: { code: -32000, message: "already known" } };
@@ -309,7 +339,10 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (!via) throw new Error(`selftest: no network (${url})`);
   const body = JSON.parse(String(init?.body)) as RpcReq | RpcReq[];
   const list = Array.isArray(body) ? body : [body];
-  for (const r of list) calls.push(r.method === "eth_call" ? `eth_call:${callName(r)}` : r.method);
+  for (const r of list) {
+    if (r.method === "eth_getTransactionReceipt") receiptReads.push(String(r.params?.[0]));
+    else calls.push(r.method === "eth_call" ? `eth_call:${callName(r)}` : r.method);
+  }
   if (via === "wrong") {
     wrongCalls.push(...list.map((r) => r.method));
     const out = list.map((r) =>
@@ -338,9 +371,10 @@ function callName(r: RpcReq): string {
 }
 
 function reset(state: Partial<typeof chain> = {}) {
-  Object.assign(chain, { spent: false, known: true, seen: true, send: "ok" }, state);
+  Object.assign(chain, { spent: false, known: true, seen: true, send: "ok", receipt: "success" }, state);
   calls.length = 0;
   sends.length = 0;
+  receiptReads.length = 0;
 }
 
 /** Runs `fn` with GLOAM_RPC_URL set for the test network, so relay sends go to the private RPC first. */
@@ -362,6 +396,14 @@ async function lockFree(nul: Hex): Promise<boolean> {
   if (!l) return false;
   await l.release();
   return true;
+}
+
+/** The relay reads the receipt on its own after a send: waits until it has, `times` times over. */
+async function receiptRead(times = 1) {
+  for (let i = 0; i < 1_000 && receiptReads.length < times; i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(receiptReads.length >= times, "the relay read the receipt");
+  // what it does with the answer comes a few ticks after the read
+  await new Promise((r) => setTimeout(r, 20));
 }
 
 function transferBody(nul: Hex) {
@@ -594,6 +636,137 @@ await test("cash out: once sent, the lock holds; spent check came before the dry
   const spentAt = calls.indexOf("eth_call:spent");
   assert.ok(spentAt >= 0 && spentAt < calls.indexOf("eth_estimateGas"));
   await assert.rejects(relayUnshield(net, unshieldBody(nul, CLEAN)), isRelayError("in_flight", 409));
+});
+
+await test("a send that landed keeps the lock once its receipt is read", async () => {
+  reset({ receipt: "success" });
+  const nul = nullifier();
+  assert.equal(await relayTransfer(net, transferBody(nul)), TX_HASH);
+  await receiptRead();
+  assert.deepEqual(receiptReads, [TX_HASH], "that send's own receipt");
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("in_flight", 409));
+  assert.equal(sends.length, 1);
+});
+
+await test("send: a reverted receipt frees the lock, so the note can move at once", async () => {
+  reset({ receipt: "reverted" });
+  const nul = nullifier();
+  assert.equal(await relayTransfer(net, transferBody(nul)), TX_HASH);
+  await receiptRead();
+  assert.ok(await lockFree(nul));
+  reset();
+  assert.equal(await relayTransfer(net, transferBody(nul)), TX_HASH);
+  assert.equal(sends.length, 1, "the next spend of the note goes out");
+});
+
+await test("cash out: a reverted receipt frees the lock", async () => {
+  reset({ receipt: "reverted" });
+  const nul = nullifier();
+  assert.equal(await relayUnshield(net, unshieldBody(nul, CLEAN)), TX_HASH);
+  await receiptRead();
+  assert.ok(await lockFree(nul));
+});
+
+await test("no receipt yet: the reply doesn't wait for it, the lock holds, and a late reverted receipt frees it", async () => {
+  reset({ receipt: "none" });
+  const nul = nullifier();
+  const res = await relayPost(req("http://localhost/api/relay", { chainId: net.chainId, action: "transfer", ...transferBody(nul) }, "203.0.113.60"));
+  assert.equal(res.status, 200);
+  assert.equal(((await res.json()) as { hash: Hex }).hash, TX_HASH);
+  await receiptRead();
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("in_flight", 409));
+  chain.receipt = "error";
+  await receiptRead(2);
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("in_flight", 409));
+  chain.receipt = "reverted";
+  await receiptRead(3);
+  assert.ok(await lockFree(nul));
+  assert.equal(sends.length, 1);
+});
+
+await test("copies sent together: one goes out, and only a reverted receipt lets the next one try", async () => {
+  reset({ receipt: "none" });
+  const nul = nullifier();
+  const tries = await Promise.allSettled(Array.from({ length: 6 }, () => relayTransfer(net, transferBody(nul))));
+  assert.equal(tries.filter((t) => t.status === "fulfilled").length, 1);
+  for (const t of tries) if (t.status === "rejected") isRelayError("in_flight", 409)(t.reason);
+  assert.equal(sends.length, 1);
+  await receiptRead();
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("in_flight", 409));
+  assert.equal(sends.length, 1, "still one out");
+  chain.receipt = "reverted";
+  await receiptRead(2);
+  chain.receipt = "none";
+  receiptReads.length = 0;
+  const again = await Promise.allSettled(Array.from({ length: 6 }, () => relayTransfer(net, transferBody(nul))));
+  assert.equal(again.filter((t) => t.status === "fulfilled").length, 1);
+  assert.equal(sends.length, 2, "one more, and no more than one");
+  await receiptRead();
+  chain.receipt = "success";
+});
+
+await test("a spent or stale note still costs nothing after a reverted receipt", async () => {
+  reset({ receipt: "reverted" });
+  const nul = nullifier();
+  assert.equal(await relayTransfer(net, transferBody(nul)), TX_HASH);
+  await receiptRead();
+  chain.spent = true;
+  calls.length = 0;
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("AlreadySpent", 409));
+  assert.ok(!calls.includes("eth_estimateGas"));
+  assert.equal(sends.length, 1);
+});
+
+await test("a send with no hash never reads a receipt, and keeps the lock even if the chain shows a revert", async () => {
+  reset({ send: "drop", receipt: "reverted" });
+  const nul = nullifier();
+  await assert.rejects(relayTransfer(net, transferBody(nul)), isRelayError("maybe_sent", 502, MAYBE_SENT_MESSAGE));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(receiptReads, []);
+  assert.equal(await lockFree(nul), false);
+});
+
+await test("the watch only ever frees on a reverted receipt, and gives up keeping the lock", async () => {
+  const held = async (outcome: () => Promise<"success" | "reverted" | null>) => {
+    const key = inflightKey(net.chainId, nullifier());
+    const lock = await takeInflight(key);
+    assert.ok(lock);
+    let reads = 0;
+    await releaseIfReverted(
+      lock,
+      () => {
+        reads++;
+        return outcome();
+      },
+      30,
+      5,
+    );
+    const free = await takeInflight(key);
+    await free?.release();
+    return { free: free !== null, reads };
+  };
+  const neverAnswers = await held(async () => null);
+  assert.equal(neverAnswers.free, false, "a timeout frees nothing");
+  assert.ok(neverAnswers.reads > 1, "it kept looking until the time ran out");
+  const failing = await held(async () => {
+    throw new Error("rpc down");
+  });
+  assert.equal(failing.free, false, "a read that fails frees nothing");
+  assert.ok(failing.reads > 1);
+  assert.deepEqual(await held(async () => "success"), { free: false, reads: 1 });
+  assert.deepEqual(await held(async () => "reverted"), { free: true, reads: 1 });
+});
+
+await test("a reverted receipt read after the lock lapsed leaves the newer holder alone", async () => {
+  const key = inflightKey(net.chainId, nullifier());
+  const t0 = Date.now();
+  const old = await takeInflight(key, 1, t0);
+  assert.ok(old);
+  const newer = await takeInflight(key, 1, t0 + 1_000);
+  assert.ok(newer);
+  await releaseIfReverted(old, async () => "reverted");
+  assert.equal(await takeInflight(key, 1, t0 + 1_001), null, "the newer holder keeps it");
+  await newer.release();
 });
 
 await test("a send that may have gone out (dropped connection) is maybe_sent, sent once, and keeps the lock", async () => {
@@ -1175,6 +1348,29 @@ await test("Redis back: the next send locks in Redis, and the recovery is logged
     assert.ok(redisState.commands.includes(`SET ${inflightKey(net.chainId, nul)}`), "the per-spend lock is in Redis");
     assert.deepEqual(sends, ["public"]);
     assert.equal(logs.back(), 1);
+  });
+});
+
+await test("with Redis, a reverted receipt drops the lock by its token, and a newer holder's stays", async () => {
+  await withRedis(async () => {
+    reset({ receipt: "reverted" });
+    const nul = nullifier();
+    const key = inflightKey(net.chainId, nul);
+    assert.equal(await relayTransfer(net, transferBody(nul)), TX_HASH);
+    await receiptRead();
+    assert.equal(redisState.data.has(key), false, "dropped");
+
+    reset({ receipt: "none" });
+    const other = nullifier();
+    const otherKey = inflightKey(net.chainId, other);
+    assert.equal(await relayTransfer(net, transferBody(other)), TX_HASH);
+    await receiptRead();
+    assert.ok(redisState.data.has(otherKey));
+    // the lock lapsed and another request holds it now
+    redisState.data.set(otherKey, "a-newer-holder");
+    chain.receipt = "reverted";
+    await receiptRead(2);
+    assert.equal(redisState.data.get(otherKey), "a-newer-holder");
   });
 });
 

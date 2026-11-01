@@ -5,8 +5,8 @@ import { BASE_MAINNET_TOKENS, ETHEREUM_MAINNET_TOKENS, RH_MAINNET_SWAP_TOKENS, R
 
 /**
  * Tokens the markets feed does not price, priced from CoinGecko like
- * Transparency does: on Robinhood Chain mainnet $GLOAM and the swap tokens such
- * as cbBTC, and on Base and Ethereum BDX (one address on both, listed once).
+ * Transparency does: on Robinhood Chain mainnet $GLOAM, AI, ORBIO and the swap
+ * tokens such as cbBTC, and on Base and Ethereum BDX (one address on both, listed once).
  * The list is fixed, never the viewer's holdings, so the request says nothing
  * about what this wallet holds. Stocks come from the markets feed, WETH from
  * ETH's price and dollar stablecoins are $1, so they are not asked for here.

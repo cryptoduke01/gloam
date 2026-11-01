@@ -219,6 +219,81 @@ export default function DocsAgentsPage() {
         does not check out is left blank, with the reason shown to the user.
       </p>
 
+      <h2 id="top-ups">Keep an agent topped up</h2>
+      <p>
+        An owner can refill an agent&apos;s wallet from their private balance on
+        a schedule, with Gloam closed. Open{" "}
+        <Link href="/app/vault?tab=topups">Agent top-ups</Link> in the Vault and
+        pick the agent&apos;s wallet, a stablecoin, an amount, how often (weekly
+        or every 2 weeks) and how many.
+      </p>
+      <p>
+        The whole total is paid for up front. Proofs are made in the browser, so
+        nothing can make one later on its own. The app splits the total into one
+        private balance per top-up, proves one cash out of each to the
+        agent&apos;s wallet, and hands each proof to the Gloam relay with its own
+        day. The relay picks a random time inside that UTC day and sends it. A
+        proof fixes the amount and the wallet, so the relay can send it as it is
+        or not at all, and it holds no spending key. Proofs are kept encrypted, so
+        reading the relay&apos;s store alone gives nobody a proof to send.
+      </p>
+      <ul>
+        <li>
+          <strong>Up to about 90 days ahead.</strong> That is 12 top-ups weekly,
+          or 7 every 2 weeks. Start a new series for longer.
+        </li>
+        <li>
+          <strong>Cancel any top-up before it goes.</strong> The money stays in
+          the vault until then. A proof stays valid until its private balance is
+          spent, so a cancelled top-up, or one the relay can&apos;t send, first
+          moves to a fresh private balance. That ends the old proof, and the
+          money shows in your balance once the move lands.
+        </li>
+        <li>
+          <strong>Not from a fresh deposit.</strong> A proof carries the vault
+          root it was made against, and a top-up sent with Gloam closed keeps that
+          root. So a series can only start 6 hours after the deposit behind it,
+          once 3 more deposits or payments from others have reached the vault. The
+          screen says when you can start. A payment you received has no deposit of
+          yours to point at, so it does not wait.
+        </li>
+        <li>
+          <strong>Setup takes about a minute per top-up,</strong> with the tab
+          open. If it stops, nothing is lost: what was scheduled still goes out,
+          the rest stays in your private balance, and you can finish the series
+          from the same screen.
+        </li>
+        <li>
+          <strong>Each top-up pays the usual 0.25% cash-out fee,</strong> taken
+          from that top-up when it goes out.
+        </li>
+        <li>
+          <strong>An alert if one fails, if you want one.</strong> Give an https
+          address and the relay posts <code>status</code>, <code>series</code>{" "}
+          and <code>at</code> to it when a top-up fails or is held. Nothing else
+          is sent, but whoever runs that address learns when it happened. The
+          address is kept encrypted with the job.
+        </li>
+        <li>
+          <strong>On Robinhood Chain, Tempo and Base.</strong> They aren&apos;t
+          offered on Ethereum: each one takes two relay transactions, and gas
+          there costs more than the fee brings in.
+        </li>
+      </ul>
+      <p>
+        Each top-up is a public cash out: its amount, the agent&apos;s wallet and
+        the time show on the explorer, and they all land in one wallet, so anyone
+        can add them up. Only where the money came from stays private. The agent
+        needs its own gas: top-ups send stablecoins only, so on Robinhood Chain,
+        where ETH isn&apos;t held in the vault, and on Base it needs ETH from
+        somewhere else.
+      </p>
+      <p>
+        Keep your backup current after setting one up. The proofs wait with the
+        relay, but the balances behind them, and the only way to cancel, are in
+        your browser.
+      </p>
+
       <h2>Reference agent (the SDK path)</h2>
       <p>
         <code>examples/agent-shield</code> is the smallest complete agent: it

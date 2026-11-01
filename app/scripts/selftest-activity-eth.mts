@@ -78,8 +78,9 @@ assert.ok(!txs.some((t) => t.valueWei === parseEther("0.2").toString()), "anothe
 assert.ok(txs.every((t) => t.token?.decimals === (t.token?.symbol === "ETH" ? 18 : 6)));
 assert.ok(calls > 0);
 
-// Robinhood Chain mainnet lists no ETH: nothing extra is asked for there.
+// Robinhood Chain mainnet lists ETH too, so its activity reads the same; Tempo has no native coin.
 const { supportsNativeShield } = await import("../src/lib/tokens");
-assert.equal(supportsNativeShield(4663), false);
+assert.equal(supportsNativeShield(4663), true);
+assert.equal(supportsNativeShield(4217), false);
 
 console.log("selftest-activity-eth: 4 checks passed");

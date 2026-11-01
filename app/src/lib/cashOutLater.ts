@@ -10,7 +10,9 @@
  * settled by the chain like any spend (the note's nullifier shows spent). One
  * that came back unsent (refused, a root the vault never knew, or cancelled)
  * makes the note spendable again, but only once the note's own chain shows it
- * unspent: nothing moved. A job that is going out, or may have gone out, never
+ * unspent: nothing moved. Its proof stays valid until the note is spent, so the
+ * note moves to a fresh one first (shield proofLoose). A job that is going out,
+ * or may have gone out, never
  * puts its note back; neither does a relay that can't be read or no longer
  * holds the job. The chain settles those.
  */
@@ -23,11 +25,13 @@ import { getAllNotes } from "./noteVault";
 import { noteNullifierPoseidon } from "./notePoseidon";
 import { fieldToHex, hexToField } from "./poseidon";
 import { publicClientFor } from "./rhClient";
-import { shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
+import { HANDOVER_MS, endedPlan, markCleared, shieldPoolAbi, updateLocalNote, type CashOutMark, type LocalNote } from "./shield";
 import type { DelayWindow } from "./relay/scheduled";
 
 /** The windows the relay offers (lib/relay/scheduled DELAY_WINDOWS): about an hour, 6 hours or a day. */
 export type CashOutWindow = DelayWindow;
+/** When the relay sends it: at a random time in a window from now, or on a day ahead (a prepaid top-up). */
+export type CashOutWhen = CashOutWindow | { day: number; webhook?: string };
 
 export type CashOutJobView = {
   id: string;
@@ -78,8 +82,9 @@ export function markFor(job: OwnedCashOutJob, proof?: { root: Hex; at: number })
 
 /**
  * Hands a proven cash out to the relay to send at a random time inside
- * `window`. Asking again for the same money returns the job already waiting;
- * when that one pays another address, a CashOutLaterError carries it.
+ * `window`, or inside the UTC day `day`. Asking again for the same money
+ * returns the job already waiting; when that one pays another address, a
+ * CashOutLaterError carries it.
  */
 export async function scheduleCashOut(p: {
   chainId: number;
@@ -89,7 +94,9 @@ export async function scheduleCashOut(p: {
   asset: Address;
   to: Address;
   amount: bigint;
-  window: CashOutWindow;
+  window?: CashOutWindow;
+  day?: number;
+  webhook?: { url: string; series: string };
 }): Promise<OwnedCashOutJob> {
   // Recording demo: the pretend relay keeps the job (lib/demo/chain), by the same rules.
   if (readDemo()) {
@@ -168,16 +175,27 @@ export async function cancelCashOut(id: string): Promise<CancelResult> {
  * relay holds, not the one asked for: when this money already has a cash out
  * waiting to another address, the note is marked with that one and this throws.
  */
-export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, window: CashOutWindow): Promise<OwnedCashOutJob> {
+export async function scheduleNoteCashOut(note: LocalNote, call: CashOutCall, when: CashOutWhen): Promise<OwnedCashOutJob> {
+  // Every scheduled cash out comes through here. On disk before the proof goes:
+  // however this ends, a closed tab included, the note can't be spent past that
+  // proof. The lease keeps any tab's sync from moving it until the reply says how
+  // it went (shield HANDOVER_MS).
+  await updateLocalNote(note.id, { proofOutAt: Date.now(), handoverUntil: Date.now() + HANDOVER_MS });
+  const lease = { handoverUntil: undefined };
+  const series = note.cashOutPlan?.plan;
+  const at =
+    typeof when === "string"
+      ? { window: when }
+      : { day: when.day, ...(when.webhook && series ? { webhook: { url: when.webhook, series } } : {}) };
   let job: OwnedCashOutJob;
   try {
-    job = await scheduleCashOut({ ...call, window });
+    job = await scheduleCashOut({ ...call, ...at });
   } catch (e) {
-    if (e instanceof CashOutLaterError && e.job) updateLocalNote(note.id, { cashOut: markFor(e.job) });
+    await updateLocalNote(note.id, e instanceof CashOutLaterError && e.job ? { cashOut: markFor(e.job), ...lease } : lease);
     throw e;
   }
   // The relay may hand back the job already waiting for this money: its proof's root is not this one.
-  updateLocalNote(note.id, { cashOut: markFor(job, job.existing ? undefined : { root: call.root, at: Date.now() }) });
+  await updateLocalNote(note.id, { cashOut: markFor(job, job.existing ? undefined : { root: call.root, at: Date.now() }), ...lease });
   return job;
 }
 
@@ -211,10 +229,10 @@ export function scheduledCashOutNotes(notes: LocalNote[] = getAllNotes()): Local
   return notes.filter((n) => n.status !== "recovered" && (n.cashOut?.state === "scheduled" || n.cashOut?.state === "sent"));
 }
 
-/** Notes whose scheduled cash out came back unsent, for a one-time notice. */
+/** Notes whose scheduled cash out came back unsent, for a one-time notice. A top-up shows on its own screen, and is not back yet. */
 export function returnedCashOutNotes(notes: LocalNote[] = getAllNotes()): LocalNote[] {
   return notes.filter(
-    (n) => n.status !== "recovered" && (n.cashOut?.state === "expired" || n.cashOut?.state === "failed")
+    (n) => n.status !== "recovered" && !n.cashOutPlan?.topUp && (n.cashOut?.state === "expired" || n.cashOut?.state === "failed")
   );
 }
 
@@ -359,7 +377,21 @@ export async function reconcileCashOuts(env?: CashOutEnv): Promise<boolean> {
 export async function releaseGoneCashOut(n: LocalNote, env: CashOutEnv = appCashOutEnv()): Promise<boolean> {
   if (!n.cashOut || !onEnvChain(n, env)) return false;
   if ((await unspentOnChain(n, env)) !== true) return false;
-  updateLocalNote(n.id, { cashOut: undefined });
+  await updateLocalNote(n.id, markCleared(n));
+  return true;
+}
+
+/**
+ * A prepaid top-up can wait months and the app can stay closed for longer than
+ * the relay keeps a finished job, so "gone" can only mean it is over. The note
+ * is settled from its own chain: spent, it went out; unspent, the relay can no
+ * longer send it, so it comes back with the usual notice. True when it was.
+ */
+export async function settleGoneCashOut(n: LocalNote, env: CashOutEnv = appCashOutEnv()): Promise<boolean> {
+  if (!n.cashOut || !onEnvChain(n, env)) return false;
+  const unspent = await unspentOnChain(n, env);
+  if (unspent === null) return false;
+  updateLocalNote(n.id, { cashOut: { ...n.cashOut, state: unspent ? "failed" : "sent" } });
   return true;
 }
 
@@ -369,5 +401,6 @@ export async function releaseGoneCashOut(n: LocalNote, env: CashOutEnv = appCash
  * plain money in the balance from here, not a piece still to schedule.
  */
 export function dismissReturnedCashOut(noteId: string) {
-  updateLocalNote(noteId, { cashOut: undefined, cashOutPlan: undefined });
+  const n = getAllNotes().find((x) => x.id === noteId);
+  if (n) updateLocalNote(noteId, { ...markCleared(n), cashOutPlan: endedPlan(n.cashOutPlan, "returned") });
 }

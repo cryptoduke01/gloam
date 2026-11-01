@@ -39,6 +39,7 @@ import {
   readReceiptSignals,
   hexToField,
   FIELD_PRIME,
+  NATIVE_ASSET,
   RH_MAINNET_CHAIN_ID,
   RH_TESTNET_CHAIN_ID,
   RH_MAINNET_USDG,
@@ -162,7 +163,9 @@ assert(byId["erc20.grift.approve"].to === RH_MAINNET_GRIFT, "the GRIFT approval 
 assert(byId["erc20.usdg.approve"].rules.some((r) => r.toLowerCase().includes(vault)), "an approval names the vault as the only spender");
 assert(byId["gloam.memo.postMemo"].to === "0x01B3172d9900Cb26d57E986429b9b23854c74598", "postMemo goes to the mainnet board");
 const all = agentSigningAllowlist();
-assert(all.filter((e) => e.signature.startsWith("approve")).length === mainnetNetwork("robinhood").assets.length, "by default, an approval per listed token");
+const listedTokens = mainnetNetwork("robinhood").assets.filter((a) => a.address !== NATIVE_ASSET);
+assert(all.filter((e) => e.signature.startsWith("approve")).length === listedTokens.length, "by default, an approval per listed token");
+assert(!all.some((e) => e.id === "erc20.eth.approve") && all.every((e) => e.value === "0"), "native ETH is listed, but the allowlist stays tokens only: no approval for it and no value");
 const testnet = agentSigningAllowlist({ chainId: RH_TESTNET_CHAIN_ID, assets: [{ symbol: "USDG", address: RH_USDG }] });
 assert(testnet.find((e) => e.id === "gloam.vault.transfer").to === SEALED_VAULT, "testnet: the testnet vault");
 assert(testnet.find((e) => e.id === "gloam.memo.postMemo").to === GLOAM_PAY_MEMO, "testnet: the testnet board");

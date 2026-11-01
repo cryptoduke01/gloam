@@ -15,8 +15,8 @@
  *     Redis is set but not answering, or a production build has none, the
  *     relay is off and sends nothing), before anything is read from the chain, so copies of one proof sent together cannot each
  *     pass the dry run and then revert at the relay's expense; the lock is
- *     dropped if nothing went out, and kept until it expires once a
- *     transaction did
+ *     dropped if nothing went out or the receipt shows the transaction
+ *     reverted, and otherwise kept until it expires once a transaction did
  *   - spent and root check on every send and cash out, before the dry run, so
  *     a spent note never reaches the gas estimate
  *   - dry run (gas estimate against the pool) before anything is sent, so a bad
@@ -64,6 +64,7 @@ import {
   type PublicClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { after } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import {
   NETWORK_KEYS,
@@ -75,7 +76,9 @@ import { SharedCountUnavailable, hitRateLimit } from "@/lib/mcpRemote/rateLimit"
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
-import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, takeInflight } from "@/lib/relay/inflight";
+import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, releaseIfReverted, takeInflight } from "@/lib/relay/inflight";
+import { jobKeyReady } from "@/lib/relay/jobSeal";
+import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
@@ -720,11 +723,22 @@ async function feeCap(net: GloamNetwork, pub: PublicClient, ceiling: bigint): Pr
 export const IN_FLIGHT_MESSAGE = "This payment is already being sent. Wait a moment and refresh.";
 export const RELAY_BUSY_MESSAGE = "The relay is busy right now. Try again in a moment or send from your wallet.";
 
+/** Runs `task` once the reply is out, while the function still runs. Outside a request (a self-test) it just runs. */
+function afterReply(task: () => Promise<void>): void {
+  try {
+    after(task);
+  } catch {
+    void task();
+  }
+}
+
 /**
  * A send or cash out, one at a time per nullifier: take the lock, check the
  * note is unspent and the root known, then dry run and send. The lock is
  * dropped when nothing went out (a failed check, dry run or send), so the user
- * can retry at once; once a transaction is out it stays until it expires.
+ * can retry at once; once a transaction is out it stays until it expires,
+ * unless its receipt shows it reverted. That is read after the reply, so the
+ * caller gets the hash at once however long the transaction takes to land.
  */
 async function submitSpend(
   net: GloamNetwork,
@@ -749,6 +763,8 @@ async function submitSpend(
       keep = true;
     });
     keep = true;
+    const receiptStatus = () => relayPublicClient(net).getTransactionReceipt({ hash }).then((r) => r.status);
+    afterReply(() => releaseIfReverted(lock, receiptStatus));
     return hash;
   } finally {
     if (!keep) await lock.release();
@@ -1015,6 +1031,8 @@ export type RelayNetworkStatus = {
   maxGasGwei: string | null;
   /** The gas price in gwei when the chain has a ceiling, else null. */
   gasGwei: string | null;
+  /** Dated jobs can be taken here: the chain has them, and the relay can seal them at rest. */
+  topUps: boolean;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -1091,6 +1109,7 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
         gasHigh: gas.high,
         maxGasGwei: gas.ceilingWei === null ? null : formatGwei(gas.ceilingWei),
         gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
+        topUps: jobKeyReady() && !datedOff(net.chainId),
       };
     })
   );

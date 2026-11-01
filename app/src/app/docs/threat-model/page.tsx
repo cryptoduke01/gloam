@@ -213,8 +213,9 @@ export default function DocsThreatModelPage() {
         within the buffer. It lands exactly as the owner made it: the same output, into
         the owner&apos;s new note. The app keeps both new notes until the chain shows
         which one landed. It also moves the note to a fresh one through the relay, which
-        ends those proofs: about 3 minutes after the swap, once the relay takes the note,
-        or on the owner&apos;s next visit if the app was closed by then. Until that move
+        ends those proofs: about a minute after the swap, a few minutes if the relay
+        hasn&apos;t confirmed the revert, or on the owner&apos;s next visit if the app was
+        closed by then. Until that move
         lands the proofs stay usable. A swap the app never heard back about moves its note
         the same way once an hour has passed with nothing landed. If that swap lands
         first, the move fails and the swap stands; if the move lands first, the swap
@@ -239,6 +240,25 @@ export default function DocsThreatModelPage() {
         never withdrawals or private sends. The owner is a single wallet (
         <code>0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8</code>); since 24 October
         cash-out fees go to a separate treasury wallet. A multisig is planned.
+      </p>
+      <p>
+        <strong>The owner guard.</strong> Each mainnet vault&apos;s ownership moves to
+        VaultOwnerGuard, a small contract with no upgrade path that forwards deposit limit
+        and fee changes and the sweep of coin sent by mistake, and nothing else. On a vault
+        the guard holds, limits and fees work as above, but its proof checkers can never be replaced and its ownership can never
+        move again, by anyone, the team included. The paragraph above describes a vault the
+        guard does not hold yet. To see which applies, read <code>owner()</code> on the
+        vault, or check <Link href="/verify">Verify</Link>.
+      </p>
+      <p>
+        That has a cost. A bug in a proof checker could not be patched in place on such a
+        vault. The response would be to close deposits at once, waive the cash-out fee and
+        move people to a new vault. Anyone holding a valid note could still cash out of the
+        old one, because nothing can pause withdrawals, unless the bug is that the checker
+        stops accepting valid proofs, which could then never be repaired. If the bug lets
+        someone forge a proof, nothing on chain could stop them taking money before everyone
+        has left. The three-day delay would not have stopped that either, since a fix has to
+        wait it out.
       </p>
 
       <h3>The web app</h3>

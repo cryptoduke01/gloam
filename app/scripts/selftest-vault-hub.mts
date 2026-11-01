@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import {
   ADD_FIRST,
   VAULT_ACTIONS,
+  topUpsSetAside,
   addAssetHref,
   pickAddAsset,
   vaultActionBlocked,
@@ -46,12 +47,12 @@ test("the five main actions come first, in the order money moves", () => {
 });
 
 test("each network gets the actions it has", () => {
-  // Robinhood Chain mainnet: swaps live, a native coin, no stocks
-  assert.deepEqual(ids({ swap: true, stocks: false, native: true }), ["shield", "pay", "receive", "swap", "cashout", "send"]);
-  // Tempo: no native coin to send, no swap router on the testnet
-  assert.deepEqual(ids({ swap: false, stocks: false, native: false }), ["shield", "pay", "receive", "cashout"]);
+  // Robinhood Chain mainnet: swaps live, no stocks
+  assert.deepEqual(ids({ swap: true, stocks: false }), ["shield", "pay", "receive", "swap", "cashout", "topups", "send"]);
+  // Tempo testnet: no swap router; Public send carries its stablecoins
+  assert.deepEqual(ids({ swap: false, stocks: false }), ["shield", "pay", "receive", "cashout", "topups", "send"]);
   // Robinhood Chain testnet: stocks
-  assert.deepEqual(ids({ swap: false, stocks: true, native: true }), ["shield", "pay", "receive", "cashout", "trade", "send"]);
+  assert.deepEqual(ids({ swap: false, stocks: true }), ["shield", "pay", "receive", "cashout", "topups", "trade", "send"]);
 });
 
 test("a URL opens its action, and the bare Vault opens the overview", () => {
@@ -101,10 +102,29 @@ test("a claim already taken stops marking Receive once the URL names another act
 });
 
 test("a tab this network does not have opens the overview, not a blank page", () => {
-  const tempo = vaultActionsFor({ swap: false, stocks: false, native: false });
-  assert.equal(vaultActionFromUrl("swap", null, "", tempo), null);
-  assert.equal(vaultActionFromUrl("send", null, "", tempo), null);
-  assert.equal(vaultActionFromUrl("move", "cashout", "", tempo), "cashout");
+  const base = vaultActionsFor({ swap: false, stocks: false });
+  assert.equal(vaultActionFromUrl("swap", null, "", base), null);
+  assert.equal(vaultActionFromUrl("trade", null, "", base), null);
+  assert.equal(vaultActionFromUrl("send", null, "", base), "send");
+  assert.equal(vaultActionFromUrl("move", "cashout", "", base), "cashout");
+});
+
+test("the overview says what agent top-ups hold out of the balance", () => {
+  const USDC = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+  const tag = { plan: "p", piece: 1, of: 2, to: "0x1", window: "day", topUp: { day: 1, everyDays: 7 } };
+  const n = (cashOut: string | null, over: object = {}) =>
+    ({ asset: USDC, amountWei: "5000000", status: "open", cashOutPlan: tag, ...(cashOut ? { cashOut: { job: "j", at: 1, to: "0x1", state: cashOut } } : {}), ...over }) as never;
+  const got = topUpsSetAside([
+    n("scheduled"),
+    n("sent"),
+    n("scheduled", { status: "recovered" }), // it went out
+    n("failed"), // back in the balance
+    n(null), // not scheduled: still in the balance
+    n("scheduled", { cashOutPlan: { ...tag, topUp: undefined } }), // an ordinary piece
+    n("failed", { proofOutAt: 1 }), // on its way back to a fresh note: out of the balance until it lands
+  ]);
+  assert.deepEqual([...got], [[USDC, 15_000_000n]]);
+  assert.equal(topUpsSetAside([]).size, 0);
 });
 
 test("each action writes the deep link the app already serves", () => {
@@ -114,6 +134,7 @@ test("each action writes the deep link the app already serves", () => {
     receive: "?tab=move&mode=receive",
     swap: "?tab=swap",
     cashout: "?tab=move&mode=cashout",
+    topups: "?tab=topups",
     trade: "?tab=trade",
     send: "?tab=send",
   };

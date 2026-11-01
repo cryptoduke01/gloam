@@ -16,7 +16,7 @@ import { hexToField } from "@/lib/poseidon";
 import type { RelayNetworkStatus } from "@/lib/relay/client";
 import { TEMPO_STABLE_TOKENS } from "@/lib/tokens";
 import type { SyncedTree } from "@/lib/treeSync";
-import { drawSendAfter, type DelayWindow } from "@/lib/relay/scheduled";
+import { DATED_OFF_MESSAGE, datedOff, drawSendAfter, drawSendOn, type DelayWindow } from "@/lib/relay/scheduled";
 import {
   DEMO_MS,
   creditDemoWallet,
@@ -56,6 +56,7 @@ export function demoRelayStatus(): RelayNetworkStatus[] {
     gasHigh: false,
     maxGasGwei: null,
     gasGwei: null,
+    topUps: !datedOff(getNetwork(key).chainId),
   }));
 }
 
@@ -92,8 +93,8 @@ function owned(j: DemoCashOutJob): DemoOwnedJob {
 
 /**
  * The pretend relay taking a proven cash out for later, by the relay's own
- * rules (lib/relay/scheduled): a random send time inside the window, and one
- * live job per spend (the same cash out comes back, another address is refused).
+ * rules (lib/relay/scheduled): a random send time inside the window or the
+ * day, and one live job per spend (the same cash out comes back, another address is refused).
  */
 export async function demoScheduleCashOut(p: {
   chainId: number;
@@ -101,9 +102,11 @@ export async function demoScheduleCashOut(p: {
   asset: Address;
   to: Address;
   amount: bigint;
-  window: DelayWindow;
+  window?: DelayWindow;
+  day?: number;
 }): Promise<{ ok: true; job: DemoOwnedJob } | { ok: false; code: string; error: string; job?: DemoOwnedJob }> {
   await sleep(jitter(DEMO_MS.relay));
+  if (p.day !== undefined && datedOff(p.chainId)) return { ok: false, code: "dated_off", error: DATED_OFF_MESSAGE };
   const live = demoCashOutJobs().find(
     (j) => j.chainId === p.chainId && j.nullifier.toLowerCase() === p.nullifier.toLowerCase() && j.status === "scheduled"
   );
@@ -121,7 +124,7 @@ export async function demoScheduleCashOut(p: {
     asset: p.asset,
     to: p.to,
     amount: p.amount.toString(),
-    sendAfter: drawSendAfter(now, p.window),
+    sendAfter: p.day !== undefined ? drawSendOn(now, p.day) : drawSendAfter(now, p.window ?? "day"),
     status: "scheduled",
     updatedAt: now,
   };

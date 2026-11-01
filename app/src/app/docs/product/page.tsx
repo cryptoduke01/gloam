@@ -69,12 +69,12 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Public path",
-            body: "Connect, portfolio, send stablecoins and ETH. Faucet stocks and markets on testnet.",
+            body: "Connect, portfolio, send ETH and every listed token from your wallet. Faucet stocks and markets on testnet.",
           },
           {
             n: "●",
             title: "Shield",
-            body: `Mainnet: USDG and $GLOAM on Robinhood Chain; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
+            body: `Mainnet: USDG, $GLOAM, PONS and CASHCAT on Robinhood Chain, then ETH, AI and ORBIO once their limits land; USDC.e, pathUSD, USDT0 and OUSD on Tempo${BASE_LIVE ? "; USDC, EURC, USDT and ETH on Base" : ""}${ETHEREUM_LIVE ? "; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum" : ""}, under beta deposit limits. Testnet: also test ETH and Robinhood Chain stock tokens.`,
           },
           {
             n: "●",
@@ -94,7 +94,7 @@ export default function DocsProductPage() {
           {
             n: "●",
             title: "Private swaps",
-            body: "Mainnet on Robinhood Chain (USDG and $GLOAM) and Tempo (its stablecoins). Swap from your private balance in one relayed transaction. Who swapped stays private; the amounts are public.",
+            body: "Mainnet on Robinhood Chain (USDG, $GLOAM, PONS, CASHCAT, WETH, stock tokens and more) and Tempo (its stablecoins). Swap from your private balance in one relayed transaction. Who swapped stays private; the amounts are public.",
           },
           {
             n: "●",

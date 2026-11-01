@@ -63,7 +63,6 @@ function VaultNavList({
   const actions = vaultActionsFor({
     swap: settled && vaultSwapRouter(network.chainId) !== null && swapOpenTo(address),
     stocks: settled && Boolean(network.stocks),
-    native: settled && network.family !== "tempo",
   });
   const inVault = pathname === "/app/vault";
   const current: VaultActionId | null = inVault ? vaultActionFromParams(tab, mode, actions) : null;

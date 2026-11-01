@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
+import { JobSealError, jobKeyReady } from "@/lib/relay/jobSeal";
 import {
+  DATED_KEY_OFF_MESSAGE,
+  DATED_OFF_MESSAGE,
   DELAY_WINDOWS,
   REPROVE_MIN_LEAD_MS,
   cancelJob,
+  datedOff,
   drawSendAfter,
+  drawSendOn,
   isLive,
   jobView,
   replaceJobProof,
   sameCashOut,
   scheduleJob,
+  sendDayProblem,
   type CashOutJob,
   type DelayWindow,
+  type JobWebhook,
   type ReplaceRefusal,
 } from "@/lib/relay/scheduled";
+import { webhookUrlProblem } from "@/lib/relay/webhookUrl";
 import { scheduledStore, scheduledStoreReady } from "@/lib/relay/scheduledStore";
 import { RelayError, checkRateLimit, checkUnshieldForLater, networkForChain } from "@/lib/relay/server";
 
@@ -24,6 +32,15 @@ export const dynamic = "force-dynamic";
 
 /** New scheduled cash outs per sender per hour. */
 const SCHEDULE_PER_HOUR = 20;
+/**
+ * New dated cash outs (prepaid top-ups) per sender, counted apart from the
+ * above so a batch of 12 is never cut short by a cash out made in the same
+ * hour, and never uses up what those need. Two full batches an hour, with a
+ * cap per day because these stay on record for months, not hours. Each one
+ * still needs a real unspent note and a proof that passes the dry run.
+ */
+const DATED_PER_HOUR = 24;
+const DATED_PER_DAY = 48;
 /** New scheduled cash outs per spend per hour (asking again for a waiting one returns it). */
 const SCHEDULE_PER_SPEND = 6;
 /** Status reads per sender per minute (the app checks each job now and then). */
@@ -65,9 +82,24 @@ function answerExisting(job: CashOutJob, same: boolean) {
   return NextResponse.json({ ok: false, error, code: "already_scheduled", job: owned(job) }, { status: 409, headers: NO_STORE });
 }
 
+/** A dated job's webhook, checked. Only a dated job may have one: nothing else is kept sealed for sure. */
+function webhookOf(raw: unknown, dated: boolean): JobWebhook | undefined {
+  if (raw === undefined) return undefined;
+  if (!dated) throw new RelayError("Only a top-up can have a webhook.");
+  const { url, series } = (raw ?? {}) as Partial<JobWebhook>;
+  const problem = webhookUrlProblem(url);
+  if (problem) throw new RelayError(problem);
+  if (typeof series !== "string" || !/^[0-9a-zA-Z-]{1,64}$/.test(series)) throw new RelayError("Invalid webhook.");
+  return { url: url!, series };
+}
+
 function fail(e: unknown) {
   if (e instanceof RelayError) {
     return NextResponse.json({ ok: false, error: e.message, code: e.code }, { status: e.status, headers: NO_STORE });
+  }
+  // Sealed with a key the relay doesn't have: never "unknown", which the app reads as gone.
+  if (e instanceof JobSealError) {
+    return NextResponse.json({ ok: false, error: LATER_OFF, code: "later_off" }, { status: 503, headers: NO_STORE });
   }
   console.error("gloam_cashout_later", e);
   return NextResponse.json(
@@ -79,9 +111,12 @@ function fail(e: unknown) {
 /**
  * Schedule a cash out the relay sends later: the same body as a relayed cash
  * out ({ chainId, proof, root, nullifier, asset, to, amount }) plus
- * { window: "hour" | "6h" | "day" }. It is checked and dry-run now; the send time is
- * drawn at random inside the window. Returns { id, sendAfter, to }. Asking
- * again for the same spend returns the job already waiting; asking with
+ * { window: "hour" | "6h" | "day" } or, for a dated one, { day } (the first
+ * millisecond of a UTC day, up to 90 days ahead, refused on Ethereum mainnet:
+ * lib/relay/scheduled DATED_OFF_CHAINS). It is checked and dry-run
+ * now; the send time is drawn at random inside the window or the day. Returns
+ * { id, sendAfter, to }. A dated one may also carry { webhook: { url, series } }
+ * (lib/relay/webhook). Asking again for the same spend returns the job already waiting; asking with
  * another address (or amount) is a 409 already_scheduled with that job.
  */
 export async function POST(req: Request) {
@@ -90,15 +125,25 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const window = body.window as DelayWindow;
-    if (typeof window !== "string" || !Object.hasOwn(DELAY_WINDOWS, window)) {
+    const dated = body.day !== undefined;
+    if (dated) {
+      const problem = body.window === undefined ? sendDayProblem(body.day, Date.now()) : "Pick a window or a day, not both.";
+      if (problem) throw new RelayError(problem);
+    } else if (typeof window !== "string" || !Object.hasOwn(DELAY_WINDOWS, window)) {
       throw new RelayError("Pick within an hour, 6 hours or a day.");
     }
     const net = networkForChain(body.chainId);
+    // Before any count or dry run: this is the chain's rule, whatever the app says.
+    if (dated && datedOff(net.chainId)) throw new RelayError(DATED_OFF_MESSAGE, 400, "dated_off");
+    if (dated && !jobKeyReady()) throw new RelayError(DATED_KEY_OFF_MESSAGE, 503, "dated_no_key");
+    const webhook = webhookOf(body.webhook, dated);
     const ip = clientIp(req);
     await checkRateLimit(ip);
-    if (!(await hitRateLimit(ip, "cashout-later", SCHEDULE_PER_HOUR, Date.now(), 3600)).allowed) {
-      throw new RelayError("Too many scheduled cash outs from this device. Wait a while.", 429, "rate_limit");
-    }
+    const allowed = dated
+      ? (await hitRateLimit(ip, "cashout-dated", DATED_PER_HOUR, Date.now(), 3600)).allowed &&
+        (await hitRateLimit(ip, "cashout-dated-day", DATED_PER_DAY, Date.now(), 86400)).allowed
+      : (await hitRateLimit(ip, "cashout-later", SCHEDULE_PER_HOUR, Date.now(), 3600)).allowed;
+    if (!allowed) throw new RelayError("Too many scheduled cash outs from this device. Wait a while.", 429, "rate_limit");
 
     const store = scheduledStore();
     const call = await checkUnshieldForLater(net, body);
@@ -123,10 +168,12 @@ export async function POST(req: Request) {
       to,
       amount: amount.toString(),
       createdAt: now,
-      sendAfter: drawSendAfter(now, window),
+      sendAfter: dated ? drawSendOn(now, body.day as number) : drawSendAfter(now, window),
       status: "scheduled",
       attempts: 0,
       updatedAt: now,
+      ...(dated ? { dated: true } : {}),
+      ...(webhook ? { webhook } : {}),
     };
     // Saved in one step; a request for the same spend at the same moment gets this one back.
     const saved = await scheduleJob(store, job);

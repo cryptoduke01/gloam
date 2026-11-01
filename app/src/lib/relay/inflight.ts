@@ -17,7 +17,12 @@
  * Whoever holds it releases it when the request fails before anything was
  * sent, so the user can retry right away. Once a transaction is out, the lock
  * stays until it expires: by then the spend has landed and the relay's spent
- * check refuses any copy.
+ * check refuses any copy. The one exception is a receipt showing that very
+ * transaction reverted (releaseIfReverted): the note is unspent, nothing of
+ * this request is still out, and the holder drops the lock so the note can
+ * move. A copy sent after that takes the lock and faces the dry run like any
+ * new request, so there is still at most one send of a spend out at a time. A
+ * timeout, a dropped request or a send whose outcome is unknown never drops it.
  */
 import { randomUUID } from "crypto";
 import { redisConfigured } from "@/lib/tractionStore";
@@ -178,6 +183,36 @@ export async function takeInflight(
     store: "memory",
     release: async () => memRelease(key, token),
   };
+}
+
+// ---------------------------------------------------------------- after the send
+
+const RECEIPT_POLL_MS = 1_000;
+/**
+ * How long the relay looks for a sent transaction's receipt. It runs after the
+ * reply, inside the route's 60 s limit: one still landing after this, or a
+ * function stopped first, leaves the lock to expire.
+ */
+export const RECEIPT_WATCH_MS = 30_000;
+
+/**
+ * Follows a sent transaction to its receipt and has the lock's holder drop the
+ * lock if it reverted. `outcome` reads that receipt: null, or a throw, while
+ * there is none to read. Only a reverted receipt drops the lock. Never throws.
+ */
+export async function releaseIfReverted(
+  lock: InflightLock,
+  outcome: () => Promise<"success" | "reverted" | null>,
+  watchMs = RECEIPT_WATCH_MS,
+  pollMs = RECEIPT_POLL_MS,
+): Promise<void> {
+  const deadline = Date.now() + watchMs;
+  for (;;) {
+    const ended = await outcome().catch(() => null);
+    if (ended === "reverted") await lock.release();
+    if (ended === "reverted" || ended === "success" || Date.now() + pollMs > deadline) return;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
 }
 
 // ---------------------------------------------------------------- send lane

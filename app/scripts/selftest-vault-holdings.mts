@@ -36,7 +36,8 @@ check("Robinhood mainnet: the listed tokens first, then every swap-landable one,
   const listed = shieldTokensFor(4663).map((t) => lc(t.address));
   assert.deepEqual(h.slice(0, listed.length), listed);
   assert.equal(new Set(h).size, h.length, "no address twice");
-  assert.equal(h.length, listed.length + RH_MAINNET_SWAP_TOKENS.length);
+  // PONS and CASHCAT are on both lists
+  assert.equal(h.length, new Set([...listed, ...RH_MAINNET_SWAP_TOKENS.map((t) => lc(t.address))]).size);
   for (const t of RH_MAINNET_SWAP_TOKENS) assert.ok(h.includes(lc(t.address)), t.symbol);
 });
 

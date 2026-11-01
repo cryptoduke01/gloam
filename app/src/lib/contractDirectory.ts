@@ -26,6 +26,16 @@ import { swapRoutersOn } from "./vaultSwap";
 export const GLOAM_OWNER: Address = "0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8";
 
 /**
+ * VaultOwnerGuard (contracts/src/VaultOwnerGuard.sol): the contract each mainnet
+ * vault's ownership moves to. It forwards deposit limit and fee changes and the
+ * sweep of stray native coin, and nothing else, so a vault it holds can never
+ * get a new proof checker or a new owner. null until its address is final; set it before the first handover
+ * (DEPLOY.md, owner guard), so a vault it holds reads as listed while the others
+ * are still on GLOAM_OWNER.
+ */
+export const GLOAM_OWNER_GUARD: Address | null = null;
+
+/**
  * The treasury: the vaults' fee recipient (cash-out fees go here since 24
  * October 2026 on Robinhood Chain and Tempo, and from the deploy on the
  * others), and where both swap routers send what a swap does not use.
@@ -162,6 +172,17 @@ function appRows(n: GloamNetwork): DirectoryRow[] {
       deployBlock: null,
       source: "app",
     });
+    if (GLOAM_OWNER_GUARD) {
+      rows.push({
+        role: "owner",
+        name: "Owner guard",
+        contract: "VaultOwnerGuard",
+        what: "Holds a vault once it accepts it. Forwards deposit limit and fee changes and the sweep of coin sent by mistake, nothing else, so that vault's proof checkers and ownership can never change.",
+        address: GLOAM_OWNER_GUARD,
+        deployBlock: null,
+        source: "app",
+      });
+    }
     rows.push({
       role: "fee_recipient",
       name: "Treasury",
@@ -355,6 +376,21 @@ export function chainRows(n: GloamNetwork, r: VaultRead): DirectoryRow[] {
 
 export type VaultCheck = { label: string; ok: boolean; detail: string };
 
+/** Whether a mainnet vault's owner is the listed wallet or the owner guard. */
+export function ownerCheck(owner: Address, guard: Address | null = GLOAM_OWNER_GUARD): VaultCheck {
+  const held = guard !== null && isAddressEqual(owner, guard);
+  const listed = held || isAddressEqual(owner, GLOAM_OWNER);
+  return {
+    label: "Owner as listed",
+    ok: listed,
+    detail: held
+      ? "The owner guard holds this vault: its proof checkers and owner can never change."
+      : listed
+        ? "The vault names the owner above."
+        : `The vault names ${getAddress(owner)}.`,
+  };
+}
+
 /** What the read shows, as plain checks against what the app says. */
 export function vaultChecks(n: GloamNetwork, r: VaultRead): VaultCheck[] {
   const checks: VaultCheck[] = [
@@ -370,11 +406,7 @@ export function vaultChecks(n: GloamNetwork, r: VaultRead): VaultCheck[] {
     },
   ];
   if (n.paymentsPool) {
-    checks.push({
-      label: "Owner as listed",
-      ok: isAddressEqual(r.owner, GLOAM_OWNER),
-      detail: isAddressEqual(r.owner, GLOAM_OWNER) ? "The vault names the owner above." : `The vault names ${getAddress(r.owner)}.`,
-    });
+    checks.push(ownerCheck(r.owner));
   }
   checks.push({
     label: "No handover pending",

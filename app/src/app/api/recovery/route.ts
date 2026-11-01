@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { KvUnavailableError } from "@/lib/partnersKv";
-import { RecoveryError, backupExists, backupInputProblem, deleteBackup, isHex64, readBackup, writeBackup } from "@/lib/recoveryStore";
+import { BACKUP_GONE, RecoveryError, backupExists, backupInputProblem, deleteBackup, isHex64, readBackup, writeBackup } from "@/lib/recoveryStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,11 +88,13 @@ export async function GET(req: Request) {
  * Save or replace an encrypted backup. A save to one that exists always goes
  * through (its write token is checked by the store). A new one counts against
  * its connection and the day's budget, and only once it is a valid backup.
+ * `mustExist` means this save must not make a new one: with nothing there it is
+ * a 410, nothing is written, and neither count is touched.
  */
 export async function PUT(req: Request) {
   const body = await readBody(req);
   if (!body) return fail(400, "Bad request.");
-  const { id, write, c, n } = body;
+  const { id, write, c, n, mustExist } = body;
   if (!isHex64(id) || !isHex64(write)) return fail(400, "Bad backup id.");
   const problem = backupInputProblem({ c, n });
   if (problem) return fail(400, problem);
@@ -101,6 +103,8 @@ export async function PUT(req: Request) {
     if (await backupExists(id)) {
       const saves = await hitRateLimit(id, "recovery-save", SAVES_PER_BACKUP_PER_MIN, now);
       if (!saves.allowed) return fail(429, "Too many saves in a minute. Wait a moment.", { "Retry-After": String(saves.retryAfterSec) });
+    } else if (mustExist === true) {
+      return (await limited(req)) ?? fail(410, BACKUP_GONE);
     } else {
       const mine = await hitRateLimit(clientIp(req), "recovery-new", NEW_BACKUPS_PER_DAY, now, 86_400, { v6Bits: NEW_BACKUPS_V6_BITS });
       if (!mine.allowed) {
@@ -119,7 +123,7 @@ export async function PUT(req: Request) {
         return fail(429, BUDGET_FULL, { "Retry-After": String(all.retryAfterSec) });
       }
     }
-    return ok(await writeBackup({ id, write, c: c as string, n: Number(n) }));
+    return ok(await writeBackup({ id, write, c: c as string, n: Number(n), mustExist: mustExist === true }));
   } catch (e) {
     return handle(e);
   }

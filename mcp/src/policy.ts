@@ -23,9 +23,9 @@
  * asset unless the entry says "network": "robinhood-mainnet" / "tempo-mainnet" /
  * "base-mainnet" / "ethereum-mainnet". So a config written for testnet never
  * starts approving mainnet assets by itself. Mainnet-only symbols (USDC.e,
- * USDT0, GLOAM, USDT, BDX) and mainnet-only addresses (USDG on Robinhood
- * Chain mainnet, USDC on Base, every Ethereum token) name the mainnet asset
- * directly. A symbol on two mainnets (USDT and BDX on Base and Ethereum) names
+ * USDT0, GLOAM, USDT, BDX, PONS, CASHCAT, AI, ORBIO) and mainnet-only addresses
+ * (USDG on Robinhood Chain mainnet, USDC on Base, every Ethereum token) name the
+ * mainnet asset directly. A symbol on two mainnets (USDT and BDX on Base and Ethereum) names
  * the first listed, Base; name "ethereum-mainnet" for Ethereum's. BDX sits at
  * the same address on both, so its address alone names Base's too.
  */
@@ -56,7 +56,11 @@ import {
   GLOAM_TOKEN,
   NATIVE_ASSET,
   RH_MAINNET_CHAIN_ID,
+  RH_MAINNET_AI,
+  RH_MAINNET_CASHCAT,
   RH_MAINNET_GRIFT,
+  RH_MAINNET_ORBIO,
+  RH_MAINNET_PONS,
   RH_MAINNET_USDG,
   RH_USDG,
   TEMPO_MAINNET_CHAIN_ID,
@@ -165,6 +169,11 @@ export const KNOWN_ASSETS: KnownAsset[] = [
   { symbol: "USDG", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_USDG, decimals: 6, stable: true },
   { symbol: "GLOAM", chainId: RH_MAINNET_CHAIN_ID, address: GLOAM_TOKEN, decimals: 18, stable: false },
   { symbol: "GRIFT", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_GRIFT, decimals: 18, stable: false },
+  { symbol: "ETH", chainId: RH_MAINNET_CHAIN_ID, address: NATIVE_ASSET, decimals: 18, stable: false },
+  { symbol: "PONS", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_PONS, decimals: 18, stable: false },
+  { symbol: "CASHCAT", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_CASHCAT, decimals: 18, stable: false },
+  { symbol: "AI", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_AI, decimals: 18, stable: false },
+  { symbol: "ORBIO", chainId: RH_MAINNET_CHAIN_ID, address: RH_MAINNET_ORBIO, decimals: 18, stable: false },
   { symbol: "USDC.e", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDCE, decimals: 6, stable: true },
   { symbol: "pathUSD", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_PATHUSD, decimals: 6, stable: true },
   { symbol: "USDT0", chainId: TEMPO_MAINNET_CHAIN_ID, address: TEMPO_USDT0, decimals: 6, stable: true },

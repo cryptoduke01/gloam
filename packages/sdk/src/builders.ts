@@ -13,7 +13,7 @@
  * in 0.0.x) and `poolAddress` (default: Gloam's pool on that chain). For
  * mainnet, pass the mainnet network's chainId (see mainnetNetwork()); a mainnet
  * (or Base Sepolia) whose pool is not in this SDK version is refused rather
- * than guessed. Prove
+ * than guessed, and so is a mainnet vault passed with no chainId. Prove
  * with the key set of the same chain: circuitArtifactUrls(circuit, chainId).
  */
 
@@ -27,6 +27,7 @@ import {
   networkName,
   poolForChainId,
 } from "./constants.js";
+import { MAINNET_POOLS } from "./mainnet.js";
 import { makeBoundNotePoseidon, type BoundNote } from "./note.js";
 import type { GloamIntent, IntentExec, TradeSide } from "./intents.js";
 import type { PoseidonMerklePath } from "./merkle.js";
@@ -43,6 +44,24 @@ import {
 
 const isNativeAsset = (a: Address) =>
   a.toLowerCase() === NATIVE_ASSET.toLowerCase();
+
+const isMainnetVault = (pool: Address) =>
+  Object.values(MAINNET_POOLS).some((m) => m.pool?.toLowerCase() === pool.toLowerCase());
+
+/**
+ * The chain a builder runs on: `chainId`, or Robinhood Chain testnet when it is
+ * left out. A mainnet vault has the same address on every mainnet, so it can't
+ * name its chain, and the testnet default would be wrong for it: refused.
+ */
+function resolveChainId(params: { chainId?: number; poolAddress?: Address }): number {
+  if (params.chainId != null) return params.chainId;
+  if (params.poolAddress && isMainnetVault(params.poolAddress)) {
+    throw new Error(
+      `${params.poolAddress} is Gloam's vault on every mainnet, so it doesn't say which chain this is for. Pass chainId too (see mainnetNetwork()).`
+    );
+  }
+  return RH_TESTNET_CHAIN_ID;
+}
 
 export interface ShieldIntentParams {
   /** Amount to shield, in wei (native) or token base units. */
@@ -72,7 +91,7 @@ export async function buildShieldIntent(
   params: ShieldIntentParams
 ): Promise<ShieldIntent> {
   if (params.amountWei <= 0n) throw new Error("amountWei must be positive");
-  const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
+  const chainId = resolveChainId(params);
   if (isPaymentsPoolChainId(chainId)) {
     throw new Error(`Plain shield() is off on ${networkName(chainId)}: the pool takes deposits with a proof only. Use buildShieldBoundIntent.`);
   }
@@ -131,7 +150,7 @@ export async function buildShieldBoundIntent(
   params: ShieldBoundIntentParams
 ): Promise<ShieldIntent> {
   if (params.amountWei <= 0n) throw new Error("amountWei must be positive");
-  const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
+  const chainId = resolveChainId(params);
   const asset = params.asset ?? NATIVE_ASSET;
   const isNative = isNativeAsset(asset);
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
@@ -190,7 +209,7 @@ export async function buildUnshieldIntent(
   params: UnshieldIntentParams
 ): Promise<GloamIntent<"unshield"> & { exec: IntentExec }> {
   const asset = params.asset ?? NATIVE_ASSET;
-  const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
+  const chainId = resolveChainId(params);
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
   // Checked before proving: a cash out to one of these addresses would be lost.
   const problem = cashOutTargetProblem(params.to, { chainId, pool: poolAddress });
@@ -259,7 +278,7 @@ export async function buildPrivateSendIntent(
   params: PrivateSendIntentParams
 ): Promise<PrivateSendIntent> {
   const asset = params.asset ?? NATIVE_ASSET;
-  const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
+  const chainId = resolveChainId(params);
   const poolAddress = params.poolAddress ?? poolForChainId(chainId);
   const w = await buildTransferWitness({
     secretHex: params.secretHex,
@@ -332,7 +351,7 @@ export async function buildPrivateTradeIntent(
   params: PrivateTradeIntentParams
 ): Promise<PrivateTradeIntent> {
   const assetIn = params.assetIn ?? NATIVE_ASSET;
-  const chainId = params.chainId ?? RH_TESTNET_CHAIN_ID;
+  const chainId = resolveChainId(params);
   if (isPaymentsPoolChainId(chainId)) {
     throw new Error(`Private trading is not on ${networkName(chainId)}: the pool there takes payments only.`);
   }

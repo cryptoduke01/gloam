@@ -4,7 +4,7 @@
  * is one entry here plus its page under app/blog/<slug>.
  */
 
-export type PostCoverId = "acp" | "agents" | "mainnet" | "operator" | "tempo";
+export type PostCoverId = "acp" | "agents" | "build" | "mainnet" | "operator" | "tempo";
 
 export type Post = {
   slug: string;
@@ -30,6 +30,18 @@ export const AUTHOR = {
 } as const;
 
 export const POSTS: Post[] = [
+  {
+    slug: "build-with-gloam-at-the-near-hackathon",
+    title: "Come build with Gloam at the NEAR hackathon",
+    short: "Build at the NEAR hackathon",
+    summary:
+      "Add private balances and payments to your app or agent with the Gloam SDK, and skip the circuits.",
+    date: "2026-10-31",
+    dateLabel: "October 31, 2026",
+    kind: "Announcement",
+    minutes: 2,
+    cover: "build",
+  },
   {
     slug: "agents-should-not-do-business-in-public",
     title: "Agents should not do business in public",

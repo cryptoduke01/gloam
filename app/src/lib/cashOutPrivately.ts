@@ -22,15 +22,25 @@
  *  - a split that may have gone out keeps both its notes, out of the balance
  *    until the next sync settles them (lib/claimSweep), like any split.
  * A run stops at the first problem. It never guesses past one.
+ *
+ * A proof stays valid until its note is spent, so a piece whose proof reached the
+ * relay and did not go out moves to a fresh note before it can be spent, however
+ * that came about (shield proofLoose): it is not one to schedule again.
+ *
+ * A prepaid agent top-up (lib/agentTopUp) is the same run with more pieces,
+ * each sent on a day of its own instead of inside a window.
  */
 import type { Address, Hex } from "viem";
-import { cashOutPending, updateLocalNote, type LocalNote } from "./shield";
+import { moveRevertedNotes, type ClaimEnv } from "./claimSweep";
+import { readDemo } from "./demoFlag";
+import { cashOutPending, endedPlan, markCleared, notesToMove, proofLoose, updateLocalNote, type CashOutPlanTag, type LocalNote } from "./shield";
 import { getAllNotes } from "./noteVault";
 import type { PoseidonMerklePath } from "./merklePoseidon";
 import { proveCashOut, type CashOutCall } from "./cashOutProof";
 import { freshPath, networkOfNote, SPLIT_MAYBE_SENT, spendWaitMessage, splitNote, type SplitArgs } from "./cashOutSplit";
-import { scheduleNoteCashOut, type CashOutWindow, type OwnedCashOutJob } from "./cashOutLater";
+import { scheduleNoteCashOut, type CashOutWhen, type CashOutWindow, type OwnedCashOutJob } from "./cashOutLater";
 import { MAX_PIECES, MIN_PIECES } from "./cashOutPlan";
+import { nextSendDay } from "./relay/scheduled";
 
 export type PieceState = "waiting" | "splitting" | "proving" | "scheduling" | "scheduled" | "stopped";
 
@@ -42,7 +52,7 @@ export type PrivateCashOutDeps = {
   pathOf: (n: LocalNote) => Promise<PoseidonMerklePath | null>;
   split: (a: SplitArgs) => Promise<{ part: LocalNote; change: LocalNote | null }>;
   prove: (n: LocalNote, to: Address, path: PoseidonMerklePath, chainId: number) => Promise<CashOutCall>;
-  schedule: (n: LocalNote, call: CashOutCall, window: CashOutWindow) => Promise<OwnedCashOutJob>;
+  schedule: (n: LocalNote, call: CashOutCall, when: CashOutWhen) => Promise<OwnedCashOutJob>;
   newId: () => string;
 };
 
@@ -81,27 +91,44 @@ function lowerFirst(s: string): string {
 }
 
 /**
- * Checks a plan against its note before anything moves: 2 to 4 pieces, each
- * with an address, adding up to at most the note. Throws in plain words.
+ * Checks a plan against its note before anything moves: 2 to 4 pieces (`most`
+ * for a top-up), each with an address, adding up to at most the note. Throws
+ * in plain words.
  */
-export function checkPlan(note: LocalNote, pieces: bigint[], to: Address[]): void {
-  if (pieces.length < MIN_PIECES || pieces.length > MAX_PIECES) throw new Error("A private cash out has 2 to 4 pieces.");
+export function checkPlan(note: LocalNote, pieces: bigint[], to: Address[], most = MAX_PIECES, least = MIN_PIECES): void {
+  if (pieces.length < least || pieces.length > most) throw new Error(`A private cash out has ${least} to ${most} pieces.`);
   if (to.length !== pieces.length) throw new Error("Each piece needs an address.");
   if (pieces.some((p) => p <= 0n)) throw new Error("Each piece needs an amount.");
   const total = pieces.reduce((s, p) => s + p, 0n);
   if (total > BigInt(note.amountWei)) throw new Error("The pieces add up to more than this balance.");
-  if (note.status === "recovered" || note.sweepPending || cashOutPending(note)) {
+  if (note.status === "recovered" || note.sweepPending || cashOutPending(note) || proofLoose(note)) {
     throw new Error("This balance is busy. Refresh and try again.");
   }
   const moving = spendWaitMessage(note);
   if (moving) throw new Error(moving);
 }
 
+/** A run of prepaid top-ups: which slots of the series it sets up, and the series they belong to. */
+export type TopUpRun = {
+  /** The series' id, when this finishes one that stopped part way. */
+  plan?: string;
+  /** Each piece's place in the series, from 1, and its UTC day. */
+  slots: { piece: number; day: number }[];
+  /** How many top-ups the series has. */
+  of: number;
+  everyDays: number;
+  /** The most pieces one run may take. */
+  most: number;
+  /** Where the relay says this series failed or is held. */
+  webhook?: string;
+};
+
 /**
  * Runs a private cash out of `pieces` (base units, adding up to at most the
- * note) to `to` (one address per piece), each scheduled inside `window`.
- * Resolves with what was scheduled and, when it stopped early, where and why;
- * it throws only when the plan is refused before anything moved.
+ * note) to `to` (one address per piece), each scheduled inside `window`, or on
+ * its own day with `topUp`. Resolves with what was scheduled and, when it
+ * stopped early, where and why; it throws only when the plan is refused before
+ * anything moved.
  */
 export async function runPrivateCashOut(args: {
   note: LocalNote;
@@ -109,19 +136,29 @@ export async function runPrivateCashOut(args: {
   to: Address[];
   window: CashOutWindow;
   owner: Address;
+  topUp?: TopUpRun;
   onStatus?: (s: string) => void;
   onPiece?: (i: number, p: Partial<PieceProgress>) => void;
   deps?: Partial<PrivateCashOutDeps>;
 }): Promise<PrivateCashOutResult> {
-  const { note, pieces, to, window, owner } = args;
-  checkPlan(note, pieces, to);
+  const { note, pieces, to, window, owner, topUp } = args;
+  // one left to finish a series is a run of one: there is no smaller top-up run
+  checkPlan(note, pieces, to, topUp?.most, topUp ? 1 : undefined);
   const d: PrivateCashOutDeps = { ...appDeps, ...args.deps };
   const status = args.onStatus ?? (() => {});
   const piece = args.onPiece ?? (() => {});
   const n = pieces.length;
   const whole = pieces.reduce((s, p) => s + p, 0n) === BigInt(note.amountWei);
-  const plan = d.newId();
-  const tagOf = (i: number) => ({ plan, piece: i + 1, of: n, to: to[i]!, window });
+  const plan = topUp?.plan ?? d.newId();
+  const tagOf = (i: number): CashOutPlanTag => ({
+    plan,
+    piece: topUp?.slots[i]!.piece ?? i + 1,
+    of: topUp?.of ?? n,
+    to: to[i]!,
+    window,
+    ...(topUp ? { topUp: { day: topUp.slots[i]!.day, everyDays: topUp.everyDays, ...(topUp.webhook ? { webhook: topUp.webhook } : {}) } } : {}),
+  });
+  const whenOf = (i: number): CashOutWhen => (topUp ? { day: topUp.slots[i]!.day, webhook: topUp.webhook } : window);
   const jobs: OwnedCashOutJob[] = [];
   const stop = (i: number, e: unknown): PrivateCashOutResult => {
     piece(i, { state: "stopped" });
@@ -131,10 +168,10 @@ export async function runPrivateCashOut(args: {
 
   let rest: LocalNote = note;
   for (let i = 0; i < n; i++) {
-    const label = `Piece ${i + 1} of ${n}`;
+    const label = topUp ? `Top-up ${tagOf(i).piece} of ${topUp.of}` : `Piece ${i + 1} of ${n}`;
     let target: LocalNote;
     try {
-      if (BigInt(rest.amountWei) === pieces[i]) {
+      if (i > 0 && BigInt(rest.amountWei) === pieces[i]) {
         // The last piece of a plan for the whole note: the change of the split
         // before, tagged as this piece when it was made.
         target = rest;
@@ -152,6 +189,8 @@ export async function runPrivateCashOut(args: {
           sendWithWallet: noWallet,
           onStatus: (s) => status(`${label}: ${lowerFirst(s)}`),
           partTag: tagOf(i),
+          // finishing a series with its one last top-up from a note of just that size: a fresh, tagged note all the same
+          allowWhole: BigInt(rest.amountWei) === pieces[i],
           // when the pieces are the whole note, the change of the second-last split is the last piece
           changeTag: whole && i === n - 2 ? tagOf(n - 1) : undefined,
         });
@@ -171,7 +210,7 @@ export async function runPrivateCashOut(args: {
       const call = await d.prove(target, to[i]!, path, target.chainId);
       piece(i, { state: "scheduling" });
       status(`${label}: scheduling with the Gloam relay…`);
-      const job = await d.schedule(target, call, window);
+      const job = await d.schedule(target, call, whenOf(i));
       jobs.push(job);
       piece(i, { state: "scheduled", at: job.sendAfter });
     } catch (e) {
@@ -185,15 +224,59 @@ export async function runPrivateCashOut(args: {
  * Pieces of a private cash out that are in the private balance but not
  * scheduled: split off, then stopped (a relay that was down, a closed tab). A
  * piece whose cash out came back shows that notice instead, and one still
- * landing shows once the sync settles it.
+ * landing shows once the sync settles it. A top-up whose proof already left is
+ * not one of these: it moves to a fresh note instead (shield proofLoose).
  */
 export function unscheduledPieces(notes: LocalNote[] = getAllNotes()): LocalNote[] {
-  return notes.filter((n) => n.cashOutPlan && n.status !== "recovered" && !n.sweepPending && !n.cashOut);
+  return notes.filter(
+    (n) => n.cashOutPlan && !n.cashOutPlan.topUp?.ended && n.status !== "recovered" && !n.sweepPending && !n.cashOut && !n.proofOutAt
+  );
+}
+
+function planOf(noteId: string): CashOutPlanTag | undefined {
+  return getAllNotes().find((n) => n.id === noteId)?.cashOutPlan;
 }
 
 /** Keeps a piece as plain money in the balance: it no longer shows as a piece to schedule. */
 export function keepPiece(noteId: string) {
-  updateLocalNote(noteId, { cashOutPlan: undefined });
+  updateLocalNote(noteId, { cashOutPlan: endedPlan(planOf(noteId), "kept") });
+}
+
+/** A cancelled cash out: plain money, not a piece still to schedule, once it has moved to a fresh note. Settles once that is on disk. */
+export function cancelledPiece(noteId: string): Promise<void> {
+  const n = getAllNotes().find((x) => x.id === noteId);
+  return n ? updateLocalNote(noteId, { ...markCleared(n), cashOutPlan: endedPlan(n.cashOutPlan, "cancelled") }) : Promise.resolve();
+}
+
+let demoMoving = false;
+
+/** The recording demo has no tree to prove a move against: the app's own whole-note split, on the pretend relay. */
+async function demoMoveNotes(): Promise<void> {
+  if (demoMoving) return;
+  demoMoving = true;
+  try {
+    for (const n of notesToMove(getAllNotes())) {
+      const at = await freshPath(n.commitment).catch(() => null);
+      if (!at) continue;
+      await splitNote({
+        note: n,
+        amount: BigInt(n.amountWei),
+        allowWhole: true,
+        path: at.path,
+        owner: n.from as Address,
+        relayOn: true,
+        sendWithWallet: noWallet,
+        onStatus: () => {},
+      }).catch(() => {});
+    }
+  } finally {
+    demoMoving = false;
+  }
+}
+
+/** Starts moving every note whose proof is still out, so a cancel takes effect now, not at the next sync. */
+export function moveLooseProofs(env?: ClaimEnv): Promise<void> {
+  return readDemo() ? demoMoveNotes() : moveRevertedNotes(env);
 }
 
 // ---------------------------------------------------------------- the person's choice
@@ -233,8 +316,8 @@ export function savePrivatePref(patch: Partial<PrivateCashOutPref>) {
 
 /**
  * Schedules a piece that was split off but not scheduled, as it was planned:
- * the same address and window. The caller checks the address first, as for
- * any cash out.
+ * the same address and window, or for a top-up its day (the next one if that
+ * has passed). The caller checks the address first, as for any cash out.
  */
 export async function schedulePiece(note: LocalNote, deps: Partial<PrivateCashOutDeps> = {}): Promise<OwnedCashOutJob> {
   const tag = note.cashOutPlan;
@@ -243,5 +326,5 @@ export async function schedulePiece(note: LocalNote, deps: Partial<PrivateCashOu
   const path = await d.pathOf(note);
   if (!path) throw new Error(NO_PATH);
   const call = await d.prove(note, tag.to, path, note.chainId);
-  return d.schedule(note, call, tag.window);
+  return d.schedule(note, call, tag.topUp ? { day: nextSendDay(tag.topUp.day, Date.now()), webhook: tag.topUp.webhook } : tag.window);
 }

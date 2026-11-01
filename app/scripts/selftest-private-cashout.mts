@@ -44,7 +44,7 @@ const {
 const { runPrivateCashOut, schedulePiece, keepPiece, unscheduledPieces, checkPlan } = await import("../src/lib/cashOutPrivately");
 const { scheduleNoteCashOut, dismissReturnedCashOut, scheduledCashOutNotes } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
-const { activeSpendableNotes, saveLocalNote, updateLocalNote, withdrawFeeOf } = await import("../src/lib/shield");
+const { activeSpendableNotes, notesToMove, proofLoose, saveLocalNote, updateLocalNote, withdrawFeeOf } = await import("../src/lib/shield");
 const { getAllNotes } = await import("../src/lib/noteVault");
 const { getActiveNetwork } = await import("../src/lib/networks");
 const { reconcileClaims } = await import("../src/lib/claimSweep");
@@ -510,7 +510,7 @@ await test("a split that may have gone out: both notes kept out of the balance, 
   assert.equal(total(spendable(s.created)), 30n * U);
 });
 
-await test("the relay down at scheduling: the piece stays in the balance, tagged, and shows as not scheduled", async () => {
+await test("the relay down at scheduling: that proof may be out, so its piece moves, and the piece behind it can still be scheduled", async () => {
   reset();
   const src = vaultNote("dep-run-5", 30n * U);
   const s = fakeSplitter();
@@ -518,22 +518,22 @@ await test("the relay down at scheduling: the piece stays in the balance, tagged
   const r = await runPrivateCashOut({ note: src, pieces: [10n * U, 15n * U, 5n * U], to: [TO, TO, TO], window: "6h", owner: ME, deps: deps(s) });
   assert.equal(r.stoppedAt, 1);
   assert.equal(r.error, "Could not reach the relay. Check your connection.");
-  // piece 2, and piece 3 (the second split's change, made as piece 3): both in the balance, both shown
-  const left = unscheduledPieces()
-    .filter((n) => s.created.includes(n.id))
-    .sort((a, b) => a.cashOutPlan!.piece - b.cashOutPlan!.piece);
-  assert.deepEqual(left.map((n) => [n.cashOutPlan!.piece, BigInt(n.amountWei)]), [[2, 15n * U], [3, 5n * U]]);
+  const second = s.created.map(byId).find((n) => n.cashOutPlan?.piece === 2)!;
+  assert.ok(second.proofOutAt, "marked before the proof went");
+  assert.equal(second.handoverUntil, undefined, "and the lease ended with the failure");
+  assert.equal(proofLoose(second), true);
+  assert.deepEqual(notesToMove([second]).map((n) => n.id), [second.id]);
+  // piece 3, the second split's change, never had a proof made: still one to schedule
+  const left = unscheduledPieces().filter((n) => s.created.includes(n.id));
+  assert.deepEqual(left.map((n) => [n.cashOutPlan!.piece, BigInt(n.amountWei)]), [[3, 5n * U]]);
   assert.deepEqual([left[0]!.cashOutPlan!.to, left[0]!.cashOutPlan!.window], [TO, "6h"]);
-  assert.equal(total(spendable(s.created)), 20n * U, "the 10 waits to go out; 15 and 5 are spendable");
+  assert.equal(total(spendable(s.created)), 5n * U, "the 10 waits to go out, the 15 is moving, the 5 is spendable");
 
-  // each scheduled again later, as planned: same address, same window
-  for (const piece of left) {
-    const job = await schedulePiece(piece, { pathOf: async () => PATH, prove: deps(s).prove });
-    assert.equal(job.to, TO);
-    assert.equal(scheduled.at(-1)!.window, "6h");
-    assert.equal(byId(piece.id).cashOut?.state, "scheduled");
-  }
-  assert.deepEqual(unscheduledPieces().filter((n) => s.created.includes(n.id)), []);
+  // scheduled later, as planned: same address, same window
+  const job = await schedulePiece(left[0]!, { pathOf: async () => PATH, prove: deps(s).prove });
+  assert.equal(job.to, TO);
+  assert.equal(scheduled.at(-1)!.window, "6h");
+  assert.equal(byId(left[0]!.id).cashOut?.state, "scheduled");
   assert.equal(total(spendable(s.created)), 0n);
 });
 

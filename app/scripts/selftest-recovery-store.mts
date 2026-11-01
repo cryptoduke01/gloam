@@ -7,6 +7,7 @@
  *    one silently dropped the other's data)
  *  - versions only go up, the write token is checked, a held lock frees itself,
  *    and delete needs the token
+ *  - a save that must find a backup there writes nothing when there is none
  *
  * Uses the in-process store (GLOAM_PARTNERS_STORE=memory). The ciphertext here
  * is stand-in base64; the store never reads it.
@@ -95,6 +96,28 @@ await test("a failed save never leaves the lock held", async () => {
   await writeBackup({ id: ID, write: WRITE, c: b64("ok"), n: 5 });
   await assert.rejects(writeBackup({ id: ID, write: WRITE, c: b64("old"), n: 4 }), (e) => status(e) === 409);
   assert.deepEqual(await kv([["EXISTS", `gloam:recovery:v1:${ID}:lock`]]), [0]);
+});
+
+await test("a save that must find a backup there: nothing there means a 410 and nothing written", async () => {
+  await assert.rejects(writeBackup({ id: ID, write: WRITE, c: b64("back again"), n: 2, mustExist: true }), (e) => status(e) === 410);
+  assert.equal(await readBackup(ID), null, "the id still holds nothing");
+  assert.deepEqual(await kv([["EXISTS", `gloam:recovery:v1:${ID}:lock`]]), [0], "and the lock is free");
+});
+
+await test("a save that must find a backup there, after a delete: the backup stays gone", async () => {
+  await writeBackup({ id: ID, write: WRITE, c: b64("one"), n: 1 });
+  await deleteBackup(ID, WRITE);
+  await assert.rejects(writeBackup({ id: ID, write: WRITE, c: b64("two"), n: 2, mustExist: true }), (e) => status(e) === 410);
+  assert.equal(await readBackup(ID), null);
+});
+
+await test("a save that must find a backup there and does: the usual checks, then it saves", async () => {
+  await writeBackup({ id: ID, write: WRITE, c: b64("one"), n: 1 });
+  const saved = await writeBackup({ id: ID, write: WRITE, c: b64("two"), n: 2, mustExist: true });
+  assert.equal(saved.created, false);
+  assert.equal(text((await readBackup(ID))!.c), "two");
+  await assert.rejects(writeBackup({ id: ID, write: "c".repeat(64), c: b64("theirs"), n: 3, mustExist: true }), (e) => status(e) === 403);
+  await assert.rejects(writeBackup({ id: ID, write: WRITE, c: b64("old"), n: 2, mustExist: true }), (e) => status(e) === 409);
 });
 
 console.log(`\nrecovery store: ${passed} passed`);

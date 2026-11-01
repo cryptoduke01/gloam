@@ -25,6 +25,8 @@
  * A note whose private swap landed and reverted moves the same way, with no one
  * asking (moveRevertedNotes): that swap's proof stays valid until the note is
  * spent, so the note is spent by moving it. Every sync tries until it has moved.
+ * A prepaid top-up's note moves the same way once no cash out waits on it
+ * (shield proofLoose): its proof left the browser and is just as valid.
  */
 import {
   sweepReceivedNote,
@@ -44,12 +46,11 @@ import { RelaySubmitError, relayFor, relayTransfer, waitForTx } from "./relay/cl
 import { publicClientFor } from "./rhClient";
 import { dataKeyLocked, getAllNotes, syncFromDisk, unlockNoteVault } from "./noteVault";
 import {
-  activeSpendableNotes,
   dropUnsentNote,
   isNativeAsset,
+  notesToMove,
   saveLocalNote,
   shieldPoolAbi,
-  swapProofWait,
   updateLocalNote,
   type BackupSeenCheck,
   type BackupSpentCheck,
@@ -472,7 +473,7 @@ async function moveReverted(id: string, env: ClaimEnv): Promise<void> {
       // what is on disk now: another tab may have moved it or sent a move
       await syncFromDisk();
       const note = getAllNotes().find((n) => n.id === id);
-      if (!note || activeSpendableNotes([note]).length === 0 || moveOnItsWay(id, Date.now())) return;
+      if (!note || notesToMove([note]).length === 0 || moveOnItsWay(id, Date.now())) return;
       await secureClaim(
         {
           note,
@@ -489,16 +490,19 @@ async function moveReverted(id: string, env: ClaimEnv): Promise<void> {
 }
 
 /**
- * Moves each note a reverted swap left behind (swapProofAt) whole to a fresh
- * note through the relay, so that swap's proof can't be used. Nothing is tried
- * until the relay takes the note (swapProofWait), or while it is off. A failed
- * try changes nothing: the note stays marked and in the balance, and the next
- * sync tries again. Each note goes through its own network, whichever one the
- * page shows; `env` is a test's, and limits this to its network.
+ * Moves each note a reverted swap left behind (swapProofAt), and each whose
+ * top-up proof is still out (proofLoose), whole to a fresh note through the
+ * relay, so that proof can't be used. A swap's note goes at once: the relay lets
+ * go of it when it reads the reverted receipt, and by the time the proof is made
+ * it has. Nothing is tried while the relay is off. A failed try changes nothing:
+ * the note stays marked, a reverted swap's in the balance and a top-up's out of
+ * it, and a later sync tries again (moveDue). Each note goes through
+ * its own network, whichever one the page shows; `env` is a test's, and limits
+ * this to its network.
  */
 export async function moveRevertedNotes(env?: ClaimEnv): Promise<void> {
   if (typeof window === "undefined" || dataKeyLocked()) return;
-  const due = activeSpendableNotes(getAllNotes()).filter((n) => n.swapProofAt && swapProofWait(n) === 0);
+  const due = notesToMove(getAllNotes());
   for (const n of due) {
     const net = env ? null : networkOfNote(n);
     const e = env ?? (net ? appClaimEnv(undefined, net) : null);
@@ -621,9 +625,8 @@ const GHOST_REPAIR_KEY = "gloam.repair.ghostEth.v1";
 
 /**
  * One pass per vault, once: reopen ETH notes an older sync marked spent by
- * mistake. A sync begun on Robinhood Chain or Tempo mainnet (no ETH there, so
- * its ETH inventory read 0) could finish after a switch and mark the new
- * network's ETH notes spent. Only a note the vault still holds is reopened:
+ * mistake. A sync begun on a mainnet with no ETH in its vault (its ETH inventory
+ * read 0) could finish after a switch and mark the new network's ETH notes spent. Only a note the vault still holds is reopened:
  * its nullifier is unspent and the vault has seen its commitment. A payment
  * this browser made for someone else (pay-), a secured claim and anything not
  * on a payments vault that lists ETH are never touched. A pass where a read

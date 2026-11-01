@@ -21,6 +21,8 @@ export type RelayNetworkStatus = {
   maxGasGwei?: string | null;
   /** The gas price in gwei on chains with a ceiling. */
   gasGwei?: string | null;
+  /** The relay takes prepaid top-ups here. */
+  topUps?: boolean;
 };
 
 const PREF_KEY = "gloam.relay.pref";

@@ -237,7 +237,9 @@ export default function WhitepaperPage() {
           takes one note out of the vault to a one-time escrow, buys an exact
           amount on its fixed venue, and deposits the output back as a new
           note, in one transaction. It uses only the vault&apos;s unshield and
-          proof-bound deposit, and has no owner, admin or upgrade.
+          proof-bound deposit, and has no upgrade. Tempo&apos;s has no owner;
+          Robinhood Chain&apos;s can add a pool with 3 days of public notice and
+          take one off at once, and nothing else.
         </li>
       </ul>
 
@@ -322,7 +324,10 @@ export default function WhitepaperPage() {
         out first. On mainnet the same delay applies to raising deposit limits
         or adding an asset, while the owner can lower limits or close deposits
         at once. At launch the owner is a single wallet on mainnet as on
-        testnet; a multisig is planned.
+        testnet; a multisig is planned. Each mainnet vault&apos;s ownership
+        moves to the owner guard, a contract that forwards only limit and fee
+        changes and the sweep of coin sent by mistake: on a vault it holds, nobody can swap a verifier, and the
+        trade-off is set out in the threat model.
       </p>
 
       <FlowDiagram
@@ -593,8 +598,9 @@ export default function WhitepaperPage() {
         <li>Private payroll, scheduled payroll, and payment requests</li>
         <li>Proofs of funds, payment, and payroll totals, checked at /verify</li>
         <li>
-          Private swaps on Robinhood Chain and Tempo mainnet: USDG and $GLOAM
-          on Robinhood Chain, the four vault stablecoins on Tempo, sent by the
+          Private swaps on Robinhood Chain and Tempo mainnet: USDG, $GLOAM,
+          PONS, CASHCAT, WETH, stock tokens and more on Robinhood Chain, the four
+          vault stablecoins on Tempo, sent by the
           Gloam relay, with who swapped kept private and the amounts public
         </li>
         <li>
@@ -660,7 +666,8 @@ export default function WhitepaperPage() {
         <li>The Robinhood Chain and Tempo testnets run on development proving keys from a single-contributor dev ceremony (mainnet, Base Sepolia and Ethereum Sepolia use the 13-contributor keys)</li>
         <li>
           Rule changes, including verifier swaps, by a single owner wallet,
-          limited by a public 3-day delay
+          limited by a public 3-day delay, until the owner guard holds that
+          vault
         </li>
         <li>Browser-local note storage and user operational error</li>
         <li>

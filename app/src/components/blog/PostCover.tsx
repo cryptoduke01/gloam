@@ -11,6 +11,30 @@ import { SealDots } from "@/components/ui/SealDots";
  * the full-size figure on the post and a scaled thumbnail on /research.
  */
 
+/* ---------- Come build with Gloam: what a builder adds, and what they get ---------- */
+
+const BUILD_STEPS: { name: string; line: string; sealed?: boolean }[] = [
+  { name: "Your app or agent", line: "What you're building for the hackathon" },
+  { name: "@gloamtrade/sdk", line: "One package. No circuits to write" },
+  { name: "Private money", line: "Balances and payments only your users can see", sealed: true },
+];
+
+function BuildArt() {
+  return (
+    <ol className="grid w-full max-w-[860px] grid-cols-1 gap-3 @xl:grid-cols-3">
+      {BUILD_STEPS.map((s, i) => (
+        <li key={s.name} className="gl-glass p-2 shadow-pop">
+          <div className="flex h-full flex-col rounded-[12px] bg-panel p-5">
+            <p className="tnum text-[12px] text-faint">{i + 1}</p>
+            <p className={`mt-2 text-[15px] ${s.sealed ? "text-sealed" : "text-foreground"}`}>{s.name}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-mute">{s.line}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /* ---------- Agents should not do business in public: one ACP job, twice ---------- */
 
 type JobRow = { k: string; v: string; sealed?: boolean };
@@ -256,6 +280,7 @@ function TempoArt() {
 const COVERS: Record<PostCoverId, { Art: () => React.JSX.Element; w: number; h: number }> = {
   acp: { Art: AcpArt, w: 860, h: 330 },
   agents: { Art: AgentsArt, w: 1040, h: 196 },
+  build: { Art: BuildArt, w: 860, h: 176 },
   mainnet: { Art: MainnetArt, w: 820, h: 364 },
   operator: { Art: OperatorArt, w: 860, h: 300 },
   tempo: { Art: TempoArt, w: 380, h: 300 },
