@@ -346,8 +346,9 @@ contract VaultSwapV4cForkTest is Test {
             console2.log("NO LIQUIDITY", label);
             return;
         }
-        // stablecoin pools hold billions of virtual reserve: keep to a real swap's size
-        uint256 cap = (cout == NATIVE || cout == weth) ? 2 ether : 10 ** uint256(IERC20C(cout).decimals()) * 2_000;
+        // Concentrated pools quote billions of virtual reserve and can hold far less on one side.
+        // Keep to a real swap's size: the vault takes 500 of a stablecoin in one deposit.
+        uint256 cap = (cout == NATIVE || cout == weth) ? 0.2 ether : 10 ** uint256(IERC20C(cout).decimals()) * 500;
         if (want > cap) want = cap;
         _swap(hops, cin, cout, want, label);
     }
@@ -405,6 +406,30 @@ contract VaultSwapV4cForkTest is Test {
         }
         console2.log("failures", failures);
         assertEq(failures, 0, "every route swaps");
+    }
+
+    /// Asking a real pool for more than it holds: the router reverts whole and the note stays.
+    function test_fork_asking_more_than_a_pool_holds_moves_nothing() public {
+        PoolKey[] memory hops = new PoolKey[](1);
+        hops[0] = p[p.length - 1];
+        address out = hops[0].currency0;
+        address input = hops[0].currency1;
+        uint256 note = 500 * 10 ** uint256(IERC20C(input).decimals());
+        if (out == NATIVE) out = weth;
+        nul++;
+        assertTrue(_fund(input, note), "funded");
+        Snap memory sn;
+        sn.assetIn = input;
+        sn.assetOut = out;
+        sn.note = note;
+        sn.want = type(uint128).max / 2; // past anything a pool holds, and any note could buy
+        Call memory k = _build(hops, sn);
+        uint256 dep = pool.deposited(input);
+        vm.expectRevert();
+        this.swapOnce(k);
+        assertFalse(pool.isSpent(k.s.nullifier), "the note stays");
+        assertEq(pool.deposited(input), dep);
+        assertEq(_bal(input, sn.escrow), 0);
     }
 
     function _sign(address escrow, address to) internal view returns (bytes memory) {

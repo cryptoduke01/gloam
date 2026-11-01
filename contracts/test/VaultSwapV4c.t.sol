@@ -248,6 +248,16 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         t = new GloamVaultSwapTempo2(address(pool), treasury, address(dex));
     }
 
+    /// Tempo's router has no venue that pays ETH: nothing but an opening escrow may send it any.
+    function test_tempo_takes_no_eth() public {
+        (GloamVaultSwapTempo2 t, , ) = _tempo();
+        vm.deal(outsider, 1 ether);
+        vm.prank(outsider);
+        (bool ok, bytes memory ret) = address(t).call{value: 1}("");
+        assertFalse(ok);
+        assertEq(bytes4(ret), GloamVaultSwap2.NativeRefused.selector);
+    }
+
     function test_tempo_refuses_native_and_exits_like_the_others() public {
         (GloamVaultSwapTempo2 t, MockERC20 usdt, ) = _tempo();
         GloamVaultSwap on = GloamVaultSwap(address(t));
@@ -471,6 +481,19 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
 
     // ═════════════════════════════════════════════════════════════ routes with ETH
 
+    /// Five distinct currencies, so nothing but the hop limit can refuse it.
+    function test_v3_a_clean_four_hop_route_is_refused() public {
+        PoolKey[] memory four = new PoolKey[](4);
+        four[0] = wethGloam;
+        four[1] = ethGloam;
+        four[2] = ethUsd;
+        four[3] = usdStock;
+        Call memory k = _callFrom(router, 1026, address(weth), WNOTE, address(stock), 1e15, 0x1026, abi.encode(four));
+        vm.expectRevert(GloamVaultSwapV4c.BadRoute.selector);
+        _go(router, k);
+        _assertNothingMoved(k, 4 * WNOTE);
+    }
+
     /// The router and lib/vaultSwap routeCurrencies refuse the same routes.
     function test_v3_eth_inside_a_route_that_converts_is_refused() public {
         // ETH note, WETH first pool (wrapped), then ETH again further on
@@ -604,6 +627,27 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         _assertEthBacked();
         vm.expectRevert(GloamVaultSwap2.BadRefund.selector);
         _go(router, k);
+    }
+
+    /// What the escrow holds is not what arrives if the token skims the hand-over. The refund note can
+    /// only be paid from what arrived, never from something else the router happens to hold.
+    function test_v3_a_refund_is_never_topped_up_from_what_the_router_holds() public {
+        SkimToken skim = new SkimToken();
+        pool.setDepositLimit(address(skim), 500e6, 25_000e6);
+        skim.mint(depositor, 1_000e6);
+        vm.startPrank(depositor);
+        skim.approve(address(pool), type(uint256).max);
+        pool.shieldBound(address(skim), NOTE, bytes32(uint256(0x5C10)), hex"00");
+        vm.stopPrank();
+        skim.mint(address(router), 50e6); // stray money, someone else's mistake
+
+        Call memory k = _callFrom(router, 1042, address(skim), NOTE, address(gloam), 39e18, 0x1042, _route1(direct));
+        _leaveAlone(k);
+        skim.skimFrom(_escrow(k), 2e6); // the hand-over loses more than the 0.75% margin
+        vm.expectRevert(GloamVaultSwap2.BadRefund.selector);
+        _go(router, k);
+        assertEq(skim.balanceOf(address(router)), 50e6, "the stray money is untouched");
+        assertFalse(pool.commitmentSeen(k.r.commitment));
     }
 
     function test_v3_a_short_eth_escrow_is_no_refund() public {
@@ -826,6 +870,29 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
     }
 
     // ── once, and only once
+
+    /// An escrow that can't hand its ETH over must not deploy: it would leave the money in an address
+    /// nothing can ever open again. A send that runs out of gas fails the same way.
+    function test_escrow_that_cannot_pay_never_deploys() public {
+        NoEthOpener opener = new NoEthOpener();
+        bytes32 salt = bytes32(uint256(0xE5));
+        address at = opener.at(salt);
+        vm.deal(at, 1 ether);
+        vm.expectRevert();
+        opener.open(salt);
+        assertEq(at.balance, 1 ether, "still there");
+        assertEq(at.code.length, 0);
+        // and with the router short of gas, the whole call fails instead of burning the escrow
+        Call memory k = _callFrom(router, 1124, NATIVE, ENOTE, address(usd), 110e6, 0x1124, _route1(ethUsd));
+        _leaveAlone(k);
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        bytes memory sig = _exitSig(k, exitTo);
+        (bool ok, ) = address(router).call{gas: 90_000}(abi.encodeCall(GloamVaultSwap2.exit, (NATIVE, key, exitTo, sig)));
+        assertFalse(ok, "out of gas");
+        assertEq(_escrow(k).balance, EARRIVES, "the money still waits");
+        _v3().exit(NATIVE, key, exitTo, sig);
+        assertEq(exitTo.balance, EARRIVES, "and the exit still works");
+    }
 
     function test_exit_twice_pays_once() public {
         Call memory k = _callFrom(router, 1120, NATIVE, ENOTE, address(usd), 110e6, 0x1120, _route1(ethUsd));
@@ -1099,6 +1166,53 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
 
     function goExternal(Call memory k) external returns (uint256) {
         return _go(router, k);
+    }
+}
+
+/// Deploys an ETH escrow from a contract that refuses ETH, so the escrow's send fails.
+contract NoEthOpener {
+    function at(bytes32 salt) external view returns (address) {
+        bytes32 code = keccak256(abi.encodePacked(type(SwapEscrow2).creationCode, abi.encode(address(0))));
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, code)))));
+    }
+
+    function open(bytes32 salt) external {
+        new SwapEscrow2{salt: salt}(address(0));
+    }
+}
+
+/// A token that takes a cut of whatever one address sends.
+contract SkimToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    address public skimmed;
+    uint256 public cut;
+
+    function skimFrom(address who, uint256 amount) external {
+        skimmed = who;
+        cut = amount;
+    }
+
+    function mint(address to, uint256 a) external {
+        balanceOf[to] += a;
+    }
+
+    function approve(address s, uint256 a) external returns (bool) {
+        allowance[msg.sender][s] = a;
+        return true;
+    }
+
+    function transfer(address to, uint256 a) external returns (bool) {
+        balanceOf[msg.sender] -= a;
+        balanceOf[to] += msg.sender == skimmed ? a - cut : a;
+        return true;
+    }
+
+    function transferFrom(address f, address to, uint256 a) external returns (bool) {
+        allowance[f][msg.sender] -= a;
+        balanceOf[f] -= a;
+        balanceOf[to] += a;
+        return true;
     }
 }
 
