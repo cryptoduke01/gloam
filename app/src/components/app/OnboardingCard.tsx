@@ -54,8 +54,11 @@ export function OnboardingCard() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- setup progress lives in this browser; read once after mount, and open the card if steps remain
     setState(s);
     const remaining = ONBOARDING_STEPS.filter((x) => !s.done.includes(x.id));
+    // The welcome already gives the quick start, so a first visit lands on the
+    // page, not on a second dialog behind it. Getting started opens next visit.
+    const welcomeUp = document.getElementById("gl-welcome")?.hidden === false;
     // A recording opens on a wallet that is already set up.
-    if (!s.dismissed && remaining.length > 0 && !readDemo()) setOpen(true);
+    if (!s.dismissed && remaining.length > 0 && !readDemo() && !welcomeUp) setOpen(true);
   }, []);
 
   // Let any "Getting started" trigger reopen it (even after dismiss).
