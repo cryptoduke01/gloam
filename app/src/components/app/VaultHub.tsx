@@ -238,7 +238,7 @@ function ActionRow({
               title={a.line}
               onClick={() => onSelect(a.id)}
               onKeyDown={onKey}
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-[12px] leading-tight transition-colors duration-200 max-sm:h-[60px] sm:h-10 sm:flex-row sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-[14px] ${
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] px-1 text-[12px] leading-tight transition-colors duration-200 max-sm:h-[60px] max-sm:px-0 sm:h-10 sm:flex-row sm:whitespace-nowrap sm:rounded-full sm:px-4 sm:text-[14px] ${
                 a.extra && !active ? "max-sm:hidden" : ""
               } ${extraStart ? "sm:ml-2" : ""} ${
                 active
