@@ -23,6 +23,7 @@ import {
 } from "./apiKeys";
 import { getPartner, PartnerError, type Partner } from "./partners";
 import { readSession, requestHost, SESSION_COOKIE, SignInError } from "./partnersAuth";
+import { logSafe } from "./logSafe";
 import { KvUnavailableError } from "./partnersKv";
 import { clientIp, hitRateLimit } from "./mcpRemote/rateLimit";
 import { RelayError } from "./relay/server";
@@ -75,7 +76,7 @@ export function apiFail(e: unknown, extra: Extra): NextResponse {
     code = "storage_unavailable";
     message = "Partner storage is not available on this server right now.";
   } else {
-    console.error("gloam_api", extra.requestId, e);
+    console.error("gloam_api", extra.requestId, logSafe(e));
   }
   return NextResponse.json(
     { v: API_VERSION, ok: false, error: { code, message }, requestId: extra.requestId },

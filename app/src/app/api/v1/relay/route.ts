@@ -1,5 +1,6 @@
 import { ApiError, jsonBody, requireKeyEnv, withApiKey } from "@/lib/partnersApi";
 import { keyEnvForNetwork } from "@/lib/apiKeys";
+import { logSafe } from "@/lib/logSafe";
 import { recordActivity, type ActivityKind, type ActivityRecord } from "@/lib/partners";
 import {
   asAddress,
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
         attribution = r.recorded ? { recorded: true, kind, activity: r.record } : { recorded: false, kind, reason: r.reason };
       } catch (e) {
         // The transaction is already sent: never fail the response over accounting.
-        console.error("gloam_api_attribution", e);
+        console.error("gloam_api_attribution", logSafe(e));
         attribution = { recorded: false, kind, reason: "storage_error" };
       }
     }
