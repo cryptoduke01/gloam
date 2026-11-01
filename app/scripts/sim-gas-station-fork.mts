@@ -185,8 +185,8 @@ assert.equal(await pub.readContract({ address: station, abi: stationAbi, functio
 assert.equal(fundingStep(s), "pump");
 log(`ok  make through the relay: ${made.gasUsed} gas, the station pays only ${wallet}`);
 
-await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("already_made"));
-log("ok  a second make is refused");
+await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("in_flight"));
+log("ok  a copy of the make right after it is refused");
 
 // anvil copies the pool's ticks from the live chain on first touch, which can outlast the relay's 20 s read timeout.
 const warmStart = Date.now();

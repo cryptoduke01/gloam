@@ -74,12 +74,15 @@ export function FreshWalletView() {
 
   const onChain = network.chainId === GAS_STATION_CHAIN_ID;
 
-  const [walletInput, setWalletInput] = useState("");
-  const [amountInput, setAmountInput] = useState("");
+  // A link can fill the form in. It sits in the fragment, so it never reaches a server, and nothing
+  // moves until the person presses send. Read once: this view only mounts in the browser (ClientOnly).
+  const [linked] = useState(() => readFundLink(window.location.hash));
+  const [walletInput, setWalletInput] = useState(linked.to);
+  const [amountInput, setAmountInput] = useState(linked.amount);
   /** What the person typed for gas, or null to take the default for this wallet. */
   const [gasTyped, setGasTyped] = useState<string | null>(null);
   /** The address came from a link's fragment and nobody has changed it since. */
-  const [fromLink, setFromLink] = useState(false);
+  const [fromLink, setFromLink] = useState(Boolean(linked.to));
   const [when, setWhen] = useState<FundWhen>("hour");
   /** A wallet made here, until the person says its key is saved. Never written anywhere. */
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -104,17 +107,6 @@ export function FreshWalletView() {
   });
   const feeBps = typeof feeBpsRead === "number" ? feeBpsRead : 0;
   const feeKnown = typeof feeBpsRead === "number";
-
-  // A link can fill the form in. It sits in the fragment, so it never reaches a server, and nothing moves until the person presses send.
-  useEffect(() => {
-    const { to, amount } = readFundLink(window.location.hash);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fragment only exists in the browser
-    if (to) {
-      setWalletInput(to);
-      setFromLink(true);
-    }
-    if (amount) setAmountInput(amount);
-  }, []);
 
   useEffect(() => {
     let live = true;
