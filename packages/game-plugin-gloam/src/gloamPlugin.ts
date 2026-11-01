@@ -165,7 +165,7 @@ class GloamPlugin {
     return new GameFunction({
       name: "gloam_cash_out",
       description:
-        "Cash out from the private balance to a public 0x address. The cash out is public (asset, amount and recipient show), not which private payment funded it. The pool keeps 0.25% on mainnet and on Base Sepolia. Refused when the address or amount is outside the owner's limits.",
+        "Cash out from the private balance to a public 0x address. The cash out is public (asset, amount and recipient show), not which private payment funded it. The pool keeps 0.5% on mainnet and 0.25% on Base Sepolia. Refused when the address or amount is outside the owner's limits.",
       args: [
         { name: "amount", description: "How much to cash out, in the asset's units.", type: "string" },
         { name: "to", description: "The 0x address to send it to.", type: "string" },

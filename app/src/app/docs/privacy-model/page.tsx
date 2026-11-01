@@ -140,8 +140,9 @@ export default function DocsPrivacyPage() {
           time inside the window. The proof is made in your browser at once and
           the relay sends it then. The proof binds the amount and the recipient,
           so the relay can only send it as it is or not at all. The vault
-          accepts the proof however long it waits. If the relay can&apos;t send
-          it, nothing moves and the money shows in your balance again. Once it
+          accepts the proof however long it waits, and takes its fee when it
+          lands, at the rate that day. If the relay can&apos;t send it, nothing
+          moves and the money shows in your balance again. Once it
           starts going out it can&apos;t be cancelled, and it shows as on its
           way until the network settles it.
         </li>

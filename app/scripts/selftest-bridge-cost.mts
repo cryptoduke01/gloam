@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 
-const { routeCost, expensiveRoute } = await import("../src/lib/bridge");
+const { bridgeFeeLines, bridgeFeeSetting, expensiveRoute, quotedAppFee, relayAppFees, routeCost } = await import("../src/lib/bridge");
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -68,6 +68,40 @@ test("never less than Relay's own fee, even when the price rounds the other way"
 test("when Relay doesn't price what you pay, the cost is its fee and nothing is guessed", () => {
   assert.deepEqual(routeCost(quote(null, "10", 0.8)), { usd: 0.8, share: null });
   assert.equal(expensiveRoute(quote(null, "10", 25)), null);
+});
+
+const TREASURY = "0xB3900ac9350903218e4c7597bAb0f008F01B30B8";
+
+test("Gloam's cut is off unless both settings are valid", () => {
+  const set = (bps?: string, to?: string) => bridgeFeeSetting({ BRIDGE_FEE_BPS: bps, BRIDGE_FEE_RECIPIENT: to });
+  assert.equal(set(), null);
+  assert.equal(set("30"), null, "no recipient");
+  assert.equal(set(undefined, TREASURY), null, "no rate");
+  assert.equal(set("0", TREASURY), null);
+  assert.equal(set("101", TREASURY), null, "over the 1% most");
+  assert.equal(set("2.5", TREASURY), null, "a whole number of bps");
+  assert.equal(set("30", "0x123"), null, "a bad address");
+  assert.deepEqual(set("30", TREASURY), { bps: 30, recipient: TREASURY });
+  assert.equal(relayAppFees(null), undefined, "Relay is sent nothing when it's off");
+  assert.deepEqual(relayAppFees({ bps: 30, recipient: TREASURY }), [{ recipient: TREASURY, fee: "30" }]);
+});
+
+test("a cut that is on always has a line of its own, and one that is off never does", () => {
+  assert.equal(quotedAppFee(null, "0.30", 100), null);
+  assert.deepEqual(quotedAppFee({ bps: 30 }, "0.31", 100), { bps: 30, usd: 0.31 }, "what Relay says it charged");
+  assert.deepEqual(quotedAppFee({ bps: 30 }, undefined, 100), { bps: 30, usd: 0.3 }, "Relay left it out: the rate on what is paid");
+  assert.deepEqual(quotedAppFee({ bps: 30 }, undefined, NaN), { bps: 30, usd: 0 }, "nothing priced: the rate still shows");
+
+  // $0.65 taken in all, $0.30 of it Gloam's
+  assert.deepEqual(bridgeFeeLines({ feeUsd: 0.65, appFee: { bps: 30, usd: 0.3 } }), { relayUsd: 0.35, app: { bps: 30, usd: 0.3 } });
+  assert.deepEqual(bridgeFeeLines({ feeUsd: 0.35, appFee: null }), { relayUsd: 0.35, app: null }, "off: the fee is Relay's alone");
+  assert.equal(bridgeFeeLines({ feeUsd: 0.2, appFee: { bps: 30, usd: 0.3 } }).relayUsd, 0, "never below zero");
+});
+
+test("Gloam's cut counts towards what a route costs", () => {
+  const q = { send: { usd: 100 }, receive: { amount: "95" }, feeUsd: 4, appFee: { bps: 100, usd: 1 } };
+  assert.equal(routeCost(q)!.usd, 5);
+  assert.ok(expensiveRoute(q), "over 3% with the cut in it");
 });
 
 console.log(`\nbridge cost: ${passed} passed`);

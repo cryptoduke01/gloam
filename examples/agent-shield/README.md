@@ -33,7 +33,7 @@ What to know before you use mainnet:
 - **Beta.** Gloam is beta software. Deposits are capped at 50,000 per deposit and
   2,500,000 in total for each stablecoin ($GLOAM: 2,500,000 and 25,000,000). Cash outs and
   private payments are never limited.
-- **Fees.** Deposits and private payments are free. Cashing out costs 0.25%
+- **Fees.** Direct deposits and private payments are free. Cashing out costs 0.5%
   (`cashOutFee(amount)` in the SDK).
 - **Final keys.** Mainnet proofs use the final keys from the 13-contributor
   trusted setup (release `ceremony-final`). The script picks them with

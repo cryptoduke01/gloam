@@ -233,7 +233,7 @@ export async function buildUnshieldIntent(
       "Unshield is the public exit: the amount, asset, and recipient become visible. The nullifier keeps the source note unlinkable to your other activity.",
     execution: `Unsigned. Sign and broadcast unshield(proof, root, nullifier, asset, to, amount) on ${networkName(chainId)}.${
       isPaymentsPoolChainId(chainId)
-        ? " The pool keeps its cash-out fee (0.25% at launch, see cashOutFee) and sends the rest to the recipient."
+        ? " The pool keeps its cash-out fee (see readCashOutFeeBps and cashOutFee) at the rate when this lands, and sends the rest to the recipient."
         : ""
     }`,
     exec: {

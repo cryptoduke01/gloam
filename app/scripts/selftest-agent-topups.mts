@@ -93,7 +93,7 @@ const {
   topUpWhen,
 } = await import("../src/lib/agentTopUp");
 const { checkPlan, schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
-const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
+const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, feeMovedLine, feeRise, feeRiseLine, feeRiseNotice, markFor, waitingFeeRises, nextMark, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
 const { HANDOVER_MS, RELAY_SPEND_LOCK_MS, activeSpendableNotes, exportNotesBackup, notesToMove, proofLoose, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import(
   "../src/lib/shield"
@@ -663,7 +663,7 @@ await test("a job can only be read or cancelled with its id, and reading it show
 // ---------------------------------------------------------------- the series
 
 const active = net;
-const FEE_BPS = 25;
+const FEE_BPS = 50;
 
 await test("how far a series can run: 12 weekly, and every 2 weeks only as far as the relay holds one", () => {
   assert.equal(mostTopUps("week"), 12);
@@ -681,7 +681,8 @@ await test("how far a series can run: 12 weekly, and every 2 weeks only as far a
 });
 
 await test("the fee comes out of each top-up; the whole total is set aside", () => {
-  assert.deepEqual(topUpTotals(50n * U, 12, FEE_BPS), { total: 600n * U, feeEach: 125_000n, agentGets: 49_875_000n });
+  assert.deepEqual(topUpTotals(50n * U, 12, FEE_BPS), { total: 600n * U, feeEach: 250_000n, agentGets: 49_750_000n });
+  assert.deepEqual(topUpTotals(50n * U, 12, 25), { total: 600n * U, feeEach: 125_000n, agentGets: 49_875_000n }, "a pool still at 0.25%");
   assert.deepEqual(topUpTotals(50n * U, 2, 0), { total: 100n * U, feeEach: 0n, agentGets: 50n * U });
   assert.equal(topUpAmountProblem(U, 6), null);
   assert.ok(topUpAmountProblem(U - 1n, 6));
@@ -805,6 +806,77 @@ await test("12 top-ups from a note of exactly that much: 11 splits, each to the 
   assert.deepEqual(accounted(s), { balance: 0n, waiting: 600n * U, landing: 0n, moving: 0n }, "nothing counted while it waits");
   assert.equal(topUpSetAside(rows).get(ASSET.toLowerCase()), 600n * U);
   assert.deepEqual(unscheduledPieces().filter((n) => s.created.includes(n.id)), []);
+});
+
+await test("a fee that rises after setup: each waiting job says what it pays now, and nothing else does", () => {
+  const waiting = (feeBps?: number, state: "scheduled" | "sent" = "scheduled") => ({
+    amountWei: AMOUNT.toString(),
+    cashOut: { job: "job", at: T0, to: AGENT, state, ...(feeBps === undefined ? {} : { feeBps }) },
+  });
+  // proven before the app kept the fee: every vault charged 0.25% then
+  const old = feeRise(waiting(), 50);
+  assert.deepEqual(old, { shownBps: 25, liveBps: 50, shownGets: 49_875_000n, nowGets: 49_750_000n });
+  assert.equal(feeRiseLine(old!, ASSET), "Pays 49.75 USDG, not the 49.875 USDG it showed.");
+  assert.deepEqual(feeRise(waiting(25), 50), old, "a job that kept 0.25%");
+  assert.deepEqual(feeRise(waiting(50), 100), { shownBps: 50, liveBps: 100, shownGets: 49_750_000n, nowGets: 49_500_000n }, "the next rise, from what it showed");
+
+  assert.equal(feeRise(waiting(50), 50), null, "set up at the new fee: it pays what it showed");
+  assert.equal(feeRise(waiting(), 25), null, "a pool still at 0.25%, as Base Sepolia is");
+  assert.equal(feeRise(waiting(50), 25), null, "a fee that fell pays more, nothing to warn about");
+  assert.equal(feeRise(waiting(), null), null, "no live fee: the older testnet pools have none");
+  assert.equal(feeRise(waiting(25, "sent"), 50), null, "on its way: it can't be stopped");
+  assert.equal(feeRise({ amountWei: "1", cashOut: undefined }, 50), null, "not a scheduled cash out");
+
+  const one = feeRiseNotice([old!], "top-up");
+  assert.match(one, /went up to 0\.5%/);
+  assert.match(one, /after you set up this top-up/);
+  assert.match(one, /pays less than it showed/);
+  assert.match(one, /Cancel it before it goes/);
+  assert.match(feeRiseNotice([old!, old!, old!], "scheduled cash out"), /after you set up 3 scheduled cash outs/);
+  assert.match(feeRiseNotice([old!, old!], "scheduled cash out"), /they pay less than they showed/);
+});
+
+await test("the notice on every page finds jobs on any network, each against its own vault's fee", () => {
+  const job = (id: string, chainId: number, feeBps?: number, status: "open" | "recovered" = "open") =>
+    ({
+      id,
+      chainId,
+      status,
+      amountWei: AMOUNT.toString(),
+      cashOut: { job: id, at: T0, to: AGENT, state: "scheduled", ...(feeBps === undefined ? {} : { feeBps }) },
+    }) as LocalNote;
+  const live: Record<number, number | null> = { 4663: 50, 8453: 50, 84532: 25, 46630: null };
+  const found = waitingFeeRises(
+    [job("rh", 4663), job("base", 8453, 25), job("new", 4663, 50), job("sepolia", 84532), job("old-testnet", 46630), job("gone", 4663, undefined, "recovered")],
+    (n) => live[n.chainId] ?? null
+  );
+  assert.deepEqual(found.map((r) => r.note.id), ["rh", "base"], "a job on another network counts; one at today's fee, a pool still at 0.25%, a pool with no fee and a spent note don't");
+});
+
+await test("a fee that changes under an open screen stops the confirm, with the new number", () => {
+  assert.equal(feeMovedLine(25, 50), "The cash-out fee just changed to 0.5%. Check the new numbers, then confirm again.");
+  assert.equal(feeMovedLine(50, 50), null, "the same fee goes ahead");
+  assert.equal(feeMovedLine(25, null), null, "a read that failed doesn't stop anyone: the screen's read stands");
+  assert.equal(feeMovedLine(null, 50), null, "no fee on screen yet");
+});
+
+await test("the fee a job showed stays on its mark, through the relay's updates and a job handed back", async () => {
+  reset();
+  const src = vaultNote("fee-kept", 200n * U);
+  const s = fakeSplitter();
+  const r = await setUpTopUps({ note: src, owner: ME, agent: AGENT, amount: AMOUNT, every: "week", count: 2, feeBps: FEE_BPS, deps: deps(s) });
+  assert.equal(r.stoppedAt, null, r.error ?? "");
+  const rows = topUpRows(getAllNotes()).filter((x) => s.created.includes(x.note.id));
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((x) => x.note.cashOut?.feeBps === FEE_BPS), "each job keeps the fee on screen");
+  assert.ok(rows.every((x) => feeRise(x.note, FEE_BPS) === null), "and a job set up at today's fee never warns");
+
+  const job = { id: "j", chainId: 4663, sendAfter: T0, status: "scheduled" as const, updatedAt: T0, to: AGENT };
+  const mark = markFor(job, undefined, FEE_BPS);
+  assert.equal(mark.feeBps, FEE_BPS);
+  assert.equal(markFor(job).feeBps, undefined, "left out, not written as undefined over nothing");
+  assert.equal(nextMark(mark, { ...job, sendAfter: T0 + 60_000 })!.feeBps, FEE_BPS, "a new send time keeps it");
+  assert.equal(nextMark(mark, { ...job, status: "sent" })!.feeBps, FEE_BPS, "so does going out");
 });
 
 await test("from a bigger note: one split each, and the rest stays plain money in the balance", async () => {

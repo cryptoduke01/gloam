@@ -22,8 +22,11 @@ import {
   BRIDGE_MIN_USD,
   RELAY_REFERRER,
   bridgeChain,
+  bridgeFeeSetting,
   bridgeToken,
   privateBridgeable,
+  quotedAppFee,
+  relayAppFees,
   swapSource,
   validRefundAddress,
   type PrivateBridgeQuote,
@@ -62,14 +65,6 @@ const ROUTE_BUSY = "The bridge couldn't make a route right now. Try again.";
 
 function fail(status: number, message: string) {
   return NextResponse.json({ ok: false, error: { message } }, { status, headers: { "Cache-Control": "no-store" } });
-}
-
-/** Gloam's optional cut of a bridge, set in env. Off unless both values are valid. */
-function appFees(): { recipient: string; fee: string }[] | undefined {
-  const bps = Number(process.env.BRIDGE_FEE_BPS ?? "");
-  const recipient = process.env.BRIDGE_FEE_RECIPIENT ?? "";
-  if (!Number.isInteger(bps) || bps <= 0 || bps > 100 || !isAddress(recipient)) return undefined;
-  return [{ recipient, fee: String(bps) }];
 }
 
 const units = (v: bigint, decimals: number) =>
@@ -221,7 +216,7 @@ export async function POST(req: Request) {
           { to: asset, value: "0", data: approveData },
           { to: pool, value: "0", data: shieldData },
         ],
-        appFees: appFees(),
+        appFees: relayAppFees(bridgeFeeSetting(process.env)),
         ...(apiKey ? { referrer: RELAY_REFERRER } : {}),
       }),
       signal: AbortSignal.timeout(20_000),
@@ -371,6 +366,7 @@ export async function POST(req: Request) {
     receive: { amount: amountText, symbol: dest.token.symbol, chain: dest.chain, logo: dest.token.logo },
     extra: sameChain && outAmount > amount ? formatUnits(outAmount - amount, dest.token.decimals) : null,
     feeUsd: Math.round(feeUsd * 100) / 100,
+    appFee: quotedAppFee(bridgeFeeSetting(process.env), data?.fees?.app?.amountUsd, usdIn),
     gasUsd: Number.isFinite(gasUsd) ? Math.round(gasUsd * 100) / 100 : null,
     timeSec: Number(data?.details?.timeEstimate ?? 0),
   };

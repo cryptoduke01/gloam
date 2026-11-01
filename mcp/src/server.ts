@@ -425,7 +425,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         mainnet:
           `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
-          }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
+          }). Direct deposits and private payments are free; cashing out costs 0.5%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
           "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
@@ -573,7 +573,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Execute a private shield",
       description:
-        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). A mainnet vault takes only the assets it lists (this tool names them if given another), within the deposit limits it reads from the vault; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). A mainnet vault takes only the assets it lists (this tool names them if given another), within the deposit limits it reads from the vault; direct deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
       inputSchema: {
         amount: z
           .number()

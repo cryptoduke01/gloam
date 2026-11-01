@@ -182,10 +182,11 @@ export default function PrivacyPage() {
         Beyond the transaction itself, which is public on chain, the relay
         keeps only a hashed rate-limit count and, for up to about three minutes, a
         lock on each spend so the same proof is not sent twice. The relay pays
-        the network fee for what it submits. On mainnet, Gloam takes 0.25% of a
-        cash out, kept by the vault. A private swap pays the same 0.25% on the
+        the network fee for what it submits. On mainnet, Gloam takes 0.5% of a
+        cash out, kept by the vault. A private swap pays the same 0.5% on the
         amount swapped, and what its price buffer does not use goes to the
-        Gloam treasury. On testnet nothing is charged.
+        Gloam treasury. Base Sepolia and Ethereum Sepolia keep 0.25% of a cash out;
+        the other testnets charge nothing.
       </p>
       <h2>7. Sanctions screening</h2>
       <p>

@@ -19,8 +19,8 @@
  *   receive   the payment is moved into a fresh note only this agent knows
  *             (a sweep) before it counts, since the payer knew the old one.
  *   cash out  the public exit: the asset, the amount and the recipient show,
- *             not which private payment funded it. The pool keeps 0.25% on
- *             mainnet and on Base Sepolia.
+ *             not which private payment funded it. The pool keeps 0.5% on
+ *             mainnet and 0.25% on Base Sepolia.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -33,15 +33,18 @@ import {
   formatUnits,
   http,
   isAddress,
+  isAddressEqual,
+  parseAbi,
+  parseEventLogs,
   parseUnits,
   type Address,
   type Chain,
   type Hex,
+  type Log,
   type PublicClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import {
-  CASH_OUT_FEE_BPS,
   GloamRelayError,
   NATIVE_ASSET,
   POOL_STATE_ABI,
@@ -52,12 +55,10 @@ import {
   buildPrivateSendIntent,
   buildShieldBoundIntent,
   buildUnshieldIntent,
-  cashOutFee,
   cashOutTargetProblem,
   cleanPaymentNote,
   encodeNotePackage,
   generateReceiveKey,
-  isPaymentsPoolChainId,
   isReceiveTag,
   networkName,
   normalizeRequestAmount,
@@ -201,6 +202,20 @@ const ERC20_ABI = [
 const errMsg = (e: unknown) => safeErrorMessage(e);
 const HOUR_MS = 60 * 60_000;
 const shortTag = (t: string) => (t.length > 30 ? `${t.slice(0, 18)}…${t.slice(-6)}` : t);
+
+const WITHDRAW_FEE_EVENT = parseAbi(["event WithdrawFee(bytes32 indexed nullifier, address indexed asset, uint256 fee)"]);
+
+/**
+ * What the pool kept from one cash out, from its own event: it takes the fee
+ * when the cash out lands, at the rate that day, so no constant can say. It
+ * logs nothing when it kept nothing.
+ */
+export function feeKept(logs: Log[], pool: Address, nullifier: Hex): bigint {
+  const hit = parseEventLogs({ abi: WITHDRAW_FEE_EVENT, logs }).find(
+    (l) => isAddressEqual(l.address, pool) && l.args.nullifier.toLowerCase() === nullifier.toLowerCase()
+  );
+  return hit?.args.fee ?? 0n;
+}
 
 function toHexBytes(text: string): Hex {
   return `0x${Buffer.from(text, "utf8").toString("hex")}`;
@@ -1578,7 +1593,7 @@ export class GloamAgent {
       }
       this.store.update(exact.handle, { status: "spent", spentTx: hash });
       settle("sent", { hash });
-      const fee = isPaymentsPoolChainId(this.network.chainId) ? cashOutFee(amountWei, CASH_OUT_FEE_BPS) : 0n;
+      const fee = feeKept(receipt.logs, this.network.pool, exact.nullifier);
       return {
         status: "done",
         action: "cash_out",

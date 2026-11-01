@@ -387,7 +387,7 @@ deposits only of the assets it lists, within per-deposit and total
 limits. Limits apply to deposits only; transfers, and so gloam
 charges, are never limited. Deposits and transfers carry no pool fee,
 so a charge settles for exactly the requested amount; a withdrawal
-from a mainnet pool keeps 0.25% of the amount. The testnet pools hold
+from a mainnet pool keeps 0.5% of the amount. The testnet pools hold
 test funds.
 
 Implementations SHOULD take this list from the Gloam SDK

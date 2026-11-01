@@ -222,7 +222,7 @@ async function main() {
   }
   console.log("Shielded privately. Who can spend this balance is now off the public feed.");
   if (!net.testnet) {
-    console.log("Deposits and private payments are free. Cashing out costs 0.25% (see cashOutFee in the SDK).");
+    console.log("Direct deposits and private payments are free. Cashing out costs 0.5% (see cashOutFee in the SDK).");
   }
 }
 

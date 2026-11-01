@@ -17,8 +17,8 @@ Each chain has a mainnet and a testnet, and tools take a `network`:
 
 - `tempo-mainnet`, `robinhood-mainnet`, `base-mainnet` and `ethereum-mainnet` are **mainnet**
   (beta). Deposits are capped at 50,000 of a stablecoin (20 ETH, 2,500,000 GLOAM) per deposit during
-  the beta. Deposits and private payments are free;
-  cashing out costs 0.25%.
+  the beta. Direct deposits and private payments are free;
+  cashing out costs 0.5%.
 - `tempo`, `robinhood`, `base` (Base Sepolia) and `ethereum` (Ethereum Sepolia) are the testnets.
 
 `gloam_info` lists the networks this server has and its default. Always say which network a payment

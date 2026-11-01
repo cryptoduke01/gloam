@@ -150,7 +150,18 @@ export default function DocsSdkReferencePage() {
                 <code>CASH_OUT_FEE_BPS</code> / <code>cashOutFee(amount)</code>
               </td>
               <td>
-                <code>25</code> (0.25%) / what the pool keeps on a mainnet cash out
+                <code>50</code> (0.5%) / what the pool keeps on a mainnet cash out
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>readCashOutFeeBps(client, pool)</code>
+              </td>
+              <td>
+                The rate a vault charges now, from the chain (0.4.7). The pool
+                takes it when a cash out lands. Base Sepolia and Ethereum Sepolia
+                are still at <code>25</code>; pass the result to{" "}
+                <code>cashOutFee(amount, bps)</code>
               </td>
             </tr>
             <tr>
@@ -773,7 +784,7 @@ fieldToBytes32(field: bigint | string): Hex`}</code>
         {mainnetPool(8453) ? <>, <code>8453</code></> : null}
         {mainnetPool(1) ? <>, <code>1</code></> : null}) is beta software,
         on the final ceremony keys, with beta deposit limits and a
-        0.25% cash-out fee. The Robinhood Chain and Tempo testnets (
+        0.5% cash-out fee. The Robinhood Chain and Tempo testnets (
         <code>46630</code>, <code>42431</code>) run on dev-ceremony keys with
         test funds; Base Sepolia (<code>84532</code>) and Ethereum Sepolia (
         <code>11155111</code>) run the final keys with test funds. Real proofs only, never a mock.

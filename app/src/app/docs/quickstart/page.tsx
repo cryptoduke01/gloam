@@ -219,7 +219,7 @@ saveSecret(intent.note.commitment, intent.note.secret);`}</code>
         root matches even after transfers); <code>buildUnshieldIntent</code>{" "}
         builds the witness and proof. The amount, asset, and recipient become
         public on exit; the source note stays unlinkable via the nullifier. On
-        mainnet a cash out costs 0.25%: <code>cashOutFee(amount)</code> is what
+        mainnet a cash out costs 0.5%: <code>cashOutFee(amount)</code> is what
         the pool keeps.
       </p>
       <pre>
@@ -243,7 +243,7 @@ const exit = await buildUnshieldIntent({
   prove: artifactProver(circuitArtifactUrls("unshield", net.chainId)),
 });
 
-// mainnet: the pool keeps cashOutFee(amount), 0.25%, and pays the rest to "to"
+// mainnet: the pool keeps cashOutFee(amount), 0.5%, and pays the rest to "to"
 console.log("fee", cashOutFee(amount));
 
 await wallet.writeContract({

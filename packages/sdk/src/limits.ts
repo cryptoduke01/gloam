@@ -70,6 +70,20 @@ export interface LiveDepositLimit {
 /** The reads readDepositLimit makes; a viem PublicClient fits. */
 export type DepositLimitReader = Pick<PublicClient, "readContract">;
 
+const POOL_WITHDRAW_FEE_ABI = [
+  { type: "function", name: "withdrawFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+] as const;
+
+/**
+ * The cash-out fee the vault at `pool` charges now, in basis points. It is
+ * taken when a cash out lands, so this is what one sent now pays. Throws when
+ * the vault can't be read, and on the Robinhood Chain and Tempo testnet pools,
+ * which have no fee to read. Pass the result to cashOutFee(amount, bps).
+ */
+export async function readCashOutFeeBps(client: DepositLimitReader, pool: Address): Promise<number> {
+  return Number(await client.readContract({ address: pool, abi: POOL_WITHDRAW_FEE_ABI, functionName: "withdrawFeeBps" }));
+}
+
 /**
  * The live limits for `asset` on the vault at `pool`. Throws when the vault
  * can't be read, so a caller can tell "no limit" apart from "unknown".

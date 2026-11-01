@@ -40,8 +40,9 @@ export default function DisclosuresPage() {
         in total for each stablecoin, 20 per deposit and 1,000 in total for ETH
         on Base and Ethereum, and 2,500,000 per deposit and 25,000,000 in total
         for $GLOAM. Cash outs and private payments are never limited.
-        Deposits and private payments are free; a cash out costs 0.25% of its
-        amount.
+        Direct deposits and private payments are free; a cash out costs 0.5% of
+        its amount. Money bridged in from another chain pays the bridge&apos;s
+        fees, shown before you send.
       </p>
       <p>
         The owner is a single wallet (a multisig is planned), cash-out fees go
