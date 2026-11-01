@@ -26,7 +26,7 @@ import {
 } from "./ledger";
 import { NetworkPicker } from "./NetworkPicker";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
-import { holdableTokens, swapTokenPrice } from "@/lib/vaultAssets";
+import { swapTokenPrice } from "@/lib/vaultAssets";
 import { vaultSwapRouter } from "@/lib/vaultSwap";
 
 /* ---------------------------------------------------------------- data */
@@ -106,29 +106,20 @@ type Prices = {
   /** Live marks by token address (the markets feed); for a stock this is a share price, not a token price. */
   byAddress: Map<string, number>;
   markets: Market[];
-  /** CoinGecko USD by CoinGecko id. */
-  gecko: Map<string, number>;
+  /**
+   * The server's USD by token address (/api/token-marks): $GLOAM, the tokens a
+   * private swap lands in on Robinhood Chain (cbBTC and the rest; a stock falls
+   * back to it when its live mark or multiplier is missing), and BDX on Base and
+   * Ethereum (stablecoins there are $1, and EURC stays unpriced).
+   */
+  tokenMarks: Map<string, number>;
 };
 
 /**
- * Every CoinGecko id a vault token can be priced by: $GLOAM, and the tokens a
- * private swap lands in on Robinhood Chain (cbBTC and the rest; a stock falls
- * back to it when its live mark or multiplier is missing), and BDX on Base and
- * Ethereum (stablecoins there are $1, and EURC stays unpriced).
- */
-const COINGECKO_IDS = [
-  ...new Set(
-    [...holdableTokens(4663), ...[8453, 1].flatMap((c) => holdableTokens(c).filter((t) => t.kind === "token"))].flatMap((t) =>
-      t.coingecko ? [t.coingecko] : []
-    )
-  ),
-];
-
-/**
- * USD marks the app already uses (/api/markets), plus CoinGecko for the
- * tokens above; stablecoins count as $1. `waiting` stays true for a few
- * seconds only, so a slow quote feed never holds the page: the total then
- * shows what is priced and says what is not.
+ * USD marks the app already uses (/api/markets), plus the server's prices for
+ * the tokens above, so the browser asks no price API; stablecoins count as $1.
+ * `waiting` stays true for a few seconds only, so a slow quote feed never holds
+ * the page: the total then shows what is priced and says what is not.
  */
 function usePrices(): { prices: Prices | null; waiting: boolean } {
   const [prices, setPrices] = useState<Prices | null>(null);
@@ -142,13 +133,11 @@ function usePrices(): { prices: Prices | null; waiting: boolean } {
     const markets = fetch("/api/markets", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null) as Promise<{ ethUsd?: number | null; markets?: Partial<Market>[] } | null>;
-    // display only: a slow CoinGecko never holds the other prices back
-    const gecko = fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${COINGECKO_IDS.join(",")}&vs_currencies=usd`, {
-      signal: AbortSignal.timeout(5_000),
-    })
+    // display only: a slow price read never holds the other prices back
+    const tokenPrices = fetch("/api/token-marks", { signal: AbortSignal.timeout(5_000) })
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null) as Promise<Record<string, { usd?: number }> | null>;
-    void Promise.all([markets, gecko]).then(([d, g]) => {
+      .catch(() => null) as Promise<{ marks?: Record<string, unknown> } | null>;
+    void Promise.all([markets, tokenPrices]).then(([d, t]) => {
       if (!live) return;
       const byAddress = new Map<string, number>();
       const list: Market[] = [];
@@ -159,12 +148,11 @@ function usePrices(): { prices: Prices | null; waiting: boolean } {
           list.push({ id: m.id, source: m.source, mark: m.mark, ...(m.address ? { address: m.address } : {}) });
         }
       }
-      const geckoUsd = new Map<string, number>();
-      for (const id of COINGECKO_IDS) {
-        const usd = g?.[id]?.usd;
-        if (typeof usd === "number" && usd > 0) geckoUsd.set(id, usd);
+      const tokenMarks = new Map<string, number>();
+      for (const [address, usd] of Object.entries(t?.marks ?? {})) {
+        if (typeof usd === "number" && usd > 0) tokenMarks.set(address.toLowerCase(), usd);
       }
-      setPrices({ ethUsd: typeof d?.ethUsd === "number" ? d.ethUsd : null, byAddress, markets: list, gecko: geckoUsd });
+      setPrices({ ethUsd: typeof d?.ethUsd === "number" ? d.ethUsd : null, byAddress, markets: list, tokenMarks });
     });
     return () => {
       live = false;
@@ -200,7 +188,7 @@ function fmtUsd(n: number): string {
  * A holding's dollar value, priced as the server's figures price it
  * (lib/onchainMetrics usdOf): stablecoins $1, ETH and WETH at ETH's price, a
  * Robinhood Chain stock at its share price times uiMultiplier / 1e18 (never the
- * share price alone), anything else at its live mark or CoinGecko price. Null
+ * share price alone), anything else at its live mark or the server's price. Null
  * means no price: left out of the total and named, never counted as $0.
  */
 function usdFor(h: VaultHolding, chainId: number, prices: Prices | null): number | null {
@@ -210,10 +198,10 @@ function usdFor(h: VaultHolding, chainId: number, prices: Prices | null): number
   if (!h.address || h.id === "weth") return prices.ethUsd != null ? amount * prices.ethUsd : null;
   if (chainId === 4663 && h.kind === "stock") {
     const mult = h.uiMultiplier ? BigInt(h.uiMultiplier) : null;
-    const p = swapTokenPrice(chainId, { id: h.id, kind: h.kind }, prices.markets, mult, h.coingecko ? prices.gecko.get(h.coingecko) : undefined);
+    const p = swapTokenPrice(chainId, { id: h.id, kind: h.kind }, prices.markets, mult, prices.tokenMarks.get(h.address.toLowerCase()));
     return p != null ? amount * p : null;
   }
-  const mark = prices.byAddress.get(h.address.toLowerCase()) ?? (h.coingecko ? prices.gecko.get(h.coingecko) : undefined);
+  const mark = prices.byAddress.get(h.address.toLowerCase()) ?? prices.tokenMarks.get(h.address.toLowerCase());
   return mark != null ? amount * mark : null;
 }
 

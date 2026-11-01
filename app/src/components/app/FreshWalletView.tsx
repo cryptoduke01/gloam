@@ -486,7 +486,7 @@ export function FreshWalletView() {
             </p>
             {when !== "now" && (
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
-                Each proof shows roughly when it was made, so the two can be grouped. While Gloam is open it remakes them, last shortly before each one goes. One that goes out while Gloam is closed shows when it was last made.
+                Each proof shows roughly when it was made, so the two can be grouped. While Gloam is open and on screen, with your vault unlocked, it remakes them, last shortly before each one goes. One that goes out at any other time shows when it was last made.
               </p>
             )}
           </div>

@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useAccount,
   useBalance,
@@ -90,6 +91,7 @@ export function VaultTradePanel({
   initialSide?: Side;
   onUsePrivate?: () => void;
 }) {
+  const router = useRouter();
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
   const { address, isConnected } = useAccount();
@@ -875,8 +877,8 @@ export function VaultTradePanel({
                       type="button"
                       className="font-medium text-foreground underline decoration-line-strong underline-offset-4 hover:decoration-foreground"
                       onClick={() => {
-                        // parent TradeView pathMode, deep-link query
-                        window.location.href = "/app/trade?path=public";
+                        // parent TradeView follows this deep link into its pathMode
+                        router.push("/app/trade?path=public");
                       }}
                     >
                       swap from open wallet
