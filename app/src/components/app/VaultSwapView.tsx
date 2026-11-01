@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
+import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { useAppAccount } from "@/lib/demo";
@@ -89,7 +90,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const noopSubscribe = () => () => {};
 const ZERO = "0x0000000000000000000000000000000000000000";
 
-/** The token record for an asset on this chain (logo id, name, CoinGecko id). */
+/** The token record for an asset on this chain (logo id, name). */
 function tokenFor(chainId: number, asset: string): OnchainToken | undefined {
   return knownTokens(chainId).find((t) => same(t.address, asset));
 }
@@ -121,21 +122,20 @@ const uiMultiplierAbi = [
 ] as const;
 
 /**
- * USD marks: stablecoins at $1. A Robinhood stock token at the live share price
- * times its uiMultiplier (balances never rebase; splits and dividends move the
- * multiplier, so one raw token is worth share price x multiplier / 1e18), else
- * CoinGecko's price for the token itself. Other tokens at CoinGecko's price.
- * Null while unknown.
+ * USD marks: stablecoins at $1, WETH at ETH's price. A Robinhood stock token at
+ * the live share price times its uiMultiplier (balances never rebase; splits and
+ * dividends move the multiplier, so one raw token is worth share price x
+ * multiplier / 1e18), else the server's price for the token itself (lib/tokenMarksServer,
+ * so the browser asks no price API). Other tokens at the server's price. Null while unknown.
  */
-const geckoCache = new Map<string, number>();
 function useUsdMarks(
   chainId: GloamNetwork["chainId"],
   assets: readonly Address[],
   shown: readonly (Address | null)[]
 ): Record<string, number | null> {
-  const [tick, setTick] = useState(0);
   const tokens = useMemo(() => assets.map((a) => tokenFor(chainId, a)), [assets, chainId]);
   const { data: marketData } = useLiveMarkets();
+  const { marks: serverMarks } = useCoingeckoMarks(hasCoingeckoMarks(chainId));
   const stocks = useMemo(
     () => shown.filter((a): a is Address => Boolean(a) && tokenFor(chainId, a!)?.kind === "stock"),
     [shown, chainId]
@@ -144,34 +144,12 @@ function useUsdMarks(
     contracts: stocks.map((a) => ({ address: a, abi: uiMultiplierAbi, functionName: "uiMultiplier", chainId }) as const),
     query: { enabled: stocks.length > 0, staleTime: 5 * 60_000 },
   });
-  useEffect(() => {
-    const ids = [...new Set(tokens.map((t) => t?.coingecko).filter((x): x is string => Boolean(x)))].filter(
-      (id) => !geckoCache.has(id)
-    );
-    if (!ids.length) return;
-    let live = true;
-    fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd`, {
-      signal: AbortSignal.timeout(5_000),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: Record<string, { usd?: number }> | null) => {
-        for (const id of ids) {
-          const v = j?.[id]?.usd;
-          if (typeof v === "number" && v > 0) geckoCache.set(id, v);
-        }
-        if (live) setTick((n) => n + 1);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [tokens]);
   return useMemo(() => {
-    void tick;
     const out: Record<string, number | null> = {};
     assets.forEach((a, i) => {
       const t = tokens[i];
-      out[a.toLowerCase()] = t && isDollarStable(t) ? 1 : t?.coingecko ? (geckoCache.get(t.coingecko) ?? null) : null;
+      const key = a.toLowerCase();
+      out[key] = !t ? null : isDollarStable(t) ? 1 : t.id === "weth" ? (marketData?.ethUsd ?? null) : (serverMarks.get(key) ?? null);
     });
     stocks.forEach((a, i) => {
       const t = tokenFor(chainId, a);
@@ -180,7 +158,7 @@ function useUsdMarks(
       if (m && m.mark > 0 && mult) out[a.toLowerCase()] = (m.mark * Number(mult)) / 1e18;
     });
     return out;
-  }, [assets, tokens, tick, stocks, marketData, mults, chainId]);
+  }, [assets, tokens, serverMarks, stocks, marketData, mults, chainId]);
 }
 
 /** The note a swap of `amount` spends: an exact match first, else the smallest that covers it. */
