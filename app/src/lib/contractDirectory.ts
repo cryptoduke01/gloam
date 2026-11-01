@@ -115,7 +115,8 @@ export function directoryName(n: GloamNetwork): string {
   return networkName(n);
 }
 
-function routerContract(chainId: number, version: 1 | 2): string {
+function routerContract(chainId: number, version: 1 | 2 | 3): string {
+  if (version === 3) return chainId === 4217 ? "GloamVaultSwapTempo2" : "GloamVaultSwapV4c";
   if (version === 2) return "GloamVaultSwapV4b";
   return chainId === 4217 ? "GloamVaultSwapTempo" : "GloamVaultSwapV4";
 }
@@ -154,7 +155,7 @@ function appRows(n: GloamNetwork): DirectoryRow[] {
       what:
         i > 0
           ? "Kept for refunds of swaps made through it. New swaps use the router above."
-          : r.version === 2
+          : r.venue === "v4" && r.version >= 2
             ? "Swaps one note through a public DEX and back into the vault. No upgrade; its owner can only add a pool, with 3 days of public notice, or take one off."
             : "Swaps one note through a public DEX and back into the vault. No owner, no admin, no upgrade.",
       address: getAddress(r.address),

@@ -17,6 +17,11 @@
  * which one new swaps use; the relay keeps both, so a refund of a swap made
  * through either still finishes.
  *
+ * v3 (GloamVaultSwapV4c, and GloamVaultSwapTempo2 on Tempo) adds native ETH notes,
+ * Base and Ethereum, and an exit for money a refund can't bring back. It is off
+ * until VAULT_SWAP_V3_LIVE turns it on, chain by chain (DEPLOY-ROUTER.md). Its escrow
+ * key has one more field, so a swap is built for the router it goes through.
+ *
  * Shared by the app and the relay server: no browser-only imports here.
  */
 import {
@@ -24,10 +29,12 @@ import {
   encodeAbiParameters,
   getContractAddress,
   keccak256,
+  toHex,
   type Address,
   type Hex,
   type PublicClient,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -49,10 +56,45 @@ export const VAULT_SWAP_V2_ROUTER: Record<number, Address | null> = {
   4663: "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC",
 };
 
+/**
+ * Where v3 lands on each chain, known before it deploys: the CREATE2 factory's
+ * address for the repo's compile (contracts/test/fixtures/router-next.json pins these,
+ * and contracts/launch/router-fixture.mjs writes it). Any edit to the contracts moves them.
+ */
+export const VAULT_SWAP_V3_ADDRESS: Record<number, Address> = {
+  4663: "0xbDEaC20a1Dfa892cac839a3C911d403aF6968e05",
+  8453: "0xdc88B3bF0d7cB48B7d4062572dC5fC8D2a8147C6",
+  1: "0xE2cC7C7f521D12Da0E2FAd2153b351515637dF0A",
+  4217: "0xb88794079d0DdC5b4327b49056b3761F389A9fDf",
+};
+
+/**
+ * The switch for v3, chain by chain: true once it is deployed and its read-backs
+ * passed (DEPLOY-ROUTER.md). Nothing is deployed yet. New swaps on a chain go through
+ * v3 from then on, and earlier routers stay known for their refunds.
+ */
+export const VAULT_SWAP_V3_LIVE: Record<number, boolean> = { 4663: false, 8453: false, 1: false, 4217: false };
+
+/**
+ * Ethereum stays off even with v3 deployed there: the relay pays about 1.65M gas a
+ * swap, $3.71 per gwei at $2,250 ETH, against 0.50% of the swap. That pays at 0.04 gwei
+ * and loses on every swap the vault can take above 0.67 gwei. Turn this on only once
+ * the relay refuses a swap whose gas costs more than its fee (DEPLOY-ROUTER.md).
+ */
+export const ETHEREUM_PRIVATE_SWAPS = false;
+
+function v3On(chainId: number): boolean {
+  return VAULT_SWAP_V3_LIVE[chainId] === true && (chainId !== 1 || ETHEREUM_PRIVATE_SWAPS);
+}
+
+const v3Address = (chainId: number): Address | null => (v3On(chainId) ? VAULT_SWAP_V3_ADDRESS[chainId]! : null);
+
 /** The router new swaps go through, per chain. null: swaps are off there. */
 export const VAULT_SWAP_ROUTERS: Record<number, Address | null> = {
-  4663: VAULT_SWAP_V2_ROUTER[4663] ?? RH_ROUTER_V1,
-  4217: TEMPO_ROUTER,
+  4663: v3Address(4663) ?? VAULT_SWAP_V2_ROUTER[4663] ?? RH_ROUTER_V1,
+  4217: v3Address(4217) ?? TEMPO_ROUTER,
+  8453: v3Address(8453),
+  1: v3Address(1),
 };
 
 /**
@@ -75,6 +117,9 @@ export function vaultSwapRouter(chainId: number): Address | null {
 
 export const RH_POOL_MANAGER: Address = "0x8366a39cc670b4001a1121b8f6a443a643e40951";
 export const RH_V4_QUOTER: Address = "0x8dc178efb8111bb0973dd9d722ebeff267c98f94";
+/** Uniswap's V4Quoter on Base and Ethereum: its poolManager() names the PoolManager v3 is fixed to (checked 2026-10-31). */
+const BASE_V4_QUOTER: Address = "0x0d5e0f971ed27fbff6c2837bf31316121532048d";
+const ETHEREUM_V4_QUOTER: Address = "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203";
 
 export const RH_MULTICALL3: Address = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
@@ -281,6 +326,61 @@ export const RH_SWAP_ASSETS_V2: readonly Address[] = [
  */
 export const RH_SWAP_ASSETS_V2_QUEUED: readonly Address[] = [RH_AI, RH_ORBIO];
 
+// ---------------------------------------------------------------- Base and Ethereum (Uniswap v4, v3 only)
+
+const BASE_USDC: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const BASE_USDT: Address = "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2";
+const BASE_EURC: Address = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42";
+const BASE_WETH: Address = "0x4200000000000000000000000000000000000006";
+const ETH_USDC: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const ETH_USDT: Address = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+const ETH_USDG: Address = "0xe343167631d89B6Ffc58B88d6b7fB0228795491D";
+const ETH_EURC: Address = "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c";
+const ETH_WETH: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+
+const hookless = (currency0: Address, currency1: Address, fee: number, tickSpacing: number): PoolKey => ({
+  currency0,
+  currency1,
+  fee,
+  tickSpacing,
+  hooks: NATIVE,
+});
+
+/**
+ * The pools v3 allows at deploy on Base, in DeployVaultSwapV4c.s.sol's order
+ * (contracts/test/fixtures/router-next.json pins both). Hookless only, picked from
+ * live state on 2026-10-31 by quoting $100, $500 and $5,000 both ways against Uniswap v3.
+ */
+export const BASE_SWAP_POOLS: readonly PoolKey[] = [
+  hookless(NATIVE, BASE_USDC, 500, 10),
+  hookless(NATIVE, BASE_USDC, 3000, 60),
+  hookless(BASE_USDC, BASE_USDT, 7, 1),
+  hookless(BASE_USDC, BASE_USDT, 6, 1),
+  hookless(BASE_USDC, BASE_USDT, 4, 1),
+  hookless(BASE_USDC, BASE_USDT, 100, 1),
+  hookless(BASE_EURC, BASE_USDC, 500, 10),
+];
+
+/** v3's pools on Ethereum, the same way. PYUSD and BDX have no v4 pool that can fill a swap. */
+export const ETHEREUM_SWAP_POOLS: readonly PoolKey[] = [
+  hookless(NATIVE, ETH_USDC, 500, 10),
+  hookless(NATIVE, ETH_USDC, 100, 1),
+  hookless(NATIVE, ETH_USDT, 500, 10),
+  hookless(NATIVE, ETH_USDT, 100, 1),
+  hookless(ETH_USDC, ETH_USDT, 7, 1),
+  hookless(ETH_USDC, ETH_USDT, 8, 1),
+  hookless(ETH_USDC, ETH_USDT, 10, 1),
+  hookless(ETH_USDC, ETH_USDT, 100, 1),
+  hookless(ETH_USDC, ETH_USDG, 65, 1),
+  hookless(ETH_USDC, ETH_USDG, 100, 1),
+  hookless(ETH_USDT, ETH_USDG, 100, 1),
+  hookless(ETH_EURC, ETH_USDC, 250, 3),
+  hookless(ETH_EURC, ETH_USDC, 300, 6),
+];
+
+/** The dollar stablecoins, whose pairs barely move, so a swap between two asks a thinner buffer. */
+const DOLLARS: readonly Address[] = [RH_USDG, BASE_USDC, BASE_USDT, ETH_USDC, ETH_USDT, ETH_USDG];
+
 // ---------------------------------------------------------------- Tempo (Stablecoin DEX)
 
 export const TEMPO_STABLE_DEX: Address = "0xdec0000000000000000000000000000000000000";
@@ -292,11 +392,18 @@ const TEMPO_SWAP_ASSETS: readonly Address[] = [
   "0x20c0000000000000000000006a37da5c996874be", // OUSD
 ];
 
+/** What v3 swaps between, per chain, in the order the picker lists them. Native ETH is address(0). */
+const RH_SWAP_ASSETS_V3: readonly Address[] = [RH_USDG, NATIVE, ...RH_SWAP_ASSETS_V2.slice(1), ...RH_SWAP_ASSETS_V2_QUEUED];
+const BASE_SWAP_ASSETS: readonly Address[] = [BASE_USDC, BASE_USDT, BASE_EURC, NATIVE];
+const ETHEREUM_SWAP_ASSETS: readonly Address[] = [ETH_USDC, ETH_USDT, ETH_USDG, ETH_EURC, NATIVE];
+
 /** The assets a new swap can go between, per chain (the current router's list). */
 export const VAULT_SWAP_ASSETS: Record<number, readonly Address[]> = {
-  4663: VAULT_SWAP_V2_ROUTER[4663] ? [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED] : RH_SWAP_ASSETS_V1,
+  4663: v3On(4663) ? RH_SWAP_ASSETS_V3 : VAULT_SWAP_V2_ROUTER[4663] ? [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED] : RH_SWAP_ASSETS_V1,
   4217: TEMPO_SWAP_ASSETS,
 };
+if (v3On(8453)) VAULT_SWAP_ASSETS[8453] = BASE_SWAP_ASSETS;
+if (v3On(1)) VAULT_SWAP_ASSETS[1] = ETHEREUM_SWAP_ASSETS;
 
 // ---------------------------------------------------------------- routers
 
@@ -304,26 +411,56 @@ export type SwapRouter = {
   address: Address;
   /** "v4": Uniswap v4 routes (GloamVaultSwapV4, V4b). "tempo": the Stablecoin DEX, no route. */
   venue: "v4" | "tempo";
-  /** 1: GloamVaultSwapV4 or GloamVaultSwapTempo. 2: GloamVaultSwapV4b. */
-  version: 1 | 2;
-  /** The pools a route may use (on chain, v2's allowlist has the last word). */
+  /** 1: GloamVaultSwapV4 or GloamVaultSwapTempo. 2: GloamVaultSwapV4b. 3: GloamVaultSwapV4c or GloamVaultSwapTempo2. */
+  version: 1 | 2 | 3;
+  /** The pools a route may use (on chain, an allowlist has the last word from v2 on). */
   pools: readonly PoolKey[];
   maxHops: number;
-  /** v2: the WETH the vault holds for ETH, unwrapped or wrapped at a route's ends. */
+  /** From v2 on: the chain's WETH, converted to or from ETH at a route's ends. */
   weth: Address | null;
   /** What a swap through it can go between. */
   assets: readonly Address[];
+  /** Where its quotes come from. null: no v4 route (Tempo's DEX). */
+  quoter?: Address | null;
+  /** Assets offered only once they open on chain (offeredSwapAssets). */
+  gated?: readonly Address[];
 };
+
+/** v3 on a chain, deployed or not: the switches decide when anything uses it. */
+function routerV3(chainId: number): SwapRouter | null {
+  const address = VAULT_SWAP_V3_ADDRESS[chainId];
+  if (!address) return null;
+  if (chainId === 4217) return { address, venue: "tempo", version: 3, pools: [], maxHops: 0, weth: null, assets: TEMPO_SWAP_ASSETS, quoter: null };
+  if (chainId === 8453) return { address, venue: "v4", version: 3, pools: BASE_SWAP_POOLS, maxHops: 3, weth: BASE_WETH, assets: BASE_SWAP_ASSETS, quoter: BASE_V4_QUOTER };
+  if (chainId === 1) return { address, venue: "v4", version: 3, pools: ETHEREUM_SWAP_POOLS, maxHops: 3, weth: ETH_WETH, assets: ETHEREUM_SWAP_ASSETS, quoter: ETHEREUM_V4_QUOTER };
+  return {
+    address,
+    venue: "v4",
+    version: 3,
+    pools: [...RH_SWAP_POOLS_V2, ...RH_SWAP_POOLS_V2_QUEUED],
+    maxHops: 3,
+    weth: RH_WETH,
+    assets: RH_SWAP_ASSETS_V3,
+    quoter: RH_V4_QUOTER,
+    // the vault's native ETH limit lands through its timelock, like AI's and ORBIO's
+    gated: [NATIVE, ...RH_SWAP_ASSETS_V2_QUEUED],
+  };
+}
 
 /** Every router on a chain, the newest first. */
 function routerList(chainId: number): SwapRouter[] {
+  const v3 = v3On(chainId) ? [routerV3(chainId)!] : [];
+  return [...v3, ...olderRouters(chainId)];
+}
+
+function olderRouters(chainId: number): SwapRouter[] {
   if (chainId === 4663) {
     const v1: SwapRouter = {
       address: RH_ROUTER_V1, venue: "v4", version: 1, pools: RH_SWAP_POOLS, maxHops: 2, weth: null, assets: RH_SWAP_ASSETS_V1,
     };
     const v2 = VAULT_SWAP_V2_ROUTER[4663];
     return v2
-      ? [{ address: v2, venue: "v4", version: 2, pools: [...RH_SWAP_POOLS_V2, ...RH_SWAP_POOLS_V2_QUEUED], maxHops: 3, weth: RH_WETH, assets: [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED] }, v1]
+      ? [{ address: v2, venue: "v4", version: 2, pools: [...RH_SWAP_POOLS_V2, ...RH_SWAP_POOLS_V2_QUEUED], maxHops: 3, weth: RH_WETH, assets: [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED], gated: RH_SWAP_ASSETS_V2_QUEUED }, v1]
       : [v1];
   }
   if (chainId === 4217) {
@@ -367,9 +504,12 @@ export function isSwapAsset(chainId: number, asset: string, router?: string | nu
  * How far below the quote the swap asks, in basis points. The trade must
  * cost no more than what arrives, or it reverts whole and nothing moves; the
  * part it does not use goes to the treasury. GLOAM moves, stablecoins barely.
+ * Off Robinhood Chain, a swap between two dollars asks the thinner buffer too.
  */
-export function swapBufferBps(chainId: number): number {
-  return chainId === 4217 ? 10 : 50;
+export function swapBufferBps(chainId: number, assetIn?: Address, assetOut?: Address): number {
+  if (chainId === 4217) return 10;
+  const dollars = (a?: Address) => Boolean(a) && DOLLARS.some((d) => same(d, a!));
+  return chainId !== 4663 && dollars(assetIn) && dollars(assetOut) ? 10 : 50;
 }
 
 // ---------------------------------------------------------------- contract
@@ -391,6 +531,9 @@ const ESCROW_KEY_COMPONENTS = [
   { name: "routeHash", type: "bytes32" },
 ] as const;
 
+/** GloamVaultSwap2.EscrowKey: the same, then the swap's exit key. */
+const ESCROW_KEY_V3_COMPONENTS = [...ESCROW_KEY_COMPONENTS, { name: "exitKey", type: "address" }] as const;
+
 export type EscrowKey = {
   nullifier: Hex;
   amountIn: bigint;
@@ -400,6 +543,8 @@ export type EscrowKey = {
   refundCommitment: Hex;
   refundAmount: bigint;
   routeHash: Hex;
+  /** v3: the swap's one-time exit key. Without it, the key of the routers before v3. */
+  exitKey?: Address;
 };
 
 /**
@@ -413,13 +558,46 @@ export const SWAP_ESCROW_INIT_CODE: Hex =
   "0x608060405234801561000f575f80fd5b5060405161023438038061023483398101604081905261002e916101a4565b6040516370a0823160e01b81523060048201525f906001600160a01b038316906370a0823190602401602060405180830381865afa158015610072573d5f803e3d5ffd5b505050506040513d601f19601f8201168201806040525081019061009691906101d1565b905080156101a25760408051336024820152604480820184905282518083039091018152606490910182526020810180516001600160e01b031663a9059cbb60e01b17905290515f9182916001600160a01b038616916100f5916101e8565b5f604051808303815f865af19150503d805f811461012e576040519150601f19603f3d011682016040523d82523d5f602084013e610133565b606091505b509150915081801561015d57508051158061015d57508080602001905181019061015d9190610214565b61019f5760405162461bcd60e51b815260206004820152600f60248201526e32b9b1b937bb903a3930b739b332b960891b604482015260640160405180910390fd5b50505b005b5f602082840312156101b4575f80fd5b81516001600160a01b03811681146101ca575f80fd5b9392505050565b5f602082840312156101e1575f80fd5b5051919050565b5f82515f5b8181101561020757602081860181015185830152016101ed565b505f920191825250919050565b5f60208284031215610224575f80fd5b815180151581146101ca575f80fdfe";
 export const SWAP_ESCROW_CODE_HASH: Hex = "0x192133b7cb5a5193a55ec981c9f7272702248f684d2b85aa1dd843dde9b85bd4";
 
+/**
+ * SwapEscrow2's creation code (contracts/src/SwapEscrow2.sol), pinned the same way:
+ * keccak256 is SWAP_ESCROW2_CODE_HASH, the value in contracts/test/fixtures/router-next.json.
+ */
+export const SWAP_ESCROW2_INIT_CODE: Hex =
+  "0x608060405234801561000f575f80fd5b506040516102d03803806102d083398101604081905261002e91610240565b6001600160a01b0381166100d3574780156100d1576040515f90339083908381818185875af1925050503d805f8114610082576040519150601f19603f3d011682016040523d82523d5f602084013e610087565b606091505b50509050806100cf5760405162461bcd60e51b815260206004820152600f60248201526e32b9b1b937bb903a3930b739b332b960891b60448201526064015b60405180910390fd5b505b005b6040516370a0823160e01b81523060048201525f906001600160a01b038316906370a0823190602401602060405180830381865afa158015610117573d5f803e3d5ffd5b505050506040513d601f19601f8201168201806040525081019061013b919061026d565b905080156100d15760408051336024820152604480820184905282518083039091018152606490910182526020810180516001600160e01b031663a9059cbb60e01b17905290515f9182916001600160a01b0386169161019a91610284565b5f604051808303815f865af19150503d805f81146101d3576040519150601f19603f3d011682016040523d82523d5f602084013e6101d8565b606091505b509150915081801561020257508051158061020257508080602001905181019061020291906102b0565b6100d15760405162461bcd60e51b815260206004820152600f60248201526e32b9b1b937bb903a3930b739b332b960891b60448201526064016100c6565b5f60208284031215610250575f80fd5b81516001600160a01b0381168114610266575f80fd5b9392505050565b5f6020828403121561027d575f80fd5b5051919050565b5f82515f5b818110156102a35760208186018101518583015201610289565b505f920191825250919050565b5f602082840312156102c0575f80fd5b81518015158114610266575f80fdfe";
+export const SWAP_ESCROW2_CODE_HASH: Hex = "0xa1780da0f59b3a91182d3b3ee00726136fbb782572fbf77864711fed5926d464";
+
 /** A swap's escrow, worked out here: CREATE2 from the router, salt keccak256(abi.encode(key)). */
 export function escrowAddress(router: Address, assetIn: Address, key: EscrowKey): Address {
-  const salt = keccak256(encodeAbiParameters(ESCROW_KEY_COMPONENTS, [
-    key.nullifier, key.amountIn, key.outCommitment, key.assetOut, key.amountOut, key.refundCommitment, key.refundAmount, key.routeHash,
-  ]));
-  const bytecode = concatHex([SWAP_ESCROW_INIT_CODE, encodeAbiParameters([{ type: "address" }], [assetIn])]);
+  const fields = [key.nullifier, key.amountIn, key.outCommitment, key.assetOut, key.amountOut, key.refundCommitment, key.refundAmount, key.routeHash] as const;
+  const salt = keccak256(
+    key.exitKey ? encodeAbiParameters(ESCROW_KEY_V3_COMPONENTS, [...fields, key.exitKey]) : encodeAbiParameters(ESCROW_KEY_COMPONENTS, fields)
+  );
+  const init = key.exitKey ? SWAP_ESCROW2_INIT_CODE : SWAP_ESCROW_INIT_CODE;
+  const bytecode = concatHex([init, encodeAbiParameters([{ type: "address" }], [assetIn])]);
   return getContractAddress({ opcode: "CREATE2", from: router, salt, bytecode });
+}
+
+/** Keeps an exit signature from meaning anything else (GloamVaultSwap2.EXIT_DOMAIN). */
+const EXIT_DOMAIN = keccak256(toHex("gloam.vault-swap.exit.v1"));
+
+/** What a swap's exit key signs to send its escrow to `to`: GloamVaultSwap2.exitDigest, worked out here. */
+export function exitDigest(chainId: number, router: Address, escrow: Address, to: Address): Hex {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "uint256" }, { type: "address" }, { type: "address" }, { type: "address" }],
+      [EXIT_DOMAIN, BigInt(chainId), router, escrow, to]
+    )
+  );
+}
+
+/**
+ * A swap's one-time exit key, from its refund note's secret. Whoever can spend the
+ * refund note can exit, a backup restores it with the note, and the secret itself
+ * never leaves this browser. Each swap's is its own. A secret can't be a key as it
+ * stands: hashing it also keeps a signature from saying anything about the note.
+ */
+export function exitAccount(refundSecret: Hex) {
+  return privateKeyToAccount(keccak256(concatHex([toHex("gloam.vault-swap.exit-key.v1"), refundSecret])));
 }
 
 /**
@@ -433,9 +611,21 @@ export type VaultSwapRefundInfo = {
   amountIn: string;
   out: { commitment: Hex; asset: Address; amount: string };
   route: PoolKey[];
+  /** v3: the swap's exit key, the public half (exitAccount has the rest). */
+  exitKey?: Address;
   /** The relay's send of this swap, once it answered: a sync reads how it ended if this tab never heard. */
   sent?: { hash: Hex; at: number };
 };
+
+/** Whether a refund the vault won't take can leave by its swap's exit: a v3 swap, with its money waiting. */
+export function canExitVaultSwap(note: {
+  vaultSwap?: { exitKey?: Address };
+  sweptFrom?: unknown;
+  sweepPending?: boolean;
+  refundHeld?: "returning" | "blocked";
+}): boolean {
+  return Boolean(note.vaultSwap?.exitKey && note.sweptFrom && note.sweepPending && note.refundHeld === "blocked");
+}
 
 /** The escrow key for a refund note, from what it keeps. */
 export function refundEscrowKey(info: VaultSwapRefundInfo, nullifier: Hex, refundCommitment: Hex, refundAmount: bigint): EscrowKey {
@@ -448,6 +638,7 @@ export function refundEscrowKey(info: VaultSwapRefundInfo, nullifier: Hex, refun
     refundCommitment,
     refundAmount,
     routeHash: keccak256(encodeRoute(info.route)),
+    ...(info.exitKey ? { exitKey: info.exitKey } : {}),
   };
 }
 
@@ -468,13 +659,10 @@ export async function escrowHolds(
   blockNumber?: bigint
 ): Promise<boolean> {
   const escrow = escrowAddress(info.router, info.assetIn, refundEscrowKey(info, nullifier, refundCommitment, refundAmount));
-  const held = await client.readContract({
-    address: info.assetIn,
-    abi: balanceOfAbi,
-    functionName: "balanceOf",
-    args: [escrow],
-    ...(blockNumber !== undefined ? { blockNumber } : {}),
-  });
+  const at = blockNumber !== undefined ? { blockNumber } : {};
+  const held = same(info.assetIn, NATIVE)
+    ? await client.getBalance({ address: escrow, ...at })
+    : await client.readContract({ address: info.assetIn, abi: balanceOfAbi, functionName: "balanceOf", args: [escrow], ...at });
   return held >= refundAmount;
 }
 
@@ -538,6 +726,72 @@ export const vaultSwapAbi = [
   ...SWAP_ERRORS,
 ] as const;
 
+const SPEND_COMPONENTS = [
+  { name: "proof", type: "bytes" },
+  { name: "root", type: "bytes32" },
+  { name: "nullifier", type: "bytes32" },
+  { name: "asset", type: "address" },
+  { name: "amount", type: "uint256" },
+] as const;
+
+/** v3's own calls: swap() names the exit key, escrowFor() takes the longer key, and exit() is new. */
+export const vaultSwapV3Abi = [
+  {
+    type: "function",
+    name: "swap",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "s", type: "tuple", components: SPEND_COMPONENTS },
+      { name: "d", type: "tuple", components: DEPOSIT_COMPONENTS },
+      { name: "r", type: "tuple", components: DEPOSIT_COMPONENTS },
+      { name: "route", type: "bytes" },
+      { name: "exitKey", type: "address" },
+    ],
+    outputs: [{ name: "amountIn", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "escrowFor",
+    stateMutability: "view",
+    inputs: [
+      { name: "assetIn", type: "address" },
+      { name: "k", type: "tuple", components: ESCROW_KEY_V3_COMPONENTS },
+    ],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "exit",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "assetIn", type: "address" },
+      { name: "k", type: "tuple", components: ESCROW_KEY_V3_COMPONENTS },
+      { name: "to", type: "address" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [{ name: "amount", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "OverInput",
+    inputs: [
+      { name: "needed", type: "uint256" },
+      { name: "available", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "ShortOutput",
+    inputs: [
+      { name: "got", type: "uint256" },
+      { name: "wanted", type: "uint256" },
+    ],
+  },
+  { type: "error", name: "PoolNotAllowed", inputs: [{ name: "poolId", type: "bytes32" }] },
+  { type: "error", name: "BadExit", inputs: [] },
+  ...SWAP_ERRORS,
+] as const;
+
 const POOL_KEY_COMPONENTS = [
   { name: "currency0", type: "address" },
   { name: "currency1", type: "address" },
@@ -565,11 +819,12 @@ const holds = (k: PoolKey, c: string) => same(k.currency0, c) || same(k.currency
 
 /**
  * The currencies a route passes through, as the PoolManager sees them, worked
- * out exactly as the router does it (GloamVaultSwapV4b._walk), or null when the
- * router would refuse the route. A WETH note pays in ETH when its first pool
- * holds ETH and not WETH; a WETH note can be bought with a route that ends at
- * ETH. Each currency once, and WETH nowhere inside a route that unwraps or
- * wraps it. Every pool must be one of the router's (and pass `allowed`).
+ * out exactly as the router does it (GloamVaultSwapV4b and V4c _walk), or null when
+ * the router would refuse the route. A note in one form of ETH pays in the other
+ * when its first pool holds only that one, and a route can end in the other form
+ * from the new note. Each currency once, and an end that is converted nowhere
+ * inside the route in the form the note holds. v3 alone takes native ETH notes.
+ * Every pool must be one of the router's (and pass `allowed`).
  */
 export function routeCurrencies(
   r: SwapRouter,
@@ -580,10 +835,12 @@ export function routeCurrencies(
 ): Address[] | null {
   const n = route.length;
   if (r.venue !== "v4" || n === 0 || n > r.maxHops) return null;
-  if (same(assetIn, assetOut) || same(assetIn, NATIVE) || same(assetOut, NATIVE)) return null;
-  const weth = r.weth;
+  if (same(assetIn, assetOut)) return null;
+  if (r.version < 3 && (same(assetIn, NATIVE) || same(assetOut, NATIVE))) return null;
+  const twin = (a: Address) => ethTwin(r, a);
   let cur: Address = assetIn;
-  if (weth && same(assetIn, weth) && !holds(route[0]!, weth) && holds(route[0]!, NATIVE)) cur = NATIVE;
+  const inTwin = twin(assetIn);
+  if (inTwin !== null && !holds(route[0]!, assetIn) && holds(route[0]!, inTwin)) cur = inTwin;
   const path: Address[] = [cur];
   for (const k of route) {
     if (!r.pools.some((p) => sameKey(p, k)) || (allowed && !allowed(k))) return null;
@@ -592,13 +849,21 @@ export function routeCurrencies(
     else return null;
     path.push(cur);
   }
-  if (!same(cur, assetOut) && !(weth && same(assetOut, weth) && same(cur, NATIVE))) return null;
-  const wraps = same(path[0]!, NATIVE) || same(path[n]!, NATIVE);
+  const outTwin = twin(assetOut);
+  if (!same(cur, assetOut) && !(outTwin !== null && same(cur, outTwin))) return null;
   for (let i = 0; i <= n; i++) {
-    if (wraps && weth && same(path[i]!, weth)) return null;
+    if (!same(path[0]!, assetIn) && same(path[i]!, assetIn)) return null;
+    if (!same(path[n]!, assetOut) && same(path[i]!, assetOut)) return null;
     for (let j = i + 1; j <= n; j++) if (same(path[i]!, path[j]!)) return null;
   }
   return path;
+}
+
+/** The other form of ETH for `a`, or null when `a` is no ETH this router converts. */
+function ethTwin(r: SwapRouter, a: Address): Address | null {
+  if (!r.weth) return null;
+  if (same(a, r.weth)) return NATIVE;
+  return same(a, NATIVE) ? r.weth : null;
 }
 
 /**
@@ -614,13 +879,13 @@ export function routesBetween(
 ): PoolKey[][] {
   if (!r || r.venue !== "v4") return [];
   const pools = allowed ? r.pools.filter(allowed) : r.pools;
-  const weth = r.weth;
+  const inTwin = ethTwin(r, assetIn);
   const out: PoolKey[][] = [];
   const extend = (route: PoolKey[], cur: Address) => {
     for (const k of pools) {
       if (route.includes(k)) continue;
-      // a WETH note pays its first pool in ETH when that pool holds ETH and not WETH
-      const from = !route.length && weth && same(assetIn, weth) && !holds(k, weth) && holds(k, NATIVE) ? NATIVE : cur;
+      // a note pays its first pool in the other form of ETH when that pool holds only that one
+      const from = !route.length && inTwin !== null && !holds(k, assetIn) && holds(k, inTwin) ? inTwin : cur;
       if (!holds(k, from)) continue;
       const next = same(k.currency0, from) ? k.currency1 : k.currency0;
       const at = [...route, k];
@@ -663,7 +928,7 @@ const LIVE_TTL_MS = 60_000;
  * one it doesn't allow, and a queued one shows only on the router's own word.
  */
 export async function livePools(client: PublicClient, r: SwapRouter): Promise<(k: PoolKey) => boolean> {
-  if (r.version !== 2) return () => true;
+  if (r.version === 1 || r.venue !== "v4") return () => true;
   const key = r.address.toLowerCase();
   const hit = liveCache.get(key);
   const ids = r.pools.map(poolId);
@@ -697,8 +962,9 @@ export function offeredSwapAssets(
   openGated: ReadonlySet<string>,
   live: ((k: PoolKey) => boolean) | null
 ): Address[] {
+  const gated = r?.gated ?? RH_SWAP_ASSETS_V2_QUEUED;
   return assets.filter((a) => {
-    if (!RH_SWAP_ASSETS_V2_QUEUED.some((q) => same(q, a))) return true;
+    if (!gated.some((q) => same(q, a))) return true;
     if (!r || !live || !openGated.has(a.toLowerCase())) return false;
     return r.pools.some((k) => holds(k, a) && live(k));
   });
@@ -810,7 +1076,7 @@ async function v4ExactInAll(
     contracts: routes.map(
       (route, i) =>
         ({
-          address: RH_V4_QUOTER,
+          address: r.quoter ?? RH_V4_QUOTER,
           abi: quoterAbi,
           functionName: "quoteExactInput",
           args: [quoteParams(route, routeCurrencies(r, assetIn, assetOut, route)!, true, amountIn[i]!)],
@@ -830,7 +1096,7 @@ async function v4ExactOut(
   amountOut: bigint
 ): Promise<bigint> {
   const { result } = await client.simulateContract({
-    address: RH_V4_QUOTER,
+    address: r.quoter ?? RH_V4_QUOTER,
     abi: quoterAbi,
     functionName: "quoteExactOutput",
     args: [quoteParams(route, routeCurrencies(r, assetIn, assetOut, route)!, false, amountOut)],
@@ -925,7 +1191,7 @@ export async function planVaultSwap(client: PublicClient, chainId: number, p: Sw
   }
   const available = p.amountIn - vaultFeeOf(p.amountIn, p.feeBps);
   if (available <= 0n) throw new Error("That amount is too small to swap.");
-  const buffer = BigInt(swapBufferBps(chainId));
+  const buffer = BigInt(swapBufferBps(chainId, p.assetIn, p.assetOut));
 
   if (chainId === 4217) {
     const expected = await client.readContract({

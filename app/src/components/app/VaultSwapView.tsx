@@ -35,7 +35,7 @@ import {
   withdrawFeeOf,
   type LocalNote,
 } from "@/lib/shield";
-import { isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
+import { NATIVE_ETH_TOKEN, isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
 import {
   IMPACT_WARN_BPS,
   QUOTE_TTL_MS,
@@ -91,6 +91,7 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 
 /** The token record for an asset on this chain (logo id, name, CoinGecko id). */
 function tokenFor(chainId: number, asset: string): OnchainToken | undefined {
+  if (same(asset, NATIVE_ETH_TOKEN.address)) return NATIVE_ETH_TOKEN;
   return knownTokens(chainId).find((t) => same(t.address, asset));
 }
 
@@ -775,7 +776,7 @@ export function VaultSwapView() {
                     <Row term={`Vault fee (${formatFeePercent(feeBps ?? 0)})`}>
                       {formatAssetLabel(withdrawFeeOf(amount, feeBps ?? 0), payAsset)}
                     </Row>
-                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId))})`}>
+                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId, payAsset ?? undefined, toAsset ?? undefined))})`}>
                       about {formatAssetLabel(shownPlan.leftover, payAsset)} to the treasury
                     </Row>
                     {impact != null && (

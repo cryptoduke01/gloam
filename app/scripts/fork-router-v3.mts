@@ -36,6 +36,8 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { buildPoseidonUnshieldWitness, fieldToBytes32, makeBoundNotePoseidon, packGroth16Proof, type Groth16Proof } from "@gloamtrade/sdk";
 
+const { escrowAddress, exitDigest } = await import("../src/lib/vaultSwap");
+
 const arg = process.argv[process.argv.indexOf("--chain") + 1] ?? "ethereum";
 const ETH_PRICE = Number(process.env.ETH_PRICE ?? 2250);
 const NATIVE: Address = "0x0000000000000000000000000000000000000000";
@@ -318,6 +320,7 @@ async function runCase(c: Case, feeBps: bigint) {
     exitKey: exitAccount.address,
   };
   const escrow = (await client.readContract({ address: ROUTER, abi: routerAbi, functionName: "escrowFor", args: [c.assetIn, key] })) as Address;
+  check(same(escrowAddress(ROUTER, c.assetIn, key), escrow), "the app works out the router's escrow");
   const w = await buildPoseidonUnshieldWitness({ secretHex: note.secret as Hex, amount: c.amountIn, asset: c.assetIn, to: escrow, path });
   if (!w.checks.commitmentMatches) throw new Error("the witness does not open the note");
   const [unProof, outProof, backProof] = await Promise.all([prove("unshield", w.circomInput), shieldProof(out, p.amountOut, c.assetOut), shieldProof(back, backAmount, c.assetIn)]);
@@ -349,7 +352,9 @@ async function runCase(c: Case, feeBps: bigint) {
     const stuck = await tx(RELAYER, ROUTER, data);
     console.log(`  vault limit full, the refund call: ${check(stuck.status === "reverted", "a full limit holds the refund back")} (reverted)`);
     console.log(`  still waiting at the escrow: ${check((await balance(c.assetIn, escrow)) === available, "the money waits")}`);
-    const digest = (await client.readContract({ address: ROUTER, abi: routerAbi, functionName: "exitDigest", args: [escrow, EXIT_TO] })) as Hex;
+    // signed on the app's own digest, with no help from the chain, as the app does it
+    const digest = exitDigest(cfg.id, ROUTER, escrow, EXIT_TO);
+    check(digest === (await client.readContract({ address: ROUTER, abi: routerAbi, functionName: "exitDigest", args: [escrow, EXIT_TO] })), "the app works out the router's digest");
     const signature = await exitAccount.sign({ hash: digest });
     const wrongTo = await tx(STRANGER, ROUTER, encodeFunctionData({ abi: routerAbi, functionName: "exit", args: [c.assetIn, key, STRANGER, signature] }));
     console.log(`  a stranger points the signature at themselves: ${check(wrongTo.status === "reverted", "the signature names the address")} (reverted)`);

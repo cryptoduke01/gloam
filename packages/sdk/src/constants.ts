@@ -758,13 +758,18 @@ export const CASH_OUT_TO_ROUTER_MESSAGE =
 export const CASH_OUT_TO_ZERO_MESSAGE = "That is the zero address, which nobody controls. Cash out to a wallet you control.";
 
 /**
- * Gloam's swap routers, by chain: GloamVaultSwapV4b and GloamVaultSwapV4 (kept
- * for refunds) on Robinhood Chain, GloamVaultSwapTempo on Tempo. Base and
- * Ethereum have none. How swaps run is the app's (app/src/lib/vaultSwap.ts).
+ * Gloam's swap routers, by chain, the newest first. GloamVaultSwapV4c on Robinhood
+ * Chain, Base and Ethereum and GloamVaultSwapTempo2 on Tempo land through the CREATE2
+ * factory, so each address is known before it deploys and a cash out is refused from
+ * the start (contracts/test/fixtures/router-next.json pins them). The older routers
+ * stay listed for good: GloamVaultSwapV4b and GloamVaultSwapV4 on Robinhood Chain,
+ * GloamVaultSwapTempo on Tempo. How swaps run is the app's (app/src/lib/vaultSwap.ts).
  */
 const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
-  [RH_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
-  [TEMPO_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [RH_MAINNET_CHAIN_ID]: ["0xbDEaC20a1Dfa892cac839a3C911d403aF6968e05", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
+  [TEMPO_MAINNET_CHAIN_ID]: ["0xb88794079d0DdC5b4327b49056b3761F389A9fDf", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [BASE_MAINNET_CHAIN_ID]: ["0xdc88B3bF0d7cB48B7d4062572dC5fC8D2a8147C6"],
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0xE2cC7C7f521D12Da0E2FAd2153b351515637dF0A"],
 };
 
 /**

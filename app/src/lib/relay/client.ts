@@ -6,7 +6,7 @@ import type { Address, Hex, PublicClient } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
 import { readDemo } from "@/lib/demoFlag";
 import { demoRelay, demoRelayStatus, demoWaitForTx } from "@/lib/demo/chain";
-import type { PoolKey } from "@/lib/vaultSwap";
+import type { EscrowKey, PoolKey } from "@/lib/vaultSwap";
 
 export type RelayNetworkStatus = {
   chainId: number;
@@ -163,8 +163,22 @@ export async function relayVaultSwap(p: {
   deposit: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   refund: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   route: readonly PoolKey[];
+  /** v3: the swap's exit key. */
+  exitKey?: Address;
 }): Promise<Hex> {
   return (await post({ action: "swap", ...p })).hash;
+}
+
+/** Sends a swap's waiting money to the address its exit key signed for (lib/vaultSwapRun exitVaultSwap). */
+export async function relayVaultSwapExit(p: {
+  chainId: number;
+  router: Address;
+  asset: Address;
+  key: Required<EscrowKey>;
+  to: Address;
+  signature: Hex;
+}): Promise<Hex> {
+  return (await post({ action: "swapExit", ...p })).hash;
 }
 
 /**

@@ -36,16 +36,21 @@ import type { PoseidonMerklePath } from "./merklePoseidon";
 import { prepareBridgeNote } from "./bridgePrivate";
 import { moveRevertedNotes } from "./claimSweep";
 import { freshPath, networkOfNote, spendPlanFor, spendWaitMessage, splitForCashOut } from "./cashOutSplit";
-import { relayVaultSwap, RelaySubmitError, waitForTx } from "./relay/client";
+import { relayVaultSwap, relayVaultSwapExit, RelaySubmitError, waitForTx } from "./relay/client";
 import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
 import type { GloamNetwork } from "./networks";
 import {
   encodeRoute,
   escrowAddress,
+  exitAccount,
+  exitDigest,
   refundAmountFor,
+  refundEscrowKey,
   replanVaultSwap,
+  swapRouterFor,
   vaultSwapAbi,
+  vaultSwapV3Abi,
   type EscrowKey,
   type SwapPlan,
   type VaultSwapRefundInfo,
@@ -196,6 +201,8 @@ export async function runVaultSwap(args: {
       ? target.nullifier
       : (fieldToHex(await noteNullifierPoseidon(hexToField(target.secret), hexToField(target.commitment))) as Hex);
   const routeBytes = encodeRoute(plan.route);
+  // v3 names a one-time exit key, from the refund note's own secret, in the escrow key.
+  const exitKey = swapRouterFor(network.chainId, router)?.version === 3 ? exitAccount(back.note.secret).address : undefined;
   const key: EscrowKey = {
     nullifier,
     amountIn: targetWei,
@@ -205,14 +212,12 @@ export async function runVaultSwap(args: {
     refundCommitment: back.note.commitment,
     refundAmount: BigInt(back.note.amountWei),
     routeHash: keccak256(routeBytes),
+    ...(exitKey ? { exitKey } : {}),
   };
   const escrow = escrowAddress(router, target.asset, key);
-  const routerSays = await client.readContract({
-    address: router,
-    abi: vaultSwapAbi,
-    functionName: "escrowFor",
-    args: [target.asset, key],
-  });
+  const routerSays = exitKey
+    ? await client.readContract({ address: router, abi: vaultSwapV3Abi, functionName: "escrowFor", args: [target.asset, { ...key, exitKey }] })
+    : await client.readContract({ address: router, abi: vaultSwapAbi, functionName: "escrowFor", args: [target.asset, key] });
   if (routerSays.toLowerCase() !== escrow.toLowerCase()) {
     throw new Error("This swap's address didn't check out, so nothing was sent. Refresh and try again.");
   }
@@ -240,6 +245,7 @@ export async function runVaultSwap(args: {
     amountIn: targetWei.toString(),
     out: { commitment: out.note.commitment, asset: args.assetOut, amount: plan.amountOut.toString() },
     route: plan.route,
+    ...(exitKey ? { exitKey } : {}),
   };
   const outNote: LocalNote = { ...out.note, id: `sw-${now}`, sweptFrom: { id: target.id, nullifier }, sweepPending: true };
   const refundNote: LocalNote = {
@@ -263,6 +269,7 @@ export async function runVaultSwap(args: {
       deposit: { proof: out.proof, commitment: outNote.commitment, asset: args.assetOut, amount: plan.amountOut },
       refund: { proof: back.proof, commitment: refundNote.commitment, asset: target.asset, amount: BigInt(refundNote.amountWei) },
       route: plan.route,
+      ...(exitKey ? { exitKey } : {}),
     },
     { spentId: target.id, outId: outNote.id, refund: refundNote },
     {
@@ -337,9 +344,40 @@ export async function finishVaultSwapRefund(note: LocalNote): Promise<boolean> {
     deposit: { proof: UNUSED_PROOF, commitment: info.out.commitment, asset: info.out.asset, amount: BigInt(info.out.amount) },
     refund: { proof: proofBytes, commitment: note.commitment, asset: note.asset, amount: BigInt(note.amountWei) },
     route: info.route,
+    ...(info.exitKey ? { exitKey: info.exitKey } : {}),
   });
   // the receipt is read on the note's own chain, whatever the page shows by now
   const net = networkOfNote(note);
   await waitForTx(hash, undefined, net ? publicClientFor(net) : undefined).catch(() => null);
   return true;
+}
+
+/**
+ * Takes a swap's waiting money out to `to`, in the clear, when its refund can't land
+ * (GloamVaultSwap2.exit). The key that signs comes from the refund note's secret and
+ * stays here; the signature names `to`, so the relay can only send it there. The whole
+ * escrow leaves, so the refund note is retired once the chain says it landed.
+ */
+export async function exitVaultSwap(note: LocalNote, to: Address): Promise<Hex> {
+  const info = note.vaultSwap;
+  const from = note.sweptFrom;
+  if (!info?.exitKey || !from) throw new Error("A swap through this router has no exit. Its refund lands once the vault has room.");
+  const key = refundEscrowKey(info, from.nullifier, note.commitment, BigInt(note.amountWei));
+  const account = exitAccount(note.secret);
+  if (account.address.toLowerCase() !== info.exitKey.toLowerCase()) throw new Error("This note doesn't hold this swap's exit key.");
+  const escrow = escrowAddress(info.router, info.assetIn, key);
+  const signature = await account.sign({ hash: exitDigest(note.chainId, info.router, escrow, to) });
+  const hash = await relayVaultSwapExit({
+    chainId: note.chainId,
+    router: info.router,
+    asset: info.assetIn,
+    key: { ...key, exitKey: info.exitKey },
+    to,
+    signature,
+  });
+  const net = networkOfNote(note);
+  const outcome = await waitForTx(hash, undefined, net ? publicClientFor(net) : undefined);
+  if (outcome !== "success") throw new Error("The exit didn't go through, and the money is still waiting. Try again in a minute.");
+  await updateLocalNote(note.id, { status: "recovered", sweepPending: false, refundHeld: undefined, txHash: hash });
+  return hash;
 }
