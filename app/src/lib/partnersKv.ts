@@ -75,7 +75,11 @@ async function redisPipeline(cmds: KvCommand[]): Promise<unknown[]> {
 
 // ---------------------------------------------------------------- memory
 
-type MemValue = string | Map<string, string> | Set<string> | string[];
+class MemZset {
+  scores = new Map<string, number>();
+}
+
+type MemValue = string | Map<string, string> | Set<string> | string[] | MemZset;
 type MemEntry = { v: MemValue; exp: number | null };
 
 function memStore(): Map<string, MemEntry> {
@@ -114,6 +118,19 @@ function typed<T extends MemValue>(key: string, make: () => T, is: (v: MemValue)
 const isHash = (v: MemValue): v is Map<string, string> => v instanceof Map;
 const isSet = (v: MemValue): v is Set<string> => v instanceof Set;
 const isList = (v: MemValue): v is string[] => Array.isArray(v);
+const isZset = (v: MemValue): v is MemZset => v instanceof MemZset;
+
+/** A sorted set's members by rank: lowest score first, ties by member, as Redis orders them. */
+function zsetRanked(z: MemZset): string[] {
+  return [...z.scores.entries()].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1)).map(([m]) => m);
+}
+
+/** A Redis rank range: negative positions count from the end, and stop is included. */
+function rankSlice<T>(items: T[], start: number, stop: number): T[] {
+  const from = start < 0 ? Math.max(items.length + start, 0) : start;
+  const to = stop < 0 ? items.length + stop : stop;
+  return to < from ? [] : items.slice(from, to + 1);
+}
 
 function memCommand(cmd: KvCommand): unknown {
   const [rawName, ...rest] = cmd;
@@ -250,6 +267,33 @@ function memCommand(cmd: KvCommand): unknown {
       const start = Number(a[1]);
       const stop = Number(a[2]);
       return e.v.slice(start, stop < 0 ? e.v.length + stop + 1 : stop + 1);
+    }
+    case "ZADD": {
+      const z = typed(a[0]!, () => new MemZset(), isZset);
+      let added = 0;
+      for (let i = 1; i + 1 < a.length; i += 2) {
+        if (!z.scores.has(a[i + 1]!)) added++;
+        z.scores.set(a[i + 1]!, Number(a[i]));
+      }
+      return added;
+    }
+    case "ZRANGE": {
+      const e = live(a[0]!);
+      return e && isZset(e.v) ? rankSlice(zsetRanked(e.v), Number(a[1]), Number(a[2])) : [];
+    }
+    case "ZREM": {
+      const e = live(a[0]!);
+      if (!e || !isZset(e.v)) return 0;
+      let n = 0;
+      for (const v of a.slice(1)) if (e.v.scores.delete(v)) n++;
+      return n;
+    }
+    case "ZREMRANGEBYRANK": {
+      const e = live(a[0]!);
+      if (!e || !isZset(e.v)) return 0;
+      const doomed = rankSlice(zsetRanked(e.v), Number(a[1]), Number(a[2]));
+      for (const v of doomed) e.v.scores.delete(v);
+      return doomed.length;
     }
     default:
       throw new Error(`memory kv: unsupported command ${name}`);
