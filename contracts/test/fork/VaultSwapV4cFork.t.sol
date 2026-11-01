@@ -351,6 +351,19 @@ contract VaultSwapV4cForkTest is Test {
         // Keep to a real swap's size: the vault takes 500 of a stablecoin in one deposit.
         uint256 cap = (cout == NATIVE || cout == weth) ? 0.2 ether : 10 ** uint256(IERC20C(cout).decimals()) * 500;
         if (want > cap) want = cap;
+        // A pool can hold less on one side than that, and a live pool's depth moves day to day. The
+        // router reverts whole on what it can't fill (a test of its own, below), so run at what it fills.
+        try quoter.quote(hops, _dirs(hops, cin), want) returns (uint256, uint256 fills) {
+            if (fills < want) {
+                console2.log("THIN", label, fills);
+                want = (fills * 9) / 10;
+            }
+        } catch {}
+        if (want == 0) {
+            failures++;
+            console2.log("NO LIQUIDITY", label);
+            return;
+        }
         _swap(hops, cin, cout, want, label);
     }
 
@@ -399,6 +412,7 @@ contract VaultSwapV4cForkTest is Test {
             _swap(_route(11, 0), eurc, NATIVE, 0.02 ether, "EURC>USDC>ETH");
             _swap(_route(10, 2), usdg, NATIVE, 0.02 ether, "USDG>USDT>ETH");
             _swap(_route(7, 11), p[7].currency1, eurc, 50e6, "USDT>USDC>EURC");
+            _swap(_route(4, 8), p[4].currency1, usdg, 500e6, "USDT>USDC>USDG, at the vault's limit");
         } else {
             address tsla = p[15].currency0;
             _swap(_route(15, 0), tsla, NATIVE, 0.002 ether, "TSLA>USDG>ETH");

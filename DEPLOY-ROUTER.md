@@ -86,7 +86,7 @@ pinned escrow code.
 | Chain | Router | Pools | Deploy gas |
 | --- | --- | --- | --- |
 | Robinhood Chain | `0xFD1547d9C404Bf670c9652d1D6007A1bB6528b93` | 45 | 4.6M |
-| Base | `0x0742fFA3d1C8e74765F8186d5E2133c307e2557c` | 7 | 3.5M |
+| Base | `0x0742fFA3d1C8e74765F8186d5E2133c307e2557c` | 7 | 3.6M |
 | Ethereum | `0xE36883A156ce5Ed68F083DdA79Bad7cf07AC5B2c` | 13 | 3.7M |
 | Tempo | `0x75A22213c7d64438246348129b843d69b76f2535` | no pools, its DEX | see the card |
 
