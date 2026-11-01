@@ -26,11 +26,14 @@ export default function DocsFreshWalletPage() {
       <ol>
         <li>
           Open <AppLink href={FRESH_WALLET_PATH}>Fund a fresh wallet</AppLink> and paste a new address you control, or
-          make one there. A key made there stays in your browser and is shown once, so save it before you go on.
+          make one there. A key made there stays in your browser and is shown once, so save it before you go on. Use a
+          plain wallet: the relay won&apos;t pay gas for a contract.
         </li>
         <li>Choose how much USDG the wallet gets, how much to turn into gas, and when it goes.</li>
         <li>
-          Gloam makes two cash outs: gas money to the wallet&apos;s gas station, then your USDG to the wallet.
+          Gloam makes two cash outs: gas money to the wallet&apos;s gas station, and your USDG to the wallet. Sent now, the
+          gas money lands first. Spread over a window, each lands at its own time, so either can come first. A wallet that
+          already has gas can skip the gas money.
         </li>
         <li>
           Press <strong>Turn it into ETH</strong> once the gas money lands. ETH arrives in the fresh wallet.
@@ -104,7 +107,10 @@ export default function DocsFreshWalletPage() {
         </li>
         <li>
           <strong>Timing.</strong> Money that leaves right after it came in is easy to line up too. The flow can send each
-          cash out at its own random time inside about an hour, 6 hours or a day. Longer is better.
+          cash out at its own random time inside about an hour, 6 hours or a day. Longer is better, with one limit: each
+          proof shows roughly when it was made, so the two can be grouped. While Gloam is open it remakes them, last shortly
+          before each one goes. One that goes out while Gloam is closed shows when it was last made, so keep Gloam open
+          until they have gone if timing matters.
         </li>
         <li>
           <strong>Your own moves.</strong> Sending from the fresh wallet to your main wallet, or to an exchange account in
@@ -112,7 +118,8 @@ export default function DocsFreshWalletPage() {
         </li>
         <li>
           <strong>Your setup.</strong> A wallet app or RPC provider that sees both addresses from one device can connect
-          them. A separate wallet or browser profile helps.
+          them. Using the fresh wallet from a separate browser profile helps on Borro, but not on this page: Fund a fresh
+          wallet reads the fresh wallet inside your main session, so that link exists for whoever runs the RPC.
         </li>
       </ul>
 
