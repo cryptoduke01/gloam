@@ -32,7 +32,7 @@ const { rpcVoteChain, setVoteChain } = await import("../src/lib/vote/chainReads"
 const { computeFinal, ensureFinal, finalDue, storedFinal } = await import("../src/lib/vote/final");
 const { excludedForVote, snapshotFor } = await import("../src/lib/vote/registry");
 const { listBallots } = await import("../src/lib/vote/store");
-const { smartWalletCheck } = await import("../src/lib/vote/submit");
+const { smartWalletFinalCheck } = await import("../src/lib/vote/submit");
 const { kvBackend } = await import("../src/lib/partnersKv");
 
 const args = process.argv.slice(2);
@@ -69,9 +69,9 @@ for (const id of ids) {
   const stored = await storedFinal(v.id);
   const f = store
     ? finalDue(v)
-      ? await ensureFinal(v, excluded, snapshot, { chain, contractCheck: smartWalletCheck })
+      ? await ensureFinal(v, excluded, snapshot, { chain, contractCheck: smartWalletFinalCheck })
       : null
-    : stored ?? (await computeFinal(v, await listBallots(v.id), excluded, snapshot, { chain, contractCheck: smartWalletCheck }));
+    : stored ?? (await computeFinal(v, await listBallots(v.id), excluded, snapshot, { chain, contractCheck: smartWalletFinalCheck }));
   if (!f) {
     console.error(`${id}: not counted. ${finalDue(v) ? "Another run holds the lock, or the chain didn't answer (see above). Try again." : `It counts from 2 minutes after ${v.end}.`}`);
     failed = true;
