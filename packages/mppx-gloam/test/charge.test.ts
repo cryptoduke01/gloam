@@ -579,6 +579,72 @@ test("a store that fails while a receipt is recorded leaves the payment able to 
   }
 });
 
+test("a retry that reads a sent sweep as it lands serves the payment, and a spend by someone else is still refused", async () => {
+  const sentSweep = async () => {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    // The sweep goes out and the answer is lost: it is on its way, with a sent record.
+    let sweep: readonly unknown[] | undefined;
+    const replay = memoryReplayStore();
+    const first = serverConfig(pool, {
+      replay,
+      submit: async (intent) => {
+        sweep = intent.exec.args;
+        throw Object.assign(new Error("timed out"), { maybeSent: true });
+      },
+    });
+    await rejects(settle(ch, paid.credential.payload, first), /has not confirmed/, true);
+    return { pool, ch, paid, replay, sweep: sweep! };
+  };
+
+  // It lands between the retry's two reads, whichever comes first.
+  const landing = await sentSweep();
+  let armed = false;
+  const land = async () => {
+    if (!armed) return;
+    armed = false;
+    await landing.pool.transfer(landing.sweep);
+  };
+  const config = serverConfig(landing.pool, {
+    replay: landing.replay,
+    chain: {
+      ...landing.pool.chain,
+      isSpent: async (n) => {
+        const r = await landing.pool.chain.isSpent(n);
+        await land();
+        return r;
+      },
+      isCommitmentSeen: async (c) => {
+        const r = await landing.pool.chain.isCommitmentSeen(c);
+        await land();
+        return r;
+      },
+    },
+  });
+  const validated = await validateGloamCharge({ challenge: landing.ch, payload: landing.paid.credential.payload, config });
+  armed = true;
+  const receipt = await settleGloamCharge({ challenge: landing.ch, payload: landing.paid.credential.payload, config, validated });
+  assert.equal(receipt.status, "success");
+  await rejects(settle(landing.ch, landing.paid.credential.payload, config), /already used/);
+
+  // The payer spends the payment back instead: no fresh note ever shows, so it is refused.
+  const taken = await sentSweep();
+  const note = taken.paid.built.paymentNote;
+  const back = await buildPrivateSendIntent({
+    secretHex: note.secret,
+    amountInWei: 400n,
+    amountPayWei: 400n,
+    asset: USD,
+    path: await taken.pool.path(note.commitment),
+    prove: stubProve,
+    poolAddress: POOL,
+    chainId: CHAIN_ID,
+  });
+  await taken.pool.transfer(back.exec.args);
+  await rejects(settle(taken.ch, taken.paid.credential.payload, serverConfig(taken.pool, { replay: taken.replay })), /spent by someone else/);
+});
+
 test("a sweep that fails tells the client what to do, never the text of the failure", async () => {
   const raw = 'HTTP request failed. URL: https://rpc.example.com/v2/detail-for-the-operator Request body: {"method":"eth_sendRawTransaction"}';
   const thrownBy = (error: Error): GloamChargeServerConfig["submit"] => async () => {

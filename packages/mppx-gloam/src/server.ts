@@ -435,13 +435,16 @@ export async function settleGloamCharge(args: {
   const existing = await replay.get(key);
   if (existing?.state === "settled") throw fail("This payment was already used.");
   if (existing?.state === "sent") {
+    // The spend first: a sweep does both in one block, so a spend read with no fresh note read after it was another
+    // transaction's. The other way round, a sweep landing between the two reads looks like someone else's spend.
+    const spent = await chain.isSpent(key);
     if (existing.freshCommitment && (await chain.isCommitmentSeen(existing.freshCommitment))) {
       const reference = existing.sweepHash ?? (v.payload.type === "hash" ? v.payload.hash : existing.freshCommitment);
       const receipt = receiptOf(v, reference, clock());
       await finalize({ ...existing, state: "settled", at: clock(), receipt });
       return receipt;
     }
-    if (await chain.isSpent(key)) {
+    if (spent) {
       await replay.delete(key);
       await releaseChallenge();
       throw fail("The payment note was spent by someone else before this server's sweep landed. Do not grant access.");
