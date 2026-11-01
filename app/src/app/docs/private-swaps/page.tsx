@@ -3,12 +3,23 @@ import Link from "next/link";
 import { AppLink } from "@/components/AppLink";
 import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
-import { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
+import { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER, VAULT_SWAP_V3_ADDRESS, swapV3Live } from "@/lib/vaultSwap";
+
+/** Private swaps v3 (lib/vaultSwap VAULT_SWAP_V3_LIVE), chain by chain: the page follows each switch. */
+const V3_RH = swapV3Live(4663);
+const V3_TEMPO = swapV3Live(4217);
+const V3_BASE = swapV3Live(8453);
+const V3_ETHEREUM = swapV3Live(1);
+const V3 = V3_RH || V3_TEMPO || V3_BASE || V3_ETHEREUM;
+/** The chains that joined with v3, and every chain with swaps, for the sentences that name them. */
+const NEW_CHAINS = [...(V3_BASE ? ["Base"] : []), ...(V3_ETHEREUM ? ["Ethereum"] : [])];
+const and = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+const WHERE = and(["Robinhood Chain", "Tempo", ...NEW_CHAINS]);
+const V4_WHERE = and(["Robinhood Chain", ...NEW_CHAINS]);
 
 export const metadata: Metadata = {
   title: "Private swaps",
-  description:
-    "Swap straight from your private balance on Robinhood Chain and Tempo mainnet. Who swapped stays private; the tokens and the amounts are public, like any DEX trade.",
+  description: `Swap straight from your private balance on ${WHERE} mainnet. Who swapped stays private; the tokens and the amounts are public, like any DEX trade.`,
 };
 
 const VAULT = "0x39e28cde55cab798874746ac52cb4b5cc99a0194";
@@ -21,9 +32,9 @@ export default function DocsPrivateSwapsPage() {
   return (
     <DocsLayout
       title="Private swaps"
-      lede="Swap one token for another straight from your private balance, on Robinhood Chain and Tempo mainnet. Who swapped stays private. The tokens and the amounts are public, like any trade on a DEX."
+      lede={`Swap one token for another straight from your private balance, on ${WHERE} mainnet. Who swapped stays private. The tokens and the amounts are public, like any trade on a DEX.`}
       glance={[
-        { label: "Where", value: "RH + Tempo mainnet" },
+        { label: "Where", value: NEW_CHAINS.length ? `${2 + NEW_CHAINS.length} mainnets` : "RH + Tempo mainnet" },
         { label: "Who swapped", value: "Private" },
         { label: "Amounts", value: "Public" },
         { label: "Sent by", value: "The Gloam relay" },
@@ -41,7 +52,7 @@ export default function DocsPrivateSwapsPage() {
           {
             n: "2",
             title: "Swap on a DEX",
-            body: "The swap router buys an exact amount of the other token on a public DEX: Uniswap v4 on Robinhood Chain, Tempo's stablecoin exchange on Tempo.",
+            body: `The swap router buys an exact amount of the other token on a public DEX: Uniswap v4 on ${V4_WHERE}, Tempo's stablecoin exchange on Tempo.`,
           },
           {
             n: "3",
@@ -77,7 +88,7 @@ export default function DocsPrivateSwapsPage() {
               {V2 ? (
                 <>
                   <td>
-                    USDG, $GLOAM, ETH (held as WETH), USDe, U, cbBTC, VIRTUAL,
+                    USDG, $GLOAM, {V3_RH ? "ETH, WETH" : "ETH (held as WETH)"}, USDe, U, cbBTC, VIRTUAL,
                     PONS, CASHCAT and 20 Robinhood stock tokens (SPY, NVDA, TSLA,
                     AAPL and more), any one for another. AI and ORBIO join once
                     their pools are live and the vault takes them.
@@ -102,6 +113,20 @@ export default function DocsPrivateSwapsPage() {
               <td>USDC.e, pathUSD, USDT0 and OUSD, any one for another</td>
               <td>Tempo&apos;s stablecoin exchange</td>
             </tr>
+            {V3_BASE && (
+              <tr>
+                <td>Base</td>
+                <td>USDC, USDT, EURC and ETH, any one for another</td>
+                <td>Uniswap v4, in up to three hops over hookless pools, whichever route pays the most</td>
+              </tr>
+            )}
+            {V3_ETHEREUM && (
+              <tr>
+                <td>Ethereum</td>
+                <td>USDC, USDT, USDG, EURC and ETH, any one for another</td>
+                <td>Uniswap v4, in up to three hops over hookless pools, whichever route pays the most</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -191,6 +216,7 @@ export default function DocsPrivateSwapsPage() {
           The swap asks for a little less than the quote, so a small price move
           before it lands does not make it fail. Whatever the trade does not use
           goes to the Gloam treasury.
+          {NEW_CHAINS.length > 0 && ` On ${and(NEW_CHAINS)} it is 0.1% between two dollar stablecoins and 0.5% otherwise.`}
         </li>
         <li>
           <strong>Pool fees</strong> are already in the quoted price.
@@ -260,6 +286,32 @@ export default function DocsPrivateSwapsPage() {
         ever land, so your money is counted once either way.
       </p>
 
+      {V3 && (
+        <>
+          <h3 id="exit">If the vault can&apos;t take the refund</h3>
+          <p>
+            A refund note is a deposit, so it needs room under the vault&apos;s
+            limit for that token. If there is none, the money waits at the
+            escrow. It stays yours, the app shows it as held, outside your
+            balance, and it comes back privately by itself once there is room.
+          </p>
+          <p>
+            You don&apos;t have to wait. Each swap names a one-time exit key, made
+            from your refund note&apos;s secret, so only you can use it. Sign for a
+            wallet and everything that arrived at the escrow goes there, and a
+            copy of your signature can only pay that wallet. The relay can send
+            it for you, so a new wallet needs no gas.
+          </p>
+          <p>
+            <strong>An exit is public.</strong> Anyone can see that wallet and the
+            amount next to the swap, so that money stops being private. A wallet
+            you have never used keeps the rest of your balance apart from it.
+            A swap made through an earlier router has no exit: its refund waits
+            for room.
+          </p>
+        </>
+      )}
+
       <h2 id="trust">What the router can and cannot do</h2>
       <ul>
         {V2 ? (
@@ -268,20 +320,32 @@ export default function DocsPrivateSwapsPage() {
               <strong>No upgrade, and nobody moves money.</strong> No one can
               change the routers&apos; code, the vault, the treasury or the
               exchange they use, and no function sends what passes through them
-              anywhere but your new note and the treasury.
+              anywhere but your new note, your refund note and the treasury
+              {V3 ? ", or a wallet you signed for with the swap's exit key" : ""}.
             </li>
             <li>
               <strong>Allowed venues, changed in public.</strong>{" "}
-              On Robinhood Chain the router only uses Uniswap v4 pools on its
+              On {V4_WHERE} the router only uses Uniswap v4 pools on its
               allowlist. Its owner can add a pool only with 3 days of public
               notice on chain, and can take one off at once. A swap names its
               route in advance, so a pool added later can never be slipped into
               it. On Tempo the router only uses Tempo&apos;s stablecoin exchange.
             </li>
             <li>
-              <strong>ETH as WETH.</strong> The vault holds WETH. When a route
-              uses a pool that holds ETH, the router unwraps or wraps exactly
-              what that pool trades, inside the swap, and keeps none of it.
+              {V3_RH || NEW_CHAINS.length ? (
+                <>
+                  <strong>ETH and WETH.</strong> A note can be either one, and a
+                  pool can hold either one. When they differ, the router converts
+                  exactly what that pool trades, at the end of the route, inside
+                  the swap, and keeps none of it.
+                </>
+              ) : (
+                <>
+                  <strong>ETH as WETH.</strong> The vault holds WETH. When a route
+                  uses a pool that holds ETH, the router unwraps or wraps exactly
+                  what that pool trades, inside the swap, and keeps none of it.
+                </>
+              )}
             </li>
             <li>
               <strong>Issuers keep their powers.</strong> Robinhood can pause a
@@ -329,9 +393,16 @@ export default function DocsPrivateSwapsPage() {
       <h2 id="contracts">Contracts</h2>
       <ul>
         <li>
-          <strong>Robinhood Chain router</strong> ({V2 ? "GloamVaultSwapV4b" : "GloamVaultSwapV4"}),{" "}
+          <strong>Robinhood Chain router</strong> ({V3_RH ? "GloamVaultSwapV4c" : V2 ? "GloamVaultSwapV4b" : "GloamVaultSwapV4"}),{" "}
           <code>{VAULT_SWAP_ROUTERS[4663]}</code>
         </li>
+        {V3_RH && V2 && (
+          <li>
+            <strong>Earlier Robinhood Chain router</strong> (GloamVaultSwapV4b),
+            which still finishes the refunds of swaps made through it,{" "}
+            <code>{VAULT_SWAP_V2_ROUTER[4663]}</code>
+          </li>
+        )}
         {V2 && (
           <li>
             <strong>Earlier Robinhood Chain router</strong> (GloamVaultSwapV4),
@@ -340,16 +411,26 @@ export default function DocsPrivateSwapsPage() {
           </li>
         )}
         <li>
-          <strong>Tempo router</strong> (GloamVaultSwapTempo),{" "}
+          <strong>Tempo router</strong> ({V3_TEMPO ? "GloamVaultSwapTempo2" : "GloamVaultSwapTempo"}),{" "}
           <code>{VAULT_SWAP_ROUTERS[4217]}</code>
         </li>
+        {V3_BASE && (
+          <li>
+            <strong>Base router</strong> (GloamVaultSwapV4c), <code>{VAULT_SWAP_V3_ADDRESS[8453]}</code>
+          </li>
+        )}
+        {V3_ETHEREUM && (
+          <li>
+            <strong>Ethereum router</strong> (GloamVaultSwapV4c), <code>{VAULT_SWAP_V3_ADDRESS[1]}</code>
+          </li>
+        )}
         <li>
           <strong>Vault</strong>, the same address on every mainnet,{" "}
           <code>{VAULT}</code>
         </li>
         <li>
-          <strong>Treasury</strong>, where unused input goes, fixed in both
-          routers, <code>{TREASURY}</code>
+          <strong>Treasury</strong>, where unused input goes, fixed in each
+          router, <code>{TREASURY}</code>
         </li>
       </ul>
 

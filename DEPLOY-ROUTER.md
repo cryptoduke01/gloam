@@ -90,6 +90,38 @@ pinned escrow code.
 These hold for the contracts in `test/fixtures/router-next.json`, which
 `test_v3_predicted_addresses_are_pinned` checks.
 
+## Switch a chain on
+
+Deploying changes nothing. A chain goes live with one line in the app, and each chain's
+switch stands alone.
+
+1. Wait for the chain's card to read `Deployed and checked`.
+2. If this is the first chain, publish the SDK. Its `VAULT_SWAP_ROUTERS` already lists
+   these addresses, and the app and relay build against it, but an agent on an older npm
+   version isn't refused a cash out to a router until it updates.
+3. In `app/src/lib/vaultSwap.ts`, set `VAULT_SWAP_V3_LIVE[<chainId>]` to `true`:
+   `4663` Robinhood Chain, `8453` Base, `4217` Tempo. Leave `1` alone: see
+   [Ethereum](#ethereum-what-a-swap-costs).
+4. In the same PR, update what says it is off: the `no chain is on` line in
+   `app/scripts/selftest-vault-swap.mts`, the chain's row and the `a native note never
+   swaps` line in `app/scripts/selftest-asset-matrix.mts`, and the lines below that a
+   flag can't reach.
+5. Merge it. The swap tab, the docs, `/verify`, the cash-out guard and Glim all follow
+   the flag.
+6. Make one small real swap each way, one of them from an ETH note where the chain has
+   one, and read both on the explorer.
+
+**Which docs follow the flag.** `/docs/private-swaps`, `/docs/threat-model`, `/docs/chain`,
+`/verify` and Glim do, so they are true either side of a switch. `README.md`, `AGENTS.md`,
+`mcp/README.md` and `packages/sdk/README.md` are plain files and can't: update their swap
+lines in step 4.
+
+**The switch only goes one way.** Once a chain has had a swap through the new router, do
+not set its flag back to `false`. The relay would stop knowing that router, and a refund or
+an exit of a swap made through it would be refused. To stop swaps on a v4 chain, the owner
+calls `removePool` for its pools: swaps through them revert with the note safe, and
+refunds and exits never touch a pool. `GloamVaultSwapTempo2` has no owner and no pools.
+
 ## There is no fixed order
 
 Deploying changes nothing for anyone, because no app or relay uses a router until it is
@@ -118,7 +150,10 @@ unshield proof names that escrow, so it can never land anywhere else.
 
 ## Retiring the old router
 
-1. Switch the app and relay to the new router. New quotes go to it.
+1. Switch the chain on, as above. New quotes go to the new router, and the relay refuses
+   a new swap on an older one with `swap_router_old`: a tab still holding an old quote gets
+   a clear message and the note stays put. A refund through an older router still goes,
+   because its note is already spent.
 2. Wait at least an hour, the time the app gives a swap it never heard back from.
 3. Optional, on Robinhood Chain: the owner calls `removePool` on `GloamVaultSwapV4b`
    for each pool. That stops swaps through it from any client. A swap still in flight
@@ -155,10 +190,12 @@ largest one the vault takes today. The price buffer goes to the treasury as well
 helps a little (0.1% on stablecoin pairs), but it is meant for price moves, so these
 numbers leave it out.
 
-**So Ethereum stays off.** The router deploys there and is built and tested, and the app
-keeps it switched off. Before turning it on, the relay should refuse a swap whose gas
-would cost more than the swap's fee, and pick a smallest swap. A flat gas ceiling is
-not enough: the same gas price pays on $500 and loses on $50.
+**Ethereum stays off, by decision.** The router deploys there and is built and tested, and
+`ETHEREUM_PRIVATE_SWAPS` in `app/src/lib/vaultSwap.ts` keeps it off even if
+`VAULT_SWAP_V3_LIVE[1]` is set. There is no smallest swap and no per-swap gas check, and
+none is planned for now. So turning it on would be a new decision, not a step in this
+runbook: the relay's only limit there is its gas ceiling, and at that ceiling every swap
+loses money.
 
 ## What to review first
 

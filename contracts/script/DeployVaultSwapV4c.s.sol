@@ -33,7 +33,9 @@ interface IWETHMeta2 {
  *
  * Base and Ethereum: hookless pools only, picked from live state on 2026-10-31 by
  * quoting $100, $500 and $5,000 both ways against the same pairs on Uniswap v3.
- * PYUSD and BDX are left out: neither has v4 liquidity that can fill a swap.
+ * Left out, checked on chain on 2026-11-01. PYUSD: $100 into its USDC pool returns
+ * about $6. BDX: it has v4 pools on Base and Ethereum, but they hold about $1,100 at
+ * most, nearly all at LP fees of 9% to 98%, and selling $100 of it returns under $10.
  */
 contract DeployVaultSwapV4c is Script {
     address constant VAULT = 0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194;

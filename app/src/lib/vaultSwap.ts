@@ -71,21 +71,26 @@ export const VAULT_SWAP_V3_ADDRESS: Record<number, Address> = {
 /**
  * The switch for v3, chain by chain: true once it is deployed and its read-backs
  * passed (DEPLOY-ROUTER.md). Nothing is deployed yet. New swaps on a chain go through
- * v3 from then on, and earlier routers stay known for their refunds.
+ * v3 from then on, and earlier routers stay known for their refunds. It only goes one
+ * way: back to false, the relay no longer knows v3 there, so a refund or an exit of a
+ * swap made through it is refused. To stop swaps on a chain, take its pools off instead.
  */
 export const VAULT_SWAP_V3_LIVE: Record<number, boolean> = { 4663: false, 8453: false, 1: false, 4217: false };
 
 /**
- * Ethereum stays off even with v3 deployed there: the relay pays about 1.65M gas a
- * swap, $3.71 per gwei at $2,250 ETH, against 0.50% of the swap. That pays at 0.04 gwei
- * and loses on every swap the vault can take above 0.67 gwei. Turn this on only once
- * the relay refuses a swap whose gas costs more than its fee (DEPLOY-ROUTER.md).
+ * Ethereum stays off, decided 2026-11-01, even with v3 deployed there. The relay pays
+ * about 1.65M gas a swap, $3.71 per gwei at $2,250 ETH, against 0.50% of the swap: that
+ * pays at 0.04 gwei and loses on every swap the vault can take above 0.67 gwei. Nothing
+ * weighs a swap's gas against its fee, so turning this on is a new decision (DEPLOY-ROUTER.md).
  */
 export const ETHEREUM_PRIVATE_SWAPS = false;
 
 function v3On(chainId: number): boolean {
   return VAULT_SWAP_V3_LIVE[chainId] === true && (chainId !== 1 || ETHEREUM_PRIVATE_SWAPS);
 }
+
+/** Whether v3 is what new swaps use on a chain. Docs and Glim follow this, so they stay true either side of a switch. */
+export const swapV3Live = v3On;
 
 const v3Address = (chainId: number): Address | null => (v3On(chainId) ? VAULT_SWAP_V3_ADDRESS[chainId]! : null);
 
@@ -361,7 +366,11 @@ export const BASE_SWAP_POOLS: readonly PoolKey[] = [
   hookless(BASE_EURC, BASE_USDC, 500, 10),
 ];
 
-/** v3's pools on Ethereum, the same way. PYUSD and BDX have no v4 pool that can fill a swap. */
+/**
+ * v3's pools on Ethereum, the same way. Left out, checked on chain on 2026-11-01:
+ * PYUSD ($100 into its USDC pool returns about $6) and BDX (v4 pools on both chains,
+ * about $1,100 at most, nearly all at LP fees of 9% to 98%, and selling $100 returns under $10).
+ */
 export const ETHEREUM_SWAP_POOLS: readonly PoolKey[] = [
   hookless(NATIVE, ETH_USDC, 500, 10),
   hookless(NATIVE, ETH_USDC, 100, 1),

@@ -21,7 +21,7 @@ import {
   liveMainnetsByDay,
   mainnetPool,
 } from "@/lib/mainnet";
-import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
+import { VAULT_SWAP_V2_ROUTER, swapV3Live } from "@/lib/vaultSwap";
 import { voteFacts } from "@/lib/vote/glim";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
@@ -304,7 +304,10 @@ function baseFacts(): string | null {
     );
   }
   lines.push(
-    "- On Base there are no private swaps and no Bring money over (the bridge) yet; both are planned, never give a date. Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
+    (swapV3Live(8453)
+      ? "- There is no Bring money over (the bridge) on Base yet; it is planned, never give a date."
+      : "- On Base there are no private swaps and no Bring money over (the bridge) yet; both are planned, never give a date.") +
+      " Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
   );
   return lines.join("\n");
 }
@@ -426,6 +429,11 @@ function mainnetLiveFacts(): string {
     "- Prices: with a wallet connected, Vault > Swap prices any amount, even before you have a private balance. To swap, add one of the swap tokens in Vault > Add first. An example on Tempo: 1 pathUSD gets about 0.9964 USDC.e. Never give a $GLOAM swap price or rate; point to Vault > Swap for the live quote.",
     "- If a swap can't finish: once a swap is sent, anyone can make it fail on purpose by sending its first step on its own. The money can't go anywhere else. It comes back to the private balance by itself as a refund, less 1%: the vault's cash-out fee and a safety margin that goes to the Gloam treasury. If a swap just didn't go through (the price moved), nothing moved: refresh in a minute, then get a new quote. That swap isn't cancelled, though: anyone can send it again, and it lands if the price comes back within the buffer, exactly as the user made it, and the app counts it when it does. Spending the same money on anything else first ends the old swap.",
     "- Swaps only go through the Gloam relay, never from the wallet. If the button says The Gloam relay is off, try again a bit later.",
+    ...(swapV3Live(4663) ? ["- On Robinhood Chain a swap can use a native ETH note as well as a WETH note, on either side, wherever the vault takes ETH."] : []),
+    ...(swapV3Live(8453) ? ["- Private swaps are live on Base mainnet too: USDC, USDT, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise."] : []),
+    ...(swapV3Live(4663) || swapV3Live(4217) || swapV3Live(8453)
+      ? ["- If the vault's limit keeps a refund from landing, the money waits at the swap's escrow and comes back privately once there is room. The person can also take it out now, from the held line in Portfolio, to a wallet they pick. That pays a public address, so that money stops being private. Only they can do it. A swap through an earlier router has no exit."]
+      : []),
     SWAPS_V2
       ? "- The swap routers cannot be upgraded and have no function that moves money, and the vault itself did not change. On Robinhood Chain the router's owner can add a pool only with 3 days of public notice and can take one off at once, and can do nothing else. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps."
       : "- The swap routers have no owner, no admin and no upgrade, and the vault itself did not change. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps.",
