@@ -599,7 +599,7 @@ await test("the page: the address can't change while a key is unsaved, and a pre
   assert.ok(!/onChange=\{\(e\) => \{\s*setNewKey\(null\)/.test(view), "typing must not drop an unsaved key");
   const onFund = view.slice(view.indexOf("async function onFund()"), view.indexOf("async function onGetGas()"));
   assert.ok(onFund.indexOf("setBusy(true)") >= 0 && onFund.indexOf("setBusy(true)") < onFund.indexOf("await checkTargets"), "busy comes first");
-  assert.ok(view.includes("LINKED_ADDRESS_NOTE"), "the address from a link is called out");
+  assert.match(view, /\{fromLink && <p[^>]*>\{LINKED_ADDRESS_NOTE\}<\/p>\}/, "the address from a link is called out on the page");
   assert.match(LINKED_ADDRESS_NOTE, /came from a link/);
   assert.match(LINKED_ADDRESS_NOTE, /Check you control it/);
   assert.match(view, /setFromLink\(false\)/);
