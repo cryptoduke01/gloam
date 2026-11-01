@@ -67,6 +67,19 @@ export class IncrementalMerkleTreePoseidon {
     return index;
   }
 
+  /** An independent copy: an insert into one never shows in the other. */
+  clone(): IncrementalMerkleTreePoseidon {
+    const copy = new IncrementalMerkleTreePoseidon();
+    copy.zeros = this.zeros; // set once by init, never changed
+    copy.filledSubtrees = this.filledSubtrees.slice();
+    copy.nextIndex = this.nextIndex;
+    copy.currentRoot = this.currentRoot;
+    copy.leaves = this.leaves.slice();
+    copy.levels = this.levels.map((level) => level.slice());
+    copy.ready = this.ready;
+    return copy;
+  }
+
   async path(leafIndex: number): Promise<PoseidonMerklePath> {
     await this.init();
     if (leafIndex < 0 || leafIndex >= this.leaves.length) {
