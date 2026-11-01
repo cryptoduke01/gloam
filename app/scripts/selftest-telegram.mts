@@ -563,6 +563,9 @@ await test("replies: mainnet claims, dates, secrets and posing as a person are r
   assert.equal(cleanReply("I'm Duke.", policy), null);
   assert.ok(cleanReply("Gloam is not live on mainnet, it's testnet only.", policy));
   assert.ok(cleanReply("Mainnet isn't live. It waits on a production ceremony and an audit.", policy));
+  assert.equal(cleanReply("Gloam is fully audited.", policy), null, "an audited claim is dropped");
+  assert.ok(cleanReply("Kann Audits reviewed the vault contracts and found no Critical, High or Medium issues. Report: gloam.trade/security", policy), "the review as it happened goes out");
+  assert.ok(cleanReply("The routers were reviewed internally, not externally audited.", policy), "the routers' status goes out");
   assert.ok(cleanReply("I'm Glim, Gloam's community helper bot, not a person.", policy));
   assert.ok(cleanReply("Mainnet goes live on Wednesday 21 October at 13:00 UTC. Countdown at gloam.trade/mainnet.", policy), "the announced launch goes out");
   assert.ok(cleanReply("Mainnet is Oct 21, 2pm WAT.", policy), "the same time in WAT too");

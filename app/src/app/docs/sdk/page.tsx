@@ -433,7 +433,9 @@ for (const p of payments) {
       <p>
         Mainnet ({MAINNET_IDS}) is beta software: final ceremony keys, beta
         deposit limits, a 0.25% cash-out fee. It was reviewed internally before
-        launch; an external audit is planned. The Robinhood Chain and Tempo
+        launch, and Kann Audits has since reviewed the vault contracts (
+        <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK was
+        not part of that review. The Robinhood Chain and Tempo
         testnets (<code>46630</code>, <code>42431</code>) run on dev-ceremony
         keys with test funds; Base Sepolia (<code>84532</code>) and Ethereum
         Sepolia (<code>11155111</code>) run the final keys with test funds. Real

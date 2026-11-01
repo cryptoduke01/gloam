@@ -171,7 +171,9 @@ export default function DocsProofsPage() {
           on 17 October with 13 contributors, and so do Base Sepolia and
           Ethereum Sepolia. On the Robinhood Chain and Tempo testnets they use
           development keys and test funds. The code was
-          reviewed internally before launch, and an external audit is planned.
+          reviewed internally before launch, and Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium
+          issues. The circuits were not part of that review.
           See the <Link href="/docs/production">production gate</Link>.
         </li>
         <li>

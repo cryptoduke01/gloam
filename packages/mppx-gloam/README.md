@@ -130,7 +130,7 @@ Gloam's vault has one address on every chain, and ETH is `0x0` on all of them. A
 
 ## Status
 
-Mainnet (beta) on Tempo, Robinhood Chain, Base and Ethereum (Base and Ethereum need a build with SDK 0.4.1 or later), payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, external audit planned. The testnets stay up.
+Mainnet (beta) on Tempo, Robinhood Chain, Base and Ethereum (Base and Ethereum need a build with SDK 0.4.1 or later), payments only, with the trusted setup's final keys and beta deposit limits on the pools; reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The testnets stay up.
 
 ## Tests
 

@@ -1,6 +1,6 @@
 # Security notes (Gloam)
 
-Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software, with the testnets (`46630`, `42431`, Base Sepolia `84532` and Ethereum Sepolia `11155111`) next to them. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open); an external audit is planned, not done.
+Gloam runs on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) as beta software, with the testnets (`46630`, `42431`, Base Sepolia `84532` and Ethereum Sepolia `11155111`) next to them. The code was reviewed internally before mainnet (20 October 2026, no Critical or High findings open). Kann Audits reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. The swap routers, circuits, app and relay were not part of that review.
 
 ## Secrets policy
 
@@ -49,4 +49,4 @@ With thanks to the researchers who have reported issues responsibly.
 
 - **[@mylifechangefa1](https://x.com/mylifechangefa1)** (GitHub [EFCCWEB3](https://github.com/EFCCWEB3)) — SSRF in the MCP server's `gloam_fetch_paid`. The private-address guard classified an IPv4-in-IPv6 address by its text, so an IPv4-mapped address written in hex (e.g. `::ffff:7f00:1`), long form, NAT64 (`64:ff9b::/96`) or 6to4 (`2002::/16`) slipped past it and could reach loopback or cloud-metadata services on a self-hosted server. Affected `@gloamtrade/mcp <= 0.3.0`; fixed in **0.3.1** (classify by the address bytes), with the resolved IP pinned in the connector against DNS rebinding in **0.3.2**, and credential and payment headers dropped on cross-origin redirects in **0.3.3**.
 
-Past reviews and every finding with its status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
+The Kann Audits report and its scope: [gloam.trade/security](https://gloam.trade/security). Past reviews and their findings: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).

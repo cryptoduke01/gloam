@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="October 26, 2026">
+    <LegalLayout title="Privacy Policy" updated="November 1, 2026">
       <p>
         This Privacy Policy describes what information Gloam (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;) handles when you use gloam.trade, the Gloam app, the
@@ -19,7 +20,9 @@ export default function PrivacyPage() {
         Gloam runs on two kinds of network. On mainnet (Robinhood Chain and
         Tempo, from Gloam&apos;s mainnet launch on 21 October 2026) it is
         beta software, with deposit limits, and it was
-        reviewed internally before launch; an external audit is planned. On
+        reviewed internally before launch. Kann Audits then reviewed the vault
+        contracts (<Link href="/security">report, 1 November 2026</Link>) and
+        found no Critical, High or Medium issues. On
         the testnets (Tempo Moderato testnet and Robinhood Chain testnet) the
         tokens you use are test tokens. Do not send mainnet funds
         to a testnet address or contract.

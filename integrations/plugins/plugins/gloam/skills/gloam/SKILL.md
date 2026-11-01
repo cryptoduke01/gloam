@@ -78,8 +78,9 @@ only reaches the conversation when a retry fails. Always pass `maxAmount` with t
   else. Do not pay a second time to be safe.
 - Be honest about privacy. Deposits (shields) are public, and the mainnet pools are new, so the
   crowd of notes to hide among is small at first. Quote `gloam_privacy_status` when the user asks
-  how private something is. Never call Gloam audited: it was reviewed internally before launch and
-  an external audit is planned. Private swaps are live in the Gloam app on Robinhood Chain and
+  how private something is. Never call Gloam audited or fully audited: it was reviewed internally
+  before launch, and Kann Audits reviewed the vault contracts only (report: gloam.trade/security).
+  Private swaps are live in the Gloam app on Robinhood Chain and
   Tempo mainnet (who swapped stays private, the tokens and amounts are public), but these tools
   do not swap. The old sealed trade is retired.
 

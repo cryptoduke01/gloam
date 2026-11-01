@@ -5,7 +5,8 @@ Status: **live on Tempo mainnet (`4217`) from 21 October 2026, in beta.** Pool
 `45172561`) on the trusted setup's final keys, listing USDC.e, pathUSD,
 USDT0 and OUSD with beta deposit limits (500 per deposit, 25,000 in total for
 each). Deposits and private payments are free; a cash out costs 0.25%. It was
-reviewed internally before launch; an external audit is planned. Tempo Moderato
+reviewed internally before launch, and Kann Audits has since reviewed the vault
+contracts (report, 1 November 2026) and found no Critical, High or Medium issues. Tempo Moderato
 stays up as the testnet: current pool
 `0x841DC046Ea3CC842BA3A855731472c6Eb0F2d5eb` (redeployed 2026-09-29, block
 37411195, no admin withdraw, timelocked rule changes) and memo board
@@ -150,8 +151,8 @@ selective disclosure it lacks:
   complement to Zones, with selective disclosure a user can hand an issuer or
   auditor.
 - Say "live on Tempo mainnet, in beta", with Moderato as the
-  testnet. Never say "audited": it was reviewed internally, and an external
-  audit is planned. Never claim private trading is live.
+  testnet. Never say "fully audited": it was reviewed internally, and Kann
+  Audits reviewed the vault contracts only. Never claim private trading is live.
 
 ## 7. Open questions and risks
 
