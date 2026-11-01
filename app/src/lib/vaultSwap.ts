@@ -89,6 +89,17 @@ function v3On(chainId: number): boolean {
   return VAULT_SWAP_V3_LIVE[chainId] === true && (chainId !== 1 || ETHEREUM_PRIVATE_SWAPS);
 }
 
+/**
+ * Every router Gloam has on a chain or will have, whatever the switches say: a router
+ * stays Gloam's after the next one replaces it, so its past deposits never read as a
+ * person's. New swaps use only VAULT_SWAP_ROUTERS.
+ */
+export const EVERY_SWAP_ROUTER: readonly Address[] = [
+  RH_ROUTER_V1,
+  TEMPO_ROUTER, // also GloamVaultSwapV4b on Robinhood Chain
+  ...Object.values(VAULT_SWAP_V3_ADDRESS),
+];
+
 /** Whether v3 is what new swaps use on a chain. Docs and Glim follow this, so they stay true either side of a switch. */
 export const swapV3Live = v3On;
 

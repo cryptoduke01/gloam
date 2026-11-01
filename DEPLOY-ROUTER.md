@@ -102,14 +102,16 @@ switch stands alone.
 3. In `app/src/lib/vaultSwap.ts`, set `VAULT_SWAP_V3_LIVE[<chainId>]` to `true`:
    `4663` Robinhood Chain, `8453` Base, `4217` Tempo. Leave `1` alone: see
    [Ethereum](#ethereum-what-a-swap-costs).
-4. In the same PR, update what says it is off: the `no chain is on` line in
-   `app/scripts/selftest-vault-swap.mts`, the chain's row and the `a native note never
-   swaps` line in `app/scripts/selftest-asset-matrix.mts`, and the lines below that a
-   flag can't reach.
-5. Merge it. The swap tab, the docs, `/verify`, the cash-out guard and Glim all follow
-   the flag.
+4. In the same PR, update `app/scripts/selftest-vault-swap.mts`, the one selftest that pins
+   what ships: the `no chain is on` line and the router it expects first. The other 77
+   follow the flags. Update the plain files listed below too.
+5. Merge it. The swap tab, the docs, `/verify`, the vote exclusions and Glim all follow
+   the flag. The cash-out guard needs no flag: it refuses these routers already.
 6. Make one small real swap each way, one of them from an ETH note where the chain has
    one, and read both on the explorer.
+
+This was rehearsed with Robinhood Chain, Base, Tempo and `VAULT_SWAP_V3_LIVE[1]` all on: the
+build passed, the docs rendered every chain but Ethereum, and only that one selftest failed.
 
 **Which docs follow the flag.** `/docs/private-swaps`, `/docs/threat-model`, `/docs/chain`,
 `/verify` and Glim do, so they are true either side of a switch. `README.md`, `AGENTS.md`,

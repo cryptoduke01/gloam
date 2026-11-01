@@ -1069,8 +1069,8 @@ await test("shared check: the zero address, a listed token and a swap router are
     for (const r of swapRoutersOn(n.chainId)) {
       assert.equal(cashOutTargetProblem(r.address, n), CASH_OUT_TO_ROUTER_MESSAGE, `${r.address} on ${key}`);
       assert.equal(cashOutTargetProblem(r.address.toLowerCase(), n), CASH_OUT_TO_ROUTER_MESSAGE);
-      // what the router swaps between, and the WETH it holds, are tokens
-      for (const a of [...r.assets, ...(r.weth ? [r.weth] : [])]) assert.equal(cashOutTargetProblem(a, n), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
+      // what the router swaps between, and the WETH it holds, are tokens (a native ETH note's address(0) is not)
+      for (const a of [...r.assets.filter((x) => BigInt(x) !== 0n), ...(r.weth ? [r.weth] : [])]) assert.equal(cashOutTargetProblem(a, n), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
     }
   }
   // Both Robinhood Chain routers (the one new swaps use and the older one kept for refunds) and Tempo's are covered.
@@ -1082,7 +1082,7 @@ await test("shared check: an agent on the SDK alone is refused every address the
     const n = getNetwork(key);
     const alone = (to: string) => sdkCashOutTargetProblem(to, { chainId: n.chainId });
     const routers = swapRoutersOn(n.chainId);
-    const tokens = [...shieldTokensFor(n.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets, ...(r.weth ? [r.weth] : [])])];
+    const tokens = [...shieldTokensFor(n.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets.filter((x) => BigInt(x) !== 0n), ...(r.weth ? [r.weth] : [])])];
     if (n.chainId === 4663) tokens.push(...RH_MAINNET_SWAP_TOKENS.map((t) => t.address));
     assert.ok(tokens.length > 0, key);
     assert.equal(alone(n.pool!), CASH_OUT_TO_VAULT_MESSAGE, key);

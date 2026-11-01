@@ -776,10 +776,13 @@ const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
  * Tokens that are not in a network's `assets` because its pool doesn't take a
  * deposit of them, but a cash out could still be pointed at. On Robinhood Chain
  * mainnet: what a private swap can land in (the app's RH_SWAP_ASSETS_V2, past
- * the listed USDG, GLOAM, PONS and CASHCAT). On its testnet: the faucet stock
- * tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
+ * the listed USDG, GLOAM, PONS and CASHCAT). On Base and Ethereum: WETH, which the
+ * swap router there converts to and from. On Robinhood Chain's testnet: the faucet
+ * stock tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
  */
 const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
+  [BASE_MAINNET_CHAIN_ID]: ["0x4200000000000000000000000000000000000006"], // WETH
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"], // WETH
   [RH_MAINNET_CHAIN_ID]: [
     "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", // WETH
     "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe
