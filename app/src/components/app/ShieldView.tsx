@@ -1046,7 +1046,7 @@ export function ShieldView() {
     ? null
     : walletBalance === BigInt(0)
       ? `No ${symbol} in this wallet`
-      : !amount.trim() || (typedValue !== null && typedValue <= BigInt(0))
+      : !amount.trim() || (typedValue === null && !amountProblem) || (typedValue !== null && typedValue <= BigInt(0))
         ? "Enter an amount"
         : amountProblem
           ? "Enter a valid amount"
