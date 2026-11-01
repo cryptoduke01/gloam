@@ -130,6 +130,16 @@ export function feeRise(n: Pick<LocalNote, "amountWei" | "cashOut">, liveBps: nu
   return { shownBps, liveBps, shownGets: amount - withdrawFeeOf(amount, shownBps), nowGets: amount - withdrawFeeOf(amount, liveBps) };
 }
 
+export type WaitingRise = { note: LocalNote; rise: FeeRise };
+
+/** The jobs in `notes` that will pay less than they showed, each against its own vault's live fee. */
+export function waitingFeeRises(notes: LocalNote[], liveBpsOf: (n: LocalNote) => number | null): WaitingRise[] {
+  return notes.flatMap((note) => {
+    const rise = note.status === "recovered" ? null : feeRise(note, liveBpsOf(note));
+    return rise ? [{ note, rise }] : [];
+  });
+}
+
 /** One row's line: what it pays now against what it showed. */
 export function feeRiseLine(rise: FeeRise, asset: string): string {
   return `Pays ${formatAssetLabel(rise.nowGets, asset)}, not the ${formatAssetLabel(rise.shownGets, asset)} it showed.`;

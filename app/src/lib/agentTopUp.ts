@@ -47,8 +47,9 @@
  * What the agent gets: a proof fixes the amount and the agent's wallet, not the
  * fee. The vault takes its fee as each top-up lands, at the rate that day, and a
  * series can run for months, so a rise after setup comes out of what the agent
- * gets. Every top-up still ahead shows that (lib/cashOutLater feeRise), and each
- * can be cancelled until it goes.
+ * gets. Every top-up still ahead shows that (lib/cashOutLater feeRise), on its
+ * row and on every app page, and each can be cancelled until it goes. The relay
+ * doesn't wait for that: with the app closed, a top-up goes out at the new rate.
  */
 import type { Address } from "viem";
 import { networkOfNote } from "./cashOutSplit";

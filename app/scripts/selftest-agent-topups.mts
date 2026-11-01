@@ -93,7 +93,7 @@ const {
   topUpWhen,
 } = await import("../src/lib/agentTopUp");
 const { checkPlan, schedulePiece, unscheduledPieces, keepPiece, cancelledPiece } = await import("../src/lib/cashOutPrivately");
-const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, feeMovedLine, feeRise, feeRiseLine, feeRiseNotice, markFor, nextMark, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
+const { cancelCashOut, cashOutJobStatus, dismissReturnedCashOut, feeMovedLine, feeRise, feeRiseLine, feeRiseNotice, markFor, waitingFeeRises, nextMark, releaseGoneCashOut, returnedCashOutNotes, scheduleNoteCashOut } = await import("../src/lib/cashOutLater");
 const { SPLIT_MAYBE_SENT, splitNotes } = await import("../src/lib/cashOutSplit");
 const { HANDOVER_MS, RELAY_SPEND_LOCK_MS, activeSpendableNotes, exportNotesBackup, notesToMove, proofLoose, saveLocalNote, updateLocalNote, cashOutPending, endedPlan } = await import(
   "../src/lib/shield"
@@ -832,8 +832,25 @@ await test("a fee that rises after setup: each waiting job says what it pays now
   assert.match(one, /after you set up this top-up/);
   assert.match(one, /pays less than it showed/);
   assert.match(one, /Cancel it before it goes/);
-  assert.match(feeRiseNotice([old!, old!, old!], "top-up"), /after you set up 3 top-ups/);
-  assert.match(feeRiseNotice([old!, old!], "cash out"), /they pay less than they showed/);
+  assert.match(feeRiseNotice([old!, old!, old!], "scheduled cash out"), /after you set up 3 scheduled cash outs/);
+  assert.match(feeRiseNotice([old!, old!], "scheduled cash out"), /they pay less than they showed/);
+});
+
+await test("the notice on every page finds jobs on any network, each against its own vault's fee", () => {
+  const job = (id: string, chainId: number, feeBps?: number, status: "open" | "recovered" = "open") =>
+    ({
+      id,
+      chainId,
+      status,
+      amountWei: AMOUNT.toString(),
+      cashOut: { job: id, at: T0, to: AGENT, state: "scheduled", ...(feeBps === undefined ? {} : { feeBps }) },
+    }) as LocalNote;
+  const live: Record<number, number | null> = { 4663: 50, 8453: 50, 84532: 25, 46630: null };
+  const found = waitingFeeRises(
+    [job("rh", 4663), job("base", 8453, 25), job("new", 4663, 50), job("sepolia", 84532), job("old-testnet", 46630), job("gone", 4663, undefined, "recovered")],
+    (n) => live[n.chainId] ?? null
+  );
+  assert.deepEqual(found.map((r) => r.note.id), ["rh", "base"], "a job on another network counts; one at today's fee, a pool still at 0.25%, a pool with no fee and a spent note don't");
 });
 
 await test("a fee that changes under an open screen stops the confirm, with the new number", () => {

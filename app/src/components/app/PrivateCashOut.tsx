@@ -9,7 +9,7 @@
 import type { ReactNode } from "react";
 import type { Address } from "viem";
 import { shortAddress } from "@/lib/chain";
-import { feeRise, feeRiseLine, feeRiseNotice, type CashOutWindow } from "@/lib/cashOutLater";
+import { feeRise, feeRiseLine, type CashOutWindow } from "@/lib/cashOutLater";
 import type { PieceProgress, PieceState } from "@/lib/cashOutPrivately";
 import { assetLabel, formatAssetAmount, formatAssetLabel, type LocalNote } from "@/lib/shield";
 
@@ -329,15 +329,9 @@ export function ScheduledCashOuts({
   onCancel: (n: LocalNote) => Promise<void>;
 }) {
   if (!rows.length) return null;
-  const rises = rows.flatMap((n) => feeRise(n, liveFeeBps) ?? []);
   return (
     <div className="rounded-[16px] bg-surface px-4 py-3">
       <p className="text-[13px] text-mute">Scheduled cash outs</p>
-      {rises.length > 0 && (
-        <p role="status" className="mt-2 rounded-xl bg-warn-soft px-3.5 py-3 text-[13px] leading-relaxed text-warn">
-          {feeRiseNotice(rises, "cash out")}
-        </p>
-      )}
       <ul className="mt-1 divide-y divide-line">
         {rows.map((n) => {
           const rise = feeRise(n, liveFeeBps);

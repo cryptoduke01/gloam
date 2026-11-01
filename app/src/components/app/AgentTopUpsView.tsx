@@ -43,7 +43,7 @@ import {
   type VaultLeaves,
 } from "@/lib/agentTopUp";
 import { shortAddress } from "@/lib/chain";
-import { feeMoved, feeRise, feeRiseLine, feeRiseNotice } from "@/lib/cashOutLater";
+import { feeMoved, feeRise, feeRiseLine } from "@/lib/cashOutLater";
 import { findCashOutLink, linkMessage } from "@/lib/cashOutPlan";
 import { cashOutPrivacyWarnings } from "@/lib/cashOutPrivacy";
 import { keepPiece, schedulePiece, unscheduledPieces } from "@/lib/cashOutPrivately";
@@ -785,7 +785,6 @@ function Upcoming({
   const [asked, setAsked] = useState(false);
   const waiting = rows.filter((r) => r.state === "upcoming" && r.at > now).map((r) => r.note);
   const oneAgent = oneAgentOf(rows);
-  const rises = rows.flatMap((r) => feeRise(r.note, liveFeeBps) ?? []);
   return (
     <section className="gl-card p-5" aria-labelledby="topups-upcoming">
       <div className="flex items-baseline justify-between gap-3">
@@ -795,11 +794,6 @@ function Upcoming({
         {setAside && <p className="tnum min-w-0 truncate text-right text-[13px] text-mute">{setAside} set aside</p>}
       </div>
       {oneAgent && <p className="mt-0.5 text-[12.5px] text-mute">{`To ${shortAddress(oneAgent)}`}</p>}
-      {rises.length > 0 && (
-        <p role="status" className="mt-3 rounded-xl bg-warn-soft px-3.5 py-3 text-[13px] leading-relaxed text-warn">
-          {feeRiseNotice(rises, "top-up")}
-        </p>
-      )}
       {rows.length === 0 ? (
         <p className="mt-2 text-[13.5px] leading-relaxed text-mute">Nothing scheduled yet.</p>
       ) : (
