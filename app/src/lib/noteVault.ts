@@ -59,6 +59,8 @@ const REMOVED_KEY = "gloam.shield.notes.removed.v1";
 const REMOVED_KEEP = 1000;
 /** The Web Lock every tab takes around a notes write. */
 const WRITE_LOCK = "gloam-notes-write";
+/** The Web Lock around making this browser's data key. */
+const KEY_LOCK = "gloam-notes-key";
 const DB_NAME = "gloam-vault";
 const STORE = "keys";
 const KEY_ID = "note-aes-256";
@@ -162,12 +164,20 @@ export function readPasskeyRecord(): PasskeyWrapRecord | null {
 async function loadDeviceKey(): Promise<CryptoKey> {
   const existing = await idbGet(KEY_ID);
   if (existing) return existing;
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
-    "encrypt",
-    "decrypt",
-  ]);
-  await idbPut(KEY_ID, key);
-  return key;
+  // Under a lock across tabs: two tabs on a first load must not each make a key,
+  // since what the loser saved with it would never open again.
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  const create = async () => {
+    const made = await idbGet(KEY_ID);
+    if (made) return made;
+    const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+      "encrypt",
+      "decrypt",
+    ]);
+    await idbPut(KEY_ID, key);
+    return key;
+  };
+  return locks?.request ? locks.request(KEY_LOCK, create) : create();
 }
 
 function lockedKeyPromise(): Promise<CryptoKey> {
