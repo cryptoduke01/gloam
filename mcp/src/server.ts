@@ -1135,9 +1135,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * note store; the result carries handles and the sealed X-PAYMENT header, plus
    * the MPP credential when `mpp` is the challenge being paid (push mode: this
    * server broadcasts, so limits and the note store work exactly as for x402).
-   * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request, decoded and as the
-   * payee sent it) goes to Agent Wormhole after the spend gate, and only an allow pays.
-   * `sending` hears about the payment just before it goes out.
+   * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request as the payee sent
+   * it) goes to Agent Wormhole after the spend gate, and only an allow pays.
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
@@ -1149,7 +1148,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       quote?: string;
       /** The URL the agent asked for: note labels name its host, not the payee's text. */
       requested?: string;
-      sending?: (sent: { note: string; header: string }) => void;
+      /** Hears about the payment just before it goes out. If it throws, nothing goes out. */
+      sending?: (sent: { note: string; input: string | null; header: string }) => void;
     }
   ): Promise<PayResult> {
     const fail = (result: Record<string, unknown>): PayResult => ({ ok: false, result });
@@ -1358,7 +1358,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       });
       // The sealed payment, to present if the send has an unclear outcome (no tx hash yet).
       header = encodePaymentHeader(payment.payload);
-      opts.sending?.({ note: sent.handle, header });
+      opts.sending?.({ note: sent.handle, input: input.handle, header });
       // With the Gloam relay the agent's wallet never appears next to the
       // payment (GLOAM_USE_RELAY=1, or GLOAM_RELAY_URL for a self-hosted relay).
       const relay = relayUrl();
@@ -1501,53 +1501,99 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
   }
 
+  const PAY_SHAPE = {
+    requirements: z
+      .string()
+      .describe("Encoded requirements from gloam_payment_requirements (or raw JSON), or an MPP challenge (the WWW-Authenticate: Payment value)."),
+    note: z
+      .string()
+      .optional()
+      .describe("Handle of the note to pay from (gloam_list_notes). Omit to use the smallest note that covers the amount."),
+    issuerTag: z.string().optional().describe("Optional issuer tag to attach a compliance disclosure."),
+    noteSecret: z.string().optional().describe("LEGACY, UNSAFE: the 0x secret of a note held outside this server."),
+    noteAmount: z.number().positive().optional().describe("LEGACY: the full amount of that note in the asset's units."),
+    decimals: z.number().int().optional().describe("LEGACY: decimals of that note's asset; omit for the network default."),
+  };
+  const SAFE_PAY_SHAPE = { requirements: PAY_SHAPE.requirements, note: PAY_SHAPE.note, issuerTag: PAY_SHAPE.issuerTag };
+
   /**
    * One payment for one purchase. A client that gives up on a slow call does not stop it: the send still goes
    * out, and the retry that follows must not pay again. So a purchase is claimed in the note store before anything
    * is spent. A call that finds it running, or with an outcome not known yet, is told so and pays nothing; one that
    * finds it landed gets the first answer, or presents the first payment. A retry repeats its arguments, so calls
    * that differ are different purchases. A purchase stays recorded only until its answer reached the caller (a
-   * cancelled call or a retry says it may not have), since a fixed price can be bought again on purpose. A challenge
-   * is different: it is paid once, so its record stays.
+   * cancelled call, a closed connection or a retry says it may not have), since a fixed price can be bought again
+   * on purpose. A challenge is different: it is paid once, so its record stays.
    */
-  type Purchase = { key: string; by: string; notes: NoteStore; keep: boolean; served: boolean };
+  type Purchase = { key: string; by: string; notes: NoteStore; served: boolean };
   type PurchaseSlot = { purchase?: Purchase };
   type ToolAnswer = ReturnType<typeof text>;
+  type Sending = (sent: { note: string; input: string | null; header: string }) => void;
 
   /** Answers to paid calls that may not have reached the caller, for the retry. Only in memory: they can hold a resource's body. */
-  const unheard = new Map<string, ToolAnswer>();
+  const unheard = new Map<string, { note: string | undefined; answer: ToolAnswer }>();
   const UNHEARD_MAX = 32;
   let purchaseCalls = 0;
 
   const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+  /** The credential for a payment already made, for `challenge`, which may be newer than the one it was paid against. */
+  async function credentialForPaid(challenge: PaymentChallenge, header: string, note: StoredNote): Promise<string | undefined> {
+    try {
+      const payload = decodePaymentHeader(header);
+      const payment = { intent: { exec: payload.payload.exec }, paymentNote: note, payload, sealed: true };
+      const hash = note.createdTx;
+      const built = await credentialFromPayment({
+        challenge,
+        payment: payment as unknown as Parameters<typeof credentialFromPayment>[0]["payment"],
+        // Without its hash the transfer itself says which payment this is. It is already in the pool, so nothing is submitted.
+        mode: hash ? "push" : "pull",
+        hash,
+      });
+      return built.authorization;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function payOnce(
     slot: PurchaseSlot,
-    key: string,
-    keep: boolean,
-    pay: (sending: (sent: { note: string; header: string }) => void) => Promise<PayResult>
+    purchase: { key: string; once?: boolean; challenge?: PaymentChallenge },
+    pay: (sending: Sending) => Promise<PayResult>
   ): Promise<{ paid: PayResult } | { answer: ToolAnswer }> {
+    const { key, once = false, challenge } = purchase;
     const opened = openStore();
-    if (!opened.ok) return { paid: { ok: false, result: { status: "error", error: opened.error } } };
+    // Nothing can be recorded, so nothing goes out. A call with no signer still gets its plan from here.
+    if (!opened.ok) {
+      return {
+        paid: await pay(() => {
+          throw new Error(opened.error);
+        }),
+      };
+    }
     const notes = opened.store;
     const by = `${settlerId}:${++purchaseCalls}`;
     let claim: PaymentClaim;
     try {
-      claim = notes.claimPayment(key, STUCK_MS, by);
+      claim = notes.claimPayment(key, STUCK_MS, by, once);
     } catch (e) {
-      // No record, no payment: this is what stops a second one.
       return { paid: { ok: false, result: { status: "error", error: errMsg(e) } } };
     }
     if (claim.claimed) {
       unheard.delete(key);
-      slot.purchase = { key, by, notes, keep, served: false };
-      const paid = await pay(({ note, header }) => notes.markPayment(key, by, { note, header }));
+      slot.purchase = { key, by, notes, served: false };
+      const paid = await pay(({ note, input, header }) => {
+        if (!notes.markPayment(key, by, { note, input, header })) {
+          throw new Error("A later call took this payment over, so this one sent nothing.");
+        }
+      });
       if (paid.ok) {
-        tryStore(() => notes.markPayment(key, by, { header: paid.header, ...(paid.authorization ? { authorization: paid.authorization } : {}) }));
+        tryStore(() => void notes.markPayment(key, by, { header: paid.header, ...(paid.authorization ? { authorization: paid.authorization } : {}) }));
       }
       return { paid };
     }
-    const { attempt, hash } = claim;
+    const { attempt, note } = claim;
+    const hash = note?.createdTx ?? null;
     if (!claim.reuse) {
       return {
         paid: {
@@ -1563,13 +1609,16 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       };
     }
     const first = unheard.get(key);
-    slot.purchase = { key, by, notes, keep, served: Boolean(first) };
-    if (first) return { answer: text({ ...JSON.parse(first.content[0].text), reused: true }) };
+    const replay = first?.note === attempt.note ? first?.answer : undefined;
+    slot.purchase = { key, by, notes, served: Boolean(replay) };
+    if (replay) return { answer: text({ ...JSON.parse(replay.content[0].text), reused: true }) };
+    const authorization = (challenge && note && attempt.header && (await credentialForPaid(challenge, attempt.header, note))) || attempt.authorization;
+    if (authorization) tryStore(() => void notes.markPayment(key, by, { authorization }));
     return {
       paid: {
         ok: true,
         header: attempt.header!,
-        ...(attempt.authorization ? { authorization: attempt.authorization } : {}),
+        ...(authorization ? { authorization } : {}),
         result: {
           status: "paid",
           reused: true,
@@ -1592,10 +1641,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         const p = slot.purchase;
         if (p) {
           tryStore(() => {
-            const stays = p.notes.closePayment(p.key, p.by, p.served && !p.keep && !extra.signal.aborted);
+            const stays = p.notes.closePayment(p.key, p.by, p.served && !extra.signal.aborted);
             unheard.delete(p.key);
             if (stays === "landed" && p.served && answer) {
-              unheard.set(p.key, answer);
+              unheard.set(p.key, { note: p.notes.payment(p.key)?.note, answer });
               if (unheard.size > UNHEARD_MAX) unheard.delete(unheard.keys().next().value!);
             }
           });
@@ -1603,21 +1652,6 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       }
     };
   }
-
-  const PAY_SHAPE = {
-    requirements: z
-      .string()
-      .describe("Encoded requirements from gloam_payment_requirements (or raw JSON), or an MPP challenge (the WWW-Authenticate: Payment value)."),
-    note: z
-      .string()
-      .optional()
-      .describe("Handle of the note to pay from (gloam_list_notes). Omit to use the smallest note that covers the amount."),
-    issuerTag: z.string().optional().describe("Optional issuer tag to attach a compliance disclosure."),
-    noteSecret: z.string().optional().describe("LEGACY, UNSAFE: the 0x secret of a note held outside this server."),
-    noteAmount: z.number().positive().optional().describe("LEGACY: the full amount of that note in the asset's units."),
-    decimals: z.number().int().optional().describe("LEGACY: decimals of that note's asset; omit for the network default."),
-  };
-  const SAFE_PAY_SHAPE = { requirements: PAY_SHAPE.requirements, note: PAY_SHAPE.note, issuerTag: PAY_SHAPE.issuerTag };
 
   server.registerTool(
     "gloam_execute_private_pay",
@@ -1639,7 +1673,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       if (legacy && noteSecret && noteAmount === undefined) {
         return text({ status: "error", error: "noteSecret needs noteAmount (the note's full value)." });
       }
-      const once = await payOnce(slot, mpp ? `mpp:${mpp.id}` : `x402:${digest([req, note ?? null, issuerTag ?? null])}`, Boolean(mpp), (sending) =>
+      const purchase = mpp ? { key: `mpp:${mpp.id}`, once: true, challenge: mpp } : { key: `x402:${digest([req, note ?? null, issuerTag ?? null])}` };
+      const once = await payOnce(slot, purchase, (sending) =>
         payPrivately(req, {
           handle: note,
           issuerTag,
@@ -1778,6 +1813,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       }
       if (first.status !== 402) {
         const receipt = paymentHeader ? receiptFrom(first) : null;
+        if (paymentHeader && first.ok) {
+          const opened = openStore();
+          if (opened.ok) tryStore(() => opened.store.dropPresented(paymentHeader));
+        }
         return text({ status: first.ok ? "ok" : "http_error", paid: false, ...(await readBody(first)), ...(receipt ? { paymentReceipt: receipt } : {}) });
       }
       const firstBody = await first.text();
@@ -1852,8 +1891,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // in a header is what gets paid whatever the body says, so the check reads that price alone.
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? `${quoteText(req)}\n${firstBody}` : undefined;
       // A purchase is this call at this price: a server can answer each retry with a fresh challenge.
-      const purchase = digest([url, method, body ?? null, note ?? null, req.network, req.poolAddress, req.asset, req.maxAmountRequired, req.payTo]);
-      const once = await payOnce(slot, `fetch:${purchase}`, false, (sending) =>
+      const purchase = digest([url, method, body ?? null, contentType ?? null, note ?? null, req.network, req.poolAddress, req.asset, req.maxAmountRequired, req.payTo]);
+      const once = await payOnce(slot, { key: `fetch:${purchase}`, ...(mpp ? { challenge: mpp } : {}) }, (sending) =>
         payPrivately(req, { handle: note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), sending })
       );
       if ("answer" in once) return once.answer;

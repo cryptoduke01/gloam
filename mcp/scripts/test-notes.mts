@@ -129,7 +129,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.ok(!reuse.claimed && reuse.reuse);
     assert.equal(reuse.attempt.header, "h2");
     assert.equal(reuse.attempt.authorization, "Payment x");
-    assert.equal(reuse.hash, `0x${"22".repeat(32)}`);
+    assert.equal(reuse.note?.createdTx, `0x${"22".repeat(32)}`);
     assert.equal(store.closePayment("c", me(6), true), null, "a call that gave it up has no say");
     assert.equal(store.closePayment("c", me(8), true), null);
     assert.deepEqual(store.claimPayment("c", ten, me(9)), { claimed: true });
@@ -154,12 +154,69 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.deepEqual(store.claimPayment("e", 0, me(15)), { claimed: true });
     store.closePayment("e", me(15), true);
 
-    // Nothing outlives a day.
-    store.claimPayment("f", ten, me(16));
+    // A call taken over must not send: its marks no longer take.
+    store.claimPayment("g", ten, me(16));
+    assert.equal(store.markPayment("g", me(16), { header: "h4" }), true);
+    assert.deepEqual(store.claimPayment("g", 0, me(17)), { claimed: true });
+    assert.equal(store.markPayment("g", me(16), { note: "n-late" }), false);
+    assert.equal(store.payment("g")?.note, undefined);
+    store.closePayment("g", me(17), true);
+
+    // An unclear payment is free once a refresh made the note that funds it spendable again.
+    const funding = store.add(sampleNote({ status: "pending", pending: "spend" }));
+    const stuck = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    store.claimPayment("h", ten, me(18));
+    store.markPayment("h", me(18), { note: stuck.handle, input: funding.handle, header: "h5" });
+    assert.equal(store.closePayment("h", me(18), false), "unclear");
+    assert.ok(!store.claimPayment("h", ten, me(19)).claimed);
+    store.update(funding.handle, { status: "unspent", recheck: true });
+    assert.deepEqual(store.claimPayment("h", ten, me(20)), { claimed: true });
+    store.closePayment("h", me(20), true);
+
+    // A payment presented by hand and served is finished, by either form it was handed out in.
+    const byHand = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    store.claimPayment("i", ten, me(21));
+    store.markPayment("i", me(21), { note: byHand.handle, header: "h6", authorization: "Payment y" });
+    assert.equal(store.closePayment("i", me(21), false), "landed");
+    store.dropPresented("something else");
+    assert.ok(store.payment("i"));
+    store.dropPresented("Payment y");
+    assert.equal(store.payment("i"), undefined);
+
+    // A challenge is paid once: an answer that arrived does not clear it, nor does presenting it.
+    const single = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    store.claimPayment("j", ten, me(22), true);
+    store.markPayment("j", me(22), { note: single.handle, header: "h7" });
+    assert.equal(store.closePayment("j", me(22), true), "landed");
+    store.dropPresented("h7");
+    const paidOnce = store.claimPayment("j", ten, me(23));
+    assert.ok(!paidOnce.claimed && paidOnce.reuse);
+    store.closePayment("j", me(23), true);
+
+    // Records age out, except one whose outcome is not known: a retry could pay twice.
+    const open_ = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    store.claimPayment("k", ten, me(24));
+    store.markPayment("k", me(24), { note: open_.handle, header: "h8" });
+    store.closePayment("k", me(24), false);
+    const landedKept = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    store.claimPayment("l", ten, me(25));
+    store.markPayment("l", me(25), { note: landedKept.handle, header: "h9" });
+    store.closePayment("l", me(25), false);
     const realNow = Date.now;
-    Date.now = () => realNow() + 25 * 60 * 60 * 1000;
+    const hours = (h: number) => {
+      Date.now = () => realNow() + h * 60 * 60 * 1000;
+    };
     try {
-      assert.deepEqual(store.claimPayment("f", ten, me(17)), { claimed: true });
+      hours(0.5);
+      const within = store.claimPayment("l", ten, me(26));
+      assert.ok(!within.claimed && within.reuse, "kept for a retry within the hour");
+      store.closePayment("l", me(26), false);
+      hours(2);
+      assert.deepEqual(store.claimPayment("l", ten, me(27)), { claimed: true }, "a landed payment ages out");
+      hours(26);
+      assert.ok(!store.claimPayment("j", ten, me(28)).claimed === false, "a challenge ages out after a day");
+      const stillOpen = store.claimPayment("k", ten, me(29));
+      assert.ok(!stillOpen.claimed && !stillOpen.reuse, "not known yet: still held after a day");
     } finally {
       Date.now = realNow;
     }
