@@ -108,9 +108,9 @@ export default function DocsFreshWalletPage() {
         <li>
           <strong>Timing.</strong> Money that leaves right after it came in is easy to line up too. The flow can send each
           cash out at its own random time inside about an hour, 6 hours or a day. Longer is better, with one limit: each
-          proof shows roughly when it was made, so the two can be grouped. While Gloam is open it remakes them, last shortly
-          before each one goes. One that goes out while Gloam is closed shows when it was last made, so keep Gloam open
-          until they have gone if timing matters.
+          proof shows roughly when it was made, so the two can be grouped. While Gloam is open and on screen, with your vault
+          unlocked, it remakes them, last shortly before each one goes. One that goes out at any other time shows when it was
+          last made, so keep Gloam open and on screen, with your vault unlocked, until they have gone if timing matters.
         </li>
         <li>
           <strong>Your own moves.</strong> Sending from the fresh wallet to your main wallet, or to an exchange account in
