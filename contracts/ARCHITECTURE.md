@@ -49,7 +49,7 @@ Ethereum runs the same path too: Ethereum Sepolia (`11155111`, a testnet on the 
 | PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
-| Listed assets (per deposit / total) | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (500 / 25,000), $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (25,000 / 250,000). ETH is gas only |
+| Listed assets (per deposit / total) | USDG `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` (50,000 / 2,500,000), $GLOAM `0xDcD885F5c60b3aD49F6D58718696417314e8724d` (2,500,000 / 25,000,000). ETH is gas only |
 | Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
 | Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |
@@ -64,7 +64,7 @@ Ethereum runs the same path too: Ethereum Sepolia (`11155111`, a testnet on the 
 | PoseidonT3 | `0x1a32C2c2A77225EC2dD3BF7be1018819b1039Cb4` |
 | DualProofVerifier, ShieldIVerifier | Final keys (`src/verifiers/final`); read `verifier()` and `shieldVerifier()` on the pool |
 | sealedSwapVerifier | `0x0`, always (no swap code) |
-| Listed assets (per deposit / total) | USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73`, OUSD `0x20c0000000000000000000006a37da5c996874be` (TIP-20, 6 decimals, 500 / 25,000 each) |
+| Listed assets (per deposit / total) | USDC.e `0x20c000000000000000000000b9537d11c60e8b50`, pathUSD `0x20c0000000000000000000000000000000000000`, USDT0 `0x20c00000000000000000000014f22ca97301eb73`, OUSD `0x20c0000000000000000000006a37da5c996874be` (TIP-20, 6 decimals, 50,000 / 2,500,000 each) |
 | Owner | `0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8` (one wallet; a multisig is planned) |
 | Fee recipient | `0xB3900ac9350903218e4c7597bAb0f008F01B30B8`, the treasury, since 2026-10-24 (the owner at launch; changed through the 3-day timelock) |
 | Relayer | `0xb1E994586E62994648a0b866BF33F2EDd942512e` (submits proven calls and pays gas; cannot move or redirect money) |

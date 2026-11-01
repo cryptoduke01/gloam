@@ -57,7 +57,7 @@ export default function DocsSdkReferencePage() {
         <code>&quot;dev&quot; | &quot;production&quot;</code>),{" "}
         <code>rpcUrl</code>, <code>explorerUrl</code>, <code>chain</code> (a viem{" "}
         <code>Chain</code>) and <code>assets</code> (symbol, address, decimals
-        and the beta <code>depositLimit</code>).
+        and the launch <code>depositLimit</code>).
       </p>
       <div className="overflow-x-auto">
         <table>
