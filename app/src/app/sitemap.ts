@@ -40,6 +40,7 @@ const PAGES: { path: string; priority: number }[] = [
   { path: "/docs/agents/commitments", priority: 0.6 },
   { path: "/docs/virtuals", priority: 0.6 },
   { path: "/docs/bridge", priority: 0.6 },
+  { path: "/docs/fresh-wallet", priority: 0.6 },
   { path: "/docs/chain", priority: 0.6 },
   { path: "/docs/testnet", priority: 0.6 },
   { path: "/docs/privacy-model", priority: 0.6 },
