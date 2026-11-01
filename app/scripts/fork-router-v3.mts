@@ -372,7 +372,7 @@ async function runCase(c: Case, feeBps: bigint) {
   gasRows.push({ name: c.name, gas: r.gasUsed, calldata: size });
   for (const l of r.logs) {
     if (!same(l.address, ROUTER)) continue;
-    const ev = decodeEventLog({ abi: routerAbi, data: l.data, topics: l.topics }) as { eventName: string; args: Record<string, bigint> };
+    const ev = decodeEventLog({ abi: routerAbi, data: l.data, topics: l.topics }) as unknown as { eventName: string; args: Record<string, bigint> };
     if (ev.eventName === "VaultSwap") {
       console.log(`  spent ${fmt(ev.args.amountIn!, c.assetIn)}, new note ${fmt(ev.args.amountOut!, c.assetOut)}, leftover ${fmt(ev.args.leftover!, c.assetIn)}`);
       check(ev.args.amountOut === p.amountOut, "the new note is exactly what was proved");
