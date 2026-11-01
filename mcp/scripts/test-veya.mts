@@ -43,6 +43,7 @@ import {
   IncrementalMerkleTreePoseidon,
   RECEIPT_PUBLIC_SIGNALS,
   fieldToHex,
+  syncTree as fullSyncTree,
   hexToField,
   paymentReceiptLeaf,
   proofContext,
@@ -427,7 +428,18 @@ function mockChain() {
   let n = 0;
   /** The outputs of the latest transfer; `lag` hides them from that many tree reads, as a node behind would. */
   let landed: string[] = [];
-  const state = { lag: 0, syncThrows: false, loseNextReceipt: false };
+  const state = { lag: 0, syncThrows: false, loseNextReceipt: false, msPerBlock: 0 };
+  // The chain as logs and block roots, for the real tree readers: blocks start 1000 past the vault's first.
+  let block = TEMPO.deployBlock + 1000n;
+  type Event = { name: string; args: Record<string, unknown>; blockNumber: bigint; logIndex: number; transactionHash: Hex };
+  const events: Event[] = [];
+  const rootAtBlock = new Map<bigint, Hex>();
+  const logReads: { fromBlock: bigint; toBlock: bigint }[] = [];
+  const emit = (name: string, args: Record<string, unknown>, transactionHash: Hex) => {
+    block += 1n;
+    events.push({ name, args, blockNumber: block, logIndex: 0, transactionHash });
+    rootAtBlock.set(block, lc(fieldToHex(tree.currentRoot)) as Hex);
+  };
   const insert = async (c: string) => {
     index.set(lc(c), await tree.insert(hexToField(c)));
     roots.add(lc(fieldToHex(tree.currentRoot)));
@@ -439,7 +451,10 @@ function mockChain() {
     if (fn === "shieldBound") {
       const c = String(args[2]);
       ok = !index.has(lc(c));
-      if (ok) await insert(c);
+      if (ok) {
+        await insert(c);
+        emit("Shielded", { commitment: c, asset: args[0], amount: args[1], from: WALLET }, hash);
+      }
     } else if (fn === "transfer") {
       const [, root, nullifier, outs] = args as [Hex, Hex, Hex, Hex[]];
       ok = roots.has(lc(root)) && !spent.has(lc(nullifier)) && outs.every((c) => !index.has(lc(c)));
@@ -447,6 +462,7 @@ function mockChain() {
         spent.add(lc(nullifier));
         for (const c of outs) await insert(c);
         landed = outs.map(lc);
+        emit("Transferred", { newCommitments: outs }, hash);
         logs.push({ address, topics: [TRANSFERRED_TOPIC, lc(nullifier) as Hex], data: `0x${outs.map((c) => lc(c).slice(2)).join("")}` as Hex });
       }
     }
@@ -467,8 +483,21 @@ function mockChain() {
       return receiptOf(hash);
     },
     getTransactionReceipt: async ({ hash }: { hash: Hex }) => receiptOf(hash),
-    readContract: async ({ functionName, args }: { functionName: string; args: [Hex] }) =>
-      functionName === "isSpent" ? spent.has(lc(args[0])) : index.has(lc(args[0])),
+    readContract: async ({ functionName, args, blockNumber }: { functionName: string; args: [Hex]; blockNumber?: bigint }) => {
+      if (functionName === "currentRoot") {
+        const at = [...rootAtBlock.keys()].filter((b) => b <= (blockNumber ?? block)).pop();
+        return at === undefined ? lc(fieldToHex(tree.currentRoot)) : rootAtBlock.get(at);
+      }
+      return functionName === "isSpent" ? spent.has(lc(args[0])) : index.has(lc(args[0]));
+    },
+    getChainId: async () => TEMPO.chainId,
+    getBlockNumber: async () => block,
+    /** As on a real RPC, a long range takes long. */
+    getLogs: async ({ event, fromBlock, toBlock }: { event: { name: string }; fromBlock: bigint; toBlock: bigint }) => {
+      logReads.push({ fromBlock, toBlock });
+      if (state.msPerBlock) await new Promise((r) => setTimeout(r, Number(toBlock - fromBlock + 1n) * state.msPerBlock));
+      return events.filter((e) => e.name === event.name && e.blockNumber >= fromBlock && e.blockNumber <= toBlock);
+    },
   };
   const walletClient = {
     writeContract: async ({ functionName, args, address }: { functionName: string; args: readonly unknown[]; address: Address }) => {
@@ -487,7 +516,7 @@ function mockChain() {
     }
     return { pathForCommitment: async (c: Hex) => (seen.has(lc(c)) ? tree.path(seen.get(lc(c))!) : null) };
   };
-  return { publicClient, walletClient, syncTree, chainCalls, state };
+  return { publicClient, walletClient, syncTree, chainCalls, state, logReads };
 }
 type Chain = ReturnType<typeof mockChain>;
 
@@ -534,12 +563,12 @@ function party(name: string, dir: string, over: Env = {}): Env {
   };
 }
 
-async function setup(payerOver: Env) {
+async function setup(payerOver: Env, payerDeps: (d: Partial<ServerDeps>) => Partial<ServerDeps> = (d) => d) {
   const dir = mkdtempSync(join(tmpdir(), "gloam-veya-"));
   const chain = mockChain();
   const S = await connect(deps(chain, party("payee", dir, { GLOAM_LIMITS: "off" })));
   const payerEnv = party("payer", dir, payerOver);
-  const P = await connect(deps(chain, payerEnv));
+  const P = await connect(payerDeps(deps(chain, payerEnv)));
   assert.equal((await P("gloam_execute_shield", { amount: 5, network: "tempo" })).status, "confirmed");
   const price = (amount = 1, resource = "https://api.example.com/answer") =>
     S("gloam_payment_requirements", { amount, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource, network: "tempo" });
@@ -1484,6 +1513,46 @@ test("the first run finishes during this run's anchor call: anchored stands, wha
   outcome = await settleReceipt(held, secondRun(s));
   assert.equal(outcome.anchorTx, finished.anchorTx);
   assert.deepEqual(paymentNote(s.payerEnv).receipt, finished);
+});
+
+test("the server keeps the tree between reads, so a receipt fits inside the answer however long a full read takes", async () => {
+  /** Pay on a chain where reading the vault's whole history takes a full second, with half a second for the receipt. */
+  const paySlowly = async (payerDeps: (d: Partial<ServerDeps>) => Partial<ServerDeps>) => {
+    reset(ALLOW_ID);
+    const s = await setup({ ...receiptsOn, GLOAM_VEYA_RECEIPT_TIMEOUT_MS: "500" }, payerDeps);
+    s.chain.state.msPerBlock = 1;
+    s.chain.logReads.length = 0;
+    const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
+    assert.equal(paid.status, "paid", JSON.stringify(paid));
+    return { s, paid };
+  };
+
+  // The control: reading from the start each time, the receipt can't finish in time.
+  const { paid: before } = await paySlowly((d) => ({ ...d, syncTree: fullSyncTree }));
+  assert.equal(before.veya.receipt.status, "receipt_failed", JSON.stringify(before.veya));
+  assert.match(before.veya.receipt.message, /not built yet after 0\.5s/);
+
+  // The server's own default, with nothing in place of it.
+  const { s, paid } = await paySlowly((d) => {
+    const own = { ...d };
+    delete own.syncTree;
+    return own;
+  });
+  assert.equal(paid.veya.receipt.status, "anchored", JSON.stringify(paid.veya));
+  assert.equal(paid.veya.receipt.message, "Paid, and VEYA took the receipt's leaf.");
+
+  // One read of the whole history, for the payment. The receipt read only what came after it.
+  const fromTheStart = s.chain.logReads.filter((r) => r.fromBlock === TEMPO.deployBlock);
+  assert.equal(fromTheStart.length, 3, "one full read of each event");
+  const later = s.chain.logReads.filter((r) => r.fromBlock !== TEMPO.deployBlock);
+  assert.ok(later.length > 0, "the receipt read the chain");
+  assert.ok(later.every((r) => r.toBlock - r.fromBlock < 10n), JSON.stringify(later.map((r) => String(r.toBlock - r.fromBlock))));
+
+  // And what it built is true of the chain: this payment, from a tree that has it.
+  const note = paymentNote(s.payerEnv);
+  assert.equal(BigInt(note.receipt!.record!.publicSignals[1]!), hexToField(note.commitment));
+  assert.ok(verifyPaymentReceiptLeaf(paid.veya.receipt.leaf, note.receipt!.record!));
+  assert.equal(transfers(s.chain), 1);
 });
 
 test("a payment that lands with no answer still gets its receipt, once it shows as landed", async () => {

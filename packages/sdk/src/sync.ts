@@ -85,10 +85,11 @@ async function getLogsChunked(
   address: Address,
   event: MinimalEvent,
   fromBlock: bigint,
-  chunkSize: bigint
+  chunkSize: bigint,
+  toBlock?: bigint
 ): Promise<DecodedLog[]> {
   // Fresh every time: a cached head can miss a note made seconds before it is spent.
-  const latest = await client.getBlockNumber({ cacheTime: 0 });
+  const latest = toBlock ?? (await client.getBlockNumber({ cacheTime: 0 }));
   if (latest < fromBlock) return [];
   const out: DecodedLog[] = [];
   for (let start = fromBlock; start <= latest; start += chunkSize) {
@@ -138,23 +139,19 @@ const SEALED_SWAPPED_EVENT: MinimalEvent = {
   ],
 };
 
-/**
- * Rebuild the pool's tree from chain. After this, `pathForCommitment(note.commitment)`
- * gives you the `path` that `buildUnshieldIntent` / `buildPrivateSendIntent` want.
- */
-export async function syncTree(
+/** Every leaf-inserting event in a block range, in on-chain order. With no `toBlock`, each event reads up to its own head. */
+async function readInserts(
   client: PublicClient,
-  params: SyncTreeParams
-): Promise<SyncedTree> {
-  const fromBlock = params.fromBlock ?? 0n;
-  const chunkSize = params.chunkSize ?? 40_000n;
-  const pool = params.pool;
-
+  pool: Address,
+  fromBlock: bigint,
+  chunkSize: bigint,
+  toBlock?: bigint
+): Promise<OrderedInsert[]> {
   const [shieldLogs, transferLogs, sealedLogs] = await Promise.all([
-    getLogsChunked(client, pool, SHIELDED_EVENT, fromBlock, chunkSize),
-    getLogsChunked(client, pool, TRANSFERRED_EVENT, fromBlock, chunkSize),
+    getLogsChunked(client, pool, SHIELDED_EVENT, fromBlock, chunkSize, toBlock),
+    getLogsChunked(client, pool, TRANSFERRED_EVENT, fromBlock, chunkSize, toBlock),
     // Older pools have no SealedSwapped; treat a failure as empty.
-    getLogsChunked(client, pool, SEALED_SWAPPED_EVENT, fromBlock, chunkSize).catch(
+    getLogsChunked(client, pool, SEALED_SWAPPED_EVENT, fromBlock, chunkSize, toBlock).catch(
       () => [] as DecodedLog[]
     ),
   ]);
@@ -225,12 +222,29 @@ export async function syncTree(
     if (x.logIndex !== y.logIndex) return x.logIndex - y.logIndex;
     return x.subIndex - y.subIndex;
   });
+  return inserts;
+}
 
+/** A tree and what it takes to answer for it. */
+type TreeState = {
+  tree: IncrementalMerkleTreePoseidon;
+  leaves: ChainLeaf[];
+  indexByCommitment: Map<string, number>;
+};
+
+async function emptyState(): Promise<TreeState> {
   const tree = new IncrementalMerkleTreePoseidon();
   await tree.init();
-  const leaves: ChainLeaf[] = [];
-  const indexByCommitment = new Map<string, number>();
+  return { tree, leaves: [], indexByCommitment: new Map() };
+}
 
+const copyState = (s: TreeState): TreeState => ({
+  tree: s.tree.clone(),
+  leaves: s.leaves.slice(),
+  indexByCommitment: new Map(s.indexByCommitment),
+});
+
+async function insertAll({ tree, leaves, indexByCommitment }: TreeState, inserts: OrderedInsert[]) {
   for (const ins of inserts) {
     const leafIndex = tree.nextIndex;
     await tree.insert(hexToField(ins.commitment));
@@ -247,7 +261,9 @@ export async function syncTree(
     });
     indexByCommitment.set(ins.commitment.toLowerCase(), leafIndex);
   }
+}
 
+function syncedView({ tree, leaves, indexByCommitment }: TreeState): SyncedTree {
   const pathForLeaf = async (i: number) => {
     try {
       return await tree.path(i);
@@ -271,6 +287,108 @@ export async function syncTree(
 }
 
 /**
+ * Rebuild the pool's tree from chain. After this, `pathForCommitment(note.commitment)`
+ * gives you the `path` that `buildUnshieldIntent` / `buildPrivateSendIntent` want.
+ */
+export async function syncTree(
+  client: PublicClient,
+  params: SyncTreeParams
+): Promise<SyncedTree> {
+  const inserts = await readInserts(client, params.pool, params.fromBlock ?? 0n, params.chunkSize ?? 40_000n);
+  const state = await emptyState();
+  await insertAll(state, inserts);
+  return syncedView(state);
+}
+
+const CURRENT_ROOT_ABI = [
+  {
+    type: "function",
+    name: "currentRoot",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+] as const;
+
+/** Reads of the blocks since the last one before a kept tree is given up, and looks at the root after a full read. */
+const KEEP_TRIES = 3;
+
+export interface KeepTreeOptions {
+  /** Wait between tries, for a node behind the one that gave the head. Default 1000 ms. */
+  retryMs?: number;
+}
+
+/**
+ * syncTree that keeps each pool's tree between reads, so a read costs the blocks
+ * since the last one and not the pool's whole history. On a mainnet that is the
+ * difference between a second and a minute and a half.
+ *
+ * A kept tree only moves to a block when its root equals the pool's currentRoot at
+ * exactly that block. A root the pool merely once had would not do: a read that
+ * missed a leaf still has a valid older root, and would then skip that leaf for
+ * good. Anything that doesn't match (a node behind, a reorg) is read again, then
+ * rebuilt from nothing, so the worst case is what syncTree costs anyway, and what
+ * can't be proved is returned as syncTree would return it and never kept.
+ *
+ * All three events are read up to one head, so no block is half read. A tree is
+ * kept per chain as well as per pool, since a vault has the same address on every
+ * chain. Each caller gets its own copy, so a tree already handed out never changes,
+ * and reads of one pool run one at a time.
+ */
+export function keepTree(options: KeepTreeOptions = {}): typeof syncTree {
+  const retryMs = options.retryMs ?? 1_000;
+  const kept = new Map<string, TreeState & { syncedTo: bigint }>();
+  const queues = new Map<string, Promise<unknown>>();
+  const wait = () => new Promise((r) => setTimeout(r, retryMs));
+
+  const provedAt = async (client: PublicClient, pool: Address, state: TreeState, block: bigint) => {
+    const onchain = await client
+      .readContract({ address: pool, abi: CURRENT_ROOT_ABI, functionName: "currentRoot", blockNumber: block })
+      .catch(() => null);
+    return onchain?.toLowerCase() === fieldToHex(state.tree.currentRoot).toLowerCase();
+  };
+
+  async function read(client: PublicClient, params: SyncTreeParams, key: string): Promise<SyncedTree> {
+    const { pool } = params;
+    const chunkSize = params.chunkSize ?? 40_000n;
+    const keep = (state: TreeState, syncedTo: bigint) => {
+      kept.set(key, { ...state, syncedTo });
+      return syncedView(copyState(state));
+    };
+
+    const base = kept.get(key);
+    if (base) {
+      for (let tries = 0; tries < KEEP_TRIES; tries++) {
+        if (tries) await wait();
+        const head = await client.getBlockNumber({ cacheTime: 0 });
+        // This node is behind the block the tree was proved at, so it has nothing to add.
+        if (head < base.syncedTo) return syncedView(copyState(base));
+        const next = copyState(base);
+        await insertAll(next, await readInserts(client, pool, base.syncedTo + 1n, chunkSize, head));
+        if (await provedAt(client, pool, next, head)) return keep(next, head);
+      }
+      kept.delete(key);
+    }
+
+    const head = await client.getBlockNumber({ cacheTime: 0 });
+    const state = await emptyState();
+    await insertAll(state, await readInserts(client, pool, params.fromBlock ?? 0n, chunkSize, head));
+    for (let tries = 0; tries < KEEP_TRIES; tries++) {
+      if (tries) await wait();
+      if (await provedAt(client, pool, state, head)) return keep(state, head);
+    }
+    return syncedView(state);
+  }
+
+  return async (client, params) => {
+    const key = `${await client.getChainId()}:${params.pool.toLowerCase()}:${params.fromBlock ?? 0n}`;
+    const run = (queues.get(key) ?? Promise.resolve()).then(() => read(client, params, key));
+    queues.set(key, run.catch(() => undefined));
+    return run;
+  };
+}
+
+/**
  * True if the rebuilt tree's root equals the pool's on-chain `currentRoot()`.
  * A cheap integrity check before you trust a path.
  */
@@ -282,15 +400,7 @@ export async function assertTreeMatchesChain(
   try {
     const onchain = (await client.readContract({
       address: pool,
-      abi: [
-        {
-          type: "function",
-          name: "currentRoot",
-          stateMutability: "view",
-          inputs: [],
-          outputs: [{ type: "bytes32" }],
-        },
-      ],
+      abi: CURRENT_ROOT_ABI,
       functionName: "currentRoot",
     })) as Hex;
     return onchain.toLowerCase() === synced.root.toLowerCase();

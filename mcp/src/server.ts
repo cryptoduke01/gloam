@@ -55,6 +55,7 @@ import {
   generateReceiveKey,
   isReceiveTag,
   isSealedTicket,
+  keepTree,
   syncTree,
   noteCommitmentPoseidon,
   noteNullifierPoseidon,
@@ -166,7 +167,8 @@ function defaultDeps(env: Env): ServerDeps {
       const { wasm, zkey } = await receiptArtifacts(net?.ceremony ?? "dev");
       return (input) => proveGroth16(input, wasm, zkey);
     },
-    syncTree,
+    // Reading a mainnet vault's whole history takes over a minute, and a payment's receipt reads it right after the payment did.
+    syncTree: keepTree(),
     relay: relayIntent,
     fetch: guardedFetch(env),
   };
