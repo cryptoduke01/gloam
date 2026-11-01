@@ -335,6 +335,9 @@ await test("the voting window and the signing time are enforced", async () => {
   await rejects(submitBallot(await sign(alice, 0, nowSec + core.SIGNED_MAX_AHEAD_SEC + 5), ctx()), "stale");
   // the last second of the window still counts
   await submitBallot(await sign(alice, 0, Math.floor(END / 1000) - 1), ctx({ now: END - 1_000 }));
+  // a fast clock signing past the close is refused, so it can't replace a vote that counts with one that doesn't
+  await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000)), ctx({ now: END - 1_000 })), "stale");
+  await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000) + 30), ctx({ now: END - 1_000 })), "stale");
 });
 
 await test("bad input is refused before any check", async () => {
@@ -1033,6 +1036,33 @@ await test("amounts and shares read plainly", () => {
   assert.equal(core.timeLeft(5 * 3_600_000 + 12 * 60_000), "5 hours, 12 minutes");
   assert.equal(core.timeLeft(2 * 86_400_000 + 7 * 3_600_000 + 59_000), "2 days, 7 hours");
   assert.equal(core.timeLeft(86_400_000), "1 day");
+});
+
+await test("the final count checks smart wallets, and stops rather than drop one when the node gives no answer", async () => {
+  const signature = `0x${"11".repeat(65)}` as Hex;
+  const ballot = { voter: smart, option: 1, choice: closeVote.options[1]!, weight: "0", timestamp: nowSec, signature, receivedAt: Date.now() };
+  const at = { balances: { [lower(smart)]: (7n * ONE).toString() }, block: 1 };
+  const counted = await core.recount(closeVote, at, excluded, [ballot], async () => true, { closeBlock: 1 });
+  assert.deepEqual(counted.counted.map((b) => b.weight), [(7n * ONE).toString()]);
+  const bad = await core.recount(closeVote, at, excluded, [ballot], async () => false, { closeBlock: 1 });
+  assert.deepEqual(bad.problems.map((p) => p.problem), ["signature does not match"], "a clear no is still a no");
+  await assert.rejects(
+    core.recount(closeVote, at, excluded, [ballot], async () => {
+      throw new core.ContractCheckDown(smart);
+    }, { closeBlock: 1 }),
+    core.ContractCheckDown,
+  );
+  // ballots come in with a retry, so there the same failure is only a no
+  await rejects(
+    submitBallot({ voter: smart, option: 1, timestamp: nowSec, signature }, ctx({ contractCheck: async () => { throw new Error("rpc"); } })),
+    "bad_signature",
+  );
+  // the site's count, and the script's, both make this check
+  const { readFileSync } = await import("node:fs");
+  const results = readFileSync(new URL("../src/lib/vote/results.ts", import.meta.url), "utf8");
+  assert.ok(/ensureFinal\(v, excluded, snapshot, \{[^}]*contractCheck: smartWalletFinalCheck/.test(results));
+  const script = readFileSync(new URL("./vote-final.mts", import.meta.url), "utf8");
+  assert.equal((script.match(/contractCheck: smartWalletFinalCheck/g) ?? []).length, 2);
 });
 
 console.log(`\n${passed} passed`);
