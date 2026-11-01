@@ -23,6 +23,8 @@ export type RelayNetworkStatus = {
   gasGwei?: string | null;
   /** The relay takes prepaid top-ups here. */
   topUps?: boolean;
+  /** The relay pays for a fresh wallet's gas station here. */
+  gasStation?: boolean;
 };
 
 const PREF_KEY = "gloam.relay.pref";
@@ -158,6 +160,11 @@ export async function relayVaultSwap(p: {
   route: readonly PoolKey[];
 }): Promise<Hex> {
   return (await post({ action: "swap", ...p })).hash;
+}
+
+/** One gas station step for a fresh wallet (lib/relay/gasStation): only the wallet and the step go to the relay. */
+export async function relayGasStation(p: { chainId: number; wallet: Address; step: "make" | "pump" }): Promise<Hex> {
+  return (await post({ action: "gas-station", ...p })).hash;
 }
 
 /**

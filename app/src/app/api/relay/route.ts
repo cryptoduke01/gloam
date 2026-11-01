@@ -5,6 +5,7 @@ import {
   checkRateLimit,
   memoTicket,
   networkForChain,
+  relayGasStation,
   relayMemo,
   relayStatus,
   relayTransfer,
@@ -26,7 +27,7 @@ export async function GET() {
 
 /**
  * Submit an already-proven private action through the Gloam relay.
- * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap", ...args }
+ * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap" | "gas-station", ...args }
  * Returns { ok: true, hash } as soon as the transaction is sent; the client
  * waits for the receipt itself. A transfer also returns `memoTicket` for its
  * payment (commitments[0]), null when the relay has no memo secret: sent back
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const net = networkForChain(body.chainId);
-    await checkRateLimit(clientIp(req));
+    const requester = clientIp(req);
+    await checkRateLimit(requester);
 
     let hash: `0x${string}`;
     switch (body.action) {
@@ -55,6 +57,9 @@ export async function POST(req: Request) {
         break;
       case "swap":
         hash = await relayVaultSwap(net, body);
+        break;
+      case "gas-station":
+        hash = await relayGasStation(net, body, requester);
         break;
       default:
         throw new RelayError("Unknown action.");

@@ -9,7 +9,10 @@
  * refuse to submit.
  *
  * Guard rails:
- *   - only the active pool's transfer/unshield and the memo board's postMemo
+ *   - only the active pool's transfer/unshield and the memo board's postMemo,
+ *     plus, with GLOAM_RELAY_GAS_STATION=on, Borro's gas station factory's make
+ *     and a wallet's own station's pump (lib/relay/gasStation): a request never
+ *     names a target
  *   - one request per spend at a time: a send or cash out takes a lock on its
  *     nullifier, shared across instances (lib/relay/inflight, Redis only: when
  *     Redis is set but not answering, or a production build has none, the
@@ -82,6 +85,25 @@ import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
 import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
+import { GAS_STATION_CHAIN_ID, GAS_STATION_FACTORY, gasStationAbi, gasStationFactoryAbi, readStationState } from "@/lib/gasStation";
+import {
+  STATION_BAD_STEP_MESSAGE,
+  STATION_BUSY_MESSAGE,
+  STATION_GAS_HIGH_MESSAGE,
+  STATION_IP_HOURLY,
+  STATION_IP_LIMIT_MESSAGE,
+  STATION_MAX_GAS_PRICE_WEI,
+  STATION_NETWORK_MESSAGE,
+  STATION_NO_FILL_MESSAGE,
+  STATION_OFF_MESSAGE,
+  STATION_WALLET_DAILY,
+  STATION_WALLET_LIMIT_MESSAGE,
+  gasStationDailySends,
+  gasStationOn,
+  pumpMaxIn,
+  pumpMinOut,
+  stationRefusal,
+} from "@/lib/relay/gasStation";
 
 const POOL_ERRORS = [
   "ZeroCommitment",
@@ -516,11 +538,15 @@ export type Call =
   | { kind: "transfer"; args: readonly [Hex, Hex, Hex, readonly [Hex, Hex]] }
   | { kind: "unshield"; args: readonly [Hex, Hex, Hex, Address, Address, bigint] }
   | { kind: "memo"; args: readonly [Hex, Hex]; budget: MemoBudget }
-  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] };
+  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] }
+  | { kind: "make"; args: readonly [Address] }
+  | { kind: "pump"; wallet: Address; station: Address; args: readonly [bigint, bigint] };
 
-/** Public addresses a call pays out to. Only a cash out has one. */
+/** Public addresses a call pays out to: a cash out's, and the wallet a gas station pays. */
 function publicRecipients(call: Call): Address[] {
-  return call.kind === "unshield" ? [call.args[4]] : [];
+  if (call.kind === "unshield") return [call.args[4]];
+  if (call.kind === "make") return [call.args[0]];
+  return call.kind === "pump" ? [call.wallet] : [];
 }
 
 /**
@@ -614,6 +640,10 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return pub.estimateContractGas({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, account });
       case "swap":
         return pub.estimateContractGas({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, account });
+      case "make":
+        return pub.estimateContractGas({ address: GAS_STATION_FACTORY, abi: gasStationFactoryAbi, functionName: "make", args: call.args, account });
+      case "pump":
+        return pub.estimateContractGas({ address: call.station, abi: gasStationAbi, functionName: "pump", args: call.args, account });
     }
   };
   let fees: FeeCap | undefined;
@@ -628,6 +658,10 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "swap":
         return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "make":
+        return wallet.writeContract({ address: GAS_STATION_FACTORY, abi: gasStationFactoryAbi, functionName: "make", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "pump":
+        return wallet.writeContract({ address: call.station, abi: gasStationAbi, functionName: "pump", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
     }
   };
 
@@ -1016,6 +1050,66 @@ async function precheckSpend(net: GloamNetwork, root: Hex, nullifier: Hex) {
   if (!known) throw new RelayError(REVERT_MESSAGES.UnknownRoot, 409, "UnknownRoot");
 }
 
+// ---------------------------------------------------------------- gas station
+
+/**
+ * Pays for one gas station step for a fresh wallet (lib/relay/gasStation has
+ * the rules). Only `wallet` and `step` are read from the request: `make` goes
+ * to Borro's factory and `pump` to that wallet's own station, worked out here,
+ * so a request has no way to name another target. Off unless the flag is on,
+ * and refused before anything is read from the chain.
+ */
+export async function relayGasStation(net: GloamNetwork, body: Record<string, unknown>, requester: string): Promise<Hex> {
+  if (!gasStationOn()) throw new RelayError(STATION_OFF_MESSAGE, 503, "station_off");
+  if (net.chainId !== GAS_STATION_CHAIN_ID) throw new RelayError(STATION_NETWORK_MESSAGE, 400, "network");
+  const wallet = asAddress(body.wallet, "wallet");
+  const step = body.step;
+  if (step !== "make" && step !== "pump") throw new RelayError(STATION_BAD_STEP_MESSAGE, 400, "bad_step");
+  assertCashOutTarget(net, wallet);
+  await screenCall({ kind: "make", args: [wallet] }, net);
+  if (!(await relayCount(requester, "relay-station-ip", STATION_IP_HOURLY, Date.now(), 3600)).allowed) {
+    throw new RelayError(STATION_IP_LIMIT_MESSAGE, 429, "rate_limit");
+  }
+
+  const pub = relayPublicClient(net);
+  let state: Awaited<ReturnType<typeof readStationState>>;
+  let gasPrice: bigint;
+  try {
+    [state, gasPrice] = await Promise.all([readStationState(pub, wallet), pub.getGasPrice()]);
+  } catch (e) {
+    throw explain(e, "Could not read this wallet's station. Try again shortly.", "check_failed");
+  }
+  const refused = stationRefusal(step, state);
+  if (refused) throw new RelayError(refused.message, refused.status, refused.code);
+  if (gasPrice > STATION_MAX_GAS_PRICE_WEI) throw new RelayError(STATION_GAS_HIGH_MESSAGE, 503, GAS_HIGH_CODE);
+
+  let call: Extract<Call, { kind: "make" | "pump" }>;
+  if (step === "make") {
+    call = { kind: "make", args: [wallet] };
+  } else {
+    const [account] = await fundedRelayAccounts(net);
+    const maxIn = pumpMaxIn(state.stationUsdg);
+    let fill: bigint;
+    try {
+      const sim = await pub.simulateContract({ address: state.station, abi: gasStationAbi, functionName: "pump", args: [0n, maxIn], account });
+      fill = sim.result;
+    } catch (e) {
+      throw explain(e, "Could not turn this into ETH right now. Your USDG stays at the station. Try again shortly.", "check_failed");
+    }
+    if (fill <= 0n) throw new RelayError(STATION_NO_FILL_MESSAGE, 409, "no_fill");
+    call = { kind: "pump", wallet, station: state.station, args: [pumpMinOut(fill), maxIn] };
+  }
+
+  const now = Date.now();
+  if (!(await relayCount(wallet.toLowerCase(), "relay-station-wallet", STATION_WALLET_DAILY, now, 86_400)).allowed) {
+    throw new RelayError(STATION_WALLET_LIMIT_MESSAGE, 429, "station_wallet_limit");
+  }
+  if (!(await relayCount(`chain:${net.chainId}`, "relay-station-net", gasStationDailySends(), now, 86_400)).allowed) {
+    throw new RelayError(STATION_BUSY_MESSAGE, 429, "station_busy");
+  }
+  return submit(net, call);
+}
+
 // ---------------------------------------------------------------- status
 
 export type RelayNetworkStatus = {
@@ -1033,6 +1127,8 @@ export type RelayNetworkStatus = {
   gasGwei: string | null;
   /** Dated jobs can be taken here: the chain has them, and the relay can seal them at rest. */
   topUps: boolean;
+  /** The relay pays for a fresh wallet's gas station here (lib/relay/gasStation). */
+  gasStation: boolean;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -1110,6 +1206,7 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
         maxGasGwei: gas.ceilingWei === null ? null : formatGwei(gas.ceilingWei),
         gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
         topUps: jobKeyReady() && !datedOff(net.chainId),
+        gasStation: gasStationOn() && net.chainId === GAS_STATION_CHAIN_ID,
       };
     })
   );
