@@ -14,7 +14,7 @@ import { MarketChart } from "./MarketChart";
 type Filter = "all" | "onchain" | "private" | "stocks";
 
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
-  { id: "private", label: "Private-ready", hint: "Can be shielded and traded privately" },
+  { id: "private", label: "Private-ready", hint: "Can be held and traded privately" },
   { id: "onchain", label: "Onchain", hint: "Live as a token on Robinhood Chain" },
   { id: "stocks", label: "Stocks", hint: "Tokenized equities" },
   { id: "all", label: "All markets", hint: "Everything on the watchlist" },
