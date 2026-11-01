@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { useConfig, useConnect } from "wagmi";
 import { WALLETCONNECT_ID, WALLET_APPS, isTouchDevice } from "@/lib/walletConnect";
 
@@ -29,6 +30,7 @@ export function WalletConnectSheet({ open, onClose }: { open: boolean; onClose: 
   const [attempt, setAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
   const [phone, setPhone] = useState(false);
+  const dialog = useRef<HTMLDivElement>(null);
   const pending = useRef(false);
   // the latest hooks values, read by the connect effect without restarting it
   const latest = useRef({ connectors, connectAsync, onClose });
@@ -109,19 +111,16 @@ export function WalletConnectSheet({ open, onClose }: { open: boolean; onClose: 
     };
   }, [open, attempt]);
 
+  useModalFocus(dialog, close, { open });
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [open, close]);
+  }, [open]);
 
   async function copyUri(uri: string) {
     try {
@@ -137,7 +136,9 @@ export function WalletConnectSheet({ open, onClose }: { open: boolean; onClose: 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[210] flex items-end justify-center sm:items-center sm:p-6"
+      ref={dialog}
+      tabIndex={-1}
+      className="fixed inset-0 z-[210] flex items-end justify-center outline-none sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="wc-title"

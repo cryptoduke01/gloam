@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { FAUCET_URL, faucetFor } from "@/lib/faucet";
 import { useNetwork } from "./NetworkProvider";
 import { useTempoFaucet } from "@/hooks/useTempoFaucet";
@@ -34,6 +35,8 @@ export function openOnboarding() {
 export function OnboardingCard() {
   const [state, setState] = useState<OnboardingState | null>(null);
   const [open, setOpen] = useState(false);
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocus(dialog, () => setOpen(false), { open });
   const { network } = useNetwork();
   const isTempo = network.key === "tempo";
   // A mainnet has no faucet, so no faucet step.
@@ -65,17 +68,12 @@ export function OnboardingCard() {
     return () => window.removeEventListener(OPEN_ONBOARDING_EVENT, onOpen);
   }, []);
 
-  // Escape to close + body scroll lock while open.
+  // Body scroll lock while open.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
@@ -91,7 +89,9 @@ export function OnboardingCard() {
   // inside the app's content wrapper.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      ref={dialog}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 outline-none backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
