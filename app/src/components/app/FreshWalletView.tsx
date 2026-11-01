@@ -302,7 +302,7 @@ export function FreshWalletView() {
   if (!onChain) {
     return (
       <div className="gl-card max-w-[640px] p-5 sm:p-7">
-        <h2 className="t-title">Fund a fresh wallet</h2>
+        <h2 className="t-title">Robinhood Chain only</h2>
         <p className="mt-2 text-[14px] leading-relaxed text-soft">This runs on Robinhood Chain mainnet, where Borro is.</p>
         <button type="button" className="btn btn-ghost mt-5" onClick={() => setNetworkKey("robinhood-mainnet")}>
           Switch to Robinhood Chain
@@ -319,9 +319,9 @@ export function FreshWalletView() {
   if (!stationOn) {
     return (
       <div className="gl-card max-w-[640px] p-5 sm:p-7">
-        <h2 className="t-title">Fund a fresh wallet</h2>
+        <h2 className="t-title">Not open yet</h2>
         <p className="mt-2 text-[14px] leading-relaxed text-soft">
-          This isn&apos;t open yet. The step that gets a fresh wallet its gas is switched off, so nothing can move here for now.
+          The step that gets a fresh wallet its gas is switched off, so nothing can move here for now.
         </p>
         <Link href="/docs/fresh-wallet" className="gl-arrowlink mt-5">
           How it will work
@@ -333,8 +333,7 @@ export function FreshWalletView() {
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="gl-card min-w-0 p-5 sm:p-7">
-        <h2 className="t-title">Fund a fresh wallet</h2>
-        <p className="mt-1.5 max-w-[52ch] text-[14px] leading-relaxed text-mute">
+        <p className="max-w-[52ch] text-[14px] leading-relaxed text-mute">
           Send USDG from your private balance to a new wallet, with ETH for gas, so what you open on Borro doesn&apos;t point to your main wallet.
         </p>
 
