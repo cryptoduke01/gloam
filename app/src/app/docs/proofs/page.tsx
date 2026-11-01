@@ -69,7 +69,7 @@ export default function DocsProofsPage() {
         you have claimed them.
       </p>
 
-      <h3>Payroll total</h3>
+      <h3 id="payroll-total">Payroll total</h3>
       <p>
         Shows that a payroll run you sent paid <strong>exactly</strong> a total
         across a number of payments, such as 21,500 USDG in 5 payments, without
