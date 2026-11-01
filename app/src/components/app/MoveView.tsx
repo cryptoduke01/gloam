@@ -1352,6 +1352,8 @@ export function MoveView() {
   }
 
   async function onPrivateSend() {
+    // Whatever an earlier send kept is that send's, landed or not: a failure here must not drop it.
+    keptBeforeSend.current = null;
     if (!selected || !address || !network.pool || !poseidonMode) return;
     // never prove or send a balance of another chain (several vaults share one address)
     const wrongNetwork = noteNetworkProblem(selected, network);
@@ -1501,12 +1503,13 @@ export function MoveView() {
       // before anything is sent. The change waits out of the balance until the
       // chain shows it (lib/claimSweep settles it if this tab never hears back);
       // the code goes under Sent links. A send that surely never went out drops both.
+      // A code that can't be kept stops the send, like a change note that can't.
       if (pendingChange.current) await saveLocalNote({ ...pendingChange.current, sweepPending: true });
-      if (pendingLink.current) await saveSentLink(pendingLink.current).catch(() => undefined);
-      keptBeforeSend.current = {
-        changeId: pendingChange.current?.id ?? null,
-        linkId: pendingLink.current?.id ?? null,
-      };
+      keptBeforeSend.current = { changeId: pendingChange.current?.id ?? null, linkId: null };
+      if (pendingLink.current) {
+        await saveSentLink(pendingLink.current);
+        keptBeforeSend.current.linkId = pendingLink.current.id;
+      }
 
       if (relayOn) {
         setStatus("Sending through the Gloam relay…");
