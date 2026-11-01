@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useReadContracts } from "wagmi";
+import { formatUnits } from "viem";
 import { formatEth } from "@/lib/chain";
 import { useAppAccount, useAppBalance, useAppTokenBalances } from "@/lib/demo";
 import { useNetwork } from "./NetworkProvider";
@@ -33,12 +34,14 @@ import { COINGECKO_MARKED, hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/
 import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import {
   privateHeadline,
+  tidyAmount,
   splitWalletRows,
   walletRowValue,
   walletTotal,
   type WalletHolding,
 } from "@/lib/portfolioValue";
 import {
+  assetDecimals,
   assetLabel,
   formatAssetAmount,
   isNativeAsset,
@@ -505,22 +508,19 @@ export function PortfolioView() {
       ? formatUsdCompact(balancesVisible ? publicUsd : 0)
       : `${formatEth(balancesVisible ? nativeWei : BigInt(0))} ${nativeSymbol}, ${stockCount} ${stockCount === 1 ? "token" : "tokens"}`;
 
+  // The hero number: what sits in the vault, only readable in this browser. What the
+  // dollars leave out is shown by amount: "$100 + 1,000 GLOAM" rather than "2 assets".
+  // A short amount: this is the big number, and the rows below keep every decimal.
+  const amountOfRow = (r: (typeof shieldRows)[number]) =>
+    `${tidyAmount(Number(formatUnits(r.amount, isNativeAsset(r.asset) ? 18 : assetDecimals(r.asset))))} ${r.label}`;
   const vaultValue = !balancesVisible
     ? "0"
     : !hasShield
       ? "0"
       : shieldRows.length === 1
-        ? `${
-            isNativeAsset(shieldRows[0].asset)
-              ? formatEth(shieldRows[0].amount)
-              : formatAssetAmount(shieldRows[0].amount, shieldRows[0].asset)
-          } ${shieldRows[0].label}`
+        ? amountOfRow(shieldRows[0])
         : `${shieldRows.length} assets`;
 
-  // The hero number: what sits in the vault, only readable in this browser. What the
-  // dollars leave out is shown by amount: "$100 + 1,000 GLOAM" rather than "2 assets".
-  const amountOfRow = (r: (typeof shieldRows)[number]) =>
-    `${isNativeAsset(r.asset) ? formatEth(r.amount) : formatAssetAmount(r.amount, r.asset)} ${r.label}`;
   const privateDisplay = !balancesVisible
     ? settings.showUsd
       ? formatUsd(0)
