@@ -28,7 +28,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { formatUnits, type Address, type Hex } from "viem";
-import type { ReceiveKey } from "@gloamtrade/sdk";
+import type { PaymentReceiptRecord, ReceiveKey } from "@gloamtrade/sdk";
 import { withFileLock } from "./fileLock.js";
 import type { NetworkKey } from "./networks.js";
 
@@ -44,6 +44,25 @@ export type NoteStatus = "unspent" | "pending" | "spent" | "dead";
  */
 export type NoteOrigin = "shield" | "change" | "received" | "payment";
 export type KeySource = "GLOAM_NOTE_KEY" | "signer";
+
+/**
+ * The receipt of a payment VEYA allowed, kept on the payment's note. The record
+ * shows the asset, the minimum amount and the transaction hash, so it stays here
+ * and never goes in a noteView. "pending" has not been tried yet.
+ */
+export type NoteReceipt = {
+  /** VEYA's check id, sealed into the proof as its verifier. */
+  checkId: string;
+  /** The agent id this payment was checked under, so a retry names the same one. */
+  agentId: string;
+  /** Unix seconds, sealed into the proof. Fixed before the send, so a rebuilt receipt reads the same. */
+  expiresAt: number;
+  status: "pending" | "receipt_failed" | "anchor_failed" | "anchored";
+  leaf?: Hex;
+  /** The transaction VEYA says wrote the leaf. */
+  anchorTx?: Hex;
+  record?: PaymentReceiptRecord;
+};
 
 export type StoredNote = {
   handle: string;
@@ -86,6 +105,8 @@ export type StoredNote = {
   checkedAt?: string;
   /** What the note is for, e.g. the resource a received payment paid for. */
   label?: string;
+  /** Payments VEYA allowed with receipts on. */
+  receipt?: NoteReceipt;
   createdAt: string;
   updatedAt: string;
 };
@@ -258,6 +279,17 @@ export class NoteStore {
       if (next.status !== "pending") delete next.pending;
       d.notes[i] = next;
       return next;
+    });
+  }
+
+  /** Change a note's receipt from what the store holds now, under the lock, so two runs on one receipt can't undo each other. */
+  updateReceipt(handle: string, change: (current: NoteReceipt) => NoteReceipt): NoteReceipt | undefined {
+    return this.mutate((d) => {
+      const n = d.notes.find((x) => x.handle === handle);
+      if (!n?.receipt) return undefined;
+      n.receipt = change(n.receipt);
+      n.updatedAt = stamp();
+      return n.receipt;
     });
   }
 
