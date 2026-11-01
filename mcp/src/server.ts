@@ -215,7 +215,11 @@ function text(value: unknown) {
   };
 }
 
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** A viem error's short message: its full one holds the RPC URL, API key included, and the calldata. */
+const errMsg = (e: unknown) => {
+  const short = (e as { shortMessage?: unknown } | null)?.shortMessage;
+  return typeof short === "string" ? short : e instanceof Error ? e.message : String(e);
+};
 
 function parseRequirements(input: string): GloamPaymentRequirements | null {
   try {
@@ -2087,7 +2091,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
                 const h = e.hash;
                 if (held) tryStore(() => notes.update(held!.handle, { createdTx: h }));
               }
-              throw e;
+              // Tell the sweep, so it keeps the fresh note and never reads this as nothing moved.
+              throw sweepMaybeSent && e instanceof Error ? Object.assign(e, { maybeSent: true }) : e;
             }
           ),
         // The fresh note's secret is the money: store it before the sweep is sent.
