@@ -130,8 +130,12 @@ async function cashOut(to: Address, amount: bigint) {
   assert.equal(r.status, "success", "the vault must hold USDG on the fork");
 }
 
+/** A new sender each time: one sender's hourly limit isn't what this run is checking. */
+let senders = 0;
+const sender = () => `198.51.100.${++senders}`;
+
 const relayStep = async (wallet: Address, step: "make" | "pump") => {
-  const hash = await relayGasStation(net, { wallet, step }, "127.0.0.1");
+  const hash = await relayGasStation(net, { wallet, step }, sender());
   const receipt = await pub.waitForTransactionReceipt({ hash });
   assert.equal(receipt.status, "success");
   assert.equal(receipt.from.toLowerCase(), relayer.toLowerCase(), "the relay paid");
@@ -151,7 +155,7 @@ const wallet = privateKeyToAccount(generatePrivateKey()).address;
 const station = predictStation(wallet);
 log(`\ntest wallet ${wallet}\nstation     ${station}`);
 
-await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("station_off"));
+await assert.rejects(relayGasStation(net, { wallet, step: "make" }, sender()), refusedWith("station_off"));
 log("ok  flag off: the relay refuses");
 process.env.GLOAM_RELAY_GAS_STATION = "on";
 
@@ -162,7 +166,7 @@ assert.equal(s.walletEth, 0n);
 assert.equal(fundingStep(s), "fund");
 log("ok  the factory's predict matches the local address; the wallet starts with 0 ETH");
 
-await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("no_usdg"));
+await assert.rejects(relayGasStation(net, { wallet, step: "make" }, sender()), refusedWith("no_usdg"));
 log("ok  nothing at the station: make refused, no gas spent");
 
 await cashOut(station, U);
@@ -173,7 +177,7 @@ assert.equal(s.stationUsdg, U, "USDG waits at the address before the station exi
 assert.equal(fundingStep(s), "make");
 log("ok  USDG sent to the predicted address waits there before the station exists");
 
-await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("gas_high"));
+await assert.rejects(relayGasStation(net, { wallet, step: "make" }, sender()), refusedWith("gas_high"));
 log(`ok  at anvil's own ${await pub.getGasPrice()} wei the gas limit holds: nothing sent`);
 quotedGasPrice = 20_136_000n;
 
@@ -185,7 +189,7 @@ assert.equal(await pub.readContract({ address: station, abi: stationAbi, functio
 assert.equal(fundingStep(s), "pump");
 log(`ok  make through the relay: ${made.gasUsed} gas, the station pays only ${wallet}`);
 
-await assert.rejects(relayGasStation(net, { wallet, step: "make" }, "127.0.0.1"), refusedWith("in_flight"));
+await assert.rejects(relayGasStation(net, { wallet, step: "make" }, sender()), refusedWith("in_flight"));
 log("ok  a copy of the make right after it is refused");
 
 // anvil copies the pool's ticks from the live chain on first touch, which can outlast the relay's 20 s read timeout.
@@ -203,7 +207,7 @@ assert.equal(fundingStep(s), "ready");
 const ethFromPump = s.walletEth;
 log(`ok  pump through the relay: ${pumped.gasUsed} gas, 1 USDG became ${formatEther(s.walletEth)} ETH in the wallet`);
 
-await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, "127.0.0.1"), refusedWith("in_flight"));
+await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, sender()), refusedWith("in_flight"));
 log("ok  a copy of the pump right after it is refused");
 
 // pump on an empty station succeeds on chain and does nothing: only the relay's own check stops it
@@ -211,7 +215,7 @@ const bare = privateKeyToAccount(generatePrivateKey()).address;
 await sendAs(relayer, GAS_STATION_FACTORY, encodeFunctionData({ abi: gasStationFactoryAbi, functionName: "make", args: [bare] }));
 const noop = await rpc<Hex>("eth_call", [{ from: relayer, to: predictStation(bare), data: encodeFunctionData({ abi: gasStationAbi, functionName: "pump", args: [0n, U] }) }, "latest"]);
 assert.equal(BigInt(noop), 0n, "the chain would take the gas and do nothing");
-await assert.rejects(relayGasStation(net, { wallet: bare, step: "pump" }, "127.0.0.1"), refusedWith("no_usdg"));
+await assert.rejects(relayGasStation(net, { wallet: bare, step: "pump" }, sender()), refusedWith("no_usdg"));
 log("ok  an empty station would take gas and do nothing on chain: the relay refuses it first");
 
 const spend = await sendAs(wallet, STATION_USDG, encodeFunctionData({ abi: erc20, functionName: "approve", args: [station, 1n] }), 200_000n);
@@ -230,7 +234,7 @@ const done = await getGas({
   onStatus: (t) => states.push(t),
   deps: {
     read: (w) => readStationState(pub, w),
-    send: (p) => relayGasStation(net, p, "127.0.0.1"),
+    send: (p) => relayGasStation(net, p, sender()),
     wait: async (hash) => (await pub.waitForTransactionReceipt({ hash })).status,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   },
@@ -250,9 +254,12 @@ await relayStep(racer, "make");
 const eoaEstimate = await estimateFor(predictStation(racer), pumpData(U));
 assert.ok(eoaEstimate < STATION_MAX_ESTIMATE, "an ordinary pump clears the cap");
 const nonceBefore = await pub.getTransactionCount({ address: relayer });
-const raced = await Promise.allSettled([1, 2, 3].map(() => relayGasStation(net, { wallet: racer, step: "pump" }, "127.0.0.1")));
-assert.equal(raced.filter((r) => r.status === "fulfilled").length, 1);
+const raced = await Promise.allSettled([1, 2, 3].map(() => relayGasStation(net, { wallet: racer, step: "pump" }, sender())));
+const won = raced.filter((r) => r.status === "fulfilled");
+assert.equal(won.length, 1);
 for (const r of raced) if (r.status === "rejected") refusedWith("in_flight")(r.reason);
+// The count is read once the winner is mined: until then it says nothing.
+assert.equal((await pub.waitForTransactionReceipt({ hash: (won[0] as PromiseFulfilledResult<Hex>).value })).status, "success");
 assert.equal((await pub.getTransactionCount({ address: relayer })) - nonceBefore, 1, "one transaction");
 log(`ok  3 pumps sent together: 1 transaction, 2 refused; an ordinary pump estimates ${eoaEstimate} gas`);
 
@@ -265,7 +272,7 @@ const topped = await getGas({
   wallet: stocked,
   deps: {
     read: (w) => readStationState(pub, w),
-    send: (p) => relayGasStation(net, p, "127.0.0.1"),
+    send: (p) => relayGasStation(net, p, sender()),
     wait: async (hash) => (await pub.waitForTransactionReceipt({ hash })).status,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   },
@@ -282,7 +289,7 @@ await rpc("anvil_setCode", [contract, "0x6120005b600190038060035700"]);
 const contractEstimate = await estimateFor(predictStation(contract), pumpData(U));
 assert.ok(contractEstimate > STATION_MAX_ESTIMATE, "this wallet would clear the cap");
 assert.equal(fundingStep(await readStationState(pub, contract)), "contract");
-await assert.rejects(relayGasStation(net, { wallet: contract, step: "pump" }, "127.0.0.1"), refusedWith("wallet_code"));
+await assert.rejects(relayGasStation(net, { wallet: contract, step: "pump" }, sender()), refusedWith("wallet_code"));
 assert.equal((await readStationState(pub, contract)).stationUsdg, U, "nothing moved");
 log(`ok  a contract wallet is refused: its pump estimates ${contractEstimate} gas, over the ${STATION_MAX_ESTIMATE} cap`);
 
@@ -295,7 +302,7 @@ await relayStep(third, "make");
 await rpc("evm_increaseTime", [350_000]);
 await rpc("evm_mine");
 assert.equal(await pub.readContract({ address: thirdStation, abi: stationAbi, functionName: "stuck" }), true);
-await assert.rejects(relayGasStation(net, { wallet: third, step: "pump" }, "127.0.0.1"), refusedWith("check_failed"));
+await assert.rejects(relayGasStation(net, { wallet: third, step: "pump" }, sender()), refusedWith("check_failed"));
 assert.equal((await readStationState(pub, third)).stationUsdg, U, "nothing lost");
 log("ok  price feed stale for over 4 days: the relay refuses a pump and the USDG stays put");
 
