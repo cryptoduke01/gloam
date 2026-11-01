@@ -108,7 +108,7 @@
   --text: #0b0c0e;
   --soft: #34373c;
   --mute: #5f636a;
-  --faint: #979ba2;
+  --faint: #6b6f76;
   --line: #e4e6e9;
   --line-strong: #cfd2d6;
   --panel: #ffffff;
@@ -177,7 +177,7 @@ html[data-theme="dark"],
   --text: #f4f5f6;
   --soft: #cdd0d4;
   --mute: #9b9fa6;
-  --faint: #6c7077;
+  --faint: #83878e;
   --line: #232529;
   --line-strong: #33363b;
   --panel: #111214;
@@ -1274,26 +1274,26 @@ html.gl-lite .gl-field.gl-drift {
   --tok-kw: #2e7d53;
   --tok-str: #8a5a12;
   --tok-num: #a1491f;
-  --tok-com: #8b9098;
+  --tok-com: #6b6f76;
   --tok-fn: #0b0c0e;
   --tok-prop: #4b5059;
   --tok-type: #1d4f35;
   --tok-const: #a1491f;
   --tok-lit: #a1491f;
-  --tok-punc: #8b9098;
+  --tok-punc: #6b6f76;
 }
 html[data-theme="dark"],
 .theme-dark {
   --tok-kw: #8fd3ad;
   --tok-str: #e7c48d;
   --tok-num: #f0a875;
-  --tok-com: #6c7077;
+  --tok-com: #83878e;
   --tok-fn: #f4f5f6;
   --tok-prop: #c3c8cf;
   --tok-type: #b7e6cb;
   --tok-const: #f0a875;
   --tok-lit: #f0a875;
-  --tok-punc: #7d828a;
+  --tok-punc: #83878e;
 }
 .tok-kw { color: var(--tok-kw); }
 .tok-str { color: var(--tok-str); }
