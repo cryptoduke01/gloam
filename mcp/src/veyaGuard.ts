@@ -24,8 +24,9 @@
  * VEYA is never told how a payment it allowed ended, so if one fails afterwards
  * its running budget can sit ahead of what was really paid.
  *
- * The format is as VEYA documented it on 1 Nov 2026 (backend 1.2.12). It is the
- * block below and nowhere else, so a change stays there.
+ * The format is as VEYA documented it on 1 Nov 2026 (backend 1.2.12) and as its
+ * live endpoints answered that day. It is the block below and nowhere else, so a
+ * change stays there.
  */
 import { cleanReceiptLabel } from "@gloamtrade/sdk";
 import type { Hex } from "viem";
@@ -34,7 +35,7 @@ import { guardBody, guardTimeoutMs, keyMayGoTo, plainText, postToGuard, type Gua
 type Env = Record<string, string | undefined>;
 
 export const VEYA_TIMEOUT_MS = 5_000;
-/** An anchor writes to chain before it answers, which took about 5.6s, so it can't share the check's limit. */
+/** An anchor writes to chain before it answers, which has taken 5.6 to 10 seconds, so it can't share the check's limit. */
 export const VEYA_ANCHOR_TIMEOUT_MS = 20_000;
 
 export interface VeyaConfig extends GuardEndpoint {
@@ -242,8 +243,8 @@ const ANCHOR_TRIES = 3;
 
 /**
  * Send VEYA a receipt's leaf. Taken only on a 200 that names this leaf and a
- * transaction. 409, 502 and 503 are tried again here, a sixth of the timeout apart,
- * which is long enough for a write in progress to finish. Never throws.
+ * transaction. 409, 502 and 503 are tried again here, a quarter of the timeout
+ * apart, which leaves a write in progress time to finish. Never throws.
  */
 export async function anchorLeaf(leaf: string, agentId: string, env: Env, fetchImpl: typeof fetch = fetch): Promise<AnchorResult> {
   const config = veyaConfig(env);
@@ -261,6 +262,6 @@ export async function anchorLeaf(leaf: string, agentId: string, env: Env, fetchI
     if (blocked) return { anchored: false, why: `${blocked}, HTTP ${status}`, retry: false };
     const busy = ANCHOR_RETRY[status];
     if (!busy || tries === ANCHOR_TRIES) return { anchored: false, why: busy ? `${busy}, HTTP ${status}` : `it answered HTTP ${status}`, retry: true };
-    await new Promise((r) => setTimeout(r, to.timeoutMs / 6));
+    await new Promise((r) => setTimeout(r, to.timeoutMs / 4));
   }
 }

@@ -138,7 +138,7 @@ const reset = (a: Answer, w: Answer = WORMHOLE_ALLOW, anchor: AnchorReply = veya
 const CHECK_ID = "veya-check-0123456789abcdef0123456789abcdef";
 const ALLOW_ID: Answer = { body: { decision: "allow", attestation: CHECK_ID } };
 /** A short timeout only so the waits between tries stay short here. */
-const receiptsOn: Env = { ...on, GLOAM_VEYA_ANCHOR_URL: ANCHOR_URL, GLOAM_VEYA_ANCHOR_TIMEOUT_MS: "3000" };
+const receiptsOn: Env = { ...on, GLOAM_VEYA_ANCHOR_URL: ANCHOR_URL, GLOAM_VEYA_ANCHOR_TIMEOUT_MS: "2000" };
 
 /** Stands in for the receipt circuit: it answers with the signals a real proof of this input carries. */
 const proved: Record<string, string | string[]>[] = [];
@@ -984,12 +984,12 @@ test("anchorLeaf: any other status can be retried, but not here", async () => {
   }
 });
 
-test("anchorLeaf: it has its own timeout, past the 5.6 seconds VEYA's write took", async () => {
+test("anchorLeaf: it has its own timeout, past the 10.1 seconds the live write took", async () => {
   const defaults = veyaConfig(on);
   assert.ok(defaults && !("error" in defaults));
   assert.equal(defaults.timeoutMs, 5_000, "the check keeps its 5 seconds");
   assert.equal(defaults.anchorTimeoutMs, 20_000);
-  assert.ok(defaults.anchorTimeoutMs > 5_600);
+  assert.ok(defaults.anchorTimeoutMs > 10_100);
   const held = veyaConfig({ ...on, GLOAM_VEYA_ANCHOR_TIMEOUT_MS: "90000" });
   assert.ok(held && !("error" in held));
   assert.equal(held.anchorTimeoutMs, 30_000);
