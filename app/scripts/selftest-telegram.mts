@@ -1188,6 +1188,15 @@ await test("moderation: look-alike Gloam accounts, DM lures, and the team's dele
   assert.deepEqual(moderationAsk("", "spam", false), { remove: true });
   assert.deepEqual(moderationAsk("", "del", false), { remove: false });
   assert.equal(moderationAsk("delete and kick him", null, false), null, "untagged words do nothing");
+  // an order opens with the verb; anything else an admin says while tagging the helper is not one
+  for (const [said, remove] of [["kick him", true], ["please ban this guy", true], ["block him", true], ["boot them", true], ["take it down", false], ["could you please remove this", false], ["remove him", true], ["go ahead and ban him", true]] as const) {
+    assert.deepEqual(moderationAsk(said, null, true), { remove }, said);
+  }
+  for (const said of ["which block was the snapshot?", "don't ban him", "please don't ban him", "how do they remove the passkey?", "why did you delete that?", "kick off the call at 5", "block height is what here?", "is he a scammer, should we ban him?"]) {
+    assert.equal(moderationAsk(said, null, true), null, said);
+  }
+  assert.deepEqual(moderationAsk("Glim, delete this", null, true, "Glim"), { remove: false }, "by name");
+  assert.deepEqual(moderationAsk("hey glim kick him", null, true, "Glim"), { remove: true }, "by name, with a greeting");
 
   // a look-alike posts a bare GIF: deleted, banned, one notice
   reset();
