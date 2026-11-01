@@ -249,7 +249,7 @@ function ActionRow({
               <span className="sm:hidden">
                 <VaultActionIcon id={a.id} size={18} />
               </span>
-              <span className="max-w-full truncate md:hidden">{a.short}</span>
+              <span className="max-w-full text-center md:hidden">{a.short}</span>
               <span className="hidden md:inline">{a.label}</span>
             </button>
           );
