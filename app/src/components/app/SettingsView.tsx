@@ -166,7 +166,7 @@ function Chip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`h-8 rounded-full px-3.5 capitalize transition-colors duration-200 ${
+      className={`gl-tap h-8 rounded-full px-3.5 capitalize transition-colors duration-200 ${
         active
           ? "bg-panel text-foreground shadow-card"
           : "text-mute hover:text-foreground"
@@ -574,7 +574,8 @@ export function SettingsView() {
         <p className="mt-4 max-w-[62ch] text-[13px] leading-relaxed text-mute">
           A backup holds your balances themselves, not this browser&apos;s key or
           your passkey. To restore it on any browser you need only the backup,
-          plus its passphrase if you set one.
+          plus its passphrase if you set one. Each backup holds one network, the one you&apos;re on now: {network.label}.
+          Switch networks to back up the others.
           {vault.protected && " With the passkey lock on, exporting asks for your passkey."}
         </p>
         {!backupReady && (
@@ -645,8 +646,8 @@ export function SettingsView() {
                 }
                 setBackupMsg(
                   backupPass.trim()
-                    ? `Copied a locked backup (${count} balance(s)).`
-                    : `Copied a plain backup (${count} balance(s)). Anyone with this file can spend it.`
+                    ? `Copied a locked backup (${count} balance(s) on ${network.label}).`
+                    : `Copied a plain backup (${count} balance(s) on ${network.label}). Anyone with this file can spend it.`
                 );
               } catch (e) {
                 setBackupMsg(
@@ -685,7 +686,7 @@ export function SettingsView() {
                 URL.revokeObjectURL(url);
                 setBackupMsg(
                   backup.notes.length
-                    ? `Downloaded ${backup.notes.length} balance(s)${
+                    ? `Downloaded ${backup.notes.length} balance(s) on ${network.label}${
                         backupPass.trim() ? ", locked" : ""
                       }.`
                     : "Empty backup file downloaded."

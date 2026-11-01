@@ -42,7 +42,7 @@ async function payWithSepoliaEth(server: ReturnType<typeof mockPool> & { chain: 
     secretKey: SECRET,
     network: "base-mainnet",
     currency: sdk.NATIVE_ASSET,
-    server: { receiveKey: payee, chain: server.chain, prove: stubProve, submit: server.submitter("payee"), replay: core.memoryReplayStore() },
+    server: { receiveKey: payee, chain: server.chain, prove: stubProve, submit: server.submitter("payee"), beforeSubmit: () => undefined, replay: core.memoryReplayStore() },
   });
   const charge = paywall.charge({ amount: "0.1" });
   const first = await charge(new Request(URL_));

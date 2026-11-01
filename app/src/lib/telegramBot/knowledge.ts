@@ -79,7 +79,7 @@ WHAT GLOAM IS
 - It runs on two testnets: Tempo Moderato testnet (chain ID 42431), a payments chain where you use test stablecoins such as PathUSD and OUSD and fees are paid in stablecoins, and Robinhood Chain testnet (chain ID 46630), with test ETH, sample stock tokens (TSLA, AMZN, PLTR, NFLX, AMD) and USDG. The network selector in the app header switches between them.
 - Network details, if someone wants to add a chain by hand (the app's Add to wallet button does this for them): Robinhood Chain testnet: RPC https://rpc.testnet.chain.robinhood.com, chain ID 46630, currency ETH, explorer https://explorer.testnet.chain.robinhood.com. Tempo testnet (Moderato): RPC https://rpc.moderato.tempo.xyz, chain ID 42431, currency USD, explorer https://explore.testnet.tempo.xyz. Give these exactly when asked; never make up any other URL.
 - The app is on testnet for now, with development proving keys. Mainnet is coming on both Tempo and Robinhood Chain. The trusted-setup ceremony for mainnet is done (13 contributors). Mainnet goes live on Wednesday 21 October 2026 at 13:00 UTC (14:00 WAT), on both Tempo and Robinhood Chain. The live countdown is at gloam.trade/mainnet: when someone asks when mainnet is, give the time in UTC and send them there. That is the only date and time you may give. Never give any other, and never say mainnet is live until the team announces it; until then the app is testnet. Launch news comes in Announcements and on X @gloamtrade.
-- No middlemen: the vaults have no admin withdraw, so nobody, the team included, can move pooled money. Money leaves only through a cash out with a valid proof. Rule changes are queued on-chain three days before they apply.
+- No middlemen: the vaults have no admin withdraw. Money leaves only through a cash out with a valid proof. The owner wallet can change the rules, the proof verifier included, and every change is queued on-chain in public for three days before it applies. Never say nobody can touch the money.
 - Fees at mainnet: adding money and private payments are free. Only a cash out has a fee: 0.25% of the amount goes to Gloam. The app shows what you receive and the fee before you confirm. The contract caps the fee at 1%, and raising it is queued on-chain three days ahead. Half of Gloam's fees buy back $GLOAM once fees switch on at mainnet (half burned, half to the treasury); never give a buyback amount in dollars or tokens. Cash outs on testnet have no fee.
 - Proofs are made in your browser and take about 10 to 30 seconds. Keep the tab open. A desktop or laptop is best for first proofs.
 
@@ -405,7 +405,7 @@ function mainnetLiveFacts(): string {
     "",
     "GETTING MONEY IN ON MAINNET",
     "- Bring money over (the bridge, powered by Relay): on Vault > Add, the Money on another chain? card, button Bring money over. It brings money from 24 chains, or straight from an exchange (pick the chain you withdraw on): Ethereum, Base, BNB Chain, Bitcoin, Arbitrum, Tron, Polygon, Optimism and more. You pick the chain and token and an amount, get a one-time deposit address with a QR, and send exactly that amount to it. It lands in your own wallet as USDG on Robinhood Chain, or as USDC on Tempo (listed in the vault as USDC.e). From 1 to 25,000 dollars at a time; the bridge fee and arrival time show first; usually a minute or two, Bitcoin waits for its confirmations. Bridging is public, like any deposit. Send only that token on that chain to that address, once.",
-    "- When it arrives, the panel shows Add it privately. Adding to the private balance is always a separate step you confirm yourself, because the deposit proof is made in your browser; nobody can do it for you, which is what keeps it self-custodial.",
+    "- Paying from your own wallet can go straight into the private balance in one step, when the panel offers it. Otherwise, when the money arrives the panel shows Add it privately, which you confirm yourself. Either way the deposit proof is made in your browser, which is what keeps it self-custodial.",
     "- If the balance on Add still shows the old number after a bridge or swap, tap the refresh icon next to Balance. The app also reads it again by itself a few seconds after money lands.",
     "- Swap ETH to USDG (Robinhood Chain mainnet only): Bring money over opens on Swap to USDG, and the ETH row in Portfolio Holdings has a Swap to USDG button. Type an amount or tap 25%, 50%, 75% or Max (Max keeps a little ETH back for gas). It shows the live price as you type: what you get, the rate, the least you get, the swap fee and the network fee (a few cents of ETH). Review the swap, then confirm once in your wallet. It is a public swap in your own wallet, powered by Relay, then Add it privately.",
     "- Getting onto Robinhood Chain from nothing: bridge from another chain or an exchange with Bring money over. The app's wallet button offers Switch to Robinhood Chain, which adds the chain to the wallet.",
@@ -498,7 +498,9 @@ function liveSwaps(): [string, string][] {
     ["- It runs on two testnets:", "- The Robinhood Chain and Tempo testnets (any other testnet has its own part above):"],
     [
       "Private trading is built but switched off on-chain while the team builds a new engine for it, because trading mixes many people's orders and needs its own design. It is underway; never promise a date.",
-      "The old private trade (sealed swaps) is retired and stays off. On mainnet, private swaps replaced it: see PRIVATE SWAPS. Stock tokens can't be swapped yet: swaps into 28 more Robinhood Chain tokens, stock tokens and ETH included, are coming, and the vault limits for them are already queued on-chain behind the public 3-day timelock. Never give a date.",
+      SWAPS_V2
+        ? "The old private trade (sealed swaps) is retired and stays off. On mainnet, private swaps replaced it: see PRIVATE SWAPS."
+        : "The old private trade (sealed swaps) is retired and stays off. On mainnet, private swaps replaced it: see PRIVATE SWAPS. Stock tokens can't be swapped yet: swaps into 28 more Robinhood Chain tokens, stock tokens and ETH included, are coming, and the vault limits for them are already queued on-chain behind the public 3-day timelock. Never give a date.",
     ],
     ["Only a cash out has a fee: 0.25% of the amount goes to Gloam.", "A cash out has a fee: 0.25% of the amount goes to Gloam, and a private swap pays the same fee (see PRIVATE SWAPS)."],
     [
@@ -520,7 +522,7 @@ function liveSwaps(): [string, string][] {
     [
       "- Add privately on Robinhood Chain supports ETH, USDG and the sample stock tokens TSLA, AMZN, PLTR, NFLX and AMD.",
       rh
-        ? "- Add privately on Robinhood Chain testnet supports ETH, USDG and the sample stock tokens TSLA, AMZN, PLTR, NFLX and AMD. On Robinhood Chain mainnet it takes USDG and $GLOAM only."
+        ? "- Add privately on Robinhood Chain testnet supports ETH, USDG and the sample stock tokens TSLA, AMZN, PLTR, NFLX and AMD. Robinhood Chain mainnet's assets are under MAINNET IS LIVE."
         : "- Add privately on Robinhood Chain testnet supports ETH, USDG and the sample stock tokens TSLA, AMZN, PLTR, NFLX and AMD.",
     ],
     ["- On Tempo the vault takes test stablecoins:", "- On Tempo testnet the vault takes test stablecoins:"],

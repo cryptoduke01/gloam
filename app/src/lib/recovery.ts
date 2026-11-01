@@ -27,7 +27,7 @@
  */
 import { getAddress, hexToBytes, keccak256, type Address, type Hex } from "viem";
 import { readDemo } from "./demoFlag";
-import { getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes } from "./noteVault";
+import { getAllNotes, onNotesSaved, openJson, sealJson, setAllNotes, storedNotesOpen, syncFromDisk, unlockNoteVault } from "./noteVault";
 import { PROMPT_DID_NOT_OPEN } from "./passkey";
 import type { PayrollBatch } from "./payroll";
 import { PAYROLL_SAVED_EVENT, pendingPayrollRuns, restorePayrollRuns } from "./payrollStore";
@@ -389,7 +389,22 @@ function carriedOver(old: Payload, next: Payload): boolean {
   return old.notes.filter(restorable).every((n) => notes.has(noteKey(n))) && receiveIds(old.receive).every((k) => receive.has(k));
 }
 
+/**
+ * This tab's copy of the notes brought up to the store. A page without the notes
+ * hook holds nothing until the vault is unlocked, and a tab left open holds what
+ * it read last, so neither can stand for what this browser has. A vault behind
+ * its passkey waits here for the unlock, and this never asks for it.
+ */
+async function readNotesNow(): Promise<void> {
+  if (readDemo()) return;
+  await unlockNoteVault();
+  await syncFromDisk();
+}
+
 async function collect(): Promise<Payload> {
+  await readNotesNow();
+  // A save replaces the backup, so an empty list from notes that didn't open must never be one.
+  if (!(await storedNotesOpen())) throw new RecoveryError("This browser can't open its private balance, so the backup stays as it is.");
   return {
     v: 1,
     savedAt: Date.now(),
@@ -398,6 +413,13 @@ async function collect(): Promise<Payload> {
     links: await openSentLinks(),
     payroll: await pendingPayrollRuns(),
   };
+}
+
+/** What a save holds, leaving out when it was made: the same unless something changed. */
+async function contentMark(p: Payload): Promise<string> {
+  const held: Partial<Payload> = { ...p };
+  delete held.savedAt;
+  return toB64(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(JSON.stringify(held)))));
 }
 
 async function aesKey(keys: RecoveryKeys): Promise<CryptoKey> {
@@ -459,6 +481,7 @@ function mergeNotes(restored: LocalNote[], owner?: string | null): number {
  * where this browser does not have it yet. Returns how many notes were added.
  */
 async function mergePayload(p: Payload, owner?: string | null): Promise<number> {
+  await readNotesNow();
   const added = mergeNotes(p.notes, owner);
   await restoreSentLinks(p.links);
   await restorePayrollRuns(p.payroll, owner);
@@ -529,6 +552,8 @@ function deleteRemote(backup: { id: string; write: string }): Promise<Response |
 /* ------------------------------------------------------------ state */
 
 const CONFIG_KEY = "gloam.recovery.v1";
+/** contentMark of the last save, to tell on a page load whether something since never went up. */
+const MARK_KEY = "gloam.recovery.mark.v1";
 
 /**
  * What this browser keeps, sealed by the note vault. Settings saved before
@@ -653,7 +678,10 @@ async function saveConfig(next: Config | null) {
   // a later loadConfig() reads this, not the settings as they were first read
   loading = Promise.resolve(next);
   if (next) localStorage.setItem(CONFIG_KEY, await sealJson(next));
-  else localStorage.removeItem(CONFIG_KEY);
+  else {
+    localStorage.removeItem(CONFIG_KEY);
+    localStorage.removeItem(MARK_KEY);
+  }
   setState(shownState(next));
 }
 
@@ -715,13 +743,18 @@ async function upload(c: Config): Promise<void> {
   let current = c;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!stillOn(current) || savesPaused(current)) return;
-    const blob = await seal(current, await collect());
+    const payload = await collect();
+    const blob = await seal(current, payload);
     if (!stillOn(current)) return;
     const res = await putBackup(current, blob, current.n + 1, isVersion1(current) && current.n > 0);
     if (res.ok) {
       const { data } = (await res.json()) as { data: { n: number; t: number } };
+      const mark = await contentMark(payload);
       // Turned off while this was saving: it stays off.
-      if (stillOn(current)) await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined });
+      if (stillOn(current)) {
+        await saveConfig({ ...config!, n: data.n, savedAt: data.t, retryAt: undefined });
+        localStorage.setItem(MARK_KEY, mark);
+      }
       return;
     }
     if (res.status === 410) {
@@ -933,6 +966,20 @@ function resume() {
   if (unfinished(config) && !config.retryAt && !config.next) schedule();
 }
 
+/**
+ * Saves what the last save didn't hold: a change made while no backup was
+ * running, or on a page that closed before its save. Nothing else would start
+ * one, since a page load changes no note. A browser that can't read its notes
+ * yet, or at all, saves nothing here.
+ */
+async function catchUp(): Promise<void> {
+  const c = config;
+  // Work already waiting (resume) saves everything anyway.
+  if (!c || stopping || unfinished(c)) return;
+  const current = await collect().catch(() => null);
+  if (current && stillOn(c) && localStorage.getItem(MARK_KEY) !== (await contentMark(current))) schedule();
+}
+
 let started = false;
 
 /** Keep the backup current from now on. Safe to call more than once. */
@@ -952,7 +999,10 @@ export function startRecoverySync() {
     loading = null;
     void loadConfig().then(resume);
   });
-  void loadConfig().then(resume);
+  void loadConfig().then(() => {
+    resume();
+    return catchUp();
+  });
 }
 
 /** Save now (the "Back up now" button). Throws when it didn't save, so nothing can say it did. */

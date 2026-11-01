@@ -216,7 +216,20 @@ function text(value: unknown) {
   };
 }
 
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/**
+ * What the chain shows of a private payment. Without the relay this server's
+ * wallet is the transaction's sender, so it is public that it paid someone.
+ */
+const settlementNote = (viaRelay: boolean) =>
+  viaRelay
+    ? "The public feed shows a shielded transfer sent by the Gloam relay, never the amount or the parties. Only the payee can open the payment note."
+    : "This server's wallet signs and sends it, so the public feed shows a shielded transfer from that wallet, never the amount or the payee. Only the payee can open the payment note. Set GLOAM_USE_RELAY=1 to keep the wallet out of it.";
+
+/** A viem error's short message: its full one holds the RPC URL, API key included, and the calldata. */
+const errMsg = (e: unknown) => {
+  const short = (e as { shortMessage?: unknown } | null)?.shortMessage;
+  return typeof short === "string" ? short : e instanceof Error ? e.message : String(e);
+};
 
 function parseRequirements(input: string): GloamPaymentRequirements | null {
   try {
@@ -560,7 +573,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Execute a private shield",
       description:
-        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). On mainnet the pool takes USDG or GLOAM on Robinhood Chain and USDC.e, pathUSD, USDT0 or OUSD on Tempo, at most 500 of a stablecoin (25,000 GLOAM) per deposit during the beta; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
+        "Deposit into a PRIVATE balance on the chosen Gloam network. Mints a note, generates the Groth16 shield proof server-side with that network's keys, and broadcasts shieldBound() (approving the ERC-20 first when the asset is a token). A mainnet vault takes only the assets it lists (this tool names them if given another), within the deposit limits it reads from the vault; deposits are free. The note's secret stays inside this server; the agent gets a note handle to pay from later (gloam_execute_private_pay, gloam_list_notes). Requires GLOAM_AGENT_PRIVATE_KEY; without it, returns a plan.",
       inputSchema: {
         amount: z
           .number()
@@ -948,7 +961,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Price a resource in private payments (x402 and MPP)",
       description:
-        "SERVER side. Build the HTTP 402 price an agent-paid resource returns, settled privately through Gloam: the amount and parties never go public. Returns it in both dialects: x402 requirements (and their encoded form), and an MPP challenge (mpp.wwwAuthenticate, the WWW-Authenticate: Payment value for method gloam, intent charge). payTo defaults to this server's own receive tag. Check what the payer presents with gloam_verify_payment.",
+        "SERVER side. Build the HTTP 402 price an agent-paid resource returns, settled privately through Gloam: the amount and the payee never go public, and through the relay neither does the payer's wallet. Returns it in both dialects: x402 requirements (and their encoded form), and an MPP challenge (mpp.wwwAuthenticate, the WWW-Authenticate: Payment value for method gloam, intent charge). payTo defaults to this server's own receive tag. Check what the payer presents with gloam_verify_payment.",
       inputSchema: {
         amount: z.number().positive().describe("Price in the asset's display units, e.g. 0.25."),
         decimals: z
@@ -1087,8 +1100,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         execute: mpp
           ? "gloam_execute_private_pay({ requirements, note? }) pays and returns the Authorization: Payment credential; gloam_fetch_paid({ url }) also makes the request and the retry."
           : "gloam_execute_private_pay({ requirements, note? }) pays and returns the X-PAYMENT header; gloam_fetch_paid({ url }) also makes the request and the retry.",
-        settlement:
-          "Self-custodial: this server signs and broadcasts the shielded transfer. Only the payee can open the payment note; the public sees only that a shielded transfer occurred.",
+        settlement: settlementNote(Boolean(relayUrl())),
         notVsZone: GLOAM_VS_ZONE,
         sourceNote: note ?? "the smallest note that covers the amount",
         ...(env.GLOAM_WORMHOLE_KEY?.trim()
@@ -1466,7 +1478,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
                 persistChangeNote: { secret: payment.changeNote.secret, amountWei: payment.changeNote.amountWei },
               }
             : {}),
-          privacy: "The public feed shows a shielded transfer, never the amount or the parties. Only the payee can open the payment note.",
+          privacy: settlementNote(viaRelay),
           notVsZone: GLOAM_VS_ZONE.oneLine,
         },
       };
@@ -2295,7 +2307,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
                 const h = e.hash;
                 if (held) tryStore(() => notes.update(held!.handle, { createdTx: h }));
               }
-              throw e;
+              // Tell the sweep, so it keeps the fresh note and never reads this as nothing moved.
+              throw sweepMaybeSent && e instanceof Error ? Object.assign(e, { maybeSent: true }) : e;
             }
           ),
         // The fresh note's secret is the money: store it before the sweep is sent.

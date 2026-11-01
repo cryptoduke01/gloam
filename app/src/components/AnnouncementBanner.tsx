@@ -62,7 +62,7 @@ function useStocksRemaining(): Remaining | null {
 }
 
 const linkClass =
-  "shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white";
+  "gl-tap shrink-0 text-[13px] font-medium text-white underline decoration-white/40 underline-offset-4 transition-colors hover:decoration-white";
 
 /** Slim site-wide private-stocks countdown, then the news that they are live. Dismissible per browser. */
 export function AnnouncementBanner() {
@@ -124,7 +124,7 @@ export function AnnouncementBanner() {
           type="button"
           onClick={dismiss}
           aria-label="Dismiss announcement"
-          className="absolute right-2 grid h-8 w-8 place-items-center rounded-full text-white/45 transition-colors hover:bg-white/10 hover:text-white sm:right-4"
+          className="gl-tap absolute right-2 grid h-8 w-8 place-items-center rounded-full text-white/45 transition-colors hover:bg-white/10 hover:text-white sm:right-4"
         >
           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
             <path

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -47,19 +48,17 @@ export function SuccessModal({
   // Portals need document.body, so render only on the client.
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
 
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocus(dialog, close, { open: open && mounted });
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [open, close]);
+  }, [open]);
 
   if (!open || !mounted) return null;
 
@@ -68,7 +67,9 @@ export function SuccessModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-[16px] sm:p-6"
+      ref={dialog}
+      tabIndex={-1}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-[16px] outline-none sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="success-title"

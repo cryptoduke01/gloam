@@ -34,6 +34,15 @@ export const MARKED_BY_CHAIN: { chainId: number; tokens: OnchainToken[] }[] = LI
   tokens: uniqueByAddress(tokens.filter(marked)),
 }));
 
+/**
+ * Robinhood Chain stock tokens. The markets feed prices these; this is only what
+ * the swap page and the transparency page fall back on when it has no live mark
+ * or the multiplier can't be read. Fixed like the list above.
+ */
+export const STOCK_FALLBACK_MARKED: OnchainToken[] = uniqueByAddress(
+  RH_MAINNET_SWAP_TOKENS.filter((t) => Boolean(t.coingecko) && t.kind === "stock")
+);
+
 /** Chains whose listed tokens include one priced here: Robinhood Chain, Base and Ethereum mainnet. */
 export function hasCoingeckoMarks(chainId: number): boolean {
   return chainId === 4663 || chainId === 8453 || chainId === 1;

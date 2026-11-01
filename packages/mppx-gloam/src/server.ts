@@ -179,18 +179,28 @@ export interface GloamChargeServerConfig {
   replay?: GloamReplayStore;
   /**
    * Called with the payee's fresh note after it is proved and before the sweep
-   * is submitted. Persist it here: its secret is the money, and if the process
-   * dies after submitting this is the only copy.
+   * is submitted. Persist it here: its secret is the money, and this is the only
+   * place it comes out. Required, since a sweep without it pays nobody.
    */
-  beforeSubmit?: (freshNote: NoteExport, intent: PrivateSendIntent) => void | Promise<void>;
+  beforeSubmit: (freshNote: NoteExport, intent: PrivateSendIntent) => void | Promise<void>;
   /** How long a settling record blocks another request for the same payment. Default 120 s. */
   settlingTimeoutMs?: number;
   now?: () => number;
 }
 
+/** What checking a payment needs: it never sweeps, so it has no note to keep. */
+export type GloamChargeReadConfig = Omit<GloamChargeServerConfig, "beforeSubmit">;
+
 const fail = (message: string, retryable = false) => new GloamChargeError("verification-failed", message, retryable);
+
+/** Refuses a server that would throw away what it earns: nothing else hands out a sweep's fresh note. */
+export function assertKeepsFreshNotes(config: Pick<GloamChargeServerConfig, "beforeSubmit">): void {
+  if (typeof config.beforeSubmit !== "function") {
+    throw new Error("Pass beforeSubmit to keep each fresh note: it holds the money a charge earns, and it comes out nowhere else.");
+  }
+}
 const lc = (s: string) => s.toLowerCase();
-const chainFor = (config: GloamChargeServerConfig, chainId: number) =>
+const chainFor = (config: GloamChargeReadConfig, chainId: number) =>
   typeof config.chain === "function" ? config.chain(chainId) : config.chain;
 
 /** Refuses a chain reader that answers for another chain than the charge's. */
@@ -204,11 +214,11 @@ async function requireChain(chain: GloamChargeChain, chainId: number): Promise<v
   if (problem) throw fail(problem.replace("the payment is on", "the charge is on"));
 }
 
-const replayStores = new WeakMap<GloamChargeServerConfig, GloamReplayStore>();
+const replayStores = new WeakMap<GloamChargeReadConfig, GloamReplayStore>();
 const challengeKey = (id: string) => `challenge:${id}`;
 const servedKey = (paymentNullifier: Hex) => `served:${paymentNullifier}`;
 /** The config's replay store, or one in-memory store per config object. */
-export function replayStoreOf(config: GloamChargeServerConfig): GloamReplayStore {
+export function replayStoreOf(config: GloamChargeReadConfig): GloamReplayStore {
   if (config.replay) return config.replay;
   let s = replayStores.get(config);
   if (!s) replayStores.set(config, (s = memoryReplayStore()));
@@ -250,7 +260,7 @@ export interface ValidatedGloamCharge {
 export async function validateGloamCharge(args: {
   challenge: ChargeChallengeLike;
   payload: unknown;
-  config: GloamChargeServerConfig;
+  config: GloamChargeReadConfig;
 }): Promise<ValidatedGloamCharge> {
   const { challenge, config } = args;
   const now = config.now?.() ?? Date.now();
@@ -385,6 +395,7 @@ export async function settleGloamCharge(args: {
   validated?: ValidatedGloamCharge;
 }): Promise<GloamChargeReceipt> {
   const { config } = args;
+  assertKeepsFreshNotes(config);
   const v = args.validated ?? (await validateGloamCharge(args));
   const md = v.request.methodDetails;
   const chain = chainFor(config, md.chainId);
@@ -505,11 +516,12 @@ export async function settleGloamCharge(args: {
       chain,
       submit: config.submit,
       beforeSubmit: async (fresh, intent) => {
+        // The note first: a failure here means nothing went out, and a sent record would block every retry.
+        await config.beforeSubmit(fresh, intent);
         // Remember the sweep before it goes out, so a lost receipt cannot cost the payer its access.
         await replay.put(key, { state: "sent", at: clock(), freshCommitment: fresh.commitment, sweepHash: null });
         await markChallenge("sent");
         sent = true;
-        await config.beforeSubmit?.(fresh, intent);
       },
     });
 

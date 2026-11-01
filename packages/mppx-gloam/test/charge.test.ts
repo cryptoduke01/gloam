@@ -25,6 +25,7 @@ import {
   buildGloamChargeRequest,
   challengeBinding,
   createGloamChargeCredential,
+  createGloamPaywall,
   createPaymentChallenge,
   memoryReplayStore,
   parseGloamChargePayload,
@@ -674,4 +675,32 @@ test("a sweep that fails tells the client what to do, never the text of the fail
   const unclear = await refusal(serverConfig(pool, { submit: thrownBy(Object.assign(new Error(raw), { maybeSent: true })) }), ch, paid.credential.payload);
   assert.match(unclear.message, /has not confirmed.*Retry shortly/);
   assert.equal(unclear.retryable, true);
+});
+
+test("a server or client with nowhere to keep its notes is refused before it can sweep", async () => {
+  const pool = mockPool();
+  const { beforeSubmit: _kept, ...noHook } = serverConfig(pool);
+  void _kept;
+  const server = noHook as unknown as GloamChargeServerConfig;
+  assert.throws(() => createGloamPaywall({ secretKey: "s".repeat(32), server }), /beforeSubmit/);
+  await assert.rejects(settle(await challengeFor(400n), {}, server), /beforeSubmit/);
+});
+
+test("a fresh note that can't be kept stops the sweep, and the same payment can try again", async () => {
+  const pool = mockPool();
+  const ch = await challengeFor(400n);
+  const paid = await pay(pool, ch, "push");
+  let refuse = true;
+  const config = serverConfig(pool);
+  const keep = config.beforeSubmit;
+  config.beforeSubmit = (fresh, intent) => {
+    if (refuse) throw new Error("the database is down");
+    return keep(fresh, intent);
+  };
+  await assert.rejects(settle(ch, paid.credential.payload, config), /database is down/);
+  assert.equal(config.stored.length, 0);
+  refuse = false;
+  const receipt = await settle(ch, paid.credential.payload, config);
+  assert.equal(receipt.status, "success");
+  assert.equal(config.stored.length, 1);
 });

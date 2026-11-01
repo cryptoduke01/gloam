@@ -22,6 +22,7 @@
 import type { Address, Hex } from "viem";
 import type { GloamNetworkKey } from "./constants.js";
 import type { GloamIntent } from "./intents.js";
+import { RELAY_MAYBE_SENT } from "./relay.js";
 import type { SweepSubmitter } from "./sweep.js";
 
 export const GLOAM_API_URL = "https://gloam.trade";
@@ -206,7 +207,15 @@ export class GloamApiClient {
 
   /** A submitter for settleGloamPayment / sweepReceivedNote that relays with this key. */
   submitter(): SweepSubmitter {
-    return async (intent) => (await this.relay(intent)).hash;
+    return async (intent) => {
+      try {
+        return (await this.relay(intent)).hash;
+      } catch (e) {
+        // Only a clear refusal says nothing went out. The rest may still land, so the sweep keeps its fresh note.
+        if (e instanceof GloamApiError && !RELAY_MAYBE_SENT.has(e.code)) throw e;
+        throw Object.assign(e as Error, { maybeSent: true });
+      }
+    };
   }
 
   /** Attribute a deposit your app made (at most 24 hours old), by its transaction hash. */

@@ -171,7 +171,28 @@ check("Checking… holds until the approvals are worked out, and the asset is fi
   assert.ok(/label="Asset to add"[\s\S]{0,200}disabled=\{working \|\| pendingKind !== null\}/.test(view));
 });
 
-const { surelyNotSent } = await import("../src/lib/walletErrors");
+const { solanaDeclined, solanaSurelyNotSent, surelyNotSent } = await import("../src/lib/walletErrors");
+
+check("a Solana wallet's error drops a deposit's note only when it can't follow a send", () => {
+  for (const m of ["User rejected the request.", "Transaction cancelled", "Approval Denied", "Plugin Closed", "Popup closed"]) {
+    assert.equal(solanaDeclined(m), true, m);
+    assert.equal(solanaSurelyNotSent(m), true, m);
+  }
+  for (const m of ["Transaction simulation failed: Blockhash not found", "insufficient lamports"]) {
+    assert.equal(solanaDeclined(m), false, m);
+    assert.equal(solanaSurelyNotSent(m), true, m);
+  }
+  // the extension's worker can stop after the transaction went out
+  for (const m of [
+    "A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
+    "WebSocket connection closed",
+    "The transaction was not confirmed in 30.00 seconds. It is unknown if it succeeded or failed.",
+    "Signature 5x has expired: block height exceeded.",
+    "",
+  ]) {
+    assert.equal(solanaSurelyNotSent(m), false, m);
+  }
+});
 
 check("a wallet error after the deposit may have gone out keeps its note; only a sure no drops it", () => {
   // sure: the person said no, or it failed before anything reached the network

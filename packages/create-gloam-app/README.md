@@ -52,4 +52,4 @@ selective disclosure with the rest of the SDK. See the
 
 `NEXT_PUBLIC_GLOAM_NETWORK` picks the network: `robinhood-mainnet` or
 `robinhood`. Unset, the app uses Robinhood Chain mainnet when the installed
-`@gloamtrade/sdk` has its pool, and testnet otherwise. Requires Node 18+.
+`@gloamtrade/sdk` has its pool, and testnet otherwise. Requires Node 20.9+, as Next does.

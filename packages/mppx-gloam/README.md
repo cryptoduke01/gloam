@@ -73,7 +73,7 @@ const res = await mppx.fetch("https://api.example.com/answer");
 
 The client refuses, before proving anything, a pool that is not Gloam's for that chain, a recipient that is not a receive tag, and anything outside `policy`.
 
-Proofs must be made with the keys of the chain the payment settles on: the trusted setup's final keys on mainnet (Tempo `4217`, Robinhood Chain `4663`), the dev keys on testnet. `circuitArtifactUrls("transfer", chainId)` from the SDK returns the right files. A client that pays on more than one chain picks the prover per challenge.
+Proofs must be made with the keys of the chain the payment settles on: the trusted setup's final keys on mainnet (Tempo `4217`, Robinhood Chain `4663`), the dev keys on testnet. `circuitArtifactUrls("transfer", chainId)` from the SDK returns the right files. A client that pays on more than one chain picks the prover per challenge. In Node, snarkjs reads local files only: download the files first, check them against `CIRCUIT_SHA256`, and pass their paths to `artifactProver`.
 
 ## Without an MPP library
 
@@ -83,7 +83,7 @@ Proofs must be made with the keys of the chain the payment settles on: the trust
 import { createGloamPaywall, createGloamChargeCredential, parsePaymentChallenges, isGloamChargeChallenge } from "@gloamtrade/mppx-gloam/core";
 
 // Server: same handler shape as mppx.
-const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit } });
+const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit, beforeSubmit: (freshNote) => saveNote(freshNote) } });
 const r = await paywall.charge({ amount: "0.01" })(request);
 
 // Client.

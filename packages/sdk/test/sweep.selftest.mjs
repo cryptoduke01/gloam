@@ -30,6 +30,7 @@ import {
   settleGloamPayment,
   sweepReceivedNote,
   GloamRelayError,
+  relaySubmitter,
   packGroth16Proof,
   transferCallArgs,
   GLOAM_NOT_FINAL,
@@ -274,6 +275,9 @@ const stranger = await generateReceiveKey();
   assert(down.freshNote === null, "nothing to keep when nothing was sent");
 
   // The relay could not tell whether it sent it: it may still land, so the fresh note is kept.
+  // the connection dropped after the relay took it: no answer is not a no
+  const dropped = await sweepReceivedNote({ ...base, submit: relaySubmitter({ url: "http://relay.test", fetch: async () => { throw new TypeError("fetch failed"); } }) });
+  assert(dropped.status === "unconfirmed" && dropped.freshNote, "a dropped connection to the relay keeps the fresh note");
   const unsure = await sweepReceivedNote({ ...base, submit: async () => { throw new GloamRelayError("maybe sent", "maybe_sent"); } });
   assert(unsure.status === "unconfirmed" && unsure.final === false && unsure.freshNote, "a relay maybe_sent is unconfirmed and keeps the fresh note, never 'nothing moved'");
   // The relay refused it before sending: nothing moved.

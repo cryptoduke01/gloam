@@ -6,7 +6,7 @@
  *
  *   const mppx = Mppx.create({
  *     polyfill: false,
- *     methods: [gloam({ getNote, prove, submit, policy: { maxAmountWei: 50_000n } })],
+ *     methods: [gloam({ getNote, prove, submit, beforeSubmit, policy: { maxAmountWei: 50_000n } })],
  *   })
  *   const res = await mppx.fetch("https://api.example.com/answer")
  *
@@ -21,9 +21,11 @@ import { payGloamCharge, type PayGloamChargeParams, type GloamSpendableNote } fr
 import { charge } from "./method.js";
 
 export declare namespace gloam {
-  type Parameters = Omit<PayGloamChargeParams, "challenge" | "note"> & {
+  type Parameters = Omit<PayGloamChargeParams, "challenge" | "note" | "beforeSubmit"> & {
     /** Find a note in the pool that covers the charge, with its membership path (syncTree). */
     getNote: (want: { chainId: number; pool: Address; currency: Address; amountWei: bigint }) => Promise<GloamSpendableNote>;
+    /** Persist built.changeNote here: it is the payer's remaining balance, and it comes out nowhere else. */
+    beforeSubmit: NonNullable<PayGloamChargeParams["beforeSubmit"]>;
   };
 }
 
@@ -33,6 +35,9 @@ export type GloamClientMethod = Method.Client<typeof charge, undefined>;
 /** A gloam charge client method for `Mppx.create({ methods: [...] })`. */
 export function gloam(parameters: gloam.Parameters): GloamClientMethod {
   const { getNote, ...pay } = parameters;
+  if (typeof pay.beforeSubmit !== "function") {
+    throw new Error("Pass beforeSubmit to keep each change note: it is the rest of the balance, and it comes out nowhere else.");
+  }
   return Method.toClient(charge, {
     async createCredential({ challenge }) {
       const request = challenge.request as unknown as {

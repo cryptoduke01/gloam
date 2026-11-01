@@ -178,6 +178,7 @@ test("mppx: Mppx.create with gloam() on both sides pays a route privately", asyn
 
   const note = await fundedNote(pool, 1000n);
   let gotNoteFor: unknown = null;
+  const changeKept: string[] = [];
   const client = MppxClient.create({
     polyfill: false,
     fetch: inProcess,
@@ -192,6 +193,7 @@ test("mppx: Mppx.create with gloam() on both sides pays a route privately", asyn
         waitForReceipt: pool.chain.waitForReceipt,
         mode: "push",
         policy: { maxAmountWei: 1000n, currencies: [USD] },
+        beforeSubmit: (built) => void changeKept.push(built.changeNote.commitment),
       }),
     ],
   });
@@ -210,8 +212,10 @@ test("mppx: Mppx.create with gloam() on both sides pays a route privately", asyn
   const pullClient = MppxClient.create({
     polyfill: false,
     fetch: inProcess,
-    methods: [gloamClient({ getNote: async () => note2, prove: stubProve, mode: "pull" })],
+    methods: [gloamClient({ getNote: async () => note2, prove: stubProve, mode: "pull", beforeSubmit: () => undefined })],
   });
+  // The change note comes out only through the hook, so a client without one is refused.
+  assert.throws(() => (gloamClient as (p: unknown) => unknown)({ getNote: async () => note2, prove: stubProve, mode: "pull" }), /beforeSubmit/);
   const before = pool.submitted.length;
   const res2 = await pullClient.fetch(URL_);
   assert.equal(res2.status, 200, await res2.clone().text());

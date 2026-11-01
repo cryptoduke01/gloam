@@ -72,7 +72,7 @@ function walletChainName(id: number): string {
 export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
   const { address, isConnected, isConnecting, chainId, demo, connector } =
     useAppAccount();
-  const { connect, connectors, isPending, error, variables } = useConnect();
+  const { connect, connectors, isPending, error, variables, reset } = useConnect();
   const { disconnect: wagmiDisconnect, disconnectAsync } = useDisconnect();
   const disconnect = demo ? exitDemo : wagmiDisconnect;
   const { network } = useNetwork();
@@ -295,7 +295,7 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
     }
 
     return (
-      <div ref={root} className={compact ? "inline-flex" : undefined}>
+      <div ref={root} className={compact ? "relative inline-flex" : undefined}>
         <button
           type="button"
           onClick={openWallet}
@@ -309,6 +309,25 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
           <p className="mt-2 text-[12px] leading-snug text-danger">
             {connectErrorText(error)}
           </p>
+        )}
+        {/* The top bar has no room under the button, so a phone gets the same message as a small card. */}
+        {error && compact && (
+          <div
+            role="alert"
+            className="absolute right-0 top-full z-50 mt-2 flex w-[min(300px,calc(100vw-2rem))] items-start gap-1 rounded-[14px] border border-line bg-panel py-2 pl-3.5 pr-1 shadow-pop"
+          >
+            <p className="min-w-0 flex-1 py-1 text-[12.5px] leading-snug text-danger">{connectErrorText(error)}</p>
+            <button
+              type="button"
+              onClick={() => reset()}
+              aria-label="Dismiss"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         )}
         {sheet}
       </div>

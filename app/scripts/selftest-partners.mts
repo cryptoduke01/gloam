@@ -844,5 +844,34 @@ await test("proofs: a real proof of funds passes the server snark check", async 
   assert.equal(elsewhere.ok, false);
 });
 
+await test("signup: a claim left with no account behind it doesn't lock the wallet out", async () => {
+  const { k, kv1 } = await import("../src/lib/partnersKv");
+  const stuck = privateKeyToAccount(generatePrivateKey()).address;
+  await kv1(["SET", k("owner", stuck.toLowerCase()), "ptr_gone"]);
+  const made = await upsertPartner(stuck, { name: "Back again", website: "https://example.com" });
+  assert.equal((await getPartnerByOwner(stuck))?.id, made.id);
+  assert.ok((await listPartners()).some((p) => p.id === made.id));
+});
+
+await test("signup: two at once keep one account", async () => {
+  const twice = privateKeyToAccount(generatePrivateKey()).address;
+  const [a, b] = await Promise.all([upsertPartner(twice, { name: "One", website: "https://example.com" }), upsertPartner(twice, { name: "Two", website: "https://example.com" })]);
+  assert.equal(a.id, b.id);
+  assert.equal((await listPartners()).filter((p) => p.owner === twice.toLowerCase()).length, 1);
+});
+
+await test("keys: revoked ones past the limit are forgotten as new ones are made", async () => {
+  const { MAX_REVOKED_KEPT } = await import("../src/lib/apiKeys");
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Churn", website: "https://example.com" });
+  for (let i = 0; i < MAX_REVOKED_KEPT + 5; i++) {
+    const made = await createApiKey({ partnerId: owner.id, name: `k${i}`, env: "test", pepper });
+    await revokeApiKey({ partnerId: owner.id, keyId: made.key.id });
+  }
+  const live = await createApiKey({ partnerId: owner.id, name: "live", env: "test", pepper });
+  const left = await listApiKeys(owner.id);
+  assert.ok(left.length <= MAX_REVOKED_KEPT + 1, `${left.length} kept`);
+  assert.ok(left.some((key) => key.id === live.key.id), "the new key stays");
+});
+
 console.log(`\n${passed} partner tests passed`);
 process.exit(0);
