@@ -410,8 +410,9 @@ export async function settleGloamCharge(args: {
       throw fail("This payment was already used.");
     }
     try {
-      await replay.put(key, record);
+      // The payment's record last: once it says settled, a retry stops short of this point.
       await markChallenge("settled");
+      await replay.put(key, record);
     } catch (e) {
       // Nothing was handed out, so a retry can still be served.
       await replay.delete(served).catch(() => undefined);

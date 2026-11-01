@@ -553,27 +553,30 @@ test("a payment gets one receipt when another request arrives while its sweep wa
 });
 
 test("a store that fails while a receipt is recorded leaves the payment able to be served, once", async () => {
-  const pool = mockPool();
-  const ch = await challengeFor(400n);
-  const paid = await pay(pool, ch, "push");
-  const store = memoryReplayStore();
-  let failing = true;
-  const config = serverConfig(pool, {
-    replay: {
-      ...store,
-      put: async (key, record) => {
-        if (failing && record.state === "settled" && record.receipt) {
-          failing = false;
-          throw new Error("store unavailable");
-        }
-        return store.put(key, record);
+  for (const failing of ["the payment's record", "the challenge's record"]) {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    const store = memoryReplayStore();
+    let fail = true;
+    const config = serverConfig(pool, {
+      replay: {
+        ...store,
+        put: async (key, record) => {
+          const target = failing === "the payment's record" ? Boolean(record.receipt) : key.startsWith("challenge:");
+          if (fail && record.state === "settled" && target) {
+            fail = false;
+            throw new Error("store unavailable");
+          }
+          return store.put(key, record);
+        },
       },
-    },
-  });
-  await assert.rejects(settle(ch, paid.credential.payload, config), /store unavailable/);
-  assert.equal((await settle(ch, paid.credential.payload, config)).status, "success");
-  await rejects(settle(ch, paid.credential.payload, config), /already used/);
-  assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, "one sweep");
+    });
+    await assert.rejects(settle(ch, paid.credential.payload, config), /store unavailable/, failing);
+    assert.equal((await settle(ch, paid.credential.payload, config)).status, "success", failing);
+    await rejects(settle(ch, paid.credential.payload, config), /already used/);
+    assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, `${failing}: one sweep`);
+  }
 });
 
 test("a sweep that fails tells the client what to do, never the text of the failure", async () => {
