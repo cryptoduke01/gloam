@@ -18,6 +18,7 @@ import {MockERC20} from "./MockERC20.sol";
 import {MockStableDex} from "./VaultSwap.t.sol";
 import {FreezeToken} from "./VaultSwapReview.t.sol";
 import {HostileHook, MockWETH, MockWETH9, VaultSwapV4bTest} from "./VaultSwapV4b.t.sol";
+import {DeployVaultSwapV4c} from "../script/DeployVaultSwapV4c.s.sol";
 
 /// Takes an exit's ETH and, with it, tries whatever it is armed with.
 contract ReenterReceiver {
@@ -260,6 +261,54 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
         t.exit(address(usd), key, exitTo, _sign(EXIT_PK, t.exitDigest(_escrow(k), exitTo)));
         assertEq(usd.balanceOf(exitTo), ARRIVES);
+    }
+
+    // ═════════════════════════════════════════════════════════════ the deploy
+
+    /// The deploy script's lists equal the fixture, in order, sorted as v4 keys must be, with no pool
+    /// twice, and the router takes them all at deploy. Base and Ethereum stay hookless.
+    function test_v3_deploy_script_pools_are_pinned() public {
+        DeployVaultSwapV4c d = new DeployVaultSwapV4c();
+        string memory fx = vm.readFile("test/fixtures/router-next.json");
+        uint256[3] memory chains = [uint256(4663), 8453, 1];
+        for (uint256 c = 0; c < 3; c++) {
+            (, , PoolKey[] memory p) = d.config(chains[c]);
+            bytes32[] memory ids = vm.parseJsonBytes32Array(fx, string.concat(".chains.", vm.toString(chains[c]), ".poolIds"));
+            assertEq(p.length, ids.length);
+            for (uint256 i = 0; i < p.length; i++) {
+                assertEq(_id(p[i]), ids[i]);
+                assertLt(uint160(p[i].currency0), uint160(p[i].currency1));
+                assertTrue(p[i].hooks != 0x958541C0Ce2E1A158309f7d1b141963eDa31C880, "banned hook");
+                if (chains[c] != 4663) assertEq(p[i].hooks, address(0), "hookless only here");
+                for (uint256 j = 0; j < i; j++) assertTrue(ids[j] != ids[i], "a pool twice");
+            }
+            GloamVaultSwapV4c r = GloamVaultSwapV4c(payable(address(_newRouter(p))));
+            for (uint256 i = 0; i < p.length; i++) assertTrue(r.allowedPool(ids[i]));
+        }
+    }
+
+    /// Robinhood Chain's list is v2's deploy list, unchanged, then AI's and ORBIO's four.
+    function test_v3_robinhood_keeps_every_v2_pool_and_adds_ai_and_orbio() public {
+        DeployVaultSwapV4c d = new DeployVaultSwapV4c();
+        (, , PoolKey[] memory p) = d.config(4663);
+        bytes32[] memory v2 = vm.parseJsonBytes32Array(vm.readFile("test/fixtures/vault-swap-v2-pools.json"), ".poolIds");
+        assertEq(p.length, v2.length + 4);
+        for (uint256 i = 0; i < v2.length; i++) assertEq(_id(p[i]), v2[i]);
+        assertEq(_id(p[41]), 0x592e3fb7ea947506b36481025abc15baada8e1839a50fded46ecf08b3182fa96);
+        assertEq(_id(p[42]), 0x7aebd80541bfaaf23dbb6e99ce13d4d31c1a84c91414f971eadbff7db5f85995);
+        assertEq(_id(p[43]), 0xea9f200e13055b82f175f44f592c4c13dd8c9d9320a66487d3c5cd90d68550ef);
+        assertEq(_id(p[44]), 0xc761f7de760d2b73cc3e3cc3d729916a4ed2f7fc6b0aa3872e2ced4258961e92);
+    }
+
+    /// Where each router lands is fixed by its source: any edit to the contracts moves these.
+    function test_v3_predicted_addresses_are_pinned() public {
+        DeployVaultSwapV4c d = new DeployVaultSwapV4c();
+        string memory fx = vm.readFile("test/fixtures/router-next.json");
+        uint256[4] memory chains = [uint256(4663), 8453, 1, 4217];
+        for (uint256 c = 0; c < 4; c++) {
+            address want = vm.parseJsonAddress(fx, string.concat(".chains.", vm.toString(chains[c]), ".address"));
+            assertEq(d.predicted(chains[c]), want, "rerun launch/router-fixture.mjs and update the fixture");
+        }
     }
 
     // ═════════════════════════════════════════════════════════════ from a native ETH note
