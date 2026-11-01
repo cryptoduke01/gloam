@@ -92,22 +92,25 @@ export type StoredNote = {
 
 export type NewNote = Omit<StoredNote, "handle" | "createdAt" | "updatedAt">;
 
+/** One send for a purchase: its payment note, the note that funds it, and the sealed payment that presents it. */
+export type PaymentSend = { note: string; input: string | null; header: string };
+
+/** A send with its notes as they stand. The notes hold secrets: this stays inside the server. */
+export type PaymentSendState = PaymentSend & { payment: StoredNote; funding?: StoredNote };
+
 /**
  * A purchase this server set out to pay, from before anything is spent until its answer reached whoever asked,
- * so that a retry presents this payment instead of making another. The notes say what happened: a payment note
- * gone or dead, or pending while the note that funds it is spendable again, means nothing moved. Pending means
- * not known yet, and spent means it landed.
+ * so that a retry presents this payment instead of making another.
  */
 export type PaymentAttempt = {
+  /** When a call last took it. */
   at: string;
   /** Who holds it: "pid:server:call". */
   by: string;
   /** Paid once however often it is asked, as a challenge is: an answer that arrived does not clear it. */
   once?: boolean;
-  /** Set just before the send: the payment note, the note that funds it, and the sealed payment that presents it. */
-  note?: string;
-  input?: string | null;
-  header?: string;
+  /** Every send made for it, oldest first, each from just before it goes out. */
+  sends?: PaymentSend[];
   /** The MPP credential, once there is one. */
   authorization?: string;
   /** The call that held it has ended. */
@@ -116,8 +119,11 @@ export type PaymentAttempt = {
   retried?: boolean;
 };
 
-/** Claimed: pay. Otherwise `reuse` says the payment landed and can be presented; if not, it is running or not known yet. */
-export type PaymentClaim = { claimed: true } | { claimed: false; reuse: boolean; attempt: PaymentAttempt; note: StoredNote | null };
+/**
+ * Claimed: nothing went out for this purchase, so pay. Otherwise `running` says another call holds it. If not,
+ * this call now does, and finds out from `sends` what became of them.
+ */
+export type PaymentClaim = { claimed: true } | { claimed: false; running: boolean; attempt: PaymentAttempt; sends: PaymentSendState[] };
 
 type StoreData = {
   notes: StoredNote[];
@@ -412,33 +418,31 @@ export class NoteStore {
 
   /**
    * Take a purchase for paying, under the lock and before anything is spent, as `by` ("pid:server:call"). Of any
-   * calls at once, one is claimed. An attempt that moved nothing is taken over; so is one that never reached its
-   * send, once its process is gone or it is `staleMs` old (its send then refuses: see markPayment). A record goes
-   * after an hour, or a day if `once`. One whose outcome is not known stays: a retry could pay twice.
+   * calls at once, one holds it. A call that ended, or whose process is gone, or that has held it `staleMs`, gives
+   * way (one that had not sent then refuses to: see markSend). A record goes a day after anything last happened to
+   * it, or 30 days while a payment is not known to have landed or not: a retry then could pay twice.
    */
   claimPayment(key: string, staleMs: number, by: string, once = false): PaymentClaim {
     return this.mutate((d) => {
       const all = (d.payments ??= {});
       for (const [k, v] of Object.entries(all)) {
-        const unclear = paymentNote(d, v)?.status === "pending";
-        const keep = unclear ? PULL_KEEP_MS : v.once ? DAY_MS : PAYMENT_KEEP_MS;
-        if (Date.now() - Date.parse(v.at) > keep) delete all[k];
+        const sends = sendsOf(d, v);
+        const last = Math.max(Date.parse(v.at), ...sends.map((s) => Date.parse(s.payment.updatedAt)));
+        if (Date.now() - last > (sends.some((s) => s.payment.status === "pending") ? PULL_KEEP_MS : DAY_MS)) delete all[k];
       }
       const held = all[key];
       if (held) {
-        const note = paymentNote(d, held);
-        const running = !held.closed && processAlive(held.by) && Date.now() - Date.parse(held.at) < staleMs;
-        if (held.note ? !movedNothing(d, held) : running) {
-          if (note?.status === "spent" && !running) {
-            // This call presents it now, and answers for it.
-            const taken = { ...held, by };
-            delete taken.closed;
-            delete taken.retried;
-            all[key] = taken;
-            return { claimed: false, reuse: true, attempt: taken, note };
-          }
+        const sends = sendsOf(d, held);
+        if (!held.closed && processAlive(held.by) && Date.now() - Date.parse(held.at) < staleMs) {
           held.retried = true;
-          return { claimed: false, reuse: false, attempt: { ...held }, note: note ?? null };
+          return { claimed: false, running: true, attempt: { ...held }, sends };
+        }
+        if (sends.length) {
+          const taken: PaymentAttempt = { ...held, at: stamp(), by };
+          delete taken.closed;
+          delete taken.retried;
+          all[key] = taken;
+          return { claimed: false, running: false, attempt: taken, sends };
         }
       }
       all[key] = { at: stamp(), by, ...(once ? { once } : {}) };
@@ -446,43 +450,52 @@ export class NoteStore {
     });
   }
 
-  /** Add to the attempt `by` holds. False when it no longer holds it: a call taken over must not send. */
-  markPayment(key: string, by: string, patch: Partial<Pick<PaymentAttempt, "note" | "input" | "header" | "authorization">>): boolean {
+  /** Record a send just before it goes out. False when `by` no longer holds the purchase: a call that gave way must not send. */
+  markSend(key: string, by: string, send: PaymentSend): boolean {
     return this.mutate((d) => {
       const held = d.payments?.[key];
       if (held?.by !== by) return false;
-      d.payments![key] = { ...held, ...patch };
+      held.sends = [...(held.sends ?? []), send];
       return true;
     });
   }
 
+  /** Keep what presents the payment that `by` made or found: the final header of `note`, and the credential. */
+  markPresented(key: string, by: string, note: string, presented: { header?: string; authorization?: string }) {
+    this.mutate((d) => {
+      const held = d.payments?.[key];
+      if (held?.by !== by) return;
+      const send = held.sends?.find((s) => s.note === note);
+      if (send && presented.header) send.header = presented.header;
+      if (presented.authorization) held.authorization = presented.authorization;
+    });
+  }
+
   /**
-   * The call `by` has ended. `heard` means its caller got a finished answer, so the record goes and the same
-   * call again is a new purchase. Otherwise a payment that moved stays for a retry. Returns what stays, if anything.
+   * The call `by` has ended. `heard` means its caller got a finished answer, so a landed payment's record goes and
+   * the same call again is a new purchase. Otherwise anything that went out stays for a retry. Returns the record if
+   * it stays, with the payment note that landed, if one did.
    */
-  closePayment(key: string, by: string, heard: boolean): "landed" | "unclear" | null {
+  closePayment(key: string, by: string, heard: boolean): { landed: string | null } | null {
     return this.mutate((d) => {
       const held = d.payments?.[key];
       if (held?.by !== by) return null;
-      const landed = paymentNote(d, held)?.status === "spent";
-      if (movedNothing(d, held) || (landed && heard && !held.retried && !held.once)) {
+      const sends = sendsOf(d, held);
+      const landed = sends.find((s) => s.payment.status === "spent")?.note ?? null;
+      if (!sends.length || (landed && heard && !held.retried && !held.once)) {
         delete d.payments![key];
         return null;
       }
       held.closed = true;
-      return landed ? "landed" : "unclear";
+      return { landed };
     });
-  }
-
-  payment(key: string): PaymentAttempt | undefined {
-    return this.read().payments?.[key];
   }
 
   /** A payment that was presented by hand and served is finished: the same call again is a new purchase. */
   dropPresented(presented: string) {
     this.mutate((d) => {
       for (const [k, v] of Object.entries(d.payments ?? {})) {
-        if (!v.once && (v.header === presented || v.authorization === presented)) delete d.payments![k];
+        if (!v.once && (v.authorization === presented || v.sends?.some((s) => s.header === presented))) delete d.payments![k];
       }
     });
   }
@@ -500,15 +513,12 @@ export class NoteStore {
   }
 }
 
-const paymentNote = (d: StoreData, a: PaymentAttempt) => (a.note ? d.notes.find((n) => n.handle === a.note) : undefined);
-
-/** Whether an attempt moved no money: it never reached its send, or the notes say the send did nothing. */
-function movedNothing(d: StoreData, a: PaymentAttempt): boolean {
-  if (!a.note) return true;
-  const note = paymentNote(d, a);
-  if (!note || note.status === "dead") return true;
-  // A refresh made the funding note spendable again: its spend never showed up.
-  return note.status === "pending" && Boolean(a.input) && d.notes.find((n) => n.handle === a.input)?.status === "unspent";
+/** A purchase's sends whose payment note is still there. One that surely never went out has had its note removed. */
+function sendsOf(d: StoreData, a: PaymentAttempt): PaymentSendState[] {
+  return (a.sends ?? []).flatMap((s) => {
+    const payment = d.notes.find((n) => n.handle === s.note);
+    return payment ? [{ ...s, payment, funding: s.input ? d.notes.find((n) => n.handle === s.input) : undefined }] : [];
+  });
 }
 
 /** A received note that gloam_verify_payment granted access for. One from before the served flag counts once it confirmed. */
@@ -531,7 +541,6 @@ function processAlive(by: string): boolean {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PULL_KEEP_MS = 30 * DAY_MS;
-const PAYMENT_KEEP_MS = 60 * 60 * 1000;
 const DEAD_CHECK_MIN_MS = 60 * 1000;
 const DEAD_CHECK_MAX_MS = 7 * DAY_MS;
 

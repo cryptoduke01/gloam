@@ -41,6 +41,10 @@ import {
   serializeCredential,
   verifyChallengeId,
   TRANSFERRED_TOPIC,
+  buildGloamChargeRequest,
+  formatPaymentChallenge,
+  GLOAM_METHOD,
+  GLOAM_CHARGE_INTENT,
 } from "@gloamtrade/mppx-gloam/core";
 import { createGloamServer, type ServerDeps } from "../src/server.js";
 import type { Signer } from "../src/signer.js";
@@ -881,9 +885,12 @@ test("a send whose outcome is not known is not paid again until a refresh settle
   await P("gloam_list_notes", { refresh: true });
   assert.equal((await P("gloam_execute_private_pay", { requirements: priced.encoded })).status, "payment_in_progress");
   await later(11 * 60_000, () => P("gloam_list_notes", { refresh: true }));
+  const funding = openNoteStore(env).list().find((n) => n.recheck);
+  assert.ok(funding, "the note that funded it is spendable again");
   const paid = await later(11 * 60_000, () => P("gloam_execute_private_pay", { requirements: priced.encoded }));
   assert.equal(paid.status, "paid", JSON.stringify(paid));
   assert.equal(paid.reused, undefined);
+  assert.equal(paid.spentNote, funding.handle, "the same note, so the contract lets only one of the two through");
 });
 
 for (const hashKnown of [true, false]) {
@@ -917,9 +924,8 @@ for (const hashKnown of [true, false]) {
     await P("gloam_execute_shield", { amount: 5, network: "tempo" });
     const first = await P("gloam_fetch_paid", { url: URL_ });
     assert.equal(first.status, "error", JSON.stringify(first));
-    assert.equal((await P("gloam_fetch_paid", { url: URL_ })).status, "payment_in_progress");
 
-    await P("gloam_list_notes", { refresh: true });
+    // The retry asks the chain, so it needs no refresh first.
     const r = await P("gloam_fetch_paid", { url: URL_ });
     assert.equal(r.status, "ok", JSON.stringify(r));
     assert.equal(r.body, "the answer is 42");
@@ -928,6 +934,166 @@ for (const hashKnown of [true, false]) {
     assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").length, 1, "the payee was paid once");
   });
 }
+
+/** A payer whose relay takes the send and never answers: the transfer is held, and lands when `land` says. */
+async function lostAnswer(args: { chain: Chain; payerEnv: Env; S: Awaited<ReturnType<typeof connect>>; shields: number; amount?: number }) {
+  const { chain, payerEnv } = args;
+  const env = { ...payerEnv, GLOAM_USE_RELAY: "1" };
+  const held: (readonly unknown[])[] = [];
+  let lose = true;
+  const relay: ServerDeps["relay"] = async (intent) => {
+    if (lose) {
+      held.push(intent.exec!.args);
+      throw new GloamRelayError("Relay error (504)", "error");
+    }
+    return chain.apply("transfer", intent.exec!.args);
+  };
+  const P = await connect(makeDeps(chain, env, { relay }).deps);
+  const shields = [];
+  for (let i = 0; i < args.shields; i++) shields.push(await P("gloam_execute_shield", { amount: args.amount ?? 5, network: "tempo" }));
+  return {
+    env,
+    P,
+    shields,
+    land: () => chain.apply("transfer", held.shift()!),
+    answerNormally: () => {
+      lose = false;
+    },
+    transfers: () => openNoteStore(env).list().filter((n) => n.origin === "payment"),
+  };
+}
+
+test("a send that lands long after its note was freed is found by the retry, which pays nothing", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const r = await lostAnswer({ chain, payerEnv, S, shields: 2 });
+  await r.P("gloam_execute_private_pay", { requirements: priced.encoded });
+  await later(11 * 60_000, () => r.P("gloam_list_notes", { refresh: true }));
+  await r.land();
+  r.answerNormally();
+  const retry = await later(11 * 60_000, () => r.P("gloam_execute_private_pay", { requirements: priced.encoded }));
+  assert.equal(retry.status, "paid", JSON.stringify(retry));
+  assert.equal(retry.reused, true);
+  assert.equal(r.transfers().length, 1, "no second payment was built");
+  assert.equal(r.transfers()[0]!.status, "spent", "the first is known to have landed");
+});
+
+test("a send that lands while its retry is on the way: the note's nullifier stops the retry, and the first payment is kept", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const env = { ...payerEnv, GLOAM_USE_RELAY: "1" };
+  const held: (readonly unknown[])[] = [];
+  let sends = 0;
+  const relay: ServerDeps["relay"] = async (intent) => {
+    if (++sends === 1) {
+      held.push(intent.exec!.args);
+      throw new GloamRelayError("Relay error (504)", "error");
+    }
+    await chain.apply("transfer", held.shift()!); // the first gets there just ahead of the retry
+    return chain.apply("transfer", intent.exec!.args);
+  };
+  const P = await connect(makeDeps(chain, env, { relay }).deps);
+  const a = await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  await P("gloam_execute_shield", { amount: 6, network: "tempo" });
+  const first = await P("gloam_execute_private_pay", { requirements: priced.encoded, note: a.note.handle });
+  assert.equal(first.status, "error", JSON.stringify(first));
+  await later(11 * 60_000, () => P("gloam_list_notes", { refresh: true }));
+  const second = await later(11 * 60_000, () => P("gloam_execute_private_pay", { requirements: priced.encoded, note: a.note.handle }));
+  assert.equal(second.status, "error", JSON.stringify(second));
+  assert.match(second.error, /reverted/);
+  const third = await later(11 * 60_000, () => P("gloam_execute_private_pay", { requirements: priced.encoded, note: a.note.handle }));
+  assert.equal(third.status, "paid", JSON.stringify(third));
+  assert.equal(third.reused, true, "the first payment, not a new one");
+  assert.equal(third.paymentHeader, first.paymentHeader);
+  assert.equal(chain.spent.size, 1, "one note spent on chain: there is no second payment");
+});
+
+test("a retry pays from the same note, and from another once that note was spent on something else", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const other = await price(S, 2);
+  const r = await lostAnswer({ chain, payerEnv, S, shields: 1, amount: 4 });
+  const big = await r.P("gloam_execute_shield", { amount: 9, network: "tempo" });
+  const first = await r.P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(first.status, "error");
+  const input = r.shields[0].note.handle;
+
+  // Freed by a refresh, then taken by another purchase, whose send lands. The first can never land now.
+  await later(11 * 60_000, () => r.P("gloam_list_notes", { refresh: true }));
+  r.answerNormally();
+  const elsewhere = await later(11 * 60_000, () => r.P("gloam_execute_private_pay", { requirements: other.encoded, note: input }));
+  assert.equal(elsewhere.status, "paid", JSON.stringify(elsewhere));
+
+  const retry = await later(11 * 60_000, () => r.P("gloam_execute_private_pay", { requirements: priced.encoded }));
+  assert.equal(retry.status, "paid", JSON.stringify(retry));
+  assert.equal(retry.reused, undefined);
+  assert.equal(retry.spentNote !== input, true, "not the note that is gone");
+  assert.ok(big.note.handle);
+});
+
+test("mpp: with no hash, a charge that takes only push gets no credential it would refuse", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const payee = (await S("gloam_receive_tag", {})).tag;
+  const request = buildGloamChargeRequest({ amountWei: 1_000_000n, recipient: payee, network: "tempo", modes: ["push"] });
+  const pushOnly = await createPaymentChallenge({
+    secretKey: mppSecret(payeeEnv),
+    realm: "api.example.com",
+    method: GLOAM_METHOD,
+    intent: GLOAM_CHARGE_INTENT,
+    request: request as unknown as Record<string, unknown>,
+    expires: new Date(Date.now() + 600_000),
+  });
+  const r = await lostAnswer({ chain, payerEnv, S, shields: 2 });
+  const presented: string[] = [];
+  const fetch = (async (_url: string, init?: RequestInit) => {
+    const auth = new Headers(init?.headers).get("authorization");
+    if (auth) presented.push(auth);
+    return new Response("", { status: 402, headers: { "www-authenticate": formatPaymentChallenge(pushOnly) } });
+  }) as typeof fetch;
+  const relay: ServerDeps["relay"] = async (intent) => {
+    await chain.apply("transfer", intent.exec!.args);
+    throw new GloamRelayError("Relay error (504)", "error");
+  };
+  const P = await connect(makeDeps(chain, r.env, { fetch, relay }).deps);
+  const first = await P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(first.status, "error", JSON.stringify(first));
+  const again = await P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(again.status, "paid_not_served", JSON.stringify(again));
+  assert.match(again.message, /could not be built/);
+  assert.ok(again.paymentHeader, "the payment can still be handed over");
+  assert.deepEqual(presented, [], "nothing the payee would refuse was presented");
+  assert.equal(r.transfers().length, 1, "one payment");
+});
+
+test("mpp: a hash that belongs to a reverted copy is not presented", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const r = await (async () => {
+    const env = { ...payerEnv, GLOAM_USE_RELAY: "1" };
+    let sends = 0;
+    const relay: ServerDeps["relay"] = async (intent) => {
+      if (++sends > 1) return chain.apply("transfer", intent.exec!.args);
+      await chain.apply("transfer", intent.exec!.args);
+      return chain.apply("transfer", intent.exec!.args); // the copy the answer names reverts: the first took the nullifier
+    };
+    const fetch = mppResource(S);
+    const P = await connect(makeDeps(chain, env, { relay, fetch }).deps);
+    await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+    await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+    return { P, env };
+  })();
+  const first = await r.P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(first.status, "error", JSON.stringify(first));
+  await r.P("gloam_list_notes", { refresh: true });
+  const served = await r.P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(served.status, "ok", JSON.stringify(served));
+  assert.equal(served.reused, true);
+  assert.equal(openNoteStore(r.env).list().filter((n) => n.origin === "payment").length, 1);
+});
 
 test("a call stuck before its send is taken over, and then sends nothing", async () => {
   const { chain, payeeEnv, payerEnv } = await setup();

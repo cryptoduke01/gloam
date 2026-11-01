@@ -96,11 +96,12 @@ import {
 } from "./networks.js";
 import { KNOWN_ASSETS, assetLabel, type Spend } from "./policy.js";
 import { assetDecimals, authorizeSpend, limitsReport, previewSpend, settleSpend, spendingReport } from "./spendGuard.js";
-import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type NoteStore, type PaymentClaim, type StoredNote } from "./noteStore.js";
+import { balances, deadCheckDue, noteView, openNoteStore, servedPayment, type NoteStore, type PaymentClaim, type PaymentSendState, type StoredNote } from "./noteStore.js";
 import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
 import {
+  allowedModes,
   credentialField,
   credentialFromPayment,
   fromPaymentRequirements,
@@ -1519,11 +1520,13 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   /**
    * One payment for one purchase. A client that gives up on a slow call does not stop it: the send still goes
    * out, and the retry that follows must not pay again. So a purchase is claimed in the note store before anything
-   * is spent. A call that finds it running, or with an outcome not known yet, is told so and pays nothing; one that
-   * finds it landed gets the first answer, or presents the first payment. A retry repeats its arguments, so calls
-   * that differ are different purchases. A purchase stays recorded only until its answer reached the caller (a
-   * cancelled call, a closed connection or a retry says it may not have), since a fixed price can be bought again
-   * on purpose. A challenge is different: it is paid once, so its record stays.
+   * is spent, and each send is recorded before it goes out. A call that finds it running is told so and pays
+   * nothing. One that finds an earlier send asks the chain what became of it: landed, it gets the first answer or
+   * presents that payment. Not landed, it pays from the same note, so that whichever send gets there first, the
+   * note's nullifier stops the other. A retry repeats its arguments, so calls that differ are different purchases.
+   * A purchase stays recorded only until its answer reached the caller (a cancelled call, a closed connection or a
+   * retry says it may not have), since a fixed price can be bought again on purpose. A challenge is different: it is
+   * paid once, so its record stays.
    */
   type Purchase = { key: string; by: string; notes: NoteStore; served: boolean };
   type PurchaseSlot = { purchase?: Purchase };
@@ -1531,22 +1534,53 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   type Sending = (sent: { note: string; input: string | null; header: string }) => void;
 
   /** Answers to paid calls that may not have reached the caller, for the retry. Only in memory: they can hold a resource's body. */
-  const unheard = new Map<string, { note: string | undefined; answer: ToolAnswer }>();
+  const unheard = new Map<string, { note: string; answer: ToolAnswer }>();
   const UNHEARD_MAX = 32;
   let purchaseCalls = 0;
 
   const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-  /** The credential for a payment already made, for `challenge`, which may be newer than the one it was paid against. */
-  async function credentialForPaid(challenge: PaymentChallenge, header: string, note: StoredNote): Promise<string | undefined> {
+  /**
+   * What became of a purchase's earlier sends, from the chain: the one that landed, or the note to pay from
+   * instead (null for any), or undefined when that can't be said yet.
+   */
+  async function sendsOutcome(sends: PaymentSendState[]): Promise<{ landed: PaymentSendState } | { payFrom: string | null } | undefined> {
+    const known = sends.find((s) => s.payment.status === "spent");
+    if (known) return { landed: known };
+    const net = networkByChainId(sends[0]!.payment.chainId);
+    if (!net || sends.some((s) => !s.funding)) return undefined;
     try {
-      const payload = decodePaymentHeader(header);
-      const payment = { intent: { exec: payload.payload.exec }, paymentNote: note, payload, sealed: true };
-      const hash = note.createdTx;
+      const chain = sweepChain(deps.signer(net)?.publicClient ?? deps.publicClient(net), net);
+      // The spend first: a send does both in one block, so a spend read with no payment read after it was another transaction's.
+      const stillOpen: PaymentSendState[] = [];
+      for (const s of sends) if (!(await chain.isSpent(s.funding!.nullifier))) stillOpen.push(s);
+      for (const s of sends) if (await chain.isCommitmentSeen(s.payment.commitment)) return { landed: s };
+      const notes = new Set(stillOpen.map((s) => s.input));
+      if (notes.size > 1) return undefined;
+      // Every note that funded a send was spent by something else: none of them can land.
+      if (!stillOpen.length) return { payFrom: null };
+      // A send from this note may still land, so only this note can pay. It may still be waiting on that send.
+      return stillOpen[0]!.funding!.status === "unspent" ? { payFrom: stillOpen[0]!.input } : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The credential for a payment already made, for `challenge`, which may be newer than the one it was paid against. */
+  async function credentialForPaid(challenge: PaymentChallenge, send: PaymentSendState): Promise<string | undefined> {
+    try {
+      const net = networkByChainId(send.payment.chainId);
+      if (!net) return undefined;
+      // A relay's resend can leave a reverted copy's hash on the note, though another copy landed.
+      const reverted = await txReads(deps.signer(net)?.publicClient ?? deps.publicClient(net)).reverted(send.payment.createdTx);
+      const hash = reverted ? null : send.payment.createdTx;
+      // Without its hash the transfer itself says which payment this is. It is in the pool, so nothing is submitted.
+      if (!hash && !allowedModes(parseGloamChargeRequest(challenge.request)).includes("pull")) return undefined;
+      const payload = decodePaymentHeader(send.header);
+      const payment = { intent: { exec: payload.payload.exec }, paymentNote: send.payment, payload, sealed: true };
       const built = await credentialFromPayment({
         challenge,
         payment: payment as unknown as Parameters<typeof credentialFromPayment>[0]["payment"],
-        // Without its hash the transfer itself says which payment this is. It is already in the pool, so nothing is submitted.
         mode: hash ? "push" : "pull",
         hash,
       });
@@ -1559,7 +1593,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
   async function payOnce(
     slot: PurchaseSlot,
     purchase: { key: string; once?: boolean; challenge?: PaymentChallenge },
-    pay: (sending: Sending) => Promise<PayResult>
+    pay: (sending: Sending, payFrom: string | null) => Promise<PayResult>
   ): Promise<{ paid: PayResult } | { answer: ToolAnswer }> {
     const { key, once = false, challenge } = purchase;
     const opened = openStore();
@@ -1568,11 +1602,26 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       return {
         paid: await pay(() => {
           throw new Error(opened.error);
-        }),
+        }, null),
       };
     }
     const notes = opened.store;
     const by = `${settlerId}:${++purchaseCalls}`;
+    const payNow = async (payFrom: string | null) => {
+      unheard.delete(key);
+      let sent: string | undefined;
+      const paid = await pay(({ note, input, header }) => {
+        if (!notes.markSend(key, by, { note, input, header })) {
+          throw new Error("A later call took this payment over, so this one sent nothing.");
+        }
+        sent = note;
+      }, payFrom);
+      if (paid.ok && sent) {
+        const note = sent;
+        tryStore(() => notes.markPresented(key, by, note, { header: paid.header, ...(paid.authorization ? { authorization: paid.authorization } : {}) }));
+      }
+      return { paid };
+    };
     let claim: PaymentClaim;
     try {
       claim = notes.claimPayment(key, STUCK_MS, by, once);
@@ -1580,21 +1629,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       return { paid: { ok: false, result: { status: "error", error: errMsg(e) } } };
     }
     if (claim.claimed) {
-      unheard.delete(key);
       slot.purchase = { key, by, notes, served: false };
-      const paid = await pay(({ note, input, header }) => {
-        if (!notes.markPayment(key, by, { note, input, header })) {
-          throw new Error("A later call took this payment over, so this one sent nothing.");
-        }
-      });
-      if (paid.ok) {
-        tryStore(() => void notes.markPayment(key, by, { header: paid.header, ...(paid.authorization ? { authorization: paid.authorization } : {}) }));
-      }
-      return { paid };
+      return payNow(null);
     }
-    const { attempt, note } = claim;
-    const hash = note?.createdTx ?? null;
-    if (!claim.reuse) {
+    if (!claim.running) slot.purchase = { key, by, notes, served: false };
+    const outcome = claim.running ? undefined : await sendsOutcome(claim.sends);
+    if (outcome && "payFrom" in outcome) return payNow(outcome.payFrom);
+    if (!outcome) {
+      const last = claim.sends.at(-1);
+      const hash = last?.payment.createdTx ?? null;
       return {
         paid: {
           ok: false,
@@ -1603,21 +1646,26 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             message:
               "The same payment is still being made, or whether it landed is not known yet. Nothing was paid by this call. Wait, then call again with the same arguments: it will use that payment. If this keeps coming back, call gloam_list_notes with refresh first.",
             ...(hash ? { hash } : {}),
-            ...(attempt.header ? { paymentHeader: attempt.authorization ?? attempt.header } : {}),
+            ...(last ? { paymentHeader: claim.attempt.authorization ?? last.header } : {}),
           },
         },
       };
     }
+    const { landed } = outcome;
+    const purchased = slot.purchase!;
+    if (landed.payment.status !== "spent") tryStore(() => void notes.update(landed.note, { status: "spent" }));
     const first = unheard.get(key);
-    const replay = first?.note === attempt.note ? first?.answer : undefined;
-    slot.purchase = { key, by, notes, served: Boolean(replay) };
-    if (replay) return { answer: text({ ...JSON.parse(replay.content[0].text), reused: true }) };
-    const authorization = (challenge && note && attempt.header && (await credentialForPaid(challenge, attempt.header, note))) || attempt.authorization;
-    if (authorization) tryStore(() => void notes.markPayment(key, by, { authorization }));
+    if (first?.note === landed.note) {
+      purchased.served = true;
+      return { answer: text({ ...JSON.parse(first.answer.content[0].text), reused: true }) };
+    }
+    const authorization = (challenge && (await credentialForPaid(challenge, landed))) || claim.attempt.authorization;
+    if (authorization) tryStore(() => notes.markPresented(key, by, landed.note, { authorization }));
+    const hash = landed.payment.createdTx;
     return {
       paid: {
         ok: true,
-        header: attempt.header!,
+        header: landed.header,
         ...(authorization ? { authorization } : {}),
         result: {
           status: "paid",
@@ -1643,8 +1691,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           tryStore(() => {
             const stays = p.notes.closePayment(p.key, p.by, p.served && !extra.signal.aborted);
             unheard.delete(p.key);
-            if (stays === "landed" && p.served && answer) {
-              unheard.set(p.key, { note: p.notes.payment(p.key)?.note, answer });
+            if (stays?.landed && p.served && answer) {
+              unheard.set(p.key, { note: stays.landed, answer });
               if (unheard.size > UNHEARD_MAX) unheard.delete(unheard.keys().next().value!);
             }
           });
@@ -1674,9 +1722,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         return text({ status: "error", error: "noteSecret needs noteAmount (the note's full value)." });
       }
       const purchase = mpp ? { key: `mpp:${mpp.id}`, once: true, challenge: mpp } : { key: `x402:${digest([req, note ?? null, issuerTag ?? null])}` };
-      const once = await payOnce(slot, purchase, (sending) =>
+      const once = await payOnce(slot, purchase, (sending, payFrom) =>
         payPrivately(req, {
-          handle: note,
+          handle: payFrom ?? note,
           issuerTag,
           legacyNote: legacy && noteSecret && noteAmount !== undefined ? { secret: noteSecret, amount: noteAmount, decimals } : undefined,
           mpp: mpp ?? undefined,
@@ -1892,8 +1940,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? `${quoteText(req)}\n${firstBody}` : undefined;
       // A purchase is this call at this price: a server can answer each retry with a fresh challenge.
       const purchase = digest([url, method, body ?? null, contentType ?? null, note ?? null, req.network, req.poolAddress, req.asset, req.maxAmountRequired, req.payTo]);
-      const once = await payOnce(slot, { key: `fetch:${purchase}`, ...(mpp ? { challenge: mpp } : {}) }, (sending) =>
-        payPrivately(req, { handle: note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), sending })
+      const once = await payOnce(slot, { key: `fetch:${purchase}`, ...(mpp ? { challenge: mpp } : {}) }, (sending, payFrom) =>
+        payPrivately(req, { handle: payFrom ?? note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), sending })
       );
       if ("answer" in once) return once.answer;
       const { paid } = once;

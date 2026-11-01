@@ -89,134 +89,134 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
 } else {
   // ---------------------------------------------------------------- the store
 
-  test("a purchase is claimed once, and what its payment note says decides the next call", () => {
+  test("a purchase is claimed once, and its sends stay on record until the answer arrived", () => {
     const dir = tmp();
     const env: Env = { GLOAM_AGENT_ID: "bot", GLOAM_NOTE_KEY: KEY_A, GLOAM_NOTE_STORE: join(dir, "notes.json") };
     const store = openNoteStore(env);
     const ten = 10 * 60_000;
     const me = (n: number) => `${process.pid}:srv:${n}`;
-    const reopened = () => openNoteStore(env);
+    const sent = (handle: string, input: string | null = null, header = "h") => ({ note: handle, input, header });
+    const payment = (over: Partial<NewNote> = {}) => store.add(sampleNote({ origin: "payment", status: "pending", pending: "create", ...over }));
 
     // Of two calls, one holds it; the other is told it is running, and that counts as a retry.
     assert.deepEqual(store.claimPayment("a", ten, me(1)), { claimed: true });
-    const running = reopened().claimPayment("a", ten, me(2));
-    assert.ok(!running.claimed && !running.reuse);
+    const running = openNoteStore(env).claimPayment("a", ten, me(2));
+    assert.ok(!running.claimed && running.running);
     assert.equal(running.attempt.retried, true);
 
-    // Moved nothing: the record goes, whatever the caller heard.
+    // Nothing went out: the record goes, whatever the caller heard.
     assert.equal(store.closePayment("a", me(1), false), null);
     assert.deepEqual(store.claimPayment("a", ten, me(3)), { claimed: true });
     assert.equal(store.closePayment("a", me(3), true), null);
 
+    // A send whose note was taken back surely never went out.
+    store.claimPayment("a2", ten, me(30));
+    const gone = payment();
+    store.markSend("a2", me(30), sent(gone.handle));
+    store.remove(gone.handle);
+    assert.equal(store.closePayment("a2", me(30), false), null);
+
     // Heard about a landed payment: gone, and the next call is a new purchase.
-    const paid = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    const paid = payment();
     store.claimPayment("b", ten, me(4));
-    store.markPayment("b", me(4), { note: paid.handle, header: "h1" });
-    store.update(paid.handle, { status: "spent", createdTx: `0x${"11".repeat(32)}` as Hex });
+    assert.equal(store.markSend("b", me(4), sent(paid.handle)), true);
+    store.update(paid.handle, { status: "spent" });
     assert.equal(store.closePayment("b", me(4), true), null);
     assert.deepEqual(store.claimPayment("b", ten, me(5)), { claimed: true });
     store.closePayment("b", me(5), true);
 
-    // Not heard: it stays, and one later call takes it over to present.
-    const kept = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    // Not heard: it stays, and one later call takes it over.
+    const kept = payment();
     store.claimPayment("c", ten, me(6));
-    store.markPayment("c", me(6), { note: kept.handle, header: "h2", authorization: "Payment x" });
-    store.update(kept.handle, { status: "spent", createdTx: `0x${"22".repeat(32)}` as Hex });
+    store.markSend("c", me(6), sent(kept.handle, null, "early"));
+    store.markPresented("c", me(6), kept.handle, { header: "final", authorization: "Payment x" });
+    store.update(kept.handle, { status: "spent" });
     const during = store.claimPayment("c", ten, me(7));
-    assert.ok(!during.claimed && !during.reuse, "while the first call runs it is not presented twice");
-    assert.equal(store.closePayment("c", me(6), true), "landed", "a retry came, so the first caller may not have heard");
-    const reuse = store.claimPayment("c", ten, me(8));
-    assert.ok(!reuse.claimed && reuse.reuse);
-    assert.equal(reuse.attempt.header, "h2");
-    assert.equal(reuse.attempt.authorization, "Payment x");
-    assert.equal(reuse.note?.createdTx, `0x${"22".repeat(32)}`);
+    assert.ok(!during.claimed && during.running, "while the first call runs it is not presented twice");
+    assert.deepEqual(store.closePayment("c", me(6), true), { landed: kept.handle }, "a retry came, so the first caller may not have heard");
+    const takeOver = store.claimPayment("c", ten, me(8));
+    assert.ok(!takeOver.claimed && !takeOver.running);
+    assert.equal(takeOver.sends[0]!.header, "final");
+    assert.equal(takeOver.attempt.authorization, "Payment x");
     assert.equal(store.closePayment("c", me(6), true), null, "a call that gave it up has no say");
     assert.equal(store.closePayment("c", me(8), true), null);
-    assert.deepEqual(store.claimPayment("c", ten, me(9)), { claimed: true });
-    store.closePayment("c", me(9), true);
 
-    // Not known yet: it blocks, until the chain says.
-    const unclear = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    // Whatever became of a send, a later call is shown it, oldest first, with its notes: dead and pending ones too.
+    const funding = store.add(sampleNote({ status: "pending", pending: "spend" }));
+    const dead = payment();
+    const pending = payment();
     store.claimPayment("d", ten, me(10));
-    store.markPayment("d", me(10), { note: unclear.handle, header: "h3" });
-    assert.equal(store.closePayment("d", me(10), false), "unclear");
-    const waiting = store.claimPayment("d", ten, me(11));
-    assert.ok(!waiting.claimed && !waiting.reuse);
-    assert.equal(waiting.attempt.header, "h3");
-    store.markDead(unclear.handle);
-    assert.deepEqual(store.claimPayment("d", ten, me(12)), { claimed: true });
-    store.closePayment("d", me(12), true);
+    store.markSend("d", me(10), sent(dead.handle, funding.handle));
+    store.markDead(dead.handle);
+    assert.deepEqual(store.closePayment("d", me(10), false), { landed: null });
+    const again = store.claimPayment("d", ten, me(11));
+    assert.ok(!again.claimed && !again.running);
+    assert.equal(again.sends[0]!.funding?.handle, funding.handle);
+    store.markSend("d", me(11), sent(pending.handle, funding.handle));
+    store.closePayment("d", me(11), false);
+    const both = store.claimPayment("d", ten, me(12));
+    assert.ok(!both.claimed);
+    assert.deepEqual(both.sends.map((x) => x.note), [dead.handle, pending.handle]);
+    store.closePayment("d", me(12), false);
 
-    // Never reached its send: free once its process is gone, or it is old. A live one holds.
+    // Never reached a send: free once its process is gone, or it is old. A live one holds, and a call that gave way cannot send.
     store.claimPayment("e", ten, `${2 ** 22 + 1}:gone:1`);
     assert.deepEqual(store.claimPayment("e", ten, me(13)), { claimed: true });
     assert.ok(!store.claimPayment("e", ten, me(14)).claimed);
     assert.deepEqual(store.claimPayment("e", 0, me(15)), { claimed: true });
+    assert.equal(store.markSend("e", me(13), sent("n-late")), false);
     store.closePayment("e", me(15), true);
 
-    // A call taken over must not send: its marks no longer take.
-    store.claimPayment("g", ten, me(16));
-    assert.equal(store.markPayment("g", me(16), { header: "h4" }), true);
-    assert.deepEqual(store.claimPayment("g", 0, me(17)), { claimed: true });
-    assert.equal(store.markPayment("g", me(16), { note: "n-late" }), false);
-    assert.equal(store.payment("g")?.note, undefined);
-    store.closePayment("g", me(17), true);
-
-    // An unclear payment is free once a refresh made the note that funds it spendable again.
-    const funding = store.add(sampleNote({ status: "pending", pending: "spend" }));
-    const stuck = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
-    store.claimPayment("h", ten, me(18));
-    store.markPayment("h", me(18), { note: stuck.handle, input: funding.handle, header: "h5" });
-    assert.equal(store.closePayment("h", me(18), false), "unclear");
-    assert.ok(!store.claimPayment("h", ten, me(19)).claimed);
-    store.update(funding.handle, { status: "unspent", recheck: true });
-    assert.deepEqual(store.claimPayment("h", ten, me(20)), { claimed: true });
-    store.closePayment("h", me(20), true);
-
     // A payment presented by hand and served is finished, by either form it was handed out in.
-    const byHand = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    const byHand = payment({ status: "spent" });
     store.claimPayment("i", ten, me(21));
-    store.markPayment("i", me(21), { note: byHand.handle, header: "h6", authorization: "Payment y" });
-    assert.equal(store.closePayment("i", me(21), false), "landed");
+    store.markSend("i", me(21), sent(byHand.handle, null, "h6"));
+    store.markPresented("i", me(21), byHand.handle, { authorization: "Payment y" });
+    store.closePayment("i", me(21), false);
     store.dropPresented("something else");
-    assert.ok(store.payment("i"));
+    assert.ok(!store.claimPayment("i", 0, me(31)).claimed);
+    store.closePayment("i", me(31), false);
     store.dropPresented("Payment y");
-    assert.equal(store.payment("i"), undefined);
+    assert.deepEqual(store.claimPayment("i", ten, me(32)), { claimed: true });
+    store.closePayment("i", me(32), true);
 
     // A challenge is paid once: an answer that arrived does not clear it, nor does presenting it.
-    const single = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    const single = payment({ status: "spent" });
     store.claimPayment("j", ten, me(22), true);
-    store.markPayment("j", me(22), { note: single.handle, header: "h7" });
-    assert.equal(store.closePayment("j", me(22), true), "landed");
+    store.markSend("j", me(22), sent(single.handle, null, "h7"));
+    assert.deepEqual(store.closePayment("j", me(22), true), { landed: single.handle });
     store.dropPresented("h7");
-    const paidOnce = store.claimPayment("j", ten, me(23));
-    assert.ok(!paidOnce.claimed && paidOnce.reuse);
+    assert.ok(!store.claimPayment("j", ten, me(23)).claimed);
     store.closePayment("j", me(23), true);
 
-    // Records age out, except one whose outcome is not known: a retry could pay twice.
-    const open_ = store.add(sampleNote({ origin: "payment", status: "pending", pending: "create" }));
+    // Records age from the last thing that happened to them, and one not known to have landed or not stays.
+    const open_ = payment();
     store.claimPayment("k", ten, me(24));
-    store.markPayment("k", me(24), { note: open_.handle, header: "h8" });
+    store.markSend("k", me(24), sent(open_.handle));
     store.closePayment("k", me(24), false);
-    const landedKept = store.add(sampleNote({ origin: "payment", status: "spent" }));
+    const late = payment();
     store.claimPayment("l", ten, me(25));
-    store.markPayment("l", me(25), { note: landedKept.handle, header: "h9" });
+    store.markSend("l", me(25), sent(late.handle));
     store.closePayment("l", me(25), false);
     const realNow = Date.now;
     const hours = (h: number) => {
       Date.now = () => realNow() + h * 60 * 60 * 1000;
     };
     try {
-      hours(0.5);
-      const within = store.claimPayment("l", ten, me(26));
-      assert.ok(!within.claimed && within.reuse, "kept for a retry within the hour");
+      hours(23);
+      store.update(late.handle, { status: "spent" }); // a refresh finds it landed, a day on
+      hours(40);
+      const held = store.claimPayment("l", ten, me(26));
+      assert.ok(!held.claimed, "still there the day after that was found out");
       store.closePayment("l", me(26), false);
-      hours(2);
-      assert.deepEqual(store.claimPayment("l", ten, me(27)), { claimed: true }, "a landed payment ages out");
-      hours(26);
-      assert.ok(!store.claimPayment("j", ten, me(28)).claimed === false, "a challenge ages out after a day");
+      hours(70);
+      assert.deepEqual(store.claimPayment("l", ten, me(27)), { claimed: true }, "a day after the last thing that happened, it goes");
+      assert.deepEqual(store.claimPayment("j", ten, me(28)), { claimed: true }, "so does a challenge");
       const stillOpen = store.claimPayment("k", ten, me(29));
-      assert.ok(!stillOpen.claimed && !stillOpen.reuse, "not known yet: still held after a day");
+      assert.ok(!stillOpen.claimed && !stillOpen.running, "not known yet: still held");
+      store.closePayment("k", me(29), false);
+      hours(33 * 24);
+      assert.deepEqual(store.claimPayment("k", ten, me(33)), { claimed: true }, "but not for ever");
     } finally {
       Date.now = realNow;
     }
@@ -1092,7 +1092,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
         return chain.walletClient.writeContract(call);
       },
     };
-    const { P, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
+    const { P, S, priced, payerEnv } = await walletParties(chain, walletClient, nodeView(chain, known));
     const s = await P.call("gloam_execute_shield", { amount: 10, network: "tempo" });
     const p1 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
     assert.equal(p1.status, "error");
@@ -1100,8 +1100,14 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.ok(freed.refreshed.some((x: string) => x.includes(`${s.note.handle}: spendable again`)), JSON.stringify(freed.refreshed));
     known.add((await chain.apply("transfer", held[0]!)).toLowerCase()); // the old send lands after all
 
-    // Before any refresh: the pay must not pick the dead note.
-    const p2 = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    // Before any refresh: the same payment again finds the first one, which landed.
+    const retry = await P.call("gloam_execute_private_pay", { requirements: priced.encoded });
+    assert.equal(retry.status, "paid", JSON.stringify(retry));
+    assert.equal(retry.reused, true);
+
+    // And another payment must not pick the dead note.
+    const other = await S.call("gloam_payment_requirements", { amount: 4, decimals: 6, assetSymbol: "PathUSD", asset: TEMPO_PATHUSD, resource: "another", network: "tempo" });
+    const p2 = await P.call("gloam_execute_private_pay", { requirements: other.encoded });
     assert.equal(p2.status, "error", JSON.stringify(p2));
     assert.match(p2.error, /No single private note/, "the dead 10 is not picked (the 7 change is still confirming)");
     assert.equal(openNoteStore(payerEnv).get(s.note.handle)?.status, "spent", "and it is marked spent");
