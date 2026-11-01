@@ -329,7 +329,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/production": {
     description: "What mainnet cleared before launch, and what is still ahead.",
-    keywords: ["mainnet", "launch", "ceremony", "keys", "security", "audit", "review", "multisig", "beta limits", "timelock", "checklist"],
+    keywords: ["mainnet", "launch", "ceremony", "keys", "security", "audit", "kann", "review", "multisig", "beta limits", "timelock", "checklist"],
     headings: [
       "Why this page exists",
       "Ceremony checklist (keys)",

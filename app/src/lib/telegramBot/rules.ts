@@ -1234,9 +1234,10 @@ function wrongAddress(s: string, team: boolean, posted: Set<string>): boolean {
 const TOKEN_TALK = /\$gloam\b|\b(?:ca|contracts?|tokens?|addy|official|legit|genuine|verified|real one|right one|correct one)\b/i;
 
 /**
- * "Gloam is audited", "the contracts were fully audited": not true. Gloam had an
- * internal review before mainnet; an external audit is planned, not done.
- * "Not audited yet" and "an audit is planned" are fine.
+ * "Gloam is audited", "the contracts were fully audited": not true. Kann Audits
+ * reviewed the vault contracts only; the routers, circuits, app and relay were
+ * not part of it. "Kann Audits reviewed the vault contracts" and "the routers
+ * are not audited" are fine.
  */
 const AUDITED_CLAIM =
   /\b(?:is|are|was|were|been|got|fully|already|externally|independently|professionally)\s+(?:fully\s+|externally\s+|independently\s+|professionally\s+)?audited\b/gi;

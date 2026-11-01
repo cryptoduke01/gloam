@@ -5,7 +5,8 @@ resources from a private (shielded) balance, get paid, check payments and proofs
 it has spent, while amounts and counterparties stay off the public block explorer. Gloam runs on
 Tempo, Robinhood Chain, Base and Ethereum mainnet (beta: deposits capped at 500 of a stablecoin
 each during the beta, cashing out costs 0.25%), and on their testnets.
-Reviewed internally before launch; an external audit is planned.
+Reviewed internally before launch; Kann Audits has since reviewed the vault contracts and found no
+Critical, High or Medium issues (report: gloam.trade/security).
 
 ## What it adds
 

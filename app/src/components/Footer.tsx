@@ -32,6 +32,7 @@ const groups: {
       { href: "/token", label: "$GLOAM token" },
       { href: "/whitepaper", label: "Whitepaper" },
       { href: "/verify#contracts", label: "Verify contracts" },
+      { href: "/security", label: "Security" },
     ],
   },
   {

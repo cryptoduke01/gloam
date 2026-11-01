@@ -411,7 +411,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         mainnet:
           `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
             ethNativeLimitText()
-          }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; an external audit is planned, not done.`,
+          }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
           "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
