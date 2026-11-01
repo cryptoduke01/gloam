@@ -431,6 +431,55 @@ body {
   }
 }
 
+/* A small link keeps its size on a phone and still takes a 40px tap: the tap
+   box grows around it and nothing beside it moves. In the components layer so a
+   utility such as `absolute` on the same element still wins. */
+@layer components {
+  @media (max-width: 639px) {
+    .gl-tap,
+    .gl-arrowlink,
+    .btn-sm {
+      position: relative;
+    }
+    .gl-tap::after,
+    .gl-arrowlink::after,
+    .btn-sm::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 40px;
+      min-width: 40px;
+      transform: translateY(-50%);
+    }
+  }
+}
+
+/* The first Tab stop on every page, hidden until it is reached. */
+.gl-skip {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  z-index: 300;
+  display: inline-flex;
+  align-items: center;
+  height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 14px;
+  font-weight: 500;
+  transform: translateY(-200%);
+}
+.gl-skip:focus {
+  transform: none;
+}
+main:focus {
+  outline: none;
+}
+
 /* ---------- Surfaces ---------- */
 .shadow-card {
   box-shadow: var(--shadow-card);

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Analytics } from "@/components/Analytics";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import { CookieBanner } from "@/components/CookieBanner";
+import { SkipLink } from "@/components/SkipLink";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { VercelAnalytics } from "@/components/VercelAnalytics";
 import { DEVICE_BOOT_SCRIPT } from "@/lib/device";
@@ -111,6 +112,7 @@ export default function RootLayout({
         style={{ fontFamily: '"Aeonik", system-ui, sans-serif' }}
       >
         <ThemeProvider>
+          <SkipLink />
           <AnnouncementBanner />
           {children}
           <CookieBanner />
