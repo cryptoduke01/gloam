@@ -76,7 +76,7 @@ export function CodeTabs({ tabs }: { tabs: CodeTab[] }) {
         <button
           type="button"
           onClick={() => void copy(tab.code)}
-          className="inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground sm:px-3"
+          className="gl-tap inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium text-mute transition-colors hover:bg-surface hover:text-foreground sm:px-3"
         >
           {copied ? <CheckIcon /> : <CopyIcon />}
           <span aria-live="polite" className="max-sm:sr-only">

@@ -21,7 +21,7 @@ function Brand({ size = 26 }: { size?: number }) {
       <Logo size={size} />
       <Link
         href="/docs"
-        className="rounded-md text-[19px] leading-none tracking-[-0.015em] text-mute transition-colors hover:text-foreground"
+        className="gl-tap rounded-md text-[19px] leading-none tracking-[-0.015em] text-mute transition-colors hover:text-foreground"
       >
         Docs
       </Link>

@@ -438,12 +438,14 @@ body {
   @media (max-width: 639px) {
     .gl-tap,
     .gl-arrowlink,
-    .btn-sm {
+    .btn-sm,
+    .gloam-app footer a {
       position: relative;
     }
     .gl-tap::after,
     .gl-arrowlink::after,
-    .btn-sm::after {
+    .btn-sm::after,
+    .gloam-app footer a::after {
       content: "";
       position: absolute;
       left: 0;
