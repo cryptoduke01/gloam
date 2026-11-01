@@ -7,8 +7,9 @@
  *  - Base and Ethereum have no swap router deployed.
  *  - ETH on Robinhood Chain can't swap: the deployed router refuses a native note
  *    (GloamVaultSwap: NativeNotSupported). WETH notes swap.
- *  - AI, ORBIO and GRIFT have no pool on the router yet: a pool goes through the
- *    router's own 3-day queue first (lib/vaultSwap RH_SWAP_ASSETS_V2).
+ *  - GRIFT has no pool on the router yet: a pool goes through the router's own
+ *    3-day queue first. AI's and ORBIO's are queued (lib/vaultSwap
+ *    RH_SWAP_ASSETS_V2_QUEUED); the picker offers them once those are live.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx --tsconfig tsconfig.json scripts/selftest-asset-matrix.mts
  */
@@ -32,7 +33,7 @@ function test(name: string, fn: () => void) {
 const WALLET = "0x00000000000000000000000000000000000000b2";
 /** What swaps on each mainnet, by symbol. Everything else listed there does not, yet. */
 const SWAPS: Record<string, readonly string[]> = {
-  "robinhood-mainnet": ["USDG", "GLOAM", "PONS", "CASHCAT"],
+  "robinhood-mainnet": ["USDG", "GLOAM", "PONS", "CASHCAT", "AI", "ORBIO"],
   "tempo-mainnet": ["USDC.e", "pathUSD", "USDT0", "OUSD"],
   "base-mainnet": [],
   "ethereum-mainnet": [],

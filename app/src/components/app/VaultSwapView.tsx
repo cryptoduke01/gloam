@@ -17,9 +17,10 @@ import Link from "next/link";
 import { formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
+import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { useAppAccount } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
-import { getRhPublicClient } from "@/lib/rhClient";
+import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { relayFor } from "@/lib/relay/client";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
@@ -39,6 +40,9 @@ import {
   IMPACT_WARN_BPS,
   QUOTE_TTL_MS,
   VAULT_SWAP_ASSETS,
+  livePools,
+  offeredSwapAssets,
+  type PoolKey,
   depositRoom,
   maxSwapInForRefund,
   planVaultSwap,
@@ -192,7 +196,34 @@ export function VaultSwapView() {
   const { network } = useNetwork();
   const { address, isConnected } = useAppAccount();
   const router = vaultSwapRouter(network.chainId);
-  const assets = useMemo(() => VAULT_SWAP_ASSETS[network.chainId] ?? [], [network.chainId]);
+  const openGated = useOpenGatedTokens();
+  // A queued asset (lib/vaultSwap offeredSwapAssets) shows once the router says one of its pools is live.
+  const [livePool, setLivePool] = useState<{ chainId: number; is: (k: PoolKey) => boolean } | null>(null);
+  useEffect(() => {
+    const r = swapRouterFor(network.chainId);
+    if (!r) return;
+    let on = true;
+    const read = async () => {
+      const is = await livePools(publicClientFor(network), r);
+      if (on) setLivePool({ chainId: network.chainId, is });
+    };
+    void read();
+    const t = setInterval(() => void read(), 60_000);
+    return () => {
+      on = false;
+      clearInterval(t);
+    };
+  }, [network]);
+  const assets = useMemo(
+    () =>
+      offeredSwapAssets(
+        VAULT_SWAP_ASSETS[network.chainId] ?? [],
+        swapRouterFor(network.chainId),
+        openGated,
+        livePool?.chainId === network.chainId ? livePool.is : null
+      ),
+    [network.chainId, openGated, livePool]
+  );
   const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
 
   // Notes a swap can spend: this vault's, in a swap asset, with their secret.

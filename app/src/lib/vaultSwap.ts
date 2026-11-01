@@ -208,6 +208,29 @@ export const RH_SWAP_POOLS_V2: readonly PoolKey[] = [
   { currency0: NATIVE, currency1: "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD", fee: 8000, tickSpacing: 80, hooks: NATIVE },
 ];
 
+const RH_AI: Address = "0x2E8c31162b855A2ffa90F6F8634643Ad6F111e18";
+const RH_ORBIO: Address = "0xAa07A0e9209e16aC99708C3EC70159c6eF3128A3";
+/** The fee hook v2 already allows on CASHCAT / USDG. */
+const FABLES_HOOK: Address = "0x08E52564Bad99E05a694b4809F397edcA417A080";
+
+/**
+ * Pools queued on v2 after its deploy: live on the router by themselves once
+ * their 3-day notice ends (AI and ORBIO, 2026-11-03 at 17:09 UTC). Kept apart
+ * from RH_SWAP_POOLS_V2, which stays exactly what v2 allowed at deploy. Each key
+ * was read from the PoolManager's Initialize event for its pool id. The app
+ * routes through one only once the router says it is live (livePools).
+ */
+export const RH_SWAP_POOLS_V2_QUEUED: readonly PoolKey[] = [
+  // AI / USDG, dynamic fee, Fables fee hook (0x592e3fb7…)
+  { currency0: RH_AI, currency1: RH_USDG, fee: 8388608, tickSpacing: 60, hooks: FABLES_HOOK },
+  // AI / USDG, 0.23%, hookless (0x7aebd805…)
+  { currency0: RH_AI, currency1: RH_USDG, fee: 2300, tickSpacing: 23, hooks: NATIVE },
+  // USDG / ORBIO, 0.8%, hookless (0xea9f200e…)
+  { currency0: RH_USDG, currency1: RH_ORBIO, fee: 8000, tickSpacing: 80, hooks: NATIVE },
+  // USDG / ORBIO, dynamic fee, Fables fee hook (0xc761f7de…)
+  { currency0: RH_USDG, currency1: RH_ORBIO, fee: 8388608, tickSpacing: 200, hooks: FABLES_HOOK },
+];
+
 /** What v1 swaps between. */
 const RH_SWAP_ASSETS_V1: readonly Address[] = [RH_USDG, RH_GLOAM];
 /**
@@ -252,6 +275,12 @@ export const RH_SWAP_ASSETS_V2: readonly Address[] = [
   "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD", // MU
 ];
 
+/**
+ * What the queued pools add. The picker offers one only once a pool of its is
+ * live on the router and the vault takes deposits of it (offeredSwapAssets).
+ */
+export const RH_SWAP_ASSETS_V2_QUEUED: readonly Address[] = [RH_AI, RH_ORBIO];
+
 // ---------------------------------------------------------------- Tempo (Stablecoin DEX)
 
 export const TEMPO_STABLE_DEX: Address = "0xdec0000000000000000000000000000000000000";
@@ -265,7 +294,7 @@ const TEMPO_SWAP_ASSETS: readonly Address[] = [
 
 /** The assets a new swap can go between, per chain (the current router's list). */
 export const VAULT_SWAP_ASSETS: Record<number, readonly Address[]> = {
-  4663: VAULT_SWAP_V2_ROUTER[4663] ? RH_SWAP_ASSETS_V2 : RH_SWAP_ASSETS_V1,
+  4663: VAULT_SWAP_V2_ROUTER[4663] ? [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED] : RH_SWAP_ASSETS_V1,
   4217: TEMPO_SWAP_ASSETS,
 };
 
@@ -294,7 +323,7 @@ function routerList(chainId: number): SwapRouter[] {
     };
     const v2 = VAULT_SWAP_V2_ROUTER[4663];
     return v2
-      ? [{ address: v2, venue: "v4", version: 2, pools: RH_SWAP_POOLS_V2, maxHops: 3, weth: RH_WETH, assets: RH_SWAP_ASSETS_V2 }, v1]
+      ? [{ address: v2, venue: "v4", version: 2, pools: [...RH_SWAP_POOLS_V2, ...RH_SWAP_POOLS_V2_QUEUED], maxHops: 3, weth: RH_WETH, assets: [...RH_SWAP_ASSETS_V2, ...RH_SWAP_ASSETS_V2_QUEUED] }, v1]
       : [v1];
   }
   if (chainId === 4217) {
@@ -630,7 +659,8 @@ const LIVE_TTL_MS = 60_000;
 /**
  * Which of the router's pools it allows right now, read from the chain (one
  * multicall, kept a minute). v1's list is fixed, so all of them. A failed read
- * keeps every listed pool: the router itself still refuses one it doesn't allow.
+ * keeps every listed pool but the queued ones: the router itself still refuses
+ * one it doesn't allow, and a queued one shows only on the router's own word.
  */
 export async function livePools(client: PublicClient, r: SwapRouter): Promise<(k: PoolKey) => boolean> {
   if (r.version !== 2) return () => true;
@@ -649,10 +679,29 @@ export async function livePools(client: PublicClient, r: SwapRouter): Promise<(k
       contracts: ids.map((id) => ({ address: r.address, abi: allowedPoolAbi, functionName: "allowedPool", args: [id] }) as const),
     })
     .catch(() => null);
-  if (!res) return () => true;
+  if (!res) return (k) => !RH_SWAP_POOLS_V2_QUEUED.some((q) => sameKey(q, k));
   const live = new Set(ids.filter((_, i) => res[i] === true));
   liveCache.set(key, { at: Date.now(), live });
   return isLive(live);
+}
+
+/**
+ * The assets the picker offers now. A queued asset only once a pool of its is
+ * live on the router (`live`, null while unread) and the vault takes deposits of
+ * it (`openGated`, lowercase addresses, hooks/useOpenGatedTokens). Everything
+ * else as it is: on chain it is the router and the vault that decide.
+ */
+export function offeredSwapAssets(
+  assets: readonly Address[],
+  r: SwapRouter | null,
+  openGated: ReadonlySet<string>,
+  live: ((k: PoolKey) => boolean) | null
+): Address[] {
+  return assets.filter((a) => {
+    if (!RH_SWAP_ASSETS_V2_QUEUED.some((q) => same(q, a))) return true;
+    if (!r || !live || !openGated.has(a.toLowerCase())) return false;
+    return r.pools.some((k) => holds(k, a) && live(k));
+  });
 }
 
 // ---------------------------------------------------------------- quotes

@@ -79,7 +79,8 @@ export default function DocsPrivateSwapsPage() {
                   <td>
                     USDG, $GLOAM, ETH (held as WETH), USDe, U, cbBTC, VIRTUAL,
                     PONS, CASHCAT and 20 Robinhood stock tokens (SPY, NVDA, TSLA,
-                    AAPL and more), any one for another
+                    AAPL and more), any one for another. AI and ORBIO join once
+                    their pools are live and the vault takes them.
                   </td>
                   <td>
                     Uniswap v4, in up to three hops over the router&apos;s
