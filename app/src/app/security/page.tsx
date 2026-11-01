@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 /** Every link to the report points here. A reissued report replaces this file and no code changes. */
 const REPORT_PDF = "/audits/gloam-kann-security-review-2026-11-01.pdf";
 /** Set true once the final PDF is in app/public/audits. */
-const REPORT_LIVE = false;
+const REPORT_LIVE = true;
 
 const COMMIT = "aac9e185bbeaa6b74311236c1cc57077d928f407";
 const REPO = "https://github.com/cryptoduke01/gloam";
@@ -30,8 +30,8 @@ const FINDINGS = [
   { severity: "Critical", count: 0 },
   { severity: "High", count: 0 },
   { severity: "Medium", count: 0 },
-  { severity: "Low", count: 9 },
-  { severity: "Informational", count: 2 },
+  { severity: "Low", count: 3 },
+  { severity: "Informational", count: 8 },
 ];
 const TOTAL = FINDINGS.reduce((sum, f) => sum + f.count, 0);
 
@@ -157,7 +157,7 @@ export default function SecurityPage() {
         <Section
           id="findings"
           title="Findings"
-          note={`Kann labels L-01 and L-09 Fixed because fixes are planned, and the rest Acknowledged. None of these changes are live yet. The vault cannot be upgraded, so changes land in the next vault.`}
+          note={`Kann labels L-01 and L-02 Fixed because fixes are planned, and the rest Acknowledged. None of these changes are live yet. The vault cannot be upgraded, so changes land in the next vault.`}
         >
           <dl className="grid grid-cols-3 gap-x-6 gap-y-10 sm:grid-cols-5">
             {FINDINGS.map((f) => (
