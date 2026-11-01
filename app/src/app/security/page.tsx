@@ -33,7 +33,6 @@ const FINDINGS = [
   { severity: "Low", count: 3 },
   { severity: "Informational", count: 8 },
 ];
-const TOTAL = FINDINGS.reduce((sum, f) => sum + f.count, 0);
 
 const REVIEWED = [
   "ShieldPoolCore",

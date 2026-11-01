@@ -524,6 +524,7 @@ export function ShieldView() {
       markOnboardingStep("shield");
       markOnboardingStep("faucet");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- executeShield reads this render's form; a new one every render must not run the receipt again
   }, [
     isSuccess,
     hash,
