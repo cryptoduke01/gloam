@@ -24,20 +24,24 @@
  * VEYA is never told how a payment it allowed ended, so if one fails afterwards
  * its running budget can sit ahead of what was really paid.
  *
- * VEYA confirmed this format, but nothing here has run against its live endpoint
- * yet. Its format is the block below and nowhere else, so a change stays there.
+ * The format is as VEYA documented it on 1 Nov 2026 (backend 1.2.12). It is the
+ * block below and nowhere else, so a change stays there.
  */
 import { cleanReceiptLabel } from "@gloamtrade/sdk";
+import type { Hex } from "viem";
 import { guardBody, guardTimeoutMs, keyMayGoTo, plainText, postToGuard, type GuardEndpoint } from "./guardCall.js";
 
 type Env = Record<string, string | undefined>;
 
 export const VEYA_TIMEOUT_MS = 5_000;
+/** An anchor writes to chain before it answers, which took about 5.6s, so it can't share the check's limit. */
+export const VEYA_ANCHOR_TIMEOUT_MS = 20_000;
 
 export interface VeyaConfig extends GuardEndpoint {
   agentId: string;
   /** Where receipt leaves go; null with receipts off. */
   anchorUrl: string | null;
+  anchorTimeoutMs: number;
 }
 
 /** The payment being checked. */
@@ -119,6 +123,32 @@ function anchorRequest(leaf: string, agentId: string) {
   return { leaf, agent_id: agentId };
 }
 
+/** The same leaf can simply go again, and VEYA writes it once. */
+const ANCHOR_RETRY: Record<number, string> = {
+  409: "it is still writing this leaf",
+  502: "its chain write was not available",
+  503: "its chain write was not available",
+};
+
+/** Sending it again gets the same answer until the operator changes something. */
+const ANCHOR_BLOCKED: Record<number, string> = {
+  400: "it could not read the request (bad_request)",
+  401: "it did not accept the key (unauthorized), so check GLOAM_VEYA_KEY",
+  403: "this agent is at its limit (agent_limit)",
+  404: "it does not know this agent id (unknown_agent)",
+};
+
+/**
+ * {"status": "anchored", "leaf", "tx_hash", "duplicate", "explorer_url"}. A leaf sent
+ * twice answers the first write's tx_hash with duplicate true. Null unless it names
+ * this leaf and a transaction. explorer_url is VEYA's text, so it goes no further.
+ */
+function readAnchor(body: Record<string, unknown> | null, leaf: string): { txHash: Hex; duplicate: boolean } | null {
+  if (body?.status !== "anchored" || typeof body.leaf !== "string" || body.leaf.toLowerCase() !== leaf.toLowerCase()) return null;
+  if (typeof body.tx_hash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.tx_hash)) return null;
+  return { txHash: body.tx_hash as Hex, duplicate: body.duplicate === true };
+}
+
 // ── the check ─────────────────────────────────────────────────────────────────
 
 /**
@@ -154,7 +184,14 @@ export function veyaConfig(env: Env): VeyaConfig | { error: string } | null {
     if (!keyMayGoTo(anchor)) return { error: `GLOAM_VEYA_ANCHOR_URL must be https (or http on localhost), not ${anchor.protocol}//${anchor.host}.` };
     anchorUrl = anchor.toString();
   }
-  return { key, url: url.toString(), timeoutMs: guardTimeoutMs(env.GLOAM_VEYA_TIMEOUT_MS, VEYA_TIMEOUT_MS), agentId, anchorUrl };
+  return {
+    key,
+    url: url.toString(),
+    timeoutMs: guardTimeoutMs(env.GLOAM_VEYA_TIMEOUT_MS, VEYA_TIMEOUT_MS),
+    agentId,
+    anchorUrl,
+    anchorTimeoutMs: guardTimeoutMs(env.GLOAM_VEYA_ANCHOR_TIMEOUT_MS, VEYA_ANCHOR_TIMEOUT_MS),
+  };
 }
 
 /**
@@ -195,12 +232,35 @@ export async function checkVeyaBudget(payment: VeyaPayment, env: Env, fetchImpl:
   };
 }
 
-/** Send VEYA a receipt's leaf. Taken only on the answer status; anything else can be retried. Never throws. */
-export async function anchorLeaf(leaf: string, agentId: string, env: Env, fetchImpl: typeof fetch = fetch): Promise<{ anchored: true } | { anchored: false; why: string }> {
+export type AnchorResult =
+  | { anchored: true; txHash: Hex; duplicate: boolean }
+  /** `retry`: the same leaf may go through as it is. Otherwise something has to change first. */
+  | { anchored: false; why: string; retry: boolean };
+
+/** Tries for one leaf while VEYA answers 409, 502 or 503. */
+const ANCHOR_TRIES = 3;
+
+/**
+ * Send VEYA a receipt's leaf. Taken only on a 200 that names this leaf and a
+ * transaction. 409, 502 and 503 are tried again here, a sixth of the timeout apart,
+ * which is long enough for a write in progress to finish. Never throws.
+ */
+export async function anchorLeaf(leaf: string, agentId: string, env: Env, fetchImpl: typeof fetch = fetch): Promise<AnchorResult> {
   const config = veyaConfig(env);
-  if (config === null || "error" in config || !config.anchorUrl) return { anchored: false, why: "receipts are not set up on this server" };
-  const call = await postToGuard({ ...config, url: config.anchorUrl }, anchorRequest(leaf, agentId), fetchImpl);
-  if ("failed" in call) return { anchored: false, why: call.failed === "timeout" ? `it did not answer within ${config.timeoutMs / 1000}s` : "it could not be reached" };
-  if (call.res.status !== ANSWER_STATUS) return { anchored: false, why: `it answered HTTP ${call.res.status}` };
-  return { anchored: true };
+  if (config === null || "error" in config || !config.anchorUrl) return { anchored: false, why: "receipts are not set up on this server", retry: false };
+  const to = { ...config, url: config.anchorUrl, timeoutMs: config.anchorTimeoutMs };
+  for (let tries = 1; ; tries++) {
+    const call = await postToGuard(to, anchorRequest(leaf, agentId), fetchImpl);
+    if ("failed" in call) return { anchored: false, why: call.failed === "timeout" ? `it did not answer within ${to.timeoutMs / 1000}s` : "it could not be reached", retry: true };
+    const { status } = call.res;
+    if (status === ANSWER_STATUS) {
+      const took = readAnchor(await guardBody(call.res), leaf);
+      return took ? { anchored: true, ...took } : { anchored: false, why: "its answer did not show this leaf written", retry: true };
+    }
+    const blocked = ANCHOR_BLOCKED[status];
+    if (blocked) return { anchored: false, why: `${blocked}, HTTP ${status}`, retry: false };
+    const busy = ANCHOR_RETRY[status];
+    if (!busy || tries === ANCHOR_TRIES) return { anchored: false, why: busy ? `${busy}, HTTP ${status}` : `it answered HTTP ${status}`, retry: true };
+    await new Promise((r) => setTimeout(r, to.timeoutMs / 6));
+  }
 }

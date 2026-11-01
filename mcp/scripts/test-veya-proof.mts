@@ -57,7 +57,7 @@ const files = http.createServer((req, res) => {
   served.push(rel);
   res.writeHead(200).end(readFileSync(path));
 });
-const CHECK_ID = "chk_real_proof_01";
+const CHECK_ID = "veya-check-00112233445566778899aabbccddeeff";
 const anchored: string[] = [];
 const veya = http.createServer((req, res) => {
   let body = "";
@@ -65,7 +65,8 @@ const veya = http.createServer((req, res) => {
   req.on("end", () => {
     if (req.url === "/anchor") anchored.push(body);
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(req.url === "/anchor" ? {} : { decision: "allow", attestation: CHECK_ID }));
+    const leaf = req.url === "/anchor" ? (JSON.parse(body) as { leaf: string }).leaf : "";
+    res.end(JSON.stringify(req.url === "/anchor" ? { status: "anchored", leaf, tx_hash: `0x${"ab".repeat(32)}`, duplicate: false } : { decision: "allow", attestation: CHECK_ID }));
   });
 });
 const listen = (s: http.Server) => new Promise<number>((r) => s.listen(0, "127.0.0.1", () => r((s.address() as AddressInfo).port)));

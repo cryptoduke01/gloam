@@ -46,12 +46,15 @@ export interface ReceiptOutcome {
   note: string;
   checkId: string;
   leaf: Hex | null;
+  /** The transaction VEYA says wrote the leaf. */
+  anchorTx: Hex | null;
   /** One line for the agent: a failure here says the payment still went through. */
   message: string;
 }
 
 const PAID = "Paid, and the money has moved, so do not pay again.";
 const RETRY = "Call gloam_retry_veya_receipts to try again.";
+const FIX_FIRST = "A retry will get the same answer until that changes, then call gloam_retry_veya_receipts.";
 
 /** What goes on the payment's note before it is sent, so a payment that lands with no answer can still get its receipt. */
 export const plannedReceipt = (check: { checkId: string; agentId: string }): NoteReceipt => ({
@@ -107,6 +110,7 @@ export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt },
     note: note.handle,
     checkId: receipt.checkId,
     leaf: receipt.leaf ?? null,
+    anchorTx: receipt.anchorTx ?? null,
     message: kept ? message : `${message} The receipt could not be saved in the note store, so it may not be possible to retry it.`,
   });
 
@@ -131,10 +135,10 @@ export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt },
   const sent = await anchorLeaf(receipt.leaf!, receipt.agentId, ctx.env);
   if (!sent.anchored) {
     keep({ status: "anchor_failed" });
-    return outcome("anchor_failed", `${PAID} The receipt is built and kept, but VEYA did not take its leaf: ${sent.why}. ${RETRY}`);
+    return outcome("anchor_failed", `${PAID} The receipt is built and kept, but VEYA did not take its leaf: ${sent.why}. ${sent.retry ? RETRY : FIX_FIRST}`);
   }
-  keep({ status: "anchored" });
-  return outcome("anchored", "Paid, and VEYA took the receipt's leaf.");
+  keep({ status: "anchored", anchorTx: sent.txHash });
+  return outcome("anchored", sent.duplicate ? "Paid, and VEYA already had the receipt's leaf." : "Paid, and VEYA took the receipt's leaf.");
 }
 
 /** The leaf the note store holds for a payment, if the receipt got that far. */
@@ -158,6 +162,7 @@ export async function settleReceiptInTime(note: StoredNote & { receipt: NoteRece
         note: note.handle,
         checkId: note.receipt.checkId,
         leaf,
+        anchorTx: null,
         message: `${PAID} ${leaf ? "The receipt is built and kept, but VEYA has not taken its leaf yet" : "The receipt is not built yet"} after ${ms / 1000}s, and that may still finish. ${RETRY}`,
       });
     }, ms);

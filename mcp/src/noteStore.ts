@@ -59,6 +59,8 @@ export type NoteReceipt = {
   expiresAt: number;
   status: "pending" | "receipt_failed" | "anchor_failed" | "anchored";
   leaf?: Hex;
+  /** The transaction VEYA says wrote the leaf. */
+  anchorTx?: Hex;
   record?: PaymentReceiptRecord;
 };
 
