@@ -352,8 +352,8 @@ const NETWORKS: Record<NetworkKey, GloamNetwork> = {
   },
   // Base Sepolia: the testnet for Base, with test funds but the
   // mainnet pool (ShieldPoolPayments on the ceremony's final keys, payments
-  // only, the same assets and beta deposit limits as Base mainnet, the cash-out
-  // fee), so Base mainnet ships on code proven here. Pool from BASE_SEPOLIA_POOL
+  // only, the same assets as Base mainnet, its own beta deposit limits, the
+  // cash-out fee), so Base mainnet ships on code proven here. Pool from BASE_SEPOLIA_POOL
   // (lib/mainnet.ts), deployed 2026-10-24.
   base: {
     key: "base",

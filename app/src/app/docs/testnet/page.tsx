@@ -213,7 +213,7 @@ export default function DocsTestnetPage() {
           ? "Gloam also runs on Base Sepolia (chain ID 84532)."
           : "Base Sepolia (chain ID 84532) is next. It is not in the app yet; this is how it will work."}{" "}
         It is the testnet for Base, and it runs the mainnet vault: the
-        final keys, the same deposit limits as Base mainnet (500 USDC or EURC
+        final keys, its own beta deposit limits (500 USDC or EURC
         per deposit and 25,000 in total, 0.2 ETH per deposit and 10 in total)
         and the 0.25% cash-out fee, all on test funds. It takes test USDC, EURC
         and ETH; there is no USDT on Base Sepolia.
@@ -249,8 +249,8 @@ export default function DocsTestnetPage() {
         {ETHEREUM_SEPOLIA_LIVE
           ? "Gloam also runs on Ethereum Sepolia (chain ID 11155111), Ethereum's testnet."
           : "Ethereum Sepolia (chain ID 11155111), Ethereum's testnet, is next. It is not in the app yet; this is how it will work."}{" "}
-        Like Base Sepolia it runs the mainnet vault: the final keys, the
-        mainnet deposit limits (500 of each stablecoin per deposit and 25,000
+        Like Base Sepolia it runs the mainnet vault: the final keys, its
+        own beta deposit limits (500 of each stablecoin per deposit and 25,000
         in total, 0.2 ETH per deposit and 10 in total) and the 0.25% cash-out
         fee. It takes test USDC, USDG, PYUSD, EURC and ETH; Tether issues no
         USDT on Sepolia.

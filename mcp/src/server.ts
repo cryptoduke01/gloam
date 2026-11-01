@@ -314,10 +314,10 @@ const LEGACY_WARNING =
   "GLOAM_EXPOSE_NOTE_SECRETS=1 is set: note secrets are passed to and from the agent. Anyone who reads a secret can spend that money, and spending limits cannot stop that. Turn it off unless you are migrating old notes.";
 
 /** Build a Gloam MCP server. Pass deps to test it without a chain. */
-/** ", 0.2 and 10 for ETH on Base and Ethereum" for the chains in this build that list ETH. */
+/** ", 20 and 1,000 for ETH on Base and Ethereum" for the chains in this build that list ETH. */
 function ethNativeLimitText(): string {
   const chains = [...new Set(allNetworks().filter((n) => n.family === "base" || n.family === "ethereum").map((n) => (n.family === "base" ? "Base" : "Ethereum")))];
-  return chains.length ? `, 0.2 and 10 for ETH on ${chains.join(" and ")}` : "";
+  return chains.length ? `, 20 and 1,000 for ETH on ${chains.join(" and ")}` : "";
 }
 
 export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServer {
@@ -423,7 +423,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 500 per deposit and 25,000 in total for each stablecoin (25,000 and 250,000 for GLOAM${
+          `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
           }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
