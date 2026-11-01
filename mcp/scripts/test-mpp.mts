@@ -11,7 +11,8 @@
  * expiry, price, binding and Transferred event before sweeping and issuing a
  * Payment-Receipt, replays, a credential lifted onto another challenge, a pull
  * credential the payee submits itself, spending limits still gating every
- * payment, and that no tool result carries a secret.
+ * payment, a retried payment reusing the first one, and that no tool result
+ * carries a secret.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,6 +23,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { TransactionNotFoundError, type Address, type Hex } from "viem";
 import {
+  GloamRelayError,
   IncrementalMerkleTreePoseidon,
   fieldToHex,
   hexToField,
@@ -138,8 +140,8 @@ async function connect(deps: Partial<ServerDeps>) {
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "gloam-mpp-test", version: "0" });
   await Promise.all([server.connect(a), client.connect(b)]);
-  return async (name: string, args: Record<string, unknown> = {}) => {
-    const r = await client.callTool({ name, arguments: args });
+  return async (name: string, args: Record<string, unknown> = {}, options?: { timeout?: number }) => {
+    const r = await client.callTool({ name, arguments: args }, undefined, options);
     const raw = (r.content as { type: string; text: string }[])[0]!.text;
     seen.push(raw);
     return JSON.parse(raw);
@@ -294,7 +296,7 @@ test("gloam_fetch_paid pays an MPP 402 privately, prefers it over x402, and retu
 });
 
 test("execute_private_pay + verify_payment with an MPP challenge: binding, replay, tampering, price", async () => {
-  const { chain, payeeEnv, payerEnv } = await setup();
+  const { dir, chain, payeeEnv, payerEnv } = await setup();
   const S = await connect(makeDeps(chain, payeeEnv).deps);
   const P = await connect(makeDeps(chain, payerEnv).deps);
   await P("gloam_execute_shield", { amount: 10, network: "tempo" });
@@ -353,9 +355,17 @@ test("execute_private_pay + verify_payment with an MPP challenge: binding, repla
   assert.equal(replay.status, "already_settled");
   assert.equal(replay.grantAccess, false);
 
+  // This payer asking again uses the payment it already made: a challenge is paid once.
+  const asked = await P("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  assert.equal(asked.reused, true, JSON.stringify(asked));
+  assert.equal(asked.authorization, paid.authorization);
+
   // A second, different payment for the same (already used) challenge is refused before it is swept.
-  const paidAgain = await P("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  const P2 = await connect(makeDeps(chain, partyEnv("payer-two", dir, PAYER_LIMITS)).deps);
+  await P2("gloam_execute_shield", { amount: 10, network: "tempo" });
+  const paidAgain = await P2("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
   assert.equal(paidAgain.status, "paid", JSON.stringify(paidAgain));
+  assert.notEqual(paidAgain.authorization, paid.authorization);
   const receivedBefore = openNoteStore(payeeEnv).list().length;
   const reuse = await S("gloam_verify_payment", { payment: paidAgain.authorization });
   assert.equal(reuse.status, "rejected");
@@ -668,4 +678,243 @@ test("an MPP pull payment presented again while the commitment read lags is not 
   assert.equal(v3.status, "settled", JSON.stringify(v3));
   assert.equal((await later(20 * MINUTE, () => S("gloam_verify_payment", { payment: pulled.authorization }))).status, "already_settled");
   assert.deepEqual(Object.keys(openNoteStore(payeeEnv).pulls()), [], "its pull record goes once it is served");
+});
+
+// ── a retried payment reuses the first one ──────────────────────────────────
+
+/** A resource with one fixed x402 price: the same 402 every time, so a repeat looks like the first request. */
+const x402Resource = (S: Awaited<ReturnType<typeof connect>>, priced: { requirements: unknown; encoded: string }) =>
+  (async (_url: string, init?: RequestInit) => {
+    const pay = new Headers(init?.headers).get("x-payment");
+    if (!pay) return new Response(JSON.stringify({ x402Version: 1, accepts: [priced.requirements] }), { status: 402 });
+    const v = await S("gloam_verify_payment", { payment: pay, requirements: priced.encoded });
+    return v.grantAccess ? new Response("the answer is 42") : new Response(JSON.stringify(v), { status: 402 });
+  }) as typeof fetch;
+
+/** A resource that answers every 402 with a fresh challenge, as mppx does. */
+const mppResource = (S: Awaited<ReturnType<typeof connect>>) =>
+  (async (_url: string, init?: RequestInit) => {
+    const auth = new Headers(init?.headers).get("authorization");
+    if (!auth) {
+      const fresh = await price(S, 1, { expiresInSeconds: 300 + Math.floor(Math.random() * 1000) });
+      return new Response("", { status: 402, headers: { "www-authenticate": fresh.mpp.wwwAuthenticate } });
+    }
+    const v = await S("gloam_verify_payment", { payment: auth });
+    return v.grantAccess
+      ? new Response("the answer is 42", { headers: { "payment-receipt": v.paymentReceipt } })
+      : new Response(JSON.stringify(v), { status: 402 });
+  }) as typeof fetch;
+
+/** A prover that holds the payment until released, as a slow proof on mainnet does. */
+function heldProver() {
+  let release!: () => void;
+  let proving!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  const started = new Promise<void>((r) => (proving = r));
+  const transferProver = async () => async () => {
+    proving();
+    await held;
+    return { proofBytes: "0xdeadbeef" as Hex };
+  };
+  return { transferProver, release, started };
+}
+
+/** Payments the payer actually made, from its own notes and from the spending log. */
+async function paymentsBy(P: Awaited<ReturnType<typeof connect>>, payerEnv: Env) {
+  const report = await P("gloam_get_spending_report", {});
+  return {
+    notes: openNoteStore(payerEnv).list().filter((n) => n.origin === "payment").length,
+    logged: report.recentPayments.filter((e: { tool: string; status: string }) => e.tool === "pay" && e.status !== "failed").length,
+  };
+}
+
+/** Call until the running payment has finished. */
+async function untilFinished(call: () => Promise<{ status: string }>) {
+  for (let i = 0; i < 200; i++) {
+    const r = await call();
+    if (r.status !== "payment_in_progress") return r as Record<string, any>;
+    await new Promise((d) => setTimeout(d, 10));
+  }
+  throw new Error("the payment never finished");
+}
+
+const URL_ = "https://api.example.com/answer";
+
+for (const dialect of ["x402", "mpp"] as const) {
+  test(`${dialect}: a client that gives up on a slow fetch does not pay twice by retrying`, async () => {
+    const { chain, payeeEnv, payerEnv } = await setup();
+    const S = await connect(makeDeps(chain, payeeEnv).deps);
+    const fetch = dialect === "x402" ? x402Resource(S, await price(S, 1)) : mppResource(S);
+    const slow = heldProver();
+    const P = await connect(makeDeps(chain, payerEnv, { fetch, transferProver: slow.transferProver as ServerDeps["transferProver"] }).deps);
+    await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+    await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+
+    // The client's timeout fires while the proof runs. The server carries on.
+    await assert.rejects(P("gloam_fetch_paid", { url: URL_ }, { timeout: 20 }), /timed out/i);
+    await slow.started;
+
+    // Retried at once: told to wait, and nothing is paid.
+    const early = await P("gloam_fetch_paid", { url: URL_ });
+    assert.equal(early.status, "payment_in_progress", JSON.stringify(early));
+    assert.equal((await paymentsBy(P, payerEnv)).notes, 0, "the first has not reached its send");
+
+    slow.release();
+    const r = await untilFinished(() => P("gloam_fetch_paid", { url: URL_ }));
+    assert.equal(r.status, "ok", JSON.stringify(r));
+    assert.equal(r.body, "the answer is 42");
+    assert.equal(r.reused, true);
+    assert.deepEqual(await paymentsBy(P, payerEnv), { notes: 1, logged: 1 });
+    assert.equal(openNoteStore(payeeEnv).list().filter((n) => n.origin === "received").length, 1, "the payee was paid once");
+
+    // That answer arrived, so the same call now is a new purchase.
+    const next = await P("gloam_fetch_paid", { url: URL_ });
+    assert.equal(next.status, "ok", JSON.stringify(next));
+    assert.equal(next.reused, undefined);
+    assert.deepEqual(await paymentsBy(P, payerEnv), { notes: 2, logged: 2 });
+    assertNoSecrets([payerEnv, payeeEnv]);
+  });
+}
+
+test("two identical calls at once make one payment, and the second caller gets its answer", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const fetch = x402Resource(S, await price(S, 1));
+  const slow = heldProver();
+  const P = await connect(makeDeps(chain, payerEnv, { fetch, transferProver: slow.transferProver as ServerDeps["transferProver"] }).deps);
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  // No cancel here: a client that drops a call silently looks like this, and the second call is what tells.
+  const first = P("gloam_fetch_paid", { url: URL_ });
+  await slow.started;
+  const second = await P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(second.status, "payment_in_progress", JSON.stringify(second));
+  slow.release();
+  assert.equal((await first).status, "ok");
+  const third = await P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(third.status, "ok", JSON.stringify(third));
+  assert.equal(third.body, "the answer is 42");
+  assert.equal(third.reused, true);
+  assert.deepEqual(await paymentsBy(P, payerEnv), { notes: 1, logged: 1 });
+});
+
+test("a fixed price bought again on purpose is paid again, and different calls are different purchases", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const P = await connect(makeDeps(chain, payerEnv, { fetch: x402Resource(S, priced) }).deps);
+  for (let i = 0; i < 4; i++) await P("gloam_execute_shield", { amount: 2, network: "tempo" });
+
+  // Each answer reached its caller, so the next call is a new purchase.
+  for (const n of [1, 2]) {
+    const r = await P("gloam_fetch_paid", { url: URL_ });
+    assert.equal(r.status, "ok", JSON.stringify(r));
+    assert.equal(r.reused, undefined);
+    assert.equal((await paymentsBy(P, payerEnv)).notes, n);
+  }
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  assert.equal(paid.reused, undefined);
+  const paidAgain = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(paidAgain.status, "paid", JSON.stringify(paidAgain));
+  assert.equal(paidAgain.reused, undefined);
+  assert.notEqual(paidAgain.paymentHeader, paid.paymentHeader);
+  assert.equal((await paymentsBy(P, payerEnv)).notes, 4);
+});
+
+test("paid but not served: the same call presents the first payment, also after a restart", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const served = x402Resource(S, priced);
+  let down = true;
+  const presented: string[] = [];
+  const fetch = (async (url: string, init?: RequestInit) => {
+    const pay = new Headers(init?.headers).get("x-payment");
+    if (pay) {
+      presented.push(pay);
+      if (down) throw new Error("connection reset");
+    }
+    return served(url, init);
+  }) as typeof fetch;
+  const P = await connect(makeDeps(chain, payerEnv, { fetch }).deps);
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  const first = await P("gloam_fetch_paid", { url: URL_ });
+  assert.equal(first.status, "paid_not_served", JSON.stringify(first));
+
+  const restarted = await connect(makeDeps(chain, payerEnv, { fetch }).deps);
+  down = false;
+  const r = await restarted("gloam_fetch_paid", { url: URL_ });
+  assert.equal(r.status, "ok", JSON.stringify(r));
+  assert.equal(r.body, "the answer is 42");
+  assert.equal(r.reused, true);
+  assert.deepEqual(await paymentsBy(restarted, payerEnv), { notes: 1, logged: 1 });
+  assert.equal(presented.length, 2);
+  assert.equal(presented[1], presented[0], "the same payment was presented");
+});
+
+test("a send whose outcome is not known is not paid again until it is known", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const env = { ...payerEnv, GLOAM_USE_RELAY: "1" };
+  let lost = true;
+  const relay: ServerDeps["relay"] = async (intent) => {
+    if (lost) throw new GloamRelayError("Relay error (504)", "error");
+    return chain.apply("transfer", intent.exec!.args);
+  };
+  const P = await connect(makeDeps(chain, env, { relay }).deps);
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  const first = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(first.status, "error", JSON.stringify(first));
+  assert.match(first.check, /may have been sent/);
+
+  lost = false;
+  const again = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(again.status, "payment_in_progress", JSON.stringify(again));
+  assert.equal(again.paymentHeader, first.paymentHeader, "the payment to present if it lands");
+  assert.equal(openNoteStore(env).list().filter((n) => n.origin === "payment").length, 1);
+
+  // The chain says it never landed: now it can be paid.
+  const store = openNoteStore(env);
+  store.markDead(store.list().find((n) => n.origin === "payment")!.handle);
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  assert.equal(paid.reused, undefined);
+});
+
+test("an attempt that moved nothing leaves nothing behind", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const P = await connect(makeDeps(chain, payerEnv).deps);
+  const none = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(none.status, "error", JSON.stringify(none));
+  assert.match(none.error, /No single private note/);
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  assert.equal(paid.reused, undefined);
+});
+
+test("a challenge paid once is reused after a restart, and its credential still settles", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 2);
+  const P = await connect(makeDeps(chain, payerEnv).deps);
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  await P("gloam_execute_shield", { amount: 5, network: "tempo" });
+  const paid = await P("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+
+  const restarted = await connect(makeDeps(chain, payerEnv).deps);
+  const again = await restarted("gloam_execute_private_pay", { requirements: priced.mpp.wwwAuthenticate });
+  assert.equal(again.status, "paid", JSON.stringify(again));
+  assert.equal(again.reused, true);
+  assert.equal(again.authorization, paid.authorization);
+  assert.deepEqual(await paymentsBy(restarted, payerEnv), { notes: 1, logged: 1 });
+  const v = await S("gloam_verify_payment", { payment: again.authorization, requirements: priced.encoded });
+  assert.equal(v.status, "settled", JSON.stringify(v));
 });
