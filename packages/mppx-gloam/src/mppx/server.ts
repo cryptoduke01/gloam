@@ -6,7 +6,7 @@
  *
  *   const mppx = Mppx.create({
  *     secretKey: process.env.MPP_SECRET_KEY!,
- *     methods: [gloam({ receiveKey, chain, prove, submit, network: "tempo" })],
+ *     methods: [gloam({ receiveKey, chain, prove, submit, beforeSubmit, network: "tempo" })],
  *   })
  *   const r = await mppx.charge({ amount: "0.01" })(request)
  *   if (r.status === 402) return r.challenge
@@ -30,7 +30,7 @@ import {
   type GloamChargeNetwork,
   type GloamChargeRequest,
 } from "../charge.js";
-import { settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig, type ValidatedGloamCharge } from "../server.js";
+import { assertKeepsFreshNotes, settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig, type ValidatedGloamCharge } from "../server.js";
 import { charge } from "./method.js";
 
 /** Translate a gloam failure into the mppx error that answers with the right Problem Details. */
@@ -81,6 +81,7 @@ export type GloamServerMethod = Method.Server<typeof charge, GloamServerDefaults
 /** A gloam charge method for `Mppx.create({ methods: [...] })`. Routes pass `{ amount: "0.01" }`. */
 export function gloam(parameters: gloam.Parameters): GloamServerMethod {
   const { network, currency, decimals, canOffer, onPaymentSuccess, ...config } = parameters;
+  assertKeepsFreshNotes(config);
   const net = resolveNetwork(network);
   const pool = officialPool(net.chainId, config.pools);
   if (!pool) throw new Error(`There is no Gloam pool on chain ${net.chainId}.`);

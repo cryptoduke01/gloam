@@ -83,7 +83,7 @@ Proofs must be made with the keys of the chain the payment settles on: the trust
 import { createGloamPaywall, createGloamChargeCredential, parsePaymentChallenges, isGloamChargeChallenge } from "@gloamtrade/mppx-gloam/core";
 
 // Server: same handler shape as mppx.
-const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit } });
+const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit, beforeSubmit: (freshNote) => saveNote(freshNote) } });
 const r = await paywall.charge({ amount: "0.01" })(request);
 
 // Client.
