@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/AppShell";
+import { ClientOnly } from "@/components/app/ClientOnly";
 import { FreshWalletView } from "@/components/app/FreshWalletView";
 
 export const metadata: Metadata = {
@@ -11,7 +12,10 @@ export const metadata: Metadata = {
 export default function FreshWalletPage() {
   return (
     <AppShell title="Fund a fresh wallet" subtitle="From your private balance, ready for Borro on Robinhood Chain.">
-      <FreshWalletView />
+      {/* The balance and the network live in this browser. */}
+      <ClientOnly>
+        <FreshWalletView />
+      </ClientOnly>
     </AppShell>
   );
 }

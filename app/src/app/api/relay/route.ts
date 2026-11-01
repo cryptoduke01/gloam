@@ -27,11 +27,13 @@ export async function GET() {
 
 /**
  * Submit an already-proven private action through the Gloam relay.
- * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap" | "gas-station", ...args }
+ * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap", ...args }
  * Returns { ok: true, hash } as soon as the transaction is sent; the client
  * waits for the receipt itself. A transfer also returns `memoTicket` for its
  * payment (commitments[0]), null when the relay has no memo secret: sent back
  * as `ticket` with that payment's memo, it gets the payer's own few messages.
+ * Also action "gas-station" with { wallet, step }: a fresh wallet's gas station
+ * (lib/relay/gasStation), off unless switched on.
  */
 export async function POST(req: Request) {
   try {
@@ -52,14 +54,14 @@ export async function POST(req: Request) {
       case "unshield":
         hash = await relayUnshield(net, body);
         break;
+      case "gas-station":
+        hash = await relayGasStation(net, body, requester);
+        break;
       case "memo":
         hash = await relayMemo(net, body);
         break;
       case "swap":
         hash = await relayVaultSwap(net, body);
-        break;
-      case "gas-station":
-        hash = await relayGasStation(net, body, requester);
         break;
       default:
         throw new RelayError("Unknown action.");

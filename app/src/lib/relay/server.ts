@@ -537,16 +537,14 @@ type MemoBudget = "paid" | "open";
 export type Call =
   | { kind: "transfer"; args: readonly [Hex, Hex, Hex, readonly [Hex, Hex]] }
   | { kind: "unshield"; args: readonly [Hex, Hex, Hex, Address, Address, bigint] }
-  | { kind: "memo"; args: readonly [Hex, Hex]; budget: MemoBudget }
-  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] }
   | { kind: "make"; args: readonly [Address] }
-  | { kind: "pump"; wallet: Address; station: Address; args: readonly [bigint, bigint] };
+  | { kind: "pump"; station: Address; args: readonly [bigint, bigint] }
+  | { kind: "memo"; args: readonly [Hex, Hex]; budget: MemoBudget }
+  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] };
 
-/** Public addresses a call pays out to: a cash out's, and the wallet a gas station pays. */
+/** Public addresses a call pays out to. Only a cash out has one. */
 function publicRecipients(call: Call): Address[] {
-  if (call.kind === "unshield") return [call.args[4]];
-  if (call.kind === "make") return [call.args[0]];
-  return call.kind === "pump" ? [call.wallet] : [];
+  return call.kind === "unshield" ? [call.args[4]] : [];
 }
 
 /**
@@ -636,14 +634,14 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return pub.estimateContractGas({ address: pool, abi: relayPoolAbi, functionName: "transfer", args: call.args, account });
       case "unshield":
         return pub.estimateContractGas({ address: pool, abi: relayPoolAbi, functionName: "unshield", args: call.args, account });
-      case "memo":
-        return pub.estimateContractGas({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, account });
-      case "swap":
-        return pub.estimateContractGas({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, account });
       case "make":
         return pub.estimateContractGas({ address: GAS_STATION_FACTORY, abi: gasStationFactoryAbi, functionName: "make", args: call.args, account });
       case "pump":
         return pub.estimateContractGas({ address: call.station, abi: gasStationAbi, functionName: "pump", args: call.args, account });
+      case "memo":
+        return pub.estimateContractGas({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, account });
+      case "swap":
+        return pub.estimateContractGas({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, account });
     }
   };
   let fees: FeeCap | undefined;
@@ -654,14 +652,14 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "transfer", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "unshield":
         return wallet.writeContract({ address: pool, abi: relayPoolAbi, functionName: "unshield", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
-      case "memo":
-        return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
-      case "swap":
-        return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "make":
         return wallet.writeContract({ address: GAS_STATION_FACTORY, abi: gasStationFactoryAbi, functionName: "make", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "pump":
         return wallet.writeContract({ address: call.station, abi: gasStationAbi, functionName: "pump", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "memo":
+        return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "swap":
+        return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
     }
   };
 
@@ -1066,7 +1064,8 @@ export async function relayGasStation(net: GloamNetwork, body: Record<string, un
   const step = body.step;
   if (step !== "make" && step !== "pump") throw new RelayError(STATION_BAD_STEP_MESSAGE, 400, "bad_step");
   assertCashOutTarget(net, wallet);
-  await screenCall({ kind: "make", args: [wallet] }, net);
+  // The wallet is who these two calls pay. Neither call names it as a payee, so it is screened here.
+  if (!(await screenAddresses([wallet])).allowed) throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
   if (!(await relayCount(requester, "relay-station-ip", STATION_IP_HOURLY, Date.now(), 3600)).allowed) {
     throw new RelayError(STATION_IP_LIMIT_MESSAGE, 429, "rate_limit");
   }
@@ -1097,7 +1096,7 @@ export async function relayGasStation(net: GloamNetwork, body: Record<string, un
       throw explain(e, "Could not turn this into ETH right now. Your USDG stays at the station. Try again shortly.", "check_failed");
     }
     if (fill <= 0n) throw new RelayError(STATION_NO_FILL_MESSAGE, 409, "no_fill");
-    call = { kind: "pump", wallet, station: state.station, args: [pumpMinOut(fill), maxIn] };
+    call = { kind: "pump", station: state.station, args: [pumpMinOut(fill), maxIn] };
   }
 
   const now = Date.now();

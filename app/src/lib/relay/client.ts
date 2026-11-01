@@ -149,6 +149,11 @@ export async function relayUnshield(p: {
   return (await post({ action: "unshield", ...p })).hash;
 }
 
+/** One gas station step for a fresh wallet (lib/relay/gasStation): only the wallet and the step go to the relay. */
+export async function relayGasStation(p: { chainId: number; wallet: Address; step: "make" | "pump" }): Promise<Hex> {
+  return (await post({ action: "gas-station", ...p })).hash;
+}
+
 /** A private swap through the vault (lib/vaultSwap). Only the relay ever submits one. */
 export async function relayVaultSwap(p: {
   chainId: number;
@@ -160,11 +165,6 @@ export async function relayVaultSwap(p: {
   route: readonly PoolKey[];
 }): Promise<Hex> {
   return (await post({ action: "swap", ...p })).hash;
-}
-
-/** One gas station step for a fresh wallet (lib/relay/gasStation): only the wallet and the step go to the relay. */
-export async function relayGasStation(p: { chainId: number; wallet: Address; step: "make" | "pump" }): Promise<Hex> {
-  return (await post({ action: "gas-station", ...p })).hash;
 }
 
 /**

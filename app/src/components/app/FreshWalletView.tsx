@@ -311,7 +311,12 @@ export function FreshWalletView() {
     );
   }
 
-  if (relayChecked && !stationOn) {
+  // Until the relay answers the form stays away: it can't be used if this turns out to be off.
+  if (!relayChecked) {
+    return <div aria-busy="true" className="gl-card h-[420px] max-w-[640px] motion-safe:animate-pulse" />;
+  }
+
+  if (!stationOn) {
     return (
       <div className="gl-card max-w-[640px] p-5 sm:p-7">
         <h2 className="t-title">Fund a fresh wallet</h2>
