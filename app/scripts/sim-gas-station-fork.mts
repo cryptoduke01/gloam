@@ -16,9 +16,11 @@
  * exists waits there; refused above the gas limit, which is anvil's own price;
  * then at mainnet's price the relay makes it and pumps it through relayGasStation;
  * the ETH reaches the wallet; the wallet pays for a transaction of its own with
- * it; a second request is refused; getGas does both steps for a second wallet;
- * and with the price feed gone stale the relay refuses, nothing is lost, and
- * release() pays the wallet in USDG.
+ * it; a copy right after is refused; getGas does both steps for a second wallet;
+ * copies sent together go out once; a wallet with gas still gets what waits at
+ * its station; a contract wallet, which pump would run on the relay's gas, is
+ * refused; and with the price feed gone stale the relay refuses, nothing is lost,
+ * and release() pays the wallet in USDG.
  *
  * Run from app/ (anvil on PATH, one heavy-job slot held):
  *   ../mcp/node_modules/.bin/tsx scripts/sim-gas-station-fork.mts
@@ -95,6 +97,7 @@ await rpc("anvil_mine", ["0x1"]);
 await rpc("anvil_setBalance", [relayer, toHex(10n ** 18n)]);
 
 const { GAS_STATION_FACTORY, STATION_USDG, WALLET_GAS_OK_WEI, fundingStep, gasStationAbi, gasStationFactoryAbi, predictStation, readStationState } = await import("../src/lib/gasStation");
+const { STATION_MAX_ESTIMATE } = await import("../src/lib/relay/gasStation");
 const { RelayError, relayGasStation, relayPublicClient } = await import("../src/lib/relay/server");
 const { getGas } = await import("../src/lib/freshWallet");
 const { getNetwork } = await import("../src/lib/networks");
@@ -200,8 +203,8 @@ assert.equal(fundingStep(s), "ready");
 const ethFromPump = s.walletEth;
 log(`ok  pump through the relay: ${pumped.gasUsed} gas, 1 USDG became ${formatEther(s.walletEth)} ETH in the wallet`);
 
-await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, "127.0.0.1"), refusedWith("has_gas"));
-log("ok  a wallet with gas gets nothing more from the relay");
+await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, "127.0.0.1"), refusedWith("in_flight"));
+log("ok  a copy of the pump right after it is refused");
 
 // pump on an empty station succeeds on chain and does nothing: only the relay's own check stops it
 const bare = privateKeyToAccount(generatePrivateKey()).address;
@@ -235,6 +238,53 @@ const done = await getGas({
 assert.equal(fundingStep(done), "ready");
 assert.deepEqual(states, ["Making the gas station…", "Turning USDG into ETH…"]);
 log(`ok  getGas does both steps for a new wallet: ${formatEther(done.walletEth)} ETH from 2 USDG`);
+
+// ---------------------------------------------------------------- copies, second fundings, contracts
+
+const pumpData = (maxIn: bigint) => encodeFunctionData({ abi: gasStationAbi, functionName: "pump", args: [0n, maxIn] });
+const estimateFor = async (to: Address, data: Hex) => BigInt(await rpc<Hex>("eth_estimateGas", [{ from: relayer, to, data }]));
+
+const racer = privateKeyToAccount(generatePrivateKey()).address;
+await cashOut(predictStation(racer), U);
+await relayStep(racer, "make");
+const eoaEstimate = await estimateFor(predictStation(racer), pumpData(U));
+assert.ok(eoaEstimate < STATION_MAX_ESTIMATE, "an ordinary pump clears the cap");
+const nonceBefore = await pub.getTransactionCount({ address: relayer });
+const raced = await Promise.allSettled([1, 2, 3].map(() => relayGasStation(net, { wallet: racer, step: "pump" }, "127.0.0.1")));
+assert.equal(raced.filter((r) => r.status === "fulfilled").length, 1);
+for (const r of raced) if (r.status === "rejected") refusedWith("in_flight")(r.reason);
+assert.equal((await pub.getTransactionCount({ address: relayer })) - nonceBefore, 1, "one transaction");
+log(`ok  3 pumps sent together: 1 transaction, 2 refused; an ordinary pump estimates ${eoaEstimate} gas`);
+
+// A second funding: the wallet already has gas and more USDG lands at its station.
+const stocked = privateKeyToAccount(generatePrivateKey()).address;
+await rpc("anvil_setBalance", [stocked, toHex(10n ** 15n)]);
+await cashOut(predictStation(stocked), U);
+assert.equal(fundingStep(await readStationState(pub, stocked)), "make");
+const topped = await getGas({
+  wallet: stocked,
+  deps: {
+    read: (w) => readStationState(pub, w),
+    send: (p) => relayGasStation(net, p, "127.0.0.1"),
+    wait: async (hash) => (await pub.waitForTransactionReceipt({ hash })).status,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  },
+});
+assert.equal(topped.stationUsdg, 0n, "nothing stranded");
+assert.ok(topped.walletEth > 10n ** 15n);
+log("ok  a wallet that already has gas still gets what waits at its station");
+
+// A contract wallet: pump hands it all the gas left, so this loop would run on the relay's gas.
+const contract = privateKeyToAccount(generatePrivateKey()).address;
+await cashOut(predictStation(contract), U);
+await sendAs(relayer, GAS_STATION_FACTORY, encodeFunctionData({ abi: gasStationFactoryAbi, functionName: "make", args: [contract] }));
+await rpc("anvil_setCode", [contract, "0x6120005b600190038060035700"]);
+const contractEstimate = await estimateFor(predictStation(contract), pumpData(U));
+assert.ok(contractEstimate > STATION_MAX_ESTIMATE, "this wallet would clear the cap");
+assert.equal(fundingStep(await readStationState(pub, contract)), "contract");
+await assert.rejects(relayGasStation(net, { wallet: contract, step: "pump" }, "127.0.0.1"), refusedWith("wallet_code"));
+assert.equal((await readStationState(pub, contract)).stationUsdg, U, "nothing moved");
+log(`ok  a contract wallet is refused: its pump estimates ${contractEstimate} gas, over the ${STATION_MAX_ESTIMATE} cap`);
 
 // ---------------------------------------------------------------- a stale price feed
 

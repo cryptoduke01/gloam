@@ -89,9 +89,12 @@ import { GAS_STATION_CHAIN_ID, GAS_STATION_FACTORY, gasStationAbi, gasStationFac
 import {
   STATION_BAD_STEP_MESSAGE,
   STATION_BUSY_MESSAGE,
+  STATION_ESTIMATE_MESSAGE,
   STATION_GAS_HIGH_MESSAGE,
+  STATION_IN_FLIGHT_MESSAGE,
   STATION_IP_HOURLY,
   STATION_IP_LIMIT_MESSAGE,
+  STATION_MAX_ESTIMATE,
   STATION_MAX_GAS_PRICE_WEI,
   STATION_NETWORK_MESSAGE,
   STATION_NO_FILL_MESSAGE,
@@ -670,6 +673,10 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
   } catch (e) {
     throw explain(e, "Could not check this payment. Try again.", "check_failed");
   }
+  // pump hands the wallet all its gas, so a wallet that gained code after the checks shows up here.
+  if ((call.kind === "make" || call.kind === "pump") && gas > STATION_MAX_ESTIMATE) {
+    throw new RelayError(STATION_ESTIMATE_MESSAGE, 422, "station_gas");
+  }
   if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
   await (call.kind === "memo" ? takeMemoSlot(net, call.budget) : takeNetworkSlot(net));
 
@@ -1070,6 +1077,34 @@ export async function relayGasStation(net: GloamNetwork, body: Record<string, un
     throw new RelayError(STATION_IP_LIMIT_MESSAGE, 429, "rate_limit");
   }
 
+  // One at a time per wallet and step, before anything is read: copies sent together
+  // would each pass the checks, and all but one pump would burn gas on an empty station.
+  let lock: Awaited<ReturnType<typeof takeInflight>>;
+  try {
+    lock = await takeInflight(inflightKey(net.chainId, `gas-station:${step}:${wallet.toLowerCase()}`));
+  } catch (e) {
+    if (e instanceof LockStoreDown) throw relayOff();
+    throw e;
+  }
+  if (!lock) throw new RelayError(STATION_IN_FLIGHT_MESSAGE, 409, "in_flight");
+  const held = lock;
+  let keep = false;
+  try {
+    const call = await stationCall(net, wallet, step);
+    const hash = await submit(net, call, () => {
+      keep = true;
+    });
+    keep = true;
+    const receiptStatus = () => relayPublicClient(net).getTransactionReceipt({ hash }).then((r) => r.status);
+    afterReply(() => releaseIfReverted(held, receiptStatus));
+    return hash;
+  } finally {
+    if (!keep) await held.release();
+  }
+}
+
+/** Reads the wallet and its station, applies every rule, takes the day's counts, and builds the one call the relay may send. */
+async function stationCall(net: GloamNetwork, wallet: Address, step: "make" | "pump"): Promise<Extract<Call, { kind: "make" | "pump" }>> {
   const pub = relayPublicClient(net);
   let state: Awaited<ReturnType<typeof readStationState>>;
   let gasPrice: bigint;
@@ -1106,7 +1141,7 @@ export async function relayGasStation(net: GloamNetwork, body: Record<string, un
   if (!(await relayCount(`chain:${net.chainId}`, "relay-station-net", gasStationDailySends(), now, 86_400)).allowed) {
     throw new RelayError(STATION_BUSY_MESSAGE, 429, "station_busy");
   }
-  return submit(net, call);
+  return call;
 }
 
 // ---------------------------------------------------------------- status

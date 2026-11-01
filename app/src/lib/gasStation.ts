@@ -18,6 +18,8 @@
  *    dry run can't catch that, so stationRefusal checks the balance itself.
  *  - The wallet comes from the clone's code, never from a caller: a station can
  *    only pay its own wallet.
+ *  - pump sends the ETH with all the gas it has left, so a wallet with code runs
+ *    that code on the caller's gas. The relay refuses those wallets.
  *
  * predictStation works the address out here, from the factory's CREATE2 inputs,
  * so the relay never reads or accepts a target. readStationState also asks the
@@ -46,8 +48,6 @@ export const STATION_MAX_PUMP_USDG = 5_000_000n;
  * covers one of each and the approval before it.
  */
 export const WALLET_GAS_OK_WEI = 50_000_000_000_000n;
-/** A wallet holding this much pays for its own pump: the relay leaves it alone. */
-export const WALLET_PAYS_OWN_GAS_WEI = 200_000_000_000_000n;
 
 export const gasStationFactoryAbi = [
   { type: "function", name: "make", stateMutability: "nonpayable", inputs: [{ name: "wallet", type: "address" }], outputs: [{ name: "station", type: "address" }] },
@@ -103,6 +103,8 @@ export type StationState = {
   walletEth: bigint;
   /** Transactions the wallet has sent: above 0 it is not as fresh as it looks. */
   walletTxs: number;
+  /** The wallet is a contract, or an account delegating to one (EIP-7702). */
+  walletHasCode: boolean;
 };
 
 export type StationReader = Pick<PublicClient, "readContract" | "getCode" | "getBalance" | "getTransactionCount">;
@@ -114,28 +116,38 @@ export async function readStationState(client: StationReader, wallet: Address): 
   const station = predictStation(wallet);
   const balanceOf = (account: Address) =>
     client.readContract({ address: STATION_USDG, abi: erc20BalanceAbi, functionName: "balanceOf", args: [account] });
-  const [onChain, code, stationUsdg, walletUsdg, walletEth, walletTxs] = await Promise.all([
+  const [onChain, code, walletCode, stationUsdg, walletUsdg, walletEth, walletTxs] = await Promise.all([
     client.readContract({ address: GAS_STATION_FACTORY, abi: gasStationFactoryAbi, functionName: "predict", args: [wallet] }),
     client.getCode({ address: station }),
+    client.getCode({ address: wallet }),
     balanceOf(station),
     balanceOf(wallet),
     client.getBalance({ address: wallet }),
     client.getTransactionCount({ address: wallet }),
   ]);
   if (!isAddressEqual(onChain, station)) throw new Error(STATION_MISMATCH_MESSAGE);
-  return { wallet, station, made: Boolean(code && code !== "0x"), stationUsdg, walletUsdg, walletEth, walletTxs };
+  const has = (c: Hex | undefined) => Boolean(c && c !== "0x");
+  return { wallet, station, made: has(code), stationUsdg, walletUsdg, walletEth, walletTxs, walletHasCode: has(walletCode) };
 }
 
 /**
  * What a wallet needs next, from the chain alone, so the flow picks up wherever
- * it was left: `ready` it has gas, `make` and `pump` the station holds enough to
- * go on, `low` the station holds too little for the relay to act, and `fund`
- * nothing has reached it yet.
+ * it was left. USDG at the station comes first: a wallet that already has gas
+ * can still have more waiting there, and it needs a way out. `make` and `pump`
+ * the station holds enough to go on, `ready` the wallet has gas, `low` the
+ * station holds too little for the relay to act, `fund` nothing has reached it
+ * yet, and `contract` the relay can't help: the wallet has code and no gas.
  */
-export type FundingStep = "fund" | "low" | "make" | "pump" | "ready";
+export type FundingStep = "fund" | "low" | "make" | "pump" | "ready" | "contract";
 
-export function fundingStep(s: Pick<StationState, "made" | "stationUsdg" | "walletEth">): FundingStep {
-  if (s.walletEth >= WALLET_GAS_OK_WEI) return "ready";
+/** The wallet holds enough ETH for Borro. */
+export function walletHasGas(s: Pick<StationState, "walletEth">): boolean {
+  return s.walletEth >= WALLET_GAS_OK_WEI;
+}
+
+export function fundingStep(s: Pick<StationState, "made" | "stationUsdg" | "walletEth" | "walletHasCode">): FundingStep {
+  if (s.walletHasCode) return walletHasGas(s) ? "ready" : "contract";
   if (s.stationUsdg >= STATION_MIN_USDG) return s.made ? "pump" : "make";
+  if (walletHasGas(s)) return "ready";
   return s.stationUsdg > 0n ? "low" : "fund";
 }

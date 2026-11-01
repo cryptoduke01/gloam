@@ -12,7 +12,10 @@
  *    here, so this reads what really went out, not what was meant to
  *  - nothing is spent on a station with too little USDG, the trap being that
  *    pump on an empty station succeeds and does nothing, so a dry run passes it
- *  - nothing is spent for a wallet that can pay for itself, or above the gas limit
+ *  - nothing is spent on a wallet with code, whose code pump would run on the
+ *    relay's gas, on any send estimated over the cap, or above the gas limit
+ *  - one request per wallet and step at a time: copies sent together go out once
+ *  - USDG at a station can always be turned into ETH, whatever the wallet holds
  *  - a pump never takes more than the cap, and its minimum follows the pool's fill
  *  - spend limits: per wallet, per sender and per day across everyone
  *  - the factory naming another station stops everything
@@ -51,7 +54,6 @@ const {
   STATION_MISMATCH_MESSAGE,
   STATION_USDG,
   WALLET_GAS_OK_WEI,
-  WALLET_PAYS_OWN_GAS_WEI,
   fundingStep,
   gasStationAbi,
   gasStationFactoryAbi,
@@ -61,6 +63,7 @@ const {
 const {
   STATION_DAILY_DEFAULT,
   STATION_IP_HOURLY,
+  STATION_MAX_ESTIMATE,
   STATION_MAX_GAS_PRICE_WEI,
   STATION_OFF_MESSAGE,
   STATION_WALLET_DAILY,
@@ -73,6 +76,7 @@ const {
 const { RelayError, relayGasStation, relayStatus } = await import("../src/lib/relay/server");
 const { POST: relayPost } = await import("../src/app/api/relay/route");
 const { getNetwork } = await import("../src/lib/networks");
+const { hitRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
 const { relayGasStation: clientGasStation } = await import("../src/lib/relay/client");
 
 let passed = 0;
@@ -104,13 +108,17 @@ function freshWallet(): Address {
 
 // ---------------------------------------------------------------- fake chain
 
-type WalletChain = { made: boolean; stationUsdg: bigint; walletEth: bigint };
+type WalletChain = { made: boolean; stationUsdg: bigint; walletEth: bigint; code?: boolean };
 const chain = {
   wallets: new Map<string, WalletChain>(),
   gasPrice: 20_136_000n,
   /** What the factory's predict answers instead of the real address, when set. */
   wrongPredict: null as Address | null,
   fill: 442_345_771_441_961n,
+  /** What eth_estimateGas answers. */
+  estimate: 196_608n,
+  /** How the send's receipt reads: not there yet, or reverted. */
+  receipt: "none" as "none" | "reverted",
   /** The next read of chain state refuses. */
   relayBalance: 10n ** 18n,
 };
@@ -171,7 +179,8 @@ const BLOCK = {
 };
 
 function answer(method: string, params: unknown[]): unknown {
-  calls.push(method);
+  // the relay reads the receipt on its own after a send, so it stays out of `calls`
+  if (method !== "eth_getTransactionReceipt") calls.push(method);
   switch (method) {
     case "eth_chainId":
       return toHex(net.chainId);
@@ -184,12 +193,13 @@ function answer(method: string, params: unknown[]): unknown {
     case "eth_getBlockByNumber":
       return BLOCK;
     case "eth_estimateGas":
-      return "0x30000";
+      return toHex(chain.estimate);
     case "eth_getTransactionCount":
       return "0x0";
     case "eth_getCode": {
-      const hit = byStation(params[0] as string);
-      return hit?.c.made ? "0x363d3d37" : "0x";
+      const who = (params[0] as string).toLowerCase();
+      for (const [w, c] of chain.wallets) if (w.toLowerCase() === who) return c.code ? "0xef0100aa" : "0x";
+      return byStation(who)?.c.made ? "0x363d3d37" : "0x";
     }
     case "eth_getBalance": {
       const who = (params[0] as string).toLowerCase();
@@ -206,7 +216,23 @@ function answer(method: string, params: unknown[]): unknown {
       return "0x" + "ab".repeat(32);
     }
     case "eth_getTransactionReceipt":
-      return null;
+      if (chain.receipt === "none") return null;
+      return {
+        transactionHash: params[0],
+        transactionIndex: "0x0",
+        blockHash: "0x" + "12".repeat(32),
+        blockNumber: "0x1",
+        from: "0x" + "11".repeat(20),
+        to: GAS_STATION_FACTORY,
+        cumulativeGasUsed: "0x1",
+        gasUsed: "0x1",
+        effectiveGasPrice: "0x1",
+        contractAddress: null,
+        logs: [],
+        logsBloom: "0x" + "00".repeat(256),
+        status: "0x0",
+        type: "0x2",
+      };
     default:
       throw new Error(`fake chain: unexpected ${method}`);
   }
@@ -272,7 +298,7 @@ await test("the selectors the relay sends are the ones in the deployed bytecode"
 // ---------------------------------------------------------------- the next step
 
 await test("the next step comes from the chain alone", () => {
-  const s = (made: boolean, stationUsdg: bigint, walletEth = 0n) => fundingStep({ made, stationUsdg, walletEth });
+  const s = (made: boolean, stationUsdg: bigint, walletEth = 0n, walletHasCode = false) => fundingStep({ made, stationUsdg, walletEth, walletHasCode });
   assert.equal(s(false, 0n), "fund");
   assert.equal(s(true, 0n), "fund");
   assert.equal(s(false, STATION_MIN_USDG - 1n), "low");
@@ -280,8 +306,14 @@ await test("the next step comes from the chain alone", () => {
   assert.equal(s(false, STATION_MIN_USDG), "make");
   assert.equal(s(true, STATION_MIN_USDG), "pump");
   assert.equal(s(false, 0n, WALLET_GAS_OK_WEI), "ready");
-  assert.equal(s(true, 10n ** 6n, WALLET_GAS_OK_WEI), "ready");
-  assert.equal(s(true, 10n ** 6n, WALLET_GAS_OK_WEI - 1n), "pump");
+  assert.equal(s(true, STATION_MIN_USDG - 1n, WALLET_GAS_OK_WEI), "ready", "dust at the station changes nothing");
+  // more USDG at the station than the relay's minimum always has a way out, whatever the wallet holds
+  assert.equal(s(true, 10n ** 6n, WALLET_GAS_OK_WEI), "pump");
+  assert.equal(s(false, 10n ** 6n, 10n ** 18n), "make");
+  // a wallet with code gets no help from the relay, so it never shows a button that would be refused
+  assert.equal(s(false, 10n ** 6n, 0n, true), "contract");
+  assert.equal(s(true, 0n, 0n, true), "contract");
+  assert.equal(s(true, 10n ** 6n, WALLET_GAS_OK_WEI, true), "ready");
 });
 
 // ---------------------------------------------------------------- the flag
@@ -407,17 +439,96 @@ await test("no USDG, no gas spent: pump on an empty station would succeed and do
   }
 });
 
-await test("a wallet that can pay for itself gets nothing from the relay", async () => {
+await test("a wallet with gas can still turn what waits at its station into ETH", async () => {
+  // a second funding, or more than one pump's worth: without this the USDG would sit there with no way out
   const wallet = freshWallet();
-  setWallet(wallet, { made: true, stationUsdg: 10n ** 6n, walletEth: WALLET_PAYS_OWN_GAS_WEI });
+  setWallet(wallet, { made: true, stationUsdg: 10n ** 6n, walletEth: 10n ** 18n });
   forget();
-  await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, IP()), isRelayError("has_gas", 409));
-  assert.equal(sent.length, 0);
-  // just under it still gets its pump
-  const low = freshWallet();
-  setWallet(low, { made: true, stationUsdg: 10n ** 6n, walletEth: WALLET_PAYS_OWN_GAS_WEI - 1n });
-  await relayGasStation(net, { wallet: low, step: "pump" }, IP());
+  await relayGasStation(net, { wallet, step: "pump" }, IP());
   assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.to.toLowerCase(), predictStation(wallet).toLowerCase());
+});
+
+await test("a wallet with code gets nothing: pump would run its code on the relay's gas", async () => {
+  for (const [step, made] of [["make", false], ["pump", true]] as const) {
+    const wallet = freshWallet();
+    setWallet(wallet, { made, stationUsdg: 10n ** 6n, code: true });
+    forget();
+    await assert.rejects(relayGasStation(net, { wallet, step }, IP()), isRelayError("wallet_code", 409));
+    assert.equal(sent.length, 0);
+    assert.equal(simulated.length, 0, "not even a simulation");
+  }
+});
+
+await test("a send estimated over the cap is refused, for both steps: this is what a wallet that gains code after the checks hits", async () => {
+  for (const [step, made] of [["make", false], ["pump", true]] as const) {
+    const wallet = freshWallet();
+    setWallet(wallet, { made, stationUsdg: 10n ** 6n });
+    chain.estimate = STATION_MAX_ESTIMATE + 1n;
+    forget();
+    await assert.rejects(relayGasStation(net, { wallet, step }, IP()), isRelayError("station_gas", 422));
+    assert.equal(sent.length, 0);
+    // at the cap it goes out, and the lock was let go when nothing was sent
+    chain.estimate = STATION_MAX_ESTIMATE;
+    await relayGasStation(net, { wallet, step }, IP());
+    assert.equal(sent.length, 1);
+  }
+  chain.estimate = 196_608n;
+});
+
+await test("copies sent together go out once, and the rest are refused in_flight", async () => {
+  for (const [step, made] of [["pump", true], ["make", false]] as const) {
+    const wallet = freshWallet();
+    setWallet(wallet, { made, stationUsdg: 10n ** 6n });
+    forget();
+    const all = await Promise.allSettled([0, 1, 2, 3].map((i) => relayGasStation(net, { wallet, step }, `198.51.105.${i}`)));
+    assert.equal(all.filter((r) => r.status === "fulfilled").length, 1);
+    for (const r of all) if (r.status === "rejected") isRelayError("in_flight", 409)(r.reason);
+    assert.equal(sent.length, 1, "one transaction");
+  }
+});
+
+await test("the lock is per wallet and per step, goes when nothing went out, and stays once something did", async () => {
+  const wallet = freshWallet();
+  setWallet(wallet, { stationUsdg: 0n });
+  // refused: the next try gets the real answer, not in_flight
+  await assert.rejects(relayGasStation(net, { wallet, step: "make" }, IP()), isRelayError("no_usdg"));
+  await assert.rejects(relayGasStation(net, { wallet, step: "make" }, IP()), isRelayError("no_usdg"));
+  setWallet(wallet, { stationUsdg: 10n ** 6n });
+  await relayGasStation(net, { wallet, step: "make" }, IP());
+  // sent: a copy is refused however long after, until the lock expires
+  await assert.rejects(relayGasStation(net, { wallet, step: "make" }, IP()), isRelayError("in_flight", 409));
+  // the next step isn't held up by the one before it
+  setWallet(wallet, { made: true, stationUsdg: 10n ** 6n });
+  forget();
+  await relayGasStation(net, { wallet, step: "pump" }, IP());
+  assert.equal(sent.length, 1);
+  // and nobody else's wallet is
+  const other = freshWallet();
+  setWallet(other, { made: true, stationUsdg: 10n ** 6n });
+  await relayGasStation(net, { wallet: other, step: "pump" }, IP());
+  assert.equal(sent.length, 2);
+});
+
+await test("a send whose receipt shows it reverted lets go of the lock", async () => {
+  const wallet = freshWallet();
+  setWallet(wallet, { made: true, stationUsdg: 10n ** 6n });
+  chain.receipt = "reverted";
+  await relayGasStation(net, { wallet, step: "pump" }, IP());
+  let freed = false;
+  for (let i = 0; i < 40 && !freed; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    forget();
+    freed = await relayGasStation(net, { wallet, step: "pump" }, IP()).then(
+      () => true,
+      (e: unknown) => {
+        isRelayError("in_flight", 409)(e);
+        return false;
+      }
+    );
+  }
+  chain.receipt = "none";
+  assert.ok(freed, "the lock stayed");
 });
 
 await test("each step runs once, in order", async () => {
@@ -499,11 +610,11 @@ await test("the factory naming another station stops everything", async () => {
 });
 
 await test("the rules, one by one", () => {
-  const ok = { made: false, stationUsdg: STATION_MIN_USDG, walletEth: 0n };
+  const ok = { made: false, stationUsdg: STATION_MIN_USDG, walletHasCode: false };
   assert.equal(stationRefusal("make", ok), null);
   assert.equal(stationRefusal("pump", { ...ok, made: true }), null);
-  // the wallet's gas is checked first, so a funded wallet hears the useful reason
-  assert.equal(stationRefusal("make", { ...ok, stationUsdg: 0n, walletEth: WALLET_PAYS_OWN_GAS_WEI })?.code, "has_gas");
+  // the wallet's code is checked first: nothing about its station matters then
+  assert.equal(stationRefusal("make", { ...ok, stationUsdg: 0n, walletHasCode: true })?.code, "wallet_code");
   // an empty station is checked before made, so make never runs for nothing
   assert.equal(stationRefusal("make", { ...ok, made: true, stationUsdg: 0n })?.code, "no_usdg");
 });
@@ -513,11 +624,15 @@ await test("the rules, one by one", () => {
 await test("a wallet gets a few sends a day", async () => {
   const wallet = freshWallet();
   setWallet(wallet, { made: true, stationUsdg: 10n ** 6n });
+  // the lock would stop a second send first: the day's count is filled by hand
+  for (let i = 0; i < STATION_WALLET_DAILY - 1; i++) await hitRateLimit(wallet.toLowerCase(), "relay-station-wallet", 99, Date.now(), 86_400);
   forget();
-  for (let i = 0; i < STATION_WALLET_DAILY; i++) await relayGasStation(net, { wallet, step: "pump" }, `198.51.101.${i}`);
-  assert.equal(sent.length, STATION_WALLET_DAILY);
-  await assert.rejects(relayGasStation(net, { wallet, step: "pump" }, "198.51.101.200"), isRelayError("station_wallet_limit", 429));
-  assert.equal(sent.length, STATION_WALLET_DAILY);
+  await relayGasStation(net, { wallet, step: "pump" }, "198.51.101.1");
+  assert.equal(sent.length, 1, "the last one of the day");
+  const next = wallet;
+  setWallet(next, { made: false, stationUsdg: 10n ** 6n });
+  await assert.rejects(relayGasStation(net, { wallet: next, step: "make" }, "198.51.101.2"), isRelayError("station_wallet_limit", 429));
+  assert.equal(sent.length, 1);
 });
 
 await test("a sender gets a few requests an hour, across wallets", async () => {
