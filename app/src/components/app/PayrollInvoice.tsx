@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { createPortal } from "react-dom";
 import { Mark } from "@/components/Logo";
 import { shortAddress } from "@/lib/chain";
@@ -31,6 +32,7 @@ export function PayrollInvoice({
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const number = invoiceNumber(batch);
   const paid = batch.rows.filter((r) => r.status === "paid");
   const total = paid.reduce((s, r) => s + BigInt(r.amount), 0n);
@@ -43,18 +45,14 @@ export function PayrollInvoice({
   // stays 0.004 and every line adds up to the total shown.
   const money = (raw: bigint | string) => `${formatAssetAmountExact(raw, batch.asset, 2)} ${symbol}`;
 
+  useModalFocus(dialog, onClose, { initial: closeRef });
+
   useEffect(() => {
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   function downloadPdf() {
     // The browser names the PDF after the page title, so borrow the invoice number.
@@ -70,6 +68,7 @@ export function PayrollInvoice({
 
   return createPortal(
     <div
+      ref={dialog}
       id="gl-invoice"
       className="fixed inset-0 z-[200] overflow-y-auto"
       role="dialog"

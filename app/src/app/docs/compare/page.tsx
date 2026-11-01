@@ -225,7 +225,7 @@ export default function DocsComparePage() {
       </p>
       <p>
         <strong>Where they win:</strong> private shared state on Solana.{" "}
-        <strong>Where Gloam differs:</strong> no cluster to trust, and it runs on
+        <strong>Where Gloam differs:</strong> no cluster to trust, and it runs on{" "}
         {MAINNETS}.
       </p>
 

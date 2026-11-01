@@ -481,7 +481,7 @@ function ActionTile({
   return (
     <Link
       href={`/app/vault${vaultActionSearch(action.id, "")}`}
-      className={`group ${layout} transition-colors duration-200 hover:bg-surface/60 focus-visible:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground/30`}
+      className={`group ${layout} transition-colors duration-200 hover:bg-surface/60 focus-visible:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground/50`}
     >
       {body}
     </Link>

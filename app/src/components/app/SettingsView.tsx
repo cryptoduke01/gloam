@@ -166,7 +166,7 @@ function Chip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`h-8 rounded-full px-3.5 capitalize transition-colors duration-200 ${
+      className={`gl-tap h-8 rounded-full px-3.5 capitalize transition-colors duration-200 ${
         active
           ? "bg-panel text-foreground shadow-card"
           : "text-mute hover:text-foreground"

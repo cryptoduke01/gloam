@@ -137,7 +137,7 @@ const verified = proofOk && live;`}</code>
           you mean to.
         </li>
         <li>
-          <strong>Trustless to verify.</strong> The recipient checks the math and
+          <strong>Checked, not trusted.</strong> The recipient checks the math and
           the chain themselves; they do not trust the holder or Gloam.
         </li>
       </ul>
