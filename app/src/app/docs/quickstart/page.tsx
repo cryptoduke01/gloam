@@ -279,7 +279,8 @@ await wallet.writeContract({
       <p>
         Mainnet is beta software. It runs on the final keys
         from the 13-contributor ceremony, under beta deposit limits, after an
-        internal review; an external audit is planned. The testnets run on
+        internal review. Kann Audits has since reviewed the vault contracts (
+        <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The testnets run on
         dev-ceremony keys with test funds. Everything here is real: real proofs,
         real on-chain state, no mocks. Private swaps run in the app on both
         mainnets (<Link href="/docs/private-swaps">private swaps</Link>); the

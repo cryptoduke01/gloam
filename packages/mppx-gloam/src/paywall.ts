@@ -4,7 +4,7 @@
  * 402 with a challenge, or a 200 with `withReceipt`), so moving to mppx later
  * is a swap of the factory, not a rewrite of the routes.
  *
- *   const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit } })
+ *   const paywall = createGloamPaywall({ secretKey, server: { receiveKey, chain, prove, submit, beforeSubmit } })
  *   const r = await paywall.charge({ amount: "0.01" })(request)
  *   if (r.status === 402) return r.challenge
  *   return r.withReceipt(Response.json(data))
@@ -26,7 +26,7 @@ import {
   type GloamChargeRequest,
   type GloamMode,
 } from "./charge.js";
-import { settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig } from "./server.js";
+import { assertKeepsFreshNotes, settleGloamCharge, validateGloamCharge, type GloamChargeServerConfig } from "./server.js";
 import {
   createPaymentChallenge,
   extractPaymentCredential,
@@ -74,6 +74,7 @@ export type GloamPaywallResult =
   | { status: 200; receipt: GloamChargeReceipt; withReceipt: (response: Response) => Response };
 
 export function createGloamPaywall(config: GloamPaywallConfig) {
+  assertKeepsFreshNotes(config.server);
   const net = resolveNetwork(config.network);
   const known = config.decimals ?? assetDecimals(config.currency ?? net.currency);
   if (known === undefined) throw new Error(`Pass decimals for currency ${config.currency}.`);

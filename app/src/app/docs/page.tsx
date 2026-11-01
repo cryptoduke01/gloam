@@ -44,8 +44,9 @@ export default function DocsOverviewPage() {
         Mainnet is <strong>beta software</strong>. It uses
         the final keys from a 13-contributor trusted setup, and beta deposit
         limits cap what goes in. The code was reviewed internally before
-        launch; an external audit is planned. Direct deposits and private payments
-        are free, and cashing out costs 0.5%. The Robinhood Chain and Tempo
+        launch, and Kann Audits has since reviewed the vault contracts (
+        <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. Deposits and private payments are
+        free, and cashing out costs 0.5%. The Robinhood Chain and Tempo
         testnets keep <strong>development proving keys</strong>; Base Sepolia
         and Ethereum Sepolia run the final keys. Details: <Link href="/docs/chain">Networks</Link>.
       </p>
@@ -164,8 +165,7 @@ export default function DocsOverviewPage() {
           Pyth / RedStone wired)
         </li>
         <li>
-          <Link href="/docs/production">An external audit and a multisig owner</Link>{" "}
-          (both planned)
+          <Link href="/docs/production">A multisig owner</Link> (planned)
         </li>
         {NEXT_MAINNETS ? <li>{NEXT_MAINNETS} mainnet, next (their testnets are live)</li> : null}
       </ul>

@@ -45,7 +45,7 @@ All three share one core: a Poseidon note scheme, a depth-20 incremental Merkle 
 
 ## Mainnet beta
 
-Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) since Wednesday 21 October 2026, 13:00 UTC, and on Base mainnet (`8453`) and Ethereum mainnet (`1`) since 26 October 2026. The vault has the same address on all four, `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`. This is beta software. It was reviewed internally before launch (20 October 2026, no Critical or High findings open), and an independent review on 23 October found no new exploitable contract flaw and eight app issues, whose fixes are being merged. An external audit is planned, not done.
+Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) since Wednesday 21 October 2026, 13:00 UTC, and on Base mainnet (`8453`) and Ethereum mainnet (`1`) since 26 October 2026. The vault has the same address on all four, `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194`. This is beta software. It was reviewed internally before launch (20 October 2026, no Critical or High findings open), and an independent review on 23 October found no new exploitable contract flaw and eight app issues, whose fixes are being merged. Kann Audits reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues; the swap routers, circuits, app and relay were not part of it.
 
 | | Robinhood Chain `4663` | Tempo `4217` | Base `8453` | Ethereum `1` |
 | --- | --- | --- | --- | --- |
@@ -141,7 +141,7 @@ Ethereum Sepolia (`11155111`) runs the mainnet vault the same way as Base Sepoli
 
 Privacy has to be checkable and correct before mainnet. Mainnet is beta software, and this is where it stands.
 
-- **Where review stands.** An internal pre-mainnet review finished on 20 October 2026 with no Critical or High findings open. An independent review on 23 October found no new exploitable contract flaw and eight issues in the app (amount entry, saving notes, payroll resume and addresses, API key rotation, and two displayed figures), and the fixes are being merged. An external audit is planned, not done. Until then, beta deposit limits cap what each pool can take in.
+- **Where review stands.** An internal pre-mainnet review finished on 20 October 2026 with no Critical or High findings open. An independent review on 23 October found no new exploitable contract flaw and eight issues in the app (amount entry, saving notes, payroll resume and addresses, API key rotation, and two displayed figures), and the fixes are being merged. Kann Audits reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. Its findings are acknowledged and not fixed: the vault cannot be upgraded, so changes land in the next vault. The swap routers, circuits, app and relay were not part of that review, and the routers have only had internal review. Beta deposit limits cap what each pool can take in.
 - **Earlier reviews.** Kensho reviews of the contracts and an independent review of the circuits (latest 2026-10-11) found no way to steal, inflate, double-spend or redirect pool funds. What they did find is fixed or switched off: an earlier critical drain in the first sealed pool (drained and de-published), value binding at deposit (C1), swap solvency (H1, the sealed trade is retired), an overclaiming proof checker and a copyable legacy disclosure. Every finding and its status: [`contracts/audit/REMEDIATION.md`](./contracts/audit/REMEDIATION.md).
 - **No admin withdraw, timelocked rule changes.** There is no function the team can call to take pooled funds, and notes leave only through an unshield proof. The mainnet pools end setup in the same deploy run that creates them (`endSetup()`), so a new verifier, a raised deposit limit, a new asset or a higher fee must be queued on-chain and waits a public 3-day delay before it can run (`queueChange`). Lowering a limit or closing deposits works at once. Verify `setupMode() == false` on the pools listed below. Each vault's ownership moves to [`VaultOwnerGuard`](./contracts/src/VaultOwnerGuard.sol), which forwards only limit and fee changes and the sweep of stray native coin: on a vault it holds, `setVerifier` can never run again. Read `owner()` on a vault to see which holds it.
 - **Selective disclosure, not a mixer.** Prove balance or a payment to a counterparty or auditor without revealing everything. The right posture for a regulated-sponsor chain.
@@ -267,7 +267,7 @@ Earlier testnet pools are superseded and listed in [`contracts/ARCHITECTURE.md`]
 
 ## Guardrails
 
-- Mainnet is beta: deposit limits on, reviewed internally, external audit planned. Say so plainly.
+- Mainnet is beta: deposit limits on, reviewed internally, and Kann Audits reviewed the vault contracts only. Say so plainly.
 - The sealed trade stays retired. Private swaps are live on mainnet: always say the tokens and amounts are public.
 - Real privacy only. Never fake or mock a private success.
 - Selective disclosure over opacity. Verifiable, not just hidden.

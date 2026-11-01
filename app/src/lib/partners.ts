@@ -272,17 +272,20 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
     createdAt: now,
     updatedAt: now,
   };
+  // The account first, then the wallet's claim on it: a claim with no account behind it locks the wallet out.
+  await kv1(["SET", k("partner", partner.id), JSON.stringify(partner)]);
   const [claimed] = await kv([["SET", k("owner", partner.owner), partner.id, "NX"]]);
   if (claimed !== "OK") {
     // Two tabs signed up at once: keep the first account.
     const first = await getPartnerByOwner(owner);
-    if (first) return first;
-    throw new PartnerError("Could not create the account. Try again.", 500, "internal");
+    if (first) {
+      await kv1(["DEL", k("partner", partner.id)]).catch(() => undefined);
+      return first;
+    }
+    // A claim with nothing behind it, from a signup that stopped halfway: this one takes its place.
+    await kv1(["SET", k("owner", partner.owner), partner.id]);
   }
-  await kv([
-    ["SET", k("partner", partner.id), JSON.stringify(partner)],
-    ["SADD", k("partners"), partner.id],
-  ]);
+  await kv1(["SADD", k("partners"), partner.id]);
   return partner;
 }
 

@@ -431,10 +431,12 @@ export default function DocsPrivacyPage() {
           contributor, so testnet is for practice only.
         </li>
         <li>
-          <strong>Internal review only.</strong> Several rounds, with fixes
-          deployed, and a review before launch that finished on 20 October with
-          no Critical or High findings open. An external audit is planned; until
-          then, beta deposit limits cap how much each pool can hold: 500 per
+          <strong>External review covers the vault only.</strong> Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues.
+          The swap routers, circuits, app and relay were not part of it. Before
+          that came several internal rounds, with fixes deployed, and a review
+          before launch that finished on 20 October with no Critical or High
+          findings open. Beta deposit limits cap how much each pool can hold: 500 per
           deposit and 25,000 in total for each stablecoin, and 25,000 per deposit
           and 250,000 in total for $GLOAM.
         </li>

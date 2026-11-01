@@ -310,9 +310,12 @@ export default function DocsThreatModelPage() {
           limits cap what each pool can take while it is young.
         </li>
         <li>
-          <strong>Internal review only.</strong> Several internal rounds, with fixes
-          deployed. The pre-mainnet review finished on 20 October 2026 with no
-          Critical or High findings open. An external audit is planned, not done.
+          <strong>External review covers the vault only.</strong> Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues.
+          Its findings are acknowledged and not fixed; changes land in the next vault.
+          The swap routers, circuits, app and relay were not part of it. Before that
+          came several internal rounds, with fixes deployed. The pre-mainnet review
+          finished on 20 October 2026 with no Critical or High findings open.
         </li>
         <li>
           <strong>Thin anonymity set.</strong> The mainnet pools are new, so there are

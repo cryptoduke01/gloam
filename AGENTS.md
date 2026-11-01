@@ -8,7 +8,7 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 - Why the tech fits: a payment has one owner, so the owner proves it on their own device with zero-knowledge proofs and nobody else holds a key. Committee systems (Zama FHE, Arcium MPC) and operator systems (Tempo Zones) suit shared secrets, not single-owner payments.
 - Not new cryptography: the Zcash-lineage pool. New, as far as our research found: the payroll total proof, proofs scoped to one reader with an expiry (`context` input), and private payments for agents (MPP method proposal, x402, MCP with spending limits).
 - Stock tokens: Robinhood Chain testnet only, held and sent privately there. Private swaps are live on Robinhood Chain and Tempo mainnet: a swap goes from the private balance through a one-time escrow to a public DEX and back. Who swapped stays private; the pair and the amounts are public. The old sealed trade stays retired.
-- Never claim "first" or "only". Mainnet is live in beta: say it has beta deposit limits, was reviewed internally (20 October 2026) and that an external audit is planned. Never say "audited". Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
+- Never claim "first" or "only". Mainnet is live in beta: say it has beta deposit limits, was reviewed internally (20 October 2026) and that Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium issues. Never say "fully audited", "audited and safe" or "audited protocol", never imply the routers, circuits, app or relay were covered, and never say its findings are fixed. Never say a swap hides its amounts, or call it anonymous or untraceable. $GLOAM: facts only (a mainnet pool asset on Robinhood Chain; half of Gloam's fees buy it back). Say "no admin withdraw, timelocked rule changes", not "no admin" or "trustless".
 - Comparison and honest gaps: `/docs/compare`, `/docs/privacy-model`, `/docs/production`. Every address on every network, read live and as a CSV: `/verify#contracts` (from `app/src/lib/contractDirectory.ts`).
 
 ## Canonical
@@ -41,7 +41,8 @@ Mainnet (final keys, beta deposit limits: 500 per deposit and 25,000 total per s
 
 ## Audits
 
-- Reviews so far are internal: two rounds with fixes deployed, then the pre-mainnet review of 20 October 2026, closed with no Critical or High findings open. The multi-party ceremony is done (13 contributors, drand round 6561386, release `ceremony-final`). An external audit is planned, not done.
+- Internal: two rounds with fixes deployed, then the pre-mainnet review of 20 October 2026, closed with no Critical or High findings open. The multi-party ceremony is done (13 contributors, drand round 6561386, release `ceremony-final`).
+- External: Kann Audits reviewed the vault contracts at commit `aac9e18` (report dated 1 November 2026; page `/security`, file `app/public/audits/gloam-kann-security-review-2026-11-01.pdf`, keep that path if it is reissued). No Critical, High or Medium issues. Findings are acknowledged and not fixed: changes land in the next vault. The swap routers, `GloamPayMemo`, generated verifiers, circuits, app, relay, MCP and SDK were out of scope. The finding counts live only in `FINDINGS` in `app/src/app/security/page.tsx`; other copy says "no Critical, High or Medium" and gives no total.
 
 ## Rules
 

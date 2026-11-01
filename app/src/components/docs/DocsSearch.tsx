@@ -248,6 +248,11 @@ const PAGE_META: Record<string, PageMeta> = {
     keywords: ["bridge", "deposit", "relay", "bitcoin", "btc", "solana", "tron", "base", "ethereum", "exchange", "deposit address", "refund", "fee", "cross-chain"],
     headings: ["Straight into your private balance", "Bitcoin, Tron and exchanges", "What it costs", "What is public", "Try it"],
   },
+  "/docs/fresh-wallet": {
+    description: "Fund a new wallet from your private balance, with ETH for gas, and use Borro on Robinhood Chain without the position pointing to your main wallet.",
+    keywords: ["borro", "fresh wallet", "new wallet", "gas station", "gas", "short", "stock lending", "loan", "robinhood chain", "cash out", "pump"],
+    headings: ["The steps", "Why gas takes its own step", "What is public and what is private", "What can still link your wallets", "What it costs", "Coming back", "About Borro", "Linking to this flow"],
+  },
   "/docs/encryption": {
     description: "Add money, hold it privately, cash out: the whole loop in plain words.",
     keywords: ["shield", "deposit", "withdraw", "cash out", "private balance", "vault", "how it works"],
@@ -329,7 +334,7 @@ const PAGE_META: Record<string, PageMeta> = {
   },
   "/docs/production": {
     description: "What mainnet cleared before launch, and what is still ahead.",
-    keywords: ["mainnet", "launch", "ceremony", "keys", "security", "audit", "review", "multisig", "beta limits", "timelock", "checklist"],
+    keywords: ["mainnet", "launch", "ceremony", "keys", "security", "audit", "kann", "review", "multisig", "beta limits", "timelock", "checklist"],
     headings: [
       "Why this page exists",
       "Ceremony checklist (keys)",

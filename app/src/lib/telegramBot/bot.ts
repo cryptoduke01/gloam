@@ -277,6 +277,11 @@ export function isOwner(u: { id: number; username?: string }, c: BotConfig): boo
   return Boolean(u.username && c.owners.handles.includes(u.username.toLowerCase()));
 }
 
+/** Owner chats to write to. One stored for someone no longer an owner is left out (a private chat's id is the user's id). */
+async function currentOwnerChats(c: BotConfig): Promise<{ chatId: number; username: string }[]> {
+  return (await ownerChats().catch(() => [])).filter((o) => isOwner({ id: o.chatId, username: o.username || undefined }, c));
+}
+
 /**
  * An admin: by id first (TELEGRAM_ADMIN_IDS, or an id given with the handle),
  * then by handle, but only for an admin with no id on file, since a handle
@@ -483,7 +488,7 @@ async function noteBan(c: BotConfig, who: TgUser, why: string, text: string, top
   const what = defanged(text);
   const where = topic === null ? "as they joined" : `in ${topicName(topic)}`;
   const how = guess ? " (the model's call, not a fixed rule, so worth a look)" : "";
-  for (const o of await ownerChats().catch(() => [])) {
+  for (const o of await currentOwnerChats(c)) {
     await sendMessage(
       o.chatId,
       `I removed ${name}${who.username ? ` (@${who.username})` : ""} from the group ${where}, for ${BAN_WHY[why] ?? why}${how}.` +
@@ -647,7 +652,7 @@ async function onLead(msg: TgMessage, from: TgUser, c: BotConfig, topic: number,
   const what = defanged(text, 300);
   const link = messageLink(msg);
   const where = known ? `It's still up${link ? `: ${escapeHtml(link)}` : "."}` : "I took it down so it isn't pitched in public, so reply to them directly if it's worth it.";
-  for (const o of await ownerChats().catch(() => [])) {
+  for (const o of await currentOwnerChats(c)) {
     await sendMessage(o.chatId, `A business ask in ${topicName(topic)} from ${who}:${what ? `\n"${escapeHtml(what)}"` : ""}\n\n${where}`, { parseMode: "HTML" });
   }
   return known ? "quiet" : "acted";
@@ -668,7 +673,7 @@ async function onLinkAfterProblem(msg: TgMessage, from: TgUser, c: BotConfig, to
   const name = escapeHtml(cleanName(from.first_name, "someone"));
   const who = from.username ? `${name} (@${escapeHtml(from.username)})` : `<a href="tg://user?id=${Math.trunc(from.id)}">${name}</a> (no username, id ${from.id})`;
   const what = defanged(text, 300);
-  for (const o of await ownerChats().catch(() => [])) {
+  for (const o of await currentOwnerChats(c)) {
     await sendMessage(
       o.chatId,
       `${who} ${kind === "asked" ? "asked whether a link is real" : "described a problem, then shared a link"} in ${topicName(topic)}. It may be a scam they were sent, so I took the link down and left them in the group:${what ? `\n"${escapeHtml(what)}"` : ""}`,
@@ -1094,7 +1099,7 @@ async function onReport(msg: TgMessage, from: TgUser, target: TgMessage | null, 
   const link = messageLink(target);
   const what = memoryText(targetText) ?? (imageRef(target) || target.document ? "[a picture or GIF]" : "[a message]");
   await logEscalation({ at: Date.now(), name, topic: topicName(topic), text: `Report about ${cleanName(who.first_name)}: ${what}`.slice(0, 200), link }).catch(() => {});
-  const chats = await ownerChats().catch(() => []);
+  const chats = await currentOwnerChats(c);
   for (const o of chats) {
     await sendMessage(
       o.chatId,
@@ -1256,7 +1261,7 @@ async function onGroupMessage(msg: TgMessage, c: BotConfig, edited = false): Pro
   const modTarget = trusted && !edited ? explicitReply(msg) : null;
   if (modTarget) {
     const tagged = mentionsBot(msg, me) || namesPersona(text, c.persona);
-    const ask = moderationAsk(withoutTag(text, me.username), cmd && !cmd.forOther ? cmd.name : null, tagged);
+    const ask = moderationAsk(withoutTag(text, me.username), cmd && !cmd.forOther ? cmd.name : null, tagged, c.persona);
     if (ask) {
       await moderate(msg, modTarget, ask.remove, c, me, threadId);
       return;

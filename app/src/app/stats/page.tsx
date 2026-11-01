@@ -123,7 +123,9 @@ function HeldList({ stats }: { stats: PublicStats }) {
             <span className="tnum shrink-0 text-right">
               <span className="block text-[15px] text-foreground">{r.heldUsd == null ? "No price" : fmtUsd(r.heldUsd)}</span>
               <span className="block text-[12.5px] text-mute">
-                {fmtHeld(r.held, r.stable)} {r.symbol}
+                {/* `stable` means a $1 coin, where the amount is the dollar figure. `held` is cut to two
+                    decimals and dollars are rounded, so using it here would read a cent apart. */}
+                {r.stable && r.heldUsd != null ? fmtHeld(String(r.heldUsd), true) : fmtHeld(r.held, r.stable)} {r.symbol}
               </span>
             </span>
           </li>

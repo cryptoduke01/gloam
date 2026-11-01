@@ -711,7 +711,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 
 ## Guardrails and honesty
 
-- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open; an external audit is planned and not done yet. Start small.
+- **Mainnet is beta.** Robinhood Chain (`4663`), Tempo (`4217`), Base (`8453`) and Ethereum (`1`) run on the final keys of the 13-contributor trusted setup, with beta deposit limits. The contracts and circuits had an internal pre-mainnet review on 20 October 2026 with no Critical or High findings open. Kann Audits then reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues. The circuits and this SDK were not part of that review. Start small.
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
 - **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.

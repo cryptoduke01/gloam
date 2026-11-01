@@ -524,6 +524,7 @@ export function ShieldView() {
       markOnboardingStep("shield");
       markOnboardingStep("faucet");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- executeShield reads this render's form; a new one every render must not run the receipt again
   }, [
     isSuccess,
     hash,
@@ -1046,7 +1047,7 @@ export function ShieldView() {
     ? null
     : walletBalance === BigInt(0)
       ? `No ${symbol} in this wallet`
-      : !amount.trim() || (typedValue !== null && typedValue <= BigInt(0))
+      : !amount.trim() || (typedValue === null && !amountProblem) || (typedValue !== null && typedValue <= BigInt(0))
         ? "Enter an amount"
         : amountProblem
           ? "Enter a valid amount"
@@ -1538,20 +1539,9 @@ function AssetMark({
   return <TokenLogo id={id} symbol={symbol} size={size} />;
 }
 
-/** The ETH mark, monochrome on an ink squircle (flips in dark mode). */
+/** ETH's real mark, the same one Portfolio and every token list show. */
 function EthMark({ size = 28 }: { size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-grid shrink-0 place-items-center rounded-[30%] bg-ink text-on-ink"
-      style={{ width: size, height: size }}
-    >
-      <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" fill="none">
-        <path d="M12 2.5l6 9.75-6 3.5-6-3.5 6-9.75z" fill="currentColor" />
-        <path d="M6 13.6l6 3.5 6-3.5-6 8.4-6-8.4z" fill="currentColor" opacity="0.7" />
-      </svg>
-    </span>
-  );
+  return <TokenLogo id="eth" symbol="ETH" size={size} />;
 }
 
 function EyeIcon({ off = false }: { off?: boolean }) {

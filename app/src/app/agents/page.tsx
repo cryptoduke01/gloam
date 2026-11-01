@@ -351,8 +351,11 @@ export default function AgentsPage() {
             <div className="border-t border-foreground pt-5">
               <p className="text-[18px] leading-snug tracking-[-0.01em]">Mainnet, in beta</p>
               <p className="mt-3 text-[14px] leading-relaxed text-mute">
-                Beta deposit limits apply. The code was reviewed internally and
-                an external audit is planned, so start with small amounts.
+                Beta deposit limits apply. Kann Audits reviewed the vault contracts (
+                <Link href="/security" className="text-soft underline decoration-line-strong underline-offset-4 transition-colors hover:text-foreground">
+                  report
+                </Link>
+                ) and found no Critical, High or Medium issues. It is still beta, so start with small amounts.
               </p>
             </div>
             <div className="border-t border-foreground pt-5">

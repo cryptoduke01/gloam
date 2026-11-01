@@ -798,8 +798,10 @@ export default function DocsNetworksPage() {
         the final keys from the multi-party ceremony that closed on 17 October
         with 13 contributors, and beta deposit limits cap what the pools take.
         The code was reviewed internally before launch; that review finished on
-        20 October with no Critical or High findings open. An external audit is
-        planned, not done. The mainnet pools are new, so their anonymity set is
+        20 October with no Critical or High findings open. Kann Audits then
+        reviewed the vault contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High
+        or Medium issues; the swap routers, circuits, app and relay were not
+        part of it. The mainnet pools are new, so their anonymity set is
         thin at first. The testnets run on development keys with test funds, and
         stay open for practice. See the{" "}
         <Link href="/docs/production">production gate</Link> for what is done

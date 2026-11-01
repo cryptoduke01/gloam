@@ -29,6 +29,7 @@ export function useShieldTree() {
   // a failed sync tries again by itself a few times (1 s, 3 s, 9 s, with jitter)
   const retries = useRef(0);
   const retryTimer = useRef<number | null>(null);
+  const latestRefresh = useRef<(auto?: boolean) => Promise<void>>(async () => {});
   // a sync that started before a network switch must not replace the new network's tree
   const shownKey = useRef(network.key);
   useEffect(() => {
@@ -73,13 +74,17 @@ export function useShieldTree() {
       if (retries.current < 3) {
         const wait = 1_000 * 3 ** retries.current + Math.random() * 500;
         retries.current++;
-        retryTimer.current = window.setTimeout(() => void refresh(true), wait);
+        retryTimer.current = window.setTimeout(() => void latestRefresh.current(true), wait);
       }
     } finally {
       if (shownKey.current === key) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network.key, settled]);
+
+  useEffect(() => {
+    latestRefresh.current = refresh;
+  }, [refresh]);
 
   useEffect(() => {
     // Start on the next microtask so the effect body itself sets no state.

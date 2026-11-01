@@ -307,7 +307,7 @@ export function Select<V extends string | number>({
 
   const trigger =
     variant === "pill"
-      ? `flex h-11 items-center gap-2 rounded-full bg-panel pr-3 text-[15px] font-medium text-foreground shadow-card transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 aria-expanded:ring-2 aria-expanded:ring-foreground/15 disabled:cursor-not-allowed disabled:opacity-45 ${
+      ? `flex h-11 items-center gap-2 rounded-full bg-panel pr-3 text-[15px] font-medium text-foreground shadow-card transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 aria-expanded:ring-2 aria-expanded:ring-foreground/15 disabled:cursor-not-allowed disabled:opacity-45 ${
           icon ? "pl-1.5" : "pl-3.5"
         }`
       : `gl-input relative flex items-center gap-2.5 pr-9 text-left disabled:cursor-not-allowed disabled:opacity-45 ${

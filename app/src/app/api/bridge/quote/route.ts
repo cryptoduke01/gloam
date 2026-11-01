@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Relay's quote JSON is read field by field and checked below */
 import { NextResponse } from "next/server";
 import { formatUnits, isAddress, parseUnits } from "viem";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
@@ -17,6 +18,7 @@ import {
   validRefundAddress,
   type BridgeQuote,
 } from "@/lib/bridge";
+import { noteRelayQuote } from "@/lib/relayLedger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -178,5 +180,8 @@ export async function POST(req: Request) {
     timeSec: Number(data?.details?.timeEstimate ?? 0),
     bitcoin: chain.kind === "bvm",
   };
+  // For /admin's count (lib/relayLedger), with no wallet. A swap is left out: the
+  // panel re-prices it as the amount is typed, so most never run.
+  if (apiKey && !chain.swap) await noteRelayQuote(quote.requestId, quote.depositAddress);
   return NextResponse.json({ ok: true, data: quote }, { headers: { "Cache-Control": "no-store" } });
 }

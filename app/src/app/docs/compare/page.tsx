@@ -225,7 +225,7 @@ export default function DocsComparePage() {
       </p>
       <p>
         <strong>Where they win:</strong> private shared state on Solana.{" "}
-        <strong>Where Gloam differs:</strong> no cluster to trust, and it runs on
+        <strong>Where Gloam differs:</strong> no cluster to trust, and it runs on{" "}
         {MAINNETS}.
       </p>
 
@@ -261,7 +261,7 @@ export default function DocsComparePage() {
       </p>
       <p>
         <strong>Where they win:</strong> years live, a far bigger crowd of
-        notes, and external audits. <strong>Where Gloam differs:</strong>{" "}
+        notes, and more external audits. <strong>Where Gloam differs:</strong>{" "}
         proofs for one reader that expire, payroll total proofs, agent payments,
         and {MAINNETS}.
       </p>
@@ -325,7 +325,12 @@ export default function DocsComparePage() {
                 were not provided and were out of scope. The circuits are not published (
                 <Src href={NM.audits}>audits</Src>)
               </td>
-              <td>Internal reviews; an external audit is in progress. The circuits are public in the repo</td>
+              <td>
+                External review of the vault contracts (Kann Audits,{" "}
+                <Link href="/security">report, 1 November 2026</Link>), with no Critical, High or Medium
+                issues found. The swap routers and circuits were not part of it. The circuits are public in
+                the repo
+              </td>
             </tr>
             <tr>
               <td>Fees</td>
@@ -410,9 +415,12 @@ export default function DocsComparePage() {
           beta deposit limits on what the pools take. It is beta software.
         </li>
         <li>
-          <strong>Internal review only.</strong> Several rounds, with fixes
-          deployed, and a review before launch that finished on 20 October with
-          no Critical or High findings open. An external audit is in progress.
+          <strong>External review covers the vault only.</strong> Kann Audits reviewed the vault
+          contracts (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues.
+          The swap routers, circuits, app and relay were not part of it. Before
+          that came several internal rounds, with fixes deployed, and a review
+          before launch that finished on 20 October with no Critical or High
+          findings open.
         </li>
         <li>
           <strong>Small crowd.</strong> The mainnet pools are new, so the

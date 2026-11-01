@@ -889,6 +889,10 @@ export function impersonates(u: { first_name?: string; last_name?: string; usern
 
 export type ModAction = { remove: boolean };
 
+/** How an order opens: an optional please or "can you", then the verb, with its object where the word alone means something else. */
+const MOD_ORDER =
+  /^(?:(?:please|pls|plz|ok|okay)[\s,]+)*(?:(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+|pls\s+)?|go\s+ahead\s+and\s+)?(?:delete|remove|kick(?!\s+off\b)|ban|boot|block\s+(?:him|her|them|this|that)|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out|take\s+(?:it|this)\s+down)\b/;
+
 /**
  * Rose's manual moderation commands. Rose owns them: when an admin types one,
  * Rose acts and Glim stays out of it, so one command never gets two bots
@@ -905,17 +909,22 @@ export const ROSE_COMMANDS = new Set([
  * (delete it), /spam (delete it and remove the person), or tagging the helper
  * with "delete", "remove", "kick" or "ban". Rose's own commands (/ban, /kick,
  * /del and the rest) are Rose's: the bot ignores them before getting here.
- * Null when it is not that.
+ * Null when it is not that. The words have to open the message as an order:
+ * this bans people and deletes what they said, and "which block was the
+ * snapshot?", "don't ban him" and "how do they remove the passkey?" are not.
+ * `persona` is the helper's name, for "Glim, delete this".
  */
-export function moderationAsk(text: string, command: string | null, tagged: boolean): ModAction | null {
+export function moderationAsk(text: string, command: string | null, tagged: boolean, persona = ""): ModAction | null {
   if (command) {
     if (command === "del" || command === "delete") return { remove: false };
     if (command === "spam" || command === "remove") return { remove: true };
     return null;
   }
   if (!tagged) return null;
-  const t = norm(text).toLowerCase();
-  const remove = /\b(?:kick|ban|boot|block|remove\s+(?:him|her|them|this\s+(?:guy|person|user|account|scammer))|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out)\b/.test(t);
+  const said = norm(text).toLowerCase();
+  const t = persona ? said.replace(new RegExp(`^(?:(?:hey|hi|hello|yo|ok|okay|pls|please|oi)[\\s,]+)?${escapeRe(persona.toLowerCase())}[\\s,:]+`, "u"), "") : said;
+  if (!MOD_ORDER.test(t)) return null;
+  const remove = /\b(?:kick|ban|boot|block\s+(?:him|her|them|this|that)|remove\s+(?:him|her|them|this\s+(?:guy|person|user|account|scammer))|throw\s+(?:him|her|them)\s+out|get\s+(?:him|her|them)\s+out)\b/.test(t);
   const del = /\b(?:delete|remove|take\s+(?:it|this)\s+down)\b/.test(t);
   return remove || del ? { remove } : null;
 }
@@ -1234,9 +1243,10 @@ function wrongAddress(s: string, team: boolean, posted: Set<string>): boolean {
 const TOKEN_TALK = /\$gloam\b|\b(?:ca|contracts?|tokens?|addy|official|legit|genuine|verified|real one|right one|correct one)\b/i;
 
 /**
- * "Gloam is audited", "the contracts were fully audited": not true. Gloam had an
- * internal review before mainnet; an external audit is planned, not done.
- * "Not audited yet" and "an audit is planned" are fine.
+ * "Gloam is audited", "the contracts were fully audited": not true. Kann Audits
+ * reviewed the vault contracts only; the routers, circuits, app and relay were
+ * not part of it. "Kann Audits reviewed the vault contracts" and "the routers
+ * are not audited" are fine.
  */
 const AUDITED_CLAIM =
   /\b(?:is|are|was|were|been|got|fully|already|externally|independently|professionally)\s+(?:fully\s+|externally\s+|independently\s+|professionally\s+)?audited\b/gi;

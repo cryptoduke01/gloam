@@ -116,7 +116,7 @@ Runbook: [`DEPLOY-ETHEREUM.md`](../DEPLOY-ETHEREUM.md).
 
 ## Explicit non-claims
 
-- No external audit yet: reviewed internally, an external audit is planned
+- No full external audit: Kann Audits reviewed the vault contracts only (report, 1 November 2026). The swap routers, circuits, app and relay were not part of it
 - Mainnet is beta software: deposit limits on, one owner wallet until the multisig
 - Until the owner guard holds a vault, its owner can replace a proof checker through
   the 3-day timelock: read `owner()`. After that a proof checker cannot be patched,

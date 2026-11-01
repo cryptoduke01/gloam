@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import {
   RelayError,
   checkRateLimit,
   memoTicket,
   networkForChain,
+  relayGasStation,
   relayMemo,
   relayStatus,
   relayTransfer,
@@ -31,13 +33,16 @@ export async function GET() {
  * waits for the receipt itself. A transfer also returns `memoTicket` for its
  * payment (commitments[0]), null when the relay has no memo secret: sent back
  * as `ticket` with that payment's memo, it gets the payer's own few messages.
+ * Also action "gas-station" with { wallet, step }: a fresh wallet's gas station
+ * (lib/relay/gasStation), off unless switched on.
  */
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
     const net = networkForChain(body.chainId);
-    await checkRateLimit(clientIp(req));
+    const requester = clientIp(req);
+    await checkRateLimit(requester);
 
     let hash: `0x${string}`;
     switch (body.action) {
@@ -49,6 +54,9 @@ export async function POST(req: Request) {
       }
       case "unshield":
         hash = await relayUnshield(net, body);
+        break;
+      case "gas-station":
+        hash = await relayGasStation(net, body, requester);
         break;
       case "memo":
         hash = await relayMemo(net, body);
@@ -64,7 +72,7 @@ export async function POST(req: Request) {
     if (e instanceof RelayError) {
       return NextResponse.json({ ok: false, error: e.message, code: e.code }, { status: e.status });
     }
-    console.error("gloam_relay", e);
+    console.error("gloam_relay", logSafe(e));
     return NextResponse.json(
       { ok: false, error: "The relay hit an error. Send from your wallet for now.", code: "internal" },
       { status: 500 }

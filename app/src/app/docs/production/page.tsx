@@ -12,7 +12,7 @@ const LATER = [BASE_LIVE ? "Base (8453)" : null, ETHEREUM_LIVE ? "Ethereum (1)" 
 export const metadata: Metadata = {
   title: "Production gate",
   description:
-    "What was in place before Gloam launched on mainnet, and what is still ahead: final ceremony keys, beta limits, timelock, internal review, external audit, multisig.",
+    "What was in place before Gloam launched on mainnet, what came after, and what is still ahead: final ceremony keys, beta limits, timelock, internal review, the Kann Audits vault review, multisig.",
 };
 
 export default function DocsProductionPage() {
@@ -23,7 +23,7 @@ export default function DocsProductionPage() {
       glance={[
         { label: "Mainnet", value: "Live since 21 Oct, 13:00 UTC" },
         { label: "Keys", value: "Final, 13 contributors" },
-        { label: "Review", value: "Internal; external planned" },
+        { label: "Review", value: "Internal; Kann on the vault" },
         { label: "Testnet", value: "Test funds" },
       ]}
     >
@@ -51,7 +51,7 @@ export default function DocsProductionPage() {
           {
             n: "2",
             title: "Internal review (done)",
-            body: "Contracts and circuits reviewed internally before launch. The review finished on 20 October with no Critical or High findings open. An external audit is planned, not done.",
+            body: "Contracts and circuits reviewed internally before launch. The review finished on 20 October with no Critical or High findings open.",
           },
           {
             n: "3",
@@ -68,8 +68,18 @@ export default function DocsProductionPage() {
             title: "Private swap routers (deployed)",
             body: "One router each on Robinhood Chain and Tempo mainnet, with no upgrade. Tempo's has no owner; Robinhood Chain's owner can add a pool with 3 days of public notice and take one off at once, and nothing else. They use only the vault's normal release and deposit calls, so the vault did not change. Reviewed internally before deploy, not externally audited.",
           },
+          {
+            n: "6",
+            title: "Kann Audits vault review (done)",
+            body: "After launch, Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium issues. Its findings are acknowledged and not fixed: the vault cannot be upgraded, so changes land in the next vault.",
+          },
         ]}
       />
+
+      <p>
+        The report, what it covered and how to report a bug are on the{" "}
+        <Link href="/security">security page</Link>.
+      </p>
 
       <h2>Ceremony checklist (keys)</h2>
       <ul>
@@ -140,8 +150,10 @@ export default function DocsProductionPage() {
       <h2>What is still ahead</h2>
       <ul>
         <li>
-          <strong>External audit.</strong> Planned, not done. Until then the
-          beta limits cap how much the pools can hold.
+          <strong>External review beyond the vault.</strong> The{" "}
+          <Link href="/security">Kann Audits report</Link> covers the vault
+          contracts only. The swap routers, circuits, app and relay were not
+          part of it. Beta limits cap how much the pools can hold.
         </li>
         <li>
           <strong>Multisig owner.</strong> One wallet is the owner (

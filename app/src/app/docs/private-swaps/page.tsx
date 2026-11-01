@@ -79,7 +79,8 @@ export default function DocsPrivateSwapsPage() {
                   <td>
                     USDG, $GLOAM, ETH (held as WETH), USDe, U, cbBTC, VIRTUAL,
                     PONS, CASHCAT and 20 Robinhood stock tokens (SPY, NVDA, TSLA,
-                    AAPL and more), any one for another
+                    AAPL and more), any one for another. AI and ORBIO join once
+                    their pools are live and the vault takes them.
                   </td>
                   <td>
                     Uniswap v4, in up to three hops over the router&apos;s
@@ -315,8 +316,9 @@ export default function DocsPrivateSwapsPage() {
           with a proof, and deposit with a proof.
         </li>
         <li>
-          <strong>Not audited.</strong> The routers were reviewed internally
-          before deploy. An external audit is planned, as for the vault.
+          <strong>Not part of the external review.</strong>{" "}
+          <Link href="/security">Kann Audits</Link> reviewed the vault contracts,
+          not the routers. The routers have only had internal review.
         </li>
       </ul>
       <p>

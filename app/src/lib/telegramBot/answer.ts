@@ -84,7 +84,7 @@ function mainnetRule(live: boolean, drafts: boolean): string {
   const later = laterMainnets();
   const laterSince = laterMainnetsSince();
   const since = `on ${launchNames()} since Wednesday 21 October, 13:00 UTC${later.length ? `, and on ${later.join(" and ")} since ${laterSince ? laterSince.replace(/ \d{4}$/, "") : "then"}` : ""}`;
-  return `Gloam is live on ${liveMainnetCountWords()}, ${since}, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (it was reviewed internally; an external audit is planned), and never say private trading is live.`;
+  return `Gloam is live on ${liveMainnetCountWords()}, ${since}, with beta deposit limits. Say so plainly when asked${drafts ? ", drafts included" : ""}, and keep mainnet and testnet apart. Call them mainnet and testnet, and never gloss them as real money or play money. Never give or guess any other date or time. Mainnet is beta software: never call Gloam audited (Kann Audits reviewed the vault contracts only; the swap routers, circuits, app and relay were not part of it), and never say private trading is live.`;
 }
 
 export function botModel(): string {

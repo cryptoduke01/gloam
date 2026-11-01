@@ -33,7 +33,7 @@ import { useVaultStatus } from "@/lib/passkey";
 import { dropUnsentNote, formatFeePercent, saveLocalNote, updateLocalNote, type LocalNote } from "@/lib/shield";
 import { connectSolana, paySolana, useSolanaWallets, type SolanaAccount, type SolanaWallet } from "@/lib/solanaWallet";
 import { track } from "@/lib/track";
-import { failedBeforeSend, surelyNotSent, walletDeclined, walletErrorText } from "@/lib/walletErrors";
+import { failedBeforeSend, solanaDeclined, solanaSurelyNotSent, surelyNotSent, walletDeclined, walletErrorText } from "@/lib/walletErrors";
 import { useNetwork } from "./NetworkProvider";
 import { AmountProblem } from "./AmountProblem";
 
@@ -89,11 +89,6 @@ type PrivateStage =
   | { kind: "landed"; quote: PrivateBridgeQuote }
   | { kind: "late"; quote: PrivateBridgeQuote }
   | { kind: "failed"; quote: PrivateBridgeQuote };
-
-/** A wallet's answer that means the person said no, so nothing was sent. */
-const DECLINED = /reject|denied|declin|cancel|closed/i;
-/** A wallet error that means it never sent the transaction. */
-const NOT_SENT = /simulat|blockhash|insufficient|not enough/i;
 
 /** A chain's logo, with its dark-theme version when Relay ships one. */
 function ChainLogo({ id, size = 24, className = "" }: { id: number; size?: number; className?: string }) {
@@ -616,7 +611,7 @@ function BridgeSheet({
         kind: "form",
         error:
           step === "connect"
-            ? DECLINED.test(msg)
+            ? solanaDeclined(msg)
               ? `${payerName} didn't connect. Nothing moved.`
               : `Couldn't connect ${payerName}. Try again.`
             : step === "prepare"
@@ -655,14 +650,14 @@ function BridgeSheet({
         await paySolana(r.wallet, r.account, quote.solanaTx);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "";
-        if (DECLINED.test(msg) || NOT_SENT.test(msg)) {
+        if (solanaSurelyNotSent(msg)) {
           dropUnsentNote(r.note.id);
           setPriv({
             ...r,
             quote,
             at,
             signing: false,
-            error: DECLINED.test(msg) ? "You cancelled it in your wallet. Nothing moved." : (msg.split("\n")[0] ?? "It didn't send. Try again."),
+            error: solanaDeclined(msg) ? "You cancelled it in your wallet. Nothing moved." : (msg.split("\n")[0] ?? "It didn't send. Try again."),
           });
           return;
         }

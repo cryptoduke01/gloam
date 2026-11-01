@@ -32,7 +32,7 @@ export function AuthorLine({ small = false }: { small?: boolean }) {
         <span className="text-[13.5px] text-soft">{AUTHOR.name}</span>
       ) : (
         <span className="leading-tight">
-          <a href={AUTHOR.href} target="_blank" rel="noreferrer" className="block text-[15px] text-foreground hover:underline">
+          <a href={AUTHOR.href} target="_blank" rel="noreferrer" className="gl-tap block text-[15px] text-foreground hover:underline">
             {AUTHOR.name}
           </a>
           <span className="block text-[13px] text-mute">{AUTHOR.role}</span>

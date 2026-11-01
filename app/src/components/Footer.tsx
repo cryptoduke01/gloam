@@ -32,6 +32,7 @@ const groups: {
       { href: "/token", label: "$GLOAM token" },
       { href: "/whitepaper", label: "Whitepaper" },
       { href: "/verify#contracts", label: "Verify contracts" },
+      { href: "/security", label: "Security" },
     ],
   },
   {
@@ -99,7 +100,7 @@ export function Footer() {
               </p>
               <a
                 href="mailto:hello@gloam.trade"
-                className="mt-4 inline-block text-[15px] text-mute transition-colors hover:text-foreground"
+                className="gl-tap mt-4 inline-block text-[15px] text-mute transition-colors hover:text-foreground"
               >
                 hello@gloam.trade
               </a>
@@ -151,21 +152,21 @@ export function Footer() {
                             href={l.href}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[14.5px] text-soft transition-colors hover:text-foreground"
+                            className="gl-tap text-[14.5px] text-soft transition-colors hover:text-foreground"
                           >
                             {l.label}
                           </a>
                         ) : l.href.startsWith("/app") ? (
                           <AppLink
                             href={l.href}
-                            className="text-[14.5px] text-soft transition-colors hover:text-foreground"
+                            className="gl-tap text-[14.5px] text-soft transition-colors hover:text-foreground"
                           >
                             {l.label}
                           </AppLink>
                         ) : (
                           <Link
                             href={l.href}
-                            className="text-[14.5px] text-soft transition-colors hover:text-foreground"
+                            className="gl-tap text-[14.5px] text-soft transition-colors hover:text-foreground"
                           >
                             {l.label}
                           </Link>
@@ -201,7 +202,7 @@ export function Footer() {
                 {legal.map((l, i) => (
                   <span key={l.href} className="flex items-center">
                     {i > 0 && <span aria-hidden className="mx-3 h-3 w-px bg-line-strong" />}
-                    <Link href={l.href} className="transition-colors hover:text-foreground">
+                    <Link href={l.href} className="gl-tap transition-colors hover:text-foreground">
                       {l.label}
                     </Link>
                   </span>

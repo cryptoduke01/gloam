@@ -139,13 +139,15 @@ export async function runPrivateCashOut(args: {
   topUp?: TopUpRun;
   /** The fee the screen showed, kept on each job: the vault takes the rate of the day it lands. */
   feeBps?: number;
+  /** The fewest pieces this run takes: 2 unless the caller means less, like funding a wallet that needs no gas. */
+  least?: number;
   onStatus?: (s: string) => void;
   onPiece?: (i: number, p: Partial<PieceProgress>) => void;
   deps?: Partial<PrivateCashOutDeps>;
 }): Promise<PrivateCashOutResult> {
   const { note, pieces, to, window, owner, topUp } = args;
   // one left to finish a series is a run of one: there is no smaller top-up run
-  checkPlan(note, pieces, to, topUp?.most, topUp ? 1 : undefined);
+  checkPlan(note, pieces, to, topUp?.most, args.least ?? (topUp ? 1 : undefined));
   const d: PrivateCashOutDeps = { ...appDeps, ...args.deps };
   const status = args.onStatus ?? (() => {});
   const piece = args.onPiece ?? (() => {});

@@ -563,6 +563,9 @@ await test("replies: mainnet claims, dates, secrets and posing as a person are r
   assert.equal(cleanReply("I'm Duke.", policy), null);
   assert.ok(cleanReply("Gloam is not live on mainnet, it's testnet only.", policy));
   assert.ok(cleanReply("Mainnet isn't live. It waits on a production ceremony and an audit.", policy));
+  assert.equal(cleanReply("Gloam is fully audited.", policy), null, "an audited claim is dropped");
+  assert.ok(cleanReply("Kann Audits reviewed the vault contracts and found no Critical, High or Medium issues. Report: gloam.trade/security", policy), "the review as it happened goes out");
+  assert.ok(cleanReply("The routers were reviewed internally, not externally audited.", policy), "the routers' status goes out");
   assert.ok(cleanReply("I'm Glim, Gloam's community helper bot, not a person.", policy));
   assert.ok(cleanReply("Mainnet goes live on Wednesday 21 October at 13:00 UTC. Countdown at gloam.trade/mainnet.", policy), "the announced launch goes out");
   assert.ok(cleanReply("Mainnet is Oct 21, 2pm WAT.", policy), "the same time in WAT too");
@@ -1185,6 +1188,15 @@ await test("moderation: look-alike Gloam accounts, DM lures, and the team's dele
   assert.deepEqual(moderationAsk("", "spam", false), { remove: true });
   assert.deepEqual(moderationAsk("", "del", false), { remove: false });
   assert.equal(moderationAsk("delete and kick him", null, false), null, "untagged words do nothing");
+  // an order opens with the verb; anything else an admin says while tagging the helper is not one
+  for (const [said, remove] of [["kick him", true], ["please ban this guy", true], ["block him", true], ["boot them", true], ["take it down", false], ["could you please remove this", false], ["remove him", true], ["go ahead and ban him", true]] as const) {
+    assert.deepEqual(moderationAsk(said, null, true), { remove }, said);
+  }
+  for (const said of ["which block was the snapshot?", "don't ban him", "please don't ban him", "how do they remove the passkey?", "why did you delete that?", "kick off the call at 5", "block height is what here?", "is he a scammer, should we ban him?"]) {
+    assert.equal(moderationAsk(said, null, true), null, said);
+  }
+  assert.deepEqual(moderationAsk("Glim, delete this", null, true, "Glim"), { remove: false }, "by name");
+  assert.deepEqual(moderationAsk("hey glim kick him", null, true, "Glim"), { remove: true }, "by name, with a greeting");
 
   // a look-alike posts a bare GIF: deleted, banned, one notice
   reset();

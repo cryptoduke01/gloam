@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { logSafe } from "@/lib/logSafe";
 import { clientIp, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { JobSealError, jobKeyReady } from "@/lib/relay/jobSeal";
 import {
@@ -101,7 +102,7 @@ function fail(e: unknown) {
   if (e instanceof JobSealError) {
     return NextResponse.json({ ok: false, error: LATER_OFF, code: "later_off" }, { status: 503, headers: NO_STORE });
   }
-  console.error("gloam_cashout_later", e);
+  console.error("gloam_cashout_later", logSafe(e));
   return NextResponse.json(
     { ok: false, error: "Could not schedule this cash out. Cash out now instead, or try again.", code: "internal" },
     { status: 500, headers: NO_STORE }

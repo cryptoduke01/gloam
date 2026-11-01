@@ -595,7 +595,9 @@ const hash = await wallet.writeContract({
         describe is retired. Shield, private send, cash out, and disclosure are
         live and proof-gated. Mainnet uses the final keys from the 13-contributor
         ceremony; testnet runs on dev-ceremony keys. The code was reviewed
-        internally before launch, and an external audit is planned. Mainnet is
+        internally before launch, and Kann Audits reviewed the vault contracts
+        (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK
+        and the MCP server were not part of that review. Mainnet is
         beta software, so start an agent on small limits.
       </p>
     </DocsLayout>

@@ -108,6 +108,14 @@ await test("only a wallet with weight in an open vote can send, and only its own
   assert.equal((await listFeedback()).length, 0);
 });
 
+await test("a wallet that adds its chain to the signed domain can send a note, as it can vote", async () => {
+  const message = "from a wallet that signs with its chain id";
+  const typed = core.feedbackTypedData({ category: "Idea", message, author: holder.address, timestamp: nowSec });
+  const signature = await holder.signTypedData({ ...typed, domain: { ...typed.domain, chainId: 56 } });
+  const sent = await submitFeedback({ author: holder.address, category: "Idea", message, timestamp: nowSec, signature }, ctx);
+  assert.equal(sent.author, holder.address);
+});
+
 await test("bad input is refused", async () => {
   const ok = await note(holder, "fine note");
   await rejects(submitFeedback({ ...ok, author: "0x12" }, ctx), "bad_author");
