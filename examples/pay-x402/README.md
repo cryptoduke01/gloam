@@ -36,8 +36,8 @@ GLOAM_NETWORK=tempo-mainnet GLOAM_PAY_KEY=0x... npx tsx examples/pay-x402/pay-x4
 
 What to know before you use mainnet:
 
-- **Beta.** Gloam is beta software. Deposits are capped at 500 per deposit and
-  25,000 in total for each stablecoin. Private payments and cash outs are never
+- **Beta.** Gloam is beta software. Deposits are capped at 50,000 per deposit and
+  2,500,000 in total for each stablecoin. Private payments and cash outs are never
   limited.
 - **Fees.** Gloam takes no fee on deposits or private payments (this x402
   payment and the seller's sweep included); you pay only network gas. Cashing

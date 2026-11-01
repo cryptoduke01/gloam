@@ -65,7 +65,7 @@ test("GLOAM_NETWORK takes ethereum-mainnet, the access key goes to Tempo mainnet
 
 test("deposits on Ethereum are checked against its listed assets and limits", async () => {
   assert.doesNotThrow(() => assertDepositAllowed(1, ETHEREUM_PYUSD, 500_000_000n));
-  // amounts are read live from the vault, so the 100x raise is taken the day it lands
+  // amounts are read live from the vault, so a new limit is taken the day it lands
   assert.doesNotThrow(() => assertDepositAllowed(1, ETHEREUM_USDT, 500_000_001n));
   assert.doesNotThrow(() => assertDepositAllowed(1, NATIVE_ASSET, 2n * 10n ** 17n + 1n));
   const vault = (per: bigint) => ({

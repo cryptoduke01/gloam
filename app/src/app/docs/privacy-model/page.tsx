@@ -436,9 +436,9 @@ export default function DocsPrivacyPage() {
           The swap routers, circuits, app and relay were not part of it. Before
           that came several internal rounds, with fixes deployed, and a review
           before launch that finished on 20 October with no Critical or High
-          findings open. Beta deposit limits cap how much each pool can hold: 500 per
-          deposit and 25,000 in total for each stablecoin, and 25,000 per deposit
-          and 250,000 in total for $GLOAM.
+          findings open. Beta deposit limits cap how much each pool can hold: 50,000 per
+          deposit and 2,500,000 in total for each stablecoin, and 2,500,000 per
+          deposit and 25,000,000 in total for $GLOAM.
         </li>
         <li>
           <strong>A payer can take back a payment until it is claimed.</strong>{" "}

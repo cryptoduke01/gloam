@@ -57,7 +57,7 @@ Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) sin
 | Private swaps | USDG and $GLOAM on Uniswap v4 (`GloamVaultSwapV4`). Router v2 (`GloamVaultSwapV4b`, any allowlisted pool, ETH via WETH) is deployed and opens in the app once the queued deposit limits for 28 more tokens execute on 26 October | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
 
 - **Fees.** Direct deposits and private payments are free. Cashing out costs 0.5%, taken when the cash out lands, at the vault's rate that day. A private swap pays the same 0.5% on the amount swapped, plus a price buffer (0.5% on Robinhood Chain, 0.1% on Tempo) whose unused part goes to the treasury. Money bridged in from another chain pays Relay's fee, and Gloam's own fee when one is set, shown before you send. Since 24 October fees go to their own treasury wallet (`0xB390…30B8`), and half of them are set to buy back $GLOAM, half of that burned and half kept.
-- **Beta deposit limits.** 500 per deposit and 25,000 in total for each stablecoin; ETH on Base and Ethereum 0.2 per deposit and 10 in total; $GLOAM 25,000 per deposit and 250,000 in total. A 100x raise of these limits is queued behind the public 3-day timelock and applies around 1 November 2026. Cash outs and private payments are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.
+- **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin; ETH on Base and Ethereum 20 per deposit and 1,000 in total; $GLOAM 2,500,000 per deposit and 25,000,000 in total. Cash outs and private payments are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.
 - **Keys.** Mainnet proofs use the final keys from the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`).
 - **Partners.** [Raeto](https://raeto.cc) funds AI agents from a private Gloam balance, and [Agent Wormhole](https://agentwormhole.com) checks an agent's payment request before it pays (MCP 0.4.0, optional).
 
@@ -116,7 +116,7 @@ The same private core runs on [Tempo](https://tempo.xyz) mainnet (`4217`), the p
 
 Base (an Ethereum L2 on the OP Stack) is the third chain. Base mainnet (`8453`) is live since 26 October 2026, and Base Sepolia (`84532`) is its testnet, live since 24 October 2026. Both run the mainnet vault (`ShieldPoolPayments` on the final keys, beta deposit limits, a cash-out fee of 0.5% on Base mainnet and 0.25% on Base Sepolia), so Base Sepolia is a testnet on the mainnet contract and keys.
 
-- **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. Each stablecoin 500 per deposit and 25,000 in total, ETH 0.2 per deposit and 10 in total.
+- **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. On Base mainnet each stablecoin takes 50,000 per deposit and 2,500,000 in total, and ETH 20 per deposit and 1,000 in total. On Base Sepolia each stablecoin takes 500 per deposit and 25,000 in total, and ETH 0.2 per deposit and 10 in total.
 - **Base Sepolia.** Vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `49802958`) and payment-message board `0x01B3172d9900Cb26d57E986429b9b23854c74598`, the same addresses as on the other chains, every contract source-verified on Sourcify. Test USDC and EURC from [faucet.circle.com](https://faucet.circle.com/), test ETH from a Base Sepolia faucet. Addresses: [`contracts/deployments/base-sepolia.json`](./contracts/deployments/base-sepolia.json).
 - **Base mainnet.** Vault `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (deploy block `53109632`) and payment-message board `0xfCa1887e77f738ef9C5751974b3f3873d029F2DC`. Addresses: [`contracts/deployments/base-mainnet.json`](./contracts/deployments/base-mainnet.json).
 - **Later.** Private swaps on Base (router v2 on Uniswap v4) and bringing money over into Base (the Relay bridge).
@@ -127,7 +127,7 @@ Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 
 Ethereum mainnet (`1`) is the fourth chain, live since 26 October 2026, on the same mainnet vault (`ShieldPoolPayments`, the final keys, beta deposit limits, the 0.5% cash-out fee). Its testnet is Ethereum Sepolia, below, on the same contract and keys.
 
-- **Assets.** USDC, USDT, USDG, PYUSD and EURC, each 500 per deposit and 25,000 in total, and ETH, 0.2 per deposit and 10 in total.
+- **Assets.** USDC, USDT, USDG, PYUSD and EURC, each 50,000 per deposit and 2,500,000 in total, and ETH, 20 per deposit and 1,000 in total.
 - **Gas.** The Gloam relay pays Ethereum gas for relayed private sends and cash outs only while gas is under its ceiling (3 gwei by default); above it the relay waits and the app says so, and a cash out for later waits for gas to come down.
 - **Contracts.** Vault `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (deploy block `26276183`) and payment-message board `0x8699D015087dE6D25d55d5ceB63b34b9d773f135`. Addresses: [`contracts/deployments/ethereum-mainnet.json`](./contracts/deployments/ethereum-mainnet.json).
 
@@ -160,7 +160,7 @@ const intent = await buildShieldBoundIntent({
   chainId: net.chainId,
   poolAddress: net.pool,
   asset: TEMPO_USDCE,
-  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 500 per deposit
+  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 50,000 per deposit
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
 });
 
@@ -205,8 +205,8 @@ gloam/
 
 | Asset | Address | Beta limit (per deposit / total) |
 | --- | --- | --- |
-| USDG (6 decimals) | [`0x5fc5…d168`](https://robin.etherscan.io/address/0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168) | 500 / 25,000 |
-| $GLOAM (18 decimals) | [`0xDcD8…724d`](https://robin.etherscan.io/address/0xDcD885F5c60b3aD49F6D58718696417314e8724d) | 25,000 / 250,000 |
+| USDG (6 decimals) | [`0x5fc5…d168`](https://robin.etherscan.io/address/0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168) | 50,000 / 2,500,000 |
+| $GLOAM (18 decimals) | [`0xDcD8…724d`](https://robin.etherscan.io/address/0xDcD885F5c60b3aD49F6D58718696417314e8724d) | 2,500,000 / 25,000,000 |
 
 **Contracts: Tempo mainnet `4217`**
 
@@ -223,10 +223,10 @@ gloam/
 
 | Asset (TIP-20, 6 decimals) | Address | Beta limit (per deposit / total) |
 | --- | --- | --- |
-| USDC.e | [`0x20c0…8b50`](https://explore.tempo.xyz/address/0x20c000000000000000000000b9537d11c60e8b50) | 500 / 25,000 |
-| pathUSD | [`0x20c0…0000`](https://explore.tempo.xyz/address/0x20c0000000000000000000000000000000000000) | 500 / 25,000 |
-| USDT0 | [`0x20c0…eb73`](https://explore.tempo.xyz/address/0x20c00000000000000000000014f22ca97301eb73) | 500 / 25,000 |
-| OUSD | [`0x20c0…74be`](https://explore.tempo.xyz/address/0x20c0000000000000000000006a37da5c996874be) | 500 / 25,000 |
+| USDC.e | [`0x20c0…8b50`](https://explore.tempo.xyz/address/0x20c000000000000000000000b9537d11c60e8b50) | 50,000 / 2,500,000 |
+| pathUSD | [`0x20c0…0000`](https://explore.tempo.xyz/address/0x20c0000000000000000000000000000000000000) | 50,000 / 2,500,000 |
+| USDT0 | [`0x20c0…eb73`](https://explore.tempo.xyz/address/0x20c00000000000000000000014f22ca97301eb73) | 50,000 / 2,500,000 |
+| OUSD | [`0x20c0…74be`](https://explore.tempo.xyz/address/0x20c0000000000000000000006a37da5c996874be) | 50,000 / 2,500,000 |
 
 On every mainnet: direct deposits and private payments are free, and a cash out costs 0.5%. The pools run on the trusted setup's final keys; read the verifiers from the pool (`verifier()`, `shieldVerifier()`).
 

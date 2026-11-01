@@ -737,7 +737,7 @@ function mppHowToMainnet(role: "pay" | "charge" | "both", network: NetworkKey): 
             : { import: "ETHEREUM_USDC", line: "      currency: ETHEREUM_USDC, decimals: 6,               // or ETHEREUM_USDT, ETHEREUM_USDG, ETHEREUM_PYUSD" }
           : { import: "RH_MAINNET_USDG", line: "      currency: RH_MAINNET_USDG, decimals: 6,             // or GLOAM_TOKEN, RH_MAINNET_PONS, RH_MAINNET_CASHCAT with decimals: 18" };
   const getter = n.testnet ? "testnetNetwork" : "mainnetNetwork";
-  const sdkVersion = "0.4.5";
+  const sdkVersion = "0.4.7";
   const netLines = `const net = ${getter}("${family}");                   // null until the pool is published
 if (!net) throw new Error("${where} pool not published yet");`;
   const charge = {
@@ -810,7 +810,7 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     mainnet: n.testnet
       ? `${family === "base" ? `${where} (Base Sepolia)` : where}: a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
       : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" || family === "ethereum" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
-    install: `npm i mppx @gloamtrade/mppx-gloam@^0.3.4 @gloamtrade/sdk@^${sdkVersion}`,
+    install: `npm i mppx @gloamtrade/mppx-gloam@^0.4.0 @gloamtrade/sdk@^${sdkVersion}`,
     ...(role !== "pay" ? { charge } : {}),
     ...(role !== "charge" ? { pay } : {}),
     ...MPP_TAIL,

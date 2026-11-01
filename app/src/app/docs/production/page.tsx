@@ -114,8 +114,9 @@ export default function DocsProductionPage() {
           <Link href="/docs/chain#mainnet">Networks</Link>.
         </li>
         <li>
-          <strong>Beta deposit limits.</strong> Each stablecoin: 500 per deposit
-          and 25,000 in total. $GLOAM: 25,000 per deposit and 250,000 in total.
+          <strong>Beta deposit limits.</strong> Each stablecoin: 50,000 per
+          deposit and 2,500,000 in total. $GLOAM: 2,500,000 per deposit and
+          25,000,000 in total.
           Cash outs and private payments are never limited.
         </li>
         <li>

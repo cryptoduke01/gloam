@@ -29,7 +29,7 @@ Tagline: private by default, provable on demand. Hero line: private money on pub
 
 ## Live
 
-Mainnet (final keys, beta deposit limits: 500 per deposit and 25,000 total per stablecoin, ETH on Base and Ethereum 0.2 per deposit and 10 total, $GLOAM 25,000 per deposit and 250,000 total; a 100x raise is queued behind the 3-day timelock for around 1 November 2026) and the testnets (dev keys, test funds):
+Mainnet (final keys, beta deposit limits: 50,000 per deposit and 2,500,000 total per stablecoin, ETH on Base and Ethereum 20 per deposit and 1,000 total, $GLOAM 2,500,000 per deposit and 25,000,000 total) and the testnets (dev keys, test funds):
 
 - Shield, private send, cash out, private payroll (one-off and scheduled), payment requests, the Gloam relay
 - Mainnet assets: USDG, $GLOAM, PONS and CASHCAT on Robinhood Chain, with ETH, AI, ORBIO and GRIFT listed and opening as each deposit limit lands through the timelock; USDC.e, pathUSD, USDT0 and OUSD on Tempo; USDC, EURC, USDT and ETH on Base; USDC, USDT, USDG, PYUSD, EURC and ETH on Ethereum. Direct deposits and private payments are free; a cash out costs 0.5%. Money bridged in pays Relay's fee, plus Gloam's when `BRIDGE_FEE_BPS` is set

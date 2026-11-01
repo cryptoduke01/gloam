@@ -57,7 +57,7 @@ export default function DocsSdkReferencePage() {
         <code>&quot;dev&quot; | &quot;production&quot;</code>),{" "}
         <code>rpcUrl</code>, <code>explorerUrl</code>, <code>chain</code> (a viem{" "}
         <code>Chain</code>) and <code>assets</code> (symbol, address, decimals
-        and the beta <code>depositLimit</code>).
+        and the launch <code>depositLimit</code>).
       </p>
       <div className="overflow-x-auto">
         <table>
@@ -158,7 +158,7 @@ export default function DocsSdkReferencePage() {
                 <code>readCashOutFeeBps(client, pool)</code>
               </td>
               <td>
-                The rate a vault charges now, from the chain (0.4.6). The pool
+                The rate a vault charges now, from the chain (0.4.7). The pool
                 takes it when a cash out lands. Base Sepolia and Ethereum Sepolia
                 are still at <code>25</code>; pass the result to{" "}
                 <code>cashOutFee(amount, bps)</code>

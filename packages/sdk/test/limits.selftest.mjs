@@ -1,12 +1,12 @@
 /**
  * Live beta deposit limits self-test.
  *
- * The vault's limits change through its timelock (the 100x raise queued for
- * 1 November), so the SDK reads them from the vault: depositLimitsOn(),
- * depositLimit(asset) and deposited(asset). A deposit over the old 500 launch
- * value goes through once the vault says so; one over the vault's live limit or
- * its room left is refused before proving; a vault that can't be read refuses
- * nothing (the vault enforces its own limits). Reads go to an in-memory fake.
+ * The vault's limits change through its timelock, so the SDK reads them from
+ * the vault: depositLimitsOn(), depositLimit(asset) and deposited(asset). A
+ * deposit over the old 500 launch value goes through once the vault says so;
+ * one over the vault's live limit or its room left is refused before proving;
+ * a vault that can't be read refuses nothing (the vault enforces its own
+ * limits). Reads go to an in-memory fake.
  *
  * Run after build:  node test/limits.selftest.mjs
  */

@@ -125,9 +125,11 @@ npm install snarkjs   # optional peer, for proving`}</code>
           <code>TEMPO_OUSD</code>.
         </li>
         <li>
-          Beta deposit limits: 500 per deposit and 25,000 in total for each
-          stablecoin; $GLOAM 25,000 per deposit and 250,000 in total. Each
-          network&apos;s <code>assets</code> carry the <code>depositLimit</code>.
+          Beta deposit limits: 50,000 per deposit and 2,500,000 in total for
+          each stablecoin; $GLOAM 2,500,000 per deposit and 25,000,000 in total.
+          Each network&apos;s <code>assets</code> carry the launch value in{" "}
+          <code>depositLimit</code>; <code>readDepositLimit</code> reads the
+          live limit from the vault.
         </li>
         <li>
           A mainnet cash out costs 0.5% (<code>CASH_OUT_FEE_BPS = 50</code>);{" "}
@@ -177,7 +179,7 @@ const intent = await buildShieldBoundIntent({
   chainId: net.chainId,
   poolAddress: net.pool,
   asset: TEMPO_USDCE,
-  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 500 per deposit
+  amountWei: 25_000_000n,                    // 25 USDC.e (6 decimals); beta cap is 50,000 per deposit
   prover: artifactProver(circuitArtifactUrls("shield", net.chainId)),
 });
 

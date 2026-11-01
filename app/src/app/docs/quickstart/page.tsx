@@ -49,7 +49,7 @@ cd my-private-app && npm install && npm run dev`}</code>
           <strong>For mainnet:</strong> USDG on Robinhood Chain
           (chain id <code>4663</code>) plus a little ETH for gas, or USDC.e,
           pathUSD, USDT0 or OUSD on Tempo (<code>4217</code>), where gas is paid
-          in stablecoins. Beta limits cap each stablecoin deposit at 500. See{" "}
+          in stablecoins. Beta limits cap each stablecoin deposit at 50,000. See{" "}
           <Link href="/docs/chain#mainnet">Networks</Link>.
         </li>
         <li>
@@ -127,7 +127,7 @@ const wallet = createWalletClient({ account, chain: net.chain, transport: http(n
 // reads at the chain head, old logs from the network's full-history RPC where it names one
 const publicClient = createPublicClient({ chain: net.chain, transport: gloamReadTransport(net) });
 
-const amount = parseUnits("25", 6);   // 25 USDG (6 decimals); beta cap is 500 per deposit
+const amount = parseUnits("25", 6);   // 25 USDG (6 decimals); beta cap is 50,000 per deposit
 
 // mint the note + generate the shield proof with this chain's keys
 const intent = await buildShieldBoundIntent({

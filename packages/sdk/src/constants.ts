@@ -341,6 +341,11 @@ export const ETHEREUM_SEPOLIA_HISTORY_RPC: HistoryRpc = {
 };
 
 const units = (whole: bigint, decimals: number) => whole * 10n ** BigInt(decimals);
+/**
+ * Launch values, still live on the Sepolia vaults. The mainnet vaults now take
+ * 50,000 per deposit and 2,500,000 in total for each stablecoin, and
+ * readDepositLimit reads that live.
+ */
 const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_000n, 6) };
 
 /**
@@ -352,7 +357,9 @@ const stableLimit: DepositLimit = { perDeposit: units(500n, 6), total: units(25_
  * at the prices of 2026-10-31, queued through contracts/script/
  * QueueRobinhoodAssets.s.sol, 0 on chain until each lands. PONS and CASHCAT were
  * opened as swap assets on 2026-10-27, so their limits here are the ones live
- * that day, with raises already queued. In every case the live read wins.
+ * that day. USDG and GLOAM here are launch values. The vault now takes USDG at
+ * 50,000 / 2,500,000, GLOAM at 2,500,000 / 25,000,000, PONS at 390,000 / 9,800,000
+ * and CASHCAT at 960,000 / 24,000,000. In every case the live read wins.
  */
 export const RH_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "USDG", address: RH_MAINNET_USDG, decimals: 6, depositLimit: stableLimit },
@@ -373,7 +380,11 @@ export const TEMPO_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "OUSD", address: TEMPO_OUSD, decimals: 6, depositLimit: stableLimit },
 ];
 
-/** Native ETH on Base: 0.2 per deposit and 10 in total, about the dollar value of the stablecoin limits. */
+/**
+ * Native ETH's launch value on Base and Ethereum, still live on the Sepolia
+ * vaults. The mainnet vaults now take 20 per deposit and 1,000 in total, and
+ * readDepositLimit reads that live.
+ */
 const baseEthLimit: DepositLimit = { perDeposit: 2n * 10n ** 17n, total: units(10n, 18) };
 
 /**
@@ -404,7 +415,7 @@ export const ETHEREUM_MAINNET_ASSETS: GloamAsset[] = [
   { symbol: "BDX", address: ETHEREUM_BDX, decimals: 9, depositLimit: bdxLimit },
 ];
 
-/** Base Sepolia pool assets: Circle's test USDC and EURC, and ETH, with the same limits as Base mainnet. No USDT there. */
+/** Base Sepolia pool assets: Circle's test USDC and EURC (500 / 25,000 each), and ETH (0.2 / 10). No USDT there. */
 export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: BASE_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
   { symbol: "EURC", address: BASE_SEPOLIA_EURC, decimals: 6, depositLimit: stableLimit },
@@ -413,7 +424,7 @@ export const BASE_SEPOLIA_ASSETS: GloamAsset[] = [
 
 /**
  * Ethereum Sepolia pool assets: Circle's test USDC and EURC, Paxos's test USDG
- * and PYUSD, and ETH, with the mainnet limits. No USDT there.
+ * and PYUSD, and ETH, with the same limits as Base Sepolia. No USDT there.
  */
 export const ETHEREUM_SEPOLIA_ASSETS: GloamAsset[] = [
   { symbol: "USDC", address: ETHEREUM_SEPOLIA_USDC, decimals: 6, depositLimit: stableLimit },
@@ -571,7 +582,7 @@ const MAINNETS: Partial<Record<GloamChainFamily, GloamNetwork | null>> = {
 /**
  * Base Sepolia, or null while BASE_SEPOLIA_POOL is not filled in. A testnet,
  * but on the mainnet pool: ShieldPoolPayments on the final keys, payments only,
- * the same listed assets and beta limits as Base mainnet, the cash-out fee.
+ * the same listed assets as Base mainnet, its own beta limits, the cash-out fee.
  */
 const BASE_TESTNET: GloamNetwork | null = (() => {
   const p = baseSepoliaPool();
