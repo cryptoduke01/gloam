@@ -6,11 +6,14 @@
  *  - the two pieces: gas first, the vault's own fee read live, Max leaving room
  *    for gas
  *  - the real private cash-out runner with fake money paths: order, targets,
- *    scheduled or sent now, the station confirmed before anything moves, and a
- *    run that stops part way
- *  - sending now: a note is marked spent only once its receipt says so
+ *    scheduled or sent now, the station confirmed before anything moves, a run
+ *    that stops part way, and a wallet that needs no gas money
+ *  - a wallet with code is refused gas money before anything moves
+ *  - sending now: a note is marked spent only once its receipt says so, and a
+ *    send that may have gone out never reads as "nothing has gone out"
  *  - gas: make then pump, picking up from the chain, the relay's node running a
- *    moment behind, and no relay call at all when nothing is needed
+ *    moment behind, no relay call at all when nothing is needed, and USDG at the
+ *    station of a wallet that already has gas
  *  - the fill-in link and the link back
  *  - the wording rules, on every file a reader sees
  *
@@ -26,8 +29,11 @@ const {
   FRESH_MIN_GAS,
   FRESH_MIN_USDG,
   GAS_REVERTED,
+  LINKED_ADDRESS_NOTE,
+  NEEDS_GAS_PROBLEM,
   SEND_REVERTED,
   SEND_SLOW,
+  WALLET_CODE_PROBLEM,
   amountProblem,
   backLink,
   freshAddressProblem,
@@ -40,6 +46,7 @@ const {
   pieceWords,
   readFundLink,
   sendPieceNow,
+  stoppedLine,
 } = await import("../src/lib/freshWallet");
 const { FRESH_WALLET_PATH, GAS_STATION_CHAIN_ID, STATION_MIN_USDG, STATION_MISMATCH_MESSAGE, STATION_USDG, WALLET_GAS_OK_WEI, predictStation } = await import("../src/lib/gasStation");
 const { runPrivateCashOut } = await import("../src/lib/cashOutPrivately");
@@ -95,6 +102,16 @@ await test("amounts: at least 0.5 USDG to the wallet, 0.5 to 5 for gas", () => {
   assert.equal(gasProblem(FRESH_MAX_GAS, "5"), null);
 });
 
+await test("a wallet that already has gas can go without gas money, and only then", () => {
+  assert.equal(gasProblem(0n, "0", true), null);
+  assert.equal(gasProblem(null, "", true), null, "left empty");
+  assert.match(gasProblem(0n, "0", false)!, /0\.5 to 5/);
+  assert.match(gasProblem(null, "", false)!, /Enter/);
+  // any amount it does send still has to be one the relay can act on
+  assert.match(gasProblem(1n, "0.000001", true)!, /0\.5 to 5/);
+  assert.equal(gasProblem(U, "1", true), null);
+});
+
 await test("the least gas money still clears what the relay acts on, even at a much higher fee", () => {
   for (const bps of [0, 25, 50, 100, 500]) assert.ok(FRESH_MIN_GAS - withdrawFeeOf(FRESH_MIN_GAS, bps) >= STATION_MIN_USDG, `at ${bps} bps`);
 });
@@ -112,11 +129,20 @@ await test("gas goes first, to the wallet's own station, and the fee is the vaul
   }
 });
 
+await test("with no gas money there is one cash out, to the wallet, and nothing goes to the station", () => {
+  const p = fundingPlan({ wallet: WALLET, amount: 100n * U, gas: 0n, feeBps: 25 });
+  assert.deepEqual(p.pieces, [100n * U]);
+  assert.deepEqual(p.to, [WALLET]);
+  assert.equal(p.arrives.station, 0n);
+  assert.equal(p.fee, withdrawFeeOf(100n * U, 25));
+});
+
 await test("Max leaves room for gas, and nothing is offered when gas doesn't fit", () => {
   assert.equal(mostForWallet(10n * U, U), 9n * U);
   assert.equal(mostForWallet(U, U), 0n);
   assert.equal(mostForWallet(U, 2n * U), 0n);
   assert.equal(mostForWallet(10n * U, null), 0n, "no gas amount yet");
+  assert.equal(mostForWallet(10n * U, 0n), 10n * U, "no gas money at all");
 });
 
 // ---------------------------------------------------------------- funding
@@ -149,6 +175,7 @@ const stateOf = (over: Partial<StationState> = {}): StationState => ({
   walletUsdg: 0n,
   walletEth: 0n,
   walletTxs: 0,
+  walletHasCode: false,
   ...over,
 });
 
@@ -183,12 +210,21 @@ function fakeRun(log: string[], stopAt?: number) {
   return run;
 }
 
-const fund = (when: FundWhen, log: string[], over: { note?: LocalNote; read?: () => Promise<StationState>; stopAt?: number } = {}) =>
+type FundOver = {
+  note?: LocalNote;
+  read?: () => Promise<StationState>;
+  stopAt?: number;
+  gas?: bigint;
+  /** Runs in place of sending piece `i` now; throw to stop there. */
+  sendNow?: (i: number) => void;
+};
+
+const fund = (when: FundWhen, log: string[], over: FundOver = {}) =>
   fundFreshWallet({
     note: over.note ?? note(),
     wallet: WALLET,
     amount: 10n * U,
-    gas: U,
+    gas: over.gas ?? U,
     feeBps: 25,
     when,
     owner: OWNER,
@@ -196,6 +232,7 @@ const fund = (when: FundWhen, log: string[], over: { note?: LocalNote; read?: ()
       read: over.read ?? (async () => (log.push("confirm station"), stateOf())),
       run: fakeRun(log, over.stopAt),
       sendNow: async (_n, call) => {
+        over.sendNow?.(log.filter((l) => l.startsWith("now")).length);
         log.push(`now ${call.to}`);
         return { id: "h", chainId: call.chainId, sendAfter: 1, status: "sent", updatedAt: 1, to: call.to };
       },
@@ -223,6 +260,33 @@ await test("now: the same steps, sent instead of scheduled", async () => {
   const r = await fund("now", log);
   assert.equal(r.stoppedAt, null);
   assert.deepEqual(log.filter((l) => l.startsWith("now") || l.startsWith("schedule")), [`now ${STATION}`, `now ${WALLET}`]);
+});
+
+await test("no gas money: one cash out to the wallet, now or in a window, and the station is left alone", async () => {
+  const withGas = async () => stateOf({ walletEth: WALLET_GAS_OK_WEI });
+  for (const when of ["now", "hour"] as const) {
+    const log: string[] = [];
+    const r = await fund(when, log, { gas: 0n, read: withGas });
+    assert.equal(r.stoppedAt, null);
+    assert.equal(r.jobs.length, 1);
+    assert.ok(!log.some((l) => l.includes(STATION)), "nothing to the station");
+    assert.deepEqual(log.filter((l) => l.startsWith("prove")), [`prove ${WALLET}`]);
+  }
+});
+
+await test("no gas money for a wallet with no gas is refused before anything moves", async () => {
+  const log: string[] = [];
+  await assert.rejects(fund("now", log, { gas: 0n, read: async () => stateOf() }), new RegExp(NEEDS_GAS_PROBLEM));
+  assert.deepEqual(log, []);
+});
+
+await test("a wallet with code gets no gas money: the relay would never pump it", async () => {
+  const log: string[] = [];
+  await assert.rejects(fund("now", log, { read: async () => stateOf({ walletHasCode: true }) }), new RegExp(WALLET_CODE_PROBLEM));
+  assert.deepEqual(log, []);
+  // with its own gas it can take USDG like any address
+  const r = await fund("now", log, { gas: 0n, read: async () => stateOf({ walletHasCode: true, walletEth: WALLET_GAS_OK_WEI }) });
+  assert.equal(r.stoppedAt, null);
 });
 
 await test("a station the factory doesn't confirm stops the run before anything moves", async () => {
@@ -254,6 +318,69 @@ await test("a run that stops says where, and the USDG never goes without its gas
   assert.ok(!log.some((l) => l.includes(WALLET)), "the wallet's piece never started");
 });
 
+await test("a piece sent now that may have gone out counts as maybeSent, and never reads as nothing sent", async () => {
+  const mayBeOut = [new RelaySubmitError("It may have gone out.", "maybe_sent"), new RelaySubmitError("No answer.", "rpc"), new RelaySubmitError("Offline.", "network"), new Error(SEND_SLOW)];
+  for (const e of mayBeOut) {
+    const r = await fund("now", [], {
+      sendNow: () => {
+        throw e;
+      },
+    });
+    assert.equal(r.maybeSent, true, e.message);
+    assert.equal(r.stoppedAt, 0);
+    const line = stoppedLine(r, true);
+    assert.ok(!/nothing has gone out/i.test(line), line);
+    assert.match(line, /gas money may have gone out/i);
+    assert.match(line, /pay twice/);
+  }
+});
+
+await test("the USDG piece may have gone out: the line says the gas money went, and which one is unknown", async () => {
+  const r = await fund("now", [], {
+    sendNow: (i) => {
+      if (i === 1) throw new Error(SEND_SLOW);
+    },
+  });
+  assert.equal(r.maybeSent, true);
+  assert.equal(r.stoppedAt, 1);
+  assert.equal(r.jobs.length, 1);
+  const line = stoppedLine(r, true);
+  assert.match(line, /gas money is on its way/i);
+  assert.match(line, /Your USDG may have gone out/);
+  assert.ok(!/nothing has gone out/i.test(line));
+});
+
+await test("with no gas piece, the one piece is the USDG", async () => {
+  const r = await fund("now", [], {
+    gas: 0n,
+    read: async () => stateOf({ walletEth: WALLET_GAS_OK_WEI }),
+    sendNow: () => {
+      throw new Error(SEND_SLOW);
+    },
+  });
+  assert.equal(r.maybeSent, true);
+  const line = stoppedLine(r, false);
+  assert.match(line, /^Your USDG may have gone out/);
+  assert.ok(!/gas money/i.test(line), line);
+});
+
+await test("a send surely refused still says nothing went out, and why", async () => {
+  const r = await fund("now", [], {
+    sendNow: () => {
+      throw new RelaySubmitError("The relay is off.", "relay_off");
+    },
+  });
+  assert.equal(r.maybeSent, false);
+  assert.equal(stoppedLine(r, true), "Nothing has gone out. The relay is off. The rest is safe in your private balance.");
+  // a reverted send is a known end, and its error says so
+  const re = await fund("now", [], {
+    sendNow: () => {
+      throw new Error(SEND_REVERTED);
+    },
+  });
+  assert.equal(re.maybeSent, false);
+});
+
 await test("a plan bigger than the note is refused before anything moves", async () => {
   const log: string[] = [];
   await assert.rejects(fund("now", log, { note: note({ amountWei: String(5n * U) }) }), /more than this balance/);
@@ -272,6 +399,7 @@ await test("the runner's words name the two pieces, and say sending when it send
   assert.equal(pieceWords("Piece 1 of 2: proving privately…", "hour"), "Gas money: proving privately…");
   assert.equal(pieceWords("Piece 2 of 2: scheduling with the Gloam relay…", "hour"), "Your USDG: scheduling with the Gloam relay…");
   assert.equal(pieceWords("Piece 2 of 2: scheduling with the Gloam relay…", "now"), "Your USDG: sending through the Gloam relay…");
+  assert.equal(pieceWords("Piece 1 of 1: proving privately…", "now"), "Your USDG: proving privately…");
 });
 
 // ---------------------------------------------------------------- sending now
@@ -366,6 +494,32 @@ await test("gas asks the relay for nothing when nothing is needed", async () => 
   }
 });
 
+await test("USDG at the station of a wallet that already has gas still gets its pump: a second funding is never stranded", async () => {
+  const rich = { walletEth: WALLET_GAS_OK_WEI * 20n };
+  const d = gasDeps([{ ...made, ...rich }, { made: true, stationUsdg: 0n, ...rich }]);
+  const s = await getGas({ wallet: WALLET, deps: d.deps });
+  assert.deepEqual(d.sent, ["pump"]);
+  assert.equal(s.stationUsdg, 0n);
+  // and one that was never made gets made first
+  const fresh = gasDeps([{ ...funded, ...rich }, { ...made, ...rich }, { made: true, stationUsdg: 0n, ...rich }]);
+  await getGas({ wallet: WALLET, deps: fresh.deps });
+  assert.deepEqual(fresh.sent, ["make", "pump"]);
+});
+
+await test("one pump a run: more than the cap at the station waits for a later press, not a refused second pump", async () => {
+  const d = gasDeps([{ made: true, stationUsdg: 12n * U }, { made: true, stationUsdg: 7n * U, walletEth: WALLET_GAS_OK_WEI * 20n }]);
+  const s = await getGas({ wallet: WALLET, deps: d.deps });
+  assert.deepEqual(d.sent, ["pump"]);
+  assert.equal(s.stationUsdg, 7n * U);
+  assert.deepEqual(d.slept, [], "no waiting once the chain has moved");
+});
+
+await test("a wallet with code asks the relay for nothing", async () => {
+  const d = gasDeps([{ ...funded, walletHasCode: true }]);
+  await getGas({ wallet: WALLET, deps: d.deps });
+  assert.deepEqual(d.sent, []);
+});
+
 await test("the chain a moment behind after a make: gas waits for it to show", async () => {
   const d = gasDeps([funded, funded, funded, made, gassed]);
   await getGas({ wallet: WALLET, deps: d.deps });
@@ -435,6 +589,41 @@ await test("the link back is a USDG request on Robinhood Chain mainnet, to your 
   assert.equal(fragment.get("asset")?.toLowerCase(), STATION_USDG.toLowerCase());
   assert.equal(fragment.get("amount"), null, "the payer picks the amount");
   assert.ok(readPaymentRequest(fragment, "robinhood-mainnet"));
+});
+
+// ---------------------------------------------------------------- the page, read from its source
+
+await test("the page: the address can't change while a key is unsaved, and a press is busy before the first wait", () => {
+  const view = readFileSync(new URL("../src/components/app/FreshWalletView.tsx", import.meta.url), "utf8");
+  assert.match(view, /readOnly=\{Boolean\(newKey\)\}/);
+  assert.ok(!/onChange=\{\(e\) => \{\s*setNewKey\(null\)/.test(view), "typing must not drop an unsaved key");
+  const onFund = view.slice(view.indexOf("async function onFund()"), view.indexOf("async function onGetGas()"));
+  assert.ok(onFund.indexOf("setBusy(true)") >= 0 && onFund.indexOf("setBusy(true)") < onFund.indexOf("await checkTargets"), "busy comes first");
+  assert.ok(view.includes("LINKED_ADDRESS_NOTE"), "the address from a link is called out");
+  assert.match(LINKED_ADDRESS_NOTE, /came from a link/);
+  assert.match(LINKED_ADDRESS_NOTE, /Check you control it/);
+  assert.match(view, /setFromLink\(false\)/);
+});
+
+await test("a scheduled send never promises the tab can close, and says what a proof dates", () => {
+  const view = readFileSync(new URL("../src/components/app/FreshWalletView.tsx", import.meta.url), "utf8");
+  const docs = readFileSync(new URL("../src/app/docs/fresh-wallet/page.tsx", import.meta.url), "utf8");
+  assert.ok(!/close Gloam\./.test(view.replace(/\/\*[\s\S]*?\*\//g, "")), "no promise the tab can close");
+  assert.ok(!view.includes("timing says less"));
+  for (const [name, text] of [["view", view], ["docs", docs]] as const) {
+    const flat = text.replace(/\s+/g, " ");
+    assert.match(flat, /proof shows roughly when it was made/, name);
+    assert.match(flat, /remakes them, last shortly before each one goes/, name);
+    assert.match(flat, /goes out while Gloam is closed shows when it was last made/, name);
+  }
+});
+
+await test("the guide is honest about order and about this page's session", () => {
+  const docs = readFileSync(new URL("../src/app/docs/fresh-wallet/page.tsx", import.meta.url), "utf8").replace(/\s+/g, " ");
+  assert.match(docs, /Sent now, the gas money lands first/);
+  assert.match(docs, /either can come first/);
+  assert.match(docs, /but not on this page/);
+  assert.match(docs, /reads the fresh wallet inside your main session/);
 });
 
 // ---------------------------------------------------------------- wording

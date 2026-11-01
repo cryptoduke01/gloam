@@ -15,6 +15,7 @@ import { formatUnits, getAddress, isAddress, type Address } from "viem";
 import { useReadContract } from "wagmi";
 import { largestTopUpNote, pickTopUpNote } from "@/lib/agentTopUp";
 import { shortAddress } from "@/lib/chain";
+import type { OwnedCashOutJob } from "@/lib/cashOutLater";
 import { findCashOutLink, linkMessage } from "@/lib/cashOutPlan";
 import { depositWallets, presetAmounts, sameAmountDeposit, sameAmountText } from "@/lib/cashOutPrivacy";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
@@ -23,6 +24,8 @@ import {
   FRESH_MIN_GAS,
   GAS_DEFAULT,
   GAS_PRESETS,
+  LINKED_ADDRESS_NOTE,
+  WALLET_CODE_PROBLEM,
   amountProblem,
   backLink,
   freshAddressProblem,
@@ -32,9 +35,10 @@ import {
   getGas,
   mostForWallet,
   readFundLink,
+  stoppedLine,
   type FundWhen,
 } from "@/lib/freshWallet";
-import { BORRO_URL, GAS_STATION_CHAIN_ID, STATION_USDG, fundingStep, predictStation, readStationState, type StationState } from "@/lib/gasStation";
+import { BORRO_URL, GAS_STATION_CHAIN_ID, STATION_USDG, fundingStep, predictStation, readStationState, walletHasGas, type StationState } from "@/lib/gasStation";
 import { countPerson } from "@/lib/people";
 import { getOrCreateReceiveIdentity } from "@/lib/receiveTag";
 import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
@@ -72,7 +76,10 @@ export function FreshWalletView() {
 
   const [walletInput, setWalletInput] = useState("");
   const [amountInput, setAmountInput] = useState("");
-  const [gasInput, setGasInput] = useState<string>(GAS_DEFAULT);
+  /** What the person typed for gas, or null to take the default for this wallet. */
+  const [gasTyped, setGasTyped] = useState<string | null>(null);
+  /** The address came from a link's fragment and nobody has changed it since. */
+  const [fromLink, setFromLink] = useState(false);
   const [when, setWhen] = useState<FundWhen>("hour");
   /** A wallet made here, until the person says its key is saved. Never written anywhere. */
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -102,7 +109,10 @@ export function FreshWalletView() {
   useEffect(() => {
     const { to, amount } = readFundLink(window.location.hash);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the fragment only exists in the browser
-    if (to) setWalletInput(to);
+    if (to) {
+      setWalletInput(to);
+      setFromLink(true);
+    }
     if (amount) setAmountInput(amount);
   }, []);
 
@@ -169,10 +179,14 @@ export function FreshWalletView() {
 
   const parsedAmount = amountInput.trim() ? parseAssetAmount(amountInput.trim(), STATION_USDG) : null;
   const amount = parsedAmount !== null && parsedAmount > 0n ? parsedAmount : null;
-  const parsedGas = gasInput.trim() ? parseAssetAmount(gasInput.trim(), STATION_USDG) : null;
-  const gas = parsedGas !== null && parsedGas > 0n ? parsedGas : null;
+  // A wallet that already has gas can go without: more gas money would only wait at its station.
+  const hasGas = state !== null && walletHasGas(state);
+  const gasInput = gasTyped ?? (hasGas ? "0" : GAS_DEFAULT);
+  const gas = gasInput.trim() ? parseAssetAmount(gasInput.trim(), STATION_USDG) : hasGas ? 0n : null;
   const amountBad = amountProblem(amount, amountInput);
-  const gasBad = gasProblem(gas, gasInput);
+  const gasBad = gasProblem(gas, gasInput, hasGas);
+  // The relay won't act for a wallet with code, so gas money sent to its station would only sit there.
+  const codeBad = Boolean(state?.walletHasCode && (gas === null || gas > 0n));
 
   const plan = wallet && amount !== null && gas !== null && !amountBad && !gasBad ? fundingPlan({ wallet, amount, gas, feeBps }) : null;
   const largest = largestTopUpNote(open, STATION_USDG);
@@ -194,7 +208,8 @@ export function FreshWalletView() {
   const step = state ? fundingStep(state) : null;
   const relayOk = Boolean(relay?.enabled);
   const stationOn = Boolean(relay?.gasStation);
-  const ready = isConnected && relayOk && stationOn && feeKnown && HASH_SCHEME === "poseidon" && !newKey && source !== null && plan !== null && !busy;
+  const ready =
+    isConnected && relayOk && stationOn && feeKnown && HASH_SCHEME === "poseidon" && !newKey && !codeBad && source !== null && plan !== null && !busy;
 
   async function makeWallet() {
     setError(null);
@@ -202,6 +217,7 @@ export function FreshWalletView() {
     const { generatePrivateKey, privateKeyToAccount } = await import("viem/accounts");
     const key = generatePrivateKey();
     setNewKey(key);
+    setFromLink(false);
     setWalletInput(privateKeyToAccount(key).address);
   }
 
@@ -211,9 +227,9 @@ export function FreshWalletView() {
     if (s) setState(s);
   }
 
-  /** What every cash out passes before anything moves, for both addresses. */
-  async function checkTargets(to: Address, station: Address): Promise<boolean> {
-    for (const t of [to, station]) {
+  /** What every cash out passes before anything moves, for every address it pays. */
+  async function checkTargets(to: Address, targets: Address[]): Promise<boolean> {
+    for (const t of targets) {
       const problem = cashOutTargetProblem(t, network);
       if (problem) {
         setError(problem);
@@ -226,7 +242,7 @@ export function FreshWalletView() {
       setError(`Money sent to ${shortAddress(to, 4)} has been moved out automatically within seconds before, by another account. Use another address.`);
       return false;
     }
-    const screen = await screenWallets([to, station], { chainId: network.chainId, asset: STATION_USDG, flow: "cashout" });
+    const screen = await screenWallets(targets, { chainId: network.chainId, asset: STATION_USDG, flow: "cashout" });
     if (!screen.allowed) {
       setError(screen.message ?? SCREEN_BLOCKED_MESSAGE);
       return false;
@@ -238,25 +254,17 @@ export function FreshWalletView() {
     if (!ready || !plan || !source || !wallet || !address || amount === null || gas === null) return;
     setError(null);
     setNotice(null);
-    if (!(await checkTargets(wallet, plan.to[0]))) return;
+    // Before the first wait, so a second press can't start a second run while the checks read the chain.
     setBusy(true);
+    setStatus("Checking the addresses…");
     try {
+      if (!(await checkTargets(wallet, plan.to))) return;
       const r = await fundFreshWallet({ note: source, wallet, amount, gas, feeBps, when, owner: address as Address, onStatus: setStatus });
       if (r.stoppedAt === null) {
         setAmountInput("");
-        const [g, w] = r.jobs;
-        setNotice(
-          when === "now"
-            ? "Both have landed. Now turn the gas money into ETH."
-            : `Gas money goes out ${aboutTime(g!.sendAfter)}, your USDG ${aboutTime(w!.sendAfter)}. You can close Gloam. Come back with this address once the gas money lands.`
-        );
+        setNotice(fundedLine(r.jobs, when, gas > 0n));
       } else {
-        const said = r.jobs.length ? "The gas money is on its way, your USDG is not." : "Nothing has gone out.";
-        setError(
-          r.maybeSent
-            ? `${said} The last step may have gone out. Your money is safe in the vault and shows again once it lands.`
-            : `${said} ${r.error ?? ""} The rest is safe in your private balance.`.replace(/\s+/g, " ")
-        );
+        setError(stoppedLine(r, gas > 0n));
       }
       if (r.jobs.length > 0) countPerson("cashout", address, network.testnet);
     } catch (e) {
@@ -359,14 +367,17 @@ export function FreshWalletView() {
               autoComplete="off"
               spellCheck={false}
               disabled={busy}
+              readOnly={Boolean(newKey)}
               value={walletInput}
               onChange={(e) => {
-                setNewKey(null);
+                setFromLink(false);
                 setWalletInput(e.target.value);
               }}
-              aria-invalid={Boolean(walletProblem)}
+              aria-invalid={Boolean(walletProblem) || codeBad}
             />
             {walletProblem && <p className="mt-1.5 text-[12.5px] leading-relaxed text-warn">{walletProblem}</p>}
+            {codeBad && <p className="mt-1.5 text-[12.5px] leading-relaxed text-warn">{WALLET_CODE_PROBLEM}</p>}
+            {fromLink && <p className="mt-1.5 text-[12.5px] leading-relaxed text-warn">{LINKED_ADDRESS_NOTE}</p>}
             {state && state.walletTxs > 0 && (
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
                 This wallet has been used before. If it ever touched your main wallet, the chain still shows that.
@@ -430,17 +441,17 @@ export function FreshWalletView() {
                 autoComplete="off"
                 disabled={busy}
                 value={gasInput}
-                onChange={(e) => setGasInput(e.target.value)}
+                onChange={(e) => setGasTyped(e.target.value)}
                 aria-invalid={Boolean(gasBad)}
                 className="gl-input tnum w-24! text-[14px]"
               />
-              {GAS_PRESETS.map((g) => (
+              {(hasGas ? ["0", ...GAS_PRESETS] : GAS_PRESETS).map((g) => (
                 <button
                   key={g}
                   type="button"
                   disabled={busy}
                   aria-pressed={gasInput === g}
-                  onClick={() => setGasInput(g)}
+                  onClick={() => setGasTyped(g)}
                   className={`gl-chip tnum min-h-10 ${gasInput === g ? "border-foreground! text-foreground!" : ""}`}
                 >
                   {g}
@@ -448,7 +459,10 @@ export function FreshWalletView() {
               ))}
             </div>
             <p className={`mt-1.5 text-[12.5px] leading-relaxed ${gasBad ? "text-warn" : "text-mute"}`}>
-              {gasBad ?? `This goes to the wallet's gas station and comes out as ETH. It can only ever pay that wallet, so send what you need for gas.`}
+              {gasBad ??
+                (hasGas
+                  ? "This wallet already has gas, so you can leave this at 0."
+                  : "This goes to the wallet's gas station and comes out as ETH. It can only ever pay that wallet, so send what you need for gas.")}
             </p>
           </div>
 
@@ -476,8 +490,13 @@ export function FreshWalletView() {
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
               {when === "now"
                 ? "Sending right after you added money makes the two easier to line up."
-                : "Each goes out at its own random time in that window, so timing says less."}
+                : "Each goes out at its own random time in that window."}
             </p>
+            {when !== "now" && (
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-mute">
+                Each proof shows roughly when it was made, so the two can be grouped. While Gloam is open it remakes them, last shortly before each one goes. One that goes out while Gloam is closed shows when it was last made.
+              </p>
+            )}
           </div>
 
           {linkNote && <CashOutLinkNote text={linkNote} />}
@@ -487,7 +506,7 @@ export function FreshWalletView() {
               <SummaryRow label="From your private balance" value={formatAssetLabel(plan.total, STATION_USDG)} strong />
               <SummaryRow label={`Fee (${feeKnown ? formatFeePercent(feeBps) : "reading"})`} value={formatAssetLabel(plan.fee, STATION_USDG)} />
               <SummaryRow label="Wallet gets" value={formatAssetLabel(plan.arrives.wallet, STATION_USDG)} />
-              <SummaryRow label="Gas station gets" value={formatAssetLabel(plan.arrives.station, STATION_USDG)} />
+              {plan.arrives.station > 0n && <SummaryRow label="Gas station gets" value={formatAssetLabel(plan.arrives.station, STATION_USDG)} />}
             </dl>
           )}
 
@@ -558,18 +577,19 @@ export function FreshWalletView() {
                 Turn it into ETH
               </button>
             )}
+            {step === "contract" && <p className="mt-3 text-[12.5px] leading-relaxed text-warn">{WALLET_CODE_PROBLEM}</p>}
             {step === "low" && (
               <p className="mt-3 text-[12.5px] leading-relaxed text-mute">
                 The station holds too little for the relay to act. Send it at least {formatAssetLabel(FRESH_MIN_GAS, STATION_USDG)} more.
               </p>
             )}
-            {step === "ready" && (
+            {hasGas && (
               <a href={BORRO_URL} target="_blank" rel="noopener noreferrer" className="btn btn-ink mt-4 inline-flex w-full items-center justify-center gap-1.5">
                 Open Borro
                 <ArrowUpRight />
               </a>
             )}
-            {step === "ready" && (
+            {hasGas && (
               <p className="mt-2.5 text-[12.5px] leading-relaxed text-mute">
                 Connect the fresh wallet there, not your main one. Borro is a separate project. Gloam doesn&apos;t run it.
               </p>
@@ -593,6 +613,13 @@ export function FreshWalletView() {
       </div>
     </div>
   );
+}
+
+/** What happens next, once every piece is sent or scheduled. Scheduled proofs can date themselves, so this never says the tab can close. */
+function fundedLine(jobs: OwnedCashOutJob[], when: FundWhen, withGas: boolean): string {
+  if (when === "now") return withGas ? "Both have landed. Now turn the gas money into ETH." : "Your USDG has landed.";
+  if (!withGas) return `Your USDG goes out ${aboutTime(jobs[0]!.sendAfter)}.`;
+  return `Gas money goes out ${aboutTime(jobs[0]!.sendAfter)}, your USDG ${aboutTime(jobs[1]!.sendAfter)}. Come back with this address once the gas money lands.`;
 }
 
 function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
