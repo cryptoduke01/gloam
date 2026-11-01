@@ -454,6 +454,23 @@ export async function syncFromDisk(): Promise<void> {
   }
 }
 
+/**
+ * Whether the notes on disk open with this browser's key. False (wrong key,
+ * damaged) means the cache is not what this browser holds, so nothing built
+ * from it may stand in for them.
+ */
+export async function storedNotesOpen(): Promise<boolean> {
+  if (typeof window === "undefined") return true;
+  const raw = localStorage.getItem(NOTES_KEY);
+  if (!raw?.startsWith(ENC_PREFIX)) return true;
+  try {
+    await decrypt(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** All notes in the in-memory cache (unfiltered). */
 export function getAllNotes(): LocalNote[] {
   // Recording demo: the pretend wallet's notes, never this browser's own.
