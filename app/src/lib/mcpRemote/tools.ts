@@ -745,7 +745,7 @@ if (!net) throw new Error("${where} pool not published yet");`;
       "Make a receive key once with generateReceiveKey() from @gloamtrade/sdk and keep it on the server. Its tag (gloamr1.…) is what payers pay to; the key itself never leaves your server.",
       "Add the gloam method to mppx. Routes answer 402 with a WWW-Authenticate: Payment challenge, then check the payer's credential.",
       "Before serving, the server sweeps the payment into a fresh note only it knows (save that note in beforeSubmit: it is the money). Until the sweep confirms, the payer could spend the payment back, so access waits for it.",
-      "The sweep is proved with the final keys, as on every mainnet vault: circuitArtifactUrls(\"transfer\", net.chainId).",
+      "The sweep is proved with the final keys, as on every mainnet vault: circuitArtifactUrls(\"transfer\", net.chainId) names them. In Node, snarkjs reads local files only, so download them first, check them against CIRCUIT_SHA256, and pass their paths to artifactProver.",
     ],
     code: `import { Mppx } from "mppx/server";
 import { gloam } from "@gloamtrade/mppx-gloam/server";
