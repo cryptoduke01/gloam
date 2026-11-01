@@ -614,7 +614,9 @@ await test("a scheduled send never promises the tab can close, and says what a p
     const flat = text.replace(/\s+/g, " ");
     assert.match(flat, /proof shows roughly when it was made/, name);
     assert.match(flat, /remakes them, last shortly before each one goes/, name);
-    assert.match(flat, /goes out while Gloam is closed shows when it was last made/, name);
+    assert.match(flat, /goes out at any other time shows when it was last made/, name);
+    // the proofs are remade only with the tab in view and the vault open (components/app/CashOutProofRefresh)
+    assert.match(flat, /open and on screen, with your vault unlocked/, name);
   }
 });
 
