@@ -16,7 +16,9 @@
  * Replay protection is the payment note's nullifier: the sweep spends it on
  * chain exactly once. A replay store in front of it keeps concurrent requests
  * with the same credential from racing, and remembers a sweep whose receipt
- * was lost so a retry of the same credential can still be served once.
+ * was lost so a retry of the same credential can still be served once. Every
+ * receipt comes from one atomic claim on the payment, so however the requests
+ * for it overlap, one of them is served.
  */
 
 import { keccak256, toBytes, type Address, type Hex } from "viem";
@@ -134,9 +136,9 @@ export interface GloamReplayRecord {
 }
 
 /**
- * Keyed by the payment note's nullifier, and by `challenge:<id>` so that a
- * challenge settles one payment only. Use a shared store (Redis, a database)
- * when several instances settle.
+ * Keyed by the payment note's nullifier, by `challenge:<id>` so that a challenge
+ * settles one payment only, and by `served:<nullifier>` so that a payment gets
+ * one receipt. Use a shared store (Redis, a database) when several instances settle.
  */
 export interface GloamReplayStore {
   get(key: string): Promise<GloamReplayRecord | undefined>;
@@ -214,6 +216,7 @@ async function requireChain(chain: GloamChargeChain, chainId: number): Promise<v
 
 const replayStores = new WeakMap<GloamChargeReadConfig, GloamReplayStore>();
 const challengeKey = (id: string) => `challenge:${id}`;
+const servedKey = (paymentNullifier: Hex) => `served:${paymentNullifier}`;
 /** The config's replay store, or one in-memory store per config object. */
 export function replayStoreOf(config: GloamChargeReadConfig): GloamReplayStore {
   if (config.replay) return config.replay;
@@ -344,6 +347,16 @@ export async function validateGloamCharge(args: {
 
 // ── settle ───────────────────────────────────────────────────────────────────
 
+/**
+ * What the paying client is told about a sweep that did not finish. These two carry the failure's own text in
+ * the SDK, for the operator. The client gets fixed words.
+ */
+function sweepReason(result: { status: string; reason: string | null }): string {
+  if (result.status === "unconfirmed") return "The sweep has not confirmed.";
+  if (result.status === "failed") return "The sweep did not go through and nothing moved. It can be retried.";
+  return result.reason ?? "The payment could not be settled.";
+}
+
 function receiptOf(v: ValidatedGloamCharge, sweepHash: Hex, now: number): GloamChargeReceipt {
   return {
     status: "success",
@@ -399,6 +412,25 @@ export async function settleGloamCharge(args: {
     if (h?.paymentNullifier === key) await replay.delete(ckey);
   };
 
+  // One receipt per payment, whichever request gets here first: the one that swept it, a retry waiting on the same
+  // sweep, or the payment bound to another challenge. The reads above can all pass at once, so this claim decides.
+  const finalize = async (record: GloamReplayRecord) => {
+    const served = servedKey(key);
+    if (!(await replay.claim(served, { state: "settled", at: record.at }))) {
+      await markChallenge("settled");
+      throw fail("This payment was already used.");
+    }
+    try {
+      // The payment's record last: once it says settled, a retry stops short of this point.
+      await markChallenge("settled");
+      await replay.put(key, record);
+    } catch (e) {
+      // Nothing was handed out, so a retry can still be served.
+      await replay.delete(served).catch(() => undefined);
+      throw e;
+    }
+  };
+
   // A challenge settles one payment. Another payment that holds it blocks this one (before anything is swept).
   const holder = await replay.get(ckey);
   if (holder && holder.paymentNullifier !== key) {
@@ -414,14 +446,16 @@ export async function settleGloamCharge(args: {
   const existing = await replay.get(key);
   if (existing?.state === "settled") throw fail("This payment was already used.");
   if (existing?.state === "sent") {
+    // The spend first: a sweep does both in one block, so a spend read with no fresh note read after it was another
+    // transaction's. The other way round, a sweep landing between the two reads looks like someone else's spend.
+    const spent = await chain.isSpent(key);
     if (existing.freshCommitment && (await chain.isCommitmentSeen(existing.freshCommitment))) {
       const reference = existing.sweepHash ?? (v.payload.type === "hash" ? v.payload.hash : existing.freshCommitment);
       const receipt = receiptOf(v, reference, clock());
-      await replay.put(key, { ...existing, state: "settled", at: clock(), receipt });
-      await markChallenge("settled");
+      await finalize({ ...existing, state: "settled", at: clock(), receipt });
       return receipt;
     }
-    if (await chain.isSpent(key)) {
+    if (spent) {
       await replay.delete(key);
       await releaseChallenge();
       throw fail("The payment note was spent by someone else before this server's sweep landed. Do not grant access.");
@@ -496,14 +530,13 @@ export async function settleGloamCharge(args: {
       // sent): settled all the same, and referenced as a retry of a sent record is.
       const sweepHash = result.sweep?.hash ?? null;
       const receipt = receiptOf(v, sweepHash ?? (v.payload.type === "hash" ? v.payload.hash : result.freshNote.commitment), clock());
-      await replay.put(key, {
+      await finalize({
         state: "settled",
         at: clock(),
         freshCommitment: result.freshNote.commitment,
         sweepHash,
         receipt,
       });
-      await markChallenge("settled");
       return receipt;
     }
     if (result.status === "unconfirmed") {
@@ -513,11 +546,11 @@ export async function settleGloamCharge(args: {
         freshCommitment: result.freshNote?.commitment,
         sweepHash: result.sweep?.hash ?? null,
       });
-      throw fail(`${result.reason ?? "The sweep has not confirmed."} Retry shortly with the same credential.`, true);
+      throw fail(`${sweepReason(result)} Retry shortly with the same credential.`, true);
     }
     await replay.delete(key);
     await releaseChallenge();
-    throw fail(result.reason ?? "The payment could not be settled.");
+    throw fail(sweepReason(result));
   } catch (e) {
     // Keep a sent record (money may be moving); drop a bare claim unless the failure is worth retrying.
     const drop = !sent && (!(e instanceof GloamChargeError) || !e.retryable);

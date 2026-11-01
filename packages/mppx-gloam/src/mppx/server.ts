@@ -36,9 +36,9 @@ import { charge } from "./method.js";
 /** Translate a gloam failure into the mppx error that answers with the right Problem Details. */
 export function toMppxError(e: unknown, challengeId?: string): Error {
   if (e instanceof Errors.PaymentError) return e;
-  // mppx ends the problem detail with its own period.
-  const reason = (e instanceof Error ? e.message : String(e)).replace(/\.$/, "");
   if (e instanceof GloamChargeError) {
+    // mppx ends the problem detail with its own period.
+    const reason = e.message.replace(/\.$/, "");
     switch (e.code) {
       case "payment-expired":
         return new Errors.PaymentExpiredError({});
@@ -50,7 +50,9 @@ export function toMppxError(e: unknown, challengeId?: string): Error {
         return new Errors.VerificationFailedError({ reason, details: { retryable: e.retryable } });
     }
   }
-  return new Errors.VerificationFailedError({ reason });
+  // Anything else came from the RPC, the store or the submitter. That text is for the operator, so the
+  // client gets the same words as on the plain paywall.
+  return new Errors.VerificationFailedError({ reason: "The payment could not be processed" });
 }
 
 export declare namespace gloam {

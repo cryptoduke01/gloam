@@ -242,3 +242,46 @@ test("mppx: Mppx.create with gloam() on both sides pays a route privately", asyn
   assert.equal(replay.status, 402);
   assert.match(await replay.text(), /already used/);
 });
+
+test("a failed chain read or sweep answers a 402 with none of the failure's text", async () => {
+  const raw = 'HTTP request failed. URL: https://rpc.example.com/v2/detail-for-the-operator Request body: {"method":"eth_call"}';
+  const down = async (): Promise<never> => {
+    throw new Error(raw);
+  };
+  const failures: ((pool: MockPool) => Partial<GloamChargeServerConfig>)[] = [
+    (pool) => ({ chain: { ...pool.chain, getReceipt: down } }),
+    (pool) => ({ chain: { ...pool.chain, isSpent: down } }),
+    (pool) => ({ chain: { ...pool.chain, chainId: down } }),
+    () => ({ submit: down }),
+  ];
+  const mppxApp = (config: GloamChargeServerConfig) => {
+    const mppx = MppxServer.create({ secretKey: SECRET, realm: "api.example.com", methods: [gloamServer({ ...config, network: "tempo" })] });
+    return async (req: Request) => {
+      const r = await mppx.charge({ amount: "0.0004" })(req);
+      return r.status === 402 ? r.challenge : r.withReceipt(Response.json({ answer: 42 }));
+    };
+  };
+  const paywallApp = (config: GloamChargeServerConfig) => {
+    const paywall = createGloamPaywall({ secretKey: SECRET, server: config, network: "tempo" });
+    return async (req: Request) => {
+      const r = await paywall.charge({ amount: "0.0004" })(req);
+      return r.status === 402 ? r.challenge : r.withReceipt(Response.json({ answer: 42 }));
+    };
+  };
+
+  for (const app of [mppxApp, paywallApp]) {
+    for (const failure of failures) {
+      const pool = mockPool();
+      const handle = app({ ...server(pool), ...failure(pool) });
+      const [ch] = parsePaymentChallenges((await handle(new Request(URL_))).headers.get("www-authenticate"));
+      const note = await fundedNote(pool, 1000n);
+      const paid = await createGloamChargeCredential({ challenge: ch!, note, prove: stubProve, mode: "push", submit: pool.submitter("payer"), waitForReceipt: pool.chain.waitForReceipt });
+      const res = await handle(new Request(URL_, { headers: { [credentialField(ch!)]: paid.authorization } }));
+      const body = await res.text();
+      assert.equal(res.status, 402, body);
+      assert.ok(!body.includes("detail-for-the-operator") && !body.includes("eth_call"), body);
+      for (const [name, value] of res.headers) assert.ok(!value.includes("detail-for-the-operator"), `${name}: ${value}`);
+      assert.ok(body.length > 0, "the refusal still says something");
+    }
+  }
+});
