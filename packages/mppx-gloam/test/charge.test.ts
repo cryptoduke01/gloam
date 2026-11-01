@@ -4,7 +4,7 @@
  * before issuing a receipt. Covers push and pull, replay, a credential lifted
  * onto another challenge, wrong keys, amounts, assets, pools and events, a
  * payer who spends the payment back, lost sweep receipts, a sweep sent by a
- * relay whose answer was lost, and concurrency.
+ * relay whose answer was lost, concurrency, and one receipt for each payment.
  */
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -502,5 +502,75 @@ test("the same credential settling twice at once yields one receipt", async () =
   const results = await Promise.allSettled([1, 2, 3].map(() => settle(ch, paid.credential.payload, config)));
   const ok = results.filter((r) => r.status === "fulfilled");
   assert.equal(ok.length, 1, JSON.stringify(results.map((r) => (r.status === "rejected" ? String(r.reason) : "ok"))));
+  assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, "one sweep");
+});
+
+test("a payment gets one receipt when another request arrives while its sweep waits to be confirmed", async () => {
+  for (const other of ["same credential", "bound to another challenge"]) {
+    const pool = mockPool();
+    const ch = await challengeFor(400n);
+    const paid = await pay(pool, ch, "push");
+    // The sweep is in a block, and the request that sent it has not heard yet.
+    let landed!: () => void;
+    let hear!: () => void;
+    const onChain = new Promise<void>((r) => (landed = r));
+    const heard = new Promise<void>((r) => (hear = r));
+    const config = serverConfig(pool, {
+      chain: {
+        ...pool.chain,
+        waitForReceipt: async (hash) => {
+          landed();
+          await heard;
+          return pool.chain.waitForReceipt(hash);
+        },
+      },
+    });
+    const outcome = (p: Promise<unknown>) => p.then(() => "receipt", (e: Error) => e.message);
+    const first = outcome(settle(ch, paid.credential.payload, config));
+    await onChain;
+
+    let ch2 = ch;
+    let payload2: unknown = paid.credential.payload;
+    if (other !== "same credential") {
+      ch2 = await challengeFor(400n);
+      const { secret, commitment } = paid.built.paymentNote;
+      const binding = await challengeBinding({ secret, realm: ch2.realm, challengeId: ch2.id, commitment });
+      payload2 = { ...(paid.credential.payload as Record<string, unknown>), binding };
+    }
+    const second = await outcome(settle(ch2, payload2, config));
+    hear();
+    const results = [await first, second];
+    assert.equal(results.filter((r) => r === "receipt").length, 1, `${other}: ${JSON.stringify(results)}`);
+    assert.match(results.find((r) => r !== "receipt")!, /already used/, other);
+    assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, `${other}: one sweep`);
+    await rejects(settle(ch, paid.credential.payload, config), /already used/);
+
+    // The challenge is used, not left waiting on a sweep that finished.
+    const next = await pay(pool, ch, "push");
+    await assert.rejects(settle(ch, next.credential.payload, config), (e: unknown) => e instanceof GloamChargeError && e.code === "invalid-challenge", other);
+  }
+});
+
+test("a store that fails while a receipt is recorded leaves the payment able to be served, once", async () => {
+  const pool = mockPool();
+  const ch = await challengeFor(400n);
+  const paid = await pay(pool, ch, "push");
+  const store = memoryReplayStore();
+  let failing = true;
+  const config = serverConfig(pool, {
+    replay: {
+      ...store,
+      put: async (key, record) => {
+        if (failing && record.state === "settled" && record.receipt) {
+          failing = false;
+          throw new Error("store unavailable");
+        }
+        return store.put(key, record);
+      },
+    },
+  });
+  await assert.rejects(settle(ch, paid.credential.payload, config), /store unavailable/);
+  assert.equal((await settle(ch, paid.credential.payload, config)).status, "success");
+  await rejects(settle(ch, paid.credential.payload, config), /already used/);
   assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, "one sweep");
 });
