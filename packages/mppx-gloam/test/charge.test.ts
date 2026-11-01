@@ -4,7 +4,8 @@
  * before issuing a receipt. Covers push and pull, replay, a credential lifted
  * onto another challenge, wrong keys, amounts, assets, pools and events, a
  * payer who spends the payment back, lost sweep receipts, a sweep sent by a
- * relay whose answer was lost, concurrency, and one receipt for each payment.
+ * relay whose answer was lost, concurrency, one receipt for each payment, and
+ * what a client is told when a sweep fails.
  */
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
@@ -573,4 +574,35 @@ test("a store that fails while a receipt is recorded leaves the payment able to 
   assert.equal((await settle(ch, paid.credential.payload, config)).status, "success");
   await rejects(settle(ch, paid.credential.payload, config), /already used/);
   assert.equal(pool.submitted.filter((s) => s === "payee").length, 1, "one sweep");
+});
+
+test("a sweep that fails tells the client what to do, never the text of the failure", async () => {
+  const raw = 'HTTP request failed. URL: https://rpc.example.com/v2/detail-for-the-operator Request body: {"method":"eth_sendRawTransaction"}';
+  const thrownBy = (error: Error): GloamChargeServerConfig["submit"] => async () => {
+    throw error;
+  };
+  const refusal = async (config: GloamChargeServerConfig, ch: PaymentChallenge, payload: unknown) => {
+    const e = await settle(ch, payload, config).then(
+      () => assert.fail("a sweep that failed gave a receipt"),
+      (err: unknown) => err
+    );
+    assert.ok(e instanceof GloamChargeError, String(e));
+    assert.ok(!e.message.includes("detail-for-the-operator") && !e.message.includes("eth_sendRawTransaction"), e.message);
+    return e;
+  };
+
+  // Never sent: nothing moved, and the same credential can come back.
+  let pool = mockPool();
+  let ch = await challengeFor(400n);
+  let paid = await pay(pool, ch, "push");
+  const nothingMoved = await refusal(serverConfig(pool, { submit: thrownBy(new Error(raw)) }), ch, paid.credential.payload);
+  assert.match(nothingMoved.message, /did not go through and nothing moved/);
+
+  // Maybe sent: the client is told to retry.
+  pool = mockPool();
+  ch = await challengeFor(400n);
+  paid = await pay(pool, ch, "push");
+  const unclear = await refusal(serverConfig(pool, { submit: thrownBy(Object.assign(new Error(raw), { maybeSent: true })) }), ch, paid.credential.payload);
+  assert.match(unclear.message, /has not confirmed.*Retry shortly/);
+  assert.equal(unclear.retryable, true);
 });

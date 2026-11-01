@@ -337,6 +337,16 @@ export async function validateGloamCharge(args: {
 
 // ── settle ───────────────────────────────────────────────────────────────────
 
+/**
+ * What the paying client is told about a sweep that did not finish. These two carry the failure's own text in
+ * the SDK, for the operator. The client gets fixed words.
+ */
+function sweepReason(result: { status: string; reason: string | null }): string {
+  if (result.status === "unconfirmed") return "The sweep has not confirmed.";
+  if (result.status === "failed") return "The sweep did not go through and nothing moved. It can be retried.";
+  return result.reason ?? "The payment could not be settled.";
+}
+
 function receiptOf(v: ValidatedGloamCharge, sweepHash: Hex, now: number): GloamChargeReceipt {
   return {
     status: "success",
@@ -520,11 +530,11 @@ export async function settleGloamCharge(args: {
         freshCommitment: result.freshNote?.commitment,
         sweepHash: result.sweep?.hash ?? null,
       });
-      throw fail(`${result.reason ?? "The sweep has not confirmed."} Retry shortly with the same credential.`, true);
+      throw fail(`${sweepReason(result)} Retry shortly with the same credential.`, true);
     }
     await replay.delete(key);
     await releaseChallenge();
-    throw fail(result.reason ?? "The payment could not be settled.");
+    throw fail(sweepReason(result));
   } catch (e) {
     // Keep a sent record (money may be moving); drop a bare claim unless the failure is worth retrying.
     const drop = !sent && (!(e instanceof GloamChargeError) || !e.retryable);
