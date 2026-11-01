@@ -186,6 +186,9 @@ export interface GloamChargeServerConfig {
   now?: () => number;
 }
 
+/** What checking a payment needs: it never sweeps, so it has no note to keep. */
+export type GloamChargeReadConfig = Omit<GloamChargeServerConfig, "beforeSubmit">;
+
 const fail = (message: string, retryable = false) => new GloamChargeError("verification-failed", message, retryable);
 
 /** Refuses a server that would throw away what it earns: nothing else hands out a sweep's fresh note. */
@@ -195,7 +198,7 @@ export function assertKeepsFreshNotes(config: Pick<GloamChargeServerConfig, "bef
   }
 }
 const lc = (s: string) => s.toLowerCase();
-const chainFor = (config: GloamChargeServerConfig, chainId: number) =>
+const chainFor = (config: GloamChargeReadConfig, chainId: number) =>
   typeof config.chain === "function" ? config.chain(chainId) : config.chain;
 
 /** Refuses a chain reader that answers for another chain than the charge's. */
@@ -209,10 +212,10 @@ async function requireChain(chain: GloamChargeChain, chainId: number): Promise<v
   if (problem) throw fail(problem.replace("the payment is on", "the charge is on"));
 }
 
-const replayStores = new WeakMap<GloamChargeServerConfig, GloamReplayStore>();
+const replayStores = new WeakMap<GloamChargeReadConfig, GloamReplayStore>();
 const challengeKey = (id: string) => `challenge:${id}`;
 /** The config's replay store, or one in-memory store per config object. */
-export function replayStoreOf(config: GloamChargeServerConfig): GloamReplayStore {
+export function replayStoreOf(config: GloamChargeReadConfig): GloamReplayStore {
   if (config.replay) return config.replay;
   let s = replayStores.get(config);
   if (!s) replayStores.set(config, (s = memoryReplayStore()));
@@ -254,7 +257,7 @@ export interface ValidatedGloamCharge {
 export async function validateGloamCharge(args: {
   challenge: ChargeChallengeLike;
   payload: unknown;
-  config: GloamChargeServerConfig;
+  config: GloamChargeReadConfig;
 }): Promise<ValidatedGloamCharge> {
   const { challenge, config } = args;
   const now = config.now?.() ?? Date.now();
