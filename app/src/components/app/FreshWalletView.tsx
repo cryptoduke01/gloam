@@ -180,7 +180,7 @@ export function FreshWalletView() {
   const most = mostForWallet(largest, gas);
   const source = plan ? pickTopUpNote(open, STATION_USDG, plan.total) : null;
   const shortOf =
-    plan && !source
+    isConnected && plan && !source
       ? largest > 0n
         ? `Both come out of one balance, and your largest is ${formatAssetLabel(largest, STATION_USDG)}. Try a smaller amount.`
         : "Nothing to send in USDG yet. Add some privately first."
