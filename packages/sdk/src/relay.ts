@@ -39,13 +39,19 @@ export class GloamRelayError extends Error {
   }
 }
 
+/** Relay answers that don't say a send stayed unsent: it may still land, so nothing kept for it can go. */
+export const RELAY_MAYBE_SENT: ReadonlySet<string> = new Set(["maybe_sent", "rpc", "network", "error", "internal", "in_flight"]);
+
 async function post(body: Record<string, unknown>, opts: RelayOptions = {}): Promise<Hex> {
   const f = opts.fetch ?? fetch;
-  const res = await f(opts.url ?? GLOAM_RELAY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
-  });
+  const payload = JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+  let res: Response;
+  try {
+    res = await f(opts.url ?? GLOAM_RELAY_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+  } catch (e) {
+    // A dropped connection can come after the relay took the request and sent it.
+    throw new GloamRelayError(`No answer from the relay: ${e instanceof Error ? e.message : String(e)}`, "maybe_sent");
+  }
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; hash?: Hex; error?: string; code?: string };
   if (!res.ok || !json.ok || !json.hash) {
     throw new GloamRelayError(json.error ?? `Relay error (${res.status})`, json.code ?? "error");
