@@ -209,8 +209,8 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
       const held = store.claimPayment("l", ten, me(26));
       assert.ok(!held.claimed, "still there the day after that was found out");
       store.closePayment("l", me(26), false);
-      hours(70);
-      assert.deepEqual(store.claimPayment("l", ten, me(27)), { claimed: true }, "a day after the last thing that happened, it goes");
+      hours(50);
+      assert.deepEqual(store.claimPayment("l", ten, me(27)), { claimed: true }, "a day after its payment last changed it goes, though a retry came since");
       assert.deepEqual(store.claimPayment("j", ten, me(28)), { claimed: true }, "so does a challenge");
       const stillOpen = store.claimPayment("k", ten, me(29));
       assert.ok(!stillOpen.claimed && !stillOpen.running, "not known yet: still held");

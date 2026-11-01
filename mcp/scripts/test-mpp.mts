@@ -979,6 +979,29 @@ test("a send that lands long after its note was freed is found by the retry, whi
   assert.equal(r.transfers()[0]!.status, "spent", "the first is known to have landed");
 });
 
+test("just after a send lands, nodes can disagree: a spend with no payment to be seen pays nothing yet", async () => {
+  const { chain, payeeEnv, payerEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const priced = await price(S, 1);
+  const r = await lostAnswer({ chain, payerEnv, S, shields: 2 });
+  await r.P("gloam_execute_private_pay", { requirements: priced.encoded });
+  await r.land();
+  r.answerNormally();
+
+  // The spend reads from a node that has the block, the payment from one that doesn't yet.
+  const read = chain.publicClient.readContract;
+  chain.publicClient.readContract = async (q) => (q.functionName === "isSpent" ? read(q) : false);
+  const early = await r.P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(early.status, "payment_in_progress", JSON.stringify(early));
+  assert.equal(r.transfers().length, 1, "no second payment");
+
+  chain.publicClient.readContract = read;
+  const settled = await r.P("gloam_execute_private_pay", { requirements: priced.encoded });
+  assert.equal(settled.status, "paid", JSON.stringify(settled));
+  assert.equal(settled.reused, true);
+  assert.equal(r.transfers().length, 1, "and none after");
+});
+
 test("a send that lands while its retry is on the way: the note's nullifier stops the retry, and the first payment is kept", async () => {
   const { chain, payeeEnv, payerEnv } = await setup();
   const S = await connect(makeDeps(chain, payeeEnv).deps);

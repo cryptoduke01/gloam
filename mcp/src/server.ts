@@ -1557,8 +1557,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       for (const s of sends) if (await chain.isCommitmentSeen(s.payment.commitment)) return { landed: s };
       const notes = new Set(stillOpen.map((s) => s.input));
       if (notes.size > 1) return undefined;
-      // Every note that funded a send was spent by something else: none of them can land.
-      if (!stillOpen.length) return { payFrom: null };
+      // Every note that funded a send is spent and no payment shows, so something else spent them and none can land.
+      // Unless the send is recent: right after one lands, one node can show the spend while another lacks the payment.
+      if (!stillOpen.length) return Date.now() - Date.parse(sends.at(-1)!.payment.createdAt) > STUCK_MS ? { payFrom: null } : undefined;
       // A send from this note may still land, so only this note can pay. It may still be waiting on that send.
       return stillOpen[0]!.funding!.status === "unspent" ? { payFrom: stillOpen[0]!.input } : undefined;
     } catch {

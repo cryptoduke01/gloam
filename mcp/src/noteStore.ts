@@ -103,10 +103,11 @@ export type PaymentSendState = PaymentSend & { payment: StoredNote; funding?: St
  * so that a retry presents this payment instead of making another.
  */
 export type PaymentAttempt = {
-  /** When a call last took it. */
+  /** When it was first claimed. A retry doesn't change this, so being asked again never keeps a record alive. */
   at: string;
-  /** Who holds it: "pid:server:call". */
+  /** Who holds it: "pid:server:call", and when that call took it over, if it did. */
   by: string;
+  takenAt?: string;
   /** Paid once however often it is asked, as a challenge is: an answer that arrived does not clear it. */
   once?: boolean;
   /** Every send made for it, oldest first, each from just before it goes out. */
@@ -419,8 +420,8 @@ export class NoteStore {
   /**
    * Take a purchase for paying, under the lock and before anything is spent, as `by` ("pid:server:call"). Of any
    * calls at once, one holds it. A call that ended, or whose process is gone, or that has held it `staleMs`, gives
-   * way (one that had not sent then refuses to: see markSend). A record goes a day after anything last happened to
-   * it, or 30 days while a payment is not known to have landed or not: a retry then could pay twice.
+   * way (one that had not sent then refuses to: see markSend). A record goes a day after its payment last changed,
+   * or 30 days while a payment is not known to have landed or not: a retry then could pay twice.
    */
   claimPayment(key: string, staleMs: number, by: string, once = false): PaymentClaim {
     return this.mutate((d) => {
@@ -433,12 +434,12 @@ export class NoteStore {
       const held = all[key];
       if (held) {
         const sends = sendsOf(d, held);
-        if (!held.closed && processAlive(held.by) && Date.now() - Date.parse(held.at) < staleMs) {
+        if (!held.closed && processAlive(held.by) && Date.now() - Date.parse(held.takenAt ?? held.at) < staleMs) {
           held.retried = true;
           return { claimed: false, running: true, attempt: { ...held }, sends };
         }
         if (sends.length) {
-          const taken: PaymentAttempt = { ...held, at: stamp(), by };
+          const taken: PaymentAttempt = { ...held, by, takenAt: stamp() };
           delete taken.closed;
           delete taken.retried;
           all[key] = taken;
