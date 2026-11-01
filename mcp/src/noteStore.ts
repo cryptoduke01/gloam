@@ -282,6 +282,17 @@ export class NoteStore {
     });
   }
 
+  /** Change a note's receipt from what the store holds now, under the lock, so two runs on one receipt can't undo each other. */
+  updateReceipt(handle: string, change: (current: NoteReceipt) => NoteReceipt): NoteReceipt | undefined {
+    return this.mutate((d) => {
+      const n = d.notes.find((x) => x.handle === handle);
+      if (!n?.receipt) return undefined;
+      n.receipt = change(n.receipt);
+      n.updatedAt = stamp();
+      return n.receipt;
+    });
+  }
+
   /**
    * Mark a note dead: by the chain's reads its transaction can never land. The secret stays, since
    * reads can come from a node behind; a refresh brings the note back if it shows up.

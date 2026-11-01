@@ -12,6 +12,11 @@
  * store, saved before each step that can fail, so a failed receipt or anchor can
  * be retried. That state holds the full record, which shows the asset, the
  * minimum amount and the transaction hash: only the leaf and a status leave here.
+ *
+ * Two runs can reach one receipt: reading a mainnet vault's tree can outlast the
+ * wait for the answer, so a retry can arrive while the first run is still going, and
+ * two processes can share a note store. In one process the second run joins the
+ * first. Across processes the store decides: see `advance`.
  */
 import { buildPaymentReceipt, cleanReceiptLabel, proofContext, type PaymentReceiptPlan, type ReceiptProver, type syncTree } from "@gloamtrade/sdk";
 import type { Hex } from "viem";
@@ -53,6 +58,7 @@ export interface ReceiptOutcome {
 }
 
 const PAID = "Paid, and the money has moved, so do not pay again.";
+const ALREADY = "VEYA already took this receipt's leaf.";
 const RETRY = "Call gloam_retry_veya_receipts to try again.";
 const FIX_FIRST = "A retry will get the same answer until that changes, then call gloam_retry_veya_receipts.";
 
@@ -62,6 +68,15 @@ export const plannedReceipt = (check: { checkId: string; agentId: string }): Not
   expiresAt: Math.floor(Date.now() / 1000) + RECEIPT_TTL_S,
   status: "pending",
 });
+
+/**
+ * A step's result on the receipt the store holds now: anchored is final, and the
+ * first record stands, since a second would be a second leaf for the same payment.
+ */
+function advance(current: NoteReceipt, patch: Partial<NoteReceipt>): NoteReceipt {
+  if (current.status === "anchored") return current;
+  return current.record ? { ...current, ...patch, record: current.record, leaf: current.leaf } : { ...current, ...patch };
+}
 
 function receiptPlan(note: StoredNote, receipt: NoteReceipt): PaymentReceiptPlan {
   const verifier = cleanReceiptLabel(receipt.checkId);
@@ -97,12 +112,17 @@ async function pathAfterLanding(note: StoredNote, ctx: ReceiptContext) {
 export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt }, ctx: ReceiptContext): Promise<ReceiptOutcome> {
   let receipt = note.receipt;
   let kept = true;
+  try {
+    receipt = ctx.notes.get(note.handle)?.receipt ?? receipt; // the note passed in may be older than the store
+  } catch {
+    kept = false;
+  }
   const keep = (patch: Partial<NoteReceipt>) => {
-    receipt = { ...receipt, ...patch };
     try {
-      ctx.notes.update(note.handle, { receipt });
+      receipt = ctx.notes.updateReceipt(note.handle, (current) => advance(current, patch)) ?? advance(receipt, patch);
     } catch {
       kept = false;
+      receipt = advance(receipt, patch);
     }
   };
   const outcome = (status: ReceiptOutcome["status"], message: string): ReceiptOutcome => ({
@@ -114,27 +134,37 @@ export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt },
     message: kept ? message : `${message} The receipt could not be saved in the note store, so it may not be possible to retry it.`,
   });
 
-  if (receipt.status === "anchored") return outcome("anchored", "VEYA already took this receipt's leaf.");
+  // A function, since keep() can change it: another run may finish at any step here.
+  const anchored = () => receipt.status === "anchored";
+  if (anchored()) return outcome("anchored", ALREADY);
   if (!receipt.record) {
-    const failed = (why: string) => {
-      keep({ status: "receipt_failed" });
-      return outcome("receipt_failed", `${PAID} ${why} Nothing went to VEYA. ${RETRY}`);
-    };
-    if (!note.createdTx) return failed("The payment's transaction is not known yet.");
-    try {
-      const path = await pathAfterLanding(note, ctx);
-      if (!path) return failed("The payment does not show in the vault's tree yet, so its receipt could not be built.");
-      const record = await buildPaymentReceipt({ plan: receiptPlan(note, receipt), path, txHash: note.createdTx, prove: await ctx.prover() });
-      // Saved before it goes out, so a crash here leaves a leaf to send again, not a second one.
-      keep({ status: "anchor_failed", record, leaf: record.leaf });
-    } catch {
-      return failed("The receipt could not be built.");
+    let why: string | null = null;
+    if (!note.createdTx) why = "The payment's transaction is not known yet.";
+    else {
+      try {
+        const path = await pathAfterLanding(note, ctx);
+        if (!path) why = "The payment does not show in the vault's tree yet, so its receipt could not be built.";
+        else {
+          const record = await buildPaymentReceipt({ plan: receiptPlan(note, receipt), path, txHash: note.createdTx, prove: await ctx.prover() });
+          // Saved before it goes out, so a crash here leaves a leaf to send again, not a second one.
+          keep({ status: "anchor_failed", record, leaf: record.leaf });
+        }
+      } catch {
+        why = "The receipt could not be built.";
+      }
     }
+    if (why) {
+      keep({ status: "receipt_failed" });
+      // Another run may have got further while this one failed, and then its result stands.
+      if (!receipt.record) return outcome("receipt_failed", `${PAID} ${why} Nothing went to VEYA. ${RETRY}`);
+    }
+    if (anchored()) return outcome("anchored", ALREADY);
   }
 
   const sent = await anchorLeaf(receipt.leaf!, receipt.agentId, ctx.env);
   if (!sent.anchored) {
     keep({ status: "anchor_failed" });
+    if (anchored()) return outcome("anchored", ALREADY);
     return outcome("anchor_failed", `${PAID} The receipt is built and kept, but VEYA did not take its leaf: ${sent.why}. ${sent.retry ? RETRY : FIX_FIRST}`);
   }
   keep({ status: "anchored", anchorTx: sent.txHash });
@@ -148,6 +178,19 @@ function keptLeaf(handle: string, ctx: ReceiptContext): Hex | null {
   } catch {
     return null;
   }
+}
+
+/** Receipts being worked on in this process, by note store and note. */
+const running = new Map<string, Promise<ReceiptOutcome>>();
+
+/** A run for this note if one is going, else a new one. */
+function settleOnce(note: StoredNote & { receipt: NoteReceipt }, ctx: ReceiptContext): Promise<ReceiptOutcome> {
+  const key = `${ctx.notes.path}\n${note.handle}`;
+  const already = running.get(key);
+  if (already) return already;
+  const run = settleReceipt(note, ctx).finally(() => running.delete(key));
+  running.set(key, run);
+  return run;
 }
 
 /** settleReceipt, but the caller stops waiting at the deadline. The work may still finish; a retry shows where it stands. */
@@ -168,7 +211,7 @@ export async function settleReceiptInTime(note: StoredNote & { receipt: NoteRece
     }, ms);
   });
   try {
-    return await Promise.race([settleReceipt(note, ctx), late]);
+    return await Promise.race([settleOnce(note, ctx), late]);
   } finally {
     clearTimeout(timer);
   }
