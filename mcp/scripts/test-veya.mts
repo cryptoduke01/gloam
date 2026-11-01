@@ -44,6 +44,7 @@ import {
   RECEIPT_PUBLIC_SIGNALS,
   fieldToHex,
   hexToField,
+  paymentReceiptLeaf,
   proofContext,
   verifyPaymentReceiptLeaf,
   GLOAM_NETWORKS,
@@ -1051,7 +1052,11 @@ test("execute_private_pay: an allow with an id gives a leaf whose verifier is th
   assert.ok(record.expiresAt > Date.now() / 1000 + 29 * 24 * 3600);
   assert.ok(verifyPaymentReceiptLeaf(paid.veya.receipt.leaf, record));
   const context = proofContext({ kind: "payment", chainId: record.chainId, pool: record.pool, verifier: CHECK_ID, expiresAt: record.expiresAt });
-  assert.equal(record.publicSignals[RECEIPT_PUBLIC_SIGNALS.indexOf("context")], context.toString(), "the id is sealed into the proof");
+  const contextAt = RECEIPT_PUBLIC_SIGNALS.indexOf("context");
+  assert.equal(record.publicSignals[contextAt], context.toString(), "the id is sealed into the proof");
+  // The tie VEYA relies on: the id is in the leaf, so another id can't have this leaf.
+  const otherId = proofContext({ kind: "payment", chainId: record.chainId, pool: record.pool, verifier: `${CHECK_ID}-other`, expiresAt: record.expiresAt });
+  assert.notEqual(paymentReceiptLeaf({ ...record, publicSignals: record.publicSignals.map((v, i) => (i === contextAt ? otherId.toString() : v)) }), paid.veya.receipt.leaf);
 
   // The only thing VEYA gets after the payment.
   assert.equal(anchorApi.received.length, 1);
