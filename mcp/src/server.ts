@@ -1135,8 +1135,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * note store; the result carries handles and the sealed X-PAYMENT header, plus
    * the MPP credential when `mpp` is the challenge being paid (push mode: this
    * server broadcasts, so limits and the note store work exactly as for x402).
-   * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request as the payee sent
-   * it) goes to Agent Wormhole after the spend gate, and only an allow pays.
+   * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request, decoded and as the
+   * payee sent it) goes to Agent Wormhole after the spend gate, and only an allow pays.
    * `sending` hears about the payment just before it goes out.
    */
   async function payPrivately(
@@ -1847,9 +1847,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           });
         }
       }
-      // For Agent Wormhole: the 402 body as the payee sent it, when the price came in it. A price in
-      // a header is what gets paid whatever the body says, so the check reads that price, decoded.
-      const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? firstBody : undefined;
+      // For Agent Wormhole: the price as it would be paid, decoded, since that is the text the agent gets back and
+      // a body can carry it encoded. Then the 402 body as the payee sent it, when the price came in it. A price
+      // in a header is what gets paid whatever the body says, so the check reads that price alone.
+      const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? `${quoteText(req)}\n${firstBody}` : undefined;
       // A purchase is this call at this price: a server can answer each retry with a fresh challenge.
       const purchase = digest([url, method, body ?? null, note ?? null, req.network, req.poolAddress, req.asset, req.maxAmountRequired, req.payTo]);
       const once = await payOnce(slot, `fetch:${purchase}`, false, (sending) =>
