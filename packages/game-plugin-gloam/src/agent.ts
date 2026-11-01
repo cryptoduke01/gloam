@@ -76,6 +76,8 @@ import {
   type Prover,
   type ReceiveKey,
   type SweepChain,
+  approvalSteps,
+  gloamReadTransport,
 } from "@gloamtrade/sdk";
 import { Artifacts, type ArtifactSource } from "./artifacts.js";
 import { claimLinkFor, readClaimLink } from "./claimLinks.js";
@@ -227,7 +229,10 @@ export class GloamAgent {
     // RPC URLs often carry an API key, and RPC errors quote the URL.
     registerUrlSecret(this.network.rpc);
     const chain: Chain = { ...this.network.chain, rpcUrls: { default: { http: [this.network.rpc] } } };
-    this.publicClient = opts.publicClient ?? (createPublicClient({ chain, transport: http(this.network.rpc) }) as PublicClient);
+    // A network whose public RPC keeps only recent history reads old logs from its history RPC, unless a private RPC was set.
+    const historyRpc = this.network.rpc === this.network.rpcUrl ? this.network.historyRpc : null;
+    this.publicClient =
+      opts.publicClient ?? (createPublicClient({ chain, transport: gloamReadTransport({ rpcUrl: this.network.rpc, historyRpc }) }) as PublicClient);
     this.agentId = opts.agentId ?? envAgentId(env);
 
     // The key comes from the agent's own environment and never leaves this process.
@@ -868,8 +873,9 @@ export class GloamAgent {
       const calls: Call[] = [];
       if (!isNative) {
         const allowance = await this.publicClient.readContract({ address: asset.address, abi: ERC20_ABI, functionName: "allowance", args: [sender.address, this.network.pool] });
-        if (allowance < amountWei) {
-          calls.push({ to: asset.address, data: encodeFunctionData({ abi: ERC20_ABI, functionName: "approve", args: [this.network.pool, amountWei] }) });
+        // USDT on Ethereum refuses a new approval over a stale one, so that takes a reset first.
+        for (const step of approvalSteps(this.network.chainId, asset.address, allowance, amountWei)) {
+          calls.push({ to: asset.address, data: encodeFunctionData({ abi: ERC20_ABI, functionName: "approve", args: [this.network.pool, step] }) });
         }
       }
       calls.push({
@@ -1371,7 +1377,11 @@ export class GloamAgent {
     const FINAL = new Set(["swept", "already_secured", "already_spent", "bad_note"]);
     for (const p of scan.payments) {
       const asset = this.network.assets.find((a) => a.address.toLowerCase() === p.asset.toLowerCase());
-      if (!asset) continue;
+      if (!asset) {
+        // The scan moves past it, so it is said now, not passed over in silence.
+        received.push({ asset: p.asset, note: p.note, status: "unlisted_asset", skipped: "Recorded and skipped: this version can't secure this asset. It stays on chain, so don't count it as received." });
+        continue;
+      }
       let res: Awaited<ReturnType<GloamAgent["secure"]>>;
       try {
         res = await this.secure(await notePackageToExport(p.notePackage), asset, p.note ? `received: ${p.note}` : "received");
