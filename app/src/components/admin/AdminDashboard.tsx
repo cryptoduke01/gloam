@@ -1608,7 +1608,7 @@ type TesterRow = {
   createdAt: number;
 };
 
-const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Both", tempo: "Tempo", robinhood: "Robinhood Chain" };
+const TESTER_NETWORK: Record<TesterRow["network"], string> = { both: "Any", tempo: "Tempo", robinhood: "Robinhood Chain" };
 
 function TestersPanel() {
   const [data, setData] = useState<{ backend: string; cap: number; applications: TesterRow[]; loadedAt: number } | null>(null);
