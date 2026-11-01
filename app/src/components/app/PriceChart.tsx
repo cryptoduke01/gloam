@@ -71,7 +71,7 @@ export function PriceChart({
           >
             {up ? "+" : ""}
             {change24h.toFixed(2)}%
-            <span className="ml-1.5 font-normal opacity-70">24h</span>
+            <span className="ml-1.5 font-normal opacity-85">24h</span>
           </p>
         </div>
         <div className="-mx-1 mt-5">
