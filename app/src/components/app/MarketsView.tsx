@@ -115,7 +115,7 @@ export function MarketsView() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            className={`inline-flex h-11 items-center gap-2 rounded-xl border bg-panel pl-4 pr-3 text-[14px] text-foreground transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/15 ${
+            className={`inline-flex h-11 items-center gap-2 rounded-xl border bg-panel pl-4 pr-3 text-[14px] text-foreground transition-colors hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 ${
               menuOpen ? "border-line-strong" : "border-line"
             }`}
           >
