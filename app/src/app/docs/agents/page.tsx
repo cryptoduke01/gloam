@@ -522,9 +522,14 @@ const hash = await wallet.writeContract({
       </p>
       <pre>
         <code>{`GLOAM_VEYA_KEY=your-veya-key
-GLOAM_VEYA_URL=veya-check-endpoint
+GLOAM_VEYA_URL=https://api.veyanet.tech/guard/v1/check
 GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       </pre>
+      <p>
+        VEYA covers USDG on Robinhood Chain. A payment on another chain or in
+        another asset is refused, so with the check on, the server pays only in
+        USDG on Robinhood Chain.
+      </p>
       <p>
         With this on, VEYA sees the agent id, asset, amount and payee during the
         check, along with the chain, the resource&apos;s host and the payment
@@ -540,7 +545,9 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       <h3>The receipt after a payment</h3>
       <p>
         VEYA&apos;s allow carries a check id. Set{" "}
-        <code>GLOAM_VEYA_ANCHOR_URL</code> as well, and the server proves each
+        <code>GLOAM_VEYA_ANCHOR_URL</code> to{" "}
+        <code>https://api.veyanet.tech/guard/v1/anchor</code> as well, and the
+        server proves each
         payment once it lands, with that id as the receipt&apos;s verifier, and
         hashes the proof into one <code>bytes32</code> leaf. VEYA gets that leaf
         and the agent id, nothing else: never the record, the proof, the amount,
@@ -554,8 +561,11 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         that fails leaves the payment paid, with a status of{" "}
         <code>anchor_failed</code> or <code>receipt_failed</code> in the result,
         and <code>gloam_retry_veya_receipts</code> tries again without paying
-        anything. <code>anchored</code> means VEYA took the leaf; the server does
-        not read the chain to confirm the write.
+        anything. <code>anchored</code> means VEYA named the leaf and the
+        transaction that wrote it, given as <code>anchorTx</code>; the server
+        does not read the chain to confirm the write. VEYA writes a leaf once,
+        so sending the same one again is safe, and it answers with the first
+        transaction.
       </p>
       <p>
         The server keeps the full record in its encrypted note store. It shows

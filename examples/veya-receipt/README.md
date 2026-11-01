@@ -34,7 +34,7 @@ Set `GLOAM_VEYA_ANCHOR_URL` next to the check's settings. The
 | 2 | MCP server | Pays privately. |
 | 3 | MCP server | Once the payment lands, proves it with the check id as the receipt's verifier, and keeps the record in its encrypted note store. |
 | 4 | MCP server | Posts `{"leaf": "0x…", "agent_id": "…"}` to `GLOAM_VEYA_ANCHOR_URL`, and nothing else. |
-| 5 | VEYA | Writes the leaf to `storeCommitment`. |
+| 5 | VEYA | Writes the leaf to `storeCommitment` and answers with the transaction. |
 
 ## What to know
 
@@ -42,8 +42,10 @@ Set `GLOAM_VEYA_ANCHOR_URL` next to the check's settings. The
   no gas for it. VEYA's hosted MCP write tools take a private key
   (`payerPrivateKey`); this flow does not use them, so never give them one, and
   never send a note secret anywhere.
-- **`anchored` means VEYA took the leaf.** The server does not read the chain to
-  confirm the write.
+- **`anchored` means VEYA named the leaf and its transaction.** The result gives
+  it as `anchorTx`. The server does not read the chain to confirm the write, so
+  look it up if it matters. VEYA writes a leaf once, so sending the same one again
+  is safe.
 - **VEYA can't open a leaf.** It sees a hash and the agent id. Only someone
   holding the record can recompute the leaf and see what it commits to.
 - **The time is public.** An anchor shows when it was written, shortly after the
