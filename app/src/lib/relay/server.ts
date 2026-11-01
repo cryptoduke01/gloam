@@ -83,7 +83,7 @@ import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, r
 import { jobKeyReady } from "@/lib/relay/jobSeal";
 import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
-import { encodeRoute, escrowAddress, isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, vaultSwapRouter, vaultSwapV3Abi, type EscrowKey, type PoolKey } from "@/lib/vaultSwap";
+import { encodeRoute, escrowAddress, isKnownRoute, isSwapAsset, swapExpired, swapRouterFor, vaultSwapAbi, vaultSwapRouter, vaultSwapV3Abi, type EscrowKey, type PoolKey } from "@/lib/vaultSwap";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
 import { GAS_STATION_CHAIN_ID, GAS_STATION_FACTORY, gasStationAbi, gasStationFactoryAbi, readStationState } from "@/lib/gasStation";
 import {
@@ -203,6 +203,7 @@ const REVERT_MESSAGES: Record<string, string> = {
   ShortOutput: "The price moved since the quote. Get a new one and try again.",
   OverDepositLimit: "The vault is not taking that much of this asset right now. Swap a smaller amount.",
   BadExit: "This exit's signature doesn't match the swap, or its money has already left.",
+  SwapExpired: "This swap's time ran out. Get a new quote and try again.",
   PoolNotAllowed: "This swap route is not allowed.",
   BadRoute: "This swap route is not allowed.",
   NativeRefused: "This swap route is not allowed.",
@@ -553,7 +554,7 @@ export type Call =
   | { kind: "pump"; station: Address; args: readonly [bigint, bigint] }
   | { kind: "memo"; args: readonly [Hex, Hex]; budget: MemoBudget }
   | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] }
-  | { kind: "swapV3"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex, Address] }
+  | { kind: "swapV3"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex, Address, bigint] }
   | { kind: "swapExit"; router: Address; args: readonly [Address, Required<EscrowKey>, Address, Hex] };
 
 /** Public addresses a call pays out to: a cash out's and a swap exit's. */
@@ -989,6 +990,7 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
   const routeBytes = encodeRoute(route);
   const v3 = config.version === 3;
   const exitKey = v3 ? asAddress(body.exitKey, "exit key") : undefined;
+  const deadline = v3 ? asAmount(body.deadline) : undefined;
   const pub = relayPublicClient(net);
   // A new note that is already in the vault would revert after the proof checks.
   const seen = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "commitmentSeen", args: [deposit.commitment] });
@@ -1005,6 +1007,10 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
         throw new RelayError("This quote was for an earlier swap router. Get a new quote and try again.", 409, "swap_router_old");
       }
       if (!known) throw new RelayError(REVERT_MESSAGES.UnknownRoot, 409, "UnknownRoot");
+      // only a swap has a deadline: below this line is a refund, which never does
+      if (deadline !== undefined && swapExpired(deadline, BigInt(Math.floor(Date.now() / 1000)))) {
+        throw new RelayError(REVERT_MESSAGES.SwapExpired!, 409, "SwapExpired");
+      }
       return;
     }
     // spent: only worth a send if this swap's money is waiting at its escrow (the refund)
@@ -1017,14 +1023,14 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       refundCommitment: refund.commitment,
       refundAmount: refund.amount,
       routeHash: keccak256(routeBytes),
-      ...(exitKey ? { exitKey } : {}),
+      ...(exitKey ? { exitKey, deadline } : {}),
     });
     if ((await heldAt(pub, spend.asset, escrow)) < refund.amount) throw new RelayError(REVERT_MESSAGES.AlreadySpent, 409, "AlreadySpent");
   };
   return submitSpend(
     net,
     exitKey
-      ? { kind: "swapV3", router, args: [spend, deposit, refund, routeBytes, exitKey] }
+      ? { kind: "swapV3", router, args: [spend, deposit, refund, routeBytes, exitKey, deadline!] }
       : { kind: "swap", router, args: [spend, deposit, refund, routeBytes] },
     precheck
   );
@@ -1063,6 +1069,7 @@ export async function relayVaultSwapExit(net: GloamNetwork, body: Record<string,
     refundAmount: asAmount(k.refundAmount),
     routeHash: asBytes32(k.routeHash, "route"),
     exitKey: asAddress(k.exitKey, "exit key"),
+    deadline: asAmount(k.deadline),
   };
   const pub = relayPublicClient(net);
   const precheck = async () => {

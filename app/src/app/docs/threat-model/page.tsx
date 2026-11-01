@@ -223,6 +223,7 @@ export default function DocsThreatModelPage() {
         the same way once an hour has passed with nothing landed. If that swap lands
         first, the move fails and the swap stands; if the move lands first, the swap
         reverts.
+        {V3 && " A swap through the newest routers also carries a deadline in its escrow address, 30 minutes after it is made, and can't land after it. A refund and an exit have no deadline."}
       </p>
       <p>
         <strong>Limits and blocks.</strong> The new note and the refund note are deposits,

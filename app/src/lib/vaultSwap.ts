@@ -62,10 +62,10 @@ export const VAULT_SWAP_V2_ROUTER: Record<number, Address | null> = {
  * and contracts/launch/router-fixture.mjs writes it). Any edit to the contracts moves them.
  */
 export const VAULT_SWAP_V3_ADDRESS: Record<number, Address> = {
-  4663: "0xbDEaC20a1Dfa892cac839a3C911d403aF6968e05",
-  8453: "0xdc88B3bF0d7cB48B7d4062572dC5fC8D2a8147C6",
-  1: "0xE2cC7C7f521D12Da0E2FAd2153b351515637dF0A",
-  4217: "0xb88794079d0DdC5b4327b49056b3761F389A9fDf",
+  4663: "0xFD1547d9C404Bf670c9652d1D6007A1bB6528b93",
+  8453: "0x0742fFA3d1C8e74765F8186d5E2133c307e2557c",
+  1: "0xE36883A156ce5Ed68F083DdA79Bad7cf07AC5B2c",
+  4217: "0x75A22213c7d64438246348129b843d69b76f2535",
 };
 
 /**
@@ -551,8 +551,20 @@ const ESCROW_KEY_COMPONENTS = [
   { name: "routeHash", type: "bytes32" },
 ] as const;
 
-/** GloamVaultSwap2.EscrowKey: the same, then the swap's exit key. */
-const ESCROW_KEY_V3_COMPONENTS = [...ESCROW_KEY_COMPONENTS, { name: "exitKey", type: "address" }] as const;
+/** GloamVaultSwap2.EscrowKey: the same, then the swap's exit key and deadline. */
+const ESCROW_KEY_V3_COMPONENTS = [
+  ...ESCROW_KEY_COMPONENTS,
+  { name: "exitKey", type: "address" },
+  { name: "deadline", type: "uint256" },
+] as const;
+
+/** How long a v3 swap has to land, from the chain's own clock when it is made. */
+export const SWAP_DEADLINE_SECONDS = 30 * 60;
+
+/** Whether a swap can no longer land at `now`, in seconds: it lands up to and including its deadline. */
+export function swapExpired(deadline: bigint, now: bigint): boolean {
+  return now > deadline;
+}
 
 export type EscrowKey = {
   nullifier: Hex;
@@ -565,6 +577,8 @@ export type EscrowKey = {
   routeHash: Hex;
   /** v3: the swap's one-time exit key. Without it, the key of the routers before v3. */
   exitKey?: Address;
+  /** v3: the last time the swap can land, in seconds. It comes with the exit key. */
+  deadline?: bigint;
 };
 
 /**
@@ -589,8 +603,11 @@ export const SWAP_ESCROW2_CODE_HASH: Hex = "0xa1780da0f59b3a91182d3b3ee00726136f
 /** A swap's escrow, worked out here: CREATE2 from the router, salt keccak256(abi.encode(key)). */
 export function escrowAddress(router: Address, assetIn: Address, key: EscrowKey): Address {
   const fields = [key.nullifier, key.amountIn, key.outCommitment, key.assetOut, key.amountOut, key.refundCommitment, key.refundAmount, key.routeHash] as const;
+  if (key.exitKey && key.deadline === undefined) throw new Error("A v3 swap needs a deadline.");
   const salt = keccak256(
-    key.exitKey ? encodeAbiParameters(ESCROW_KEY_V3_COMPONENTS, [...fields, key.exitKey]) : encodeAbiParameters(ESCROW_KEY_COMPONENTS, fields)
+    key.exitKey
+      ? encodeAbiParameters(ESCROW_KEY_V3_COMPONENTS, [...fields, key.exitKey, key.deadline!])
+      : encodeAbiParameters(ESCROW_KEY_COMPONENTS, fields)
   );
   const init = key.exitKey ? SWAP_ESCROW2_INIT_CODE : SWAP_ESCROW_INIT_CODE;
   const bytecode = concatHex([init, encodeAbiParameters([{ type: "address" }], [assetIn])]);
@@ -633,6 +650,8 @@ export type VaultSwapRefundInfo = {
   route: PoolKey[];
   /** v3: the swap's exit key, the public half (exitAccount has the rest). */
   exitKey?: Address;
+  /** v3: the swap's deadline, in seconds, as a decimal string. */
+  deadline?: string;
   /** The relay's send of this swap, once it answered: a sync reads how it ended if this tab never heard. */
   sent?: { hash: Hex; at: number };
 };
@@ -658,7 +677,7 @@ export function refundEscrowKey(info: VaultSwapRefundInfo, nullifier: Hex, refun
     refundCommitment,
     refundAmount,
     routeHash: keccak256(encodeRoute(info.route)),
-    ...(info.exitKey ? { exitKey: info.exitKey } : {}),
+    ...(info.exitKey ? { exitKey: info.exitKey, deadline: BigInt(info.deadline ?? "0") } : {}),
   };
 }
 
@@ -766,6 +785,7 @@ export const vaultSwapV3Abi = [
       { name: "r", type: "tuple", components: DEPOSIT_COMPONENTS },
       { name: "route", type: "bytes" },
       { name: "exitKey", type: "address" },
+      { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "amountIn", type: "uint256" }],
   },
@@ -809,6 +829,7 @@ export const vaultSwapV3Abi = [
   },
   { type: "error", name: "PoolNotAllowed", inputs: [{ name: "poolId", type: "bytes32" }] },
   { type: "error", name: "BadExit", inputs: [] },
+  { type: "error", name: "SwapExpired", inputs: [] },
   ...SWAP_ERRORS,
 ] as const;
 

@@ -285,6 +285,13 @@ export default function DocsPrivateSwapsPage() {
         has landed by then, it makes the same move. Only one of the two can
         ever land, so your money is counted once either way.
       </p>
+      {V3 && (
+        <p>
+          A swap through the newest routers carries a deadline, 30 minutes after
+          it is made. It can&apos;t land after that. A refund and an exit have no
+          deadline.
+        </p>
+      )}
 
       {V3 && (
         <>

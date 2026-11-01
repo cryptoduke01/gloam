@@ -63,9 +63,9 @@ function runtimeOf(deployedBytecode, values) {
 function escrowSample(address, escrowInit) {
   const zero = "0x" + "00".repeat(32);
   const one = "0x" + "11".repeat(32);
-  const key = `(${one},1000,${one},${TREASURY},1000,${one},990,${zero},${OWNER})`;
-  const data = cast(["calldata", "escrowFor(address,(bytes32,uint256,bytes32,address,uint256,bytes32,uint256,bytes32,address))", TREASURY, key]);
-  const salt = keccak(cast(["abi-encode", "f((bytes32,uint256,bytes32,address,uint256,bytes32,uint256,bytes32,address))", key]));
+  const key = `(${one},1000,${one},${TREASURY},1000,${one},990,${zero},${OWNER},1800)`;
+  const data = cast(["calldata", "escrowFor(address,(bytes32,uint256,bytes32,address,uint256,bytes32,uint256,bytes32,address,uint256))", TREASURY, key]);
+  const salt = keccak(cast(["abi-encode", "f((bytes32,uint256,bytes32,address,uint256,bytes32,uint256,bytes32,address,uint256))", key]));
   const codeHash = keccak("0x" + strip(escrowInit) + word(TREASURY));
   const out = keccak("0xff" + strip(address) + strip(salt) + strip(codeHash));
   return { data, answer: "0x" + out.slice(-40).toLowerCase() };

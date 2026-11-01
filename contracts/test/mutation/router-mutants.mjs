@@ -38,9 +38,15 @@ const MUTANTS = [
   ["digest: no address", BASE, "keccak256(abi.encode(EXIT_DOMAIN, block.chainid, address(this), escrow, to))", "keccak256(abi.encode(EXIT_DOMAIN, block.chainid, address(this), escrow))"],
   // the escrow key
   ["key: swap drops the exit key", BASE, "k.exitKey = exitKey;", ""],
+  ["key: swap drops the deadline", BASE, "k.deadline = deadline;", ""],
   ["key: swap drops the route", BASE, "k.routeHash = routeHash;", ""],
   ["key: swap drops the refund note", BASE, "k.refundCommitment = r.commitment;", ""],
   ["key: swap drops the new note", BASE, "k.outCommitment = d.commitment;", ""],
+  // the deadline: on the swap branch alone
+  ["deadline: not checked", BASE, "if (!refunding && block.timestamp > deadline) revert SwapExpired();", ""],
+  ["deadline: a second early", BASE, "if (!refunding && block.timestamp > deadline) revert SwapExpired();", "if (!refunding && block.timestamp >= deadline) revert SwapExpired();"],
+  ["deadline: holds back a refund", BASE, "if (!refunding && block.timestamp > deadline) revert SwapExpired();", "if (block.timestamp > deadline) revert SwapExpired();"],
+  ["deadline: holds back an exit", BASE, "amount = _open(salt, assetIn);\n        _pay(assetIn, to, amount);", "if (block.timestamp > k.deadline) revert BadExit();\n        amount = _open(salt, assetIn);\n        _pay(assetIn, to, amount);"],
   // the latch and the escrow opening
   ["latch: a call back while an escrow opens", BASE, "if (_entered != IDLE) revert Reentrancy();", "if (_entered == RUNNING) revert Reentrancy();"],
   ["open: never marked as opening", BASE, "_entered = OPENING;\n", ""],

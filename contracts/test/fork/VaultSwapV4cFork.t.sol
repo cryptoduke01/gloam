@@ -108,6 +108,7 @@ contract VaultSwapV4cForkTest is Test {
 
     address constant NATIVE = address(0);
     uint256 constant EXIT_PK = 0xE817;
+    uint256 constant DEADLINE = type(uint64).max;
 
     ShieldPoolPayments pool;
     GloamVaultSwapV4c router;
@@ -261,7 +262,7 @@ contract VaultSwapV4cForkTest is Test {
 
     function _key(Call memory k) internal view returns (GloamVaultSwap2.EscrowKey memory) {
         return GloamVaultSwap2.EscrowKey(
-            k.s.nullifier, k.s.amount, k.d.commitment, k.d.asset, k.d.amount, k.r.commitment, k.r.amount, keccak256(k.route), vm.addr(EXIT_PK)
+            k.s.nullifier, k.s.amount, k.d.commitment, k.d.asset, k.d.amount, k.r.commitment, k.r.amount, keccak256(k.route), vm.addr(EXIT_PK), DEADLINE
         );
     }
 
@@ -276,7 +277,7 @@ contract VaultSwapV4cForkTest is Test {
     }
 
     function swapOnce(Call memory k) external returns (uint256) {
-        return router.swap(k.s, k.d, k.r, k.route, vm.addr(EXIT_PK));
+        return router.swap(k.s, k.d, k.r, k.route, vm.addr(EXIT_PK), DEADLINE);
     }
 
     /// One private swap through `hops`, buying `want` of assetOut; checks every invariant.

@@ -15,6 +15,9 @@ had one. See [What to review first](#what-to-review-first).
 - **Base and Ethereum.** Uniswap v4, hookless pools only.
 - **An exit.** Money waiting at a swap's escrow can leave to an address the swap's
   one-time exit key signs for, when its refund can't land.
+- **A deadline.** Each swap carries one in its escrow key, 30 minutes after it is made
+  by default (`SWAP_DEADLINE_SECONDS`). It can't land after that. A refund and an exit
+  have no deadline.
 
 ## What it can't change
 
@@ -82,10 +85,10 @@ pinned escrow code.
 
 | Chain | Router | Pools | Deploy gas |
 | --- | --- | --- | --- |
-| Robinhood Chain | `0xbDEaC20a1Dfa892cac839a3C911d403aF6968e05` | 45 | 4.6M |
-| Base | `0xdc88B3bF0d7cB48B7d4062572dC5fC8D2a8147C6` | 7 | 3.5M |
-| Ethereum | `0xE2cC7C7f521D12Da0E2FAd2153b351515637dF0A` | 13 | 3.7M |
-| Tempo | `0xb88794079d0DdC5b4327b49056b3761F389A9fDf` | no pools, its DEX | see the card |
+| Robinhood Chain | `0xFD1547d9C404Bf670c9652d1D6007A1bB6528b93` | 45 | 4.6M |
+| Base | `0x0742fFA3d1C8e74765F8186d5E2133c307e2557c` | 7 | 3.5M |
+| Ethereum | `0xE36883A156ce5Ed68F083DdA79Bad7cf07AC5B2c` | 13 | 3.7M |
+| Tempo | `0x75A22213c7d64438246348129b843d69b76f2535` | no pools, its DEX | see the card |
 
 These hold for the contracts in `test/fixtures/router-next.json`, which
 `test_v3_predicted_addresses_are_pinned` checks.
@@ -207,7 +210,7 @@ loses money.
 3. `GloamVaultSwapV4c._walk` and `unlockCallback`: conversion between ETH and WETH at
    the ends of a route, and that a pool can still take no more than the leftover.
 4. `SwapEscrow2`: a new init code. Every escrow address depends on it.
-5. The escrow key, now nine fields: what it fixes, and that the app and the router hash
-   it the same way.
+5. The escrow key, now ten fields: what it fixes, and that the app and the router hash
+   it the same way. The deadline: that it stops a swap, and only a swap.
 6. The Base and Ethereum pool lists against live state on the day.
 7. The deploy page: that what it signs is what was reviewed.

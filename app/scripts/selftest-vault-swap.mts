@@ -59,6 +59,7 @@ import {
   BASE_SWAP_POOLS,
   ETHEREUM_PRIVATE_SWAPS,
   ETHEREUM_SWAP_POOLS,
+  SWAP_DEADLINE_SECONDS,
   SWAP_ESCROW2_CODE_HASH,
   SWAP_ESCROW2_INIT_CODE,
   VAULT_SWAP_V3_ADDRESS,
@@ -67,6 +68,7 @@ import {
   exitAccount,
   exitDigest,
   swapBufferBps,
+  swapExpired,
   swapRoutersOn,
 } from "../src/lib/vaultSwap";
 import { knownTokens } from "../src/lib/tokens";
@@ -540,6 +542,12 @@ n += 4;
     route: [ethUsdg],
   };
   await assert.rejects(relayVaultSwap(net3, body), (e: unknown) => e instanceof RelayError && e.code === "bad_request", "no exit key");
+  await assert.rejects(
+    relayVaultSwap(net3, { ...body, exitKey: "0x00000000000000000000000000000000000e0817" }),
+    (e: unknown) => e instanceof RelayError && e.code === "bad_request",
+    "no deadline"
+  );
+  n += 2;
   const exitBody = {
     router: VAULT_SWAP_V3_ADDRESS[4663],
     asset: USDG,
@@ -548,6 +556,7 @@ n += 4;
     key: {
       nullifier: `0x${"33".repeat(32)}`, amountIn: "100", outCommitment: `0x${"55".repeat(32)}`, assetOut: GLOAM, amountOut: "100",
       refundCommitment: `0x${"77".repeat(32)}`, refundAmount: "99", routeHash: `0x${"88".repeat(32)}`, exitKey: "0x00000000000000000000000000000000000e0817",
+      deadline: "1800",
     },
   };
   const noExit = async (b: Record<string, unknown>, code: string) => {
@@ -560,10 +569,25 @@ n += 4;
   await noExit({ ...exitBody, to: VAULT_SWAP_V3_ADDRESS[4663] }, "vault_recipient");
   await noExit({ ...exitBody, to: USDG }, "vault_recipient");
   await noExit({ ...exitBody, signature: "0x1234" }, "bad_request");
+  await noExit({ ...exitBody, key: { ...exitBody.key, deadline: undefined } }, "bad_request");
   VAULT_SWAP_V3_LIVE[4663] = false;
   VAULT_SWAP_ROUTERS[4663] = RH_V1;
   VAULT_SWAP_V2_ROUTER[4663] = null;
   n += 1;
+
+  // the deadline: 30 minutes by default, in the key, and a swap lands up to and including it
+  assert.equal(SWAP_DEADLINE_SECONDS, 1800);
+  assert.equal(swapExpired(1000n, 999n), false);
+  assert.equal(swapExpired(1000n, 1000n), false, "the deadline itself still lands, as on chain");
+  assert.equal(swapExpired(1000n, 1001n), true);
+  const keyOf = (deadline?: bigint) => ({
+    nullifier: `0x${"33".repeat(32)}` as const, amountIn: 100n, outCommitment: `0x${"55".repeat(32)}` as const, assetOut: GLOAM, amountOut: 100n,
+    refundCommitment: `0x${"77".repeat(32)}` as const, refundAmount: 99n, routeHash: `0x${"88".repeat(32)}` as const,
+    exitKey: "0x00000000000000000000000000000000000e0817" as Address, deadline,
+  });
+  assert.notEqual(escrowAddress(VAULT_SWAP_V3_ADDRESS[8453]!, USDG, keyOf(1800n)), escrowAddress(VAULT_SWAP_V3_ADDRESS[8453]!, USDG, keyOf(1801n)), "the key fixes it");
+  assert.throws(() => escrowAddress(VAULT_SWAP_V3_ADDRESS[8453]!, USDG, keyOf(undefined)), /deadline/, "a v3 key can't go without one");
+  n += 6;
 
   // the exit key: from the refund note's secret, its own for each swap, and the digest fixes every part
   const secret = `0x${"12".repeat(32)}` as const;

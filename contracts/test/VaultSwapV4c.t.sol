@@ -54,6 +54,8 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
     address constant NATIVE = address(0);
 
     address exitKey;
+    /// Far enough off that the warps in the older routers' tests never reach it.
+    uint256 swapDeadline = type(uint64).max;
     address payable exitTo = payable(address(0xE417));
 
     function setUp() public override {
@@ -82,9 +84,9 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         return GloamVaultSwap2.Deposit(d.proof, d.commitment, d.asset, d.amount);
     }
 
-    function _key2(GloamVaultSwap.EscrowKey memory k, address key) internal pure returns (GloamVaultSwap2.EscrowKey memory) {
+    function _key2(GloamVaultSwap.EscrowKey memory k, address key) internal view returns (GloamVaultSwap2.EscrowKey memory) {
         return GloamVaultSwap2.EscrowKey(
-            k.nullifier, k.amountIn, k.outCommitment, k.assetOut, k.amountOut, k.refundCommitment, k.refundAmount, k.routeHash, key
+            k.nullifier, k.amountIn, k.outCommitment, k.assetOut, k.amountOut, k.refundCommitment, k.refundAmount, k.routeHash, key, swapDeadline
         );
     }
 
@@ -98,16 +100,16 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
     }
 
     function _go(GloamVaultSwap on, Call memory k) internal override returns (uint256) {
-        return GloamVaultSwap2(payable(address(on))).swap(_s2(k.s), _d2(k.d), _d2(k.r), k.route, exitKey);
+        return GloamVaultSwap2(payable(address(on))).swap(_s2(k.s), _d2(k.d), _d2(k.r), k.route, exitKey, swapDeadline);
     }
 
     function _swapData(Call memory k) internal view override returns (bytes memory) {
-        return abi.encodeCall(GloamVaultSwap2.swap, (_s2(k.s), _d2(k.d), _d2(k.r), k.route, exitKey));
+        return abi.encodeCall(GloamVaultSwap2.swap, (_s2(k.s), _d2(k.d), _d2(k.r), k.route, exitKey, swapDeadline));
     }
 
     function _keyOf(Call memory k) internal view returns (GloamVaultSwap2.EscrowKey memory) {
         return GloamVaultSwap2.EscrowKey(
-            k.s.nullifier, k.s.amount, k.d.commitment, k.d.asset, k.d.amount, k.r.commitment, k.r.amount, keccak256(k.route), exitKey
+            k.s.nullifier, k.s.amount, k.d.commitment, k.d.asset, k.d.amount, k.r.commitment, k.r.amount, keccak256(k.route), exitKey, swapDeadline
         );
     }
 
@@ -189,7 +191,7 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
 
     function test_escrow_address_is_create2_of_the_key() public view override {
         GloamVaultSwap2.EscrowKey memory key = GloamVaultSwap2.EscrowKey(
-            bytes32(uint256(1)), NOTE, bytes32(uint256(2)), address(gloam), 39e18, bytes32(uint256(3)), 99e6, keccak256("r"), exitKey
+            bytes32(uint256(1)), NOTE, bytes32(uint256(2)), address(gloam), 39e18, bytes32(uint256(3)), 99e6, keccak256("r"), exitKey, swapDeadline
         );
         bytes32 codeHash = keccak256(abi.encodePacked(type(SwapEscrow2).creationCode, abi.encode(address(usd))));
         address want = address(
@@ -992,6 +994,9 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         c = _keyOf(k);
         c.exitKey = address(1);
         assertTrue(_v3().escrowFor(address(usd), c) != base, "exit key");
+        c = _keyOf(k);
+        c.deadline -= 1;
+        assertTrue(_v3().escrowFor(address(usd), c) != base, "deadline");
         assertTrue(_v3().escrowFor(address(gloam), key) != base, "asset in");
     }
 
@@ -1071,6 +1076,107 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         _v3().exit(address(evil), key, exitTo, sig);
         assertFalse(pool.isSpent(inner.s.nullifier));
         assertEq(evil.balanceOf(_escrow(k)), ARRIVES, "still waiting");
+    }
+
+    // ═════════════════════════════════════════════════════════════ the deadline
+
+    function test_deadline_a_swap_lands_up_to_its_last_second() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1300, address(gloam), 39e18, 0x1300, _route1(direct));
+        vm.warp(swapDeadline);
+        _go(router, k);
+        assertTrue(pool.commitmentSeen(k.d.commitment), "lands at the deadline itself");
+        _assertRouterEmpty();
+    }
+
+    function test_deadline_a_swap_past_it_moves_nothing() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1301, address(gloam), 39e18, 0x1301, _route1(direct));
+        vm.warp(swapDeadline + 1);
+        vm.expectRevert(GloamVaultSwap2.SwapExpired.selector);
+        _go(router, k);
+        _assertNothingMoved(k, 4 * NOTE);
+        assertEq(usd.balanceOf(_escrow(k)), 0);
+    }
+
+    function test_deadline_an_eth_note_swap_past_it_moves_nothing() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _callFrom(router, 1302, NATIVE, ENOTE, address(usd), 110e6, 0x1302, _route1(ethUsd));
+        vm.warp(swapDeadline + 1);
+        vm.expectRevert(GloamVaultSwap2.SwapExpired.selector);
+        _go(router, k);
+        _assertNothingMoved(k, 4 * ENOTE);
+    }
+
+    function test_deadline_is_fixed_by_the_proof() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1303, address(gloam), 39e18, 0x1303, _route1(direct));
+        // the same swap with a later deadline is another escrow, and the proof names this one
+        swapDeadline += 1 days;
+        vm.expectRevert(ShieldPoolCore.InvalidProof.selector);
+        _go(router, k);
+        assertFalse(pool.isSpent(k.s.nullifier));
+    }
+
+    function test_deadline_never_holds_back_a_refund() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1304, address(gloam), 39e18, 0x1304, _route1(direct));
+        vm.warp(swapDeadline + 365 days);
+        _leaveAlone(k);
+        vm.prank(relayer);
+        assertEq(_go(router, k), 0);
+        assertTrue(pool.commitmentSeen(k.r.commitment), "the refund landed a year late");
+        _assertRouterEmpty();
+    }
+
+    function test_deadline_never_holds_back_an_exit() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _callFrom(router, 1305, NATIVE, ENOTE, address(usd), 110e6, 0x1305, _route1(ethUsd));
+        vm.warp(swapDeadline + 365 days);
+        _leaveAlone(k);
+        _v3().exit(NATIVE, _keyOf(k), exitTo, _exitSig(k, exitTo));
+        assertEq(exitTo.balance, EARRIVES, "the exit paid a year late");
+    }
+
+    /// Money that left for its escrow before the deadline can still come back after it.
+    function test_deadline_a_note_left_before_it_comes_back_after_it() public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1306, address(gloam), 39e18, 0x1306, _route1(direct));
+        _leaveAlone(k);
+        vm.warp(swapDeadline + 1);
+        assertEq(_go(router, k), 0);
+        assertTrue(pool.commitmentSeen(k.r.commitment));
+    }
+
+    function test_deadline_on_tempo() public {
+        (GloamVaultSwapTempo2 t, MockERC20 usdt, ) = _tempo();
+        GloamVaultSwap on = GloamVaultSwap(address(t));
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(on, 1307, address(usdt), 99e6, 0x1307, "");
+        vm.warp(swapDeadline + 1);
+        vm.expectRevert(GloamVaultSwap2.SwapExpired.selector);
+        _go(on, k);
+        assertFalse(pool.isSpent(k.s.nullifier));
+        // and its refund and exit stay open
+        _leaveAlone(k);
+        assertEq(_go(on, k), 0);
+        assertTrue(pool.commitmentSeen(k.r.commitment));
+    }
+
+    /// At any time: a swap lands only up to its deadline, and a refund lands either way.
+    function testFuzz_deadline_gates_the_swap_and_nothing_else(uint32 wait, bool leftAlone) public {
+        swapDeadline = block.timestamp + 30 minutes;
+        Call memory k = _call(router, 1308, address(gloam), 39e18, 0x1308, _route1(direct));
+        if (leftAlone) _leaveAlone(k);
+        vm.warp(block.timestamp + wait);
+        if (!leftAlone && block.timestamp > swapDeadline) {
+            vm.expectRevert(GloamVaultSwap2.SwapExpired.selector);
+            _go(router, k);
+            assertFalse(pool.isSpent(k.s.nullifier));
+            return;
+        }
+        _go(router, k);
+        assertTrue(pool.commitmentSeen(leftAlone ? k.r.commitment : k.d.commitment));
     }
 
     // ═════════════════════════════════════════════════════════════ fuzz

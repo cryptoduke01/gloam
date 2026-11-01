@@ -41,6 +41,7 @@ import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
 import type { GloamNetwork } from "./networks";
 import {
+  SWAP_DEADLINE_SECONDS,
   encodeRoute,
   escrowAddress,
   exitAccount,
@@ -203,6 +204,8 @@ export async function runVaultSwap(args: {
   const routeBytes = encodeRoute(plan.route);
   // v3 names a one-time exit key, from the refund note's own secret, in the escrow key.
   const exitKey = swapRouterFor(network.chainId, router)?.version === 3 ? exitAccount(back.note.secret).address : undefined;
+  // and a deadline, from the chain's clock rather than this device's
+  const deadline = exitKey ? (await client.getBlock()).timestamp + BigInt(SWAP_DEADLINE_SECONDS) : undefined;
   const key: EscrowKey = {
     nullifier,
     amountIn: targetWei,
@@ -212,11 +215,11 @@ export async function runVaultSwap(args: {
     refundCommitment: back.note.commitment,
     refundAmount: BigInt(back.note.amountWei),
     routeHash: keccak256(routeBytes),
-    ...(exitKey ? { exitKey } : {}),
+    ...(exitKey ? { exitKey, deadline } : {}),
   };
   const escrow = escrowAddress(router, target.asset, key);
   const routerSays = exitKey
-    ? await client.readContract({ address: router, abi: vaultSwapV3Abi, functionName: "escrowFor", args: [target.asset, { ...key, exitKey }] })
+    ? await client.readContract({ address: router, abi: vaultSwapV3Abi, functionName: "escrowFor", args: [target.asset, { ...key, exitKey, deadline: deadline! }] })
     : await client.readContract({ address: router, abi: vaultSwapAbi, functionName: "escrowFor", args: [target.asset, key] });
   if (routerSays.toLowerCase() !== escrow.toLowerCase()) {
     throw new Error("This swap's address didn't check out, so nothing was sent. Refresh and try again.");
@@ -245,7 +248,7 @@ export async function runVaultSwap(args: {
     amountIn: targetWei.toString(),
     out: { commitment: out.note.commitment, asset: args.assetOut, amount: plan.amountOut.toString() },
     route: plan.route,
-    ...(exitKey ? { exitKey } : {}),
+    ...(exitKey ? { exitKey, deadline: deadline!.toString() } : {}),
   };
   const outNote: LocalNote = { ...out.note, id: `sw-${now}`, sweptFrom: { id: target.id, nullifier }, sweepPending: true };
   const refundNote: LocalNote = {
@@ -269,7 +272,7 @@ export async function runVaultSwap(args: {
       deposit: { proof: out.proof, commitment: outNote.commitment, asset: args.assetOut, amount: plan.amountOut },
       refund: { proof: back.proof, commitment: refundNote.commitment, asset: target.asset, amount: BigInt(refundNote.amountWei) },
       route: plan.route,
-      ...(exitKey ? { exitKey } : {}),
+      ...(exitKey ? { exitKey, deadline } : {}),
     },
     { spentId: target.id, outId: outNote.id, refund: refundNote },
     {
@@ -344,7 +347,7 @@ export async function finishVaultSwapRefund(note: LocalNote): Promise<boolean> {
     deposit: { proof: UNUSED_PROOF, commitment: info.out.commitment, asset: info.out.asset, amount: BigInt(info.out.amount) },
     refund: { proof: proofBytes, commitment: note.commitment, asset: note.asset, amount: BigInt(note.amountWei) },
     route: info.route,
-    ...(info.exitKey ? { exitKey: info.exitKey } : {}),
+    ...(info.exitKey ? { exitKey: info.exitKey, deadline: BigInt(info.deadline ?? "0") } : {}),
   });
   // the receipt is read on the note's own chain, whatever the page shows by now
   const net = networkOfNote(note);
@@ -371,7 +374,7 @@ export async function exitVaultSwap(note: LocalNote, to: Address): Promise<Hex> 
     chainId: note.chainId,
     router: info.router,
     asset: info.assetIn,
-    key: { ...key, exitKey: info.exitKey },
+    key: { ...key, exitKey: info.exitKey, deadline: BigInt(info.deadline ?? "0") },
     to,
     signature,
   });

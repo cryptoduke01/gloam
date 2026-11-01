@@ -17,16 +17,18 @@ import {SwapEscrow2} from "./SwapEscrow2.sol";
  *  - Native ETH. A note may be native ETH (asset address(0)) on either side.
  *  - A way out. Each swap names a one-time exit key in its escrow key, and money
  *    waiting at the swap's escrow can leave to an address that key signs for.
+ *  - A deadline. Each swap names the last time it can land in its escrow key.
+ *    A refund and an exit have none.
  *
  * What binds what. The vault's unshield proof has one free public input, `to`.
  * A swap sets it to an escrow address that CREATE2 derives from everything the
  * swap must do: the note spent (nullifier, amount), the new note (commitment,
- * asset, amount), a refund note (commitment, amount), the route and the exit
- * key. So:
+ * asset, amount), a refund note (commitment, amount), the route, the exit key
+ * and the deadline. So:
  *  - only the note's owner can start a swap (the proof needs its secret);
  *  - a caller who copies the call and changes the new note, the refund note,
- *    the route or the exit key gets a different escrow, and the vault rejects
- *    the proof;
+ *    the route, the exit key or the deadline gets a different escrow, and the
+ *    vault rejects the proof;
  *  - no two notes ever share an escrow;
  *  - the new note's shield proof binds it to exactly `amountOut` of the asset.
  *
@@ -83,6 +85,7 @@ abstract contract GloamVaultSwap2 {
         uint256 refundAmount;
         bytes32 routeHash;
         address exitKey;
+        uint256 deadline;
     }
 
     /// @notice Native ETH, as the vault names it.
@@ -121,6 +124,7 @@ abstract contract GloamVaultSwap2 {
     error BadRefund();
     error BadExit();
     error EscrowUsed();
+    error SwapExpired();
     error OverInput(uint256 needed, uint256 available);
     error ShortOutput(uint256 got, uint256 wanted);
     error Reentrancy();
@@ -164,19 +168,24 @@ abstract contract GloamVaultSwap2 {
      * @param r The refund note, in `s.asset`, made in advance; used only in that case.
      * @param route Venue-specific route, checked by the venue contract.
      * @param exitKey The swap's one-time exit key (exit()).
+     * @param deadline The last time the swap can land. It does not apply to a refund.
      * @return amountIn What the swap spent of the input (0 on a refund).
      */
-    function swap(Spend calldata s, Deposit calldata d, Deposit calldata r, bytes calldata route, address exitKey)
-        external
-        nonReentrant
-        returns (uint256 amountIn)
-    {
+    function swap(
+        Spend calldata s,
+        Deposit calldata d,
+        Deposit calldata r,
+        bytes calldata route,
+        address exitKey,
+        uint256 deadline
+    ) external nonReentrant returns (uint256 amountIn) {
         if (s.asset == d.asset) revert SameAsset();
         if (d.amount == 0) revert InvalidAmount();
         if (r.asset != s.asset || r.amount == 0 || r.amount > s.amount || r.commitment == d.commitment) revert BadRefund();
 
         bool refunding = vault.isSpent(s.nullifier);
-        uint256 available = _collect(s, d, r, route, exitKey, refunding);
+        if (!refunding && block.timestamp > deadline) revert SwapExpired();
+        uint256 available = _collect(s, r, _salt(s, d, r, keccak256(route), exitKey, deadline), refunding);
 
         if (refunding) {
             if (available < r.amount) revert BadRefund();
@@ -185,7 +194,14 @@ abstract contract GloamVaultSwap2 {
             emit VaultSwapRefund(s.nullifier, r.commitment, r.asset, r.amount);
             return 0;
         }
+        return _buy(s, d, route, available);
+    }
 
+    /// @dev The swap itself: buys the new note with what arrived, and deposits it.
+    function _buy(Spend calldata s, Deposit calldata d, bytes calldata route, uint256 available)
+        private
+        returns (uint256 amountIn)
+    {
         uint256 outBefore = _balance(d.asset);
         amountIn = _swapExactOut(s.asset, d.asset, d.amount, available, route);
         if (amountIn > available) revert OverInput(amountIn, available);
@@ -257,15 +273,7 @@ abstract contract GloamVaultSwap2 {
 
     /// @dev Takes the note out to the swap's escrow (unless that already
     ///      happened), opens the escrow, and returns what arrived here.
-    function _collect(
-        Spend calldata s,
-        Deposit calldata d,
-        Deposit calldata r,
-        bytes calldata route,
-        address exitKey,
-        bool spent
-    ) private returns (uint256 available) {
-        bytes32 salt = _salt(s, d, r, keccak256(route), exitKey);
+    function _collect(Spend calldata s, Deposit calldata r, bytes32 salt, bool spent) private returns (uint256 available) {
         address escrow = _escrowAt(salt, s.asset);
         if (!spent) {
             _unshieldTo(s, escrow);
@@ -282,11 +290,14 @@ abstract contract GloamVaultSwap2 {
     }
 
     /// @dev keccak256(abi.encode(EscrowKey)), field by field.
-    function _salt(Spend calldata s, Deposit calldata d, Deposit calldata r, bytes32 routeHash, address exitKey)
-        private
-        pure
-        returns (bytes32)
-    {
+    function _salt(
+        Spend calldata s,
+        Deposit calldata d,
+        Deposit calldata r,
+        bytes32 routeHash,
+        address exitKey,
+        uint256 deadline
+    ) private pure returns (bytes32) {
         EscrowKey memory k;
         k.nullifier = s.nullifier;
         k.amountIn = s.amount;
@@ -297,6 +308,7 @@ abstract contract GloamVaultSwap2 {
         k.refundAmount = r.amount;
         k.routeHash = routeHash;
         k.exitKey = exitKey;
+        k.deadline = deadline;
         return keccak256(abi.encode(k));
     }
 

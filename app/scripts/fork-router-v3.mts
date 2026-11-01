@@ -36,7 +36,7 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { buildPoseidonUnshieldWitness, fieldToBytes32, makeBoundNotePoseidon, packGroth16Proof, type Groth16Proof } from "@gloamtrade/sdk";
 
-const { escrowAddress, exitDigest } = await import("../src/lib/vaultSwap");
+const { SWAP_DEADLINE_SECONDS, escrowAddress, exitDigest } = await import("../src/lib/vaultSwap");
 
 const arg = process.argv[process.argv.indexOf("--chain") + 1] ?? "ethereum";
 const ETH_PRICE = Number(process.env.ETH_PRICE ?? 2250);
@@ -52,7 +52,7 @@ const SALT = keccak256(toHex("gloam.vault-swap.v3"));
 const TREE_SLOT = 4n; // nextIndex 4, currentRoot 5, filledSubtrees 6.., zeros 26.. (forge inspect)
 const fixture = JSON.parse(readFileSync(new URL("../../contracts/test/fixtures/router-next.json", import.meta.url), "utf8"));
 
-type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" };
+type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" | "late" };
 type Cfg = { id: number; fork: string; quoter: Address; port: number; bufferBps: bigint; syms: Record<string, [string, number]>; cases: Case[]; prepare?: () => Promise<void> };
 
 const BU = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address;
@@ -79,6 +79,7 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "USDT -> ETH via USDC, two hops", assetIn: ET, assetOut: NATIVE, amountIn: parseUnits("100", 6), pools: [4, 0] },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDT exit, vault limit full", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "exit" },
+      { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
     ],
   },
   base: {
@@ -92,6 +93,7 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "ETH -> USDT via USDC, two hops", assetIn: NATIVE, assetOut: BT, amountIn: parseUnits("0.05", 18), pools: [0, 2] },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDC exit, vault limit full", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "exit" },
+      { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
     ],
   },
   robinhood: {
@@ -105,6 +107,7 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "WETH -> USDG (a WETH note still works)", assetIn: RW, assetOut: RU, amountIn: parseUnits("0.05", 18), pools: [2] },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: RU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDG exit, vault limit full", assetIn: RU, assetOut: NATIVE, amountIn: parseUnits("100", 6), pools: [0], kind: "exit" },
+      { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: RU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
     ],
   },
 };
@@ -135,6 +138,7 @@ const vaultAbi = parseAbi([
   "function shieldBound(address asset, uint256 amount, bytes32 commitment, bytes proof) payable",
   "function unshield(bytes proof, bytes32 root, bytes32 nullifier, address asset, address to, uint256 amount)",
   "function commitmentSeen(bytes32) view returns (bool)",
+  "function isSpent(bytes32) view returns (bool)",
   "function currentRoot() view returns (bytes32)",
   "function isKnownRoot(bytes32) view returns (bool)",
   "function withdrawFeeBps() view returns (uint16)",
@@ -158,6 +162,7 @@ const KEY = [
   { name: "refundAmount", type: "uint256" },
   { name: "routeHash", type: "bytes32" },
   { name: "exitKey", type: "address" },
+  { name: "deadline", type: "uint256" },
 ] as const;
 const DEP = [
   { name: "proof", type: "bytes" },
@@ -174,6 +179,7 @@ const routerAbi = [
       { name: "r", type: "tuple", components: DEP },
       { name: "route", type: "bytes" },
       { name: "exitKey", type: "address" },
+      { name: "deadline", type: "uint256" },
     ],
     outputs: [{ type: "uint256" }],
   },
@@ -308,6 +314,8 @@ async function runCase(c: Case, feeBps: bigint) {
   const exitPk = generatePrivateKey();
   const exitAccount = privateKeyToAccount(exitPk);
   const routeBytes = encodeAbiParameters([{ type: "tuple[]", components: POOL_KEY }], [p.route.map((k) => ({ ...k }))]);
+  // from the chain's clock, as the app does it
+  const deadline = (await client.getBlock()).timestamp + BigInt(SWAP_DEADLINE_SECONDS);
   const key = {
     nullifier: note.nullifier as Hex,
     amountIn: c.amountIn,
@@ -318,6 +326,7 @@ async function runCase(c: Case, feeBps: bigint) {
     refundAmount: backAmount,
     routeHash: keccak256(routeBytes),
     exitKey: exitAccount.address,
+    deadline,
   };
   const escrow = (await client.readContract({ address: ROUTER, abi: routerAbi, functionName: "escrowFor", args: [c.assetIn, key] })) as Address;
   check(same(escrowAddress(ROUTER, c.assetIn, key), escrow), "the app works out the router's escrow");
@@ -335,9 +344,16 @@ async function runCase(c: Case, feeBps: bigint) {
       { proof: backProof, commitment: back.commitment as Hex, asset: c.assetIn, amount: backAmount },
       routeBytes,
       exitAccount.address,
+      deadline,
     ],
   });
   const seen = (cm: string) => readVault("commitmentSeen", [cm]) as Promise<boolean>;
+
+  if (kind === "late") {
+    await raw("evm_setNextBlockTimestamp", [Number(deadline) + 1]);
+    const late = await tx(RELAYER, ROUTER, data);
+    console.log(`  one second past its deadline: ${check(late.status === "reverted", "a swap past its deadline reverts")} (reverted), note unspent: ${check(!(await readVault("isSpent", [nullifier])), "the note stays unspent")}`);
+  }
 
   if (kind !== "swap") {
     const alone = await tx(STRANGER, VAULT, encodeFunctionData({ abi: vaultAbi, functionName: "unshield", args: [unProof, root, nullifier, c.assetIn, escrow, c.amountIn] }));
@@ -384,7 +400,7 @@ async function runCase(c: Case, feeBps: bigint) {
       check(ev.args.amountIn! + ev.args.leftover! === available, "spent plus leftover is what arrived");
     }
   }
-  if (kind === "refund") console.log(`  refund note landed: ${check(await seen(back.commitment), "refund landed")}, new note not made: ${check(!(await seen(out.commitment)), "no new note")}`);
+  if (kind === "refund" || kind === "late") console.log(`  refund note landed: ${check(await seen(back.commitment), "refund landed")}, new note not made: ${check(!(await seen(out.commitment)), "no new note")}`);
   else console.log(`  new note landed: ${check(await seen(out.commitment), "new note landed")}, refund note unused: ${check(!(await seen(back.commitment)), "refund unused")}`);
   const ethLeft = await client.getBalance({ address: ROUTER });
   console.log(`  router holds ${formatUnits(ethLeft, 18)} ETH, ${fmt(await balance(c.assetIn, ROUTER), c.assetIn)}, ${fmt(await balance(c.assetOut, ROUTER), c.assetOut)}; escrow ${fmt(await balance(c.assetIn, escrow), c.assetIn)}`);
