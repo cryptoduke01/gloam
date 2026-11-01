@@ -453,7 +453,7 @@ Medium issues. The report is at
 `app/public/audits/gloam-kann-security-review-2026-11-01.pdf`, with its scope and
 counts at gloam.trade/security.
 
-- The report labels L-01 and L-09 Fixed because fixes are planned, and the rest
+- The report labels L-01 and L-02 Fixed because fixes are planned, and the rest
   Acknowledged. None of these changes are live yet. The vault cannot be upgraded,
   so contract changes land in the next vault.
 - I-02: the owner can replace the proof verifier through the 3-day timelock.
