@@ -1036,6 +1036,24 @@ await test("5. a relay that forgot the job, or can't be read, never puts a note 
   assert.equal(noteById(gone.id).cashOut, undefined);
 });
 
+await test("5b. a job on its way that the relay let go of comes back, once its record has aged out and the note is unspent", async () => {
+  const days = (d: number) => d * 24 * 60 * 60 * 1000;
+  const aged = marked("sent");
+  const fresh = marked("sent");
+  const spent = marked("sent");
+  const env = cashEnv({
+    now: aged.cashOut!.at + days(8),
+    views: { [aged.cashOut!.job]: "gone", [spent.cashOut!.job]: "gone" },
+    spent: { [aged.nullifier!]: false, [spent.nullifier!]: true },
+  });
+  await reconcileCashOuts(env);
+  assert.equal(noteById(aged.id).cashOut!.state, "failed", "over: it shows as returned");
+  assert.equal(noteById(spent.id).cashOut!.state, "sent", "spent: it went out");
+  // A job missing inside the time a finished one is kept says nothing yet.
+  await reconcileCashOuts(cashEnv({ now: fresh.cashOut!.at + days(1), views: { [fresh.cashOut!.job]: "gone" }, spent: { [fresh.nullifier!]: false } }));
+  assert.equal(noteById(fresh.id).cashOut!.state, "sent");
+});
+
 // 6. A split can be counted twice.
 
 await test("6. a split's notes name the note they spend, and landing retires it: counted once", async () => {
