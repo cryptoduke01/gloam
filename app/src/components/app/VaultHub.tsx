@@ -149,7 +149,7 @@ export function VaultHub() {
 
   return (
     <div className="space-y-6">
-      <StocksLiveNote chainId={network.chainId} where="vault" />
+      <StocksLiveNote chainId={network.chainId} where="vault" alone={current.id === "swap"} />
       <ActionRow actions={actions} current={current.id} onSelect={select} />
 
       <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${current.id}`} className="min-w-0">
