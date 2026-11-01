@@ -810,7 +810,7 @@ const res = await mppx.fetch("https://api.example.com/answer");`,
     mainnet: n.testnet
       ? `${family === "base" ? `${where} (Base Sepolia)` : where}: a testnet on the mainnet vault, with its final keys and deposit limits. testnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.`
       : `${where}: beta software with deposit limits. mainnetNetwork("${family}") in @gloamtrade/sdk ${sdkVersion} returns this vault (pool ${n.pool}, deploy block ${n.deployBlock}, chain ${n.chainId}); getGloamNetwork("${network}") is the same network by key.${family === "base" || family === "ethereum" ? "" : ` GLOAM_NETWORKS.${family} stays the testnet.`}`,
-    install: `npm i mppx @gloamtrade/mppx-gloam@^0.4.0 @gloamtrade/sdk@^${sdkVersion}`,
+    install: `npm i mppx @gloamtrade/mppx-gloam@^0.4.1 @gloamtrade/sdk@^${sdkVersion}`,
     ...(role !== "pay" ? { charge } : {}),
     ...(role !== "charge" ? { pay } : {}),
     ...MPP_TAIL,
