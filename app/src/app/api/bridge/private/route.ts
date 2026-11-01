@@ -30,6 +30,7 @@ import {
   type PrivateBridgeTx,
 } from "@/lib/bridge";
 import { originChain } from "@/lib/originChains";
+import { noteRelayQuote } from "@/lib/relayLedger";
 import { serverTransport } from "@/lib/serverRpc";
 import { buildSolanaTx, type RelaySolanaInstruction } from "@/lib/solanaTx";
 import { screenAddresses } from "@/lib/screeningServer";
@@ -373,5 +374,6 @@ export async function POST(req: Request) {
     gasUsd: Number.isFinite(gasUsd) ? Math.round(gasUsd * 100) / 100 : null,
     timeSec: Number(data?.details?.timeEstimate ?? 0),
   };
+  if (apiKey) await noteRelayQuote(requestId);
   return NextResponse.json({ ok: true, data: quote }, { headers: { "Cache-Control": "no-store" } });
 }

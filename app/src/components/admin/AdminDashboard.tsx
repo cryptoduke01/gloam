@@ -45,7 +45,7 @@ type MetricsPayload = {
   };
   /** Claim-link totals per UTC day, oldest first (lib/funnel). */
   claimLinks?: FunnelDay[];
-  /** Bridges and swaps tagged to Gloam at Relay (lib/relayVolume). */
+  /** Bridges and swaps through Gloam's Relay panel (lib/relayVolume). */
   relay?: RelayVolume | { error: string };
   /** Different wallets using Gloam, counted one way (lib/peopleStore). */
   people?: PeopleSummary;
@@ -1916,6 +1916,16 @@ function RelayPanel({
         </p>
       )}
 
+      {live?.historyError ? (
+        <p className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] leading-relaxed text-danger">
+          Relay&apos;s history didn&apos;t answer ({live.historyError}). These figures are what Gloam has on record so far, so the newest swaps may be missing.
+        </p>
+      ) : live?.history === "v2" ? (
+        <p className="rounded-xl bg-surface px-4 py-3 text-[14px] leading-relaxed text-soft">
+          Add RELAY_API_KEY_ID on Vercel before 24 November 2026. Relay retires the history read this page uses on that day, and new swaps stop counting here without it.
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title="Funnel">
           <BarChart rows={funnel} />
@@ -1929,7 +1939,7 @@ function RelayPanel({
             <DataTable
               headers={["Source", "Kind", "Finished", "Volume", "Relay fees"]}
               rows={live.bySource.map((r) => [relayChainName(r.chainId), r.kind === "swap" ? "Swap" : "Bridge", n(r.count), fmtUsd(r.inUsd), fmtUsd(r.feeUsd)])}
-              empty="Nothing tagged yet"
+              empty="Nothing counted yet"
               minWidth={460}
             />
           ) : (
@@ -1957,7 +1967,8 @@ function RelayPanel({
             />
             <p className="mt-4 text-[13px] leading-relaxed text-mute">
               UTC days, finished requests only, valued in dollars by Relay when each one was made.
-              {live.since ? ` Tagged at Relay since ${fmtWhen(live.since)}.` : " Nothing tagged at Relay yet."}
+              {live.since ? ` Counted since ${fmtWhen(live.since)}.` : " Nothing counted yet."}
+              {" Older bridges were never tagged at Relay, so they can't be recovered."}
               {live.truncated ? " More requests exist than one refresh reads, so totals are a floor." : ""}
             </p>
           </Panel>
