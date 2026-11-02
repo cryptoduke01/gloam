@@ -551,6 +551,13 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         this server and nowhere else. If a payment fails after an allow,
         VEYA&apos;s running budget may sit ahead of what was really paid.
       </p>
+      <p>
+        VEYA checks payments: <code>gloam_execute_private_pay</code> and{" "}
+        <code>gloam_fetch_paid</code>. A private swap, and a swap&apos;s exit
+        to an address, go through the spending limits but not through VEYA,
+        and only run when the owner lists <code>swap</code> in the limits. Leave
+        it out if every spend must pass VEYA.
+      </p>
       <h3>The receipt after a payment</h3>
       <p>
         VEYA&apos;s allow carries a check id. Set{" "}
@@ -580,6 +587,14 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
         The server keeps the full record in its encrypted note store. It shows
         the asset, the minimum amount and the transaction hash, so no tool hands
         it to the agent. See <code>examples/veya-receipt</code>.
+      </p>
+      <p>
+        What a receipt proves: a payment of at least the stated amount, in that
+        asset, made by that transaction into the vault, tied to VEYA&apos;s
+        check id. It does not prove who received it, since the payee stays
+        private, or that anything was delivered for it. The leaf on chain
+        proves only that VEYA wrote that leaf; whoever holds the record checks
+        the rest with <code>checkPaymentReceipt</code>.
       </p>
 
       <h2>Spending limits</h2>
