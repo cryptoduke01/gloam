@@ -410,6 +410,9 @@ export async function exitVaultSwap(note: LocalNote, to: Address): Promise<Hex> 
   const account = exitAccount(note.secret);
   if (account.address.toLowerCase() !== info.exitKey.toLowerCase()) throw new Error("This note doesn't hold this swap's exit key.");
   const escrow = escrowAddress(info.router, info.assetIn, key);
+  // the router refuses these (BadExit): the money would stop there for good
+  const stops = [escrow, info.router, networkOfNote(note)?.pool ?? null, info.assetIn].filter(Boolean) as Address[];
+  if (stops.some((a) => a.toLowerCase() === to.toLowerCase())) throw new Error("An exit can't go to that address. Pick a wallet address.");
   const unshieldTx = await unshieldTxOf(note, escrow).catch(() => null);
   if (!unshieldTx) throw new Error("The vault's payment to this swap can't be read yet. Try again in a minute.");
   const signature = await account.sign({ hash: exitDigest(note.chainId, info.router, escrow, to) });
