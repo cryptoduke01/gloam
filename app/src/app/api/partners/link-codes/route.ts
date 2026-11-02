@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { ApiError, jsonBody, limitPortalWrite, portal, sessionWallet } from "@/lib/partnersApi";
+import { hitRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { sameSiteJson } from "@/lib/partnersAuth";
 import { getPartnerByOwner } from "@/lib/partners";
-import { issueLinkCode, linkCodeView, listLinkCodes, MAX_LIVE_CODES } from "@/lib/partnerLinks";
+import { issueLinkCode, linkCodeView, listLinkCodes, MAX_CODES, MAX_LIVE_CODES } from "@/lib/partnerLinks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,12 +16,19 @@ async function ownPartner(req: NextRequest, write = false) {
   return partner;
 }
 
-/** The signed-in partner's link codes, revoked and expired ones included. */
+/** Code lists per wallet per minute: the portal reads it on load and after each change. */
+const LISTS_PER_MIN = 30;
+
+/** The signed-in partner's link codes, revoked and expired ones still on record included. */
 export async function GET(req: NextRequest) {
   return portal(async () => {
+    const wallet = sessionWallet(req);
+    if (!(await hitRateLimit(`wallet:${wallet.toLowerCase()}`, "partner-codes", LISTS_PER_MIN)).allowed) {
+      throw new ApiError(429, "rate_limited", "Too many reads in a minute. Wait a moment.");
+    }
     const partner = await ownPartner(req);
     const now = Date.now();
-    return { data: { codes: (await listLinkCodes(partner.id)).map((c) => linkCodeView(c, now)), maxLive: MAX_LIVE_CODES } };
+    return { data: { codes: (await listLinkCodes(partner.id)).map((c) => linkCodeView(c, now)), maxLive: MAX_LIVE_CODES, maxCodes: MAX_CODES } };
   });
 }
 

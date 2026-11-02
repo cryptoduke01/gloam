@@ -149,6 +149,8 @@ export async function runVaultSwap(args: {
   /** The note's tree path, read fresh. */
   pathFor: (note: LocalNote) => Promise<PoseidonMerklePath | null>;
   onStatus: (s: string) => void;
+  /** A partner's link code: it goes to the relay with the swap, which counts it to them once it lands. */
+  partnerCode?: string;
 }): Promise<SwapResult> {
   const { network, note, amount, router } = args;
   if (!network.pool) throw new Error("This network has no vault yet.");
@@ -278,6 +280,7 @@ export async function runVaultSwap(args: {
       refund: { proof: back.proof, commitment: refundNote.commitment, asset: target.asset, amount: BigInt(refundNote.amountWei) },
       route: plan.route,
       ...(exitKey ? { exitKey, deadline } : {}),
+      ...(args.partnerCode ? { partnerCode: args.partnerCode } : {}),
     },
     { spentId: target.id, outId: outNote.id, refund: refundNote },
     {

@@ -14,10 +14,11 @@
  * Anything else (a deposit, a refund, a swap's exit, two actions packed into one
  * transaction, logs from some other contract) is refused: attribution fails closed.
  *
- * What comes out is only what the chain already shows: the kind, and for a cash
- * out or a swap the asset and amount that left the vault and the vault's own fee
- * on it (its WithdrawFee log, same nullifier; 0 when there is none). Never the
- * address a cash out paid or anything about who sent it.
+ * What comes out is only what the chain already shows: the kind, the spend's
+ * nullifier, and for a cash out or a swap the asset and amount that left the
+ * vault and the vault's own fee on it (its WithdrawFee log, same nullifier; 0
+ * when there is none). A cash out's receiving address comes out too, so it can
+ * be matched to a partner's own address; callers never store it.
  */
 import { decodeEventLog, toEventSelector, type Address, type Hex } from "viem";
 
@@ -86,15 +87,19 @@ const VAULT_TOPICS = new Set<string>(VAULT_EVENTS.map((e) => toEventSelector(e))
 export type VaultTxKind = "private_payment" | "cash_out" | "private_swap";
 
 export type VaultTxFacts =
-  | { ok: true; kind: "private_payment" }
+  | { ok: true; kind: "private_payment"; nullifier: Hex }
   | {
       ok: true;
       kind: "cash_out" | "private_swap";
+      /** The spend's nullifier: what a link registration is found by (lib/partnerAttribution). */
+      nullifier: Hex;
       /** The asset and amount that left the vault (the note's full amount, before the fee). */
       asset: Address;
       amount: bigint;
       /** The vault's own fee on it, in the same asset (WithdrawFee); 0n when it kept none. */
       vaultFee: bigint;
+      /** A cash out's receiving address (read to match a partner's own address; never stored with a record). */
+      to: Address | null;
     }
   | { ok: false; reason: "not_vault" | "mixed" | "refund" | "unknown_router" };
 
@@ -160,7 +165,7 @@ export function classifyVaultTx(
     if (!same(out.nullifier, swap.nullifier) || !same(back.commitment, swap.commitment) || !same(back.from, log.address)) {
       return { ok: false, reason: "mixed" };
     }
-    return { ok: true, kind: "private_swap", asset: out.asset, amount: out.amount, vaultFee: feeFor(out.nullifier, out.asset) };
+    return { ok: true, kind: "private_swap", nullifier: out.nullifier, asset: out.asset, amount: out.amount, vaultFee: feeFor(out.nullifier, out.asset), to: null };
   }
 
   // a note a router put in with no swap beside it is a refund: money coming back, not anyone's payment
@@ -172,9 +177,9 @@ export function classifyVaultTx(
     const out = unshielded[0]!;
     // a cash out never pays a router (lib/cashOutTarget refuses it); one that did is a swap's leg
     if (anyRouter.has(out.to.toLowerCase())) return { ok: false, reason: "mixed" };
-    return { ok: true, kind: "cash_out", asset: out.asset, amount: out.amount, vaultFee: feeFor(out.nullifier, out.asset) };
+    return { ok: true, kind: "cash_out", nullifier: out.nullifier, asset: out.asset, amount: out.amount, vaultFee: feeFor(out.nullifier, out.asset), to: out.to };
   }
-  if (transferred.length === 1 && unshielded.length === 0) return { ok: true, kind: "private_payment" };
+  if (transferred.length === 1 && unshielded.length === 0) return { ok: true, kind: "private_payment", nullifier: transferred[0]!.nullifier };
   return { ok: false, reason: unshielded.length || transferred.length ? "mixed" : "not_vault" };
 }
 

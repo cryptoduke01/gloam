@@ -261,6 +261,20 @@ function memCommand(cmd: KvCommand): unknown {
       e.v = e.v.slice(start, stop < 0 ? e.v.length + stop + 1 : stop + 1);
       return "OK";
     }
+    case "LREM": {
+      // LREM key count value: count 0 takes every copy out, as Redis does
+      const e = live(a[0]!);
+      if (!e || !isList(e.v)) return 0;
+      const want = Number(a[1]);
+      let n = 0;
+      const kept: string[] = [];
+      for (const v of e.v) {
+        if (v === a[2] && (want === 0 || n < Math.abs(want))) n++;
+        else kept.push(v);
+      }
+      e.v = kept;
+      return n;
+    }
     case "LRANGE": {
       const e = live(a[0]!);
       if (!e || !isList(e.v)) return [];

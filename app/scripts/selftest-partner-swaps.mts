@@ -99,7 +99,7 @@ await test("accounting: swaps are counted apart from public volume, per day and 
   assert.equal(stats.totals.publicVolumeUsd, 100, "public volume stays deposits and cash outs");
   assert.equal(stats.byKind.private_swap.count, 1);
   assert.equal(stats.byKind.private_swap.commissionUsd, 0);
-  assert.equal(stats.byNetwork["robinhood-mainnet"].private_swap, 1);
+  assert.equal(stats.byNetwork["robinhood-mainnet"]!.private_swap, 1);
   assert.equal(stats.daily.at(-1)!.swaps, 1);
   assert.equal(stats.daily.at(-1)!.volumeUsd, 100, "daily volume stays deposits and cash outs");
   const usdg = stats.byAsset.find((r) => r.asset.toLowerCase() === RH_USDG.toLowerCase());

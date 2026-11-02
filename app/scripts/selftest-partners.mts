@@ -110,7 +110,6 @@ async function test(name: string, fn: () => void | Promise<void>) {
 const HOST = "localhost:3121";
 const ORIGIN = `http://${HOST}`;
 const RH = getNetwork("robinhood");
-const TEMPO = getNetwork("tempo");
 const USDG = "0x7E955252E15c84f5768B83c41a71F9eba181802F" as Address;
 const pepper = (() => {
   const p = apiKeyPepper(HOST);
@@ -543,10 +542,14 @@ await test("keys: per-minute limit", async () => {
 
 // ---------------------------------------------------------------- attribution
 
+// Valued on mainnet only: a testnet transaction is counted, never priced (see the last test of this block).
+const RHM = getNetwork("robinhood-mainnet");
+const TEMPOM = getNetwork("tempo-mainnet");
+const USDG_M = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168" as Address;
 const TX = (n: number) => `0x${n.toString(16).padStart(64, "0")}` as Hex;
 
 await test("attribution: private payments keep no amount, asset or recipient", async () => {
-  const r = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1) });
+  const r = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1) });
   assert.ok(r.recorded);
   const rec = r.record;
   assert.equal(rec.asset, null);
@@ -555,7 +558,7 @@ await test("attribution: private payments keep no amount, asset or recipient", a
   assert.equal(rec.feeUsd, 0.05);
   assert.deepEqual(
     Object.keys(rec).sort(),
-    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "linkCode", "network", "source", "symbol", "ts", "txHash", "vaultFee", "vaultFeeUsd", "volumeUsd"].sort()
+    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "linkCode", "network", "source", "symbol", "ts", "txHash", "v", "vaultFee", "vaultFeeUsd", "volumeUsd"].sort()
   );
   // a private payment is free in the vault, and came in with a key
   assert.equal(rec.source, "api");
@@ -564,16 +567,16 @@ await test("attribution: private payments keep no amount, asset or recipient", a
 });
 
 await test("attribution: a transaction counts once, for one partner", async () => {
-  const again = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1) });
+  const again = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1) });
   assert.deepEqual(again, { recorded: false, reason: "duplicate" });
-  const upper = await recordActivity({ partner, keyId, network: RH, kind: "private_payment", txHash: TX(1).toUpperCase().replace("0X", "0x") as Hex });
+  const upper = await recordActivity({ partner, keyId, network: RHM, kind: "private_payment", txHash: TX(1).toUpperCase().replace("0X", "0x") as Hex });
   assert.equal(upper.recorded, false, "hash case does not matter");
-  const otherChain = await recordActivity({ partner, keyId, network: TEMPO, kind: "private_payment", txHash: TX(1) });
+  const otherChain = await recordActivity({ partner, keyId, network: TEMPOM, kind: "private_payment", txHash: TX(1) });
   assert.equal(otherChain.recorded, true, "same hash on another chain is another transaction");
 });
 
 await test("attribution: public edges are valued and summed", async () => {
-  const c = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(2), edge: { asset: USDG, amount: 250_000_000n } });
+  const c = await recordActivity({ partner, keyId, network: RHM, kind: "cash_out", txHash: TX(2), edge: { asset: USDG_M, amount: 250_000_000n } });
   assert.ok(c.recorded);
   assert.equal(c.record.symbol, "USDG");
   assert.equal(c.record.volumeUsd, 250);
@@ -581,7 +584,7 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(c.record.feeToken, "625000");
   // A stock token has no price here: counted, not valued.
   const tsla = "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E" as Address;
-  const s = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(3), edge: { asset: tsla, amount: 10n ** 18n } });
+  const s = await recordActivity({ partner, keyId, network: RHM, kind: "cash_out", txHash: TX(3), edge: { asset: tsla, amount: 10n ** 18n } });
   assert.ok(s.recorded && s.record.feeUsd === null && s.record.feeToken === "2500000000000000");
 
   const stats = await readPartnerStats(partner.id, { recent: 10 });
@@ -590,8 +593,8 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(stats.totals.publicVolumeUsd, 250);
   assert.equal(stats.totals.unpriced, 1);
   assert.ok(Math.abs(stats.totals.commissionUsd - (0.05 * 2 + 0.625)) < 1e-9);
-  assert.equal(stats.byNetwork.robinhood.private_payment, 1);
-  assert.equal(stats.byNetwork.tempo.private_payment, 1);
+  assert.equal(stats.byNetwork["robinhood-mainnet"]!.private_payment, 1);
+  assert.equal(stats.byNetwork["tempo-mainnet"]!.private_payment, 1);
   const usdg = stats.byAsset.find((a) => a.symbol === "USDG")!;
   assert.equal(usdg.volume, "250");
   assert.equal(usdg.commission, "0.625");
@@ -602,15 +605,23 @@ await test("attribution: public edges are valued and summed", async () => {
   assert.equal(today.cashOuts, 2);
   assert.equal(stats.daily.length, 14);
 
-  const all = await readPartnerStats("all");
-  assert.equal(all.totals.cashOuts, 2);
   const totals = await readAllPartnerTotals((await listPartners()).map((p) => p.id));
-  assert.equal(totals[partner.id]!.privatePayments, 2);
+  assert.equal(totals.byPartner[partner.id]!.privatePayments, 2);
+  assert.ok(totals.program.cashOuts >= 2, "the program's sum holds every partner's");
+
+  // testnet is counted apart and never valued
+  const t = await recordActivity({ partner, keyId, network: RH, kind: "cash_out", txHash: TX(9), edge: { asset: USDG, amount: 1_000_000_000_000n } });
+  assert.ok(t.recorded && t.record.volumeUsd === null && t.record.feeUsd === null);
+  const test = await readPartnerStats(partner.id, { tier: "testnet" });
+  assert.equal(test.totals.cashOuts, 1);
+  assert.equal(test.totals.publicVolumeUsd, 0);
+  assert.equal(test.totals.unpriced, 1);
+  assert.equal((await readPartnerStats(partner.id)).totals.cashOuts, 2, "mainnet unchanged");
 });
 
 await test("attribution: fee setting applies at the time of the transaction", async () => {
   const updated = await upsertPartner(wallet.address, { fees: { privatePaymentCents: 20 } });
-  const r = await recordActivity({ partner: updated, keyId, network: RH, kind: "private_payment", txHash: TX(4) });
+  const r = await recordActivity({ partner: updated, keyId, network: RHM, kind: "private_payment", txHash: TX(4) });
   assert.ok(r.recorded && r.record.feeUsd === 0.2);
   const stats = await readPartnerStats(partner.id, { recent: 5 });
   assert.ok(stats.recent.some((x) => x.txHash === TX(1) && x.feeUsd === 0.05), "earlier records keep their fee");

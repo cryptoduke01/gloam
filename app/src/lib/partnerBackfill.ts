@@ -1,20 +1,22 @@
 /**
- * The on-chain match: past cash outs that paid one of a partner's own receiving
- * addresses (lib/partnerAddresses), counted to that partner with source "chain".
- * Admin-started, server side, read-only. Server only.
+ * The on-chain match: cash outs that paid one of a partner's own proven
+ * receiving addresses (lib/partnerAddresses), counted to that partner with
+ * source "chain". Admin-started, server side, read-only on chain. Server only.
  *
  * On every mainnet with a vault it reads the vault's Unshielded logs from the
  * vault's deploy block (lib/networks, the same blocks as contracts/deployments)
  * up to the chain's head, one address and one topic per query (Robinhood Chain's
  * RPC allows no more over a wide range), in spans each chain's RPC accepts; a
- * span the node calls too wide is halved (lib/logRange). Where a log's `to` is a
- * partner's address, the transaction's receipt is read and checked like a link
- * attribution's (lib/partnerVerify: one cash out, no swap in it), and counted with
- * what the chain shows: the hash, chain, asset, amount, the vault's fee from its
- * WithdrawFee log and the block's time. A transaction counts once (the claim in
- * lib/partners recordActivity, shared with live attribution and claimTransaction),
- * so running it again, or after a link already counted the same transaction,
- * changes nothing.
+ * span the node calls too wide is halved (lib/logRange). For each cash out:
+ *  - it paid a partner's proven address: the receipt is read and checked like a
+ *    link's (lib/partnerVerify: one plain cash out) and the cash out is counted to
+ *    that partner with the vault fee from its WithdrawFee log and the block's time.
+ *    One a link counted to another partner is moved to the address's partner: an
+ *    address match overrides a link. One counted with an API key stays.
+ *  - it was registered from a partner's link (a cash out sent later, say) and
+ *    nobody counted it yet: it is counted to that link's partner
+ *    (lib/partnerAttribution settleLinkTx).
+ * A transaction counts once (the claim in lib/partners).
  *
  * What it can't find, said plainly in the dashboards:
  *  - private payments: inside the vault the payee and the amount are hidden, so
@@ -28,18 +30,20 @@
  * sender, not the relay, not the paying wallet.
  *
  * A pass stops starting new spans when its time budget runs out; each chain's
- * cursor (backfill:cursor:<chainId>) keeps where it got to, and the next pass
- * picks up there. A dry run reads the same and writes nothing.
+ * cursor (backfill:cursor:<chainId>) keeps where it got to, and the next pass picks
+ * up there. A span where a receipt could not be read is not passed: the cursor
+ * stays before it. A dry run reads the same and writes nothing.
  */
+import { createHash } from "crypto";
 import type { Address, Hex } from "viem";
 import { getLogsSafe } from "./logRange";
-import { k, kv1 } from "./partnersKv";
-import { assetInfo, attributedTo, getPartner, recordActivity, type Partner } from "./partners";
+import { k, kv, kv1, type KvCommand } from "./partnersKv";
+import { assetInfo, attributedTo, countedRecord, getPartner, recordActivity, reverseActivity, type Partner } from "./partners";
 import { addressChains } from "./partnerAddresses";
-import { classifyVaultTx, VAULT_EVENTS } from "./partnerVerify";
+import { VAULT_EVENTS } from "./partnerVerify";
+import { linkNullifierHash } from "./partnerCode";
+import { classify, settleLinkTx, type AttributionReceipt } from "./partnerAttribution";
 import { relayPublicClient } from "./relay/server";
-import { EVERY_SWAP_ROUTER, swapRoutersOn } from "./vaultSwap";
-import type { AttributionReceipt } from "./partnerAttribution";
 import type { GloamNetwork, NetworkKey } from "./networks";
 
 /** First span per query; a range error halves it. Robinhood Chain takes wide spans for one address and one topic. */
@@ -60,6 +64,12 @@ export type BackfillDeps = {
   partner: (id: string) => Promise<Partner | null>;
   record: typeof recordActivity;
   attributed: typeof attributedTo;
+  counted: typeof countedRecord;
+  reverse: typeof reverseActivity;
+  /** Which of these spends were registered from a partner's link. */
+  registered: (chainId: number, nullifiers: Hex[]) => Promise<boolean[]>;
+  /** Counts a registered transaction to its link (lib/partnerAttribution settleLinkTx). */
+  settle: (net: GloamNetwork, hash: Hex) => Promise<void>;
   readCursor: (chainId: number) => Promise<bigint | null>;
   writeCursor: (chainId: number, block: bigint) => Promise<void>;
   now: () => number;
@@ -100,6 +110,16 @@ export const backfillDeps: BackfillDeps = {
   partner: getPartner,
   record: recordActivity,
   attributed: attributedTo,
+  counted: countedRecord,
+  reverse: reverseActivity,
+  registered: async (chainId, nullifiers) => {
+    if (!nullifiers.length) return [];
+    const res = await kv(nullifiers.map((n) => ["EXISTS", k("reg", chainId, linkNullifierHash(n).toLowerCase())] as KvCommand));
+    return res.map((r) => Number(r) > 0);
+  },
+  settle: async (net, hash) => {
+    await settleLinkTx({ chainId: net.chainId, txHash: hash });
+  },
   readCursor: async (chainId) => {
     const v = await kv1(["GET", k("backfill", "cursor", chainId)]);
     return typeof v === "string" && /^\d+$/.test(v) ? BigInt(v) : null;
@@ -110,8 +130,22 @@ export const backfillDeps: BackfillDeps = {
   now: () => Date.now(),
 };
 
+export type BackfillResultKind =
+  | "recorded"
+  | "would_record"
+  | "moved"
+  | "would_move"
+  | "settled"
+  | "would_settle"
+  | "already_counted"
+  | "refused";
+
 export type BackfillMatch = {
   partnerId: string;
+  /** "chain": it paid this partner's proven address; "link": registered from this partner's link. */
+  via: "chain" | "link";
+  /** The partner's own proven address it paid (via "chain"); never the sender. */
+  address?: string;
   network: NetworkKey;
   chainId: number;
   txHash: Hex;
@@ -122,9 +156,11 @@ export type BackfillMatch = {
   amount: string;
   /** The vault's fee, smallest units. */
   vaultFee: string;
-  /** Block time, ms. */
+  /** Block time, ms (0 when not read). */
   ts: number;
-  result: "recorded" | "already_counted" | "would_record" | "refused";
+  result: BackfillResultKind;
+  /** The partner a link had counted it to, for a move. */
+  from?: string;
   /** Why a matched log was not counted. */
   reason?: string;
 };
@@ -144,13 +180,19 @@ export type ChainScan = {
   error?: string;
 };
 
+/** Per proven address: what the pass found paying it. */
+export type AddressSummary = { partnerId: string; chainId: number; address: string; matches: number; counted: number; byToken: Record<string, string> };
+
 export type BackfillResult = {
   dryRun: boolean;
   from: "deploy" | "cursor";
   ms: number;
   addresses: number;
+  /** Fingerprint of the proven addresses this pass used (a real pass needs a dry run of the same). */
+  book: string;
   chains: ChainScan[];
   matches: BackfillMatch[];
+  byAddress: AddressSummary[];
   /** Why swaps are not matched, in a sentence. */
   swaps: string;
   /** Why private payments are not matched, in a sentence. */
@@ -162,9 +204,18 @@ export const SWAPS_NOT_MATCHED =
 export const PRIVATE_PAYMENTS_NOT_MATCHED =
   "Past private payments can't be matched: inside the vault the payee and the amount are hidden. Only cash outs that paid a partner's public address can be.";
 
+/** A stable fingerprint of an address book, so a real pass can be tied to the dry run that showed it. */
+export function bookFingerprint(book: Map<number, Map<string, string>>): string {
+  const lines = [...book.entries()].flatMap(([chain, m]) => [...m.entries()].map(([a, p]) => `${chain}:${a}:${p}`)).sort();
+  return createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 32);
+}
+
+/** A receipt that could not be read: the span is not passed, so the next pass reads it again. */
+class ReceiptUnread extends Error {}
+
 /**
  * One pass over every mainnet (or `chains`). `book`: chainId to (lowercase
- * address to partner id). Stops starting new spans after `budgetMs`.
+ * address to partner id), proven addresses only. Stops starting new spans after `budgetMs`.
  */
 export async function runBackfill(
   opts: { dryRun: boolean; from: "deploy" | "cursor"; book: Map<number, Map<string, string>>; budgetMs: number; chains?: number[] },
@@ -196,39 +247,82 @@ export async function runBackfill(
           const logs = await deps.unshielded(net, a, b);
           scan.queries++;
           scan.logs += logs.length;
+          const others = logs.filter((l) => !mine.has(l.to.toLowerCase()));
+          const reg = await deps.registered(net.chainId, others.map((l) => l.nullifier));
+          const linked = new Set(others.filter((_, i) => reg[i]).map((l) => l.txHash.toLowerCase()));
           for (const log of logs) {
             const partnerId = mine.get(log.to.toLowerCase());
-            if (!partnerId) continue;
-            scan.matches++;
-            matches.push(await matchOne(net, log, partnerId, opts.dryRun, deps));
+            if (partnerId) {
+              scan.matches++;
+              matches.push(await matchAddress(net, log, partnerId, opts.dryRun, deps));
+            } else if (linked.has(log.txHash.toLowerCase())) {
+              matches.push(await settleRegistered(net, log, opts.dryRun, deps));
+            }
           }
+          // every receipt of this span was read: it is passed
           scan.scannedTo = b.toString();
           if (!opts.dryRun) await deps.writeCursor(net.chainId, b);
         }
         scan.done = BigInt(scan.scannedTo) >= head;
       } catch (e) {
-        scan.error = e instanceof Error ? e.message.split("\n")[0]!.slice(0, 200) : "read failed";
+        scan.error =
+          e instanceof ReceiptUnread
+            ? "A receipt could not be read. The cursor stays before it; run again to carry on."
+            : e instanceof Error
+              ? e.message.split("\n")[0]!.slice(0, 200)
+              : "read failed";
       }
       scan.ms = deps.now() - t0;
       return scan;
     })
   );
   matches.sort((x, y) => y.ts - x.ts);
+
+  const byAddress = new Map<string, AddressSummary & { raw: Record<string, { amount: bigint; decimals: number }> }>();
+  for (const m of matches) {
+    if (m.via !== "chain" || !m.address) continue;
+    const key = `${m.chainId}:${m.address}`;
+    const s = byAddress.get(key) ?? { partnerId: m.partnerId, chainId: m.chainId, address: m.address, matches: 0, counted: 0, byToken: {}, raw: {} };
+    s.matches++;
+    if (["recorded", "would_record", "moved", "would_move"].includes(m.result)) {
+      s.counted++;
+      const net = nets.find((n) => n.chainId === m.chainId)!;
+      const sym = m.symbol ?? m.asset;
+      const prev = s.raw[sym] ?? { amount: 0n, decimals: assetInfo(net, m.asset)?.decimals ?? 18 };
+      s.raw[sym] = { ...prev, amount: prev.amount + BigInt(m.amount) };
+    }
+    byAddress.set(key, s);
+  }
+  const summaries: AddressSummary[] = [...byAddress.values()].map(({ raw, ...s }) => ({
+    ...s,
+    byToken: Object.fromEntries(Object.entries(raw).map(([sym, r]) => [sym, wholeTokens(r.amount, r.decimals)])),
+  }));
+
   return {
     dryRun: opts.dryRun,
     from: opts.from,
     ms: deps.now() - started,
     addresses,
+    book: bookFingerprint(opts.book),
     chains,
     matches,
+    byAddress: summaries,
     swaps: SWAPS_NOT_MATCHED,
     privatePayments: PRIVATE_PAYMENTS_NOT_MATCHED,
   };
 }
 
-async function matchOne(net: GloamNetwork, log: UnshieldLog, partnerId: string, dryRun: boolean, deps: BackfillDeps): Promise<BackfillMatch> {
-  const base: BackfillMatch = {
+function wholeTokens(v: bigint, decimals: number): string {
+  const base = 10n ** BigInt(decimals);
+  const frac = (v % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac ? `${v / base}.${frac}` : `${v / base}`;
+}
+
+function baseOf(net: GloamNetwork, log: UnshieldLog, partnerId: string, via: "chain" | "link"): BackfillMatch {
+  return {
     partnerId,
+    via,
+    ...(via === "chain" ? { address: log.to.toLowerCase() } : {}),
     network: net.key,
     chainId: net.chainId,
     txHash: log.txHash.toLowerCase() as Hex,
@@ -240,23 +334,29 @@ async function matchOne(net: GloamNetwork, log: UnshieldLog, partnerId: string, 
     ts: 0,
     result: "refused",
   };
-  if (await deps.attributed(net.chainId, base.txHash)) return { ...base, result: "already_counted" };
+}
+
+async function matchAddress(net: GloamNetwork, log: UnshieldLog, partnerId: string, dryRun: boolean, deps: BackfillDeps): Promise<BackfillMatch> {
+  const base = baseOf(net, log, partnerId, "chain");
+  const counted = await deps.counted(net.chainId, base.txHash);
+  // counted to this partner already, or with a key (the key's partner sent it): left as it is
+  if (counted && (counted.partnerId === partnerId || counted.record.source !== "link")) return { ...base, result: "already_counted" };
+  if (!counted && (await deps.attributed(net.chainId, base.txHash))) return { ...base, result: "already_counted", reason: "Claimed as a refund or an exit." };
   const receipt = await deps.receipt(net, base.txHash);
-  if (!receipt || receipt.status !== "success") return { ...base, reason: "No successful receipt." };
-  const facts = classifyVaultTx(receipt.logs, {
-    pool: net.pool!,
-    routers: swapRoutersOn(net.chainId).map((r) => r.address),
-    anyRouter: EVERY_SWAP_ROUTER,
-  });
+  if (!receipt) throw new ReceiptUnread();
+  if (receipt.status !== "success") return { ...base, reason: "The transaction failed." };
+  const facts = classify(net, receipt.logs);
   // the receipt must be the one cash out the log came from, nothing packed beside it
   if (!facts.ok || facts.kind !== "cash_out" || facts.asset.toLowerCase() !== log.asset.toLowerCase() || facts.amount !== log.amount) {
     return { ...base, reason: "Not a plain cash out." };
   }
   const ts = (await deps.blockTime(net, receipt.blockNumber)) * 1000;
-  const found = { ...base, vaultFee: facts.vaultFee.toString(), ts };
-  if (dryRun) return { ...found, result: "would_record" };
+  const found = { ...base, vaultFee: facts.vaultFee.toString(), ts, ...(counted ? { from: counted.partnerId } : {}) };
+  if (dryRun) return { ...found, result: counted ? "would_move" : "would_record" };
   const partner = await deps.partner(partnerId);
   if (!partner) return { ...found, reason: "The partner account is gone." };
+  // an address match overrides a link: take it back from the link's partner first
+  if (counted) await deps.reverse(net.chainId, base.txHash);
   const r = await deps.record({
     partner,
     keyId: null,
@@ -268,5 +368,20 @@ async function matchOne(net: GloamNetwork, log: UnshieldLog, partnerId: string, 
     vaultFee: facts.vaultFee,
     now: ts,
   });
-  return { ...found, result: r.recorded ? "recorded" : "already_counted" };
+  return { ...found, result: r.recorded ? (counted ? "moved" : "recorded") : "already_counted" };
+}
+
+async function settleRegistered(net: GloamNetwork, log: UnshieldLog, dryRun: boolean, deps: BackfillDeps): Promise<BackfillMatch> {
+  const base = baseOf(net, log, "", "link");
+  if (await deps.attributed(net.chainId, base.txHash)) return { ...base, result: "already_counted" };
+  if (dryRun) return { ...base, result: "would_settle" };
+  try {
+    await deps.settle(net, base.txHash);
+    const c = await deps.counted(net.chainId, base.txHash);
+    return { ...base, partnerId: c?.partnerId ?? "", ts: c?.record.ts ?? 0, vaultFee: c?.record.vaultFee ?? "0", result: "settled" };
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === "tx_not_found" || code === "rpc") throw new ReceiptUnread();
+    return { ...base, result: code === "already_attributed" ? "already_counted" : "refused", reason: e instanceof Error ? e.message : undefined };
+  }
 }

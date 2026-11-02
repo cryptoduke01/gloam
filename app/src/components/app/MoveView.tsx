@@ -85,7 +85,7 @@ import { gasHighMessage } from "@/lib/relay/gasCeiling";
 import { RelayToggle } from "./RelayToggle";
 import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
-import { queuePartnerJobs, reportPartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
+import { queuePartnerJobs, registerLinkSpend, settlePartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
 import {
   claimNetworkProblem,
   isWalletRequest,
@@ -496,10 +496,12 @@ export function MoveView() {
     null
   );
   /**
-   * The partner link the payment or cash out in flight came from (lib/partnerLinkClient):
-   * reported once it lands, never waited on.
+   * The payment or cash out in flight came from a partner's link: its spend was
+   * registered under the link's code before it was sent (by the app, or by the
+   * relay with the code it was handed), and it is asked to be counted once it
+   * lands (lib/partnerLinkClient). Never waited on.
    */
-  const partnerSend = useRef<{ code: string; chainId: number } | null>(null);
+  const partnerSend = useRef<{ chainId: number } | null>(null);
   /** Analytics for the payment in flight: sent on a request, carrying a note. */
   const payTrack = useRef<{ chainId: number; request: boolean; note: boolean } | null>(null);
   /** The payment's code for Sent links, saved once the payment lands. */
@@ -583,11 +585,11 @@ export function MoveView() {
 
       if (pendingAction.current === "cashout") countPerson("cashout", address, network.testnet);
 
-      // From a partner's link: the server checks this transaction on chain and counts it to them.
+      // From a partner's link: the server checks this transaction on chain and counts it to the link it was registered under.
       if ((pendingAction.current === "send" || pendingAction.current === "cashout") && partnerSend.current) {
         const ps = partnerSend.current;
         partnerSend.current = null;
-        reportPartnerTx({ code: ps.code, chainId: ps.chainId, txHash, flow: "pay" });
+        settlePartnerTx({ chainId: ps.chainId, txHash });
       }
 
       if (pendingAction.current === "send" && payTrack.current) {
@@ -748,7 +750,7 @@ export function MoveView() {
     // it may still land: the report waits for the chain, and counts nothing if it never does
     const ps = partnerSend.current;
     partnerSend.current = null;
-    if (ps && (action === "send" || action === "cashout")) reportPartnerTx({ code: ps.code, chainId: ps.chainId, txHash, flow: "pay" });
+    if (ps && (action === "send" || action === "cashout")) settlePartnerTx({ chainId: ps.chainId, txHash });
     pendingChange.current = null;
     pendingShare.current = null;
     pendingMemo.current = null;
@@ -1112,17 +1114,18 @@ export function MoveView() {
       spentNoteId.current = target.id;
       setStatus("Proving privately, this takes 10 to 30 seconds…");
       const call = await proveCashOut(target, to, path, network.chainId);
+      // From a partner's link to the request's own wallet: bound to the link's code before anything is sent.
+      const fromLink = requestPartner(to);
       if (later) {
         setStatus("Scheduling with the Gloam relay…");
         // Out of the balance while it waits; the chain settles it once it goes out. The
         // address shown is the one the relay holds, not the one asked for (and when this
         // money already has a cash out waiting, the note shows that one).
-        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow);
+        // the relay registers it under the code as it schedules it, and counts it as it sends it
+        const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow, fromLink ? { partnerCode: fromLink.code } : {});
         spentNoteId.current = null;
         countPerson("cashout", address, network.testnet);
-        // from a partner's link: reported once the relay has sent it
-        const later = requestPartner(to);
-        if (later) queuePartnerJobs(later.code, later.chainId, [job.id]);
+        if (fromLink) queuePartnerJobs(network.chainId, [job.id]);
         setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(target.amountWei, target.asset) });
         setCashOutInput("");
         refreshNotes();
@@ -1133,16 +1136,19 @@ export function MoveView() {
         });
         return;
       }
-      partnerSend.current = requestPartner(to);
+      partnerSend.current = fromLink ? { chainId: network.chainId } : null;
       if (relayOn) {
         setStatus("Sending through the Gloam relay…");
-        const h = await relayUnshield(call);
+        // the relay registers it under the code as it sends it
+        const h = await relayUnshield({ ...call, ...(fromLink ? { partnerCode: fromLink.code } : {}) });
         setCashedOut({ to, asset: target.asset as Address });
         setRelayHash(h);
         setSuccessTitle("Cashed out");
         setCashOutInput("");
         return;
       }
+      // from the wallet: registered under the code now, before the wallet is asked
+      if (fromLink) registerLinkSpend({ code: fromLink.code, chainId: network.chainId, nullifier: call.nullifier, flow: "pay" });
       setStatus("Confirm the cash out in your wallet…");
       writeContract({
         address: network.pool,
@@ -1278,6 +1284,9 @@ export function MoveView() {
     setCashedOut(null);
     setPlanRun(pieces.map((p, i) => ({ amount: p, to: targets[i]!, state: "waiting" })));
     setRunNote(note);
+    // From a partner's link: the pieces that pay the request's own wallet carry its code to the relay as they are scheduled.
+    const fromLink = requestPartner(cashOutTo);
+    const toRequest = (a: Address) => Boolean(fromLink && cashOutTo && a.toLowerCase() === cashOutTo.toLowerCase());
     try {
       const r = await runPrivateCashOut({
         note,
@@ -1287,13 +1296,11 @@ export function MoveView() {
         owner: address as Address,
         onStatus: setStatus,
         onPiece: (i, patch) => setPlanRun((rows) => rows && rows.map((row, j) => (j === i ? { ...row, ...patch } : row))),
+        ...(fromLink
+          ? { deps: { schedule: (n, c, when) => scheduleNoteCashOut(n, c, when, toRequest(c.to) ? { partnerCode: fromLink.code } : {}) } }
+          : {}),
       });
-      // From a partner's link: the pieces that pay the request's wallet, reported as each goes out.
-      const fromLink = requestPartner(cashOutTo);
-      if (fromLink) {
-        const toWallet = r.jobs.filter((j) => j.to.toLowerCase() === cashOutTo?.toLowerCase()).map((j) => j.id);
-        queuePartnerJobs(fromLink.code, fromLink.chainId, toWallet);
-      }
+      if (fromLink) queuePartnerJobs(network.chainId, r.jobs.filter((j) => toRequest(j.to)).map((j) => j.id));
       if (r.jobs.length) {
         // Jobs come back in piece order: the first ones are what was scheduled.
         const times = r.jobs.map((j) => j.sendAfter);
@@ -1458,6 +1465,13 @@ export function MoveView() {
       });
       if (w.blocker) throw new Error(w.blocker);
 
+      // From a partner's link, to the request's own Gloam address: bound to the link's code before
+      // anything is sent. Registered now, before proving; a relayed send also hands the code to the relay.
+      const linkCode =
+        request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to ? request.partnerCode : null;
+      partnerSend.current = linkCode ? { chainId: network.chainId } : null;
+      if (linkCode) registerLinkSpend({ code: linkCode, chainId: network.chainId, nullifier: fieldToBytes32(w.publicInputs.nullifier), flow: "pay" });
+
       const { proofBytes } = await proveTransferInBrowser(w.circomInput);
 
       // Change stays with sender only. Payment secret goes solely into share package.
@@ -1495,11 +1509,6 @@ export function MoveView() {
       });
       setSentNote(pack.note ?? null);
       payTrack.current = { chainId: network.chainId, request: Boolean(request), note: Boolean(pack.note) };
-      // From a partner's link, to the request's own Gloam address: reported once it lands.
-      partnerSend.current =
-        request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to
-          ? { code: request.partnerCode, chainId: network.chainId }
-          : null;
       let share: string;
       let locked = false;
       if (payStyle === "direct") {
@@ -1580,6 +1589,7 @@ export function MoveView() {
             fieldToBytes32(w.publicInputs.newCommitment0),
             fieldToBytes32(w.publicInputs.newCommitment1),
           ],
+          ...(linkCode ? { partnerCode: linkCode } : {}),
         });
         setRelayHash(h);
         setSuccessTitle("Sent privately");

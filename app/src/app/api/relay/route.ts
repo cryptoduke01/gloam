@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
+import { afterRelaySend, relaySpendOf } from "@/lib/partnerAttribution";
 import {
   RelayError,
   checkChainRateLimit,
@@ -37,11 +38,19 @@ export async function GET() {
  * as `ticket` with that payment's memo, it gets the payer's own few messages.
  * Also action "gas-station" with { wallet, step }: a fresh wallet's gas station
  * (lib/relay/gasStation), off unless switched on.
+ *
+ * A send opened from a partner's link may carry { partnerCode }. Nothing about
+ * the send changes: once it is out, the relay registers its spend under the code
+ * as of when it took this request and counts it when it lands, after the response
+ * (lib/partnerAttribution afterRelaySend). That step never fails or delays a send.
  */
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") throw new RelayError("Invalid request.");
+    // a link's code is read now, used only after the send (afterRelaySend)
+    const takenAt = Date.now();
+    const partnerCode = body.partnerCode;
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
@@ -52,6 +61,10 @@ export async function POST(req: Request) {
     switch (body.action) {
       case "transfer": {
         hash = await relayTransfer(net, body, requester);
+        if (partnerCode !== undefined) {
+          const sent = hash;
+          after(() => afterRelaySend({ net, hash: sent, code: partnerCode, spend: relaySpendOf(body), at: takenAt }));
+        }
         // relayTransfer checked commitments[0] is a bytes32
         const payment = (body.commitments as string[])[0]!;
         return NextResponse.json({ ok: true, hash, memoTicket: memoTicket(net.chainId, payment) });
@@ -73,6 +86,10 @@ export async function POST(req: Request) {
         break;
       default:
         throw new RelayError("Unknown action.");
+    }
+    if (partnerCode !== undefined && (body.action === "unshield" || body.action === "swap")) {
+      const sent = hash;
+      after(() => afterRelaySend({ net, hash: sent, code: partnerCode, spend: relaySpendOf(body), at: takenAt }));
     }
     return NextResponse.json({ ok: true, hash });
   } catch (e) {

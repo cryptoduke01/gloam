@@ -86,7 +86,7 @@ import type { NetworkKey } from "@/lib/networks";
 import { swapLinkFromHash, swapLinkParams, swapLinkStep, type SwapLink } from "@/lib/swapLink";
 import { dropSwapLink, keepSwapLink, keptSwapLink } from "@/lib/swapLinkStore";
 import { SwapLinkBanner } from "./SwapLinkBanner";
-import { reportPartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
+import { settlePartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
 
 /**
  * The swap link this tab opens with (lib/swapLink): the one in the address bar,
@@ -556,11 +556,13 @@ export function VaultSwapView() {
         owner: address as Address,
         pathFor: async (n) => ((await freshPath(n.commitment))?.path as PoseidonMerklePath | undefined) ?? null,
         onStatus: setStatus,
+        // from a partner's link: the code goes to the relay with the swap, which counts it once it lands
+        ...(partnerCode ? { partnerCode } : {}),
       });
       if (!refunded) {
         countPerson("swap", address, network.testnet);
-        // from a partner's link: the server checks the swap on chain and counts it to them; never waited on
-        if (partnerCode) reportPartnerTx({ code: partnerCode, chainId, txHash: hash, flow: "swap" });
+        // a second chance for the count if the relay's own step missed it; never waited on
+        if (partnerCode) settlePartnerTx({ chainId, txHash: hash });
         setReceipt({ pay: from, payAmount: paid, receive: into, receiveAmount: BigInt(outNote.amountWei), hash });
         finishLink();
       }

@@ -10,9 +10,14 @@
  * shares. It only says which partner a link is from. A revoked or expired code
  * counts for nothing from then on; what it counted before stays counted.
  *
+ * Bounded: an account holds at most MAX_LIVE_CODES live codes and MAX_CODES in
+ * all; a revoked code's record goes away REVOKED_TTL_SEC after it was revoked
+ * (or expired), and listing reads only what is still there.
+ *
  * Storage (lib/partnersKv), under gloam:partners:v1:
- *   link:<code>        the code's record (JSON)
- *   links:<partnerId>  set of the partner's codes
+ *   link:<code>             the code's record (JSON)
+ *   links:<partnerId>       set of the partner's codes still on record
+ *   links-live:<partnerId>  set of its live codes
  */
 import { randomInt } from "crypto";
 import { cleanText } from "./paymentNote";
@@ -25,6 +30,10 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
 
 /** Live codes a partner may hold at once. */
 export const MAX_LIVE_CODES = 20;
+/** Codes a partner may have on record at once, live, revoked or expired. */
+export const MAX_CODES = 100;
+/** How long a revoked or expired code's record is kept, for the partner's list. */
+export const REVOKED_TTL_SEC = 30 * 86_400;
 export const LINK_LABEL_MAX = 40;
 /** The longest a code can be set to last, in days; no expiry when none is asked for. */
 export const MAX_EXPIRY_DAYS = 730;
@@ -65,15 +74,30 @@ export async function getLinkCode(code: string): Promise<LinkCode | null> {
   return jsonOf<LinkCode>(await kv1(["GET", k("link", code)]));
 }
 
-/** Every code a partner holds, newest first, revoked and expired ones included. */
-export async function listLinkCodes(partnerId: string): Promise<LinkCode[]> {
+/**
+ * Every code a partner holds, newest first: live, and revoked or expired ones
+ * still on record. Codes whose record went away are dropped from the sets, and
+ * an expired code leaves the live set and starts its own expiry.
+ */
+export async function listLinkCodes(partnerId: string, now = Date.now()): Promise<LinkCode[]> {
   const codes = (await kv1(["SMEMBERS", k("links", partnerId)])) as string[];
   if (!Array.isArray(codes) || codes.length === 0) return [];
   const raw = await kv(codes.map((c) => ["GET", k("link", c)] as KvCommand));
-  return raw
-    .map((r) => jsonOf<LinkCode>(r))
-    .filter((c): c is LinkCode => Boolean(c && c.partnerId === partnerId))
-    .sort((a, b) => b.createdAt - a.createdAt);
+  const tidy: KvCommand[] = [];
+  const out: LinkCode[] = [];
+  codes.forEach((code, i) => {
+    const c = jsonOf<LinkCode>(raw[i]);
+    if (!c || c.partnerId !== partnerId) {
+      tidy.push(["SREM", k("links", partnerId), code], ["SREM", k("links-live", partnerId), code]);
+      return;
+    }
+    if (linkCodeState(c, now) === "expired") {
+      tidy.push(["SREM", k("links-live", partnerId), code], ["EXPIRE", k("link", code), REVOKED_TTL_SEC]);
+    }
+    out.push(c);
+  });
+  if (tidy.length) await kv(tidy).catch(() => undefined);
+  return out.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** Issues a new code for a partner. `expiresInDays`: whole days, 1 to MAX_EXPIRY_DAYS, or none. */
@@ -95,9 +119,12 @@ export async function issueLinkCode(args: {
     }
     expiresAt = now + d * 86_400_000;
   }
-  const live = (await listLinkCodes(args.partnerId)).filter((c) => linkCodeState(c, now) === "live");
-  if (live.length >= MAX_LIVE_CODES) {
+  const all = await listLinkCodes(args.partnerId, now);
+  if (all.filter((c) => linkCodeState(c, now) === "live").length >= MAX_LIVE_CODES) {
     throw new PartnerError(`An account can hold ${MAX_LIVE_CODES} live link codes. Revoke one first.`, 400, "too_many_codes");
+  }
+  if (all.length >= MAX_CODES) {
+    throw new PartnerError(`An account can have ${MAX_CODES} link codes on record. Revoked ones go after 30 days.`, 400, "too_many_codes");
   }
   for (let attempt = 0; attempt < 3; attempt++) {
     const c: LinkCode = {
@@ -109,27 +136,31 @@ export async function issueLinkCode(args: {
       expiresAt,
       revokedAt: null,
     };
-    const [set] = await kv([
-      ["SET", k("link", c.code), JSON.stringify(c), "NX"],
+    const [set] = await kv([["SET", k("link", c.code), JSON.stringify(c), "NX"]]);
+    if (set !== "OK") continue; // never happens at 119 bits
+    await kv([
       ["SADD", k("links", c.partnerId), c.code],
+      ["SADD", k("links-live", c.partnerId), c.code],
     ]);
-    if (set === "OK") return c;
-    // never happens at 119 bits; if it did, the set holds a code that is someone else's, so take it back out
-    await kv1(["SREM", k("links", c.partnerId), c.code]);
+    return c;
   }
   throw new PartnerError("Could not make a code. Try again.", 500, "internal");
 }
 
 /**
  * Revokes a code. Only the partner it belongs to can, or an admin (no partnerId).
- * Revoking twice keeps the first time. Null when there is no such code for them.
+ * Revoking twice keeps the first time. The record stays REVOKED_TTL_SEC, then goes.
+ * Null when there is no such code for them.
  */
 export async function revokeLinkCode(args: { code: string; partnerId?: string; now?: number }): Promise<LinkCode | null> {
   const c = await getLinkCode(args.code);
   if (!c || (args.partnerId !== undefined && c.partnerId !== args.partnerId)) return null;
   if (c.revokedAt != null) return c;
   const next: LinkCode = { ...c, revokedAt: args.now ?? Date.now() };
-  await kv1(["SET", k("link", c.code), JSON.stringify(next)]);
+  await kv([
+    ["SET", k("link", c.code), JSON.stringify(next), "EX", REVOKED_TTL_SEC],
+    ["SREM", k("links-live", c.partnerId), c.code],
+  ]);
   return next;
 }
 
