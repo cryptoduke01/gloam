@@ -119,7 +119,7 @@ Base (an Ethereum L2 on the OP Stack) is the third chain. Base mainnet (`8453`) 
 - **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. On Base mainnet each stablecoin takes 50,000 per deposit and 2,500,000 in total, and ETH 20 per deposit and 1,000 in total. On Base Sepolia each stablecoin takes 500 per deposit and 25,000 in total, and ETH 0.2 per deposit and 10 in total.
 - **Base Sepolia.** Vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `49802958`) and payment-message board `0x01B3172d9900Cb26d57E986429b9b23854c74598`, the same addresses as on the other chains, every contract source-verified on Sourcify. Test USDC and EURC from [faucet.circle.com](https://faucet.circle.com/), test ETH from a Base Sepolia faucet. Addresses: [`contracts/deployments/base-sepolia.json`](./contracts/deployments/base-sepolia.json).
 - **Base mainnet.** Vault `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (deploy block `53109632`) and payment-message board `0xfCa1887e77f738ef9C5751974b3f3873d029F2DC`. Addresses: [`contracts/deployments/base-mainnet.json`](./contracts/deployments/base-mainnet.json).
-- **Later.** Private swaps on Base (router v2 on Uniswap v4) and bringing money over into Base (the Relay bridge).
+- **Later.** Private swaps on Base. Bringing money over into Base (the Relay bridge) is live since 26 October 2026.
 
 Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 

@@ -115,7 +115,7 @@ Base is the third chain. Base mainnet is live since 26 October 2026: from 0.4.1,
 | Base | `base-mainnet` | `8453` | USDC, EURC, USDT (50,000 / 2,500,000 each), ETH (20 / 1,000), BDX (100,000 / 2,000,000 once its timelocked limit lands) | Final |
 | Base testnet (Sepolia) | `base` | `84532` | Test USDC and EURC from Circle's faucet (500 / 25,000 each), test ETH (0.2 / 10) | Final |
 
-Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets and 0.25% cash-out fee as Base mainnet and its own beta limits, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). Private swaps and the bridge into Base come later.
+Base Sepolia is a testnet, but it runs the mainnet pool (`ShieldPoolPayments`) on the final keys, with the same listed assets and 0.25% cash-out fee as Base mainnet and its own beta limits, so a test there runs the same code as Base mainnet. Both Base pools take native ETH, and both have a payment-message board (`payMemoBoardFor(8453)`, `payMemoBoardFor(84532)`). The bridge (through Relay) brings USDC into Base mainnet since 26 October 2026; private swaps on Base come later.
 
 ### Ethereum
 
@@ -129,7 +129,7 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 - **EURC is a euro stablecoin.** Never count it as a dollar.
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
-- No private swaps on Ethereum yet, and no bridge into Ethereum.
+- The bridge (through Relay) brings USDC into Ethereum, as into Base. No private swaps on Ethereum yet.
 ### Ethereum Sepolia
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
