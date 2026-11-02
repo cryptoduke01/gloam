@@ -33,6 +33,7 @@ import {
   relayUnshield,
   relayVaultSwap,
   relayVaultSwapExit,
+  type MemoPartner,
 } from "./relay/server";
 
 export type PartnerRelayAction = "transfer" | "unshield" | "memo" | "swap" | "swapExit";
@@ -45,7 +46,7 @@ export type Attribution =
 export type PartnerRelayDeps = {
   relayTransfer: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
   relayUnshield: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
-  relayMemo: (net: GloamNetwork, body: Record<string, unknown>, requester?: string) => Promise<Hex>;
+  relayMemo: (net: GloamNetwork, body: Record<string, unknown>, from?: MemoPartner) => Promise<Hex>;
   relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
   relayVaultSwapExit: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
   /** The vault's spent(nullifier), read on the relay's own node. */
@@ -94,7 +95,8 @@ export async function relayForPartner(
       edge = { asset: asAddress(body.asset, "asset"), amount: asAmount(body.amount) };
       break;
     case "memo":
-      hash = await deps.relayMemo(net, body, `key:${keyId}`);
+      // an approved partner's messages share the paid budget (lib/relay/server relayMemo)
+      hash = await deps.relayMemo(net, body, { partner: partner.id, approved: partner.relayApproved === true });
       break;
     case "swap": {
       // the relay's own first refusal, before anything is read from the chain

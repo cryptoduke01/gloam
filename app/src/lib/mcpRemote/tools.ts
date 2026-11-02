@@ -600,7 +600,7 @@ function planDeposit(args: Args, ctx: ToolContext): CallToolResult {
       ? `Get test funds: ${faucetUrl}${network === "robinhood" && asset.symbol === "USDG" ? " (test USDG: https://faucet.paxos.com/)" : ""}.`
       : `Have the ${asset.symbol} in your own wallet on ${n.label}. This is mainnet, with beta deposit limits the app shows before you sign.`,
     n.testnet
-      ? `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet (or sign in with a passkey), and choose ${n.label} in the network menu.`
+      ? `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet${network === "tempo" ? " (or sign in with a passkey, which works on Tempo testnet only)" : ""}, and choose ${n.label} in the network menu.`
       : `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet, and choose ${n.label} mainnet in the network menu.`,
     `Pick ${asset.symbol} and enter ${amount.value ? amount.value : "the amount"}.`,
     ...(asset.native ? [] : [`Approve ${asset.symbol} for the Gloam vault: one signature in your wallet.`]),

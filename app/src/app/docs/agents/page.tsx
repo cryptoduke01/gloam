@@ -13,7 +13,7 @@ export default function DocsAgentsPage() {
   return (
     <DocsLayout
       title="Build a private agent"
-      lede="Give an AI agent a private execution surface on Robinhood Chain, Tempo, Base and Ethereum. It shields, pays, and proves holdings end to end, with size and strategy hidden and signing under policy."
+      lede="Give an AI agent private payments on Robinhood Chain, Tempo, Base and Ethereum. It holds, pays and gets paid with amounts and payees hidden, proves what it holds when asked, and signs under policy."
       glance={[
         { label: "SDK", value: "@gloamtrade/sdk" },
         { label: "Server", value: "@gloamtrade/mcp (MCP)" },
@@ -29,11 +29,13 @@ export default function DocsAgentsPage() {
     >
       <h2>Why agents need this most</h2>
       <p>
-        An agent trading a public chain leaks its whole strategy: every position,
-        size, and time is on the graph for anyone to copy or front-run. Agents run
-        predictable, high-frequency strategies, so they are the easiest to
-        reverse-engineer. Gloam gives an agent a private execution surface: hold,
-        move, and prove value with size hidden, so its edge stays its own.
+        An agent paying on a public chain shows every payment: who it paid, how
+        much and when, for anyone to read or copy. Agents pay often and in
+        patterns, so they are easy to follow. With Gloam an agent holds, pays and
+        gets paid with the amounts and payees hidden. Money going in and out of
+        the vault stays public. Private swaps in the Gloam app hide who swapped,
+        not the tokens or the amounts, and agents can&apos;t swap through the SDK
+        or the MCP server yet.
       </p>
 
       <h2>Two ways in</h2>

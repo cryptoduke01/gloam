@@ -33,6 +33,7 @@ const ERRORS: [string, number | string, string][] = [
   ["InvalidProof, InsufficientPoolBalance, ...", 422, "The dry run against the pool reverted, with the pool's own reason. Nothing was sent."],
   ["relay_off, relay_empty", 503, "The relay is not set up, or out of gas, on this network."],
   ["spend_cap", 429, "The relay reached its hourly limit on this network. Nothing was sent. Try again later."],
+  ["memo_busy", 429, "The relay's hourly budget for payment messages on this network is used up. Nothing was sent. Try later, or post the message from your own wallet."],
   ["gas_most", 422, "This send costs more gas than the relay pays for its kind. Nothing was sent."],
   ["gas_high", 503, "Gas on this chain is over the relay's ceiling (Ethereum mainnet: 3 gwei). Nothing was sent. Try again shortly, or submit the call yourself."],
   ["rpc", 502, "The network did not answer. Try again."],
@@ -180,7 +181,15 @@ export default function DocsPartnersPage() {
         <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and{" "}
         <code>X-RateLimit-Reset</code> (unix seconds); a 429 adds{" "}
         <code>Retry-After</code>. The relay also keeps its own per-sender and
-        per-network caps, with your key as the sender.
+        per-network caps. Your partner account is the sender, so all your keys
+        count together.
+      </p>
+      <p>
+        Payment messages sent with a key share a small hourly budget on each
+        network with every other partner&apos;s keys, the same size as the budget
+        for messages sent without a key (60 an hour on Ethereum). Once Gloam
+        approves your account, your keys use the larger one. Ask us when you
+        need it. One IP can make three new partner accounts a day.
       </p>
 
       <h2>Responses and errors</h2>

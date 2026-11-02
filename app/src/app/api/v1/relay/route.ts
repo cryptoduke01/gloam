@@ -1,7 +1,7 @@
 import { jsonBody, requireKeyEnv, withApiKey } from "@/lib/partnersApi";
 import { keyEnvForNetwork } from "@/lib/apiKeys";
 import { relayForPartner } from "@/lib/partnerRelay";
-import { checkRateLimit, networkForChain, relayStatus } from "@/lib/relay/server";
+import { checkChainRateLimit, checkRateLimit, networkForChain, relayStatus } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
 // a send can wait its turn in the relay's queue (lib/relay/inflight) before it goes out
@@ -31,8 +31,11 @@ export async function POST(req: Request) {
     const body = await jsonBody(req);
     const net = networkForChain(body.chainId);
     requireKeyEnv(key, keyEnvForNetwork(net), net.label);
-    // The relay's own per-sender cap, with the key as the sender (the network cap applies when it sends).
-    await checkRateLimit(`key:${key.id}`);
+    // The relay's own per-sender caps, with the partner account as the sender: all its
+    // keys count together (the network caps apply when it sends).
+    const sender = `partner:${partner.id}`;
+    await checkRateLimit(sender);
+    if (body.action !== "memo") await checkChainRateLimit(net, sender);
     const { hash, action, attribution } = await relayForPartner({ net, body, partner, keyId: key.id });
     return { data: { hash, chainId: net.chainId, network: net.key, action, attribution, charged: false } };
   });

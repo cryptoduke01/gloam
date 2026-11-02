@@ -191,6 +191,12 @@ export type Partner = {
   /** Where fees would be paid, per network. */
   payout: PayoutAddresses;
   fees: PartnerFees;
+  /**
+   * Set by a Gloam admin, never by the partner. Payment messages from an approved
+   * account's keys use the relay's larger message budget; every other account's keys
+   * share one the size of the budget for messages sent without a key.
+   */
+  relayApproved?: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -300,6 +306,15 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
   }
   await kv1(["SADD", k("partners"), partner.id]);
   return partner;
+}
+
+/** Admin only: approves this account for the relay's larger message budget, or takes that back. Null when there is no such account. */
+export async function setRelayApproved(id: string, approved: boolean): Promise<Partner | null> {
+  const partner = await getPartner(id);
+  if (!partner) return null;
+  const next: Partner = { ...partner, relayApproved: approved, updatedAt: Date.now() };
+  await kv1(["SET", k("partner", partner.id), JSON.stringify(next)]);
+  return next;
 }
 
 export async function listPartners(): Promise<Partner[]> {
@@ -616,6 +631,7 @@ export function partnerView(p: Partner) {
     website: p.website,
     payout: p.payout,
     fees: p.fees,
+    relayApproved: p.relayApproved === true,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
