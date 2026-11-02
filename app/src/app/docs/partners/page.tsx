@@ -17,7 +17,12 @@ const ERRORS: [string, number | string, string][] = [
   ["invalid_json", 400, "The body is not a JSON object."],
   ["bad_request", 400, "A relay field is malformed (proof, root, nullifier, commitments, asset, to, amount, memo). Relayed memos are capped at 2,048 bytes."],
   ["network", 400, "chainId is not a network the relay serves (4663 or 4217 on mainnet, 46630 or 42431 on testnet)."],
-  ["bad_action", 400, "action is not transfer, unshield or memo."],
+  ["bad_action", 400, "action is not transfer, unshield, memo, swap or swapExit."],
+  ["no_swap, swap_router, swap_asset, same_asset, BadRoute", 400, "Private swaps are not live on that network, or the router, an asset or the route is not one Gloam knows there."],
+  ["SwapExpired, swap_router_old", 409, "The swap's time ran out, or it was made for an earlier router. Get a new quote and prove again."],
+  ["swap_small, swaps_paused, note_wait", "422 or 429", "On a chain where gas is dear, the swap is under the relay's floor, or the relay is pausing swaps or this note for the hour. Nothing was sent."],
+  ["unshield_tx, nothing_waiting, no_exit", "400 or 409", "A refund or exit names no vault payment to its escrow, nothing waits there, or its router has no exit."],
+  ["check_failed", 503, "The relay could not read the chain for a check. Nothing was sent. Try again shortly."],
   ["screened", 403, "A cash out to a sanctioned address. The relay says nothing more."],
   ["asset_policy", 403, "On Tempo, the token issuer's policy blocks this cash out."],
   ["AlreadySpent", 409, "The note was already spent."],
@@ -116,6 +121,12 @@ export default function DocsPartnersPage() {
               <td>Share of the amount</td>
               <td>0% to 1%</td>
               <td>The token and amount entering the vault are public too.</td>
+            </tr>
+            <tr>
+              <td>Private swap</td>
+              <td>None</td>
+              <td>No setting</td>
+              <td>Counted to you with its input token and amount, which are public on chain, but there is no partner fee on swaps.</td>
             </tr>
           </tbody>
         </table>
@@ -268,6 +279,109 @@ curl https://gloam.trade/api/v1/relay \\
         says which networks the relay can submit on right now.
       </p>
 
+      <h2>Private swaps</h2>
+      <p>
+        A private swap spends one note from the private balance, buys the other
+        asset on a public DEX, and lands it back in the vault as a new note, all
+        in one transaction the relay sends. It hides who swapped. The tokens and
+        the amounts are public, like any trade on that DEX. Swaps are live on
+        mainnet, on the networks <code>GET /api/v1/swaps</code> lists.
+      </p>
+      <p>
+        <code>POST /api/v1/relay</code> takes a swap with{" "}
+        <code>&quot;action&quot;: &quot;swap&quot;</code> and the same body as the
+        app&apos;s relay. The note&apos;s unshield proof pays a one-time escrow
+        address worked out from the new note, a refund note and the route, so the
+        relay can only send the swap as proved or refuse it. Keep both new notes
+        (the new note and the refund note) before you send: if the swap cannot
+        land, the refund note, and on the newest routers the exit key made from
+        it, are how the money comes back.
+      </p>
+      <pre>
+        <code>{`# a private swap: counted to you with its input token and amount, no partner fee
+curl https://gloam.trade/api/v1/relay \
+  -H "Authorization: Bearer $GLOAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "chainId": 4663,
+    "action": "swap",
+    "router": "0x...",
+    "spend":   { "proof": "0x...", "root": "0x...", "nullifier": "0x...", "asset": "0x...", "amount": "100000000" },
+    "deposit": { "proof": "0x...", "commitment": "0x...", "asset": "0x...", "amount": "..." },
+    "refund":  { "proof": "0x...", "commitment": "0x...", "asset": "0x...", "amount": "..." },
+    "route": [ { "currency0": "0x...", "currency1": "0x...", "fee": 500, "tickSpacing": 10, "hooks": "0x..." } ],
+    "exitKey": "0x...", "deadline": "1793000000"
+  }'
+
+# a refund: the same call, with the refund note's proof and the transaction
+# that paid the escrow; relayed, not counted
+  -d '{ "chainId": 4663, "action": "swap", ..., "unshieldTx": "0x..." }'
+
+# an exit (newest routers): the escrow's money to the address the exit key signed for; relayed, not counted
+  -d '{ "chainId": 4663, "action": "swapExit", "router": "0x...", "asset": "0x...",
+        "key": { "nullifier": "0x...", "amountIn": "...", "outCommitment": "0x...", "assetOut": "0x...",
+                 "amountOut": "...", "refundCommitment": "0x...", "refundAmount": "...",
+                 "routeHash": "0x...", "exitKey": "0x...", "deadline": "..." },
+        "to": "0xYourWallet", "signature": "0x...", "unshieldTx": "0x..." }'`}</code>
+      </pre>
+      <p>
+        A swap is counted to you as <code>private_swap</code>, with its input
+        token and amount, which the chain shows, and no partner fee. Whether it is
+        a new swap is read from the vault just before it is sent: a note that is
+        already spent can only take the refund path, and a refund or an exit is
+        sent but not counted. Nothing is charged.
+      </p>
+      <p>
+        <code>GET /api/v1/swaps</code> lists each network&apos;s swaps: whether they
+        are live, the router new swaps use, what it swaps between, and the earlier
+        routers the relay keeps for refunds of swaps made with them.{" "}
+        <code>POST /api/v1/swaps/quote</code> prices one, read only, with the same
+        planning and the same stops as the app&apos;s swap tab.
+      </p>
+      <pre>
+        <code>{`curl https://gloam.trade/api/v1/swaps/quote \
+  -H "Authorization: Bearer $GLOAM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "network": "robinhood-mainnet", "assetIn": "0x5fc5...d168", "assetOut": "0x0000000000000000000000000000000000000000", "amountIn": "100000000" }'
+
+{
+  "v": 1, "ok": true,
+  "data": {
+    "network": "robinhood-mainnet", "chainId": 4663,
+    "router": "0x...", "routerVersion": 2, "venue": "v4",
+    "assetIn": "0x5fc5...d168", "assetOut": "0x0000...0000",
+    "amountIn": "100000000", "feeBps": 25,
+    "available": "99750000", "amountOut": "...", "cost": "...", "leftover": "...",
+    "route": [ { ... } ], "hops": 1, "impactBps": 3, "pegBps": null,
+    "warnings": [],
+    "stop": null,
+    "limits": { "maxIn": "...", "outRoom": "..." },
+    "relay": { "enabled": true, "gasHigh": false }, "floorUsd": null,
+    "valueChecked": false,
+    "deadlineSeconds": 1800, "quotedAt": 1793000000000, "ttlMs": 15000,
+    "public": "A private swap hides who swapped. The tokens and the amounts are public, like any trade on the DEX it goes through."
+  },
+  "requestId": "req_..."
+}`}</code>
+      </pre>
+      <p>
+        <code>amountIn</code> is the value of the note the swap spends, in base
+        units, as a string. <code>stop</code> is the first thing that would keep
+        the swap from going, or null: <code>too_thin</code> and{" "}
+        <code>over_room</code> come with <code>fitsIn</code>, about the most that
+        would pass; <code>refund_wont_fit</code> with <code>maxIn</code>, the most
+        one swap can spend so its refund note fits the vault&apos;s limit (split
+        the note first); <code>swap_small</code> with <code>floorUsd</code>, the
+        smallest swap the relay sends right now where gas is dear. The others are{" "}
+        <code>no_route</code>, <code>too_small</code>, <code>off_peg</code>,{" "}
+        <code>no_fill</code>, <code>price_moving</code>, <code>vault_closed</code>,{" "}
+        <code>relay_off</code>, <code>gas_high</code> and the reads that failed.
+        Pass <code>&quot;via&quot;: &quot;wallet&quot;</code> for a swap you send
+        yourself, which skips the relay&apos;s own stops. Market prices are not
+        compared here (<code>valueChecked: false</code>): the app&apos;s swap tab
+        does that with marks from off chain.
+      </p>
+
       <h2>Count a deposit</h2>
       <p>
         Deposits come from the user&apos;s own wallet, not the relay, so your app
@@ -293,11 +407,11 @@ curl https://gloam.trade/api/v1/relay \\
       </p>
       <pre>
         <code>{`{
-  "totals": { "privatePayments": 128, "cashOuts": 9, "deposits": 4,
-              "publicVolumeUsd": 5210.5, "commissionUsd": 19.43, "unpriced": 0 },
+  "totals": { "privatePayments": 128, "cashOuts": 9, "deposits": 4, "privateSwaps": 3,
+              "publicVolumeUsd": 5210.5, "swapVolumeUsd": 300, "commissionUsd": 19.43, "unpriced": 0 },
   "byNetwork": { "robinhood": { "private_payment": 90, ... }, "tempo": { ... } },
   "byAsset": [ { "symbol": "USDG", "network": "robinhood", "volume": "4210.5", "commission": "8.42" } ],
-  "daily": [ { "day": "2026-10-06", "privatePayments": 12, "cashOuts": 1, "deposits": 0,
+  "daily": [ { "day": "2026-10-06", "privatePayments": 12, "cashOuts": 1, "deposits": 0, "swaps": 1,
                "volumeUsd": 250, "commissionUsd": 1.23 } ],
   "recent": [ ... ],
   "fees": { "privatePaymentCents": 5, "cashoutBps": 25, "depositBps": 0 },
@@ -415,8 +529,9 @@ await settleGloamPayment({ ...params, submit: gloam.submitter() });`}</code>
           key that sent it, and the fee your setting gave it.
         </li>
         <li>
-          <strong>Only for deposits and cash outs:</strong> the token and amount,
-          which the chain already shows.
+          <strong>Only for deposits, cash outs and private swaps:</strong> the
+          token and amount (for a swap, what went in), which the chain already
+          shows.
         </li>
         <li>
           <strong>Never:</strong> notes, secrets, balances, private amounts, or who
