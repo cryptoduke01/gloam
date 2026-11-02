@@ -71,7 +71,16 @@ export const backfillDeps: BackfillDeps = {
   head: (net) => relayPublicClient(net).getBlockNumber({ cacheTime: 0 }),
   unshielded: async (net, from, to) => {
     const c = relayPublicClient(net);
-    const logs = await getLogsSafe((x, y) => c.getLogs({ address: net.pool!, event: UNSHIELDED, fromBlock: x, toBlock: y }), from, to);
+    const read = (x: bigint, y: bigint) => getLogsSafe((a, b) => c.getLogs({ address: net.pool!, event: UNSHIELDED, fromBlock: a, toBlock: b }), x, y);
+    let logs: Awaited<ReturnType<typeof read>>;
+    try {
+      logs = await read(from, to);
+    } catch (e) {
+      // Some nodes refuse a span with a generic error ("Invalid parameters") rather than a range error: halve it once.
+      if (to - from < 1_000n) throw e;
+      const mid = from + (to - from) / 2n;
+      logs = [...(await read(from, mid)), ...(await read(mid + 1n, to))];
+    }
     return logs.map((l) => ({
       txHash: l.transactionHash!,
       blockNumber: l.blockNumber!,

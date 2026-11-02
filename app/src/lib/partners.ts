@@ -440,7 +440,7 @@ export async function recordActivity(args: {
   linkCode?: string | null;
   /** The vault's own fee on a public edge, smallest units of its asset; null or left out when not known. */
   vaultFee?: bigint | null;
-  /** When it happened, ms. A past one (source "chain") keeps its own day and never moves `last` back. */
+  /** When it happened, ms (the block's time for a link or an on-chain match): it keeps its own day and never moves `last` back. */
   now?: number;
 }): Promise<{ recorded: true; record: ActivityRecord } | { recorded: false; reason: "duplicate" }> {
   const { partner, network: net, kind } = args;
@@ -525,9 +525,9 @@ export async function recordActivity(args: {
   // a day keeps totals by kind and by source, not per network or per asset
   const dayIncr = incr.filter(([f]) => !/^(vt|ft|vft):/.test(f) && !/^n:[^:]+:/.test(f));
 
-  // a past transaction found on chain never moves "last" back
+  // a transaction counted at its own (earlier) time never moves "last" back
   let setLast = true;
-  if (source === "chain") {
+  if (args.now !== undefined) {
     const prev = Number(await kv1(["HGET", k("stats", partner.id), "last"]));
     setLast = !(Number.isFinite(prev) && prev >= now);
   }

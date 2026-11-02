@@ -176,10 +176,12 @@ function Codes({ id, codes, onChanged }: { id: string; codes: CodeView[]; onChan
         <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
           {codes.map((c) => (
             <li key={c.code} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5 text-[13px] ${c.state === "live" ? "" : "opacity-60"}`}>
-              <span className="tnum min-w-0 flex-1 select-all text-foreground [overflow-wrap:anywhere]">{c.code}</span>
-              <span className="text-mute">
-                {c.label || "No label"} · {c.state === "live" ? "Live" : c.state === "revoked" ? "Revoked" : "Expired"} · {c.createdBy === "admin" ? "by Gloam" : "by partner"} ·
-                expires {when(c.expiresAt)}
+              <span className="min-w-0 flex-1">
+                <span className="tnum block select-all text-foreground [overflow-wrap:anywhere]">{c.code}</span>
+                <span className="block text-mute">
+                  {c.label || "No label"} · {c.state === "live" ? "Live" : c.state === "revoked" ? "Revoked" : "Expired"} ·{" "}
+                  {c.createdBy === "admin" ? "by Gloam" : "by partner"} · expires {when(c.expiresAt)}
+                </span>
               </span>
               {c.state === "live" && (
                 <button
@@ -351,7 +353,7 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
     }
   }
 
-  const notDone = r?.chains.some((c) => !c.done && !c.error);
+  const notDone = r?.chains.some((c) => !c.done);
   const label = (m: BackfillResult["matches"][number]) =>
     m.result === "recorded" ? "Counted" : m.result === "would_record" ? "Would count" : m.result === "already_counted" ? "Already counted" : (m.reason ?? "Left out");
   return (
@@ -385,7 +387,7 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
             {r.dryRun ? "Dry run" : "Pass"} over {r.addresses.toLocaleString("en-US")} {r.addresses === 1 ? "address" : "addresses"} took{" "}
             {(r.ms / 1000).toFixed(1)}s. {r.matches.filter((m) => m.result === (r.dryRun ? "would_record" : "recorded")).length}{" "}
             {r.dryRun ? "would be counted" : "counted"}.
-            {notDone ? " Not every chain finished: run it again without the deploy-block box to carry on." : ""}
+            {notDone ? " A chain failed or ran out of time: run it again with the deploy-block box off to carry on from where it stopped." : ""}
           </p>
           <ul className="tnum space-y-0.5">
             {r.chains.map((c) => (
