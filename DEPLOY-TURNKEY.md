@@ -60,8 +60,9 @@ A new Gloam wallet holds no gas. Claiming a link, receiving a private payment, p
 privately, cashing out and a bridge order paid from Solana or another wallet need none
 from it. Adding money privately from the wallet's own public balance does. Turnkey's gas
 station can pay that fee, on Robinhood Chain, Base and Ethereum (mainnet and testnet).
-It pays for two calls only: the deposit into that chain's Gloam vault and the approve
-that lets the vault take the token, and never for a call whose gas estimate fails. A
+It pays for two calls only: the deposit into that chain's Gloam vault, and the approve,
+on a token Add privately lists there, that lets the vault take it. It never pays for a
+call whose gas estimate fails. A
 public send or a bridge order paid from the wallet is the wallet's own to pay for. On
 Tempo the fee always comes out of the stablecoin.
 
@@ -77,9 +78,10 @@ To turn it on:
 
 The app sponsors a send only when the wallet can't pay its own fee, so a wallet that
 holds ETH pays its own way. Only a refusal Turnkey answers to the first submit (a 4xx
-saying it was turned down before any work) counts as "nothing was sent"; a 5xx, a lost
-answer, or anything after Turnkey took the send keeps the note the app saved ahead of
-it, because the deposit may still land. A sponsored wallet delegates to Turnkey's open-source gas
+whose `turnkeyErrorCode`, or with none its gRPC code, says it was turned down before any
+work) counts as "nothing was sent"; a 5xx, an unknown code, a lost answer, or anything
+after Turnkey took the send keeps the note the app saved ahead of it, because the deposit
+may still land. A sponsored wallet delegates to Turnkey's open-source gas
 delegate (`0x955D84139e7621bc571b117D8EB5D28A4A222C6f`, EIP-7702); the cash-out check
 already treats it as a known delegate.
 
