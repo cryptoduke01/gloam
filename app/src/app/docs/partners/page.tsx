@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { SWAP_REF_MAX, SWAP_REF_WORDS, swapNetworks } from "@/lib/swapLink";
+
+/** Where a swap link fills in a swap now (lib/swapLink): the docs follow each network's switch. */
+const SWAP_NETWORKS = swapNetworks();
 
 export const metadata: Metadata = {
   title: "Partner program and API",
@@ -514,6 +518,77 @@ curl https://gloam.trade/api/v1/relay \
 
 # 201: data.url = "https://gloam.trade/app/vault?tab=move&mode=pay#to=gloamr1...&amount=1250&asset=0x5fc5..."`}</code>
       </pre>
+
+      <h2 id="swap-link">Trade privately with one link</h2>
+      <p>
+        A trading app can add a &quot;Trade privately with Gloam&quot; button that
+        opens the Swap tab with the swap filled in. It works like a payment
+        request link: it only fills in the form. Nothing swaps on its own. The
+        person checks the live quote and taps Swap privately. No API key is
+        needed.
+      </p>
+      <pre>
+        <code>{`https://gloam.trade/app/vault?tab=swap#from=<token>&to=<token>&amount=<amount>&chain=<network>&ref=<your name>`}</code>
+      </pre>
+      <ul>
+        <li>
+          <code>from</code>: the token to pay with, by symbol or address on that
+          network. <code>to</code>: the token to get, the same way.
+        </li>
+        <li>
+          <code>amount</code>: optional, in whole tokens of <code>from</code>{" "}
+          (<code>100</code> is 100 USDG), not base units.
+        </li>
+        <li>
+          <code>chain</code>: the same network keys as a payment request link.
+          Private swaps run on{" "}
+          {SWAP_NETWORKS.map((k, i) => (
+            <span key={k}>
+              {i > 0 ? (i === SWAP_NETWORKS.length - 1 ? " and " : ", ") : ""}
+              <code>{k}</code>
+            </span>
+          ))}{" "}
+          now. A network without private swaps fills in nothing.
+        </li>
+        <li>
+          <code>ref</code>: optional, your app&apos;s name, shown to the person as
+          &quot;From Motion&quot;. Up to {SWAP_REF_MAX} characters and{" "}
+          {SWAP_REF_WORDS} words: letters, digits, spaces and{" "}
+          <code>. &amp; &apos; _ -</code>. A web address, markup or a name with
+          Gloam in it is left out.
+        </li>
+      </ul>
+      <p>
+        Only tokens the swap router lists on that network can be swapped. They
+        are in <Link href="/docs/private-swaps#pairs">what you can swap</Link>,
+        and <code>GET /api/v1/swaps</code> lists them by address. Any other
+        token is left out, and the person is told why.
+      </p>
+      <p>
+        For example, Motion sending someone to buy TSLA with 100 USDG on
+        Robinhood Chain:
+      </p>
+      <pre>
+        <code>{`https://gloam.trade/app/vault?tab=swap#from=USDG&to=TSLA&amount=100&chain=robinhood-mainnet&ref=Motion
+
+# the same with addresses
+https://gloam.trade/app/vault?tab=swap#from=0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168&to=0x322F0929c4625eD5bAd873c95208D54E1c003b2d&amount=100&chain=robinhood-mainnet&ref=Motion`}</code>
+      </pre>
+      <p>
+        The person sees &quot;From Motion&quot; and &quot;Swap 100 USDG for
+        TSLA&quot; above the swap, with the live quote and every check the Swap
+        tab makes: price impact, the vault&apos;s limits and the relay. If they
+        are not signed in, they sign in and the swap stays filled in. With no
+        private USDG, or too little, it offers Add USDG privately and Bring money
+        over, and keeps the swap ready in that tab while they do.
+      </p>
+      <p>
+        A swap hides who swapped, not the tokens or the amounts. The Gloam relay
+        sends it, so the person&apos;s wallet never shows, while the two tokens
+        and the two amounts are public, like any trade on that DEX. Keep the
+        fields after the <code>#</code>: browsers never send that part to a
+        server.
+      </p>
 
       <h2>Public figures</h2>
       <p>

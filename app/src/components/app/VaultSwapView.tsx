@@ -37,7 +37,15 @@ import {
   withdrawFeeOf,
   type LocalNote,
 } from "@/lib/shield";
-import { NATIVE_ETH_TOKEN, isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
+import {
+  NATIVE_ETH_TOKEN,
+  isAddableToken,
+  isDollarStable,
+  isNativeAddable,
+  knownTokens,
+  shieldTokensFor,
+  type OnchainToken,
+} from "@/lib/tokens";
 import {
   IMPACT_WARN_BPS,
   PEG_WARN_BPS,
@@ -73,6 +81,28 @@ import { SuccessModal } from "./SuccessModal";
 import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
 import { ADD_FIRST, vaultActionSearch } from "@/lib/vaultHub";
+import { BRIDGE_DESTINATIONS, bridgeVisible } from "@/lib/bridge";
+import type { NetworkKey } from "@/lib/networks";
+import { swapLinkFromHash, swapLinkParams, swapLinkStep, type SwapLink } from "@/lib/swapLink";
+import { dropSwapLink, keepSwapLink, keptSwapLink } from "@/lib/swapLinkStore";
+import { SwapLinkBanner } from "./SwapLinkBanner";
+
+/**
+ * The swap link this tab opens with (lib/swapLink): the one in the address bar,
+ * else one this tab kept while the person went to Add first (lib/swapLinkStore).
+ * One read from the address bar is kept for that trip.
+ */
+function openSwapLink(shown: NetworkKey): SwapLink | null {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash;
+  const link = swapLinkFromHash(hash, shown);
+  if (link) {
+    if (link.on) keepSwapLink(hash.replace(/^#/, ""), link.on);
+    return link;
+  }
+  const kept = keptSwapLink();
+  return kept ? swapLinkFromHash(kept.frag, kept.on) : null;
+}
 
 const limitAbi = [
   {
@@ -186,7 +216,7 @@ function pickSwapNote(notes: readonly LocalNote[] | undefined, amount: bigint | 
 }
 
 export function VaultSwapView() {
-  const { network } = useNetwork();
+  const { network, networkKey, setNetworkKey } = useNetwork();
   const { address, isConnected } = useAppAccount();
   const router = vaultSwapRouter(network.chainId);
   const openGated = useOpenGatedTokens();
@@ -217,7 +247,7 @@ export function VaultSwapView() {
       ),
     [network.chainId, openGated, livePool]
   );
-  const { open, refresh: refreshNotes } = useLocalShieldNotes(address);
+  const { open, ready: notesRead, balanceSyncing, refresh: refreshNotes } = useLocalShieldNotes(address);
 
   // Notes a swap can spend: this vault's, in a swap asset, with their secret.
   // A claimed payment the payer could still take back is secured first, in Pay.
@@ -253,20 +283,28 @@ export function VaultSwapView() {
     return m;
   }, [notes]);
 
-  const [payPick, setPayPick] = useState<Address | null>(null);
-  const [toPick, setToPick] = useState<Address | null>(null);
+  // A swap link (lib/swapLink) fills in both tokens and the amount, read once
+  // here and again when another link opens in this tab. It never swaps: the
+  // person checks the quote and taps Swap privately like any other swap.
+  const [link, setLink] = useState<SwapLink | null>(() => openSwapLink(networkKey));
+  const [payPick, setPayPick] = useState<Address | null>(() => link?.from?.address ?? null);
+  const [toPick, setToPick] = useState<Address | null>(() => link?.to?.address ?? null);
+  // The link's token to pay with stays picked with no private balance in it, so
+  // the person sees what to add; a token picked by hand needs a balance.
+  const [payPinned, setPayPinned] = useState(() => Boolean(link?.from));
+  const offered = (a: Address) => assets.some((x) => same(x, a));
   const payAsset: Address | null =
-    (payPick && holdings.has(payPick.toLowerCase()) ? payPick : null) ??
+    (payPick && offered(payPick) && (payPinned || holdings.has(payPick.toLowerCase())) ? payPick : null) ??
     // The first held token in the list's order (the dollar first), not the
     // largest raw amount: 18-decimal GLOAM would always outrank 6-decimal USDG.
     assets.find((a) => holdings.has(a.toLowerCase())) ??
     assets[0] ??
     null;
   const toAsset: Address | null =
-    (toPick && payAsset && !same(toPick, payAsset) ? toPick : null) ??
+    (toPick && payAsset && !same(toPick, payAsset) && offered(toPick) ? toPick : null) ??
     assets.find((a) => payAsset && !same(a, payAsset)) ??
     null;
-  const [amountInput, setAmountInput] = useState("");
+  const [amountInput, setAmountInput] = useState(() => link?.amount ?? "");
   const marks = useUsdMarks(network.chainId, assets, [payAsset, toAsset]);
 
   // The vault's limits on the input token: a swap's refund note lands in it, so
@@ -363,6 +401,40 @@ export function VaultSwapView() {
   const [picker, setPicker] = useState<"pay" | "receive" | null>(null);
   // The flip button turns half a circle on each flip.
   const [turns, setTurns] = useState(0);
+
+  // Another swap link opened in this tab only changes the fragment: fill that one in.
+  // Not while a swap is running: the form stays on the swap being sent.
+  useEffect(() => {
+    if (busy) return;
+    const onHash = () => {
+      const l = swapLinkFromHash(window.location.hash, networkKey);
+      if (!l) return;
+      if (l.on) keepSwapLink(window.location.hash.replace(/^#/, ""), l.on);
+      setLink(l);
+      setPayPick(l.from?.address ?? null);
+      setPayPinned(Boolean(l.from));
+      setToPick(l.to?.address ?? null);
+      setAmountInput(l.amount ?? "");
+      setQuote(null);
+      setError(null);
+      setDone(null);
+      setReceipt(null);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [busy, networkKey]);
+
+  function closeLink() {
+    dropSwapLink();
+    setLink(null);
+  }
+  // Once its swap lands a link is done: a reload must not fill the same swap in again.
+  function finishLink() {
+    closeLink();
+    if (swapLinkParams(window.location.hash).toString()) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
+  }
 
   // A coarse clock for quote ages: every 5 seconds, paused while the page is hidden.
   const [clock, setClock] = useState(() => Date.now());
@@ -482,6 +554,7 @@ export function VaultSwapView() {
       if (!refunded) {
         countPerson("swap", address, network.testnet);
         setReceipt({ pay: from, payAmount: paid, receive: into, receiveAmount: BigInt(outNote.amountWei), hash });
+        finishLink();
       }
       setDone(
         refunded ? SWAP_REFUNDED : `Swapped. ${formatAssetLabel(outNote.amountWei, outNote.asset)} is in your private balance.`
@@ -500,6 +573,7 @@ export function VaultSwapView() {
   function pickPay(a: Address) {
     if (toAsset && same(a, toAsset)) setToPick(payAsset);
     setPayPick(a);
+    setPayPinned(false);
     setAmountInput("");
     setQuote(null);
     setDone(null);
@@ -509,6 +583,7 @@ export function VaultSwapView() {
     if (payAsset && same(a, payAsset)) {
       if (toAsset && holdings.has(toAsset.toLowerCase())) {
         setPayPick(toAsset);
+        setPayPinned(false);
         setAmountInput("");
       } else return;
     }
@@ -524,6 +599,7 @@ export function VaultSwapView() {
     const next = shownPlan ? plainAmount(shownPlan.amountOut, toAsset) : "";
     setTurns((t) => t + 1);
     setPayPick(toAsset);
+    setPayPinned(false);
     setToPick(payAsset);
     setAmountInput(next);
     setQuote(null);
@@ -541,6 +617,40 @@ export function VaultSwapView() {
   const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : `Uniswap on ${network.label}`;
   // What Add takes of the swap tokens (WETH, say, arrives only by swapping into it).
   const addable = assets.filter((a) => shieldTokensFor(network.chainId).some((t) => same(t.address, a)));
+
+  // A swap link's next step (lib/swapLink): sign in, or add the token it pays
+  // with when the private balance in it is none or too little. Bring money over
+  // only where it lands that token (USDG on Robinhood Chain, USDC.e on Tempo).
+  const linkFrom = link?.on === networkKey ? link.from : null;
+  const linkHeld = linkFrom ? (holdings.get(linkFrom.address.toLowerCase())?.total ?? 0n) : 0n;
+  const linkStep = link
+    ? swapLinkStep(link, {
+        signedIn: Boolean(isConnected && address),
+        network: networkKey,
+        known: notesRead && !balanceSyncing,
+        held: linkHeld,
+        need: linkFrom && link.amount ? parseAssetAmount(link.amount, linkFrom.address) : null,
+        addable: Boolean(
+          linkFrom &&
+            (same(linkFrom.address, ZERO)
+              ? isNativeAddable(network.chainId, openGated)
+              : isAddableToken(network.chainId, linkFrom, openGated))
+        ),
+        bridge: Boolean(
+          linkFrom && bridgeVisible(network) && same(BRIDGE_DESTINATIONS[network.family]?.token.address ?? "", linkFrom.address)
+        ),
+        heldLabel: linkFrom ? formatAssetLabel(linkHeld, linkFrom.address) : undefined,
+      })
+    : null;
+  // A token the router lists but whose pools or vault limit haven't opened yet is left out, once the pools are read.
+  const poolsRead = livePool?.chainId === network.chainId;
+  const linkNotOpen =
+    link?.on === networkKey && poolsRead
+      ? [link.from, link.to].flatMap((t) =>
+          t && !offered(t.address) ? [`${t.symbol} is not open for private swaps yet, so it was left out.`] : []
+        )
+      : [];
+
   const payUsd = payAsset && typed !== null && typed > 0n ? usdOf(typed, payAsset, marks) : null;
   const getUsd = shownPlan && toAsset ? usdOf(shownPlan.amountOut, toAsset, marks) : null;
   const receiveText = shownPlan && toAsset ? formatAssetAmount(shownPlan.amountOut, toAsset) : "0";
@@ -634,10 +744,23 @@ export function VaultSwapView() {
           </span>
         </div>
 
+        {link && (
+          <SwapLinkBanner
+            link={link}
+            currentNetwork={networkKey}
+            onSwitchNetwork={setNetworkKey}
+            onDismiss={closeLink}
+            step={linkStep}
+            notOpen={linkNotOpen}
+          />
+        )}
+
         {!isConnected || !address ? (
           <div className="space-y-4 rounded-[20px] bg-surface p-6">
             <p className="text-[14px] leading-relaxed text-soft">
-              Connect the wallet you use with Gloam to swap from your private balance.
+              {linkStep?.kind === "signin"
+                ? linkStep.text
+                : "Connect the wallet you use with Gloam to swap from your private balance."}
             </p>
             <WalletMenu />
           </div>
@@ -826,7 +949,7 @@ export function VaultSwapView() {
               </div>
             )}
 
-            {(!notes.length ||
+            {((!notes.length && linkStep?.kind !== "add") ||
               priceError ||
               overRoom ||
               relayOk === false ||
@@ -837,7 +960,8 @@ export function VaultSwapView() {
               (impact != null && impact >= IMPACT_WARN_BPS) ||
               (note && amount !== null && amount < BigInt(note.amountWei))) && (
               <div className="gl-settle mt-4 space-y-2.5 px-1 text-[12.5px] leading-[1.6]">
-                {!notes.length && addable.length > 0 && (
+                {/* a swap link's banner already says what to add */}
+                {!notes.length && addable.length > 0 && linkStep?.kind !== "add" && (
                   <p className="text-mute">
                     You can check prices now. To swap, add {listOr(addable.map(assetLabel))} to your private balance
                     first.{" "}
