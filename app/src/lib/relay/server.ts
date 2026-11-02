@@ -347,7 +347,7 @@ const PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS = 60;
  * Where gas is dear (lib/relay/swapFloor), a swap that reverts after it was sent pays
  * nothing back, and neither does a refund. Anyone can make a swap revert by moving
  * its pool first, so each has a budget per hour. Past it, new swaps wait for the next
- * hour. A refund waits too, and comes back by itself, and an exit never waits.
+ * hour. A refund or exit under the swap floor waits with them (assertWaitingWorthSending).
  */
 const REVERTED_SWAPS_HOURLY_DEAR_GAS = 12;
 const REFUNDS_HOURLY_DEAR_GAS = 30;
@@ -552,6 +552,28 @@ function explain(err: unknown, fallback: string, code: "rpc" | "check_failed" = 
 // Tempo caps a tx at 30M gas; keep headroom and pad estimates for Tempo's
 // storage-heavy pricing (tree inserts).
 const GAS_CAP = 25_000_000n;
+/**
+ * The most gas the relay pays for a send that can call out to someone else's code.
+ * The vault and a swap's exit pay ETH to a contract with all the gas there is, so a dry
+ * run alone says what a send will cost, not that it should go. These are real proofs on
+ * forks with room to spare. Robinhood Chain's estimates carry a parent-chain cost that
+ * moves, so it gets more. Tempo has no native coin to pay out, and prices storage its own way.
+ */
+const SEND_GAS_MOST: Partial<Record<Call["kind"], bigint>> = {
+  unshield: 1_200_000n,
+  swap: 2_600_000n,
+  swapV3: 2_600_000n,
+  swapExit: 400_000n,
+};
+const GAS_MOST_FACTOR: Readonly<Record<number, bigint>> = { 4663: 4n, 46630: 4n };
+export const GAS_TOO_MUCH_MESSAGE = "This costs more gas than the relay pays. Send from your wallet.";
+
+export function sendGasMost(chainId: number, kind: Call["kind"]): bigint | null {
+  const most = SEND_GAS_MOST[kind];
+  if (!most || isTempoChain(chainId)) return null;
+  return most * (GAS_MOST_FACTOR[chainId] ?? 1n);
+}
+
 function padGas(est: bigint) {
   const padded = (est * 13n) / 10n;
   return padded > GAS_CAP ? GAS_CAP : padded;
@@ -652,8 +674,11 @@ export async function fundedRelayAccounts(
   return accounts;
 }
 
-/** `onMaybeSent` runs when the send failed in a way that may still have put the transaction out. */
-async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): Promise<Hex> {
+/**
+ * `onMaybeSent` runs when the send failed in a way that may still have put the transaction
+ * out. `afterDryRun` runs once the dry run passed, for what only a send that will go counts.
+ */
+async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void, afterDryRun?: () => Promise<void>): Promise<Hex> {
   // Screen before anything else: a blocked call never reaches the chain.
   await screenCall(call, net);
   const pub = relayPublicClient(net);
@@ -718,6 +743,9 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
   if ((call.kind === "make" || call.kind === "pump") && gas > STATION_MAX_ESTIMATE) {
     throw new RelayError(STATION_ESTIMATE_MESSAGE, 422, "station_gas");
   }
+  const most = sendGasMost(net.chainId, call.kind);
+  if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
+  await afterDryRun?.();
   if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
   await (call.kind === "memo" ? takeMemoSlot(net, call.budget) : takeNetworkSlot(net));
 
@@ -823,13 +851,19 @@ function afterReply(task: () => Promise<void>): void {
 async function submitSpend(
   net: GloamNetwork,
   call: Extract<Call, { kind: "transfer" | "unshield" | "swap" | "swapV3" | "swapExit" }>,
-  precheck?: () => Promise<void>
+  opts: {
+    precheck?: () => Promise<void>;
+    /** What the lock is on, the nullifier unless said. Anyone can name a nullifier that has left the vault, so money waiting at an escrow locks on the escrow. */
+    lockOn?: Hex;
+    afterDryRun?: () => Promise<void>;
+  } = {}
 ): Promise<Hex> {
+  const { precheck, lockOn, afterDryRun } = opts;
   const isSwap = call.kind === "swap" || call.kind === "swapV3";
   const nullifier = call.kind === "swapExit" ? call.args[1].nullifier : isSwap ? call.args[0].nullifier : call.args[2];
   let lock: Awaited<ReturnType<typeof takeInflight>>;
   try {
-    lock = await takeInflight(inflightKey(net.chainId, nullifier));
+    lock = await takeInflight(inflightKey(net.chainId, lockOn ?? nullifier));
   } catch (e) {
     // never on memory in production: without Redis this spend is not sent at all
     if (e instanceof LockStoreDown) throw relayOff();
@@ -840,9 +874,14 @@ async function submitSpend(
   try {
     if (precheck) await precheck();
     else if (call.kind === "transfer" || call.kind === "unshield") await precheckSpend(net, call.args[1], nullifier);
-    const hash = await submit(net, call, () => {
-      keep = true;
-    });
+    const hash = await submit(
+      net,
+      call,
+      () => {
+        keep = true;
+      },
+      afterDryRun
+    );
     keep = true;
     const receiptStatus = async () => {
       const { status } = await relayPublicClient(net).getTransactionReceipt({ hash });
@@ -978,7 +1017,9 @@ const erc20BalanceAbi = [
  * puts it back as the refund note. That call (lib/vaultSwapRun
  * finishVaultSwapRefund) carries only the refund note's proof; the spend's
  * proof and root and the new note's proof are placeholders the router never
- * reads on that path, so the root is not checked for it.
+ * reads on that path, so the root is not checked for it. The money at an escrow
+ * proves nothing about who put it there, so a spent note's call locks on its
+ * escrow, never its nullifier, and pays no more than its size earns.
  */
 export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>) {
   if (!swapRouterFor(net.chainId)) throw new RelayError("Private swaps are not live on this network yet.", 400, "no_swap");
@@ -1016,6 +1057,20 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
   const seen = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "commitmentSeen", args: [deposit.commitment] });
   if (seen) throw new RelayError(REVERT_MESSAGES.DuplicateCommitment, 409, "DuplicateCommitment");
 
+  const escrow = escrowAddress(router, spend.asset, {
+    nullifier: spend.nullifier,
+    amountIn: spend.amount,
+    outCommitment: deposit.commitment,
+    assetOut: deposit.asset,
+    amountOut: deposit.amount,
+    refundCommitment: refund.commitment,
+    refundAmount: refund.amount,
+    routeHash: keccak256(routeBytes),
+    ...(exitKey ? { exitKey, deadline } : {}),
+  });
+  // a note that left the vault is public: only its escrow says whose call this is
+  const left = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [spend.nullifier] });
+  let refunding = false;
   const precheck = async () => {
     const [spent, known] = await Promise.all([
       pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [spend.nullifier] }),
@@ -1036,28 +1091,21 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       return;
     }
     // spent: only worth a send if this swap's money is waiting at its escrow (the refund)
-    const escrow = escrowAddress(router, spend.asset, {
-      nullifier: spend.nullifier,
-      amountIn: spend.amount,
-      outCommitment: deposit.commitment,
-      assetOut: deposit.asset,
-      amountOut: deposit.amount,
-      refundCommitment: refund.commitment,
-      refundAmount: refund.amount,
-      routeHash: keccak256(routeBytes),
-      ...(exitKey ? { exitKey, deadline } : {}),
-    });
     if ((await heldAt(pub, spend.asset, escrow)) < refund.amount) throw new RelayError(REVERT_MESSAGES.AlreadySpent, 409, "AlreadySpent");
-    if (hasSwapFloor(net.chainId) && !(await relayCount(`chain:${net.chainId}`, "relay-swap-refund", REFUNDS_HOURLY_DEAR_GAS, Date.now(), 3600)).allowed) {
-      throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
-    }
+    refunding = true;
   };
   return submitSpend(
     net,
     exitKey
       ? { kind: "swapV3", router, args: [spend, deposit, refund, routeBytes, exitKey, deadline!] }
       : { kind: "swap", router, args: [spend, deposit, refund, routeBytes] },
-    precheck
+    {
+      precheck,
+      lockOn: left ? escrow : undefined,
+      afterDryRun: async () => {
+        if (refunding) await assertWaitingWorthSending(net, spend.asset, refund.amount);
+      },
+    }
   );
 }
 
@@ -1121,7 +1169,22 @@ export async function assertSwapWorthSending(
   }
   const smallest = smallestSwapUsd({ ...floor, hops });
   if (noteUsd(net.chainId, spend.asset, spend.amount, floor.ethUsd) < smallest) {
-    throw new RelayError(swapFloorMessage(net.label, smallest), 422, "swap_small");
+    throw new RelayError(Number.isFinite(smallest) ? swapFloorMessage(net.label, smallest) : SWAPS_PAUSED_MESSAGE, 422, "swap_small");
+  }
+}
+
+/**
+ * Money waiting at an escrow goes back whatever it is worth, but where gas is dear, an
+ * amount under the swap floor spends from an hourly budget: anyone can send a little to
+ * an escrow of their own making, and the relay would pay full price to land it. At or
+ * over the floor it just goes, so spending this budget never holds up a real refund.
+ */
+async function assertWaitingWorthSending(net: GloamNetwork, asset: Address, amount: bigint): Promise<void> {
+  if (!hasSwapFloor(net.chainId)) return;
+  const floor = await readFloor(net).catch(() => null);
+  if (floor && noteUsd(net.chainId, asset, amount, floor.ethUsd) >= smallestSwapUsd({ ...floor, hops: 1 })) return;
+  if (!(await relayCount(`chain:${net.chainId}`, "relay-swap-refund", REFUNDS_HOURLY_DEAR_GAS, Date.now(), 3600)).allowed) {
+    throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
   }
 }
 
@@ -1170,6 +1233,7 @@ export async function relayVaultSwapExit(net: GloamNetwork, body: Record<string,
   if (!config) throw new RelayError("That is not a Gloam swap router on this network.", 400, "swap_router");
   if (config.version !== 3) throw new RelayError("A swap through this router has no exit. Its refund lands once the vault has room.", 400, "no_exit");
   const asset = asAddress(body.asset, "asset");
+  if (!isSwapAsset(net.chainId, asset, config.address)) throw new RelayError("This asset cannot be swapped here.", 400, "swap_asset");
   const to = asAddress(body.to, "recipient");
   assertCashOutTarget(net, to);
   if (typeof body.signature !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(body.signature)) throw new RelayError("Invalid exit signature.");
@@ -1187,12 +1251,18 @@ export async function relayVaultSwapExit(net: GloamNetwork, body: Record<string,
     deadline: asAmount(k.deadline),
   };
   const pub = relayPublicClient(net);
+  const escrow = escrowAddress(config.address, asset, key);
+  let waiting = 0n;
   const precheck = async () => {
     const spent = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [key.nullifier] });
-    const waiting = spent ? await heldAt(pub, asset, escrowAddress(config.address, asset, key)) : 0n;
+    waiting = spent ? await heldAt(pub, asset, escrow) : 0n;
     if (waiting === 0n) throw new RelayError("Nothing is waiting at this swap's escrow.", 409, "nothing_waiting");
   };
-  return submitSpend(net, { kind: "swapExit", router: config.address, args: [asset, key, to, body.signature as Hex] }, precheck);
+  return submitSpend(net, { kind: "swapExit", router: config.address, args: [asset, key, to, body.signature as Hex] }, {
+    precheck,
+    lockOn: escrow,
+    afterDryRun: () => assertWaitingWorthSending(net, asset, waiting),
+  });
 }
 
 /**
@@ -1375,7 +1445,9 @@ const tempoFeeAbi = [
   { name: "userTokens", type: "function", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
   { name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
-const isTempoChain = (chainId: number) => chainId === 42431 || chainId === 4217;
+function isTempoChain(chainId: number): boolean {
+  return chainId === 42431 || chainId === 4217;
+}
 
 /** Whether this relay account can no longer pay for a send on `net`. */
 async function relayEmpty(net: GloamNetwork, account: PrivateKeyAccount): Promise<boolean> {
