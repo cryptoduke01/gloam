@@ -231,7 +231,13 @@ export function WalletMenu({ variant }: { variant?: WalletMenuVariant } = {}) {
           }
         >
           <ClientOnly>
-            <TurnkeyHeaderSignIn className={primary} fallback={plainConnect} />
+            <TurnkeyHeaderSignIn
+              className={primary}
+              quietClassName={`text-[13px] text-mute transition-colors hover:text-foreground disabled:opacity-60 ${
+                compact ? "h-9 px-1" : "h-9 w-full rounded-full hover:bg-surface"
+              }`}
+              fallback={plainConnect}
+            />
           </ClientOnly>
           <button
             type="button"

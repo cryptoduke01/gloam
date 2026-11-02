@@ -153,3 +153,41 @@ export function onEmbeddedAvailability(fn: () => void): () => void {
   availabilityListeners.add(fn);
   return () => availabilityListeners.delete(fn);
 }
+
+/* ---------------------------------------------------------------- the signer */
+
+/**
+ * Whether the Gloam wallet's signer started after sign-in: "failed" lets the
+ * header offer Try again and Sign out instead of waiting forever.
+ */
+export type EmbeddedSignerState = "idle" | "starting" | "ready" | "failed";
+let signerState: EmbeddedSignerState = "idle";
+let signerRetries = 0;
+const signerListeners = new Set<() => void>();
+
+export function setEmbeddedSignerState(s: EmbeddedSignerState) {
+  if (s === signerState) return;
+  signerState = s;
+  signerListeners.forEach((fn) => fn());
+}
+
+export function embeddedSignerState(): EmbeddedSignerState {
+  return signerState;
+}
+
+export function onEmbeddedSignerState(fn: () => void): () => void {
+  signerListeners.add(fn);
+  return () => signerListeners.delete(fn);
+}
+
+/** Asks the Turnkey layer to build the signer again. */
+export function retryEmbeddedSigner() {
+  signerRetries++;
+  signerListeners.forEach((fn) => fn());
+}
+
+export function embeddedSignerRetries(): number {
+  return signerRetries;
+}
+
+export const onEmbeddedSignerRetry = onEmbeddedSignerState;

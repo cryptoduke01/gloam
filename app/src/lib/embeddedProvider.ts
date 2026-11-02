@@ -14,7 +14,6 @@
  * Plain viem, with no React or wagmi, so scripts/selftest-turnkey-connector.mts runs it.
  */
 import {
-  BaseError,
   SwitchChainError,
   UnauthorizedProviderError,
   UnsupportedProviderMethodError,
@@ -32,20 +31,13 @@ import {
   type PublicClient,
   type Transport,
 } from "viem";
-import { TEMPO_FEE_CHAIN_IDS, gasBudget, noGasText, pickGasRoute } from "./embeddedGas";
+import { TEMPO_FEE_CHAIN_IDS, gasBudget, noGasText, pickGasRoute, sponsorableCall } from "./embeddedGas";
+import { EmbeddedNotSentError } from "./embeddedErrors";
 import type { EmbeddedSigner } from "./turnkeyBridge";
 
-/**
- * A send that surely never went out: no gas, the wrong chain, or Turnkey refused
- * it before broadcast. lib/walletErrors counts it as "failed before send", so the
- * app may drop what it saved ahead of the send (a note, a claim code).
- */
-export class EmbeddedNotSentError extends BaseError {
-  override name = "EmbeddedNotSentError";
-  constructor(shortMessage: string) {
-    super(shortMessage);
-  }
-}
+// A send that surely never went out (lib/embeddedErrors); lib/walletErrors counts it
+// as "failed before send", so the app may drop what it saved ahead of the send.
+export { EmbeddedMaybeSentError, EmbeddedNotSentError } from "./embeddedErrors";
 
 type TxParams = {
   from?: string;
@@ -64,6 +56,8 @@ export type EmbeddedProviderDeps = {
   signer: () => EmbeddedSigner | null;
   /** Chains whose sends Turnkey may sponsor (lib/embeddedGas SPONSOR_CHAINS). */
   sponsorChains?: ReadonlySet<number>;
+  /** The Gloam vault on a chain, the only contract a sponsored send may call (with the approve for it). */
+  vaultFor?: (chainId: number) => Address | null;
   initialChainId?: number;
   /** Called after the provider moves to another chain. */
   onChainChanged?: (chainId: number) => void;
@@ -126,17 +120,20 @@ export function makeEmbeddedProvider(deps: EmbeddedProviderDeps): EmbeddedProvid
     if (!TEMPO_FEE_CHAIN_IDS.has(chainId)) {
       const [bal, est, fee] = await Promise.all([
         client.getBalance({ address: s.account.address }).catch(() => null),
-        gas !== undefined ? gas : client.estimateGas({ account: s.account.address, to, data, value }).catch(() => null),
+        // Always estimated, even with a gas limit given: a call that would revert is never sponsored.
+        client.estimateGas({ account: s.account.address, to, data, value }).catch(() => null),
         client
           .estimateFeesPerGas()
           .then((f) => f.maxFeePerGas ?? f.gasPrice ?? null)
           .catch(() => client.getGasPrice().catch(() => null)),
       ]);
       balance = bal;
-      cost = est !== null && fee !== null ? gasBudget(chainId, est, fee) : null;
+      const units = est !== null && gas !== undefined && gas > est ? gas : est;
+      cost = units !== null && fee !== null ? gasBudget(chainId, units, fee) : null;
     }
 
-    const route = pickGasRoute({ chainId, balance, value, cost, sponsorChains: s.sponsoredSend ? sponsorChains : new Set() });
+    const sponsorable = sponsorableCall({ to, data, value, vault: deps.vaultFor?.(chainId) ?? null });
+    const route = pickGasRoute({ chainId, balance, value, cost, sponsorable, sponsorChains: s.sponsoredSend ? sponsorChains : new Set() });
     if (route.kind === "none") throw new EmbeddedNotSentError(noGasText(route.why, chain.name, chain.nativeCurrency.symbol));
     if (route.kind === "sponsored") {
       return s.sponsoredSend!({

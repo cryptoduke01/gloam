@@ -2,7 +2,15 @@
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { AuthState, ClientState, useTurnkey } from "@turnkey/react-wallet-kit";
-import { embeddedNeedsWallet, onEmbeddedNeedsWallet, openEmbeddedSheet } from "@/lib/turnkeyBridge";
+import {
+  embeddedNeedsWallet,
+  embeddedSignerState,
+  onEmbeddedNeedsWallet,
+  onEmbeddedSignerState,
+  openEmbeddedSheet,
+  retryEmbeddedSigner,
+  signOutEmbedded,
+} from "@/lib/turnkeyBridge";
 
 /**
  * Email or passkey sign-in for a Gloam wallet, sized by `className` for where it
@@ -10,33 +18,69 @@ import { embeddedNeedsWallet, onEmbeddedNeedsWallet, openEmbeddedSheet } from "@
  *
  * - Signed out: Sign in, which opens Turnkey's email and passkey sheet.
  * - Signed in with no wallet yet: Create wallet, which opens the create sheet.
- * - Signed in with a wallet: a moment while the wallet connects; then the wallet
+ * - Signed in with a wallet: a moment while the wallet connects, with Sign out
+ *   beside it; if the wallet's signer didn't start, Try again. Then the wallet
  *   menu shows the address and this is gone.
  * - When the kit could not start (Turnkey refused this site, or no connection),
  *   `fallback` instead: a sign-in that can only fail is never offered.
  */
 export function TurnkeyHeaderSignIn({
   className = "btn btn-ink btn-sm",
+  quietClassName = "text-[13px] text-mute transition-colors hover:text-foreground",
   fallback = null,
 }: {
   className?: string;
+  /** The look of the small Sign out next to a wallet that is still opening. */
+  quietClassName?: string;
   fallback?: ReactNode;
 } = {}) {
   const { authState, clientState, handleLogin } = useTurnkey();
   const needsWallet = useSyncExternalStore(onEmbeddedNeedsWallet, embeddedNeedsWallet, () => false);
+  const signer = useSyncExternalStore(onEmbeddedSignerState, embeddedSignerState, () => "idle" as const);
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   if (clientState === ClientState.Error) return <>{fallback}</>;
 
   if (authState === AuthState.Authenticated) {
-    return needsWallet ? (
-      <button type="button" onClick={() => openEmbeddedSheet("create")} className={className}>
-        Create wallet
+    if (needsWallet) {
+      return (
+        <button type="button" onClick={() => openEmbeddedSheet("create")} className={className}>
+          Create wallet
+        </button>
+      );
+    }
+    const signOut = (
+      <button
+        type="button"
+        disabled={leaving}
+        onClick={async () => {
+          setLeaving(true);
+          try {
+            await signOutEmbedded();
+          } finally {
+            setLeaving(false);
+          }
+        }}
+        className={quietClassName}
+      >
+        {leaving ? "Signing out…" : "Sign out"}
       </button>
+    );
+    return signer === "failed" ? (
+      <>
+        <button type="button" onClick={retryEmbeddedSigner} className={className}>
+          Try again
+        </button>
+        {signOut}
+      </>
     ) : (
-      <button type="button" disabled className={className}>
-        Opening your wallet…
-      </button>
+      <>
+        <button type="button" disabled className={className}>
+          Opening your wallet…
+        </button>
+        {signOut}
+      </>
     );
   }
 
