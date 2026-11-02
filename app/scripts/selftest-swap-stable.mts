@@ -72,7 +72,7 @@ const {
   vaultSwapRouter,
 } = await import("../src/lib/vaultSwap");
 const { FEED_MAX_AGE_SEC, SPLIT_GAS_UNITS, hasSwapFloor, smallestSwapUsd, swapFloorGas, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
-const { NOTE_WAIT_MESSAGE, RECEIPT_WATCH_WITHIN_MS, RelayError, SENDER_SHARE_MESSAGE, SPEND_CAP_MESSAGE, receiptWatchMs, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayMemo, relayStatus, relayTransfer, relayUnshield, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
+const { BACK_SHARE_MESSAGE, NOTE_WAIT_MESSAGE, RECEIPT_WATCH_WITHIN_MS, RelayError, SENDER_SHARE_MESSAGE, SPEND_CAP_MESSAGE, receiptWatchMs, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayMemo, relayStatus, relayTransfer, relayUnshield, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
 const { hourlySpendWei, ipSendsLimit } = await import("../src/lib/relay/spendCap");
 const { resetGasReads } = await import("../src/lib/relay/gasCeiling");
 const { getNetwork } = await import("../src/lib/networks");
@@ -381,7 +381,7 @@ function answer(r: RpcReq, chainId: number): unknown {
 }
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
-  const chainId = url.includes("base") ? 8453 : 1;
+  const chainId = url.includes("base") ? 8453 : url.includes("robinhood") ? 4663 : 1;
   const body = JSON.parse(String(init?.body));
   const one = (r: RpcReq) => {
     try {
@@ -412,11 +412,11 @@ function swapBody(asset: Address, out: Address, amount: bigint, route: readonly 
 const direct = [ETHEREUM_SWAP_POOLS[4]!];
 
 /** What a swap body's escrow is, as the relay works it out. */
-function escrowOf(b: ReturnType<typeof swapBody>, router: Address = VAULT_SWAP_V3_ADDRESS[1]!): Address {
+function escrowOf(b: ReturnType<typeof swapBody>, router: Address = VAULT_SWAP_V3_ADDRESS[1]!, route: readonly unknown[] = direct): Address {
   return escrowAddress(router, b.spend.asset as Address, {
     nullifier: b.spend.nullifier as Hex, amountIn: BigInt(b.spend.amount), outCommitment: b.deposit.commitment as Hex, assetOut: b.deposit.asset as Address,
     amountOut: BigInt(b.deposit.amount), refundCommitment: b.refund.commitment as Hex, refundAmount: BigInt(b.refund.amount),
-    routeHash: keccak256(encodeRoute(direct)), exitKey: b.exitKey as Address, deadline: BigInt(b.deadline as string),
+    routeHash: keccak256(encodeRoute(route as typeof direct)), exitKey: b.exitKey as Address, deadline: BigInt(b.deadline as string),
   });
 }
 
@@ -896,22 +896,30 @@ await test("a send the cap turns away takes none of the network's slots, so a re
   assert.equal(sends.length, 3, "the refund went, in the last slot but one");
 });
 
-await test("one sender holds at most its share, a payroll of 200 always fits it, and the last of the cap is for refunds and exits", async () => {
+/** Sends until one is refused, or `most` went. */
+async function until(send: () => Promise<unknown>, most: number, settle = false) {
+  let sent = 0;
+  for (; sent < most; sent++) {
+    const r = await send().catch((e: unknown) => e);
+    if (typeof r !== "string") return { sent, refused: (r as Error).message };
+    if (settle) await new Promise((res) => setTimeout(res, 12));
+  }
+  return { sent, refused: null as string | null };
+}
+const spentOnChain = async (chainId: number) => {
+  const { readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  return readRateLimit(`chain:${chainId}`, "relay-spend", Date.now(), 3600);
+};
+
+await test("one sender holds at most its share; the last of the cap is for refunds and exits", async () => {
   fresh();
   chain.receipt = "none";
-  // 0.000098 held a send. Cap 0.03: 40% is 0.012, under 200 sends' worth (0.0196), so a
-  // sender's share is 200 sends; new sends stop at 0.024, cash outs at 0.0276
+  // 0.000098 held a send at 0.037 gwei. Cap 0.03: 40% is 0.012, 200 sends' dry-run gas at
+  // that price 0.0126, so the share is 0.0126; new sends stop at 0.024, cash outs at 0.0276
   process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.03";
-  const until = async (send: () => Promise<unknown>, most: number) => {
-    let sent = 0;
-    for (; sent < most; sent++) {
-      const r = await send().catch((e: unknown) => e);
-      if (typeof r !== "string") return { sent, refused: (r as Error).message };
-    }
-    return { sent, refused: null };
-  };
   const A = "198.51.100.21";
-  assert.deepEqual(await until(() => relayTransfer(net, transferBody(), A), 300), { sent: 200, refused: SENDER_SHARE_MESSAGE }, "a payroll of 200 fits");
+  const a = await until(() => relayTransfer(net, transferBody(), A), 300);
+  assert.ok(a.refused === SENDER_SHARE_MESSAGE && a.sent > 100 && a.sent < 200, JSON.stringify(a));
   // a cash out from the same sender counts toward its share too
   chain.dryRunGas = 300_000n;
   await assert.rejects(relayUnshield(net, cashOut(usd(10)), A), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
@@ -925,49 +933,112 @@ await test("one sender holds at most its share, a payroll of 200 always fits it,
   assert.ok(C.sent > 100 && C.refused === SPEND_CAP_MESSAGE, JSON.stringify(C));
   await assert.rejects(relayUnshield(net, cashOut(usd(10)), "198.51.100.24"), (e: unknown) => (e as Error).message === SPEND_CAP_MESSAGE);
   chain.dryRunGas = DRY_RUN_GAS;
-  // money on its way back from a swap still goes, from what is kept for it
+  // money on its way back from a swap still goes, from what is kept for it, whatever A sent
   const before = sends.length;
   chain.spent = true;
   chain.held = usd(1_000);
   await relayVaultSwap(net, refundBody(usd(1_000)), A);
-  assert.equal(sends.length, before + 1, "a refund holds against no sender's share, and the last of the cap is its");
+  assert.equal(sends.length, before + 1);
 });
 
-await test("a payroll of 200 fits one sender's share at twice today's gas too", async () => {
+await test("no sender's share passes 60% of the cap, however dear gas is", async () => {
   fresh();
   chain.receipt = "none";
-  chain.gasPrice = 74_000_000n;
-  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.06";
-  let sent = 0;
-  for (let i = 0; i < 200; i++) {
-    await relayTransfer(net, transferBody(), "198.51.100.41");
-    sent++;
-  }
-  assert.equal(sent, 200);
-  await assert.rejects(relayTransfer(net, transferBody(), "198.51.100.41"), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
+  // 0.247 gwei: 200 sends would be 0.084, over the whole cap (0.05)
+  chain.gasPrice = 247_000_000n;
+  const a = await until(() => relayTransfer(net, transferBody(), "198.51.100.25"), 300);
+  assert.equal(a.refused, SENDER_SHARE_MESSAGE);
+  const used = await spentOnChain(1);
+  assert.ok(used <= 30_000_000 && used > 29_000_000, `one sender held ${used} of 50,000,000`);
+  // and another sender still sends
+  assert.equal(typeof (await relayTransfer(net, transferBody(), "198.51.100.26")), "string");
 });
+
+let payrollIp = 100;
+for (const [label, n, gwei, fits] of [
+  ["Ethereum at today's gas", "ethereum", 40_000_000n, true],
+  ["Ethereum up to 0.084 gwei", "ethereum", 84_000_000n, true],
+  ["Ethereum past it, at 0.1 gwei", "ethereum", 100_000_000n, false],
+  ["Base at today's gas", "base", 6_000_000n, true],
+  ["Base up to 0.016 gwei", "base", 16_000_000n, true],
+  ["Robinhood Chain at today's gas", "robinhood", 20_000_000n, true],
+  ["Robinhood Chain up to 0.034 gwei", "robinhood", 34_000_000n, true],
+] as const) {
+  await test(`a 200-payment payroll from one browser: ${label}, ${fits ? "fits" : "meets the 60% ceiling"}`, async () => {
+    fresh();
+    chain.receipt = "success";
+    chain.dryRunGas = 1_800_000n; // what a relayed transfer's dry run shows
+    chain.gasUsed = 1_742_548n; // and what one burns (Robinhood Chain, 2 November)
+    chain.gasPrice = gwei;
+    const on = n === "ethereum" ? net : n === "base" ? base : getNetwork("robinhood-mainnet");
+    // a browser of its own each time, so nothing from an earlier case is counted against it
+    const ip = `198.51.100.${payrollIp++}`;
+    const r = await until(() => relayTransfer(on, transferBody(), ip), 200, true);
+    if (fits) assert.deepEqual(r, { sent: 200, refused: null });
+    else assert.ok(r.sent < 200 && r.refused === SENDER_SHARE_MESSAGE, JSON.stringify(r));
+    await settled();
+  });
+}
 
 await test("accounts sharing one IP share that IP's share; an approved account holds only its own", async () => {
   fresh();
   chain.receipt = "none";
-  // as above: a share is 200 sends, and the chain takes them all
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.03";
+  // what one IP alone gets here
+  const alone = (await until(() => relayTransfer(net, transferBody(), "198.51.100.50"), 300)).sent;
+  fresh();
+  chain.receipt = "none";
   process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.03";
   const IP = "198.51.100.51";
-  for (let i = 0; i < 120; i++) await relayTransfer(net, transferBody(), ["partner:ptr_one111", IP]);
-  let second = 0;
-  for (;;) {
-    const r = await relayTransfer(net, transferBody(), ["partner:ptr_two222", IP]).catch((e: unknown) => e);
-    if (typeof r !== "string") {
-      assert.equal((r as Error).message, SENDER_SHARE_MESSAGE);
-      break;
-    }
-    second++;
-  }
-  assert.equal(second, 80, "the IP's 200, between both accounts");
-  // the app from that IP is the same sender
+  for (let i = 0; i < 60; i++) await relayTransfer(net, transferBody(), ["partner:ptr_one111", IP]);
+  const second = await until(() => relayTransfer(net, transferBody(), ["partner:ptr_two222", IP]), 300);
+  assert.equal(second.refused, SENDER_SHARE_MESSAGE);
+  assert.equal(60 + second.sent, alone, "the IP's share, between both accounts");
   await assert.rejects(relayTransfer(net, transferBody(), IP), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
-  // an approved account is held to its own share only
   assert.equal(typeof (await relayTransfer(net, transferBody(), ["partner:ptr_ok3333"])), "string");
+});
+
+/** A refund on Base: the note spent alone, the money at its escrow, the vault's payment on record. */
+const baseRoute = [BASE_SWAP_POOLS[2]!];
+function baseRefundBody(amount: bigint) {
+  const b = { ...swapBody(B.USDC, B.USDT, amount, baseRoute), router: VAULT_SWAP_V3_ADDRESS[8453] };
+  const escrow = escrowOf(b, VAULT_SWAP_V3_ADDRESS[8453]!, baseRoute);
+  return { ...b, unshieldTx: vaultPaid(b.spend.nullifier, b.spend.asset, escrow, amount) };
+}
+
+await test("where there's no swap floor, an IP's refunds hold against a budget of their own, never against its sends", async () => {
+  on(8453);
+  fresh();
+  chain.receipt = "none";
+  chain.spent = true;
+  chain.held = usd(10);
+  // Base, cap 0.01: 2% is 0.0002, five refunds' dry-run gas at 0.037 gwei 0.000315; each holds 0.000123
+  const X = "198.51.100.71";
+  const x = await until(() => relayVaultSwap(base, baseRefundBody(usd(10)), X), 10);
+  assert.deepEqual(x, { sent: 2, refused: BACK_SHARE_MESSAGE });
+  // another IP's refund still goes
+  assert.equal(typeof (await relayVaultSwap(base, baseRefundBody(usd(10)), "198.51.100.72")), "string");
+  // an IP that used its whole share on sends still gets its refunds back
+  chain.spent = false;
+  const Y = "198.51.100.73";
+  const y = await until(() => relayTransfer(base, transferBody(), Y), 100);
+  assert.equal(y.refused, SENDER_SHARE_MESSAGE);
+  chain.spent = true;
+  assert.equal(typeof (await relayVaultSwap(base, baseRefundBody(usd(10)), Y)), "string");
+  off(8453);
+});
+
+await test("on Ethereum a refund holds no IP budget: the floor's budgets apply there", async () => {
+  fresh();
+  chain.receipt = "none";
+  chain.spent = true;
+  chain.held = usd(1_000);
+  let sent = 0;
+  for (let i = 0; i < 6; i++) {
+    await relayVaultSwap(net, refundBody(usd(1_000)), "198.51.100.74");
+    sent++;
+  }
+  assert.equal(sent, 6);
 });
 
 await test("a shared store that fails between two holds gets the first one back", async () => {
