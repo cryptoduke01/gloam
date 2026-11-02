@@ -15,7 +15,7 @@
  */
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -65,6 +65,8 @@ function fakeChain(chainId: number) {
   const logs: { args: { nullifier: Hex; asset: Address; to: Address }; transactionHash: Hex }[] = [];
   /** Assets the vault takes none of (a deposit limit of 0 and 0). */
   const closed = new Set<string>();
+  /** Assets whose total limit is used up: deposited equals the total. */
+  const full = new Set<string>();
   let n = 0;
   const hash = () => `0x${(++n).toString(16).padStart(64, "0")}` as Hex;
   const insert = async (c: Hex) => {
@@ -96,7 +98,7 @@ function fakeChain(chainId: number) {
         case "depositLimit":
           return closed.has(lc(args![0] as string)) ? [0n, 0n] : [50_000_000_000n, 2_500_000_000_000n];
         case "deposited":
-          return 0n;
+          return full.has(lc(args![0] as string)) ? 2_500_000_000_000n : 0n;
         case "isSpent":
           return spent.has(lc(args![0] as string));
         case "isKnownRoot":
@@ -139,7 +141,7 @@ function fakeChain(chainId: number) {
     });
     return h;
   }
-  return { client, tree, index, roots, spent, seen, balances, receipts, logs, closed, hash, insert, deposit, unshieldAlone };
+  return { client, tree, index, roots, spent, seen, balances, receipts, logs, closed, full, hash, insert, deposit, unshieldAlone };
 }
 type Chain = ReturnType<typeof fakeChain>;
 
@@ -161,8 +163,8 @@ function escrowOf(call: SwapRelayCall): Address {
 
 type RelayMode = "swap" | "refund" | "refuse" | "unclear" | "alone";
 
-function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (call: SwapRelayCall) => void } = {}) {
-  const state = { mode: opts.mode ?? "swap", swaps: [] as SwapRelayCall[], transfers: 0, proofs: 0 };
+function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (call: SwapRelayCall) => void; refuseSplit?: boolean } = {}) {
+  const state = { mode: opts.mode ?? "swap", swaps: [] as SwapRelayCall[], transfers: 0, proofs: 0, splits: [] as { exec?: { args: readonly unknown[] } }[] };
   const prover = async () => {
     state.proofs++;
     return { proofBytes: PROOF };
@@ -181,6 +183,9 @@ function makeDeps(chain: Chain, env: Env, opts: { mode?: RelayMode; onRelay?: (c
     // the split's private send
     relay: async (intent) => {
       state.transfers++;
+      state.splits.push(intent);
+      // the relay has the split's proof in hand from here on, whatever it answers
+      if (opts.refuseSplit) throw new GloamRelayError("Too many requests from this device. Wait a few minutes.", "rate_limit");
       const [, , nullifier, outs] = intent.exec!.args as [Hex, Hex, Hex, Hex[]];
       chain.spent.add(lc(nullifier));
       for (const c of outs) await chain.insert(c);
@@ -252,6 +257,7 @@ function swapEnv(over: Env = {}): Env {
     GLOAM_LIMIT_MAX_PER_DAY: "5000",
     GLOAM_LIMIT_RECIPIENTS: "any",
     GLOAM_LIMIT_TOOLS: "pay,swap",
+    GLOAM_LIMIT_SWAP_TO: "GLOAM",
     ...over,
   };
 }
@@ -495,7 +501,7 @@ test("an exit sends the waiting money only to an address the owner's limits allo
   try {
     const chain = fakeChain(8453);
     const ok = "0x00000000000000000000000000000000000000aa";
-    const env = swapEnv({ GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "base-mainnet", GLOAM_LIMIT_RECIPIENTS: ok });
+    const env = swapEnv({ GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "base-mainnet", GLOAM_LIMIT_RECIPIENTS: ok, GLOAM_LIMIT_SWAP_TO: "USDT" });
     const { deps, state } = makeDeps(chain, env, { mode: "alone" });
     const call = await connect(deps);
     const n = await keepNote(chain, env, 100_000_000n, BASE_USDC, "base-mainnet", 8453, "USDC");
@@ -525,4 +531,153 @@ test("an exit sends the waiting money only to an address the owner's limits allo
 test("no tool result carries a note secret", () => {
   const all = seen.join("\n");
   for (const m of all.matchAll(/"secret"/g)) assert.fail(`a result named a secret field at ${m.index}`);
+});
+
+// ── what the owner allows a swap to buy, and the price impact it may take ──
+
+test("a swap into an asset the owner didn't allow is refused before any proof", async () => {
+  const chain = fakeChain(4663);
+  // the agent's assets are USDG only, and no swapTo: a swap may only buy USDG
+  const env = swapEnv({ GLOAM_LIMIT_SWAP_TO: undefined });
+  const { deps, state } = makeDeps(chain, env);
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 100_000_000n);
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(r.status, "refused", JSON.stringify(r));
+  assert.equal(r.code, "swap_to_not_allowed");
+  assert.equal(state.proofs, 0, "nothing proved");
+  assert.equal(state.swaps.length, 0, "nothing sent");
+  assert.equal(openNoteStore(env).get(n.handle)!.status, "unspent");
+  // an asset on the agent's list may be bought without swapTo (a limits file, as each asset has its own caps)
+  const dir = tmp();
+  const file = join(dir, "limits.json");
+  const caps = { maxPerPayment: "1000", maxPerDay: "5000", network: "robinhood-mainnet" };
+  writeFileSync(file, JSON.stringify({ agents: { swapper: { recipients: "any", tools: ["pay", "swap"], assets: { USDG: caps, GLOAM: caps } } } }));
+  const env2: Env = { GLOAM_AGENT_ID: "swapper", GLOAM_NOTE_KEY: "c3".repeat(32), GLOAM_NOTE_STORE: join(dir, "notes.json"), GLOAM_SPEND_LOG: join(dir, "log.json"), GLOAM_LIMITS_FILE: file };
+  const call2 = await connect(makeDeps(chain, env2).deps);
+  const n2 = await keepNote(chain, env2, 100_000_000n);
+  const ok = await call2("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n2.handle });
+  assert.equal(ok.status, "swapped", JSON.stringify(ok));
+  // the limits report names what a swap may buy
+  const limits = await call("gloam_get_limits");
+  assert.equal(limits.swapTo, "the assets below");
+  const limits2 = await (await connect(makeDeps(chain, swapEnv()).deps))("gloam_get_limits");
+  assert.deepEqual(limits2.swapTo.map((a: { symbol: string }) => a.symbol), ["GLOAM"]);
+});
+
+/** A pool that pays a fair rate on a hundredth of the size and 1% of it at the full size. */
+function thinPool(chain: Chain) {
+  chain.client.multicall = (async ({ contracts }: { contracts: { functionName: string; args: [{ exactAmount: bigint }] }[] }) =>
+    contracts.map((x) => {
+      if (x.functionName === "allowedPool") return true;
+      const a = x.args[0].exactAmount;
+      return { status: "success", result: [a > 10_000_000n ? a / 100n : a, 0n] };
+    })) as typeof chain.client.multicall;
+}
+
+test("price impact over 2% stops a swap on Robinhood Chain too; an agent can lower the cap, only the owner can raise it", async () => {
+  const chain = fakeChain(4663);
+  thinPool(chain);
+  const env = swapEnv();
+  const { deps, state } = makeDeps(chain, env);
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 1_000_000_000n);
+  const q = await call("gloam_swap_quote", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", amount: 1000 });
+  assert.equal(q.status, "stopped", JSON.stringify(q));
+  assert.equal(q.stop.code, "too_thin");
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(r.status, "refused", JSON.stringify(r));
+  assert.equal(r.stop.code, "too_thin");
+  // the agent asking for more changes nothing
+  const asked = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle, maxImpactBps: 10_000 });
+  assert.equal(asked.status, "refused", JSON.stringify(asked));
+  assert.equal(state.proofs, 0);
+  assert.equal(state.swaps.length, 0);
+  assert.equal(openNoteStore(env).get(n.handle)!.status, "unspent");
+  // the owner can raise it
+  const ownerEnv = { ...env, GLOAM_SWAP_MAX_IMPACT_BPS: "10000" };
+  const owner = await connect(makeDeps(chain, ownerEnv).deps);
+  const done = await owner("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", note: n.handle });
+  assert.equal(done.status, "swapped", JSON.stringify(done));
+  // and a broken setting never loosens anything
+  const broken = await (await connect(makeDeps(chain, { ...env, GLOAM_SWAP_MAX_IMPACT_BPS: "lots" }).deps))("gloam_swap_quote", {
+    network: "robinhood-mainnet",
+    from: "USDG",
+    to: "GLOAM",
+    amount: 1,
+  });
+  assert.equal(broken.status, "error");
+  assert.match(broken.error, /GLOAM_SWAP_MAX_IMPACT_BPS/);
+});
+
+test("an agent's lower impact cap holds where the owner's would let a swap through", async () => {
+  const chain = fakeChain(4663);
+  // 1.5% impact: under the default 2%, over an asked 1%
+  chain.client.multicall = (async ({ contracts }: { contracts: { functionName: string; args: [{ exactAmount: bigint }] }[] }) =>
+    contracts.map((x) => {
+      if (x.functionName === "allowedPool") return true;
+      const a = x.args[0].exactAmount;
+      return { status: "success", result: [a > 10_000_000n ? (a * 985n) / 1000n : a, 0n] };
+    })) as typeof chain.client.multicall;
+  const env = swapEnv();
+  const call = await connect(makeDeps(chain, env).deps);
+  const q = await call("gloam_swap_quote", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", amount: 1000 });
+  assert.equal(q.status, "ok", JSON.stringify(q));
+  const tight = await call("gloam_swap_quote", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", amount: 1000, maxImpactBps: 100 });
+  assert.equal(tight.stop?.code, "too_thin");
+});
+
+// ── a swap whose refund can't land, and the spending log ──
+
+test("with the vault full, finish takes the money out by the exit, counted once against the limits", async () => {
+  VAULT_SWAP_V3_LIVE[8453] = VAULT_SWAP_V3_ADDRESS[8453]!;
+  try {
+    const chain = fakeChain(8453);
+    const to = "0x00000000000000000000000000000000000000aa";
+    const env = swapEnv({ GLOAM_LIMIT_ASSETS: "USDC", GLOAM_LIMIT_NETWORK: "base-mainnet", GLOAM_LIMIT_RECIPIENTS: to, GLOAM_LIMIT_SWAP_TO: "USDT" });
+    const { deps, state } = makeDeps(chain, env, { mode: "alone" });
+    const call = await connect(deps);
+    const n = await keepNote(chain, env, 100_000_000n, BASE_USDC, "base-mainnet", 8453, "USDC");
+    const r = await call("gloam_execute_private_swap", { network: "base-mainnet", from: "USDC", to: "USDT", note: n.handle });
+    assert.equal(r.status, "refund_ready", JSON.stringify(r));
+    // the vault's USDC total fills up while the money waits: the refund note can't land
+    chain.full.add(lc(BASE_USDC));
+    const [refund] = byOrigin(env, "swap_refund");
+    const need = await call("gloam_finish_swap", { note: refund!.handle });
+    assert.equal(need.status, "needs_to", JSON.stringify(need));
+    assert.match(need.message, /no room/);
+    const exit = await call("gloam_finish_swap", { note: refund!.handle, to });
+    assert.equal(exit.status, "exited", JSON.stringify(exit));
+    assert.equal(state.swaps.at(-1)!.action, "swapExit");
+    // the swap counted 100 USDC; the exit pays out that same money and is not counted again
+    const report = await call("gloam_get_spending_report", {});
+    const usdc = report.today.find((t: { symbol: string }) => t.symbol === "USDC");
+    assert.equal(usdc.spentToday, "100", JSON.stringify(report.today));
+    assert.ok(report.recentPayments.some((e: { countedAgainstLimits?: boolean; recipient: string }) => e.countedAgainstLimits === false && e.recipient === to));
+  } finally {
+    VAULT_SWAP_V3_LIVE[8453] = null;
+  }
+});
+
+test("a refused split keeps both new notes (dead) and the note is checked again, so a late landing is never lost", async () => {
+  const chain = fakeChain(4663);
+  const env = swapEnv();
+  const { deps, state } = makeDeps(chain, env, { refuseSplit: true });
+  const call = await connect(deps);
+  const n = await keepNote(chain, env, 500_000_000n);
+  const r = await call("gloam_execute_private_swap", { network: "robinhood-mainnet", from: "USDG", to: "GLOAM", amount: 100 });
+  assert.equal(r.status, "error", JSON.stringify(r));
+  assert.equal(state.splits.length, 1, "the relay was handed the split's proof");
+  const made = byOrigin(env, "change");
+  assert.deepEqual(made.map((x) => x.status).sort(), ["dead", "dead"], "both notes the split would make are kept, dead");
+  assert.equal(openNoteStore(env).get(n.handle)!.status, "unspent");
+  assert.equal(openNoteStore(env).get(n.handle)!.recheck, true);
+  // the proof the relay was handed lands later after all
+  const [, , nullifier, outs] = state.splits[0]!.exec!.args as [Hex, Hex, Hex, Hex[]];
+  chain.spent.add(lc(nullifier));
+  for (const c of outs) await chain.insert(c);
+  await call("gloam_list_notes", { refresh: true });
+  const after = openNoteStore(env);
+  assert.equal(after.get(n.handle)!.status, "spent");
+  assert.deepEqual(byOrigin(env, "change").map((x) => after.get(x.handle)!.status).sort(), ["unspent", "unspent"], "both notes it made are spendable");
 });
