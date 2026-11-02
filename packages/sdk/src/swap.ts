@@ -864,9 +864,9 @@ export const vaultSwapV3Abi = [
   },
   { type: "error", name: "PoolNotAllowed", inputs: [{ name: "poolId", type: "bytes32" }] },
   { type: "error", name: "BadExit", inputs: [] },
+  { type: "error", name: "SwapExpired", inputs: [] },
   { type: "error", name: "EscrowFailed", inputs: [] },
   { type: "error", name: "ReceiveBlocked", inputs: [] },
-  { type: "error", name: "SwapExpired", inputs: [] },
   ...SWAP_ERRORS,
 ] as const;
 
