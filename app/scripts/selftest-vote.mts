@@ -340,6 +340,18 @@ await test("the voting window and the signing time are enforced", async () => {
   // a fast clock signing past the close is refused, so it can't replace a vote that counts with one that doesn't
   await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000)), ctx({ now: END - 1_000 })), "stale");
   await rejects(submitBallot(await sign(alice, 1, Math.floor(END / 1000) + 30), ctx({ now: END - 1_000 })), "stale");
+  // a signature from before the open is refused when it is sent, since the count would leave it out
+  const early = await sign(bob, 1, Math.floor(START / 1000) - 90);
+  await rejects(submitBallot(early, ctx({ now: START + 5_000 })), "stale");
+  await rejects(submitBallot(await sign(bob, 1, Math.floor(START / 1000) - 1), ctx({ now: START + 1_000 })), "stale");
+  try {
+    await submitBallot(early, ctx({ now: START + 5_000 }));
+  } catch (e) {
+    assert.match((e as Error).message, /before this vote opened/);
+  }
+  assert.ok(!(await listBallots(testVote.id)).some((b) => b.voter.toLowerCase() === bob.address.toLowerCase()), "nothing kept");
+  // the first second of the window counts
+  await submitBallot(await sign(bob, 1, Math.floor(START / 1000)), ctx({ now: START + 1_000 }));
 });
 
 await test("bad input is refused before any check", async () => {

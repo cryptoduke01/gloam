@@ -462,7 +462,7 @@ export function topUpWhen(r: Pick<TopUpRow, "state" | "at"> & { moving?: boolean
 export async function cancelTopUp(n: LocalNote, env?: CashOutEnv): Promise<string | null> {
   const mark = n.cashOut;
   if (!mark) return null;
-  const result = await cancelCashOut(mark.job);
+  const result = await cancelCashOut(mark.job, n);
   if (result === "cancelled") {
     await cancelledPiece(n.id);
     return null;
