@@ -483,10 +483,21 @@ await test("twelve reverted swaps in an hour pause new ones on Ethereum, and onl
 
 await test("a reverted receipt counts against the budget by itself", async () => {
   fresh();
-  const { readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
-  const before = await readRateLimit("chain:8453", "relay-swap-reverted", Date.now(), 3600);
-  assert.equal(before, 0, "Base never counts");
-  const { hitRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  const { hitRateLimit, readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  const reverted = () => readRateLimit("chain:1", "relay-swap-reverted", Date.now(), 3600);
+  assert.equal(await readRateLimit("chain:8453", "relay-swap-reverted", Date.now(), 3600), 0, "Base never counts");
+  // a swap that lands and reverts, on Base: nothing counted, and its lock is released
+  chain.receipt = "reverted";
+  const body = { ...swapBody(B.USDC, B.USDT, usd(1), [BASE_SWAP_POOLS[2]!]), router: VAULT_SWAP_V3_ADDRESS[8453] };
+  await relayVaultSwap(base, body);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(await readRateLimit("chain:8453", "relay-swap-reverted", Date.now(), 3600), 0);
+  chain.spent = true;
+  chain.held = usd(100);
+  const counted = await reverted();
+  await relayVaultSwap(net, swapBody(E.USDC, E.USDT, usd(100), direct));
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(await reverted(), counted + 1, "a swap call that reverted, refund or not");
   await hitRateLimit("selftest", "relay-swap-reverted", 5, Date.now(), 3600);
   assert.equal(await readRateLimit("selftest", "relay-swap-reverted", Date.now(), 3600), 1, "reads what a hit counted");
   assert.equal(await readRateLimit("selftest", "relay-swap-reverted", Date.now(), 3600), 1, "and counts nothing itself");

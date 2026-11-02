@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { formatUnits, type Address, type Hex } from "viem";
+import { BaseError, formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -420,7 +420,8 @@ export function VaultSwapView() {
           // A refresh that fails leaves a fresh price up; it stops showing by itself.
           const now = Date.now();
           setQuote((q) => (q && q.key === key && quoteFresh(q.at, now) ? q : null));
-          setQuoteError(e instanceof Error ? e.message : "Could not get a price. Try again.");
+          // an RPC's own words are no use here; what this code threw is
+          setQuoteError(e instanceof Error && !(e instanceof BaseError) ? e.message : "Could not get a price. Try again.");
           setQuoteFits(e instanceof SwapQuoteRefused ? e.fitsIn : null);
         })
         .finally(() => live && setQuoting(false));

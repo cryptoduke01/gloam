@@ -1337,7 +1337,8 @@ export async function planVaultSwap(client: PublicClient, chainId: number, p: Sw
       throw new SwapQuoteRefused(SWAP_TOO_THIN, fits > 0n ? noteFor(fits, p.feeBps) : null);
     }
   }
-  const cost = await v4ExactOut(client, r, route, p.assetIn, p.assetOut, amountOut);
+  // the buffer asks for less than the pool quoted, so one that can't fill even that moved since
+  const cost = await v4ExactOut(client, r, route, p.assetIn, p.assetOut, amountOut).catch(() => available + 1n);
   if (cost > available) throw new Error("The price is moving too fast. Try again in a moment.");
   return { router: r.address, available, amountOut, cost, leftover: available - cost, route, impactBps, pegBps };
 }

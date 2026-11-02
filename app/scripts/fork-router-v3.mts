@@ -52,7 +52,7 @@ const SALT = keccak256(toHex("gloam.vault-swap.v3"));
 const TREE_SLOT = 4n; // nextIndex 4, currentRoot 5, filledSubtrees 6.., zeros 26.. (forge inspect)
 const fixture = JSON.parse(readFileSync(new URL("../../contracts/test/fixtures/router-next.json", import.meta.url), "utf8"));
 
-type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" | "late" };
+type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" | "late" | "short" };
 type Cfg = { id: number; fork: string; quoter: Address; port: number; bufferBps: bigint; syms: Record<string, [string, number]>; cases: Case[]; prepare?: () => Promise<void> };
 
 const BU = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address;
@@ -77,6 +77,14 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "ETH -> USDC (native note in)", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0] },
       { name: "USDC -> ETH (native note out)", assetIn: EU, assetOut: NATIVE, amountIn: parseUnits("100", 6), pools: [0] },
       { name: "USDT -> ETH via USDC, two hops", assetIn: ET, assetOut: NATIVE, amountIn: parseUnits("100", 6), pools: [4, 0] },
+      { name: "USDT -> USDG via USDC, two hops, past the thin direct pool", assetIn: ET, assetOut: EG, amountIn: parseUnits("1000", 6), pools: [4, 8] },
+      { name: "USDG -> USDC via USDT, two hops", assetIn: EG, assetOut: EU, amountIn: parseUnits("1000", 6), pools: [10, 4] },
+      { name: "USDT -> EURC via USDC, two hops", assetIn: ET, assetOut: EE, amountIn: parseUnits("100", 6), pools: [4, 11] },
+      { name: "USDG -> EURC via USDT and USDC, three hops", assetIn: EG, assetOut: EE, amountIn: parseUnits("100", 6), pools: [10, 4, 11] },
+      { name: "USDC -> USDT at 45,000", assetIn: EU, assetOut: ET, amountIn: parseUnits("45000", 6), pools: [7] },
+      { name: "EURC -> USDC", assetIn: EE, assetOut: EU, amountIn: parseUnits("100", 6), pools: [11] },
+      { name: "USDT swap priced past what arrives, reverted", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "short" },
+      { name: "USDT refund, unshield sent alone", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "refund" },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDT exit, vault limit full", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "exit" },
       { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
@@ -91,6 +99,11 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "ETH -> USDC (native note in)", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0] },
       { name: "USDC -> ETH (native note out)", assetIn: BU, assetOut: NATIVE, amountIn: parseUnits("100", 6), pools: [0] },
       { name: "ETH -> USDT via USDC, two hops", assetIn: NATIVE, assetOut: BT, amountIn: parseUnits("0.05", 18), pools: [0, 2] },
+      { name: "USDT -> USDC", assetIn: BT, assetOut: BU, amountIn: parseUnits("100", 6), pools: [2] },
+      { name: "EURC -> USDC", assetIn: BE, assetOut: BU, amountIn: parseUnits("100", 6), pools: [6] },
+      { name: "USDT -> EURC via USDC, two hops", assetIn: BT, assetOut: BE, amountIn: parseUnits("100", 6), pools: [2, 6] },
+      { name: "USDC -> USDT at 10,000", assetIn: BU, assetOut: BT, amountIn: parseUnits("10000", 6), pools: [2] },
+      { name: "USDC swap priced past what arrives, reverted", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "short" },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDC exit, vault limit full", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "exit" },
       { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
@@ -307,6 +320,8 @@ async function runCase(c: Case, feeBps: bigint) {
   const available = c.amountIn - fee;
   const p = await plan(c, available);
   if (p.cost > available) failures.push(`${c.name}: the quote costs more than arrives`);
+  // a price past the buffer, as if the pool moved after the quote: the new note asks for more than arrives can buy
+  if (kind === "short") p.amountOut = (p.amountOut * 102n) / 100n;
   const backAmount = c.amountIn - c.amountIn / 100n;
   const out = await makeBoundNotePoseidon(p.amountOut, c.assetOut);
   const back = await makeBoundNotePoseidon(backAmount, c.assetIn);
@@ -388,6 +403,12 @@ async function runCase(c: Case, feeBps: bigint) {
 
   const r = await tx(RELAYER, ROUTER, data);
   const size = (data.length - 2) / 2;
+  if (kind === "short") {
+    console.log(`  swap: ${check(r.status === "reverted", `${c.name} reverts`)} (reverted), gas ${r.gasUsed}, note unspent: ${check(!(await readVault("isSpent", [nullifier])), "the note stays unspent")}`);
+    gasRows.push({ name: c.name, gas: r.gasUsed, calldata: size });
+    check((await balance(c.assetIn, escrow)) === 0n, "nothing at the escrow");
+    return;
+  }
   console.log(`  swap: ${check(r.status === "success", `${c.name} lands`)}, gas ${r.gasUsed}, calldata ${size} bytes`);
   if (r.status !== "success") return;
   gasRows.push({ name: c.name, gas: r.gasUsed, calldata: size });

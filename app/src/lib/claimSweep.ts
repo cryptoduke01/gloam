@@ -544,7 +544,7 @@ async function markRevertedSwap(env: ClaimEnv, refund: LocalNote): Promise<boole
 }
 
 /** Refusals that mean the vault won't take the refund for now, not that the relay had a bad moment. */
-const REFUND_BLOCKED = new Set(["OverDepositLimit", "swap_asset", "swap_router", "no_swap", "BadRoute"]);
+const REFUND_BLOCKED = new Set(["OverDepositLimit", "FeeOnTransferNotSupported", "swap_asset", "swap_router", "no_swap", "BadRoute"]);
 
 /** Tries to finish a held refund and says on the note if the vault won't take it. The note stays pending either way. */
 async function finishHeldRefund(env: ClaimEnv, n: LocalNote): Promise<void> {
