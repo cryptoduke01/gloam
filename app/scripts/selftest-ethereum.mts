@@ -51,7 +51,7 @@ const nets = await import("../src/lib/networks");
 const tokens = await import("../src/lib/tokens");
 const { bridgeVisible, bridgeChain, BRIDGE_DESTINATIONS } = await import("../src/lib/bridge");
 const { ORIGIN_CHAINS } = await import("../src/lib/originChains");
-const { vaultSwapRouter } = await import("../src/lib/vaultSwap");
+const { VAULT_SWAP_V3_ADDRESS, swapV3Live, vaultSwapRouter } = await import("../src/lib/vaultSwap");
 const { faucetFor } = await import("../src/lib/faucet");
 const { requestAssetsFor, claimNetworkProblem } = await import("../src/lib/paymentRequest");
 const { walkTuning } = await import("../src/lib/leafIndex");
@@ -155,7 +155,7 @@ check("a bridge origin and a bridge into Ethereum (USDC), no swaps", () => {
   assert.ok(origin, "Ethereum stays a chain money can be brought over from");
   assert.deepEqual(origin.tokens.map((t) => t.symbol), ["USDC", "USDT", "USDG", "PYUSD", "ETH"]);
   assert.ok(ORIGIN_CHAINS.some((c) => c.id === 1));
-  assert.equal(vaultSwapRouter(1), null);
+  assert.equal(vaultSwapRouter(1), swapV3Live(1) ? VAULT_SWAP_V3_ADDRESS[1] : null);
   assert.equal(faucetFor("ethereum-mainnet"), null);
 });
 
