@@ -57,13 +57,13 @@ import { RelayError, relayVaultSwap, relayVaultSwapExit } from "../src/lib/relay
 import { cashOutTargetProblem as appCashOutTargetProblem } from "../src/lib/cashOutTarget";
 import {
   BASE_SWAP_POOLS,
-  ETHEREUM_PRIVATE_SWAPS,
   ETHEREUM_SWAP_POOLS,
   SWAP_DEADLINE_SECONDS,
   SWAP_ESCROW2_CODE_HASH,
   SWAP_ESCROW2_INIT_CODE,
   VAULT_SWAP_V3_ADDRESS,
   VAULT_SWAP_V3_LIVE,
+  swapV3Live,
   canExitVaultSwap,
   exitAccount,
   exitDigest,
@@ -442,12 +442,11 @@ n += 4;
     chains: Record<string, { address: Address; poolIds?: string[] }>;
   };
   // nothing is deployed: every switch off, and Ethereum has a switch of its own
-  assert.deepEqual(VAULT_SWAP_V3_LIVE, { 4663: false, 8453: false, 1: false, 4217: false }, "no chain is on");
-  assert.equal(ETHEREUM_PRIVATE_SWAPS, false, "Ethereum stays off");
+  assert.deepEqual({ ...VAULT_SWAP_V3_LIVE }, { 4663: null, 8453: null, 1: null, 4217: null }, "no router address is filled in, so no chain is on");
   assert.equal(vaultSwapRouter(8453), null, "no swaps on Base yet");
   assert.equal(vaultSwapRouter(1), null, "no swaps on Ethereum yet");
   assert.deepEqual(swapRoutersOn(8453), [], "nothing on /verify that isn't deployed");
-  n += 5;
+  n += 4;
 
   for (const [id, c] of Object.entries(pinned.chains)) {
     assert.equal(VAULT_SWAP_V3_ADDRESS[Number(id)]!.toLowerCase(), c.address.toLowerCase(), `v3's address on ${id}`);
@@ -463,15 +462,15 @@ n += 4;
   for (const k of [...BASE_SWAP_POOLS, ...ETHEREUM_SWAP_POOLS]) assert.equal(BigInt(k.hooks), 0n, "hookless only on Base and Ethereum");
   n += 5;
 
-  // the switch: on for a chain, v3 is the router new swaps use; Ethereum needs its own flag as well
+  // the switch: a router address filled in, v3 is what new swaps use; a wrong address is still off
   const ETH: Address = "0x0000000000000000000000000000000000000000";
   const [BU, BT, BE] = ["0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42"] as Address[];
-  VAULT_SWAP_V3_LIVE[1] = true;
-  VAULT_SWAP_ROUTERS[1] = VAULT_SWAP_V3_ADDRESS[1]!;
-  assert.equal(swapRoutersOn(1).length, 0, "Ethereum: deployed is not on");
-  VAULT_SWAP_V3_LIVE[1] = false;
-  VAULT_SWAP_ROUTERS[1] = null;
-  VAULT_SWAP_V3_LIVE[8453] = true;
+  VAULT_SWAP_V3_LIVE[1] = "0x000000000000000000000000000000000000dEaD";
+  assert.equal(swapV3Live(1), false, "an address that isn't the pinned one is off");
+  VAULT_SWAP_V3_LIVE[1] = VAULT_SWAP_V3_ADDRESS[1]!;
+  assert.equal(swapV3Live(1), true, "the pinned address is on");
+  VAULT_SWAP_V3_LIVE[1] = null;
+  VAULT_SWAP_V3_LIVE[8453] = VAULT_SWAP_V3_ADDRESS[8453]!;
   VAULT_SWAP_ROUTERS[8453] = VAULT_SWAP_V3_ADDRESS[8453]!;
   const base = swapRouterFor(8453)!;
   assert.equal(base.version, 3);
@@ -487,12 +486,12 @@ n += 4;
   assert.equal(swapBufferBps(4663, USDG, GLOAM), 50);
   assert.equal(swapBufferBps(4217), 10);
   n += 12;
-  VAULT_SWAP_V3_LIVE[8453] = false;
+  VAULT_SWAP_V3_LIVE[8453] = null;
   VAULT_SWAP_ROUTERS[8453] = null;
 
   // Robinhood Chain: the same rules as GloamVaultSwapV4c._walk, ETH and WETH both
   VAULT_SWAP_V2_ROUTER[4663] = RH_V2;
-  VAULT_SWAP_V3_LIVE[4663] = true;
+  VAULT_SWAP_V3_LIVE[4663] = VAULT_SWAP_V3_ADDRESS[4663]!;
   VAULT_SWAP_ROUTERS[4663] = VAULT_SWAP_V3_ADDRESS[4663]!;
   const v3 = swapRouterFor(4663)!;
   assert.equal(v3.version, 3);
@@ -570,7 +569,7 @@ n += 4;
   await noExit({ ...exitBody, to: USDG }, "vault_recipient");
   await noExit({ ...exitBody, signature: "0x1234" }, "bad_request");
   await noExit({ ...exitBody, key: { ...exitBody.key, deadline: undefined } }, "bad_request");
-  VAULT_SWAP_V3_LIVE[4663] = false;
+  VAULT_SWAP_V3_LIVE[4663] = null;
   VAULT_SWAP_ROUTERS[4663] = RH_V1;
   VAULT_SWAP_V2_ROUTER[4663] = null;
   n += 1;

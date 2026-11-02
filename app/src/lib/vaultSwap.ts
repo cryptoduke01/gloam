@@ -19,8 +19,9 @@
  *
  * v3 (GloamVaultSwapV4c, and GloamVaultSwapTempo2 on Tempo) adds native ETH notes,
  * Base and Ethereum, and an exit for money a refund can't bring back. It is off
- * until VAULT_SWAP_V3_LIVE turns it on, chain by chain (DEPLOY-ROUTER.md). Its escrow
- * key has one more field, so a swap is built for the router it goes through.
+ * until a router address is filled into VAULT_SWAP_V3_LIVE, chain by chain
+ * (DEPLOY-ROUTER.md). Its escrow key has two more fields, so a swap is built for the
+ * router it goes through.
  *
  * Shared by the app and the relay server: no browser-only imports here.
  */
@@ -69,24 +70,19 @@ export const VAULT_SWAP_V3_ADDRESS: Record<number, Address> = {
 };
 
 /**
- * The switch for v3, chain by chain: true once it is deployed and its read-backs
- * passed (DEPLOY-ROUTER.md). Nothing is deployed yet. New swaps on a chain go through
- * v3 from then on, and earlier routers stay known for their refunds. It only goes one
- * way: back to false, the relay no longer knows v3 there, so a refund or an exit of a
- * swap made through it is refused. To stop swaps on a chain, take its pools off instead.
+ * The switch for v3, chain by chain: null until the router is deployed and its read-backs
+ * passed (DEPLOY-ROUTER.md), then its address. Nothing is deployed yet, so merging this
+ * turns nothing on. An address that isn't the one pinned in VAULT_SWAP_V3_ADDRESS counts
+ * as off. New swaps on a chain go through v3 from then on, and earlier routers stay known
+ * for their refunds. It only goes one way: back to null, the relay no longer knows v3
+ * there, so a refund or an exit of a swap made through it is refused. To stop swaps on a
+ * chain, take its pools off instead.
  */
-export const VAULT_SWAP_V3_LIVE: Record<number, boolean> = { 4663: false, 8453: false, 1: false, 4217: false };
-
-/**
- * Ethereum stays off, decided 2026-11-01, even with v3 deployed there. The relay pays
- * about 1.65M gas a swap, $3.71 per gwei at $2,250 ETH, against 0.50% of the swap: that
- * pays at 0.04 gwei and loses on every swap the vault can take above 0.67 gwei. Nothing
- * weighs a swap's gas against its fee, so turning this on is a new decision (DEPLOY-ROUTER.md).
- */
-export const ETHEREUM_PRIVATE_SWAPS = false;
+export const VAULT_SWAP_V3_LIVE: Record<number, Address | null> = { 4663: null, 8453: null, 1: null, 4217: null };
 
 function v3On(chainId: number): boolean {
-  return VAULT_SWAP_V3_LIVE[chainId] === true && (chainId !== 1 || ETHEREUM_PRIVATE_SWAPS);
+  const at = VAULT_SWAP_V3_LIVE[chainId];
+  return Boolean(at) && same(at!, VAULT_SWAP_V3_ADDRESS[chainId] ?? "");
 }
 
 /**
