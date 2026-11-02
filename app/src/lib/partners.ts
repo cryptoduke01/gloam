@@ -1,6 +1,12 @@
 /**
  * The Gloam partner program: partner accounts, fee settings, and the
- * accounting of what each partner's API key brought in. Server only.
+ * accounting of what each partner brought in, by where it was seen:
+ *   api    relayed or reported with the partner's API key
+ *   link   opened from the partner's link (a link code, lib/partnerLinks) and
+ *          checked on chain once it landed (lib/partnerAttribution)
+ *   chain  a past cash out found on chain paying one of the partner's own
+ *          receiving addresses (lib/partnerBackfill)
+ * Server only.
  *
  * How fees can work, honestly:
  *  - A private payment hides its amount from everyone, the relay included. So
@@ -14,10 +20,11 @@
  *    partner's setting at the time. The only fee taken on mainnet is Gloam's
  *    own 0.25% on cash outs, kept by the pool.
  *
- * What is recorded per transaction: network, kind, tx hash, time, and for
- * public edges only the asset and amount (both already on chain: a deposit's, a
- * cash out's, a private swap's input). Never a note, a secret, a recipient of a
- * private send, or a private amount. A private swap carries no partner fee.
+ * What is recorded per transaction: network, kind, tx hash, time, where it was
+ * seen (source), and for public edges only the asset and amount (both already
+ * on chain: a deposit's, a cash out's, a private swap's input) and the vault's
+ * own cash-out fee on it. Never a note, a secret, a wallet, an IP, a recipient
+ * of a private send, or a private amount. A private swap carries no partner fee.
  *
  * Storage (lib/partnersKv), all under gloam:partners:v1:
  *   partner:<id>            partner record (JSON)
@@ -25,8 +32,15 @@
  *   partners                set of partner ids
  *   tx:<chainId>:<hash>     partner id that a transaction is attributed to
  *   events:<id>             newest-first list of activity records (capped)
- *   stats:<id> / stats:all  running counters (see STAT_FIELDS below)
+ *   stats:<id> / stats:all  running counters (fields below)
  *   day:<id|all>:<YYYY-MM-DD>  per-day counters, kept 120 days
+ *
+ * Counter fields: n:<kind>, n:<network>:<kind>, usd:<kind>, unpriced:<kind>,
+ * fee:<kind> (would-be partner fee), vf:<kind> (vault fee, USD micros),
+ * vfu:<kind> (vault fees with no price), vt|ft|vft:<chainId>:<asset>:<kind>
+ * (volume, partner fee and vault fee per asset, micro-units), and
+ * src:<link|chain>:n|usd|vf:<kind> per source. API-key figures are the total
+ * less the other two, so activity counted before sources existed reads as API.
  */
 import { getAddress, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { loadEthUsd } from "./live-quotes";
@@ -356,16 +370,32 @@ export async function listPartners(): Promise<Partner[]> {
 
 // ---------------------------------------------------------------- accounting
 
+/** Where a partner's activity was seen (see the top of this file). */
+export type ActivitySource = "api" | "link" | "chain";
+export const ACTIVITY_SOURCES: ActivitySource[] = ["api", "link", "chain"];
+export const SOURCE_LABEL: Record<ActivitySource, string> = {
+  api: "Via API key",
+  link: "Via link",
+  chain: "Matched on chain",
+};
+
 export type ActivityRecord = {
   id: string;
   kind: ActivityKind;
   network: NetworkKey;
   chainId: number;
   txHash: Hex;
-  /** ms since epoch, when Gloam recorded it. */
+  /** ms since epoch: when Gloam recorded it, or the block's time for one matched on chain. */
   ts: number;
-  /** The API key that brought it in. */
+  /** Where it was seen. Records from before sources existed have none and read as "api". */
+  source?: ActivitySource;
+  /** The API key that brought it in (source "api"). */
   keyId: string | null;
+  /** The partner's link code it came through (source "link"). */
+  linkCode?: string | null;
+  /** The vault's own cash-out fee on it, smallest units of `asset`; null when not known. */
+  vaultFee?: string | null;
+  vaultFeeUsd?: number | null;
   /** Public edges only (deposits, cash outs, a swap's input): what is already on chain. */
   asset: Address | null;
   symbol: string | null;
@@ -404,9 +434,17 @@ export async function recordActivity(args: {
   txHash: Hex;
   /** Public edges: the asset and amount the chain shows. */
   edge?: { asset: Address; amount: bigint } | null;
+  /** Where it was seen; "api" when left out. */
+  source?: ActivitySource;
+  /** The link code it came through (source "link"). */
+  linkCode?: string | null;
+  /** The vault's own fee on a public edge, smallest units of its asset; null or left out when not known. */
+  vaultFee?: bigint | null;
+  /** When it happened, ms. A past one (source "chain") keeps its own day and never moves `last` back. */
   now?: number;
 }): Promise<{ recorded: true; record: ActivityRecord } | { recorded: false; reason: "duplicate" }> {
   const { partner, network: net, kind } = args;
+  const source: ActivitySource = args.source ?? "api";
   const now = args.now ?? Date.now();
   const txHash = args.txHash.toLowerCase() as Hex;
   const [claim] = await kv([["SET", k("tx", net.chainId, txHash), partner.id, "NX", "EX", TX_TTL_SEC]]);
@@ -423,6 +461,17 @@ export async function recordActivity(args: {
     };
   }
   const c = commissionFor(kind, partner.fees, edgeAmount);
+  // Deposits and private payments are free in the vault: their fee is 0, known.
+  const vaultFee =
+    kind === "private_payment" || kind === "deposit" ? 0n : args.vaultFee != null && args.vaultFee >= 0n ? args.vaultFee : null;
+  const vaultFeeUsdMicros =
+    vaultFee == null
+      ? null
+      : vaultFee === 0n
+        ? 0n
+        : edgeAmount?.priceMicros != null
+          ? (vaultFee * edgeAmount.priceMicros) / 10n ** BigInt(edgeAmount.decimals)
+          : null;
 
   const record: ActivityRecord = {
     id: randomId("act"),
@@ -431,7 +480,11 @@ export async function recordActivity(args: {
     chainId: net.chainId,
     txHash,
     ts: now,
-    keyId: args.keyId,
+    source,
+    keyId: source === "api" ? args.keyId : null,
+    linkCode: source === "link" ? (args.linkCode ?? null) : null,
+    vaultFee: vaultFee == null ? null : vaultFee.toString(),
+    vaultFeeUsd: micros(vaultFeeUsdMicros),
     asset: kind === "private_payment" || !args.edge ? null : (getAddress(args.edge.asset) as Address),
     symbol: info?.symbol ?? null,
     decimals: info?.decimals ?? null,
@@ -447,18 +500,37 @@ export async function recordActivity(args: {
     [`n:${kind}`, 1],
     [`n:${net.key}:${kind}`, 1],
   ];
+  // per source: API-key figures are the total less these (see the top of this file)
+  if (source !== "api") incr.push([`src:${source}:n:${kind}`, 1]);
   if (c.feeUsdMicros != null) incr.push([`fee:${kind}`, c.feeUsdMicros]);
+  if (vaultFeeUsdMicros != null && vaultFeeUsdMicros > 0n) {
+    incr.push([`vf:${kind}`, vaultFeeUsdMicros]);
+    if (source !== "api") incr.push([`src:${source}:vf:${kind}`, vaultFeeUsdMicros]);
+  } else if (vaultFee != null && vaultFee > 0n) {
+    incr.push([`vfu:${kind}`, 1]);
+  }
   if (kind !== "private_payment") {
-    if (c.volumeUsdMicros != null) incr.push([`usd:${kind}`, c.volumeUsdMicros]);
-    else incr.push([`unpriced:${kind}`, 1]);
-    // per-asset volume and fees stay what deposits and cash outs moved
-    if (args.edge && info && kind !== "private_swap") {
+    if (c.volumeUsdMicros != null) {
+      incr.push([`usd:${kind}`, c.volumeUsdMicros]);
+      if (source !== "api") incr.push([`src:${source}:usd:${kind}`, c.volumeUsdMicros]);
+    } else incr.push([`unpriced:${kind}`, 1]);
+    // per asset: what deposits, cash outs and swaps' inputs moved, partner fees, the vault's fees
+    if (args.edge && info) {
       const tag = `${net.chainId}:${args.edge.asset.toLowerCase()}`;
       incr.push([`vt:${tag}:${kind}`, toMicroUnits(args.edge.amount, info.decimals)]);
-      if (c.feeToken != null) incr.push([`ft:${tag}:${kind}`, toMicroUnits(c.feeToken, info.decimals)]);
+      if (c.feeToken != null && kind !== "private_swap") incr.push([`ft:${tag}:${kind}`, toMicroUnits(c.feeToken, info.decimals)]);
+      if (vaultFee != null && vaultFee > 0n) incr.push([`vft:${tag}:${kind}`, toMicroUnits(vaultFee, info.decimals)]);
     }
   }
-  const dayIncr = incr.filter(([f]) => !f.startsWith("vt:") && !f.startsWith("ft:") && !/^n:[a-z]+:/.test(f));
+  // a day keeps totals by kind and by source, not per network or per asset
+  const dayIncr = incr.filter(([f]) => !/^(vt|ft|vft):/.test(f) && !/^n:[^:]+:/.test(f));
+
+  // a past transaction found on chain never moves "last" back
+  let setLast = true;
+  if (source === "chain") {
+    const prev = Number(await kv1(["HGET", k("stats", partner.id), "last"]));
+    setLast = !(Number.isFinite(prev) && prev >= now);
+  }
 
   const cmds: (string | number)[][] = [
     ["LPUSH", k("events", partner.id), JSON.stringify(record)],
@@ -466,7 +538,7 @@ export async function recordActivity(args: {
   ];
   for (const scope of [partner.id, "all"]) {
     for (const [f, v] of incr) cmds.push(["HINCRBY", k("stats", scope), f, v.toString()]);
-    cmds.push(["HSET", k("stats", scope), "last", now]);
+    if (setLast) cmds.push(["HSET", k("stats", scope), "last", now]);
     const dayKey = k("day", scope, day);
     for (const [f, v] of dayIncr) cmds.push(["HINCRBY", dayKey, f, v.toString()]);
     cmds.push(["EXPIRE", dayKey, DAY_TTL_SEC]);
@@ -491,16 +563,42 @@ export async function attributedTo(chainId: number, txHash: string): Promise<str
   return typeof v === "string" ? v : null;
 }
 
-export type KindTotals = { count: number; volumeUsd: number; commissionUsd: number; unpriced: number };
+export type KindTotals = {
+  count: number;
+  volumeUsd: number;
+  commissionUsd: number;
+  unpriced: number;
+  /** The vault's own cash-out fee on these, USD of the priced ones. */
+  vaultFeeUsd: number;
+  /** Ones that paid the vault a fee with no USD price for it. */
+  vaultFeeUnpriced: number;
+};
+
+/** One source's share: counts, USD volume of public edges and the vault's fee, by kind and in all. */
+export type SourceTotals = {
+  counts: Record<ActivityKind, number>;
+  /** USD of priced public edges (deposits, cash outs, swaps' inputs), by kind. */
+  volumeUsdByKind: Record<ActivityKind, number>;
+  vaultFeeUsdByKind: Record<ActivityKind, number>;
+  volumeUsd: number;
+  vaultFeeUsd: number;
+};
 
 export type AssetTotals = {
   network: NetworkKey;
   chainId: number;
   asset: Address;
   symbol: string;
-  /** Whole tokens, as decimal strings (six places at most). */
+  /** Whole tokens, as decimal strings (six places at most): what deposits and cash outs moved. */
   volume: string;
+  /** Would-be partner fees in this token. */
   commission: string;
+  /** Whole tokens: the inputs of private swaps in this token. */
+  swapVolume: string;
+  /** Whole tokens: the vault's own cash-out fee on these (cash outs and swaps). */
+  vaultFee: string;
+  /** Whole tokens moved, per kind. */
+  byKind: Record<"cash_out" | "deposit" | "private_swap", string>;
 };
 
 export type DayTotals = {
@@ -508,11 +606,17 @@ export type DayTotals = {
   privatePayments: number;
   cashOuts: number;
   deposits: number;
-  /** Private swaps relayed with the key. */
+  /** Private swaps. */
   swaps: number;
   /** USD of priced deposits and cash outs (swaps are not in it). */
   volumeUsd: number;
+  /** USD of priced swap inputs. */
+  swapVolumeUsd: number;
   commissionUsd: number;
+  /** The vault's own fee on that day's cash outs and swaps, priced ones. */
+  vaultFeeUsd: number;
+  /** That day's activity by source and kind. */
+  bySource: Record<ActivitySource, SourceTotals>;
 };
 
 export type PartnerStats = {
@@ -520,7 +624,7 @@ export type PartnerStats = {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
-    /** Private swaps relayed with the key. */
+    /** Private swaps. */
     privateSwaps: number;
     /** USD of priced deposits and cash outs. Swaps are counted apart, in swapVolumeUsd. */
     publicVolumeUsd: number;
@@ -530,8 +634,13 @@ export type PartnerStats = {
     commissionUsd: number;
     /** Deposits and cash outs with no USD price (counted, not valued). */
     unpriced: number;
+    /** The vault's own cash-out fee these brought in, USD of the priced ones. */
+    vaultFeeUsd: number;
+    /** Cash outs and swaps whose vault fee has no USD price. */
+    vaultFeeUnpriced: number;
   };
   byKind: Record<ActivityKind, KindTotals>;
+  bySource: Record<ActivitySource, SourceTotals>;
   byNetwork: Record<NetworkKey, Record<ActivityKind, number>>;
   byAsset: AssetTotals[];
   daily: DayTotals[];
@@ -551,6 +660,42 @@ export function lastDays(n: number, now = Date.now()): string[] {
   return out;
 }
 
+const zeroKinds = (): Record<ActivityKind, number> => ({ private_payment: 0, cash_out: 0, deposit: 0, private_swap: 0 });
+
+/**
+ * Counters by source. Links and on-chain matches are kept apart; API-key figures
+ * are the total less those two (activity from before sources existed is API's).
+ */
+function sourcesOf(c: Record<string, number>): Record<ActivitySource, SourceTotals> {
+  const pick = (src: "link" | "chain"): SourceTotals => {
+    const counts = zeroKinds();
+    const volumeUsdByKind = zeroKinds();
+    const vaultFeeUsdByKind = zeroKinds();
+    for (const kind of ACTIVITY_KINDS) {
+      counts[kind] = c[`src:${src}:n:${kind}`] ?? 0;
+      volumeUsdByKind[kind] = (c[`src:${src}:usd:${kind}`] ?? 0) / 1e6;
+      vaultFeeUsdByKind[kind] = (c[`src:${src}:vf:${kind}`] ?? 0) / 1e6;
+    }
+    return withSums({ counts, volumeUsdByKind, vaultFeeUsdByKind });
+  };
+  const link = pick("link");
+  const chain = pick("chain");
+  const counts = zeroKinds();
+  const volumeUsdByKind = zeroKinds();
+  const vaultFeeUsdByKind = zeroKinds();
+  for (const kind of ACTIVITY_KINDS) {
+    counts[kind] = Math.max(0, (c[`n:${kind}`] ?? 0) - link.counts[kind] - chain.counts[kind]);
+    volumeUsdByKind[kind] = Math.max(0, (c[`usd:${kind}`] ?? 0) / 1e6 - link.volumeUsdByKind[kind] - chain.volumeUsdByKind[kind]);
+    vaultFeeUsdByKind[kind] = Math.max(0, (c[`vf:${kind}`] ?? 0) / 1e6 - link.vaultFeeUsdByKind[kind] - chain.vaultFeeUsdByKind[kind]);
+  }
+  return { api: withSums({ counts, volumeUsdByKind, vaultFeeUsdByKind }), link, chain };
+}
+
+function withSums(t: Omit<SourceTotals, "volumeUsd" | "vaultFeeUsd">): SourceTotals {
+  const sum = (r: Record<ActivityKind, number>) => ACTIVITY_KINDS.reduce((s, kind) => s + r[kind], 0);
+  return { ...t, volumeUsd: sum(t.volumeUsdByKind), vaultFeeUsd: sum(t.vaultFeeUsdByKind) };
+}
+
 /** Turns a stats hash (and day hashes) into totals. Pure, for tests. */
 export function summarizeStats(
   stats: Record<string, number>,
@@ -563,22 +708,30 @@ export function summarizeStats(
       volumeUsd: (stats[`usd:${kind}`] ?? 0) / 1e6,
       commissionUsd: (stats[`fee:${kind}`] ?? 0) / 1e6,
       unpriced: stats[`unpriced:${kind}`] ?? 0,
+      vaultFeeUsd: (stats[`vf:${kind}`] ?? 0) / 1e6,
+      vaultFeeUnpriced: stats[`vfu:${kind}`] ?? 0,
     };
   }
   const byNetwork = {} as Record<NetworkKey, Record<ActivityKind, number>>;
   for (const net of NETWORK_KEYS) {
-    byNetwork[net] = { private_payment: 0, cash_out: 0, deposit: 0, private_swap: 0 };
+    byNetwork[net] = zeroKinds();
     for (const kind of ACTIVITY_KINDS) byNetwork[net][kind] = stats[`n:${net}:${kind}`] ?? 0;
   }
 
-  const assets = new Map<string, { volume: number; commission: number }>();
+  type Row = { volume: number; commission: number; swap: number; vaultFee: number; kinds: Record<string, number> };
+  const assets = new Map<string, Row>();
   for (const [field, v] of Object.entries(stats)) {
-    const m = /^(vt|ft):(\d+):(0x[0-9a-f]{40}):[a-z_]+$/.exec(field);
+    const m = /^(vt|ft|vft):(\d+):(0x[0-9a-f]{40}):([a-z_]+)$/.exec(field);
     if (!m) continue;
     const key = `${m[2]}:${m[3]}`;
-    const row = assets.get(key) ?? { volume: 0, commission: 0 };
-    if (m[1] === "vt") row.volume += v;
-    else row.commission += v;
+    const kind = m[4]!;
+    const row = assets.get(key) ?? { volume: 0, commission: 0, swap: 0, vaultFee: 0, kinds: {} };
+    if (m[1] === "vt") {
+      row.kinds[kind] = (row.kinds[kind] ?? 0) + v;
+      if (kind === "private_swap") row.swap += v;
+      else row.volume += v;
+    } else if (m[1] === "ft") row.commission += v;
+    else row.vaultFee += v;
     assets.set(key, row);
   }
   const byAsset: AssetTotals[] = [];
@@ -593,9 +746,16 @@ export function summarizeStats(
       symbol: assetInfo(net, asset)?.symbol ?? `${asset.slice(0, 6)}…${asset.slice(-4)}`,
       volume: microString(row.volume),
       commission: microString(row.commission),
+      swapVolume: microString(row.swap),
+      vaultFee: microString(row.vaultFee),
+      byKind: {
+        cash_out: microString(row.kinds.cash_out ?? 0),
+        deposit: microString(row.kinds.deposit ?? 0),
+        private_swap: microString(row.kinds.private_swap ?? 0),
+      },
     });
   }
-  byAsset.sort((a, b) => Number(b.volume) - Number(a.volume));
+  byAsset.sort((a, b) => Number(b.volume) + Number(b.swapVolume) - (Number(a.volume) + Number(a.swapVolume)));
 
   const daily: DayTotals[] = days.map(({ day, counters: c }) => ({
     day,
@@ -604,7 +764,10 @@ export function summarizeStats(
     deposits: c["n:deposit"] ?? 0,
     swaps: c["n:private_swap"] ?? 0,
     volumeUsd: ((c["usd:cash_out"] ?? 0) + (c["usd:deposit"] ?? 0)) / 1e6,
+    swapVolumeUsd: (c["usd:private_swap"] ?? 0) / 1e6,
     commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + (c[`fee:${kind}`] ?? 0), 0) / 1e6,
+    vaultFeeUsd: ACTIVITY_KINDS.reduce((s, kind) => s + (c[`vf:${kind}`] ?? 0), 0) / 1e6,
+    bySource: sourcesOf(c),
   }));
 
   return {
@@ -617,8 +780,11 @@ export function summarizeStats(
       swapVolumeUsd: byKind.private_swap.volumeUsd,
       commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + byKind[kind].commissionUsd, 0),
       unpriced: byKind.cash_out.unpriced + byKind.deposit.unpriced,
+      vaultFeeUsd: ACTIVITY_KINDS.reduce((s, kind) => s + byKind[kind].vaultFeeUsd, 0),
+      vaultFeeUnpriced: ACTIVITY_KINDS.reduce((s, kind) => s + byKind[kind].vaultFeeUnpriced, 0),
     },
     byKind,
+    bySource: sourcesOf(stats),
     byNetwork,
     byAsset,
     daily,
@@ -627,13 +793,21 @@ export function summarizeStats(
 }
 
 export const STATS_DAYS = 14;
+/** The most days a breakdown or an export reads: as long as day counters are kept. */
+export const STATS_DAYS_MAX = 120;
 
-/** Totals, last 14 days, and (optionally) the most recent activity for one partner, or "all". */
+/** A stored record as shown: one from before sources existed came in with a key. */
+function normalized(r: ActivityRecord): ActivityRecord {
+  return { ...r, source: r.source ?? "api", linkCode: r.linkCode ?? null, vaultFee: r.vaultFee ?? null, vaultFeeUsd: r.vaultFeeUsd ?? null };
+}
+
+/** Totals, the last `days` days (14 unless asked), and (optionally) the most recent activity for one partner, or "all". */
 export async function readPartnerStats(
   scope: string,
-  opts: { recent?: number } = {}
+  opts: { recent?: number; days?: number } = {}
 ): Promise<PartnerStats & { recent: ActivityRecord[] }> {
-  const days = lastDays(STATS_DAYS);
+  const n = Math.max(1, Math.min(Math.trunc(opts.days ?? STATS_DAYS), STATS_DAYS_MAX));
+  const days = lastDays(n);
   const recentN = scope === "all" ? 0 : Math.max(0, Math.min(opts.recent ?? 0, EVENTS_MAX));
   const cmds: (string | number)[][] = [["HGETALL", k("stats", scope)], ...days.map((d) => ["HGETALL", k("day", scope, d)])];
   if (recentN > 0) cmds.push(["LRANGE", k("events", scope), 0, recentN - 1]);
@@ -641,22 +815,123 @@ export async function readPartnerStats(
   const stats = hashNumbers(res[0]);
   const dayRows = days.map((day, i) => ({ day, counters: hashNumbers(res[i + 1]) }));
   const recentRaw = recentN > 0 ? (res[days.length + 1] as unknown[]) : [];
+  // newest first by when it happened: a past one matched on chain is pushed with today's, but keeps its own time
   const recent = (Array.isArray(recentRaw) ? recentRaw : [])
     .map((r) => jsonOf<ActivityRecord>(r))
-    .filter((r): r is ActivityRecord => Boolean(r));
+    .filter((r): r is ActivityRecord => Boolean(r))
+    .map(normalized)
+    .sort((a, b) => b.ts - a.ts);
   return { ...summarizeStats(stats, dayRows), recent };
 }
 
 /** Every partner's all-time stats in one round trip, for the admin list. */
-export async function readAllPartnerTotals(ids: string[]): Promise<Record<string, PartnerStats["totals"] & { lastActivity: number | null }>> {
+export async function readAllPartnerTotals(
+  ids: string[]
+): Promise<Record<string, PartnerStats["totals"] & { lastActivity: number | null; bySource: PartnerStats["bySource"] }>> {
   if (ids.length === 0) return {};
   const res = await kv(ids.map((id) => ["HGETALL", k("stats", id)]));
-  const out: Record<string, PartnerStats["totals"] & { lastActivity: number | null }> = {};
+  const out: Record<string, PartnerStats["totals"] & { lastActivity: number | null; bySource: PartnerStats["bySource"] }> = {};
   ids.forEach((id, i) => {
     const s = summarizeStats(hashNumbers(res[i]), []);
-    out[id] = { ...s.totals, lastActivity: s.lastActivity };
+    out[id] = { ...s.totals, lastActivity: s.lastActivity, bySource: s.bySource };
   });
   return out;
+}
+
+// ---------------------------------------------------------------- CSV
+
+const KIND_LABEL: Record<ActivityKind, string> = {
+  private_payment: "Private payment",
+  cash_out: "Cash out",
+  deposit: "Deposit",
+  private_swap: "Private swap",
+};
+
+/**
+ * One cell. A cell a spreadsheet would run as a formula (=, +, -, @, a tab or a
+ * carriage return first) gets an apostrophe in front, so it reads as text: a
+ * partner's name is whatever they typed.
+ */
+export function csvCell(v: string | number | null | undefined): string {
+  const raw = v == null ? "" : String(v);
+  const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+const csvLines = (rows: (string | number | null | undefined)[][]) => rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+
+const usd2 = (n: number) => (Math.round(n * 1e6) / 1e6).toString();
+
+/**
+ * Per day, source and kind: count, USD volume and the vault's fee, one row for
+ * each that had any activity. Oldest day first. `partners` names whose rows they are.
+ */
+export function dailyCsv(partners: { id: string; name: string; daily: DayTotals[] }[]): string {
+  const rows: (string | number)[][] = [["Date (UTC)", "Partner id", "Partner", "Source", "Kind", "Count", "Volume (USD)", "Vault fee (USD)"]];
+  for (const p of partners) {
+    for (const d of p.daily) {
+      for (const src of ACTIVITY_SOURCES) {
+        const s = d.bySource[src];
+        for (const kind of ACTIVITY_KINDS) {
+          if (!s.counts[kind]) continue;
+          const pub = kind !== "private_payment";
+          rows.push([
+            d.day,
+            p.id,
+            p.name,
+            SOURCE_LABEL[src],
+            KIND_LABEL[kind],
+            s.counts[kind],
+            pub ? usd2(s.volumeUsdByKind[kind]) : "Hidden",
+            usd2(s.vaultFeeUsdByKind[kind]),
+          ]);
+        }
+      }
+    }
+  }
+  return csvLines(rows);
+}
+
+/** Whole tokens from smallest units, exact. */
+function units(raw: string | null | undefined, decimals: number | null | undefined): string {
+  if (raw == null || decimals == null) return "";
+  try {
+    const v = BigInt(raw);
+    const base = 10n ** BigInt(decimals);
+    const frac = (v % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+    return frac ? `${v / base}.${frac}` : `${v / base}`;
+  } catch {
+    return "";
+  }
+}
+
+/** One row per recorded transaction: only public facts. Newest first, as given. */
+export function activityCsv(partners: { id: string; name: string; recent: ActivityRecord[] }[]): string {
+  const rows: (string | number | null)[][] = [
+    ["Time (UTC)", "Partner id", "Partner", "Source", "Network", "Chain id", "Kind", "Transaction", "Token", "Token address", "Amount", "Volume (USD)", "Vault fee", "Vault fee (USD)"],
+  ];
+  for (const p of partners) {
+    for (const r of p.recent) {
+      const n = normalized(r);
+      rows.push([
+        new Date(n.ts).toISOString().replace("T", " ").slice(0, 19),
+        p.id,
+        p.name,
+        SOURCE_LABEL[n.source ?? "api"],
+        getNetwork(n.network).label,
+        n.chainId,
+        KIND_LABEL[n.kind],
+        n.txHash,
+        n.symbol ?? "",
+        n.asset ?? "",
+        units(n.amount, n.decimals),
+        n.volumeUsd == null ? "" : usd2(n.volumeUsd),
+        units(n.vaultFee, n.decimals),
+        n.vaultFeeUsd == null ? "" : usd2(n.vaultFeeUsd),
+      ]);
+    }
+  }
+  return csvLines(rows);
 }
 
 /** What a partner's own record looks like over the wire. */

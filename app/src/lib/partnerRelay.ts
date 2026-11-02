@@ -15,6 +15,9 @@
  * A refund or an exit is claimed for the partner without being counted, so its
  * transaction can't later be attributed as a swap or a deposit.
  * Whether a swap is new is read from the vault, never taken from the request.
+ * A cash out's and a swap's vault fee is recorded with it: the amount times the
+ * vault's withdrawFeeBps, read after the send (cached a few minutes), the way
+ * the vault works it out. A fee that can't be read is left unknown.
  *
  * Server only. The relay functions and the vault read are injectable for tests.
  */
@@ -57,7 +60,40 @@ export type PartnerRelayDeps = {
   record: typeof recordActivity;
   /** Claims a transaction for the partner without counting it (a refund, an exit). */
   claim: typeof claimTransaction;
+  /** The vault's cash-out fee in basis points, or null when it can't be read. */
+  vaultFeeBps: (net: GloamNetwork) => Promise<number | null>;
 };
+
+const feeBpsCache = new Map<number, { at: number; bps: number }>();
+const FEE_BPS_TTL_MS = 5 * 60_000;
+
+/** withdrawFeeBps on the relay's own node, cached; null on any failure. */
+async function readVaultFeeBps(net: GloamNetwork): Promise<number | null> {
+  const hit = feeBpsCache.get(net.chainId);
+  if (hit && Date.now() - hit.at < FEE_BPS_TTL_MS) return hit.bps;
+  try {
+    const bps = Number(
+      await Promise.race([
+        relayPublicClient(net).readContract({ address: net.pool!, abi: feeBpsAbi, functionName: "withdrawFeeBps" }),
+        new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), 2_000)),
+      ])
+    );
+    if (!Number.isInteger(bps) || bps < 0 || bps > 100) return null;
+    feeBpsCache.set(net.chainId, { at: Date.now(), bps });
+    return bps;
+  } catch {
+    return null;
+  }
+}
+
+const feeBpsAbi = [
+  { type: "function", name: "withdrawFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] },
+] as const;
+
+/** The vault's fee on an amount: floor(amount * bps / 10,000), as unshield() keeps it. */
+export function vaultFeeOn(amount: bigint, bps: number): bigint {
+  return (amount * BigInt(bps)) / 10_000n;
+}
 
 export const partnerRelayDeps: PartnerRelayDeps = {
   relayTransfer,
@@ -69,6 +105,7 @@ export const partnerRelayDeps: PartnerRelayDeps = {
     Boolean(await relayPublicClient(net).readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [nullifier] })),
   record: recordActivity,
   claim: claimTransaction,
+  vaultFeeBps: readVaultFeeBps,
 };
 
 export class UnknownRelayAction extends RelayError {
@@ -147,7 +184,10 @@ export async function relayForPartner(
     attribution = { recorded: false, kind: null, reason: "not_billable" };
   } else {
     try {
-      const r = await deps.record({ partner, keyId, network: net, kind, txHash: hash, edge });
+      // the vault's own fee on a cash out or a swap's input: never fails the response
+      const bps = edge ? await deps.vaultFeeBps(net).catch(() => null) : null;
+      const vaultFee = edge && bps != null ? vaultFeeOn(edge.amount, bps) : null;
+      const r = await deps.record({ partner, keyId, network: net, kind, txHash: hash, edge, vaultFee, source: "api" });
       attribution = r.recorded ? { recorded: true, kind, activity: r.record } : { recorded: false, kind, reason: r.reason };
     } catch (e) {
       console.error("gloam_api_attribution", logSafe(e));

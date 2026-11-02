@@ -555,8 +555,12 @@ await test("attribution: private payments keep no amount, asset or recipient", a
   assert.equal(rec.feeUsd, 0.05);
   assert.deepEqual(
     Object.keys(rec).sort(),
-    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "network", "symbol", "ts", "txHash", "volumeUsd"].sort()
+    ["amount", "asset", "chainId", "decimals", "feeBasis", "feeToken", "feeUsd", "id", "keyId", "kind", "linkCode", "network", "source", "symbol", "ts", "txHash", "vaultFee", "vaultFeeUsd", "volumeUsd"].sort()
   );
+  // a private payment is free in the vault, and came in with a key
+  assert.equal(rec.source, "api");
+  assert.equal(rec.vaultFee, "0");
+  assert.equal(rec.linkCode, null);
 });
 
 await test("attribution: a transaction counts once, for one partner", async () => {
