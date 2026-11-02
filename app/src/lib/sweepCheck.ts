@@ -34,6 +34,10 @@ const KNOWN_DELEGATES = new Set([
   "0x5a7fc11397e9a8ad41bf10bf13f22b0a63f96f6d", // Ambire AmbireAccount7702
   "0x000000009b1d0af20d8c6d0a44e162d11f9b8f00", // Uniswap Wallet CaliburEntry
   "0x4cd241e8d1510e30b2076397afc7508ae59c66c9", // eth-infinitism Simple7702Account
+  // Turnkey TKGasDelegate v1.1 (github.com/tkhq/gas-station): a Gloam wallet whose
+  // fee Turnkey sponsored delegates to it (lib/embeddedGas). Robinhood Chain and Base
+  // differ from Ethereum only in two EIP-712 immutables (checked 2 Nov 2026).
+  "0x955d84139e7621bc571b117d8eb5d28a4a222c6f",
 ]);
 
 /** Left within this many blocks of arriving: about 2 seconds on Robinhood Chain, 11 on Tempo. */

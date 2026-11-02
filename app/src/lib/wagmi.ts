@@ -26,7 +26,9 @@ const walletConnectFn = lazyWalletConnect();
  * - injected: browser wallets on every network. On Tempo (testnet and mainnet)
  *   it sets a fee token first when the account has none and no pathUSD
  *   (lib/feeSponsor.ts).
- * - Turnkey passkey: Robinhood Chain testnet only, behind NEXT_PUBLIC_TURNKEY_ENABLED.
+ * - Gloam wallet (Turnkey, email or passkey): every chain here, behind
+ *   NEXT_PUBLIC_TURNKEY_ENABLED (lib/embeddedWallet). On Tempo it sets a fee
+ *   token first like a browser wallet; elsewhere lib/embeddedGas picks who pays gas.
  * - Tempo Wallet: passkey sign-in on Tempo testnet, fees sponsored (lib/tempoWallet.ts).
  * - WalletConnect: a wallet app on a phone (or scanned from desktop) when the
  *   browser has no wallet, behind NEXT_PUBLIC_WC_PROJECT_ID (lib/walletConnect.ts).
@@ -80,7 +82,7 @@ export const wagmiConfig = createConfig({
   chains,
   connectors: [
     tempoFeeAware(injected({ shimDisconnect: true })),
-    turnkeyConnector(),
+    tempoFeeAware(turnkeyConnector()),
     tempoWalletConnector(),
     ...(walletConnectFn ? [tempoFeeAware(walletConnectFn)] : []),
   ],

@@ -33,6 +33,8 @@ const BEFORE_SEND = new Set([
   "ContractFunctionRevertedError",
   "EstimateGasExecutionError",
   "InsufficientFundsError",
+  // a Gloam wallet with no way to pay the fee, or a sponsored send Turnkey refused (lib/embeddedProvider)
+  "EmbeddedNotSentError",
 ]);
 
 export function failedBeforeSend(e: unknown): boolean {
@@ -69,7 +71,9 @@ export function solanaSurelyNotSent(message: string): boolean {
 
 /** The short, human part of a wallet or viem error (viem's long message lists the chain and call). */
 export function walletErrorText(e: unknown): string {
-  const first = chain(e)[0];
+  const links = chain(e);
+  // A Gloam wallet's own refusal says what to do: it wins over whatever wrapped it.
+  const first = links.find((x) => x.name === "EmbeddedNotSentError") ?? links[0];
   const text = first?.shortMessage || first?.message || "";
   return text.split("\n")[0] ?? "";
 }
