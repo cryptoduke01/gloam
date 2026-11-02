@@ -8,6 +8,7 @@
  */
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { faucetFor } from "@/lib/faucet";
+import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
 import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, networkName, type NetworkKey } from "@/lib/networks";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
 import { parseUnits, type Address } from "viem";
@@ -604,9 +605,11 @@ function planDeposit(args: Args, ctx: ToolContext): CallToolResult {
     faucetUrl
       ? `Get test funds: ${faucetUrl}${network === "robinhood" && asset.symbol === "USDG" ? " (test USDG: https://faucet.paxos.com/)" : ""}.`
       : `Have the ${asset.symbol} in your own wallet on ${n.label}. This is mainnet, with beta deposit limits the app shows before you sign.`,
-    n.testnet
-      ? `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet${network === "tempo" ? " (or sign in with a passkey, which works on Tempo testnet only)" : ""}, and choose ${n.label} in the network menu.`
-      : `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet, and choose ${n.label} mainnet in the network menu.`,
+    EMBEDDED_WALLETS
+      ? `Open ${ctx.origin}/app/vault?tab=shield, sign in with your email or a passkey (or connect a wallet), and choose ${n.label}${n.testnet ? "" : " mainnet"} in the network menu.`
+      : n.testnet
+        ? `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet${network === "tempo" ? " (or sign in with a passkey, which works on Tempo testnet only)" : ""}, and choose ${n.label} in the network menu.`
+        : `Open ${ctx.origin}/app/vault?tab=shield, connect a wallet, and choose ${n.label} mainnet in the network menu.`,
     `Pick ${asset.symbol} and enter ${amount.value ? amount.value : "the amount"}.`,
     ...(asset.native ? [] : [`Approve ${asset.symbol} for the Gloam vault: one signature in your wallet.`]),
     `Your browser makes a zero-knowledge proof that the deposit matches a new private note, then you sign one transaction to the vault (${n.pool}).`,
