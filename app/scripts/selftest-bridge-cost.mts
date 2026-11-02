@@ -6,8 +6,9 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-bridge-cost.mts
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
-const { routeCost, expensiveRoute } = await import("../src/lib/bridge");
+const { SWAP_SLIPPAGE_BPS, expensiveRoute, routeCost } = await import("../src/lib/bridge");
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -68,6 +69,15 @@ test("never less than Relay's own fee, even when the price rounds the other way"
 test("when Relay doesn't price what you pay, the cost is its fee and nothing is guessed", () => {
   assert.deepEqual(routeCost(quote(null, "10", 0.8)), { usd: 0.8, share: null });
   assert.equal(expensiveRoute(quote(null, "10", 25)), null);
+});
+
+const route = readFileSync(new URL("../src/app/api/bridge/private/route.ts", import.meta.url), "utf8");
+
+test("the tighter slippage goes on the same-chain swap only, and the refusals stay", () => {
+  assert.equal(SWAP_SLIPPAGE_BPS, "30");
+  assert.match(route, /\.\.\.\(sameChain \? \{ slippageTolerance: SWAP_SLIPPAGE_BPS \} : \{\}\)/);
+  assert.equal(route.match(/slippageTolerance/g)?.length, 1, "nothing else sets it");
+  assert.match(route, /\(sameChain \? outAmount >= amount : outAmount === amount\)/);
 });
 
 console.log(`\nbridge cost: ${passed} passed`);

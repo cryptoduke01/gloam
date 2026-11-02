@@ -21,6 +21,7 @@ import {
   BRIDGE_DESTINATIONS,
   BRIDGE_MIN_USD,
   RELAY_REFERRER,
+  SWAP_SLIPPAGE_BPS,
   bridgeChain,
   bridgeToken,
   privateBridgeable,
@@ -217,6 +218,7 @@ export async function POST(req: Request) {
         amount: amount.toString(),
         tradeType: "EXACT_OUTPUT",
         useDepositAddress: false,
+        ...(sameChain ? { slippageTolerance: SWAP_SLIPPAGE_BPS } : {}),
         txs: [
           { to: asset, value: "0", data: approveData },
           { to: pool, value: "0", data: shieldData },
