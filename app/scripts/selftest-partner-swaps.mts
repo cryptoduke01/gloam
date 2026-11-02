@@ -112,6 +112,7 @@ type Call = string;
 function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
   const calls: Call[] = [];
   const recorded: { kind: string; edge: unknown }[] = [];
+  const memoFrom: unknown[] = [];
   const deps = {
     ...partnerRelayDeps,
     relayTransfer: async () => {
@@ -122,8 +123,9 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       calls.push("unshield");
       return H(2);
     },
-    relayMemo: async () => {
+    relayMemo: async (_net: unknown, _body: unknown, from?: unknown) => {
       calls.push("memo");
+      memoFrom.push(from);
       return H(3);
     },
     relayVaultSwap: async () => {
@@ -144,7 +146,7 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       return recordActivity(a);
     }) as typeof recordActivity,
   };
-  return { deps, calls, recorded };
+  return { deps, calls, recorded, memoFrom };
 }
 
 const swapBody = (over: Record<string, unknown> = {}) => ({
@@ -158,6 +160,14 @@ const swapBody = (over: Record<string, unknown> = {}) => ({
 });
 
 let txn = 200;
+await test("partner relay: a payment message goes with the partner account and its approval, not the key", async () => {
+  const { deps, memoFrom } = fakeDeps();
+  const body = { chainId: RH.chainId, action: "memo", paymentCommitment: H(500), memo: "0x00" };
+  await relayForPartner({ net: RH, body, partner: { ...partner, relayApproved: true }, keyId: "key_1" }, deps);
+  await relayForPartner({ net: RH, body, partner, keyId: "key_1" }, deps);
+  assert.deepEqual(memoFrom, [{ partner: partner.id, approved: true }, { partner: partner.id, approved: false }]);
+});
+
 await test("partner relay: a swap of an unspent note is counted, with its input, after the vault read", async () => {
   const { deps, calls, recorded } = fakeDeps({ spent: false });
   const body = swapBody({ spend: { ...swapBody().spend, nullifier: H(++txn) } });
