@@ -628,7 +628,9 @@ export default function WhitepaperPage() {
           funds, payment, and payroll totals, private agent payments, beta
           deposit limits, and pools with no admin withdraw and timelocked rule
           changes. Private swaps from the private balance run on Robinhood
-          Chain and Tempo, through a router per chain. Encrypted payment memos run on every network, and
+          Chain and Tempo, through a router per chain, and on Robinhood Chain
+          they include stock tokens. A swap hides who swapped, not the tokens or
+          the amounts. Encrypted payment memos run on every network, and
           the Robinhood Chain testnet adds stock tokens held and sent
           privately, with test funds.
         </li>
@@ -643,7 +645,7 @@ export default function WhitepaperPage() {
         </li>
         <li>
           <strong>Mid term:</strong> issuer-scoped disclosure for regulated
-          stablecoins on Tempo; private trading of stock tokens.
+          stablecoins on Tempo.
         </li>
         <li>
           <strong>Production gate:</strong> done before mainnet, the multi-party
