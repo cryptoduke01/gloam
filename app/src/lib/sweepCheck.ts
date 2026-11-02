@@ -21,6 +21,7 @@
  */
 import { parseAbiItem, type Address, type Hex } from "viem";
 import { getLogsSafe } from "./logRange";
+import { allNetworks } from "./networks";
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
@@ -80,30 +81,22 @@ export type SweepReader = {
     args: { from?: Address; to?: Address };
     fromBlock: bigint;
     toBlock: bigint;
-  }): Promise<{ blockNumber: bigint | null; transactionHash: Hex | null; args?: { value?: bigint } }[]>;
+  }): Promise<{ blockNumber: bigint | null; transactionHash: Hex | null; args?: { value?: bigint; to?: Address } }[]>;
   getTransaction(args: { hash: Hex }): Promise<{ from: Address; to?: Address | null }>;
 };
 
 /**
- * Turnkey's gas station: a sponsored send from a wallet delegating to Turnkey's
- * TKGasDelegate goes out through it, carrying the wallet's own signature (the
- * delegate runs nothing without one), so its sender is Turnkey's paymaster.
- */
-const TURNKEY_GAS_STATION = "0x5af5194b4b0909eb978e3cf1e25333852277f07d";
-const TURNKEY_GAS_DELEGATE = "0x955d84139e7621bc571b117d8eb5d28a4a222c6f";
-
-/**
  * An outgoing transfer another account sent that is still the wallet's own act:
- * the wallet delegates to a known smart-account contract, and the transaction
- * went to the wallet itself (a relayer calling its delegate), or through
- * Turnkey's gas station for a wallet on Turnkey's delegate. A Gloam wallet's own
- * sponsored deposit is one of these, not a sweep.
+ * a deposit into this chain's Gloam vault (a Gloam wallet's sponsored deposit, which
+ * Turnkey's paymaster sends), from a wallet that delegates to a known smart-account
+ * contract. Only the vault as the recipient excuses it: those delegates run any call
+ * that carries the owner's signature, for any caller, so a thief holding the key can
+ * send through their own relayer just as well. Money that leaves for anywhere else
+ * stays a sweep, whoever relayed it.
  */
-function ownDelegatedSend(address: Address, delegate: Address | null, tx: { to?: Address | null }): boolean {
-  if (!delegate || !KNOWN_DELEGATES.has(delegate.toLowerCase()) || !tx.to) return false;
-  const to = tx.to.toLowerCase();
-  if (to === address.toLowerCase()) return true;
-  return to === TURNKEY_GAS_STATION && delegate.toLowerCase() === TURNKEY_GAS_DELEGATE;
+function ownVaultDeposit(delegate: Address | null, recipient: Address | undefined, vault: Address | null): boolean {
+  if (!delegate || !KNOWN_DELEGATES.has(delegate.toLowerCase()) || !recipient || !vault) return false;
+  return recipient.toLowerCase() === vault.toLowerCase();
 }
 
 /** A Transfer log that moved money (zero-value ones are free for anyone to emit). */
@@ -137,6 +130,7 @@ async function sweptCheck(
   address: Address,
   token: Address,
   delegate: Address | null,
+  vault: Address | null,
   head?: bigint
 ): Promise<SweepCheck["swept"]> {
   try {
@@ -170,10 +164,10 @@ async function sweptCheck(
       for (const l of out) {
         // the same transaction both paid in and out: a contract passing it on, not a sweep
         if (!l.transactionHash || l.transactionHash === arrival.transactionHash || !movedMoney(l)) continue;
+        // a deposit into this chain's vault from a delegated wallet (a sponsored deposit) is its own
+        if (ownVaultDeposit(delegate, l.args?.to, vault)) continue;
         const tx = await client.getTransaction({ hash: l.transactionHash });
-        if (tx.from.toLowerCase() !== address.toLowerCase() && !ownDelegatedSend(address, delegate, tx)) {
-          return { evidenceTx: l.transactionHash };
-        }
+        if (tx.from.toLowerCase() !== address.toLowerCase()) return { evidenceTx: l.transactionHash };
       }
     }
     return null;
@@ -185,16 +179,17 @@ async function sweptCheck(
 /**
  * Checks `address` before a cash out of `token` (null: the chain's native coin,
  * whose moves leave no Transfer log, so only the delegation is read).
- * `head` pins the newest block looked at (tests).
+ * `head` pins the newest block looked at, and `vault` the chain's Gloam vault (tests).
  */
 export async function checkSweep(
   client: SweepReader,
   chainId: number,
   address: Address,
   token: Address | null,
-  opts: { head?: bigint } = {}
+  opts: { head?: bigint; vault?: Address | null } = {}
 ): Promise<SweepCheck> {
   const delegate = await readDelegate(client, address);
-  const swept = token ? await sweptCheck(client, chainId, address, token, delegate, opts.head) : null;
+  const vault = opts.vault !== undefined ? opts.vault : (allNetworks().find((n) => n.chainId === chainId)?.pool ?? null);
+  const swept = token ? await sweptCheck(client, chainId, address, token, delegate, vault, opts.head) : null;
   return { delegated: delegatedCheck(delegate), swept };
 }
