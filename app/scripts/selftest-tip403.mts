@@ -41,6 +41,7 @@ import { POST as screenPost } from "../src/app/api/screen/route";
 import { GET as policyGet } from "../src/app/api/screen/policy/route";
 import { POST as relayPost } from "../src/app/api/relay/route";
 import { RelayError, relayUnshield, screenCall } from "../src/lib/relay/server";
+import { escrowAddress } from "../src/lib/vaultSwap";
 import { getNetwork } from "../src/lib/networks";
 
 let passed = 0;
@@ -68,6 +69,8 @@ const BOB = "0x2222222222222222222222222222222222222222" as Address;
 const CAROL = "0x3333333333333333333333333333333333333333" as Address;
 // Takes payments from the vault, refuses them from the swap router.
 const ERIN = "0x5555555555555555555555555555555555555555" as Address;
+// Refuses payments from one swap's escrow, which pays its exit.
+const DAVE = "0x6666666666666666666666666666666666666666" as Address;
 // A swap router, the sender of an exit.
 const ROUTER = "0x75A22213000000000000000000000000000000aa" as Address;
 // TIP-1022 virtual address (ten 0xFD bytes at offset 4) whose master is ALICE.
@@ -105,6 +108,8 @@ function fakeChain(opts: { preT2?: boolean; down?: boolean; receiveDown?: boolea
   // Bob refuses payments from the pool (TIP-1028 receive policy).
   const refusesPool = new Set([lc(BOB)]);
   const refusesRouter = new Set([lc(ERIN)]);
+  /** Other refusals: receiver by sender. */
+  const refused = new Map<string, Set<string>>();
   const calls: string[] = [];
 
   const simple = (id: bigint, user: string): boolean => {
@@ -150,7 +155,7 @@ function fakeChain(opts: { preT2?: boolean; down?: boolean; receiveDown?: boolea
           case "validateReceivePolicy": {
             if (opts.preT2 || opts.receiveDown) throw new Error("execution reverted");
             const [from, to] = [lc(args[1] as string), lc(args[2] as string)];
-            return [!((from === lc(POOL) && refusesPool.has(to)) || (from === lc(ROUTER) && refusesRouter.has(to))), 2];
+            return [!((from === lc(POOL) && refusesPool.has(to)) || (from === lc(ROUTER) && refusesRouter.has(to)) || refused.get(from)?.has(to)), 2];
           }
         }
       }
@@ -164,7 +169,8 @@ function fakeChain(opts: { preT2?: boolean; down?: boolean; receiveDown?: boolea
       throw new Error(`unexpected call ${call.functionName} on ${call.address}`);
     },
   };
-  return { reader, calls };
+  const refuse = (sender: string, receiver: string) => refused.set(lc(sender), (refused.get(lc(sender)) ?? new Set()).add(lc(receiver)));
+  return { reader, calls, refuse };
 }
 
 // ---------------------------------------------------------------- pure helpers
@@ -432,17 +438,24 @@ await test("relay: cash-out recipient and vault checked against the issuer polic
   await screenCall(unshield(BLOCK_T, CAROL), RH);
 });
 
-await test("relay: a cash out pays from the vault, an exit from its router, and an unread receive policy sends nothing", async () => {
+await test("relay: a cash out pays from the vault, an exit from its escrow, and an unread receive policy sends nothing", async () => {
+  const h32 = H32 as `0x${string}`;
+  const KEY = {
+    nullifier: h32, amountIn: 1n, outCommitment: h32, assetOut: ALLOW_T, amountOut: 1n,
+    refundCommitment: h32, refundAmount: 1n, routeHash: h32, exitKey: ALICE, deadline: 1n,
+  };
   const unshield = (asset: Address, to: Address) =>
     ({ kind: "unshield", args: [PROOF, H32, H32, asset, to, 1n] }) as never;
   const exit = (asset: Address, to: Address) =>
-    ({ kind: "swapExit", router: ROUTER, args: [asset, {}, to, "0x"] }) as never;
+    ({ kind: "swapExit", router: ROUTER, args: [asset, KEY, to, "0x"] }) as never;
   const held = (e: RelayError) => e.message === TIP403_RECEIVE_POLICY_MESSAGE && e.code === "asset_policy" && e.status === 403;
-  // Erin refuses the router only, Bob the vault only
-  await screenCall(unshield(BLOCK_T, ERIN), TEMPO);
-  await assert.rejects(screenCall(exit(BLOCK_T, ERIN), TEMPO), held);
+  fake.refuse(escrowAddress(ROUTER, BLOCK_T, KEY), DAVE);
+  // Dave refuses this swap's escrow, Bob the vault, Erin the router alone, which pays neither
+  await screenCall(unshield(BLOCK_T, DAVE), TEMPO);
+  await assert.rejects(screenCall(exit(BLOCK_T, DAVE), TEMPO), held);
   await assert.rejects(screenCall(unshield(BLOCK_T, BOB), TEMPO), held);
   await screenCall(exit(BLOCK_T, BOB), TEMPO);
+  await screenCall(exit(BLOCK_T, ERIN), TEMPO);
   // the receive policy doesn't answer: nothing goes, and it can be tried again
   for (const opts of [{ receiveDown: true }, { down: true }]) {
     const quiet = fakeChain(opts);

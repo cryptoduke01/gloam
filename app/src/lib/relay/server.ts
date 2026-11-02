@@ -691,14 +691,15 @@ function payoutAsset(call: Call): Address | null {
  * With `net` on Tempo, a cash out is also checked against the asset's TIP-403
  * issuer policy: the vault must be allowed to send it and `to` to receive it.
  * And `to`'s own receive policy must accept whoever pays it: the vault, or for
- * a swap's exit its router. When that policy can't be read nothing is sent
+ * a swap's exit the swap's escrow. When that policy can't be read nothing is sent
  * (check_failed), as a payment it refuses is held by Tempo rather than reverted.
  */
 export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> {
   const recipients = publicRecipients(call);
   if (recipients.length === 0) return;
   const asset = payoutAsset(call);
-  const sender = call.kind === "swapExit" ? call.router : net?.pool ?? undefined;
+  // an exit is paid by the swap's escrow itself (SwapEscrow2), a cash out by the vault
+  const sender = call.kind === "swapExit" ? escrowAddress(call.router, call.args[0], call.args[1]) : net?.pool ?? undefined;
   const context = net && asset !== null ? { chainId: net.chainId, asset, flow: "cashout" as const, sender } : undefined;
   const { allowed, message } = await screenAddresses(recipients, context);
   if (!allowed) {
