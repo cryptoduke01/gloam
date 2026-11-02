@@ -19,11 +19,11 @@ const WINDOW_SEC = 60;
  * Buckets counted per instance, never in Redis: public reads, page analytics,
  * MCP requests and the helper bot's per-minute limits. What stays shared: the
  * relay, sign-in recovery, the testers form, admin and partner sign-in, partner
- * writes, address screening (a paid API) and the bot's daily model caps.
+ * writes, proof checks (they read the chain), address screening (a paid API)
+ * and the bot's daily model caps.
  */
 const LOCAL_BUCKETS = new Set([
   "req",
-  "verify",
   "collect",
   "funnel",
   "markets",
