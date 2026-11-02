@@ -24,6 +24,7 @@ import { formatUnits, getAddress, isAddress, parseUnits, zeroAddress, type Addre
 import {
   GLOAM_RELAY_URL,
   GloamRelayError,
+  IMPACT_STOP_BPS,
   RELAY_MAYBE_SENT,
   RH_WETH,
   SWAP_PUBLIC,
@@ -87,6 +88,14 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 export const SWAP_PRIVACY = `${SWAP_PUBLIC} The Gloam relay sends it, so this server's wallet is not next to it either.`;
 const ONE_NOTE =
   "A swap spends one whole note. With an amount below a note's value, the note is first split with a private send to this server's own notes, and the part of the right size is swapped.";
+
+const MAX_IMPACT_ARG = z
+  .number()
+  .int()
+  .min(0)
+  .max(10_000)
+  .optional()
+  .describe("The most price impact to accept, in basis points (100 = 1%). It can only lower the owner's cap (GLOAM_SWAP_MAX_IMPACT_BPS, 200 unless set), never raise it.");
 
 const erc20MetaAbi = [
   { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
@@ -195,6 +204,20 @@ async function relayFor(ctx: SwapToolContext, chainId: number): Promise<RelayNet
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000).unref?.());
   const read = ctx.relayStatus({ url: swapRelayUrl(ctx.env) }).then((all) => all.find((s) => s.chainId === chainId) ?? null, () => null);
   return Promise.race([read, timeout]);
+}
+
+/**
+ * The most price impact a swap from this server may take, in basis points, on every chain:
+ * GLOAM_SWAP_MAX_IMPACT_BPS (the owner's), 200 when unset. An agent's maxImpactBps can only
+ * lower it. Throws on a value that isn't 0 to 10,000, so a typo never loosens it.
+ */
+export function swapImpactCap(env: Env, asked?: number): number {
+  const raw = env.GLOAM_SWAP_MAX_IMPACT_BPS?.trim();
+  const owner = raw ? Number(raw) : IMPACT_STOP_BPS;
+  if (!Number.isInteger(owner) || owner < 0 || owner > 10_000) {
+    throw new Error(`GLOAM_SWAP_MAX_IMPACT_BPS must be a whole number of basis points from 0 to 10000, got "${raw}".`);
+  }
+  return asked === undefined ? owner : Math.min(owner, asked);
 }
 
 /** Swaps always go through a relay: GLOAM_RELAY_URL, else Gloam's. */
@@ -306,9 +329,10 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
         to: z.string().describe('What you receive: a symbol or a 0x token address ("ETH" is native ETH).'),
         amount: z.number().positive().optional().describe("How much to swap, in the asset's units (e.g. 25 for 25 USDC)."),
         note: z.string().optional().describe("A note handle (gloam_list_notes): quote swapping its whole value."),
+        maxImpactBps: MAX_IMPACT_ARG,
       },
     },
-    async ({ network, from, to, amount, note }) => {
+    async ({ network, from, to, amount, note, maxImpactBps }) => {
       const net = networkByKey(network);
       if (!swapRouterFor(net.chainId)) return text(notLive(net));
       const client = ctx.client(net);
@@ -341,6 +365,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
           assetOut: outRef.address,
           amountIn: amountWei,
           relayStatus: await relayFor(ctx, net.chainId),
+          stops: { maxImpactBps: swapImpactCap(env, maxImpactBps) },
         });
         return text({ ...quoteView(net, q, inRef, outRef), execute: "gloam_execute_private_swap({ network, from, to, amount }) proves it here and sends it through the Gloam relay." });
       } catch (e) {
@@ -361,9 +386,10 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
         to: z.string().describe("What you receive: a symbol or a 0x token address."),
         amount: z.number().positive().optional().describe("How much to swap, in the asset's units. Left out with a note handle: its whole value."),
         note: z.string().optional().describe("The note handle to swap from (gloam_list_notes). Left out: an exact match, else the smallest note that covers the amount."),
+        maxImpactBps: MAX_IMPACT_ARG,
       },
     },
-    async ({ network, from, to, amount, note }) => {
+    async ({ network, from, to, amount, note, maxImpactBps }) => {
       const net = networkByKey(network);
       if (!swapRouterFor(net.chainId)) return text(notLive(net));
       const client = ctx.client(net);
@@ -429,17 +455,20 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       }
       const split = BigInt(chosen.amountWei) > amountIn;
 
-      // The quote and its stops, before anything is reserved or proved.
+      // The quote and its stops, before anything is reserved or proved: price impact over the owner's
+      // cap (2% unless GLOAM_SWAP_MAX_IMPACT_BPS says otherwise) stops a swap on every chain.
       const relayState = await relayFor(ctx, net.chainId);
       let quote: SwapQuote;
+      let stops: { maxImpactBps: number };
       try {
-        quote = await quoteSwap({ client, chainId: net.chainId, pool: net.pool, assetIn: inRef.address, assetOut: outRef.address, amountIn, relayStatus: relayState });
+        stops = { maxImpactBps: swapImpactCap(env, maxImpactBps) };
+        quote = await quoteSwap({ client, chainId: net.chainId, pool: net.pool, assetIn: inRef.address, assetOut: outRef.address, amountIn, relayStatus: relayState, stops });
       } catch (e) {
         return text({ ...refusedView(e, errMsg), network: net.key });
       }
       if (quote.stop) return text({ ...quoteView(net, quote, inRef, outRef), status: "refused" });
 
-      // The owner's limits: on the value the swap spends.
+      // The owner's limits: on the value the swap spends, and on what it buys (swapTo, else the agent's assets).
       const spend: Spend & { pool: Address } = {
         tool: "swap",
         network: net.key,
@@ -447,6 +476,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
         asset: inRef.address,
         amountWei: amountIn,
         recipient: null,
+        assetOut: outRef.address,
         pool: net.pool,
       };
       const gate = authorizeSpend(spend, env);
@@ -491,6 +521,7 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
           shieldProver,
           unshieldProver,
           relayStatus: relayState,
+          stops,
         });
       } catch (e) {
         release();
@@ -652,6 +683,8 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
       const url = swapRelayUrl(env);
       const inRef = await describeAsset(net, client, rec.info.assetIn);
 
+      // the refund first; when the vault has no room for it, a router with an exit takes the money out instead
+      let exitNow = outcome.state === "exit_ready";
       if (outcome.state === "refund_ready") {
         try {
           const call = await buildSwapRefund(rec, { client, shieldProver: await ctx.shieldProver(net) });
@@ -662,17 +695,19 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
           const said = after ? applySwapOutcome(store, store.get(refund.handle)!, after, tryStore) : "sent; call gloam_list_notes with refresh";
           return text({ status: after?.state === "refunded" ? "refunded" : "sent", hash, explorer: `${net.explorer}/tx/${hash}`, outcome: said, refundNote: noteView(store.get(refund.handle)!) });
         } catch (e) {
-          return text({ ...refusedView(e, errMsg), note: refund.handle, check: "The money still waits at the swap's escrow. Try again shortly." });
+          if (e instanceof SwapRefusedError && e.code === "refund_wont_fit" && rec.info.exitKey) exitNow = true;
+          else return text({ ...refusedView(e, errMsg), note: refund.handle, check: "The money still waits at the swap's escrow. Try again shortly." });
         }
       }
 
-      if (outcome.state === "exit_ready") {
+      if (exitNow && (outcome.state === "exit_ready" || outcome.state === "refund_ready")) {
         if (!to || !isAddress(to, { strict: false })) {
           return text({
             status: "needs_to",
             note: refund.handle,
             waiting: units(outcome.held, inRef),
-            message: "The refund note can't take this money back. Name a 0x address (to) to send it to; it is public, and goes through the owner's limits.",
+            message:
+              "The refund note can't take this money back (the vault's fee rose, or the vault has no room for it now). Name a 0x address (to) to send it to; it is public, and goes through the owner's limits.",
           });
         }
         const spend: Spend & { pool: Address } = {
@@ -684,7 +719,8 @@ export function registerSwapTools(server: McpServer, ctx: SwapToolContext): void
           recipient: to,
           pool: net.pool,
         };
-        const gate = authorizeSpend(spend, env);
+        // the recipient, the tool and the expiry are checked; the amount is not counted again (the swap already counted it)
+        const gate = authorizeSpend(spend, env, Date.now(), { counts: false });
         if (!gate.ok) return text(gate.refusal);
         try {
           const call = await buildSwapExit(rec, { client, to: getAddress(to) });
@@ -820,7 +856,14 @@ async function splitNote(
     return { ok: true, exact: store.get(exact.handle)! };
   } catch (e) {
     const maybeSent = Boolean(hash) || (sending && (!(e instanceof GloamRelayError) || RELAY_MAYBE_SENT.has(e.code)));
-    if (!maybeSent) {
+    if (!maybeSent && sending) {
+      // The relay refused it, but it has seen the proof, which stays valid until the note is spent:
+      // both new notes stay kept (dead), and the note is spendable again and checked on every refresh.
+      if (exact) tryStore(() => void store.markDead(exact!.handle));
+      if (change) tryStore(() => void store.markDead(change!.handle));
+      tryStore(() => void store.update(note.handle, { status: "unspent", recheck: true }));
+    } else if (!maybeSent) {
+      // nothing left this server: the notes it would have made are forgotten
       release();
       if (exact) tryStore(() => store.remove(exact!.handle));
       if (change) tryStore(() => store.remove(change!.handle));

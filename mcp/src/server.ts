@@ -1458,7 +1458,15 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const maybeSent = Boolean(hash) || (sending && mayHaveSent(err, viaRelay));
       // Broadcast but unconfirmed still counts against the limit, to be safe.
       settleSpend(gate, maybeSent ? "unconfirmed" : "failed", { hash, reason: error });
-      if (!maybeSent) {
+      if (!maybeSent && sending) {
+        // Refused, but the relay (or the wallet's RPC) has seen the proof, which stays valid until
+        // the note is spent: the change and the payment stay kept (dead), and the note is spendable
+        // again and checked on every refresh, so whichever send lands first, nothing is lost.
+        if (change) tryStore(() => void notes.markDead(change!.handle));
+        if (sent) tryStore(() => void notes.markDead(sent!.handle));
+        if (input.handle) tryStore(() => void notes.update(input.handle!, { status: "unspent", recheck: true }));
+      } else if (!maybeSent) {
+        // nothing left this server: the notes it would have made are forgotten
         release();
         if (change) tryStore(() => notes.remove(change!.handle));
         if (sent) tryStore(() => notes.remove(sent!.handle));
