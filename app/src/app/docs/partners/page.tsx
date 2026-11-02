@@ -279,7 +279,7 @@ curl https://gloam.trade/api/v1/relay \\
         says which networks the relay can submit on right now.
       </p>
 
-      <h2>Private swaps</h2>
+      <h2 id="swaps">Private swaps</h2>
       <p>
         A private swap spends one note from the private balance, buys the other
         asset on a public DEX, and lands it back in the vault as a new note, all
@@ -508,7 +508,7 @@ curl https://gloam.trade/api/v1/relay \
         code, status and request id.
       </p>
       <pre>
-        <code>{`import { GloamApiClient, settleGloamPayment } from "@gloamtrade/sdk";
+        <code>{`import { GloamApiClient, settleGloamPayment, buildSwapIntent, sendSwap } from "@gloamtrade/sdk";
 
 const gloam = new GloamApiClient({ apiKey: process.env.GLOAM_API_KEY! });
 
@@ -519,7 +519,12 @@ const report = await gloam.verifyProof(proofText);
 const { url } = await gloam.paymentRequest({ to, asset: "USDG", amount: "25" });
 
 // x402 sellers: sweep received payments through the relay with your key
-await settleGloamPayment({ ...params, submit: gloam.submitter() });`}</code>
+await settleGloamPayment({ ...params, submit: gloam.submitter() });
+
+// private swaps: quote, prove locally, keep the recovery record, send with your key
+const quote = await gloam.swapQuote({ chainId: 4663, assetIn, assetOut, amountIn });
+const intent = await buildSwapIntent({ client, chainId: 4663, note, path, assetOut, shieldProver, unshieldProver });
+await sendSwap({ intent, client, save: keepRecord, submit: gloam.swapSubmitter() });`}</code>
       </pre>
 
       <h2>What is recorded</h2>

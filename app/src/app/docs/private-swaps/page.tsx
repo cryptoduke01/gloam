@@ -497,6 +497,30 @@ export default function DocsPrivateSwapsPage() {
         <Link href="/docs/privacy-model">what stays private</Link> and{" "}
         <Link href="/docs/chain#mainnet">networks</Link>.
       </p>
+
+      <h2 id="build">Swaps in your app or agent</h2>
+      <p>
+        The same swaps, with the same quotes and the same checks, are in the SDK and the MCP server.
+        A swap hides who swapped, not the tokens or the amounts.
+      </p>
+      <ul>
+        <li>
+          SDK (<code>@gloamtrade/sdk</code> 0.5.0): <code>quoteSwap</code>, <code>buildSwapIntent</code>,{" "}
+          <code>sendSwap</code>, and <code>readSwapOutcome</code>, <code>buildSwapRefund</code> and{" "}
+          <code>buildSwapExit</code> to always get the money back. See the{" "}
+          <a href="https://github.com/cryptoduke01/gloam/tree/main/packages/sdk#private-swaps">SDK README</a>.
+        </li>
+        <li>
+          Partner API: action <code>&quot;swap&quot;</code> on <code>POST /api/v1/relay</code>, and a read-only quote at{" "}
+          <code>POST /api/v1/swaps/quote</code>. See{" "}
+          <Link href="/docs/partners#swaps">the partner API</Link>.
+        </li>
+        <li>
+          MCP server (<code>@gloamtrade/mcp</code>): <code>gloam_swap_quote</code>,{" "}
+          <code>gloam_execute_private_swap</code> (proved on your machine, sent through the relay, under
+          the agent&apos;s spending limits) and <code>gloam_finish_swap</code>. The hosted server quotes only.
+        </li>
+      </ul>
     </DocsLayout>
   );
 }

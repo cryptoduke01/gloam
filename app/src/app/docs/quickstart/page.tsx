@@ -282,9 +282,9 @@ await wallet.writeContract({
         internal review. Kann Audits has since reviewed the vault contracts (
         <Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The testnets run on
         dev-ceremony keys with test funds. Everything here is real: real proofs,
-        real on-chain state, no mocks. Private swaps run in the app on both
-        mainnets (<Link href="/docs/private-swaps">private swaps</Link>); the
-        SDK does not build them yet. The old sealed trade is retired. See{" "}
+        real on-chain state, no mocks. Private swaps run in the app and the
+        SDK (<Link href="/docs/private-swaps">private swaps</Link>), and hide who
+        swapped, not the tokens or the amounts. The old sealed trade is retired. See{" "}
         <Link href="/docs/production">the production gate</Link>.
       </p>
     </DocsLayout>
