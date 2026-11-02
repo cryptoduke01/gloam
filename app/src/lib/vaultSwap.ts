@@ -394,8 +394,8 @@ export const ETHEREUM_SWAP_POOLS: readonly PoolKey[] = [
   hookless(ETH_EURC, ETH_USDC, 300, 6),
 ];
 
-/** The dollar stablecoins, whose pairs barely move, so a swap between two asks a thinner buffer. */
-const DOLLARS: readonly Address[] = [RH_USDG, BASE_USDC, BASE_USDT, ETH_USDC, ETH_USDT, ETH_USDG];
+/** The dollar stablecoins, whose pairs barely move, so a swap between two asks a thinner buffer. 6 decimals each. */
+export const DOLLARS: readonly Address[] = [RH_USDG, BASE_USDC, BASE_USDT, ETH_USDC, ETH_USDT, ETH_USDG];
 
 // ---------------------------------------------------------------- Tempo (Stablecoin DEX)
 
@@ -524,8 +524,7 @@ export function isSwapAsset(chainId: number, asset: string, router?: string | nu
  */
 export function swapBufferBps(chainId: number, assetIn?: Address, assetOut?: Address): number {
   if (chainId === 4217) return 10;
-  const dollars = (a?: Address) => Boolean(a) && DOLLARS.some((d) => same(d, a!));
-  return chainId !== 4663 && dollars(assetIn) && dollars(assetOut) ? 10 : 50;
+  return chainId !== 4663 && isDollar(assetIn) && isDollar(assetOut) ? 10 : 50;
 }
 
 // ---------------------------------------------------------------- contract
@@ -1203,10 +1202,67 @@ export type SwapPlan = {
    * in basis points (pool fees cancel out): the price impact. null when unknown.
    */
   impactBps?: number | null;
+  /** Between two dollar stablecoins: how far the route's rate falls below a dollar for a dollar. */
+  pegBps?: number | null;
 };
 
 /** Above this price impact the swap tab warns that a smaller amount gets a better rate. */
 export const IMPACT_WARN_BPS = 100;
+/**
+ * On Base and Ethereum a quote past this impact is refused. Their stablecoin pools hold a
+ * few hundred dollars at the market price and far more at any price: Base's EURC / USDC
+ * pool fills $10,000 at 13 cents on the dollar, without reverting, so a warning is not enough.
+ */
+export const IMPACT_STOP_BPS = 200;
+/** How far below a dollar for a dollar two dollar stablecoins may trade, in basis points, before the swap tab says so. */
+export const PEG_WARN_BPS = 50;
+/** And before the quote is refused: a pool this far off is drained or stale, or one of the two has lost its peg. */
+export const PEG_STOP_BPS = 200;
+
+/**
+ * A swap against market prices, on the same chains. A euro pair has no peg to hold it
+ * to, so the app weighs what goes in and what comes out at the marks it shows, fees
+ * included. It warns, and past the stop it won't send: marks are off-chain, so this
+ * lives in the swap tab alone, and no mark means no check.
+ */
+export const VALUE_WARN_BPS = 200;
+export const VALUE_STOP_BPS = 400;
+
+/** How much less `getUsd` is than `payUsd`, in basis points, never below 0. */
+export function valueGapBps(payUsd: number, getUsd: number): number | null {
+  if (!(payUsd > 0) || !(getUsd > 0)) return null;
+  return Math.max(0, Math.round((1 - getUsd / payUsd) * 10_000));
+}
+
+const CHECKED_CHAINS: readonly number[] = [8453, 1];
+
+/** Whether quotes on a chain are held to IMPACT_STOP_BPS and PEG_STOP_BPS. */
+export function swapChecked(chainId: number): boolean {
+  return CHECKED_CHAINS.includes(chainId);
+}
+
+const isDollar = (a?: Address) => Boolean(a) && DOLLARS.some((d) => same(d, a!));
+
+/** How far `out` falls below a dollar for a dollar of `amountIn`, in basis points, never below 0. */
+export function pegGapBps(amountIn: bigint, out: bigint): number {
+  if (amountIn <= 0n) return 0;
+  const bps = 10_000n - (out * 10_000n) / amountIn;
+  return bps > 0n ? Number(bps) : 0;
+}
+
+/** Why a quote was refused, and about the most of the note that would pass. null: no size would. */
+export class SwapQuoteRefused extends Error {
+  constructor(
+    message: string,
+    readonly fitsIn: bigint | null = null
+  ) {
+    super(message);
+    this.name = "SwapQuoteRefused";
+  }
+}
+
+export const SWAP_TOO_THIN = "This pool is too thin for that amount.";
+export const SWAP_OFF_PEG = "These two are too far apart right now. Nothing was swapped.";
 
 /**
  * The best swap of a note worth `amountIn` of `assetIn` into `assetOut`: the
@@ -1267,9 +1323,39 @@ export async function planVaultSwap(client: PublicClient, chainId: number, p: Sw
   if (amountOut <= 0n) throw new Error("That amount is too small to swap.");
   const small = probe > 0n ? outs[routes.length + best]! : 0n;
   const impactBps = small > 0n ? priceImpactBps(available, outs[best]!, probe, small) : null;
+  const pegBps = isDollar(p.assetIn) && isDollar(p.assetOut) ? pegGapBps(available, outs[best]!) : null;
+  if (swapChecked(chainId)) {
+    if (pegBps !== null && pegBps > PEG_STOP_BPS) throw new SwapQuoteRefused(SWAP_OFF_PEG);
+    if (impactBps !== null && impactBps > IMPACT_STOP_BPS) {
+      const fits = await largestFair(client, r, route, p, available, probe, small);
+      throw new SwapQuoteRefused(SWAP_TOO_THIN, fits > 0n ? noteFor(fits, p.feeBps) : null);
+    }
+  }
   const cost = await v4ExactOut(client, r, route, p.assetIn, p.assetOut, amountOut);
   if (cost > available) throw new Error("The price is moving too fast. Try again in a moment.");
-  return { router: r.address, available, amountOut, cost, leftover: available - cost, route, impactBps };
+  return { router: r.address, available, amountOut, cost, leftover: available - cost, route, impactBps, pegBps };
+}
+
+/** The note that brings in about `arrives` after the vault's fee. */
+function noteFor(arrives: bigint, feeBps: number): bigint {
+  return (arrives * 10_000n) / (10_000n - BigInt(feeBps));
+}
+
+/** The largest of a few halvings of `available` that `route` fills within IMPACT_WARN_BPS. 0 when none does. */
+async function largestFair(
+  client: PublicClient,
+  r: SwapRouter,
+  route: PoolKey[],
+  p: SwapAsk,
+  available: bigint,
+  probe: bigint,
+  small: bigint
+): Promise<bigint> {
+  const sizes = [2n, 4n, 8n, 16n, 32n, 64n].map((d) => available / d).filter((a) => a > probe);
+  if (!sizes.length) return 0n;
+  const outs = await v4ExactInAll(client, r, sizes.map(() => route), p.assetIn, p.assetOut, sizes);
+  const i = sizes.findIndex((a, j) => outs[j]! > 0n && priceImpactBps(a, outs[j]!, probe, small) <= IMPACT_WARN_BPS);
+  return i < 0 ? 0n : sizes[i]!;
 }
 
 /** 1 - (out / in) / (smallOut / smallIn), in basis points, never below 0. */
