@@ -25,6 +25,7 @@ import {
   bridgeChain,
   bridgeToken,
   privateBridgeable,
+  swapLeftover,
   swapSource,
   validRefundAddress,
   type PrivateBridgeQuote,
@@ -102,7 +103,8 @@ function evmSteps(steps: any[], chainId: number, sender: string): PrivateBridgeT
  *   - an EVM wallet on another chain: an approve (for a token) and a deposit,
  *     which the wallet signs on that chain;
  *   - this chain's own coin (ETH on Robinhood Chain): one swap that also makes
- *     the deposit, simulated here; the price buffer comes back to the wallet.
+ *     the deposit, simulated here; what's left of the swap comes back to the
+ *     wallet as the stablecoin.
  * If the call can't run, Relay sends the stablecoin to `recipient` instead.
  * Nothing here holds money or a secret: the commitment and proof are public.
  */
@@ -357,6 +359,7 @@ export async function POST(req: Request) {
 
   const feeUsd = ["relayer", "app"].reduce((sum, k) => sum + Number(data?.fees?.[k]?.amountUsd ?? 0), 0);
   const gasUsd = Number(data?.fees?.gas?.amountUsd ?? NaN);
+  const paidUsd = Number.isFinite(usdIn) ? Math.round(usdIn * 100) / 100 : null;
   const quote: PrivateBridgeQuote = {
     requestId,
     solanaTx,
@@ -368,10 +371,10 @@ export async function POST(req: Request) {
       chain: chain.name,
       chainId: chain.id,
       logo: token.logo,
-      usd: Number.isFinite(usdIn) ? Math.round(usdIn * 100) / 100 : null,
+      usd: paidUsd,
     },
     receive: { amount: amountText, symbol: dest.token.symbol, chain: dest.chain, logo: dest.token.logo },
-    extra: sameChain && outAmount > amount ? formatUnits(outAmount - amount, dest.token.decimals) : null,
+    extra: sameChain ? swapLeftover({ out: outAmount, amount, decimals: dest.token.decimals, paidUsd, feeUsd }) : null,
     feeUsd: Math.round(feeUsd * 100) / 100,
     gasUsd: Number.isFinite(gasUsd) ? Math.round(gasUsd * 100) / 100 : null,
     timeSec: Number(data?.details?.timeEstimate ?? 0),
