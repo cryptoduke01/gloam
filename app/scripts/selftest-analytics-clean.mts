@@ -75,4 +75,19 @@ eq(cleanRef("https://t.me/gloamtrade"), "https://t.me/gloamtrade");
 eq(cleanRef("data:text/html,hi"), null);
 eq(cleanRef("not a url"), null);
 
+// the intake takes only the events the app sends
+{
+  const { TRACK_EVENTS, isTrackEvent } = await import("../src/lib/trackEvents");
+  const { POST } = await import("../src/app/api/collect/route");
+  const post = (t: unknown) =>
+    POST(new Request("http://localhost/api/collect", { method: "POST", headers: { "x-forwarded-for": "198.51.100.9" }, body: JSON.stringify({ t, path: "/" }) }));
+  for (const t of ["junk_event", "total", "pageview_", "PAGEVIEW", "", 42, null, `shield_success${"x".repeat(40)}`]) {
+    eq(isTrackEvent(t), false, String(t));
+    eq((await post(t)).status, 400, `refused: ${String(t)}`);
+  }
+  const names: readonly string[] = TRACK_EVENTS;
+  eq(names.every((t) => /^[a-z][a-z0-9_]{0,47}$/.test(t) && t !== "total" && isTrackEvent(t)), true, "every event the app sends is a plain name");
+  eq(isTrackEvent("pageview") && isTrackEvent("shield_success") && isTrackEvent("bridge_private_sent"), true);
+}
+
 console.log(`analytics clean: ${n} passed`);

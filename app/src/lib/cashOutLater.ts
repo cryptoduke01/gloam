@@ -228,10 +228,21 @@ export async function cashOutJobStatus(id: string): Promise<CashOutJobView | "go
  */
 export type CancelResult = "cancelled" | "over" | "going" | "gone" | null;
 
-export async function cancelCashOut(id: string): Promise<CancelResult> {
+/**
+ * Asks the relay to cancel `note`'s cash out (job `id`). The relay cancels only
+ * for whoever holds the note: the request carries the note's nullifier, worked
+ * out here from its secret.
+ */
+export async function cancelCashOut(id: string, note: LocalNote): Promise<CancelResult> {
   if (readDemo()) return demoCancelCashOut(id);
+  const nullifier = await nullifierOf(note);
+  if (!nullifier) return null;
   try {
-    const res = await fetch(`/api/relay/scheduled?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await fetch(`/api/relay/scheduled?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nullifier }),
+    });
     if (res.status === 404) return "gone";
     if (!res.ok) return null;
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; status?: string };

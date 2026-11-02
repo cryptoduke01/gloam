@@ -28,6 +28,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+
+/** What the MPP guide pins: the SDK package's own version, read from its package.json (never a copy here that goes stale). */
+const SDK_PIN = new RegExp(`@gloamtrade/sdk@\\^${(JSON.parse(readFileSync(new URL("../../packages/sdk/package.json", import.meta.url), "utf8")) as { version: string }).version.replace(/\./g, "\\.")}`);
 
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -252,7 +256,7 @@ await checkAsync("Base Sepolia: the remote MCP lists it and gives final-key snip
   assert.equal(mpp.isError, false);
   assert.match(mpp.text, /testnetNetwork\(\\"base\\"\)/);
   assert.match(mpp.text, /BASE_SEPOLIA_USDC/);
-  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.7/);
+  assert.match(mpp.text, SDK_PIN, "the SDK version the guide installs is the SDK's own");
   const info = await toolJson("gloam_info");
   assert.match(info.text, /Base Sepolia \(84532\)/);
 });
