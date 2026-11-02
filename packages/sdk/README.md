@@ -129,7 +129,7 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 - **EURC is a euro stablecoin.** Never count it as a dollar.
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
-- No bridge into Ethereum yet. Private swaps there follow the next router: see the [docs](https://gloam.trade/docs/private-swaps).
+- The bridge (through Relay) brings USDC into Ethereum, as into Base. Private swaps there follow the next router: see the [docs](https://gloam.trade/docs/private-swaps).
 ### Ethereum Sepolia
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
