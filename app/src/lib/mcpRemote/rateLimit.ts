@@ -8,10 +8,22 @@
  * when Redis is not set or does not answer. Counts for cheap reads (LOCAL_BUCKETS)
  * stay in memory: every request there used to cost Redis commands, and the
  * Vercel firewall already limits each IP across instances.
- * IPs are stored hashed, never in the clear, and expire with their window.
+ *
+ * What a count is about (an IP, a wallet, a spend marker) is never in the
+ * clear: a key names it by an HMAC under the server secret GLOAM_RATE_LIMIT_KEY
+ * (32 random bytes or more, hex or base64) and the bucket, so the name can't
+ * be worked back from a guess without that secret, and one subject's names in
+ * two buckets don't match. Each key expires a random while after its
+ * window ends, so keys written by one request don't expire together.
+ * Without the secret (or with one too short) names fall back to a plain hash,
+ * logged once, and every limit still holds: set it to give keys their
+ * protection. Setting or rotating it starts every window afresh, once.
  */
-import { createHash } from "crypto";
+import { createHash, createHmac, randomInt } from "crypto";
 import { redisConfigured } from "@/lib/tractionStore";
+
+/** The server secret that names the keys of shared counts (see above). Never logged. */
+export const RATE_KEY_ENV = "GLOAM_RATE_LIMIT_KEY";
 
 const WINDOW_SEC = 60;
 
@@ -88,8 +100,51 @@ export function ipBucket(ip: string, v6Bits: V6Bits = 64): string {
   return `${groups.slice(0, v6Bits / 16).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/${v6Bits}`;
 }
 
-function ipKey(ip: string, v6Bits?: V6Bits): string {
-  return createHash("sha256").update(`gloam-mcp|${ipBucket(ip, v6Bits)}`).digest("hex").slice(0, 32);
+let keyWarned = false;
+function warnKey(why: "missing" | "short") {
+  if (keyWarned) return;
+  keyWarned = true;
+  console.warn("gloam_rate_limit_key_unset", JSON.stringify({ env: RATE_KEY_ENV, why, want: "32 random bytes or more, hex or base64" }));
+}
+
+/** The secret behind key names, or null when it is not set (or too short to use). */
+function rateKeySecret(): Buffer | null {
+  const raw = process.env[RATE_KEY_ENV]?.trim();
+  if (!raw) {
+    warnKey("missing");
+    return null;
+  }
+  const bytes = /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0 ? Buffer.from(raw, "hex") : Buffer.from(raw, "base64");
+  if (bytes.length < 32) {
+    warnKey("short");
+    return null;
+  }
+  return bytes;
+}
+
+/** Whether key names are keyed (GLOAM_RATE_LIMIT_KEY is set and long enough). */
+export function rateKeysKeyed(): boolean {
+  return rateKeySecret() !== null;
+}
+
+/**
+ * What a key says about who is counted: an HMAC under the server secret, over
+ * the bucket too, so one subject has a different name in every bucket. Without
+ * the secret, a plain hash.
+ */
+function ipKey(bucket: string, ip: string, v6Bits?: V6Bits): string {
+  const subject = ipBucket(ip, v6Bits);
+  const secret = rateKeySecret();
+  if (secret) return createHmac("sha256", secret).update(`gloam-rl|${bucket}|${subject}`).digest("hex").slice(0, 32);
+  return createHash("sha256").update(`gloam-mcp|${subject}`).digest("hex").slice(0, 32);
+}
+
+/**
+ * A key's lifetime: two windows, so it outlives the window it counts, plus a
+ * random part of up to one more, so keys written together expire apart.
+ */
+export function keyTtl(windowSec: number): number {
+  return windowSec * 2 + randomInt(0, windowSec + 1);
 }
 
 function memCounts(): Map<string, { n: number; exp: number }> {
@@ -139,9 +194,10 @@ async function redisCall(cmds: (string | number)[][]): Promise<{ result?: unknow
 
 /** One round trip per hit: the count, and the expiry when the key has none yet. */
 async function redisIncr(key: string, windowSec: number): Promise<number> {
+  const ttl = keyTtl(windowSec);
   const json = await redisCall([
     ["INCR", key],
-    ["EXPIRE", key, windowSec * 2, "NX"],
+    ["EXPIRE", key, ttl, "NX"],
   ]);
   const n = Number(json?.[0]?.result);
   if (!Number.isFinite(n) || n < 1) {
@@ -151,7 +207,7 @@ async function redisIncr(key: string, windowSec: number): Promise<number> {
   }
   // a Redis without EXPIRE NX (before 7.0) refuses it: set the expiry the old way on the first hit.
   // If that fails too the key only lingers in storage; the next window counts under a new key.
-  if (n === 1 && json?.[1]?.error) await redisCall([["EXPIRE", key, windowSec * 2]]).catch(() => {});
+  if (n === 1 && json?.[1]?.error) await redisCall([["EXPIRE", key, ttl]]).catch(() => {});
   return n;
 }
 
@@ -175,7 +231,7 @@ export async function hitRateLimit(
   const window = Math.floor(now / 1000 / span);
   // one-minute keys keep their old shape; longer windows name their length
   const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
-  const key = `${PREFIX}${bucket}:${ipKey(ip, opts.v6Bits)}:${slot}`;
+  const key = `${PREFIX}${bucket}:${ipKey(bucket, ip, opts.v6Bits)}:${slot}`;
   let n: number;
   if (redisConfigured() && !LOCAL_BUCKETS.has(bucket)) {
     try {
