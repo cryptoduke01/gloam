@@ -26,6 +26,7 @@ import type { LocalNote } from "./shield";
 import {
   connectRecovery,
   keysFromSecret,
+  noPasskeyRecovery,
   passkeySecret,
   turnOnWithWallet,
   type RecoveryWallet,
@@ -91,12 +92,24 @@ export function markBackupAsked(address: string) {
 
 /**
  * Backs up with a passkey. "create" makes a new one for this backup; "use" lets
- * the person pick one they made before, on any device it synced to, which also
- * brings back what was saved with it. Returns how many notes came back.
+ * the person pick one they backed up with before, on any device it synced to, and
+ * brings back what was saved with it. "use" needs that backup to exist, as restoring
+ * in Settings does: picking any other passkey (the sign-in one, say) says no backup
+ * was found, instead of starting an empty one and calling it backed up. Returns how
+ * many notes came back.
  */
 export async function backUpWithPasskey(address: string, mode: "create" | "use"): Promise<number> {
   const keys = await keysFromSecret("passkey", await passkeySecret(mode));
-  return connectRecovery(keys, address);
+  return connectRecovery(keys, address, { mustExist: mode === "use" });
+}
+
+/**
+ * This browser or passkey can't make a passkey backup at all, so the wallet's
+ * signature is the only other way. A prompt that was closed, however fast, is not
+ * that: the passkey stays on offer.
+ */
+export function passkeyBackupUnavailable(e: unknown): boolean {
+  return noPasskeyRecovery(e);
 }
 
 /**

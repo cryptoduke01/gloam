@@ -257,6 +257,11 @@ function randomBytes(n: number): Uint8Array<ArrayBuffer> {
 const NO_PRF =
   "This browser or passkey can't create a recovery key. Use Chrome, Safari or Edge with a passkey saved to your Google or Apple account, or use your wallet.";
 
+/** The browser or passkey can't give a recovery key at all (no PRF), as opposed to a prompt that was closed. */
+export function noPasskeyRecovery(e: unknown): boolean {
+  return e instanceof RecoveryError && e.code === "unsupported" && e.message === NO_PRF;
+}
+
 /** A passkey call that fails this fast never showed a prompt: the browser refused it outright. */
 const NO_PROMPT_MS = 1_000;
 

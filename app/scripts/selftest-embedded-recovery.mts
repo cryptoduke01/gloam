@@ -246,6 +246,45 @@ await test("the wallet-signature backup works when chosen, and is the one Turnke
   assert.ok(!/—/.test(er.TURNKEY_CAN_OPEN_TEXT));
 });
 
+await test("'I backed up before' needs a backup: the sign-in passkey alone finds none and starts nothing", async () => {
+  await freshWorld();
+  await vault.setAllNotes([note("e", GLOAM_WALLET.address)]);
+  // a passkey with no backup behind it: the one made for signing in, say
+  const signIn = randomBytes(16).toString("hex");
+  credentials.set(signIn, randomBytes(32));
+  lastCreated = signIn;
+  const e = await er.backUpWithPasskey(GLOAM_WALLET.address, "use").catch((x: unknown) => x);
+  assert.ok(e instanceof recovery.RecoveryError && e.code === "notfound", "no backup found");
+  assert.equal(recovery.recoveryState().on, false, "recovery stays off");
+  assert.equal(puts.length, 0, "no empty backup was started");
+  // with the passkey a backup was made with, it restores
+  await er.backUpWithPasskey(GLOAM_WALLET.address, "create");
+  await newDevice();
+  assert.equal(await er.backUpWithPasskey(GLOAM_WALLET.address, "use"), 1);
+});
+
+await test("a passkey prompt closed fast is a cancel: the passkey stays offered; only no PRF moves to the signature", async () => {
+  const create = (navigator.credentials as { create: unknown }).create;
+  const nav = navigator.credentials as unknown as { create: () => Promise<unknown> };
+  // closed at once (NotAllowedError within a second)
+  nav.create = async () => {
+    throw new DOMException("The operation either timed out or was not allowed.", "NotAllowedError");
+  };
+  const fast = await recovery.passkeySecret("create").catch((x: unknown) => x);
+  assert.ok(fast instanceof recovery.RecoveryError && fast.code === "unsupported", "the fast close the app reads as 'didn't open'");
+  assert.equal(er.passkeyBackupUnavailable(fast), false, "a fast close is not 'no passkey backup here'");
+  // an authenticator with no PRF at all
+  nav.create = async () => ({ rawId: new ArrayBuffer(16), getClientExtensionResults: () => ({ prf: { enabled: false } }) });
+  const noPrf = await recovery.passkeySecret("create").catch((x: unknown) => x);
+  assert.equal(er.passkeyBackupUnavailable(noPrf), true);
+  nav.create = async () => {
+    throw new DOMException("not supported", "NotSupportedError");
+  };
+  assert.equal(er.passkeyBackupUnavailable(await recovery.passkeySecret("create").catch((x: unknown) => x)), true);
+  assert.equal(er.passkeyBackupUnavailable(new Error("anything else")), false);
+  (navigator.credentials as { create: unknown }).create = create;
+});
+
 await test("turning recovery off is remembered, and storage that refuses writes doesn't stop it", async () => {
   await freshWorld();
   await er.backUpWithPasskey(GLOAM_WALLET.address, "create");

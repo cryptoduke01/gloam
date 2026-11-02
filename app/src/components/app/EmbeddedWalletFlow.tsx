@@ -17,6 +17,7 @@ import {
   backupAsked,
   backupOffer,
   markBackupAsked,
+  passkeyBackupUnavailable,
   otherWalletNotes,
   type BackupOffer,
   type PasskeySupportLevel,
@@ -297,14 +298,20 @@ function useBackup(address: string | null, embeddedConnected: boolean, justCreat
       setAsked(true);
       setAction({ kind: "done", with: using, restored });
     } catch (e) {
-      const { RecoveryError } = await import("@/lib/recovery");
-      // This browser or passkey can't make a passkey backup: offer the signature, with its warning.
-      if (e instanceof RecoveryError && e.code === "unsupported" && how !== "signature") {
+      const { PROMPT_DID_NOT_OPEN } = await import("@/lib/passkey");
+      // Only a browser or passkey that can't make a passkey backup moves the offer to the
+      // signature, with its warning. A prompt closed (however fast) leaves the passkey on offer.
+      if (passkeyBackupUnavailable(e) && how !== "signature") {
         setForceSignature(true);
         setAction(null);
         return;
       }
-      const text = e instanceof Error ? e.message : "The backup didn't turn on. Try again.";
+      const text =
+        e instanceof Error && e.message === PROMPT_DID_NOT_OPEN
+          ? "The passkey prompt closed. Nothing changed. Try again when you're ready."
+          : e instanceof Error
+            ? e.message
+            : "The backup didn't turn on. Try again.";
       setAction({ kind: "error", text, offer, returning });
     }
   }
