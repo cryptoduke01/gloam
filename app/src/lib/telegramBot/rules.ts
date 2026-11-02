@@ -49,6 +49,25 @@ export function messageText(msg: TgMessage): string {
   return (msg.text ?? msg.caption ?? "").trim();
 }
 
+/**
+ * Every link Telegram marked in a message: a url entity as written, and where
+ * a text_link (a link behind other words) points. Telegram knows every domain
+ * ending, so these catch links the text pattern can't.
+ */
+export function entityLinks(msg: TgMessage): string[] {
+  const text = msg.text ?? msg.caption ?? "";
+  const out: string[] = [];
+  for (const e of msg.entities ?? msg.caption_entities ?? []) {
+    if (e.type === "url") {
+      const link = text.slice(e.offset, e.offset + e.length).trim();
+      if (link) out.push(link);
+    } else if (e.type === "text_link" && typeof e.url === "string" && e.url.trim()) {
+      out.push(e.url.trim());
+    }
+  }
+  return out;
+}
+
 /** Which topic a group message is in. Replies inside General carry a thread id but are not topic messages. */
 export function topicOf(msg: TgMessage): number {
   return msg.is_topic_message && msg.message_thread_id ? msg.message_thread_id : TOPIC.general;
@@ -398,8 +417,18 @@ const DM_CHAT =
 export const INVITATION = /^\W*(?:if|when)\s+(?:you|u|ya|anyone|someone|any\s+of\s+you)\b/i;
 const WALLET_FIX =
   /\b(?:validate|validation|rectify|rectification|reactivate|synchroni[sz]e|resync|whitelist)\s+(?:your\s+|ur\s+|the\s+)?wallets?\b|\bsync\s+(?:your|ur)\s+wallets?\b|\bwallet\s+(?:validation|rectification|synchroni[sz]ation)\b/i;
-export const LINK_RE =
-  /\b(?:https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|t\.me\/[^\s<>"']+|(?:[a-z0-9-]+\.)+(?:com|io|xyz|org|net|app|finance|link|site|online|live|pro|top|info|co|me|cc|vip|club|fi|dev|gg|ai|so|claims?|gift|cash|money|exchange|network|tech|trade)(?:\/[^\s<>"']*)?)/gi;
+/**
+ * Endings that look like a domain's but are file types or wallet names, never
+ * a top-level domain ("app.tsx", "duke.eth"). Any other ending of two or more
+ * letters (or an encoded one, xn--) is read as a domain: new and country
+ * endings (.ru, .cfd, .support) are where look-alike sites live.
+ */
+const NOT_A_TLD =
+  "js|jsx|mjs|cjs|ts|tsx|json|jsonl|txt|csv|tsv|png|jpe?g|gif|webp|svg|pdf|html?|s?css|sol|eth|mp[34]|wav|ya?ml|toml|lock|log|env|ini|cfg|exe|dll|wasm|zkey|circom|rb|java|kt|swift|cpp|hpp|go|gz|tar|rar";
+export const LINK_RE = new RegExp(
+  `\\b(?:https?:\\/\\/[^\\s<>"']+|www\\.[^\\s<>"']+|t\\.me\\/[^\\s<>"']+|(?:[a-z0-9-]+\\.)+(?!(?:${NOT_A_TLD})(?![a-z0-9-]))(?:xn--[a-z0-9-]{2,59}|[a-z]{2,24})(?![a-z0-9-])(?:\\/[^\\s<>"']*)?)`,
+  "gi"
+);
 const LURE =
   /\b(?:wallets?|claim(?:ing|ed)?|airdrops?|giveaways?|rewards?|bonus|free (?:tokens?|money|usdc|usdt|eth|crypto)|connect|whitelist|presale|mint|eligible|allocation)\b/i;
 /**
@@ -629,19 +658,19 @@ export function says(re: RegExp, text: string): boolean {
  * flagged. Look-alike letters, digits for letters ("airdr0p") and spaced-out
  * words are read the way a person reads them.
  */
-export function scamReason(raw: string, glued = false): ScamReason | null {
+export function scamReason(raw: string, glued = false, links: readonly string[] = []): ScamReason | null {
   const text = scorable(raw);
   let warned: ScamReason | null = null;
   for (const t of spellings(text)) {
-    const why = wordsReason(t, text, glued);
+    const why = wordsReason(t, text, glued, links);
     if (why && !WARN_ONLY.has(why)) return why;
     warned ??= why;
   }
   return warned;
 }
 
-/** scamReason for one spelling of the text; links are read from the text as written. */
-function wordsReason(text: string, written: string, glued = false): ScamReason | null {
+/** scamReason for one spelling of the text; links are read from the text as written, plus the ones Telegram marked (`links`). */
+function wordsReason(text: string, written: string, glued = false, links: readonly string[] = []): ScamReason | null {
   for (const re of [SECRET_REQUEST, SECRET_QUESTION]) {
     const m = re.exec(text);
     if (m && !negated(text, m.index, m[0])) return "secret_request";
@@ -666,7 +695,7 @@ function wordsReason(text: string, written: string, glued = false): ScamReason |
   // safety words around it ("careful", "not fake") change nothing, a negation or a question in its own sentence does
   if (says(MIGRATION, text) && says(DROP, text) && says(PRIVATE_ASK, text)) return "migration_airdrop";
   if (LURE.test(text)) {
-    for (const link of written.match(LINK_RE) ?? []) {
+    for (const link of [...(written.match(LINK_RE) ?? []), ...links]) {
       const { host } = hostOf(link);
       if (!linkAllowed(link) && (host === "t.me" || !SAFE_HOSTS.some((s) => onHost(host, s)))) return "phishing_link";
     }
@@ -811,8 +840,8 @@ export function roleScam(u: { first_name?: string; last_name?: string }, raw: st
  * split-scam joiner), where a harmless "holders, the docs are updated" and a
  * later "dm me if you get stuck" must not read as the lure.
  */
-export function memberScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false): ScamReason | null {
-  const words = scamReason(raw, glued);
+export function memberScam(u: { first_name?: string; last_name?: string }, raw: string, glued = false, links: readonly string[] = []): ScamReason | null {
+  const words = scamReason(raw, glued, links);
   if (words && !WARN_ONLY.has(words)) return words;
   const role = roleScam(u, raw, glued);
   return role && !WARN_ONLY.has(role) ? role : (words ?? role);
