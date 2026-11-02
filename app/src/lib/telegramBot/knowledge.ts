@@ -21,7 +21,7 @@ import {
   liveMainnetsByDay,
   mainnetPool,
 } from "@/lib/mainnet";
-import { VAULT_SWAP_V2_ROUTER } from "@/lib/vaultSwap";
+import { VAULT_SWAP_V2_ROUTER, swapV3Live } from "@/lib/vaultSwap";
 import { voteFacts } from "@/lib/vote/glim";
 
 /** Private swaps v2 on Robinhood Chain (lib/vaultSwap VAULT_SWAP_V2_ROUTER): the facts follow the switch. */
@@ -304,7 +304,10 @@ function baseFacts(): string | null {
     );
   }
   lines.push(
-    "- Bring money over (the bridge) brings USDC into Base mainnet. There are no private swaps on Base yet; they are planned, never give a date. Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
+    (swapV3Live(8453)
+      ? "- Bring money over (the bridge) brings USDC into Base mainnet."
+      : "- Bring money over (the bridge) brings USDC into Base mainnet. There are no private swaps on Base yet; they are planned, never give a date.") +
+      " Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
   );
   return lines.join("\n");
 }
@@ -321,7 +324,10 @@ function ethereumFacts(): string | null {
     "- Ethereum mainnet (chain ID 1): beta, joined after the 21 October launch. The vault takes USDC, USDT, USDG, PYUSD, EURC and ETH: 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 ETH per deposit and 1,000 ETH in total. Same fees as the other mainnets, same final keys. " + (ethereumSepoliaPool() ? "Its testnet is Ethereum Sepolia (see ETHEREUM SEPOLIA)." : "Ethereum has no Gloam testnet; Base Sepolia is the place to practise.") + " EURC is a euro stablecoin, never count it as dollars. Details, if someone asks: chain ID 1, currency ETH, explorer https://etherscan.io.",
     "- Gas on Ethereum costs far more than on the other chains. The Gloam relay pays it for private payments and cash outs, so while Ethereum gas is above the relay's limit (3 gwei unless the team changes it) the relay waits and the app says \"Ethereum gas is high right now; try again shortly\". A cash out for later still schedules and goes out once gas is back under the limit. Turning off Hide my wallet sends from the wallet instead, which pays its own gas and shows the wallet as the sender.",
     "- Depositing USDT on Ethereum can take two approvals in the wallet: Tether's token makes an old approval go to zero before a new one. That is expected.",
-    "- Bring money over (the bridge) brings USDC into Ethereum mainnet. There are no private swaps on Ethereum yet; never give a date. Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
+    (swapV3Live(1)
+      ? "- Bring money over (the bridge) brings USDC into Ethereum mainnet."
+      : "- Bring money over (the bridge) brings USDC into Ethereum mainnet. There are no private swaps on Ethereum yet; never give a date.") +
+      " Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
   ].join("\n");
 }
 
@@ -403,7 +409,7 @@ function mainnetLiveFacts(): string {
     "6. Turn on Recovery in Settings, or save a backup (Copy backup or Download), so a new device never loses your balance.",
     "",
     "GETTING MONEY IN ON MAINNET",
-    "- Bring money over (the bridge, powered by Relay): on Vault > Add, the Money on another chain? card, button Bring money over. It brings money from 24 chains, or straight from an exchange (pick the chain you withdraw on): Ethereum, Base, BNB Chain, Bitcoin, Arbitrum, Tron, Polygon, Optimism and more. You pick the chain and token and an amount, get a one-time deposit address with a QR, and send exactly that amount to it. It lands in your own wallet as USDG on Robinhood Chain, or as USDC on Tempo (listed in the vault as USDC.e). From 1 to 25,000 dollars at a time; the bridge fee and arrival time show first; usually a minute or two, Bitcoin waits for its confirmations. Bridging is public, like any deposit. Send only that token on that chain to that address, once.",
+    "- Bring money over (the bridge, powered by Relay): on Vault > Add, the Money on another chain? card, button Bring money over. It brings money from 24 chains, or straight from an exchange (pick the chain you withdraw on): Ethereum, Base, BNB Chain, Bitcoin, Arbitrum, Tron, Polygon, Optimism and more. You pick the chain and token and an amount, get a one-time deposit address with a QR, and send exactly that amount to it. It lands in your own wallet as USDG on Robinhood Chain, as USDC on Tempo (listed in the vault as USDC.e), or as USDC on Base or Ethereum mainnet. From 1 to 25,000 dollars at a time; the bridge fee and arrival time show first; usually a minute or two, Bitcoin waits for its confirmations. Bridging is public, like any deposit. Send only that token on that chain to that address, once.",
     "- Paying from your own wallet can go straight into the private balance in one step, when the panel offers it. Otherwise, when the money arrives the panel shows Add it privately, which you confirm yourself. Either way the deposit proof is made in your browser, which is what keeps it self-custodial.",
     "- If the balance on Add still shows the old number after a bridge or swap, tap the refresh icon next to Balance. The app also reads it again by itself a few seconds after money lands.",
     "- Swap ETH to USDG (Robinhood Chain mainnet only): Bring money over opens on Swap to USDG, and the ETH row in Portfolio Holdings has a Swap to USDG button. Type an amount or tap 25%, 50%, 75% or Max (Max keeps a little ETH back for gas). It shows the live price as you type: what you get, the rate, the least you get, the swap fee and the network fee (a few cents of ETH). Review the swap, then confirm once in your wallet. It is a public swap in your own wallet, powered by Relay, then Add it privately.",
@@ -425,6 +431,20 @@ function mainnetLiveFacts(): string {
     "- Prices: with a wallet connected, Vault > Swap prices any amount, even before you have a private balance. To swap, add one of the swap tokens in Vault > Add first. An example on Tempo: 1 pathUSD gets about 0.9964 USDC.e. Never give a $GLOAM swap price or rate; point to Vault > Swap for the live quote.",
     "- If a swap can't finish: once a swap is sent, anyone can make it fail on purpose by sending its first step on its own. The money can't go anywhere else. It comes back to the private balance by itself as a refund, less 1%: the vault's cash-out fee and a safety margin that goes to the Gloam treasury. If a swap just didn't go through (the price moved), nothing moved: refresh in a minute, then get a new quote. That swap isn't cancelled, though: anyone can send it again, and it lands if the price comes back within the buffer, exactly as the user made it, and the app counts it when it does. Spending the same money on anything else first ends the old swap.",
     "- Swaps only go through the Gloam relay, never from the wallet. If the button says The Gloam relay is off, try again a bit later.",
+    ...(swapV3Live(4663) ? ["- On Robinhood Chain a swap can use a native ETH note as well as a WETH note, on either side, wherever the vault takes ETH."] : []),
+    ...(swapV3Live(8453) ? ["- Private swaps are live on Base mainnet too: USDC, USDT, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise."] : []),
+    ...(swapV3Live(1)
+      ? [
+          "- Private swaps are live on Ethereum mainnet too: USDC, USDT, USDG, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise. PYUSD can be held and sent but not swapped: its plain Uniswap v4 pools return about $10 for $100.",
+          "- On Ethereum a swap has a smallest size. The relay pays the gas, so a swap's vault fee has to cover it, and the step that sets part of a note aside when there is one. The swap tab shows the smallest one right now. It moves with gas, so never give a number; point to the swap tab. \"Smallest swap right now\" means swap more, or wait for gas to fall. A refund isn't held to it, though a small one can wait for the next hour when the relay's hourly budget for small refunds is used up.",
+        ]
+      : []),
+    ...(swapV3Live(8453) || swapV3Live(1)
+      ? ["- On Base and Ethereum the app won't send a swap that moves its pool by more than 2%, or that gives less than 98 cents on the dollar between two dollar stablecoins. \"This pool is too thin for that amount\" comes with a size that fits. EURC's pool on Base is thin, so large EURC swaps there are refused."]
+      : []),
+    ...(swapV3Live(4663) || swapV3Live(4217) || swapV3Live(8453) || swapV3Live(1)
+      ? ["- A refund through the newest routers comes back less the vault's cash-out fee and 0.1%, not the 1% it can be through an earlier one.", "- If the vault's limit keeps a refund from landing, the money waits at the swap's escrow and comes back privately once there is room. The person can also take it out now, from the held line in Portfolio, to a wallet they pick. That pays a public address, so that money stops being private. Only they can do it. A swap through an earlier router has no exit.", `- A swap through the newest routers carries a deadline, ${swapV3Live(8453) || swapV3Live(1) ? "10 minutes after it is made on Base and Ethereum and 30 minutes elsewhere" : "30 minutes after it is made"}, and can't land after that. A refund and an exit have no deadline.`]
+      : []),
     SWAPS_V2
       ? "- The swap routers cannot be upgraded and have no function that moves money, and the vault itself did not change. On Robinhood Chain the router's owner can add a pool only with 3 days of public notice and can take one off at once, and can do nothing else. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps."
       : "- The swap routers have no owner, no admin and no upgrade, and the vault itself did not change. They were reviewed internally, not externally audited. Their addresses are on gloam.trade/docs/private-swaps; point there instead of writing them out. Full guide: gloam.trade/docs/private-swaps.",

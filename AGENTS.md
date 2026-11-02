@@ -36,7 +36,7 @@ Mainnet (final keys, beta deposit limits: 50,000 per deposit and 2,500,000 total
 - Proofs of funds, payment and payroll totals, checked at `/verify`
 - Agent payments over x402 and MPP, MCP server with spending limits
 - Stock tokens held and sent privately on the Robinhood Chain testnet (testnet only)
-- Private swaps from the private balance on the Robinhood Chain and Tempo mainnets (routers 0x34AB06208586A737Bf1607fa996Bc9162271c52d on Robinhood Chain, 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC on Tempo); the old sealed trade stays retired
+- Private swaps from the private balance on the Robinhood Chain and Tempo mainnets (routers 0x34AB06208586A737Bf1607fa996Bc9162271c52d on Robinhood Chain, 0xfCa1887e77f738ef9C5751974b3f3873d029F2DC on Tempo); the next router is built and not deployed, and nothing about it is live until DEPLOY-ROUTER.md says so; the old sealed trade stays retired
 - App root: `app/` · never revive `docs.gloam.trade`
 
 ## Audits

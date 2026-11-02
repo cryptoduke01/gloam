@@ -48,6 +48,8 @@ import {
   isShieldDeployed,
 } from "@/lib/shield";
 import { isClaimedNote, isSecuredClaim, isUnsecuredClaim } from "@/lib/claimSweep";
+import { canExitVaultSwap } from "@/lib/vaultSwap";
+import { SwapExit } from "./SwapExit";
 import { SealedField } from "@/components/ui/SealedField";
 import { ActivityFeed } from "./ActivityFeed";
 import { AddressChip } from "./AddressChip";
@@ -730,6 +732,7 @@ export function PortfolioView() {
                               : "A swap of this couldn't finish, so it's on its way back to your private balance."}
                           </p>
                         )}
+                        {canExitVaultSwap(n) && <SwapExit note={n} onDone={refreshVault} />}
                         {isUnsecuredClaim(n) && !n.unfunded && (
                           <p className="mt-0.5 text-[12.5px] text-warn">
                             Not secured yet, so the sender can still take it back.{" "}

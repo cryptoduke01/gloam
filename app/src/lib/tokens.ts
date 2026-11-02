@@ -298,6 +298,9 @@ export const ETHEREUM_SEPOLIA_TOKENS: OnchainToken[] = [
   { id: "eurc", symbol: "EURC", name: "Euro Coin", address: "0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4", decimals: 6, yahoo: "", kind: "stablecoin", coingecko: "euro-coin", peg: "EUR" },
 ];
 
+/** Native ETH, as a private swap lists it: the vault's address(0), on the chains that hold it. */
+export const NATIVE_ETH_TOKEN: OnchainToken = { id: "eth", symbol: "ETH", name: "Ether", address: "0x0000000000000000000000000000000000000000", decimals: 18, yahoo: "", kind: "token", coingecko: "ethereum" };
+
 /** ERC-20 tokens shieldable on a given chain (stablecoins first). */
 export function shieldTokensFor(chainId: number): OnchainToken[] {
   if (chainId === 11155111) return ETHEREUM_SEPOLIA_TOKENS;

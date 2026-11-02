@@ -163,6 +163,11 @@ function redisAnswer(cmd: (string | number)[]): { result?: unknown; error?: stri
       d.set(a[0]!, String(n));
       return { result: n };
     }
+    case "INCRBY": {
+      const n = Number(d.get(a[0]!) ?? 0) + Number(a[1]);
+      d.set(a[0]!, String(n));
+      return { result: n };
+    }
     case "EXPIRE":
       return { result: 1 };
     default:
@@ -500,7 +505,7 @@ await test("malformed memos are refused", () => {
 await test("relay refuses an oversize memo before any chain call", async () => {
   reset();
   await assert.rejects(
-    relayMemo(net, { paymentCommitment: H32, memo: memoOf(2049) }, "selftest-memo"),
+    relayMemo(net, { paymentCommitment: H32, memo: memoOf(2049) }),
     isRelayError("bad_request", 400, "The payment message is too large.")
   );
   assert.deepEqual(calls, []);
@@ -509,7 +514,7 @@ await test("relay refuses an oversize memo before any chain call", async () => {
 await test("relay posts the largest real ticket end to end", async () => {
   reset();
   const worst = await sealedMemo("\uD800".repeat(80));
-  assert.equal(await relayMemo(net, { paymentCommitment: H32, memo: worst }, "selftest-memo"), TX_HASH);
+  assert.equal(await relayMemo(net, { paymentCommitment: H32, memo: worst }), TX_HASH);
   assert.equal(calls[0], "eth_call:commitmentSeen");
   assert.ok(calls.includes("eth_estimateGas") && calls.includes("eth_sendRawTransaction"));
 });
@@ -902,17 +907,53 @@ await test("memo DoS: 40 strangers can't block the payer's ticketed heads-up", a
   assert.equal((await post("203.0.113.9", memoBody(pay, { ticket }))).status, 409, "and only a few");
 });
 
-await test("partner keys keep their own few per payment, apart from strangers and each other", async () => {
+await test("partner accounts keep their own few per payment, apart from strangers and each other", async () => {
   withMemoSecret(MEMO_SECRET);
   reset();
   const pay = payment();
   const body = { paymentCommitment: pay, memo: memoOf(64) };
   for (let i = 0; i < 10; i++) assert.equal(await relayMemo(net, body), TX_HASH);
   await assert.rejects(relayMemo(net, body), isRelayError("memo_sent", 409));
-  for (const key of ["key:key_a1b2", "key:key_c3d4"]) {
-    for (let i = 0; i < 3; i++) assert.equal(await relayMemo(net, body, key), TX_HASH);
-    await assert.rejects(relayMemo(net, body, key), isRelayError("memo_sent", 409));
+  for (const from of [{ partner: "ptr_a1b2c3", approved: true }, { partner: "ptr_d4e5f6", approved: false }]) {
+    for (let i = 0; i < 3; i++) assert.equal(await relayMemo(net, body, from), TX_HASH);
+    await assert.rejects(relayMemo(net, body, from), isRelayError("memo_sent", 409));
+    // the same account through another key, or approved since: still the same few
+    await assert.rejects(relayMemo(net, body, { ...from, approved: !from.approved }), isRelayError("memo_sent", 409));
   }
+});
+
+await test("memo budgets: an account no admin approved shares one budget with every such account, strangers' size, never the paid one", async () => {
+  withMemoSecret(MEMO_SECRET);
+  reset();
+  const counts = (globalThis as { __gloamMcpRate?: Map<string, { n: number }> }).__gloamMcpRate!;
+  for (const k of [...counts.keys()]) if (/:relay-(?:net|memo)/.test(k)) counts.delete(k);
+  const sum = (bucket: string) => [...counts.entries()].filter(([k]) => k.includes(`:${bucket}:`)).reduce((a, [, v]) => a + v.n, 0);
+  // many accounts, three messages a payment each, over many payments
+  let accepted = 0;
+  let refused = 0;
+  for (let p = 0; p < 400 && refused === 0; p++) {
+    const pay = payment();
+    for (let a = 0; a < 3 && refused === 0; a++) {
+      try {
+        await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, { partner: `ptr_free${p % 50}x${a}`, approved: false });
+        accepted++;
+      } catch (e) {
+        assert.ok(isRelayError("memo_busy", 429)(e), String(e));
+        refused++;
+      }
+    }
+  }
+  assert.equal(accepted, 600, "the same size as the budget for messages with no key");
+  assert.equal(sum("relay-memo-key-net"), 600, "the one turned away was given back");
+  assert.equal(sum("relay-memo-net"), 0, "none from the paid budget");
+  assert.equal(sum("relay-memo-open-net"), 0, "nor the strangers' one");
+  // strangers, the payer's ticket and an approved account all still go
+  const pay = payment();
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }), TX_HASH);
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64), ticket: memoTicket(net.chainId, pay) }), TX_HASH);
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, { partner: "ptr_approved1", approved: true }), TX_HASH);
+  assert.equal(sum("relay-memo-net"), 2);
+  for (const k of [...counts.keys()]) if (/:relay-(?:net|memo)/.test(k)) counts.delete(k);
 });
 
 await test("no memo limit keys on the poster's IP", async () => {
@@ -963,7 +1004,7 @@ await test("memo budget (GHSA-5gwv-jpjr-x34r): strangers' messages can't use up 
   assert.equal(status, 200);
   assert.equal(spendSlots(), 1);
   assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64), ticket: json.memoTicket }), TX_HASH);
-  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, "key:key_budget"), TX_HASH);
+  assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, { partner: "ptr_budget1", approved: true }), TX_HASH);
   assert.equal(spendSlots(), 1, "messages never count as sends");
   for (const k of [...counts.keys()]) if (/:relay-(?:net|memo)/.test(k)) counts.delete(k);
 });
@@ -1034,7 +1075,7 @@ await test("no secret: no ticket is handed out, and everyone but partner keys sh
     withMemoSecret(secret);
     for (let i = 0; i < 10; i++) assert.equal((await post(`198.51.100.${i + 1}`, memoBody(pay, { ticket: old }))).status, 200);
     assert.equal((await post("203.0.113.9", memoBody(pay, { ticket: old }))).status, 409);
-    assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, "key:key_a1b2"), TX_HASH);
+    assert.equal(await relayMemo(net, { paymentCommitment: pay, memo: memoOf(64) }, { partner: "ptr_a1b2c3", approved: false }), TX_HASH);
   }
   withMemoSecret(undefined);
 });
@@ -1069,8 +1110,8 @@ await test("shared check: the zero address, a listed token and a swap router are
     for (const r of swapRoutersOn(n.chainId)) {
       assert.equal(cashOutTargetProblem(r.address, n), CASH_OUT_TO_ROUTER_MESSAGE, `${r.address} on ${key}`);
       assert.equal(cashOutTargetProblem(r.address.toLowerCase(), n), CASH_OUT_TO_ROUTER_MESSAGE);
-      // what the router swaps between, and the WETH it holds, are tokens
-      for (const a of [...r.assets, ...(r.weth ? [r.weth] : [])]) assert.equal(cashOutTargetProblem(a, n), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
+      // what the router swaps between, and the WETH it holds, are tokens (a native ETH note's address(0) is not)
+      for (const a of [...r.assets.filter((x) => BigInt(x) !== 0n), ...(r.weth ? [r.weth] : [])]) assert.equal(cashOutTargetProblem(a, n), CASH_OUT_TO_TOKEN_MESSAGE, `${a} on ${key}`);
     }
   }
   // Both Robinhood Chain routers (the one new swaps use and the older one kept for refunds) and Tempo's are covered.
@@ -1082,7 +1123,7 @@ await test("shared check: an agent on the SDK alone is refused every address the
     const n = getNetwork(key);
     const alone = (to: string) => sdkCashOutTargetProblem(to, { chainId: n.chainId });
     const routers = swapRoutersOn(n.chainId);
-    const tokens = [...shieldTokensFor(n.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets, ...(r.weth ? [r.weth] : [])])];
+    const tokens = [...shieldTokensFor(n.chainId).map((t) => t.address), ...routers.flatMap((r) => [...r.assets.filter((x) => BigInt(x) !== 0n), ...(r.weth ? [r.weth] : [])])];
     if (n.chainId === 4663) tokens.push(...RH_MAINNET_SWAP_TOKENS.map((t) => t.address));
     assert.ok(tokens.length > 0, key);
     assert.equal(alone(n.pool!), CASH_OUT_TO_VAULT_MESSAGE, key);

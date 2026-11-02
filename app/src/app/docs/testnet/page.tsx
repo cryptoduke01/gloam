@@ -6,6 +6,7 @@ import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { FAUCET_BLURB, FAUCET_URL } from "@/lib/faucet";
 import { baseSepoliaPool, ethereumSepoliaPool } from "@/lib/mainnet";
 import { CIRCLE_FAUCET_URL, PAXOS_FAUCET_URL } from "@/lib/tokens";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 /** Base Sepolia shows in the app once its pool is filled in (lib/mainnet.ts). */
 const BASE_SEPOLIA_LIVE = baseSepoliaPool() !== null;
@@ -429,7 +430,7 @@ export default function DocsTestnetPage() {
 
       <h2 id="private-swaps">7b. Private swaps (mainnet)</h2>
       <p>
-        Swapping from a private balance runs on Robinhood Chain and Tempo
+        Swapping from a private balance runs on {swapMainnets()}{" "}
         mainnet, under Vault &gt; Swap. Who swapped stays
         private; the tokens and amounts are public. How it works, what it costs
         and what shows: <Link href="/docs/private-swaps">private swaps</Link>.

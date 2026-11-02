@@ -359,6 +359,7 @@ const REFUSED = new Set([
   "check_failed",
   "gas_high",
   "gas_most",
+  "spend_cap",
 ]);
 /** Of those, the ones that mean this cash out can never go out as it is. */
 const PERMANENT = new Set(["screened", "asset_policy", "vault_recipient", "bad_request", "network"]);

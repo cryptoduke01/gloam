@@ -26,6 +26,8 @@ export async function GET(req: Request) {
   // Without the shared store there is nothing to run: never treat that as "no jobs".
   if (!scheduledStoreReady()) return NextResponse.json({ ok: false, code: "later_off" }, { status: 503 });
   const store = scheduledStore();
+  // every receipt watch ends well inside the function's 60 s, whichever job it follows
+  const watchUntil = Date.now() + 50_000;
   const results = await runDueJobs(store, {
     now: () => Date.now(),
     readChain: (job) => readSpendState(networkForChain(job.chainId), job.root, job.nullifier),
@@ -38,7 +40,7 @@ export async function GET(req: Request) {
         asset: job.asset,
         to: job.to,
         amount: job.amount,
-      }),
+      }, { watchUntil }),
   });
   // counts only: no ids, amounts or addresses in the logs
   const tally: Record<string, number> = {};

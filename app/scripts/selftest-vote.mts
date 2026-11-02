@@ -63,7 +63,7 @@ const final = await import("../src/lib/vote/final");
 const { ballotsCsv } = await import("../src/lib/vote/results");
 const { kv, resetMemoryKv } = await import("../src/lib/partnersKv");
 const directory = await import("../src/lib/contractDirectory");
-const { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER } = await import("../src/lib/vaultSwap");
+const { VAULT_SWAP_ROUTERS, VAULT_SWAP_V2_ROUTER, VAULT_SWAP_V3_ADDRESS, swapV3Live } = await import("../src/lib/vaultSwap");
 
 type VoteConfig = (typeof VOTES)[number];
 type Ballot = import("../src/lib/vote/core").Ballot;
@@ -212,7 +212,9 @@ await test("the standing exclusions name the team wallets, the vault, the swap r
   assert.ok(has(directory.GLOAM_DEPLOYER), "deployer");
   for (const r of directory.GLOAM_RELAYERS) assert.ok(has(r), "relayer");
   assert.ok(has("0x39e28cde55cab798874746ac52cb4b5cc99a0194"), "vault");
-  for (const r of [...Object.values(VAULT_SWAP_ROUTERS), ...Object.values(VAULT_SWAP_V2_ROUTER)]) if (r) assert.ok(has(r), `router ${r}`);
+  // Robinhood Chain's routers: GLOAM lives there, and the next one is listed once it is live
+  for (const r of [VAULT_SWAP_ROUTERS[4663], ...Object.values(VAULT_SWAP_V2_ROUTER)]) if (r) assert.ok(has(r), `router ${r}`);
+  assert.equal(has(VAULT_SWAP_V3_ADDRESS[4663]!), swapV3Live(4663), "the next router, only once it is live");
   assert.ok(has("0x8366a39cc670b4001a1121b8f6a443a643e40951"), "v4 PoolManager");
   assert.ok(has("0x0000000000000000000000000000000000000000"), "zero");
   // a vote's own extras add to the list, never replace it

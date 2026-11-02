@@ -5,6 +5,7 @@ import { DocsLayout } from "@/components/DocsLayout";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 import { liveMainnetNames } from "@/lib/mainnet";
 import { SCREEN_LIST_INFO } from "@/lib/screening";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 export const metadata: Metadata = {
   title: "What stays private",
@@ -50,7 +51,7 @@ export default function DocsPrivacyPage() {
           {
             n: "!",
             title: "Private swaps (mainnet)",
-            body: "Swap from your private balance on Robinhood Chain and Tempo mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.",
+            body: `Swap from your private balance on ${swapMainnets()} mainnet. Who swapped stays private. The tokens and amounts show, like any DEX trade.`,
           },
           {
             n: "!",
@@ -350,8 +351,9 @@ export default function DocsPrivacyPage() {
         <li>
           <strong>Cash out:</strong> the vault must be allowed to send it, and
           the destination must be allowed to receive it. If the destination&apos;s
-          own Tempo receive policy would refuse the vault, Gloam says so instead
-          of letting the payment be held.
+          own Tempo receive policy would refuse the payment, Gloam says so instead
+          of letting it be held. If that policy can&apos;t be read, the relay sends
+          nothing and asks you to try again.
         </li>
         <li>
           <strong>When:</strong> next to sanctions screening, in the app before
