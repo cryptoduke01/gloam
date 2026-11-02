@@ -85,7 +85,8 @@ only reaches the conversation when a retry fails. Always pass `maxAmount` with t
   The old sealed trade is retired.
 - Swap only what the user asked for: quote first with `gloam_swap_quote` and show the price and
   any warning, then `gloam_execute_private_swap`. It runs only if the owner listed "swap" in the
-  agent's tools. If a swap's result is unclear, call `gloam_list_notes` with `refresh: true`; if it
+  agent's tools, and buys only what the owner allows (swapTo, else the agent's assets). Price
+  impact over the owner's cap (2% by default) stops it; never ask to raise that, only the owner can. If a swap's result is unclear, call `gloam_list_notes` with `refresh: true`; if it
   says the money waits at the swap's escrow, call `gloam_finish_swap`. Never swap the same note
   again to be safe.
 

@@ -370,7 +370,9 @@ sent.outcome?.state; // "swapped": intent.recovery.out is your new note
 
 The exit key is derived from the refund note's secret (`exitAccount`), the same as the app, so the refund note is all you keep. A swap spends one whole note: to swap part of one, split it first with a private send to yourself (`buildPrivateSendIntent`) and swap the note of the right size.
 
-**What is checked before any proof**, so the relay doesn't refuse a swap you could have known about: a known router and its live pools, the right chain (`wrong_chain`) and vault (`wrong_vault`), the note unspent and its root known, price impact and peg on Base and Ethereum (`too_thin`, `off_peg`), value below market when you pass `marks`, the refund note fitting the vault's limit (`refund_wont_fit`, with `maxIn`), the vault taking the output and having room (`vault_closed`, `over_room`), and through the relay: its floor where gas is dear (`swap_small`, Ethereum), and its state when you pass `relayStatus`. The relay wants a minute left before a swap's deadline (`expired`). Refusals are `SwapRefusedError` with a `code`.
+**What is checked before any proof**, so the relay doesn't refuse a swap you could have known about: a known router and its live pools, the right chain (`wrong_chain`) and vault (`wrong_vault`), the note unspent and its root known, price impact over 2% (`too_thin`, with `fitsIn`) and two dollar stablecoins more than 2% apart (`off_peg`) on every chain, value more than 4% below market when you pass `marks`, the refund note fitting the vault's limit (`refund_wont_fit`, with `maxIn`), the vault taking the output and having room (`vault_closed`, `over_room`), and through the relay: its floor where gas is dear (`swap_small`, Ethereum), and its state when you pass `relayStatus`. The relay wants a minute left before a swap's deadline (`expired`). Refusals are `SwapRefusedError` with a `code`.
+
+The impact, peg and value stops apply on every chain by default. The Gloam app holds Base and Ethereum to them and only warns on Robinhood Chain and Tempo, where a person reads the warning before swapping; code that swaps on its own gets the stop. Set them with `stops: { maxImpactBps, maxPegGapBps, maxValueGapBps }` (basis points; 10000 turns one off, and Base and Ethereum keep the app's 2% and 4% either way).
 
 **Sending from your own wallet** works too: `intent.wallet` is `{ to, data, value }` for the router. It puts that wallet next to the swap on the explorer, so the relay is the default. With a partner key, `GloamApiClient.relaySwap(call)` sends through the partner relay and counts the swap to you (never charged); `swapQuote` and `swapNetworks` are the partner API's read-only quote and router list.
 
@@ -619,7 +621,7 @@ Each builder returns a `GloamIntent` whose `exec` is guaranteed populated. Every
 ### Private swaps (new in 0.5.0)
 
 ```ts
-quoteSwap(p): Promise<SwapQuote>                         // price of one whole note, with `stop` (or throws SwapRefusedError: no price)
+quoteSwap(p): Promise<SwapQuote>                         // price of one whole note, with `stop` (or throws SwapRefusedError: no price); p.stops sets the impact, peg and value stops
 buildSwapIntent(p): Promise<SwapIntent>                  // { relay, wallet, recovery, plan, warnings }; refuses before any proof
 sendSwap({ intent, save, submit, client })               // saves the recovery, then sends, then reads the outcome
 relaySwapCall(call, opts?)                               // POST a swap, refund or exit to the Gloam relay

@@ -338,14 +338,21 @@ curl https://gloam.trade/api/v1/relay \
         token and amount, which the chain shows, and no partner fee. Whether it is
         a new swap is read from the vault just before it is sent: a note that is
         already spent can only take the refund path, and a refund or an exit is
-        sent but not counted. Nothing is charged.
+        sent but not counted. Its transaction is still claimed for you, so no one
+        can count it later as a deposit or a swap. Nothing is charged.
       </p>
       <p>
         <code>GET /api/v1/swaps</code> lists each network&apos;s swaps: whether they
         are live, the router new swaps use, what it swaps between, and the earlier
         routers the relay keeps for refunds of swaps made with them.{" "}
-        <code>POST /api/v1/swaps/quote</code> prices one, read only, with the same
-        planning and the same stops as the app&apos;s swap tab.
+        <code>POST /api/v1/swaps/quote</code> prices one, read only, with the
+        app&apos;s planning and the swap tab&apos;s stops, plus the SDK&apos;s on every
+        chain: price impact over 2% (<code>maxImpactBps</code> sets it, 0 to 10000)
+        and two dollar stablecoins more than 2% apart. A live key quotes the
+        mainnets and a test key the testnets. Each quote is a few dozen chain
+        reads, so it has its own limit: 20 a minute per partner account, all its
+        keys together, and 20 per IP. For more, the SDK&apos;s{" "}
+        <code>quoteSwap</code> prices the same way from your own RPC.
       </p>
       <pre>
         <code>{`curl https://gloam.trade/api/v1/swaps/quote \
@@ -366,6 +373,7 @@ curl https://gloam.trade/api/v1/relay \
     "stop": null,
     "limits": { "maxIn": "...", "outRoom": "..." },
     "relay": { "enabled": true, "gasHigh": false }, "floorUsd": null,
+    "stops": { "maxImpactBps": 200, "maxPegGapBps": 200 },
     "valueChecked": false,
     "deadlineSeconds": 1800, "quotedAt": 1793000000000, "ttlMs": 15000,
     "public": "A private swap hides who swapped. The tokens and the amounts are public, like any trade on the DEX it goes through."
@@ -383,7 +391,8 @@ curl https://gloam.trade/api/v1/relay \
         the note first); <code>swap_small</code> with <code>floorUsd</code>, the
         smallest swap the relay sends right now where gas is dear. The others are{" "}
         <code>no_route</code>, <code>too_small</code>, <code>off_peg</code>,{" "}
-        <code>no_fill</code>, <code>price_moving</code>, <code>vault_closed</code>,{" "}
+        <code>no_fill</code>, <code>price_moving</code>, <code>impact_unknown</code>,{" "}
+        <code>vault_closed</code>,{" "}
         <code>relay_off</code>, <code>gas_high</code> and the reads that failed.
         Pass <code>&quot;via&quot;: &quot;wallet&quot;</code> for a swap you send
         yourself, which skips the relay&apos;s own stops. Market prices are not
@@ -397,7 +406,9 @@ curl https://gloam.trade/api/v1/relay \
         reports them: <code>POST /api/v1/deposits</code> with the transaction hash.
         The server reads the transaction from the chain. It must be a successful
         deposit into Gloam&apos;s vault, at most 24 hours old, and not already
-        counted to anyone; the first partner to report it gets it.
+        counted to anyone; the first partner to report it gets it. A swap&apos;s new
+        note and a refund note go in through a swap router, so they are never
+        anyone&apos;s deposit.
       </p>
       <pre>
         <code>{`curl https://gloam.trade/api/v1/deposits \\

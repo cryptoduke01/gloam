@@ -500,8 +500,12 @@ export default function DocsPrivateSwapsPage() {
 
       <h2 id="build">Swaps in your app or agent</h2>
       <p>
-        The same swaps, with the same quotes and the same checks, are in the SDK and the MCP server.
-        A swap hides who swapped, not the tokens or the amounts.
+        The same swaps, priced by the same planner, are in the SDK and the MCP server. A swap hides
+        who swapped, not the tokens or the amounts. They check what the swap tab checks (the vault&apos;s
+        limits, the relay&apos;s state and floor), and they stop price impact over 2% and a dollar pair
+        more than 2% apart on every chain, where the swap tab only warns on Robinhood Chain and
+        Tempo. The swap tab also weighs a swap against market prices; the SDK does that only when
+        you pass prices, and the MCP server doesn&apos;t.
       </p>
       <ul>
         <li>
