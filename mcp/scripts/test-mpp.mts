@@ -21,13 +21,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { TransactionNotFoundError, type Address, type Hex } from "viem";
+import { TransactionNotFoundError, decodeFunctionData, parseAbi, type Address, type Hex } from "viem";
+import { randomBytes } from "node:crypto";
 import {
   GloamRelayError,
   IncrementalMerkleTreePoseidon,
   fieldToHex,
   hexToField,
   noteCommitmentPoseidon,
+  encodeNotePackage,
+  sealToReceiveTag,
   GLOAM_NETWORKS,
   TEMPO_PATHUSD,
 } from "@gloamtrade/sdk";
@@ -40,6 +43,7 @@ import {
   parseReceipt,
   serializeCredential,
   verifyChallengeId,
+  challengeBinding,
   TRANSFERRED_TOPIC,
   buildGloamChargeRequest,
   formatPaymentChallenge,
@@ -96,11 +100,19 @@ function mockChain() {
     if (!r) throw Object.assign(new Error(`Transaction receipt with hash "${hash}" could not be found.`), { name: "TransactionReceiptNotFoundError" });
     return { ...r, from: "0x0000000000000000000000000000000000000abc" };
   };
+  const POOL_ABI = parseAbi(["function transfer(bytes proof, bytes32 root, bytes32 nullifier, bytes32[2] newCommitments)"]);
   const publicClient = {
     waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => receiptOf(hash),
     getTransactionReceipt: async ({ hash }: { hash: Hex }) => receiptOf(hash),
     readContract: async ({ functionName, args }: { functionName: string; args: [Hex] }) =>
       functionName === "isSpent" ? spent.has(lc(args[0])) : index.has(lc(args[0])),
+    // an eth_call of transfer(): the same rules as apply(), nothing changed
+    call: async ({ data }: { to: Address; data: Hex }) => {
+      const { args } = decodeFunctionData({ abi: POOL_ABI, data });
+      const [, root, nullifier, outs] = args;
+      if (roots.has(lc(root)) && !spent.has(lc(nullifier)) && outs.every((c) => !index.has(lc(c)))) return { data: "0x" };
+      throw Object.assign(new Error("Execution reverted."), { name: "CallExecutionError", cause: Object.assign(new Error("execution reverted"), { name: "ExecutionRevertedError" }) });
+    },
   };
   const walletClient = {
     writeContract: async ({ functionName, args, address }: { functionName: string; args: readonly unknown[]; address: Address }) => {
@@ -434,6 +446,32 @@ test("verify_payment settles a pull credential by submitting the payer's transfe
   assert.equal(nv.status, "verified_not_final");
   assert.equal(nv.grantAccess, false);
   assert.equal(chain.calls.length, before, "nothing submitted");
+});
+
+test("a pull credential whose transfer the pool would refuse is refused before this server submits anything", async () => {
+  const { chain, payeeEnv } = await setup();
+  const S = await connect(makeDeps(chain, payeeEnv).deps);
+  const hex32 = () => `0x${randomBytes(32).toString("hex")}` as Hex;
+  for (let i = 0; i < 3; i++) {
+    const issued = await price(S, 1);
+    const ch = parsePaymentChallenges(issued.mpp.wwwAuthenticate)[0]!;
+    const req = ch.request as { amount: string; recipient: string };
+    // a payment note that opens and binds the price, behind a transfer that funds nothing
+    const secret = BigInt(hex32()) % 2n ** 248n;
+    const commitment = fieldToHex(await noteCommitmentPoseidon(secret, BigInt(req.amount), TEMPO_PATHUSD));
+    const ticket = await sealToReceiveTag(
+      encodeNotePackage({ pool: TEMPO.pool, asset: TEMPO_PATHUSD, amountWei: req.amount, secret: fieldToHex(secret), commitment, chainId: TEMPO.chainId }),
+      req.recipient
+    );
+    const binding = await challengeBinding({ secret: fieldToHex(secret), realm: ch.realm, challengeId: ch.id, commitment });
+    const payload = { type: "transfer", transfer: { proof: "0xdeadbeef", root: hex32(), nullifier: hex32(), newCommitments: [commitment, hex32()] }, ticket, binding };
+    const v = await S("gloam_verify_payment", { payment: serializeCredential({ challenge: ch, payload }), requirements: issued.mpp.wwwAuthenticate });
+    assert.equal(v.status, "rejected", JSON.stringify(v));
+    assert.equal(v.grantAccess, false);
+    assert.match(v.message, /would not take the presented transfer/);
+  }
+  assert.deepEqual(chain.calls, [], "nothing submitted");
+  assert.deepEqual(Object.keys(openNoteStore(payeeEnv).pulls()), [], "and no pull kept on record");
 });
 
 test("the MCP refuses MPP challenges it cannot honor, before proving or spending", async () => {

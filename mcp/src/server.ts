@@ -2513,7 +2513,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         payload: cred.payload,
         config: {
           receiveKey,
-          chain: mppChain(sweepChain(client, net), (a) => client.getTransactionReceipt(a)),
+          chain: mppChain(
+            sweepChain(client, net),
+            (a) => client.getTransactionReceipt(a),
+            typeof client.call === "function" ? (a) => client.call(a) : undefined
+          ),
           prove: notUsed,
           submit: notUsed,
           pools: { [net.chainId]: net.pool },
