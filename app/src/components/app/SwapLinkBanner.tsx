@@ -4,10 +4,13 @@ import Link from "next/link";
 import { getNetwork, networkName, type NetworkKey } from "@/lib/networks";
 import { swapLinkSummary, swapNetworks, type SwapLink, type SwapLinkStep } from "@/lib/swapLink";
 import { addAssetHref } from "@/lib/vaultHub";
+import { PartnerLine } from "./PaymentRequest";
 
 /**
  * A swap link (lib/swapLink) opened on the Swap tab: who sent it, the swap it
- * filled in, and what to do before it can go. It never swaps: the person
+ * filled in, and what to do before it can go. With a live partner code (p=) the
+ * sender shown is the partner's name from their Gloam account; without one, the
+ * link's own `ref`, said to come from the link. It never swaps: the person
  * checks the quote under it and taps Swap privately. Laid out like a payment
  * request's banner (components/app/PaymentRequest).
  */
@@ -18,6 +21,7 @@ export function SwapLinkBanner({
   onDismiss,
   step,
   notOpen = [],
+  partnerName = null,
 }: {
   link: SwapLink;
   currentNetwork: NetworkKey;
@@ -27,6 +31,8 @@ export function SwapLinkBanner({
   step: SwapLinkStep | null;
   /** Lines for tokens the router lists but that are not open for swaps yet. */
   notOpen?: readonly string[];
+  /** The partner whose live link code opened this, from their account. */
+  partnerName?: string | null;
 }) {
   // The link's tokens were read on `on`; anywhere else they mean nothing, so offer the switch.
   const wrongNet = link.on && link.on !== currentNetwork ? getNetwork(link.on) : null;
@@ -44,10 +50,14 @@ export function SwapLinkBanner({
             </span>
             Swap link
           </p>
-          {link.ref && (
-            <p className="mt-1.5 break-words text-[13.5px] text-soft">
-              From <span className="font-medium text-foreground">{link.ref}</span>
-            </p>
+          {partnerName ? (
+            <PartnerLine name={partnerName} />
+          ) : (
+            link.ref && (
+              <p className="mt-1.5 break-words text-[13.5px] text-soft">
+                From <span className="font-medium text-foreground">{link.ref}</span>
+              </p>
+            )
           )}
           <p className="tnum mt-1 break-words text-[17px] leading-snug text-foreground">{swapLinkSummary(link)}</p>
         </div>
@@ -67,7 +77,7 @@ export function SwapLinkBanner({
         {filled
           ? "Filled in from the link. Nothing swaps until you check the price below and tap Swap privately."
           : "Nothing from this link could be filled in. You can still pick a swap yourself."}
-        {link.ref ? " The name comes from the link too." : ""}
+        {link.ref && !partnerName ? " The name comes from the link too." : ""}
       </p>
 
       {wrongNet && (

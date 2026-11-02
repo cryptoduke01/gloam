@@ -86,6 +86,7 @@ import type { NetworkKey } from "@/lib/networks";
 import { swapLinkFromHash, swapLinkParams, swapLinkStep, type SwapLink } from "@/lib/swapLink";
 import { dropSwapLink, keepSwapLink, keptSwapLink } from "@/lib/swapLinkStore";
 import { SwapLinkBanner } from "./SwapLinkBanner";
+import { reportPartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
 
 /**
  * The swap link this tab opens with (lib/swapLink): the one in the address bar,
@@ -287,6 +288,8 @@ export function VaultSwapView() {
   // here and again when another link opens in this tab. It never swaps: the
   // person checks the quote and taps Swap privately like any other swap.
   const [link, setLink] = useState<SwapLink | null>(() => openSwapLink(networkKey));
+  // A partner's link code (p=): their name from their Gloam account, once the server says it is live.
+  const partnerName = usePartnerName(link?.partnerCode ?? null);
   const [payPick, setPayPick] = useState<Address | null>(() => link?.from?.address ?? null);
   const [toPick, setToPick] = useState<Address | null>(() => link?.to?.address ?? null);
   // The link's token to pay with stays picked with no private balance in it, so
@@ -534,6 +537,9 @@ export function VaultSwapView() {
     const paid = amount;
     const from = payAsset;
     const into = toAsset;
+    // the link this swap came from, before finishing it clears the link
+    const partnerCode = link?.partnerCode ?? null;
+    const chainId = network.chainId;
     setBusy(true);
     setError(null);
     setDone(null);
@@ -553,6 +559,8 @@ export function VaultSwapView() {
       });
       if (!refunded) {
         countPerson("swap", address, network.testnet);
+        // from a partner's link: the server checks the swap on chain and counts it to them; never waited on
+        if (partnerCode) reportPartnerTx({ code: partnerCode, chainId, txHash: hash, flow: "swap" });
         setReceipt({ pay: from, payAmount: paid, receive: into, receiveAmount: BigInt(outNote.amountWei), hash });
         finishLink();
       }
@@ -752,6 +760,7 @@ export function VaultSwapView() {
             onDismiss={closeLink}
             step={linkStep}
             notOpen={linkNotOpen}
+            partnerName={partnerName}
           />
         )}
 

@@ -85,6 +85,7 @@ import { gasHighMessage } from "@/lib/relay/gasCeiling";
 import { RelayToggle } from "./RelayToggle";
 import { RelayGasNotice } from "./RelayGasNotice";
 import { PaymentRequestBanner, RequestPaymentCard } from "./PaymentRequest";
+import { queuePartnerJobs, reportPartnerTx, usePartnerName } from "@/lib/partnerLinkClient";
 import {
   claimNetworkProblem,
   isWalletRequest,
@@ -219,6 +220,8 @@ export function MoveView() {
           network.key
         )
   );
+  // A partner's link code (p=): their name from their Gloam account, once the server says the code is live.
+  const partnerName = usePartnerName(request?.partnerCode ?? null);
   // The first-payment nudge (FirstPaymentCard) opens Send with a small amount
   // in one stablecoin (?suggest=5&suggestAsset=0x…). A request link wins over
   // it. Read once; the URL is cleaned up below so a refresh starts blank.
@@ -492,6 +495,11 @@ export function MoveView() {
   const pendingShare = useRef<{ blob: string; amountLabel: string } | null>(
     null
   );
+  /**
+   * The partner link the payment or cash out in flight came from (lib/partnerLinkClient):
+   * reported once it lands, never waited on.
+   */
+  const partnerSend = useRef<{ code: string; chainId: number } | null>(null);
   /** Analytics for the payment in flight: sent on a request, carrying a note. */
   const payTrack = useRef<{ chainId: number; request: boolean; note: boolean } | null>(null);
   /** The payment's code for Sent links, saved once the payment lands. */
@@ -574,6 +582,13 @@ export function MoveView() {
       }
 
       if (pendingAction.current === "cashout") countPerson("cashout", address, network.testnet);
+
+      // From a partner's link: the server checks this transaction on chain and counts it to them.
+      if ((pendingAction.current === "send" || pendingAction.current === "cashout") && partnerSend.current) {
+        const ps = partnerSend.current;
+        partnerSend.current = null;
+        reportPartnerTx({ code: ps.code, chainId: ps.chainId, txHash, flow: "pay" });
+      }
 
       if (pendingAction.current === "send" && payTrack.current) {
         const t = payTrack.current;
@@ -713,6 +728,8 @@ export function MoveView() {
     pendingClaimLink.current = false;
     spentNoteId.current = null;
     payTrack.current = null;
+    // the wallet refused or the write failed: a memo's failure comes after the payment was reported
+    partnerSend.current = null;
     setShareBlob(landed?.blob ?? null);
     if (landed) {
       setShareAmountLabel(landed.amountLabel);
@@ -728,6 +745,10 @@ export function MoveView() {
     if (!receiptLost || !txHash || !busy) return;
     const action = pendingAction.current;
     keptBeforeSend.current = null;
+    // it may still land: the report waits for the chain, and counts nothing if it never does
+    const ps = partnerSend.current;
+    partnerSend.current = null;
+    if (ps && (action === "send" || action === "cashout")) reportPartnerTx({ code: ps.code, chainId: ps.chainId, txHash, flow: "pay" });
     pendingChange.current = null;
     pendingShare.current = null;
     pendingMemo.current = null;
@@ -1099,6 +1120,9 @@ export function MoveView() {
         const job = await scheduleNoteCashOut(target, call, cashOutWhen as CashOutWindow);
         spentNoteId.current = null;
         countPerson("cashout", address, network.testnet);
+        // from a partner's link: reported once the relay has sent it
+        const later = requestPartner(to);
+        if (later) queuePartnerJobs(later.code, later.chainId, [job.id]);
         setScheduledNotice({ at: job.sendAfter, label: formatAssetLabel(target.amountWei, target.asset) });
         setCashOutInput("");
         refreshNotes();
@@ -1109,6 +1133,7 @@ export function MoveView() {
         });
         return;
       }
+      partnerSend.current = requestPartner(to);
       if (relayOn) {
         setStatus("Sending through the Gloam relay…");
         const h = await relayUnshield(call);
@@ -1142,6 +1167,16 @@ export function MoveView() {
       setStatus(null);
       refreshNotes();
     }
+  }
+
+  /**
+   * The partner a cash out counts to: one from a partner's request link (p=) to a
+   * wallet, paying the very wallet the link asked for. null otherwise.
+   */
+  function requestPartner(to: Address | null | undefined): { code: string; chainId: number } | null {
+    const code = request?.partnerCode;
+    if (!code || !isWalletRequest(request) || handedOffRequest.current !== request || !handedOffTo.current || !to) return null;
+    return to.toLowerCase() === handedOffTo.current.toLowerCase() ? { code, chainId: network.chainId } : null;
   }
 
   /**
@@ -1253,6 +1288,12 @@ export function MoveView() {
         onStatus: setStatus,
         onPiece: (i, patch) => setPlanRun((rows) => rows && rows.map((row, j) => (j === i ? { ...row, ...patch } : row))),
       });
+      // From a partner's link: the pieces that pay the request's wallet, reported as each goes out.
+      const fromLink = requestPartner(cashOutTo);
+      if (fromLink) {
+        const toWallet = r.jobs.filter((j) => j.to.toLowerCase() === cashOutTo?.toLowerCase()).map((j) => j.id);
+        queuePartnerJobs(fromLink.code, fromLink.chainId, toWallet);
+      }
       if (r.jobs.length) {
         // Jobs come back in piece order: the first ones are what was scheduled.
         const times = r.jobs.map((j) => j.sendAfter);
@@ -1454,6 +1495,11 @@ export function MoveView() {
       });
       setSentNote(pack.note ?? null);
       payTrack.current = { chainId: network.chainId, request: Boolean(request), note: Boolean(pack.note) };
+      // From a partner's link, to the request's own Gloam address: reported once it lands.
+      partnerSend.current =
+        request?.partnerCode && request.toKind === "gloam" && payStyle === "direct" && recipientTag.trim() === request.to
+          ? { code: request.partnerCode, chainId: network.chainId }
+          : null;
       let share: string;
       let locked = false;
       if (payStyle === "direct") {
@@ -2083,6 +2129,8 @@ export function MoveView() {
    * mode reaches the URL after the first render has synced it.
    */
   const handedOffRequest = useRef<PaymentRequest | null>(null);
+  /** The wallet a request was handed off to Cash out with: a cash out from a partner's link counts only when it pays this one. */
+  const handedOffTo = useRef<Address | null>(null);
   useEffect(() => {
     if (!request || !isWalletRequest(request) || handedOffRequest.current === request) return;
     if (mode !== "send" || !payWalletTo || recipientTag !== request.to) return;
@@ -2090,6 +2138,7 @@ export function MoveView() {
     const amount = request.amount ?? "";
     const t = window.setTimeout(() => {
       handedOffRequest.current = request;
+      handedOffTo.current = to;
       const h = cashOutHandoff(to, amount);
       setCashOutDest(h.dest);
       setOtherTo(h.to);
@@ -2225,6 +2274,7 @@ export function MoveView() {
               onSwitchNetwork={setNetworkKey}
               onDismiss={() => setRequest(null)}
               balanceHint={requestHint}
+              partnerName={partnerName}
             />
           )}
 
