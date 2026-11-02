@@ -98,10 +98,11 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
 2. Sign out from the wallet menu, sign in again with the same email: the same address,
    no create sheet.
 3. Sign in with a passkey on a second browser (a new account): create a wallet with a name.
-4. Settings > Recovery shows recovery on with the wallet. Get test funds, add privately,
-   then sign in on another browser profile with the same email: the private balance comes
-   back. If Settings says the wallet "signs differently each time", Turnkey's signatures
-   are not deterministic: tell us, and use a passkey for recovery meanwhile.
+4. Add funds says the private balance is backed up, and Settings > Recovery shows recovery
+   on with the wallet. Get test funds, add privately, then sign in on another browser
+   profile with the same email: the private balance comes back. If Add funds asks you to
+   turn on recovery with a passkey instead, Turnkey's signatures are not deterministic
+   (recovery signs twice and compares): tell us, and use a passkey for recovery meanwhile.
 5. Claim a payment link sent from another wallet: it lands with no gas in the Gloam wallet.
 6. Switch networks in the menu (Tempo testnet, Base Sepolia, Ethereum Sepolia, then each
    mainnet): the wallet follows with no prompt and the same address.
