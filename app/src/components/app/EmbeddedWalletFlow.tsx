@@ -10,7 +10,18 @@ import { useModalFocus } from "@/hooks/useModalFocus";
 import { bridgeVisible } from "@/lib/bridge";
 import { shortAddress } from "@/lib/chain";
 import { SPONSOR_CHAINS, TEMPO_FEE_CHAIN_IDS } from "@/lib/embeddedGas";
-import { embeddedRecoveryResult, onEmbeddedRecovery } from "@/lib/embeddedRecovery";
+import {
+  TURNKEY_CAN_OPEN_TEXT,
+  backUpWithPasskey,
+  backUpWithWalletSignature,
+  backupAsked,
+  backupOffer,
+  markBackupAsked,
+  passkeyBackupUnavailable,
+  otherWalletNotes,
+  type BackupOffer,
+  type PasskeySupportLevel,
+} from "@/lib/embeddedRecovery";
 import {
   DEFAULT_WALLET_NAME,
   EMBEDDED_CONNECTOR_ID,
@@ -20,24 +31,32 @@ import {
   pickEmbeddedWallet,
   walletNameFor,
   walletNameProblem,
+  type WalletListState,
 } from "@/lib/embeddedWallet";
 import { networkName } from "@/lib/networks";
-import { onEmbeddedSheetRequest, setEmbeddedNeedsWallet } from "@/lib/turnkeyBridge";
+import { getActiveTurnkeyAccount, onEmbeddedSheetRequest, setEmbeddedNeedsWallet } from "@/lib/turnkeyBridge";
 import { useNetwork } from "./NetworkProvider";
 
 const noopSubscribe = () => () => {};
 
+/** How many times the wallet list is read before the sheet says it couldn't. */
+const LIST_TRIES = 3;
+
 /**
- * Creating a Gloam wallet, then adding money to it. Opens by itself once someone
- * signs in with no wallet yet, and again from the wallet menu (Add funds).
+ * Creating a Gloam wallet, adding money to it, and backing up its private
+ * balance. Opens by itself once someone signs in with no wallet yet, and again
+ * from the wallet menu (Add funds).
  *
  *  1. Create your wallet: an optional name and one button. The key is made in
  *     Turnkey's secure hardware; the page never sees it and there is no seed phrase.
  *  2. Add funds: the ways in the app already has, the ones that cost this wallet
- *     nothing first (lib/embeddedGas).
+ *     nothing first (lib/embeddedGas), with the backup offer under them.
+ *  A wallet made before gets the backup offer on its own (once), when this
+ *  browser could back up and doesn't.
  *
- * The steps come from embeddedFlowStep (lib/embeddedWallet). One sheet per
- * sign-in: it is keyed by the account, so signing out starts it over.
+ * The steps come from embeddedFlowStep (lib/embeddedWallet), the backup offer from
+ * backupOffer (lib/embeddedRecovery). One sheet per sign-in: it is keyed by the
+ * account, so signing out starts it over.
  */
 export default function EmbeddedWalletFlow() {
   const { authState, session } = useTurnkey();
@@ -46,49 +65,77 @@ export default function EmbeddedWalletFlow() {
   return <Sheet key={key} signedIn={signedIn} />;
 }
 
+/** What the backup part of the sheet shows. */
+export type BackupView =
+  | { kind: "offer"; offer: Exclude<BackupOffer, { kind: "none" }>; returning: boolean }
+  | { kind: "busy"; with: "passkey" | "signature" }
+  | { kind: "done"; with: "passkey" | "signature"; restored: number }
+  | { kind: "error"; text: string; offer: Exclude<BackupOffer, { kind: "none" }>; returning: boolean };
+
 function Sheet({ signedIn }: { signedIn: boolean }) {
   const { wallets, createWallet, refreshWallets } = useTurnkey();
   const { address: connected, connector } = useAccount();
 
-  const [listRead, setListRead] = useState(false);
+  const [list, setList] = useState<WalletListState>("unknown");
+  const [tries, setTries] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [funding, setFunding] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [name, setName] = useState("");
   const [showAddress, setShowAddress] = useState(false);
 
   const wallet = pickEmbeddedWallet(wallets);
+  const embeddedConnected = Boolean(
+    wallet && connected && connector?.id === EMBEDDED_CONNECTOR_ID && connected.toLowerCase() === wallet.address.toLowerCase(),
+  );
+  const backup = useBackup(wallet?.address ?? null, embeddedConnected, justCreated);
+
   const step = embeddedFlowStep({
     signedIn,
-    checked: listRead || Boolean(wallet),
+    list: wallet ? "read" : list,
     hasWallet: Boolean(wallet),
     creating,
     error,
     funding,
+    // a done backup keeps the sheet up to say so, until it is closed
+    backup: backup.view !== null,
     dismissed,
   });
-  // Read the wallet list once after signing in, so someone with a wallet never sees
-  // "Create wallet". Once: the kit hands out a new refreshWallets more often than that.
+
+  // Read the wallet list after signing in, so someone with a wallet never sees "Create wallet".
+  // A failed read is not an empty list: it is read again, and after LIST_TRIES the sheet says so.
   const refresh = useRef(refreshWallets);
   useEffect(() => {
     refresh.current = refreshWallets;
   });
   useEffect(() => {
-    if (!signedIn) return;
+    if (!signedIn || list !== "unknown") return;
     let live = true;
-    void refresh.current()
-      .catch(() => [])
-      .finally(() => {
-        if (live) setListRead(true);
-      });
+    const t = window.setTimeout(
+      () => {
+        void refresh
+          .current()
+          .then(() => {
+            if (live) setList("read");
+          })
+          .catch(() => {
+            if (!live) return;
+            if (tries + 1 >= LIST_TRIES) setList("failed");
+            else setTries((n) => n + 1);
+          });
+      },
+      tries === 0 ? 0 : 1_500 * tries,
+    );
     return () => {
       live = false;
+      window.clearTimeout(t);
     };
-  }, [signedIn]);
+  }, [signedIn, list, tries]);
 
-  // The header offers Create wallet while there is none, also after this sheet was closed.
-  const needsWallet = signedIn && (listRead || Boolean(wallet)) && !wallet;
+  // The header offers Create wallet only on a list that came back with none in it.
+  const needsWallet = signedIn && list === "read" && !wallet;
   useEffect(() => {
     setEmbeddedNeedsWallet(needsWallet);
   }, [needsWallet]);
@@ -105,7 +152,8 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
   );
 
   const close = () => {
-    if (creating) return;
+    if (creating || backup.view?.kind === "busy") return;
+    backup.seen();
     setDismissed(true);
     setShowAddress(false);
   };
@@ -117,8 +165,20 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
     setCreating(true);
     setError(null);
     try {
+      // Read the list again first: a wallet that is there already is never made twice.
+      let fresh: Parameters<typeof pickEmbeddedWallet>[0];
+      try {
+        fresh = await refresh.current();
+      } catch {
+        throw new Error("wallet list");
+      }
+      if (pickEmbeddedWallet(fresh)) {
+        setList("read");
+        return;
+      }
       await createWallet({ walletName: walletNameFor(name), accounts: ["ADDRESS_FORMAT_ETHEREUM"] });
-      await refreshWallets().catch(() => []);
+      await refresh.current().catch(() => []);
+      setJustCreated(true);
       setFunding(true);
       void import("@/lib/track").then(({ track }) => track("wallet_connect", { method: "gloam_wallet_created" }));
     } catch (e) {
@@ -129,7 +189,7 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
     }
   }
 
-  if (step !== "create" && step !== "creating" && step !== "failed" && step !== "funding") return null;
+  if (step === "hidden" || step === "checking") return null;
   return (
     <WalletSheet
       step={step}
@@ -138,12 +198,125 @@ function Sheet({ signedIn }: { signedIn: boolean }) {
       nameProblem={nameProblem}
       error={error}
       onCreate={() => void create()}
+      onRetryList={() => {
+        setTries(0);
+        setList("unknown");
+      }}
       onClose={close}
-      address={connected && connector?.id === EMBEDDED_CONNECTOR_ID ? connected : wallet?.address}
+      address={embeddedConnected ? connected : wallet?.address}
       showAddress={showAddress}
       onShowAddress={() => setShowAddress(true)}
+      backup={backup.view}
+      onBackup={backup.run}
     />
   );
+}
+
+/**
+ * The backup offer for this wallet on this browser, and its actions. Nothing
+ * starts without the person's tap. Marked as asked once it was shown and closed,
+ * or acted on: it is offered once.
+ */
+function useBackup(address: string | null, embeddedConnected: boolean, justCreated: boolean) {
+  const [passkey, setPasskey] = useState<PasskeySupportLevel | null>(null);
+  const [state, setState] = useState<{ on: boolean; turnedOff: boolean; otherNotes: number; for: string } | null>(null);
+  const [asked, setAsked] = useState(false);
+  const [forceSignature, setForceSignature] = useState(false);
+  const [action, setAction] = useState<BackupView | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void import("@/lib/passkey").then(({ passkeySupport }) => passkeySupport()).then((s) => live && setPasskey(s));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // What this browser holds, read once the Gloam wallet is the connected one.
+  useEffect(() => {
+    if (!address || !embeddedConnected) return;
+    let live = true;
+    void (async () => {
+      const recovery = await import("@/lib/recovery");
+      const vault = await import("@/lib/noteVault");
+      recovery.startRecoverySync();
+      await vault.unlockNoteVault();
+      await vault.syncFromDisk();
+      // the saved recovery settings load with the sync; wait for them
+      for (let i = 0; i < 50 && !recovery.recoveryState().ready; i++) await new Promise((r) => setTimeout(r, 100));
+      if (!live || !recovery.recoveryState().ready) return;
+      setState({
+        on: recovery.recoveryState().on,
+        turnedOff: recovery.recoveryTurnedOffHere(),
+        otherNotes: otherWalletNotes(vault.getAllNotes(), address),
+        for: address,
+      });
+      setAsked(backupAsked(address));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [address, embeddedConnected]);
+
+  const offer: BackupOffer | null =
+    address && passkey && state?.for === address
+      ? backupOffer({
+          on: state.on,
+          turnedOff: state.turnedOff,
+          asked,
+          embeddedConnected,
+          otherNotes: state.otherNotes,
+          passkey: forceSignature ? "no" : passkey,
+        })
+      : null;
+
+  const view: BackupView | null =
+    action ?? (offer && offer.kind !== "none" ? { kind: "offer", offer, returning: !justCreated } : null);
+
+  function seen() {
+    if (address && offer && offer.kind !== "none") {
+      markBackupAsked(address);
+      setAsked(true);
+    }
+  }
+
+  async function run(how: "passkey-create" | "passkey-use" | "signature") {
+    if (!address || !offer || offer.kind === "none") return;
+    const returning = !justCreated;
+    const using = how === "signature" ? "signature" : "passkey";
+    setAction({ kind: "busy", with: using });
+    try {
+      let restored: number;
+      if (how === "signature") {
+        const account = getActiveTurnkeyAccount();
+        if (!account) throw new Error("Your wallet isn't ready yet. Try again in a moment.");
+        restored = await backUpWithWalletSignature({ address: account.address, sign: (message) => account.signMessage({ message }) });
+      } else {
+        restored = await backUpWithPasskey(address, how === "passkey-create" ? "create" : "use");
+      }
+      markBackupAsked(address);
+      setAsked(true);
+      setAction({ kind: "done", with: using, restored });
+    } catch (e) {
+      const { PROMPT_DID_NOT_OPEN } = await import("@/lib/passkey");
+      // Only a browser or passkey that can't make a passkey backup moves the offer to the
+      // signature, with its warning. A prompt closed (however fast) leaves the passkey on offer.
+      if (passkeyBackupUnavailable(e) && how !== "signature") {
+        setForceSignature(true);
+        setAction(null);
+        return;
+      }
+      const text =
+        e instanceof Error && e.message === PROMPT_DID_NOT_OPEN
+          ? "The passkey prompt closed. Nothing changed. Try again when you're ready."
+          : e instanceof Error
+            ? e.message
+            : "The backup didn't turn on. Try again.";
+      setAction({ kind: "error", text, offer, returning });
+    }
+  }
+
+  return { view, run, seen };
 }
 
 /**
@@ -157,21 +330,27 @@ export function WalletSheet({
   nameProblem,
   error,
   onCreate,
+  onRetryList,
   onClose,
   address,
   showAddress,
   onShowAddress,
+  backup,
+  onBackup,
 }: {
-  step: "create" | "creating" | "failed" | "funding";
+  step: "unreadable" | "create" | "creating" | "failed" | "funding" | "backup";
   name: string;
   onName: (name: string) => void;
   nameProblem: string | null;
   error: string | null;
   onCreate: () => void;
+  onRetryList: () => void;
   onClose: () => void;
   address: string | undefined;
   showAddress: boolean;
   onShowAddress: () => void;
+  backup: BackupView | null;
+  onBackup: (how: "passkey-create" | "passkey-use" | "signature") => void;
 }) {
   const { network } = useNetwork();
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
@@ -179,11 +358,12 @@ export function WalletSheet({
   const dialog = useRef<HTMLDivElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
   const creating = step === "creating";
-  const fundingStep = step === "funding";
   useModalFocus(dialog, onClose, { initial: step === "create" ? nameField : undefined });
 
   if (!mounted) return null;
   const where = networkName(network);
+  const title =
+    step === "funding" ? "Add funds" : step === "backup" ? "Back up your private balance" : step === "unreadable" ? "Your wallet" : "Create your wallet";
 
   return createPortal(
     <div
@@ -213,12 +393,12 @@ export function WalletSheet({
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id="gw-title" className="text-[20px] font-medium tracking-[-0.01em] text-foreground">
-            {fundingStep ? "Add funds" : "Create your wallet"}
+            {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            disabled={creating}
+            disabled={creating || backup?.kind === "busy"}
             aria-label="Close"
             className="-mr-2 -mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-mute transition-colors hover:bg-surface hover:text-foreground disabled:opacity-50"
           >
@@ -228,7 +408,7 @@ export function WalletSheet({
           </button>
         </div>
 
-        {fundingStep ? (
+        {step === "funding" ? (
           <FundingStep
             address={address}
             where={where}
@@ -238,7 +418,25 @@ export function WalletSheet({
             showAddress={showAddress}
             onShowAddress={onShowAddress}
             onLeave={onClose}
+            backup={backup}
+            onBackup={onBackup}
           />
+        ) : step === "backup" ? (
+          <div className="mt-2">
+            {backup && <BackupPart view={backup} onBackup={onBackup} standalone />}
+            <button type="button" onClick={onClose} disabled={backup?.kind === "busy"} className="btn btn-quiet btn-block mt-5">
+              {backup?.kind === "done" ? "Done" : "Not now"}
+            </button>
+          </div>
+        ) : step === "unreadable" ? (
+          <div className="mt-2">
+            <p className="text-[13.5px] leading-relaxed text-mute">
+              Couldn&apos;t read your wallets just now, so nothing was made. Check your connection and try again.
+            </p>
+            <button type="button" onClick={onRetryList} className="btn btn-ink btn-lg btn-block mt-6">
+              Try again
+            </button>
+          </div>
         ) : (
           <form
             className="mt-2"
@@ -287,6 +485,88 @@ export function WalletSheet({
   );
 }
 
+/**
+ * The backup offer: a passkey first, the wallet's signature only where this
+ * browser can't make a passkey backup, with what that means said plainly.
+ * "Backed up" is said only after a backup turned on here, never for one that
+ * was there already.
+ */
+function BackupPart({
+  view,
+  onBackup,
+  standalone = false,
+}: {
+  view: BackupView;
+  onBackup: (how: "passkey-create" | "passkey-use" | "signature") => void;
+  standalone?: boolean;
+}) {
+  if (view.kind === "done") {
+    return (
+      <p role="status" className="flex items-start gap-2 text-[13px] leading-relaxed text-soft">
+        <span className="mt-[3px] shrink-0 text-sealed" aria-hidden>
+          <LockGlyph />
+        </span>
+        <span>
+          {view.restored > 0
+            ? `Brought back ${view.restored} ${view.restored === 1 ? "note" : "notes"} from your backup, and this browser backs up to it from now on.`
+            : view.with === "passkey"
+              ? "Backed up with your passkey. On another device, sign in and use the same passkey in Settings to bring it back."
+              : "Backed up with this wallet's signature. On another device, sign in and restore it in Settings."}
+        </span>
+      </p>
+    );
+  }
+  const busy = view.kind === "busy";
+  const offer = view.kind === "offer" || view.kind === "error" ? view.offer : null;
+  const returning = view.kind === "offer" || view.kind === "error" ? view.returning : false;
+  const signature = offer?.kind === "signature";
+
+  return (
+    <div>
+      {!standalone && <p className="text-[14.5px] text-foreground">Back up your private balance</p>}
+      <p className={`${standalone ? "" : "mt-0.5 "}text-[12.5px] leading-relaxed text-mute`}>
+        {signature
+          ? "Your private balance lives in this browser. This browser can't save a passkey backup, so the other way is this wallet's signature. "
+          : "Your private balance lives in this browser. Save it with a passkey and it comes back on any device. Only your passkey can open the backup."}
+        {signature && TURNKEY_CAN_OPEN_TEXT}
+      </p>
+      {offer?.shared && (
+        <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+          This browser also holds private notes from another wallet. They go into this backup too.
+        </p>
+      )}
+      {view.kind === "error" && (
+        <p role="alert" className="mt-2 text-[12.5px] leading-relaxed text-danger">
+          {view.text}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {signature ? (
+          <button type="button" onClick={() => onBackup("signature")} disabled={busy} className="btn btn-ghost btn-sm">
+            {busy ? "Backing up…" : "Back up with this wallet's signature"}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onBackup("passkey-create")}
+              disabled={busy}
+              className={standalone ? "btn btn-ink btn-sm" : "btn btn-ghost btn-sm"}
+            >
+              {busy ? "Check your passkey…" : "Back up with a passkey"}
+            </button>
+            {returning && (
+              <button type="button" onClick={() => onBackup("passkey-use")} disabled={busy} className="btn btn-quiet btn-sm">
+                I backed up before
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FundingStep({
   address,
   where,
@@ -296,6 +576,8 @@ function FundingStep({
   showAddress,
   onShowAddress,
   onLeave,
+  backup,
+  onBackup,
 }: {
   address: string | undefined;
   where: string;
@@ -305,10 +587,9 @@ function FundingStep({
   showAddress: boolean;
   onShowAddress: () => void;
   onLeave: () => void;
+  backup: BackupView | null;
+  onBackup: (how: "passkey-create" | "passkey-use" | "signature") => void;
 }) {
-  const recovery = useSyncExternalStore(onEmbeddedRecovery, embeddedRecoveryResult, () => null);
-  const backedUp = recovery && (recovery.result.kind === "on" || recovery.result.kind === "already");
-  const passkeyInstead = recovery?.result.kind === "unsupported";
   const fees = TEMPO_FEE_CHAIN_IDS.has(chainId)
     ? "Network fees come out of the stablecoin you send."
     : SPONSOR_CHAINS.has(chainId)
@@ -351,20 +632,13 @@ function FundingStep({
         </li>
       </ul>
 
-      {(backedUp || passkeyInstead) && (
-        <p className="mt-5 flex items-start gap-2 text-[12.5px] leading-relaxed text-mute">
-          {backedUp && (
-            <span className="mt-[2px] shrink-0 text-sealed" aria-hidden>
-              <LockGlyph />
-            </span>
-          )}
-          {backedUp
-            ? "Your private balance is backed up to this wallet. Sign in on another device and it comes back."
-            : "To back up your private balance, turn on recovery with a passkey in Settings."}
-        </p>
+      {backup && (
+        <div className="mx-3 mt-4 border-t border-line pt-4">
+          <BackupPart view={backup} onBackup={onBackup} />
+        </div>
       )}
 
-      <button type="button" onClick={onLeave} className="btn btn-quiet btn-block mt-5">
+      <button type="button" onClick={onLeave} disabled={backup?.kind === "busy"} className="btn btn-quiet btn-block mt-5">
         Later
       </button>
     </div>

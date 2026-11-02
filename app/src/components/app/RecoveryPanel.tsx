@@ -27,6 +27,8 @@ import {
   type RecoveryWallet,
 } from "@/lib/recovery";
 import { isTempoWallet } from "@/lib/tempoWallet";
+import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
+import { TURNKEY_CAN_OPEN_TEXT } from "@/lib/embeddedRecovery";
 
 type Busy = "on-wallet" | "on-passkey" | "restore-wallet" | "restore-passkey" | "restore-older" | "save" | "off" | "update" | "older" | null;
 /** "wait": nothing went wrong and nothing is finished yet, so it is not shown as done. */
@@ -134,6 +136,9 @@ function useRecovery() {
   const active = isConnected && !demo;
   // Tempo Wallet signs with a passkey, differently every time: it can't hold a key.
   const walletOk = active && !isTempoWallet(connector);
+  // A Gloam wallet: Turnkey makes its signatures, so a passkey comes first and the
+  // wallet option says Turnkey could open a backup made with it.
+  const embedded = active && connector?.id === EMBEDDED_CONNECTOR_ID;
 
   const wallet = (): RecoveryWallet => ({ address: address as string, sign: (message) => signMessageAsync({ message }) });
 
@@ -214,7 +219,7 @@ function useRecovery() {
         : "Your older backup is merged in. This browser already had everything in it.";
     });
 
-  return { state, active, walletOk, passkeyOk, walletBrowser, busy, message, offerOlder, turnOn, restore, restoreOlder, save, off, update, older };
+  return { state, active, walletOk, embedded, passkeyOk, walletBrowser, busy, message, offerOlder, turnOn, restore, restoreOlder, save, off, update, older };
 }
 
 function Note({ message }: { message: Message }) {
@@ -323,6 +328,11 @@ export function RecoverySettingsCard() {
                 {NO_BACKUP_YET} This browser tries again on its own {nextTry(state.retryAt)}, or the next time you open Gloam after that.
               </p>
             )}
+            {r.embedded && state.source === "wallet" && (
+              <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-mute">
+                {TURNKEY_CAN_OPEN_TEXT} To move to a passkey, turn recovery off, then on with a passkey.
+              </p>
+            )}
             {state.error && r.message?.tone !== "error" && <p className="mt-3 text-[13px] text-danger">{state.error}</p>}
             <Note message={r.message} />
           </div>
@@ -331,17 +341,31 @@ export function RecoverySettingsCard() {
             <Choice
               label="Turn on recovery"
               hint={
-                r.walletOk
-                  ? "Your wallet asks you to sign twice. It's free and sends nothing."
-                  : "Tempo Wallet can't sign a recovery key, so use a passkey."
+                r.embedded
+                  ? r.passkeyOk
+                    ? `A passkey keeps the backup's key on your device. ${TURNKEY_CAN_OPEN_TEXT}`
+                    : TURNKEY_CAN_OPEN_TEXT
+                  : r.walletOk
+                    ? "Your wallet asks you to sign twice. It's free and sends nothing."
+                    : "Tempo Wallet can't sign a recovery key, so use a passkey."
               }
             >
-              {r.walletOk && (
-                <button type="button" onClick={() => r.turnOn("wallet")} disabled={Boolean(busy)} className="btn btn-ink btn-sm">
-                  {busy === "on-wallet" ? "Check your wallet…" : "With your wallet"}
+              {r.embedded && r.passkeyOk && (
+                <button type="button" onClick={() => r.turnOn("passkey")} disabled={Boolean(busy)} className="btn btn-ink btn-sm">
+                  {busy === "on-passkey" ? "Check your passkey…" : "With a passkey"}
                 </button>
               )}
-              {r.passkeyOk && (
+              {r.walletOk && (
+                <button
+                  type="button"
+                  onClick={() => r.turnOn("wallet")}
+                  disabled={Boolean(busy)}
+                  className={r.embedded ? "btn btn-ghost btn-sm" : "btn btn-ink btn-sm"}
+                >
+                  {busy === "on-wallet" ? "Check your wallet…" : r.embedded ? "With the wallet's signature" : "With your wallet"}
+                </button>
+              )}
+              {!r.embedded && r.passkeyOk && (
                 <button
                   type="button"
                   onClick={() => r.turnOn("passkey")}
@@ -469,7 +493,17 @@ export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean
   const done = Boolean(r.message) && r.message?.tone !== "error" && !noBackup;
   if (!r.active || !r.state.ready || (r.state.on && !done && !noBackup && !older) || (hidden && !stayUp) || (!hasBalance && !hasDeposits && !older && !done)) return null;
 
-  const source: RecoverySource | null = r.walletOk ? "wallet" : r.passkeyOk ? "passkey" : null;
+  // A Gloam wallet's signature is Turnkey's to make: the nudge offers its passkey, and leaves
+  // the wallet option to Settings, where what it means is said.
+  const source: RecoverySource | null = r.embedded
+    ? r.passkeyOk
+      ? "passkey"
+      : null
+    : r.walletOk
+      ? "wallet"
+      : r.passkeyOk
+        ? "passkey"
+        : null;
   const busy = Boolean(r.busy);
   const action = restoreMode ? r.restore : r.turnOn;
   const label = noBackup

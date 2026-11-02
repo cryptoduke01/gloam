@@ -52,54 +52,74 @@ test("off unless the flag says exactly true and both dashboard ids are set", () 
 
 const base: EmbeddedFlowState = {
   signedIn: false,
-  checked: false,
+  list: "unknown",
   hasWallet: false,
   creating: false,
   error: null,
   funding: false,
+  backup: false,
   dismissed: false,
 };
 const step = (patch: Partial<EmbeddedFlowState>) => embeddedFlowStep({ ...base, ...patch });
 
 test("signed out: nothing shows", () => {
   assert.equal(step({}), "hidden");
-  assert.equal(step({ checked: true, hasWallet: false }), "hidden");
+  assert.equal(step({ list: "read", hasWallet: false }), "hidden");
 });
 
 test("a new account: nothing while the wallet list is read, then Create wallet", () => {
   assert.equal(step({ signedIn: true }), "checking");
-  assert.equal(step({ signedIn: true, checked: true }), "create");
+  assert.equal(step({ signedIn: true, list: "read" }), "create");
+});
+
+test("a failed wallet-list read is unknown, never 'no wallet': no Create wallet on it", () => {
+  // the kit's own list is empty because its read failed too, and the refresh failed
+  assert.equal(step({ signedIn: true, list: "unknown", hasWallet: false }), "checking");
+  assert.equal(step({ signedIn: true, list: "failed", hasWallet: false }), "unreadable");
+  assert.equal(step({ signedIn: true, list: "failed", hasWallet: false, dismissed: true }), "hidden");
+  // an unset or unexpected list state is unknown too, never "no wallet"
+  assert.equal(embeddedFlowStep({ ...base, signedIn: true, list: undefined as never }), "checking");
+  assert.equal(embeddedFlowStep({ ...base, signedIn: true, list: "weird" as never }), "checking");
 });
 
 test("an account that has a wallet never sees Create wallet", () => {
-  assert.equal(step({ signedIn: true, hasWallet: true, checked: true }), "hidden");
-  // the list already holds the wallet before the re-read finishes
-  assert.equal(step({ signedIn: true, hasWallet: true, checked: false }), "checking");
+  assert.equal(step({ signedIn: true, hasWallet: true, list: "read" }), "hidden");
+  assert.equal(step({ signedIn: true, hasWallet: true, list: "unknown" }), "hidden");
+  assert.equal(step({ signedIn: true, hasWallet: true, list: "failed" }), "hidden");
 });
 
 test("creating, then Add funds, then closed", () => {
-  const s: EmbeddedFlowState = { ...base, signedIn: true, checked: true };
+  const s: EmbeddedFlowState = { ...base, signedIn: true, list: "read" };
   assert.equal(embeddedFlowStep({ ...s, creating: true }), "creating");
   const made = { ...s, hasWallet: true, funding: true };
   assert.equal(embeddedFlowStep(made), "funding");
+  // the backup offer rides in Add funds, not in a second sheet
+  assert.equal(embeddedFlowStep({ ...made, backup: true }), "funding");
   assert.equal(embeddedFlowStep({ ...made, dismissed: true }), "hidden");
 });
 
+test("a wallet made before gets the backup offer on its own, once closed it stays closed", () => {
+  const s: EmbeddedFlowState = { ...base, signedIn: true, list: "read", hasWallet: true, backup: true };
+  assert.equal(embeddedFlowStep(s), "backup");
+  assert.equal(embeddedFlowStep({ ...s, dismissed: true }), "hidden");
+  assert.equal(embeddedFlowStep({ ...s, backup: false }), "hidden");
+});
+
 test("a failure says so and lets them try again; trying again clears it", () => {
-  const s: EmbeddedFlowState = { ...base, signedIn: true, checked: true, error: "The wallet wasn't made. Try again." };
+  const s: EmbeddedFlowState = { ...base, signedIn: true, list: "read", error: "The wallet wasn't made. Try again." };
   assert.equal(embeddedFlowStep(s), "failed");
   assert.equal(embeddedFlowStep({ ...s, creating: true }), "creating");
   assert.equal(embeddedFlowStep({ ...s, error: null }), "create");
 });
 
 test("closing the create sheet hides it; the header's Create wallet opens it again", () => {
-  const s: EmbeddedFlowState = { ...base, signedIn: true, checked: true, dismissed: true };
+  const s: EmbeddedFlowState = { ...base, signedIn: true, list: "read", dismissed: true };
   assert.equal(embeddedFlowStep(s), "hidden");
   assert.equal(embeddedFlowStep({ ...s, dismissed: false }), "create");
 });
 
 test("Add funds from the wallet menu opens on a wallet made before", () => {
-  assert.equal(step({ signedIn: true, checked: true, hasWallet: true, funding: true }), "funding");
+  assert.equal(step({ signedIn: true, list: "read", hasWallet: true, funding: true }), "funding");
 });
 
 test("the wallet to sign with: the embedded one with an Ethereum account", () => {
@@ -114,10 +134,22 @@ test("the wallet to sign with: the embedded one with an Ethereum account", () =>
     pickEmbeddedWallet([
       { source: "connected", walletId: "mm", accounts: [eth("0xMetaMask")] },
       { source: "embedded", walletId: "w1", walletName: "Savings", accounts: [sol, eth("0xGloam")] },
-      { source: "embedded", walletId: "w2", accounts: [eth("0xSecond")] },
     ]),
     { walletId: "w1", walletName: "Savings", address: "0xGloam" },
   );
+});
+
+test("with two wallets, the oldest signs, whatever order the list comes back in", () => {
+  const eth = (address: string) => [{ address, addressFormat: "ADDRESS_FORMAT_ETHEREUM" }];
+  const original = { source: "embedded", walletId: "w-old", accounts: eth("0xA1"), createdAt: { seconds: "1", nanos: "500" } };
+  const second = { source: "embedded", walletId: "w-new", accounts: eth("0xB2"), createdAt: { seconds: "2", nanos: "0" } };
+  const sameSecond = { source: "embedded", walletId: "w-same", accounts: eth("0xC3"), createdAt: { seconds: "1", nanos: "900" } };
+  const noTime = { source: "embedded", walletId: "w-x", accounts: eth("0xD4") };
+  assert.equal(pickEmbeddedWallet([original, second])?.address, "0xA1");
+  assert.equal(pickEmbeddedWallet([second, original])?.address, "0xA1");
+  assert.equal(pickEmbeddedWallet([sameSecond, second, original])?.address, "0xA1", "nanoseconds break a tie");
+  assert.equal(pickEmbeddedWallet([noTime, second])?.address, "0xB2", "a wallet with no timestamp comes after");
+  assert.equal(pickEmbeddedWallet([noTime])?.address, "0xD4");
 });
 
 test("the wallet name is optional, tidied, and kept short", () => {
@@ -144,6 +176,7 @@ test("passkeys belong to gloam.trade on the site, to the page's host elsewhere",
 });
 
 test("a wallet that wasn't made is explained in plain words", () => {
+  assert.equal(createWalletErrorText(new Error("wallet list")), "Couldn't check your wallets, so nothing was made. Try again.");
   assert.equal(createWalletErrorText(new Error("NotAllowedError: The operation either timed out or was not allowed")), "Nothing was made. Try again when you're ready.");
   assert.match(createWalletErrorText(new Error("session expired")), /sign-in ran out/);
   assert.match(createWalletErrorText(new TypeError("Failed to fetch")), /Couldn't reach the wallet service/);

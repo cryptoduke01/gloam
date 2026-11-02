@@ -21,6 +21,7 @@
  */
 import { parseAbiItem, type Address, type Hex } from "viem";
 import { getLogsSafe } from "./logRange";
+import { allNetworks } from "./networks";
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
@@ -80,9 +81,23 @@ export type SweepReader = {
     args: { from?: Address; to?: Address };
     fromBlock: bigint;
     toBlock: bigint;
-  }): Promise<{ blockNumber: bigint | null; transactionHash: Hex | null; args?: { value?: bigint } }[]>;
-  getTransaction(args: { hash: Hex }): Promise<{ from: Address }>;
+  }): Promise<{ blockNumber: bigint | null; transactionHash: Hex | null; args?: { value?: bigint; to?: Address } }[]>;
+  getTransaction(args: { hash: Hex }): Promise<{ from: Address; to?: Address | null }>;
 };
+
+/**
+ * An outgoing transfer another account sent that is still the wallet's own act:
+ * a deposit into this chain's Gloam vault (a Gloam wallet's sponsored deposit, which
+ * Turnkey's paymaster sends), from a wallet that delegates to a known smart-account
+ * contract. Only the vault as the recipient excuses it: those delegates run any call
+ * that carries the owner's signature, for any caller, so a thief holding the key can
+ * send through their own relayer just as well. Money that leaves for anywhere else
+ * stays a sweep, whoever relayed it.
+ */
+function ownVaultDeposit(delegate: Address | null, recipient: Address | undefined, vault: Address | null): boolean {
+  if (!delegate || !KNOWN_DELEGATES.has(delegate.toLowerCase()) || !recipient || !vault) return false;
+  return recipient.toLowerCase() === vault.toLowerCase();
+}
 
 /** A Transfer log that moved money (zero-value ones are free for anyone to emit). */
 function movedMoney(l: { args?: { value?: bigint } }): boolean {
@@ -95,14 +110,18 @@ export function delegateOf(code: Hex | undefined): Address | null {
   return `0x${code.slice(8)}` as Address;
 }
 
-async function delegatedCheck(client: SweepReader, address: Address): Promise<SweepCheck["delegated"]> {
+/** The address's EIP-7702 delegate, or null (none, or the read failed). */
+async function readDelegate(client: SweepReader, address: Address): Promise<Address | null> {
   try {
-    const delegate = delegateOf(await client.getCode({ address }));
-    if (!delegate || KNOWN_DELEGATES.has(delegate.toLowerCase())) return null;
-    return { delegate };
+    return delegateOf(await client.getCode({ address }));
   } catch {
     return null;
   }
+}
+
+function delegatedCheck(delegate: Address | null): SweepCheck["delegated"] {
+  if (!delegate || KNOWN_DELEGATES.has(delegate.toLowerCase())) return null;
+  return { delegate };
 }
 
 async function sweptCheck(
@@ -110,6 +129,8 @@ async function sweptCheck(
   chainId: number,
   address: Address,
   token: Address,
+  delegate: Address | null,
+  vault: Address | null,
   head?: bigint
 ): Promise<SweepCheck["swept"]> {
   try {
@@ -143,6 +164,8 @@ async function sweptCheck(
       for (const l of out) {
         // the same transaction both paid in and out: a contract passing it on, not a sweep
         if (!l.transactionHash || l.transactionHash === arrival.transactionHash || !movedMoney(l)) continue;
+        // a deposit into this chain's vault from a delegated wallet (a sponsored deposit) is its own
+        if (ownVaultDeposit(delegate, l.args?.to, vault)) continue;
         const tx = await client.getTransaction({ hash: l.transactionHash });
         if (tx.from.toLowerCase() !== address.toLowerCase()) return { evidenceTx: l.transactionHash };
       }
@@ -156,18 +179,17 @@ async function sweptCheck(
 /**
  * Checks `address` before a cash out of `token` (null: the chain's native coin,
  * whose moves leave no Transfer log, so only the delegation is read).
- * `head` pins the newest block looked at (tests).
+ * `head` pins the newest block looked at, and `vault` the chain's Gloam vault (tests).
  */
 export async function checkSweep(
   client: SweepReader,
   chainId: number,
   address: Address,
   token: Address | null,
-  opts: { head?: bigint } = {}
+  opts: { head?: bigint; vault?: Address | null } = {}
 ): Promise<SweepCheck> {
-  const [delegated, swept] = await Promise.all([
-    delegatedCheck(client, address),
-    token ? sweptCheck(client, chainId, address, token, opts.head) : Promise.resolve(null),
-  ]);
-  return { delegated, swept };
+  const delegate = await readDelegate(client, address);
+  const vault = opts.vault !== undefined ? opts.vault : (allNetworks().find((n) => n.chainId === chainId)?.pool ?? null);
+  const swept = token ? await sweptCheck(client, chainId, address, token, delegate, vault, opts.head) : null;
+  return { delegated: delegatedCheck(delegate), swept };
 }

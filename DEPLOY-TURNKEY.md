@@ -38,17 +38,33 @@ In the Turnkey dashboard, under **Embedded Wallets > Configuration**:
 | Email customization | App name `Gloam`; logo `https://www.gloam.trade/brand/logo.png` (PNG, at most 340x124). The app name is required for email sign-in. |
 | OAuth redirect URL | Leave empty: no social logins. |
 
-Wallets are not created at sign-up. After the first sign-in the app asks for an optional
+Wallets are not created at sign-up. After the first sign-in the app reads the wallet
+list (a failed read is retried, never taken for "no wallet"), then asks for an optional
 name and creates one Ethereum wallet (`m/44'/60'/0'/0/0`), which signs on every chain
-Gloam runs on.
+Gloam runs on. It reads the list once more just before creating, and with more than one
+wallet it always signs with the oldest.
+
+### Recovery for Gloam wallets
+
+A Gloam wallet's signatures are made by Turnkey and kept as activity results, which
+Gloam's Turnkey account can read. A recovery key made from one could be rebuilt without
+the person, so the app offers recovery with a passkey (WebAuthn PRF) instead: one tap,
+once per wallet per browser, only while the Gloam wallet is connected. Nothing turns on
+by itself. Where the browser can't make a passkey backup, the app offers the wallet's
+signature and says plainly that Turnkey could open that backup; Settings and `/privacy`
+say the same.
 
 ### Gas sponsorship (optional)
 
 A new Gloam wallet holds no gas. Claiming a link, receiving a private payment, paying
 privately, cashing out and a bridge order paid from Solana or another wallet need none
 from it. Adding money privately from the wallet's own public balance does. Turnkey's gas
-station can pay that fee, on Robinhood Chain, Base and Ethereum (mainnet and testnet)
-among others. On Tempo the fee always comes out of the stablecoin.
+station can pay that fee, on Robinhood Chain, Base and Ethereum (mainnet and testnet).
+It pays for two calls only: the deposit into that chain's Gloam vault, and the approve,
+on a token Add privately lists there, that lets the vault take it. It never pays for a
+call whose gas estimate fails. A
+public send or a bridge order paid from the wallet is the wallet's own to pay for. On
+Tempo the fee always comes out of the stablecoin.
 
 To turn it on:
 
@@ -61,7 +77,11 @@ To turn it on:
 3. Set `NEXT_PUBLIC_TURNKEY_SPONSOR_CHAINS` (below).
 
 The app sponsors a send only when the wallet can't pay its own fee, so a wallet that
-holds ETH pays its own way. A sponsored wallet delegates to Turnkey's open-source gas
+holds ETH pays its own way. Only a refusal Turnkey answers to the first submit (a 4xx
+whose `turnkeyErrorCode`, or with none its gRPC code, says it was turned down before any
+work) counts as "nothing was sent"; a 5xx, an unknown code, a lost answer, or anything
+after Turnkey took the send keeps the note the app saved ahead of it, because the deposit
+may still land. A sponsored wallet delegates to Turnkey's open-source gas
 delegate (`0x955D84139e7621bc571b117D8EB5D28A4A222C6f`, EIP-7702); the cash-out check
 already treats it as a known delegate.
 
@@ -75,6 +95,11 @@ All public, all build-time: redeploy after any change.
 | `NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID` | The auth proxy config id (already set) |
 | `NEXT_PUBLIC_TURNKEY_ENABLED` | `true` to switch Gloam wallets on. Unset or anything else: off |
 | `NEXT_PUBLIC_TURNKEY_SPONSOR_CHAINS` | Optional. Chain ids Turnkey may sponsor, comma-separated, or `all`. Suggested: `4663,8453,46630,84532,11155111`. Add `1` (Ethereum mainnet) only with a limit you accept: its fees are the highest. Unset sponsors nothing. |
+
+With the flag on, production builds also enforce a Content-Security-Policy on `/app`
+(scripts, frames, workers and connections only from the listed hosts, `csp.config.mjs`),
+because a Gloam wallet signs with no prompt. Still open: inline scripts, until Next's
+scripts carry nonces. Test 11 below checks it on the preview.
 
 ## 3. Check before switching on
 
@@ -98,22 +123,29 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
 2. Sign out from the wallet menu, sign in again with the same email: the same address,
    no create sheet.
 3. Sign in with a passkey on a second browser (a new account): create a wallet with a name.
-4. Add funds says the private balance is backed up, and Settings > Recovery shows recovery
-   on with the wallet. Get test funds, add privately, then sign in on another browser
-   profile with the same email: the private balance comes back. If Add funds asks you to
-   turn on recovery with a passkey instead, Turnkey's signatures are not deterministic
-   (recovery signs twice and compares): tell us, and use a passkey for recovery meanwhile.
+4. In Add funds, "Back up with a passkey": the passkey prompt opens, then the sheet says
+   it is backed up and Settings > Recovery shows "With a passkey". Get test funds, add
+   privately, then sign in on another browser profile with the same email: the backup
+   sheet offers "I backed up before"; use the same passkey and the private balance comes
+   back. Sign in on a browser that already backs up: no offer, and nothing says "backed
+   up" for it. In a browser with no passkey support, the offer is the wallet's signature,
+   with the warning that Turnkey could open it.
 5. Claim a payment link sent from another wallet: it lands with no gas in the Gloam wallet.
 6. Switch networks in the menu (Tempo testnet, Base Sepolia, Ethereum Sepolia, then each
    mainnet): the wallet follows with no prompt and the same address.
 7. With sponsorship on: on Base Sepolia, send test USDC to the wallet (no ETH), Add
    privately: approve and deposit go through, and Turnkey's dashboard shows the gas.
-   Without sponsorship the app says the wallet has no ETH for the fee and sends nothing.
+   A public send from the same wallet is not sponsored: the app says it has no ETH for
+   the fee and sends nothing. Without sponsorship, Add privately says the same.
 8. Tempo testnet: send test stablecoins to the wallet, Add privately: the first send sets
    a fee token, then the deposit goes through with the fee taken in the stablecoin.
 9. Bridge: on a mainnet, Add funds > Bring money from another chain opens the bridge.
 10. Turn Allowed Origins off for the preview (or open a URL not in the list): the app
     offers Connect wallet only, and the console names the origin to add.
+11. With the flag on, open `/app` pages, sign in, add privately (which makes a proof) and
+    connect a browser wallet and WalletConnect: the console shows no "Refused to load" or
+    "Refused to connect" line. If one does, add that host in `csp.config.mjs`.
+12. If the wallet doesn't open after sign-in, the header offers Try again and Sign out.
 
 ## Rolling back
 

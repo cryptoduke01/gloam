@@ -5,6 +5,8 @@ import { SwitchChainError, getAddress, http, type Address } from "viem";
 import { EMBEDDED_CONNECTOR_ID } from "./embeddedWallet";
 import { SPONSOR_CHAINS } from "./embeddedGas";
 import { makeEmbeddedProvider, type EmbeddedProvider } from "./embeddedProvider";
+import { allNetworks } from "./networks";
+import { shieldTokensFor } from "./tokens";
 import { getActiveTurnkeySigner, onTurnkeyAccountChange } from "./turnkeyBridge";
 
 /**
@@ -24,6 +26,11 @@ export function turnkeyConnector({ sponsorChains = SPONSOR_CHAINS }: { sponsorCh
         transportFor: (chainId) => config.transports?.[chainId] ?? http(),
         signer: getActiveTurnkeySigner,
         sponsorChains,
+        // each chain's vault and the tokens Add lists there: the only calls a sponsored send may make
+        sponsorTargetsFor: (chainId) => {
+          const vault = allNetworks().find((n) => n.chainId === chainId)?.pool;
+          return vault ? { vault, tokens: shieldTokensFor(chainId).map((t) => t.address as Address) } : null;
+        },
         onChainChanged: (chainId) => config.emitter.emit("change", { chainId }),
       });
       return provider;
