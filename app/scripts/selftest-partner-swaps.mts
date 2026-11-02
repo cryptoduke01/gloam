@@ -22,7 +22,7 @@
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-partner-swaps.mts
  */
 import assert from "node:assert/strict";
-import type { Address, Hex, PublicClient } from "viem";
+import { encodeAbiParameters, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 
 process.env.GLOAM_PARTNERS_STORE = "memory";
@@ -34,11 +34,12 @@ env.NODE_ENV = "test";
 
 const { resetMemoryKv } = await import("../src/lib/partnersKv");
 const { apiKeyPepper, createApiKey } = await import("../src/lib/apiKeys");
-const { commissionFor, describeFee, readPartnerStats, recordActivity, upsertPartner, ACTIVITY_KINDS } = await import("../src/lib/partners");
+const { attributedTo, claimTransaction, commissionFor, describeFee, readPartnerStats, recordActivity, upsertPartner, ACTIVITY_KINDS } = await import("../src/lib/partners");
+const { depositIn } = await import("../src/lib/partnerDeposits");
 const { relayForPartner, partnerRelayDeps } = await import("../src/lib/partnerRelay");
 const { RelayError } = await import("../src/lib/relay/server");
 const { getNetwork, NETWORK_KEYS } = await import("../src/lib/networks");
-const { SwapQuoteError, quoteSwapServer, SWAP_PUBLIC_LINE } = await import("../src/lib/swapQuote");
+const { SwapQuoteError, quoteSwapServer, SWAP_PUBLIC_LINE, SWAP_QUOTE_PER_MINUTE } = await import("../src/lib/swapQuote");
 const vs = await import("../src/lib/vaultSwap");
 const { smallestSwapUsd, swapFloorMessage, swapFloorShown } = await import("../src/lib/relay/swapFloor");
 const { POST: relayPost } = await import("../src/app/api/v1/relay/route");
@@ -113,6 +114,7 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
   const calls: Call[] = [];
   const recorded: { kind: string; edge: unknown }[] = [];
   const memoFrom: unknown[] = [];
+  const claimed: Hex[] = [];
   const deps = {
     ...partnerRelayDeps,
     relayTransfer: async () => {
@@ -141,12 +143,13 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       if (opts.spentRead === "fail") throw new Error("rpc down");
       return opts.spent ?? false;
     },
+    claim: (async (_p: unknown, _chainId: number, hash: Hex) => (claimed.push(hash), true)) as typeof claimTransaction,
     record: (async (a: Parameters<typeof recordActivity>[0]) => {
       recorded.push({ kind: a.kind, edge: a.edge });
       return recordActivity(a);
     }) as typeof recordActivity,
   };
-  return { deps, calls, recorded, memoFrom };
+  return { deps, calls, recorded, memoFrom, claimed };
 }
 
 const swapBody = (over: Record<string, unknown> = {}) => ({
@@ -187,6 +190,48 @@ await test("partner relay: a swap call for a spent note (the refund path) is sen
   assert.deepEqual(calls, ["isSpent", "swap"]);
   assert.deepEqual(r.attribution, { recorded: false, kind: null, reason: "not_billable" });
   assert.equal(recorded.length, 0);
+});
+
+await test("partner relay: a refund and an exit are claimed for the partner, so neither can be counted later as a deposit or a swap", async () => {
+  const refund = fakeDeps({ spent: true });
+  const r = await relayForPartner({ net: RH, body: swapBody({ unshieldTx: H(78) }), partner, keyId: "key_1" }, refund.deps);
+  assert.deepEqual(refund.claimed, [r.hash], "the refund's transaction is claimed");
+  const exit = fakeDeps();
+  const e = await relayForPartner({ net: RH, body: { chainId: RH.chainId, action: "swapExit" }, partner, keyId: "key_1" }, exit.deps);
+  assert.deepEqual(exit.claimed, [e.hash], "the exit's transaction is claimed");
+  const swap = fakeDeps({ spent: false });
+  await relayForPartner({ net: RH, body: swapBody({ spend: { ...swapBody().spend, nullifier: H(901) } }), partner, keyId: "key_1" }, swap.deps);
+  assert.deepEqual(swap.claimed, [], "a swap is recorded, which claims it already");
+  // the real claim, in the store: a second claim of the same transaction, or a deposit claim of it, is refused
+  const tx = H(902);
+  assert.equal(await claimTransaction(partner, RH.chainId, tx), true);
+  assert.equal(await attributedTo(RH.chainId, tx), partner.id);
+  const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Other Desk" });
+  assert.equal(await claimTransaction(other, RH.chainId, tx), false);
+  const asDeposit = await recordActivity({ partner: other, keyId: null, network: RH, kind: "deposit", txHash: tx, edge: { asset: RH_USDG, amount: 1n } });
+  assert.equal(asDeposit.recorded, false);
+  // a claim that can't be stored never fails the send
+  const broken = fakeDeps({ spent: true });
+  const sent = await relayForPartner({ net: RH, body: swapBody({ unshieldTx: H(79) }), partner, keyId: "key_1" }, { ...broken.deps, claim: async () => { throw new Error("kv down"); } });
+  assert.ok(sent.hash);
+});
+
+await test("deposits: a swap's or a refund's note, put in through a swap router, is no one's deposit", () => {
+  const pool = RH.pool!;
+  const word = (a: string) => `0x${a.toLowerCase().slice(2).padStart(64, "0")}` as Hex;
+  const topic0 = keccak256(toHex("Shielded(bytes32,address,uint256,uint256,address)"));
+  const log = (from: Address, amount: bigint, address: Address = pool) => ({
+    address,
+    topics: [topic0, H(3001), word(RH_USDG), word(from)] as [Hex, ...Hex[]],
+    data: encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [amount, 7n]),
+    blockHash: H(1), blockNumber: 1n, logIndex: 0, transactionHash: H(2), transactionIndex: 0, removed: false,
+  });
+  const depositor = "0x00000000000000000000000000000000de90517e" as Address;
+  assert.deepEqual(depositIn([log(depositor, 5_000_000n)] as never, pool), { asset: RH_USDG, amount: 5_000_000n }, "a wallet's deposit counts");
+  for (const router of vs.EVERY_SWAP_ROUTER) {
+    assert.equal(depositIn([log(router, 5_000_000n)] as never, pool), null, `a note from router ${router} is not a deposit`);
+  }
+  assert.equal(depositIn([log(depositor, 5n, "0x000000000000000000000000000000000000dEaD")] as never, pool), null, "only Gloam's vault");
 });
 
 await test("partner relay: a vault read that fails sends nothing", async () => {
@@ -239,8 +284,9 @@ const pepper = (() => {
   return p.pepper;
 })();
 const testKey = (await createApiKey({ partnerId: partner.id, name: "Swaps", env: "test", pepper })).secret;
-function req(path: string, init: { method?: string; key?: string; body?: unknown } = {}) {
-  const headers: Record<string, string> = { "x-forwarded-host": HOST };
+const liveKey = (await createApiKey({ partnerId: partner.id, name: "Swaps live", env: "live", pepper })).secret;
+function req(path: string, init: { method?: string; key?: string; body?: unknown; ip?: string } = {}) {
+  const headers: Record<string, string> = { "x-forwarded-host": HOST, "x-forwarded-for": init.ip ?? "203.0.113.1" };
   if (init.key) headers.authorization = `Bearer ${init.key}`;
   if (init.body !== undefined) headers["content-type"] = "application/json";
   return new Request(`http://${HOST}${path}`, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
@@ -291,10 +337,42 @@ await test("v1 swaps/quote: bad input is refused before any read", async () => {
     [{ network: "robinhood-mainnet", assetIn: RH_USDG, assetOut: "0x0000000000000000000000000000000000000000", amountIn: "1.5" }, "bad_request"],
   ];
   for (const [body, code] of cases) {
-    const r = await json(await quotePost(req("/api/v1/swaps/quote", { method: "POST", key: testKey, body })));
+    // a testnet with a test key, a mainnet with a live key
+    const key = body.network === "robinhood" ? testKey : liveKey;
+    const r = await json(await quotePost(req("/api/v1/swaps/quote", { method: "POST", key, body, ip: "203.0.113.2" })));
     assert.equal(r.ok, false, JSON.stringify(body));
     assert.equal(r.error!.code, code, JSON.stringify(body));
   }
+});
+
+await test("v1 swaps/quote: a test key can't quote a mainnet", async () => {
+  const r = await json(await quotePost(req("/api/v1/swaps/quote", { method: "POST", key: testKey, body: { network: "robinhood-mainnet", assetIn: RH_USDG, assetOut: RH_USDG, amountIn: "1" }, ip: "203.0.113.3" })));
+  assert.equal(r.ok, false);
+  assert.equal(r.error!.code, "key_env_mismatch");
+});
+
+await test("v1 swaps/quote: limited per partner account, all its keys together, and per IP", async () => {
+  // its own account and keys, so other tests' quotes don't count here
+  const desk = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Quote Desk" });
+  const k1 = (await createApiKey({ partnerId: desk.id, name: "a", env: "live", pepper })).secret;
+  const k2 = (await createApiKey({ partnerId: desk.id, name: "b", env: "live", pepper })).secret;
+  // bad input answers without any chain read, so only the limit is under test
+  const body = { network: "robinhood-mainnet", assetIn: RH_USDG, assetOut: RH_USDG, amountIn: "1" };
+  const codes: string[] = [];
+  for (let i = 0; i < SWAP_QUOTE_PER_MINUTE + 1; i++) {
+    const r = await json(await quotePost(req("/api/v1/swaps/quote", { method: "POST", key: i % 2 ? k1 : k2, body, ip: `198.51.100.${i}` })));
+    codes.push(r.error!.code);
+  }
+  assert.deepEqual(codes.slice(0, SWAP_QUOTE_PER_MINUTE), Array(SWAP_QUOTE_PER_MINUTE).fill("same_asset"));
+  assert.equal(codes.at(-1), "rate_limited", "the account's keys share one limit");
+  // one IP, many accounts
+  const ipCodes: string[] = [];
+  for (let i = 0; i < SWAP_QUOTE_PER_MINUTE + 1; i++) {
+    const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: `Desk ${i}` });
+    const k = (await createApiKey({ partnerId: other.id, name: "k", env: "live", pepper })).secret;
+    ipCodes.push((await json(await quotePost(req("/api/v1/swaps/quote", { method: "POST", key: k, body, ip: "192.0.2.77" })))).error!.code);
+  }
+  assert.equal(ipCodes.at(-1), "rate_limited", "one IP is limited across accounts");
 });
 
 // ---------------------------------------------------------------- server quote
@@ -306,6 +384,8 @@ function fakeClient(o: {
   fee?: number | "fail";
   dex?: "ok" | "fail";
   rate?: bigint; // out per 10_000 in
+  /** A v4 pool's output by size, in place of `rate` (price impact). */
+  outOf?: (amount: bigint) => bigint;
   gasPriceWei?: bigint;
   feed?: { answer: bigint; updatedAt: number } | "fail";
 }): PublicClient {
@@ -342,7 +422,7 @@ function fakeClient(o: {
         if (k.functionName === "allowedPool") return true;
         if (k.functionName === "quoteExactInput") {
           const amount = (k.args[0] as { exactAmount: bigint }).exactAmount;
-          return [(amount * rate) / 10_000n, 0n] as const;
+          return [o.outOf ? o.outOf(amount) : (amount * rate) / 10_000n, 0n] as const;
         }
         throw new Error(`unexpected multicall ${k.functionName}`);
       });
@@ -374,6 +454,23 @@ await test("quote: a clean quote on Tempo, JSON-safe, with no stop", async () =>
   assert.equal(q.quotedAt, NOW);
   assert.ok(BigInt(q.limits.maxIn!) > 0n);
   JSON.stringify(q); // no bigint anywhere
+});
+
+await test("quote: price impact past 2% stops a swap on Robinhood Chain too, as the SDK's quoteSwap does, unless asked otherwise", async () => {
+  const thin = fakeClient({ outOf: (a) => (a > 10_000_000n ? a / 100n : a) });
+  const ask = { assetIn: RH_USDG, assetOut: "0xDcD885F5c60b3aD49F6D58718696417314e8724d", amountIn: "1000000000" };
+  const q = await quoteSwapServer(RH, ask, { client: thin, relay: relayOn, now: () => NOW });
+  assert.equal(q.stop?.code, "too_thin", JSON.stringify(q.stop));
+  assert.ok(q.amountOut !== null && q.impactBps! >= 9_800, "the price still shows");
+  assert.deepEqual(q.stops, { maxImpactBps: 200, maxPegGapBps: 200 });
+  const loose = await quoteSwapServer(RH, { ...ask, maxImpactBps: 10_000 }, { client: thin, relay: relayOn, now: () => NOW });
+  assert.equal(loose.stop, null, "the swap tab's own behavior there, when asked for");
+  await assert.rejects(quoteSwapServer(RH, { ...ask, maxImpactBps: 20_000 }, { client: thin }), (e: unknown) => e instanceof SwapQuoteError && e.code === "bad_request");
+});
+
+await test("quote: Tempo's dollar pairs are held to the peg", async () => {
+  const q = await quoteSwapServer(TEMPO, { assetIn: TEMPO_USDCE, assetOut: TEMPO_PATHUSD, amountIn: "100000000" }, { client: fakeClient({ rate: 9_500n }), relay: relayOn, now: () => NOW });
+  assert.equal(q.stop?.code, "off_peg");
 });
 
 await test("quote: a refund note the vault could not take back stops the swap, with the most one swap can spend", async () => {
