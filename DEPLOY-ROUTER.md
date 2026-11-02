@@ -283,10 +283,14 @@ sent from any wallet. A scheduled cash out that meets it tries again, like any r
 | Robinhood Chain | 0.02 ETH | 34 sends, about 0.0012 ETH |
 | Tempo | 1, in its gas units | 1 send, about 0.0005 |
 
-A 200-person payroll fits these at ordinary gas, and on Ethereum up to about 0.1 gwei.
-`GLOAM_RELAY_HOURLY_SPEND_<chainId>` sets a chain's cap in its gas coin, or `off`. One IP may ask
-for 120 sends in 10 minutes on Ethereum, against 400 elsewhere: `GLOAM_RELAY_IP_SENDS_<chainId>`,
-or `off`. The partner API keeps its own limits.
+New sends stop at 80% of the cap. Cash outs, refunds and exits can use the rest. One sender (an
+IP, or a partner account) may hold 40% of the cap in an hour, refunds and exits apart, so a
+200-person payroll from one browser fits at ordinary gas, and on Ethereum up to about 0.05 gwei.
+`GLOAM_RELAY_HOURLY_SPEND_<chainId>` sets a chain's cap in its gas coin, or `off`, and
+`GLOAM_RELAY_SENDER_SHARE_<chainId>` a sender's share in percent, or `off`. One IP may ask for
+120 sends in 10 minutes on Ethereum, against 400 elsewhere: `GLOAM_RELAY_IP_SENDS_<chainId>`, or
+`off`. Through the partner API the account is the sender. On Base a send holds half again its
+gas for the fee to post it to Ethereum, and settles at the fee its receipt shows.
 
 **Gas limits by kind.** The relay checks each dry run against `SEND_GAS_MOST`: 1.2M for a cash
 out, 2.6M for a swap or refund, 400k for an exit, four times that on Robinhood Chain, whose

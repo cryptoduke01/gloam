@@ -53,11 +53,11 @@ export async function POST(req: Request) {
     let edge: { asset: `0x${string}`; amount: bigint } | null = null;
     switch (body.action) {
       case "transfer":
-        hash = await relayTransfer(net, body);
+        hash = await relayTransfer(net, body, sender);
         kind = "private_payment";
         break;
       case "unshield":
-        hash = await relayUnshield(net, body);
+        hash = await relayUnshield(net, body, sender);
         kind = "cash_out";
         // Public inputs of the cash-out proof, already validated by the relay.
         edge = { asset: asAddress(body.asset, "asset"), amount: asAmount(body.amount) };
