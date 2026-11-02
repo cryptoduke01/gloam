@@ -715,15 +715,17 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(v.status, "settled", JSON.stringify(v));
   });
 
-  test("a relay refusal that proves nothing was sent frees the note and forgets the outputs", async () => {
+  test("a relay refusal frees the note and keeps the outputs dead, since the relay has seen the proof", async () => {
     const r = await relayPayment(() => async () => {
       throw new GloamRelayError("The payment did not pass the relay's check.", "check_failed");
     });
     assert.equal(r.paid.status, "error", JSON.stringify(r.paid));
     assert.equal(r.paid.paymentHeader, undefined);
-    assert.equal(openNoteStore(r.payerEnv).get(r.input)?.status, "unspent", "the note is spendable again");
-    assert.equal(r.byOrigin("change").length, 0);
-    assert.equal(r.byOrigin("payment").length, 0);
+    const input = openNoteStore(r.payerEnv).get(r.input);
+    assert.equal(input?.status, "unspent", "the note is spendable again");
+    assert.equal(input?.recheck, true, "and checked on every refresh, in case the refused proof lands after all");
+    assert.deepEqual(r.byOrigin("change").map((n) => n.status), ["dead"], "the change is kept, dead, secret and all");
+    assert.deepEqual(r.byOrigin("payment").map((n) => n.status), ["dead"], "the payment is kept, dead");
   });
 
   /**
@@ -790,7 +792,7 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(v.status, "settled", JSON.stringify(v));
   });
 
-  test("a wallet send the node refused outright frees the note and forgets the outputs", async () => {
+  test("a wallet send the node refused outright frees the note and keeps the outputs dead", async () => {
     const dir = tmp();
     const chain = mockChain();
     const payerEnv = partyEnv("payer", dir, PAYER_LIMITS);
@@ -817,7 +819,9 @@ if (process.argv.includes("--add-notes") || process.argv.includes("--reserve")) 
     assert.equal(paid.paymentHeader, undefined);
     const notes = openNoteStore(payerEnv).list();
     assert.equal(notes.find((n) => n.handle === shield.note.handle)?.status, "unspent", "the note is spendable again");
-    assert.equal(notes.filter((n) => n.origin === "change" || n.origin === "payment").length, 0);
+    assert.equal(notes.find((n) => n.handle === shield.note.handle)?.recheck, true, "and checked on every refresh");
+    // the node had the signed transaction, proof and all: its outputs are kept, dead
+    assert.deepEqual(notes.filter((n) => n.origin === "change" || n.origin === "payment").map((n) => n.status), ["dead", "dead"]);
     const report = await P.call("gloam_get_spending_report", {});
     assert.equal(report.recentPayments.find((e: { tool: string }) => e.tool === "pay")?.status, "failed");
   });

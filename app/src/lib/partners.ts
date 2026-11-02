@@ -15,8 +15,9 @@
  *    own 0.25% on cash outs, kept by the pool.
  *
  * What is recorded per transaction: network, kind, tx hash, time, and for
- * public edges only the asset and amount (both already on chain). Never a note,
- * a secret, a recipient of a private send, or a private amount.
+ * public edges only the asset and amount (both already on chain: a deposit's, a
+ * cash out's, a private swap's input). Never a note, a secret, a recipient of a
+ * private send, or a private amount. A private swap carries no partner fee.
  *
  * Storage (lib/partnersKv), all under gloam:partners:v1:
  *   partner:<id>            partner record (JSON)
@@ -103,13 +104,24 @@ export type Commission = {
   volumeUsdMicros: bigint | null;
 };
 
-export type ActivityKind = "private_payment" | "cash_out" | "deposit";
-export const ACTIVITY_KINDS: ActivityKind[] = ["private_payment", "cash_out", "deposit"];
+/**
+ * What a partner key brought in. A private swap is counted with its input (the
+ * asset and amount the swap's unshield names, public on chain) and carries no
+ * partner fee: there is no fee setting for swaps.
+ */
+export type ActivityKind = "private_payment" | "cash_out" | "deposit" | "private_swap";
+export const ACTIVITY_KINDS: ActivityKind[] = ["private_payment", "cash_out", "deposit", "private_swap"];
 
 /** The fee a partner's setting puts on one transaction. Pure; rounds down. */
 export function commissionFor(kind: ActivityKind, fees: PartnerFees, edge?: EdgeAmount | null): Commission {
   if (kind === "private_payment") {
     return { feeUsdMicros: BigInt(fees.privatePaymentCents) * 10_000n, feeToken: null, volumeUsdMicros: null };
+  }
+  if (kind === "private_swap") {
+    // No partner fee on a swap: only its input's dollar value, when it has a price.
+    const volumeUsdMicros =
+      edge && edge.amount >= 0n && edge.priceMicros != null ? (edge.amount * edge.priceMicros) / 10n ** BigInt(edge.decimals) : null;
+    return { feeUsdMicros: 0n, feeToken: 0n, volumeUsdMicros };
   }
   if (!edge || edge.amount < 0n) return { feeUsdMicros: null, feeToken: null, volumeUsdMicros: null };
   const bps = BigInt(kind === "cash_out" ? fees.cashoutBps : fees.depositBps);
@@ -126,6 +138,7 @@ export function toMicroUnits(raw: bigint, decimals: number): bigint {
 
 /** "$0.05 per private payment", "0.25% of each cash out". */
 export function describeFee(kind: ActivityKind, fees: PartnerFees): string {
+  if (kind === "private_swap") return "No partner fee on private swaps";
   if (kind === "private_payment") return `$${(fees.privatePaymentCents / 100).toFixed(2)} per private payment`;
   const bps = kind === "cash_out" ? fees.cashoutBps : fees.depositBps;
   return `${(bps / 100).toFixed(2)}% of each ${kind === "cash_out" ? "cash out" : "deposit"}`;
@@ -353,7 +366,7 @@ export type ActivityRecord = {
   ts: number;
   /** The API key that brought it in. */
   keyId: string | null;
-  /** Public edges only (deposits, cash outs): what is already on chain. */
+  /** Public edges only (deposits, cash outs, a swap's input): what is already on chain. */
   asset: Address | null;
   symbol: string | null;
   decimals: number | null;
@@ -438,7 +451,8 @@ export async function recordActivity(args: {
   if (kind !== "private_payment") {
     if (c.volumeUsdMicros != null) incr.push([`usd:${kind}`, c.volumeUsdMicros]);
     else incr.push([`unpriced:${kind}`, 1]);
-    if (args.edge && info) {
+    // per-asset volume and fees stay what deposits and cash outs moved
+    if (args.edge && info && kind !== "private_swap") {
       const tag = `${net.chainId}:${args.edge.asset.toLowerCase()}`;
       incr.push([`vt:${tag}:${kind}`, toMicroUnits(args.edge.amount, info.decimals)]);
       if (c.feeToken != null) incr.push([`ft:${tag}:${kind}`, toMicroUnits(c.feeToken, info.decimals)]);
@@ -459,6 +473,16 @@ export async function recordActivity(args: {
   }
   await kv(cmds);
   return { recorded: true, record };
+}
+
+/**
+ * Claims a transaction for a partner without counting it: a swap's refund or exit sent
+ * with its key. It brings money back and is no one's swap or deposit, and once claimed
+ * it can't be attributed as either. True when this call claimed it.
+ */
+export async function claimTransaction(partner: Pick<Partner, "id">, chainId: number, txHash: Hex): Promise<boolean> {
+  const [claim] = await kv([["SET", k("tx", chainId, txHash.toLowerCase()), partner.id, "NX", "EX", TX_TTL_SEC]]);
+  return claim === "OK";
 }
 
 /** Who a transaction is attributed to, if anyone. */
@@ -484,6 +508,9 @@ export type DayTotals = {
   privatePayments: number;
   cashOuts: number;
   deposits: number;
+  /** Private swaps relayed with the key. */
+  swaps: number;
+  /** USD of priced deposits and cash outs (swaps are not in it). */
   volumeUsd: number;
   commissionUsd: number;
 };
@@ -493,8 +520,12 @@ export type PartnerStats = {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
-    /** USD of priced deposits and cash outs. */
+    /** Private swaps relayed with the key. */
+    privateSwaps: number;
+    /** USD of priced deposits and cash outs. Swaps are counted apart, in swapVolumeUsd. */
     publicVolumeUsd: number;
+    /** USD of the priced inputs of private swaps (each swap's asset and amount in). */
+    swapVolumeUsd: number;
     /** Would-be commissions in USD, every kind, priced only. */
     commissionUsd: number;
     /** Deposits and cash outs with no USD price (counted, not valued). */
@@ -536,7 +567,7 @@ export function summarizeStats(
   }
   const byNetwork = {} as Record<NetworkKey, Record<ActivityKind, number>>;
   for (const net of NETWORK_KEYS) {
-    byNetwork[net] = { private_payment: 0, cash_out: 0, deposit: 0 };
+    byNetwork[net] = { private_payment: 0, cash_out: 0, deposit: 0, private_swap: 0 };
     for (const kind of ACTIVITY_KINDS) byNetwork[net][kind] = stats[`n:${net}:${kind}`] ?? 0;
   }
 
@@ -571,6 +602,7 @@ export function summarizeStats(
     privatePayments: c["n:private_payment"] ?? 0,
     cashOuts: c["n:cash_out"] ?? 0,
     deposits: c["n:deposit"] ?? 0,
+    swaps: c["n:private_swap"] ?? 0,
     volumeUsd: ((c["usd:cash_out"] ?? 0) + (c["usd:deposit"] ?? 0)) / 1e6,
     commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + (c[`fee:${kind}`] ?? 0), 0) / 1e6,
   }));
@@ -580,7 +612,9 @@ export function summarizeStats(
       privatePayments: byKind.private_payment.count,
       cashOuts: byKind.cash_out.count,
       deposits: byKind.deposit.count,
+      privateSwaps: byKind.private_swap.count,
       publicVolumeUsd: byKind.cash_out.volumeUsd + byKind.deposit.volumeUsd,
+      swapVolumeUsd: byKind.private_swap.volumeUsd,
       commissionUsd: ACTIVITY_KINDS.reduce((s, kind) => s + byKind[kind].commissionUsd, 0),
       unpriced: byKind.cash_out.unpriced + byKind.deposit.unpriced,
     },
