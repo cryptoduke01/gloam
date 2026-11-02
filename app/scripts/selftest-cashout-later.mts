@@ -749,6 +749,16 @@ await test("2. the chain is the only way out unsent: root unknown with the note 
   assert.deepEqual(await runDueJobs(s2.store, s2.chain.deps), [{ id: k.id, status: "sending" }]);
 });
 
+await test("2. a send over its gas limit went nowhere: the job tries again and can still be cancelled", async () => {
+  const j = job();
+  const { store, chain } = await setup(j);
+  chain.failNextSend(() => {
+    throw new SendError("refused", "gas_most");
+  });
+  assert.deepEqual(await runDueJobs(store, chain.deps), [{ id: j.id, status: "scheduled" }]);
+  assert.equal(await cancelJob(store, j.id, T0), "cancelled");
+});
+
 await test("2. stuck 'sending' jobs never crowd a due one out of a run", async () => {
   const stuck = Array.from({ length: 25 }, () => job({ status: "sending", maybeSent: true, sendAfter: T0 - 600_000, updatedAt: T0 - 1_000 }));
   const fresh = job();
