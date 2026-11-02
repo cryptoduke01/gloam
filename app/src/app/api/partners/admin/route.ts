@@ -5,11 +5,13 @@ import { ApiError, jsonBody, portal } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
 import { listPartners, partnerView, readAllPartnerTotals, readPartnerStats, setRelayApproved } from "@/lib/partners";
 import { kvBackend } from "@/lib/partnersKv";
+import { linkCodeState, listLinkCodes } from "@/lib/partnerLinks";
+import { countAddresses, getPartnerAddresses } from "@/lib/partnerAddresses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Admin only: every partner, their keys and attributed volume, plus program totals. */
+/** Admin only: every partner, their keys, link codes, receiving addresses and attributed volume by source, plus program totals. */
 export async function GET() {
   return portal(async () => {
     if (!(await isAdminAuthenticated())) throw new ApiError(401, "unauthorized", "Admin session required.");
@@ -19,16 +21,26 @@ export async function GET() {
     }
     const partners = await listPartners();
     const ids = partners.map((p) => p.id);
-    const [totals, keys, all] = await Promise.all([readAllPartnerTotals(ids), activeKeyCounts(ids), readPartnerStats("all")]);
+    const now = Date.now();
+    const [totals, keys, all, codes, addrs] = await Promise.all([
+      readAllPartnerTotals(ids),
+      activeKeyCounts(ids),
+      readPartnerStats("all"),
+      Promise.all(ids.map((id) => listLinkCodes(id))),
+      Promise.all(ids.map((id) => getPartnerAddresses(id))),
+    ]);
     return {
       data: {
         backend,
-        partners: partners.map((p) => ({
+        partners: partners.map((p, i) => ({
           ...partnerView(p),
           activeKeys: keys[p.id] ?? 0,
+          liveCodes: codes[i]!.filter((c) => linkCodeState(c, now) === "live").length,
+          addresses: countAddresses(addrs[i]!),
           totals: totals[p.id] ?? null,
         })),
         totals: all.totals,
+        bySource: all.bySource,
         daily: all.daily,
       },
     };
