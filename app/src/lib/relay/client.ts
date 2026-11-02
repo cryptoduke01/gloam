@@ -25,6 +25,8 @@ export type RelayNetworkStatus = {
   topUps?: boolean;
   /** The relay pays for a fresh wallet's gas station here. */
   gasStation?: boolean;
+  /** The smallest one-hop private swap right now, in dollars, where gas is dear. */
+  swapFloorUsd?: number | null;
 };
 
 const PREF_KEY = "gloam.relay.pref";
@@ -46,8 +48,8 @@ export async function fetchRelayStatus(force = false): Promise<RelayNetworkStatu
   }
 }
 
-export async function relayFor(chainId: number): Promise<RelayNetworkStatus | null> {
-  const all = await fetchRelayStatus();
+export async function relayFor(chainId: number, force = false): Promise<RelayNetworkStatus | null> {
+  const all = await fetchRelayStatus(force);
   return all.find((n) => n.chainId === chainId) ?? null;
 }
 

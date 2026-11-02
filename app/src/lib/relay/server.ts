@@ -37,6 +37,9 @@
  *     default, none on the L2s): above it nothing is sent and the request is
  *     refused as gas_high, and a send under it never offers more than 1.5
  *     times the ceiling per unit of gas
+ *   - a floor under a private swap where gas is dear (lib/relay/swapFloor): its
+ *     vault fee must cover its gas, or it is refused as swap_small before anything
+ *     is sent, and a few reverted swaps or refunds in an hour pause them there
  *   - per-sender and per-network rate limits, shared across instances (the
  *     network cap counts only transactions actually sent), and a few relayed
  *     payment messages per payment: the payer's own (with the memo ticket the
@@ -75,7 +78,7 @@ import {
   isNetworkWritable,
   type GloamNetwork,
 } from "@/lib/networks";
-import { SharedCountUnavailable, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
+import { SharedCountUnavailable, hitRateLimit, readRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
@@ -83,8 +86,10 @@ import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, r
 import { jobKeyReady } from "@/lib/relay/jobSeal";
 import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
-import { encodeRoute, escrowAddress, isKnownRoute, isSwapAsset, swapExpired, swapRouterFor, vaultSwapAbi, vaultSwapRouter, vaultSwapV3Abi, type EscrowKey, type PoolKey } from "@/lib/vaultSwap";
+import { SWAP_SEND_MARGIN_SECONDS, encodeRoute, escrowAddress, isKnownRoute, isSwapAsset, swapExpired, swapRouterFor, vaultSwapAbi, vaultSwapRouter, vaultSwapV3Abi, type EscrowKey, type PoolKey } from "@/lib/vaultSwap";
+import { knownTokens } from "@/lib/tokens";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
+import { ETH_USD_FEED, FEED_MAX_AGE_SEC, ethUsdFeedAbi, hasSwapFloor, smallestSwapUsd, swapFloorMessage } from "@/lib/relay/swapFloor";
 import { GAS_STATION_CHAIN_ID, GAS_STATION_FACTORY, gasStationAbi, gasStationFactoryAbi, readStationState } from "@/lib/gasStation";
 import {
   STATION_BAD_STEP_MESSAGE,
@@ -338,6 +343,16 @@ const MEMOS_PER_PAYMENT_ALL = 10;
 const PER_NETWORK_MEMO_HOURLY = 5_000;
 const PER_NETWORK_OPEN_MEMO_HOURLY = 600;
 const PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS = 60;
+/**
+ * Where gas is dear (lib/relay/swapFloor), a swap that reverts after it was sent pays
+ * nothing back, and neither does a refund. Anyone can make a swap revert by moving
+ * its pool first, so each has a budget per hour. Past it, new swaps wait for the next
+ * hour. A refund waits too, and comes back by itself, and an exit never waits.
+ */
+const REVERTED_SWAPS_HOURLY_DEAR_GAS = 12;
+const REFUNDS_HOURLY_DEAR_GAS = 30;
+export const SWAPS_PAUSED_MESSAGE = "Swaps are paused here for a short while. Your money is safe. Try again in an hour.";
+
 export const MEMO_BUSY_MESSAGE =
   "The relay can't post more payment messages on this network right now. Try again later, or send the heads-up from your wallet.";
 
@@ -829,7 +844,11 @@ async function submitSpend(
       keep = true;
     });
     keep = true;
-    const receiptStatus = () => relayPublicClient(net).getTransactionReceipt({ hash }).then((r) => r.status);
+    const receiptStatus = async () => {
+      const { status } = await relayPublicClient(net).getTransactionReceipt({ hash });
+      if (status === "reverted" && isSwap) await countRevertedSwap(net).catch(() => {});
+      return status;
+    };
     afterReply(() => releaseIfReverted(lock, receiptStatus));
     return hash;
   } finally {
@@ -1008,10 +1027,12 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
         throw new RelayError("This quote was for an earlier swap router. Get a new quote and try again.", 409, "swap_router_old");
       }
       if (!known) throw new RelayError(REVERT_MESSAGES.UnknownRoot, 409, "UnknownRoot");
-      // only a swap has a deadline: below this line is a refund, which never does
-      if (deadline !== undefined && swapExpired(deadline, BigInt(Math.floor(Date.now() / 1000)))) {
+      // only a swap has a deadline: below this line is a refund, which never does. One
+      // about to pass would pass the dry run and revert on the way in, at the relay's expense.
+      if (deadline !== undefined && swapExpired(deadline, BigInt(Math.floor(Date.now() / 1000) + SWAP_SEND_MARGIN_SECONDS))) {
         throw new RelayError(REVERT_MESSAGES.SwapExpired!, 409, "SwapExpired");
       }
+      await assertSwapWorthSending(net, spend, route.length);
       return;
     }
     // spent: only worth a send if this swap's money is waiting at its escrow (the refund)
@@ -1027,6 +1048,9 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       ...(exitKey ? { exitKey, deadline } : {}),
     });
     if ((await heldAt(pub, spend.asset, escrow)) < refund.amount) throw new RelayError(REVERT_MESSAGES.AlreadySpent, 409, "AlreadySpent");
+    if (hasSwapFloor(net.chainId) && !(await relayCount(`chain:${net.chainId}`, "relay-swap-refund", REFUNDS_HOURLY_DEAR_GAS, Date.now(), 3600)).allowed) {
+      throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
+    }
   };
   return submitSpend(
     net,
@@ -1035,6 +1059,96 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
       : { kind: "swap", router, args: [spend, deposit, refund, routeBytes] },
     precheck
   );
+}
+
+/** The floor's inputs, read together and kept a minute, so a status poll and a swap share one read. */
+type FloorRead = { at: number; gasPriceWei: bigint; ethUsd: number; feeBps: number };
+const FLOOR_TTL_MS = 60_000;
+const floorReads = new Map<number, FloorRead>();
+
+/** Test hook: forget the kept reads. */
+export function resetSwapFloorReads(): void {
+  floorReads.clear();
+}
+
+const withdrawFeeAbi = [{ type: "function", name: "withdrawFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] }] as const;
+
+/** ETH's price and the vault's fee, and the gas price fresh each time. Throws when any can't be read, or the feed is stale. */
+async function readFloor(net: GloamNetwork, pub: Pick<PublicClient, "readContract" | "getGasPrice"> = relayPublicClient(net)): Promise<FloorRead> {
+  const now = Date.now();
+  const gasPriceWei = await pub.getGasPrice();
+  const hit = floorReads.get(net.chainId);
+  if (hit && now - hit.at < FLOOR_TTL_MS) return { ...hit, gasPriceWei };
+  const [round, feeBps] = await Promise.all([
+    pub.readContract({ address: ETH_USD_FEED[net.chainId]!, abi: ethUsdFeedAbi, functionName: "latestRoundData" }),
+    pub.readContract({ address: net.pool!, abi: withdrawFeeAbi, functionName: "withdrawFeeBps" }),
+  ]);
+  const age = Math.floor(now / 1000) - Number(round[3]);
+  if (round[1] <= 0n || age > FEED_MAX_AGE_SEC) throw new Error("eth usd feed stale");
+  const read = { at: now, gasPriceWei, ethUsd: Number(round[1]) / 1e8, feeBps };
+  floorReads.set(net.chainId, read);
+  return read;
+}
+
+/** What a note is worth in dollars, for the floor. EURC counts as a dollar, the side that asks more of it. */
+function noteUsd(chainId: number, asset: Address, amount: bigint, ethUsd: number): number {
+  if (BigInt(asset) === 0n) return (Number(amount) / 1e18) * ethUsd;
+  const t = knownTokens(chainId).find((k) => k.address.toLowerCase() === asset.toLowerCase());
+  return Number(amount) / 10 ** (t?.decimals ?? 18);
+}
+
+/**
+ * Refuses a new swap the relay would pay to lose: one whose vault fee can't cover its gas
+ * (lib/relay/swapFloor), or any while reverted swaps have used up this hour's budget.
+ * Nothing on a chain with no floor. A floor that can't be read refuses the swap: it costs a
+ * retry, where paying blind costs the relay's gas.
+ */
+export async function assertSwapWorthSending(
+  net: GloamNetwork,
+  spend: Pick<SwapSpend, "asset" | "amount">,
+  hops: number,
+  pub?: Pick<PublicClient, "readContract" | "getGasPrice">
+): Promise<void> {
+  if (!hasSwapFloor(net.chainId)) return;
+  if ((await revertedSwapCount(net)) >= REVERTED_SWAPS_HOURLY_DEAR_GAS) {
+    throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
+  }
+  let floor: FloorRead;
+  try {
+    floor = await readFloor(net, pub);
+  } catch {
+    throw new RelayError("Could not read the network fee. Try again shortly.", 503, "check_failed");
+  }
+  const smallest = smallestSwapUsd({ ...floor, hops });
+  if (noteUsd(net.chainId, spend.asset, spend.amount, floor.ethUsd) < smallest) {
+    throw new RelayError(swapFloorMessage(net.label, smallest), 422, "swap_small");
+  }
+}
+
+async function revertedSwapCount(net: GloamNetwork): Promise<number> {
+  try {
+    return await readRateLimit(`chain:${net.chainId}`, "relay-swap-reverted", Date.now(), 3600, { failClosed: true });
+  } catch (e) {
+    if (!(e instanceof SharedCountUnavailable)) throw e;
+    relayStoreDown(e.reason);
+    throw relayOff();
+  }
+}
+
+/** One swap that reverted after it was sent, where gas is dear. */
+export async function countRevertedSwap(net: GloamNetwork): Promise<void> {
+  if (hasSwapFloor(net.chainId)) await relayCount(`chain:${net.chainId}`, "relay-swap-reverted", REVERTED_SWAPS_HOURLY_DEAR_GAS, Date.now(), 3600);
+}
+
+/** The smallest one-hop swap right now, for the app, or null on a chain with no floor or when it can't be read. */
+async function swapFloorNow(net: GloamNetwork): Promise<number | null> {
+  if (!hasSwapFloor(net.chainId)) return null;
+  try {
+    const usd = smallestSwapUsd({ ...(await readFloor(net)), hops: 1 });
+    return Number.isFinite(usd) ? usd : null;
+  } catch {
+    return null;
+  }
 }
 
 /** What an address holds of an asset; address(0) is native ETH. */
@@ -1243,6 +1357,8 @@ export type RelayNetworkStatus = {
   topUps: boolean;
   /** The relay pays for a fresh wallet's gas station here (lib/relay/gasStation). */
   gasStation: boolean;
+  /** The smallest one-hop private swap right now, in dollars, where gas is dear (lib/relay/swapFloor). Else null. */
+  swapFloorUsd: number | null;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -1303,9 +1419,10 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
   return Promise.all(
     relayNetworks().map(async (net) => {
       // low = no account left that can pay for a send here
-      const [empties, gas] = await Promise.all([
+      const [empties, gas, swapFloorUsd] = await Promise.all([
         Promise.all(accounts.map((a) => relayEmpty(net, a))),
         readGas(net.chainId, relayPublicClient(net)),
+        swapRouterFor(net.chainId) ? swapFloorNow(net) : null,
       ]);
       const lowBalance = accounts.length > 0 && empties.every(Boolean);
       return {
@@ -1321,6 +1438,7 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
         gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
         topUps: jobKeyReady() && !datedOff(net.chainId),
         gasStation: gasStationOn() && net.chainId === GAS_STATION_CHAIN_ID,
+        swapFloorUsd,
       };
     })
   );

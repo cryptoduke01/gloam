@@ -556,6 +556,8 @@ const ESCROW_KEY_V3_COMPONENTS = [
 
 /** How long a v3 swap has to land, from the chain's own clock when it is made. */
 export const SWAP_DEADLINE_SECONDS = 30 * 60;
+/** The relay sends a swap only with at least this long left: closer than that it could pass the dry run and land late. */
+export const SWAP_SEND_MARGIN_SECONDS = 60;
 
 /** Whether a swap can no longer land at `now`, in seconds: it lands up to and including its deadline. */
 export function swapExpired(deadline: bigint, now: bigint): boolean {
