@@ -12,7 +12,7 @@
  *
  * Run from app/ after a plain `forge build` in contracts/:
  *   ../mcp/node_modules/.bin/tsx --tsconfig tsconfig.json scripts/fork-router-v3.mts --chain ethereum
- *   (--chain base | ethereum | robinhood)  ETH_PRICE sets the dollar line (default 2250).
+ *   (--chain base | ethereum | robinhood)  ETH_PRICE sets the dollar line (default 2250). ONLY=<words> picks cases.
  */
 import "./browser-shim.mts";
 import { execFileSync, spawn } from "node:child_process";
@@ -370,7 +370,7 @@ async function runCase(c: Case, feeBps: bigint) {
     console.log(`  one second past its deadline: ${check(late.status === "reverted", "a swap past its deadline reverts")} (reverted), note unspent: ${check(!(await readVault("isSpent", [nullifier])), "the note stays unspent")}`);
   }
 
-  if (kind !== "swap") {
+  if (kind !== "swap" && kind !== "short") {
     const alone = await tx(STRANGER, VAULT, encodeFunctionData({ abi: vaultAbi, functionName: "unshield", args: [unProof, root, nullifier, c.assetIn, escrow, c.amountIn] }));
     console.log(`  unshield sent alone by a stranger: ${check(alone.status === "success", "unshield alone")}, gas ${alone.gasUsed}`);
     console.log(`  waiting at the escrow: ${fmt(await balance(c.assetIn, escrow), c.assetIn)}: ${check((await balance(c.assetIn, escrow)) === available, "escrow holds what arrived")}`);
@@ -464,7 +464,8 @@ if (cfg.id === 4663) {
   console.log(`vault: the queued native ETH limit, past its timelock: ${check(r.status === "success", "ETH limit executed")}`);
 }
 
-for (const c of cfg.cases) {
+// ONLY=<words> runs just the cases whose name has them.
+for (const c of cfg.cases.filter((x) => x.name.includes(process.env.ONLY ?? ""))) {
   try {
     await runCase(c, feeBps);
   } catch (e) {

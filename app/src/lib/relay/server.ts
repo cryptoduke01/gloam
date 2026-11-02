@@ -345,9 +345,9 @@ const PER_NETWORK_OPEN_MEMO_HOURLY = 600;
 const PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS = 60;
 /**
  * Where gas is dear (lib/relay/swapFloor), a swap that reverts after it was sent pays
- * nothing back, and neither does a refund. Anyone can make a swap revert by moving
- * its pool first, so each has a budget per hour. Past it, new swaps wait for the next
- * hour. A refund or exit under the swap floor waits with them (assertWaitingWorthSending).
+ * nothing back, and neither does a refund, so each has a budget per hour. Past it, new
+ * swaps wait for the next hour. A refund or exit under the swap floor waits with them
+ * (assertWaitingWorthSending).
  */
 const REVERTED_SWAPS_HOURLY_DEAR_GAS = 12;
 const REFUNDS_HOURLY_DEAR_GAS = 30;
@@ -553,11 +553,9 @@ function explain(err: unknown, fallback: string, code: "rpc" | "check_failed" = 
 // storage-heavy pricing (tree inserts).
 const GAS_CAP = 25_000_000n;
 /**
- * The most gas the relay pays for a send that can call out to someone else's code.
- * The vault and a swap's exit pay ETH to a contract with all the gas there is, so a dry
- * run alone says what a send will cost, not that it should go. These are real proofs on
- * forks with room to spare. Robinhood Chain's estimates carry a parent-chain cost that
- * moves, so it gets more. Tempo has no native coin to pay out, and prices storage its own way.
+ * The most gas the relay pays for one send of a kind, checked against its dry run.
+ * Real proofs on forks, with room to spare. Robinhood Chain's estimates carry a
+ * parent-chain cost that moves, so it gets more. Tempo prices storage its own way.
  */
 const SEND_GAS_MOST: Partial<Record<Call["kind"], bigint>> = {
   unshield: 1_200_000n,
@@ -853,7 +851,7 @@ async function submitSpend(
   call: Extract<Call, { kind: "transfer" | "unshield" | "swap" | "swapV3" | "swapExit" }>,
   opts: {
     precheck?: () => Promise<void>;
-    /** What the lock is on, the nullifier unless said. Anyone can name a nullifier that has left the vault, so money waiting at an escrow locks on the escrow. */
+    /** What the lock is on, the nullifier unless said. */
     lockOn?: Hex;
     afterDryRun?: () => Promise<void>;
   } = {}
@@ -1021,9 +1019,8 @@ const erc20BalanceAbi = [
  * puts it back as the refund note. That call (lib/vaultSwapRun
  * finishVaultSwapRefund) carries only the refund note's proof; the spend's
  * proof and root and the new note's proof are placeholders the router never
- * reads on that path, so the root is not checked for it. The money at an escrow
- * proves nothing about who put it there, so a spent note's call locks on its
- * escrow, never its nullifier, and pays no more than its size earns.
+ * reads on that path, so the root is not checked for it. That call locks on its
+ * escrow, and a swap on its nullifier.
  */
 export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>) {
   if (!swapRouterFor(net.chainId)) throw new RelayError("Private swaps are not live on this network yet.", 400, "no_swap");
@@ -1072,7 +1069,7 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
     routeHash: keccak256(routeBytes),
     ...(exitKey ? { exitKey, deadline } : {}),
   });
-  // a note that left the vault is public: only its escrow says whose call this is
+  // a refund locks on its escrow, a swap on its nullifier
   const left = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [spend.nullifier] });
   let refunding = false;
   const precheck = async () => {
@@ -1178,10 +1175,8 @@ export async function assertSwapWorthSending(
 }
 
 /**
- * Money waiting at an escrow goes back whatever it is worth, but where gas is dear, an
- * amount under the swap floor spends from an hourly budget: anyone can send a little to
- * an escrow of their own making, and the relay would pay full price to land it. At or
- * over the floor it just goes, so spending this budget never holds up a real refund.
+ * Where gas is dear, a refund or an exit under the swap floor spends from an hourly
+ * budget, counted once its dry run passed. At or over the floor it just goes.
  */
 async function assertWaitingWorthSending(net: GloamNetwork, asset: Address, amount: bigint): Promise<void> {
   if (!hasSwapFloor(net.chainId)) return;

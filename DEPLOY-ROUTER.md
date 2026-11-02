@@ -123,7 +123,7 @@ server's text and Glim do, so they are true either side of a switch. `README.md`
 lines in step 4.
 
 **The switch only goes one way.** Once a chain has had a swap through the new router, do
-not set its flag back to `false`. The relay would stop knowing that router, and a refund or
+not set its address back to `null`. The relay would stop knowing that router, and a refund or
 an exit of a swap made through it would be refused. To stop swaps on a v4 chain, the owner
 calls `removePool` for its pools: swaps through them revert with the note safe, and
 refunds and exits never touch a pool. `GloamVaultSwapTempo2` has no owner and no pools.
@@ -215,7 +215,13 @@ queues the pool, 3 days of notice, after someone reads that hook.
 
 Real proofs against the live vault, on a fork (`app/scripts/fork-router-v3.mts`):
 
-@@GAS@@
+| | Gas |
+| --- | --- |
+| A swap, one hop | 1.58M to 1.68M |
+| A swap, two hops | 1.61M to 1.70M |
+| A swap, three hops | 1.70M |
+| A refund | 1.17M to 1.20M |
+| An exit | 145k |
 
 The relay pays. At $2,290 ETH a one-hop swap costs about **$3.89 per gwei**.
 
@@ -227,30 +233,36 @@ with gas and with the vault's fee, read live, and the swap tab shows it.
 | --- | --- | --- | --- |
 | 0.04 gwei | $0.16 | $62 | $31 |
 | 0.15 gwei | $0.58 | $234 | $117 |
-| 1 gwei | $3.89 | $1,557 | $778 |
+| 1 gwei | $3.89 | $1,557 | $779 |
 | 3 gwei, the relay's ceiling | $11.68 | $4,671 | $2,336 |
 
 Why this shape:
 
 - **Nothing extra is charged.** A swap under the floor isn't sent, and a person is told the
   size that would go.
-- **Only the vault fee counts.** The price buffer is not income on Ethereum: the mempool is
-  public, so a trader can step in front of a swap and take it. It can't touch what lands.
+- **Only the vault fee counts.** The price buffer can go to a trader who moves the price first,
+  as the threat model says, so the floor leaves it out.
 - **The floor is on the relay, not only the app.** Each hop past the first adds to it. The
   app asks 10% over it, so a small move in gas while a swap is proved doesn't turn it away.
 - **A refund and an exit have no floor.** Money waiting always gets to come back.
 
 The vault's fee is 0.25% until the queued 0.50% executes, and the relay reads it each time.
 
-**Reverted swaps have a budget, on Ethereum only.** Anyone can make a swap revert by moving
-its pool first, and that gas is gone. After 12 in an hour new swaps pause until the next hour
-(`swaps_paused`). 30 refunds in an hour pause the next refund the same way. It stays pending and
-comes back by itself, and an exit never waits. A swap whose deadline is under a minute away is
-refused too, since it could pass the dry run and land late.
+**Budgets on Ethereum.** A swap that reverts after it was sent pays nothing back. After 12 in an
+hour new swaps pause until the next hour (`swaps_paused`). A refund or an exit under the floor has
+a budget of 30 an hour, counted once its dry run passed, and past it it stays pending and comes
+back by itself. At or over the floor it just goes. A swap whose deadline is under a minute away is
+refused, as it could land late.
+
+**Gas limits by kind.** The relay checks each dry run against `SEND_GAS_MOST`: 1.2M for a cash
+out, 2.6M for a swap or refund, 400k for an exit, four times that on Robinhood Chain, whose
+estimates carry a parent-chain cost. Tempo has none.
+
+**A refund on Base and Ethereum** is the note less the vault's fee and 0.1%, sized from the fee
+when the swap is made, not the 1% it is elsewhere, and a swap's deadline there is 10 minutes.
 
 **Before switching Ethereum on,** top up the relay. It held 0.04 ETH on 26 October. A swap at
-0.04 gwei uses about 0.00007 ETH. A gas spike can't make a swap lose money, but reverted ones
-still cost gas, up to the budget above.
+0.04 gwei uses about 0.00007 ETH.
 
 ## What to review first
 

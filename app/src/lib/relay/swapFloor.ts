@@ -40,11 +40,11 @@ export function hasSwapFloor(chainId: number): boolean {
 }
 
 /**
- * Gas one swap costs the relay: the most seen for its hops on a fork of Ethereum, with real
- * proofs against the live vault (scripts/fork-router-v3.mts).
+ * Gas one swap costs the relay, a little over the most seen on a fork of Ethereum with real
+ * proofs against the live vault (scripts/fork-router-v3.mts): 1.58M to 1.68M in one hop, 1.70M in three.
  */
 const SWAP_GAS_FIRST_HOP = 1_700_000n;
-const SWAP_GAS_NEXT_HOP = 130_000n;
+const SWAP_GAS_NEXT_HOP = 60_000n;
 
 export function swapGasUnits(hops: number): bigint {
   return SWAP_GAS_FIRST_HOP + SWAP_GAS_NEXT_HOP * BigInt(Math.max(0, hops - 1));

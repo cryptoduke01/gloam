@@ -14,10 +14,9 @@
  *    stale too; a refund never faces it, Base has none, and the status says what it is
  *  - a swap with its deadline about to pass is refused before the dry run
  *  - reverted swaps have a budget on Ethereum: past it new swaps pause. A refund under the
- *    floor spends from a budget of its own, only once its dry run passed; one worth its gas
- *    always goes, and a stranger naming a spent note holds no lock of its owner's
- *  - an exit takes only a swap's assets, and a send that calls out to other code stops at
- *    the dry run when it would burn more gas than an honest one
+ *    floor spends from a budget of its own, only once its dry run passed; one over the
+ *    floor always goes, and a refund locks on its escrow
+ *  - an exit takes only a swap's assets, and each kind of send has a most gas
  *
  * fetch is stubbed: the relay talks to an in-process fake chain, and the relay key is a
  * throwaway made here. Nothing reaches any host.
@@ -563,12 +562,12 @@ await test("a refund under the floor spends from a budget; one that fails its dr
   assert.equal(sends.length, went + 1, "a refund worth its gas isn't held up by that");
 });
 
-await test("a stranger naming someone's spent note holds no lock of theirs", async () => {
+await test("a refund locks on its escrow", async () => {
   fresh();
   chain.spent = true;
   chain.held = usd(1_000);
   const mine = swapBody(E.USDC, E.USDT, usd(1_000), direct);
-  // the same nullifier under another escrow: a key of the stranger's making
+  // the same nullifier under another escrow
   const theirs = { ...swapBody(E.USDC, E.USDT, usd(1_000), direct), spend: mine.spend };
   await relayVaultSwap(net, theirs);
   await relayVaultSwap(net, mine);
@@ -576,7 +575,7 @@ await test("a stranger naming someone's spent note holds no lock of theirs", asy
   await assert.rejects(relayVaultSwap(net, mine), isCode("in_flight"));
 });
 
-await test("an exit takes only a swap's asset, and a send that would burn gas stops at the dry run", async () => {
+await test("an exit takes only a swap's assets, and each kind of send has a most gas", async () => {
   fresh();
   on(1);
   chain.spent = true;
@@ -604,8 +603,8 @@ await test("an exit takes only a swap's asset, and a send that would burn gas st
   assert.equal(sendGasMost(1, "unshield"), 1_200_000n);
   assert.equal(sendGasMost(8453, "swapExit"), 400_000n);
   assert.ok(sendGasMost(4663, "unshield")! > sendGasMost(1, "unshield")!, "a parent-chain cost moves Robinhood Chain's estimates");
-  assert.equal(sendGasMost(4217, "unshield"), null, "Tempo prices storage its own way, and pays out no coin");
-  assert.equal(sendGasMost(1, "transfer"), null, "a private send calls nobody");
+  assert.equal(sendGasMost(4217, "unshield"), null, "Tempo prices storage its own way");
+  assert.equal(sendGasMost(1, "transfer"), null, "a private send has no such limit");
 });
 
 await test("Base USDC to USDT past its depth says thin, with a size, not off its peg", async () => {

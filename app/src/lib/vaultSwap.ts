@@ -1165,11 +1165,10 @@ async function v4ExactOut(
  * note's unshield on its own (GloamVaultSwap): the amount less the vault's
  * highest possible cash-out fee (1%), so it is never more than arrives.
  *
- * With `feeBps`, on Base and Ethereum: the amount less the vault's fee now and 0.1%.
- * On Ethereum a swap sits in a public mempool, so sending that first step alone costs
- * a few cents, and a refund shouldn't cost more than the swap would have. A raise of
- * the fee waits out a 3-day timelock, far past a swap's 30 minutes; should a proof
- * outlive that, the refund won't land and the exit still pays.
+ * With `feeBps`, on Base and Ethereum: the amount less the vault's fee now and 0.1%,
+ * so a refund costs about what the swap would have. A raise of the fee waits out a
+ * 3-day timelock; should a proof outlive that, the refund won't land and the app offers
+ * the exit (escrowHolds).
  */
 export function refundAmountFor(amount: bigint, feeBps?: number): bigint {
   if (feeBps === undefined) return amount - amount / 100n;
