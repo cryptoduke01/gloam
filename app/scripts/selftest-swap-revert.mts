@@ -976,12 +976,17 @@ await test("the mark survives a backup: restored elsewhere, the note still moves
   await setAllNotes(getAllNotes().filter((n) => !gone.has(n.id)));
   const res = await importNotesBackup(backup, ME, backupSpentCheck(env));
   assert.ok(res.ok);
-  assert.ok(note(source.id).swapProofAt);
-  assert.equal(note(refund.id).vaultSwap?.sent?.hash !== undefined, true);
+  // restored under new ids of their own, found by commitment; the refund still names its source
+  const back = (n: LocalNote) => getAllNotes().find((m) => m.commitment.toLowerCase() === n.commitment.toLowerCase())!;
+  const [src, ref] = [back(source), back(refund)];
+  assert.ok(src.id !== source.id && ref.id !== refund.id);
+  assert.ok(src.swapProofAt);
+  assert.equal(ref.vaultSwap?.sent?.hash !== undefined, true);
+  assert.equal(ref.sweptFrom?.id, src.id, "the refund names the restored source");
   passLock();
   await moveRevertedNotes(env);
-  assert.equal(note(source.id).status, "recovered");
-  assert.equal(total(source), 20_000_000n);
+  assert.equal(back(source).status, "recovered");
+  assert.equal(total(src), 20_000_000n);
 });
 
 await test("a marked note of another network is left for that network", async () => {
