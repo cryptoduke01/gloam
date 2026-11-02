@@ -186,7 +186,13 @@ export function MoveView() {
   const { address, isConnected, chainId, connector } = useAppAccount();
   /** `to` is the Gloam wallet connected now (lib/sweepCheck sweepVerdict: its own sponsored deposits look like a sweep). */
   const ownGloamWallet = (to: string | null | undefined) =>
-    Boolean(to && address && connector?.id === EMBEDDED_CONNECTOR_ID && to.toLowerCase() === address.toLowerCase());
+    Boolean(
+      to &&
+        address &&
+        connector?.id === EMBEDDED_CONNECTOR_ID &&
+        connector.type === "turnkey" &&
+        to.toLowerCase() === address.toLowerCase()
+    );
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { open, local: allLocal, refresh: refreshNotes } = useLocalShieldNotes(address);
@@ -2939,8 +2945,9 @@ export function MoveView() {
                     {sweepNow?.swept && cashOutTo && sweepSays === "own-wallet" ? (
                       <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                         Money that reached this Gloam wallet left again soon after, in a transaction another account sent.
-                        Adding money privately with the network fee covered looks like that. If you didn&apos;t do that,
-                        check your activity before you cash out here.{" "}
+                        Adding money privately with the network fee covered looks like that. If you didn&apos;t add
+                        money privately, someone else may be moving money out of this wallet: don&apos;t cash out
+                        here, and sign out.{" "}
                         <a
                           href={network.explorerTx(sweepNow.swept.evidenceTx)}
                           target="_blank"
