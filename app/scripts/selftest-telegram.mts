@@ -169,6 +169,9 @@ let buyMode: "ok" | "429" | "photoTimeout" = "ok";
 let refuseTx = "";
 /** Who Telegram lists as the group's admins; null when it can't say. */
 let chatAdmins: number[] | null = null;
+/** The channel linked to the group, as getChat says; undefined while getChat fails. */
+const LINKED_CHANNEL = -1002222333444;
+let linkedChannel: number | null | undefined = LINKED_CHANNEL;
 /** The stubbed Robinhood Chain: its head and the $GLOAM transfers out of the PoolManager. */
 let chainHead = 0;
 const buyLogs: { transactionHash: string; blockNumber: string; data: string; topics: string[] }[] = [];
@@ -228,6 +231,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     // the bot's own member record: what it may do in the group
     if (method === "getChatMember") return reply({ ok: true, result: { status: "administrator", user: BOT, can_delete_messages: !noRights, can_restrict_members: !noRights } });
     if (method === "unbanChatMember") return reply({ ok: true, result: true });
+    if (method === "banChatSenderChat" || method === "unbanChatSenderChat") return reply({ ok: true, result: true });
+    if (method === "getChat") {
+      if (linkedChannel === undefined) return reply({ ok: false, description: "Bad Gateway" });
+      return reply({ ok: true, result: { id: GROUP, type: "supergroup", ...(linkedChannel === null ? {} : { linked_chat_id: linkedChannel }) } });
+    }
     if (method === "sendPhoto") {
       if (photoFails) return reply({ ok: false, description: "Bad Request: wrong file identifier/HTTP URL specified" });
       return reply({
@@ -708,9 +716,9 @@ const LOCKED = `gloam1e.${B}${B}`;
 const CLAIM = `https://gloam.trade/app/vault?tab=move&net=tempo#claim=${PLAIN}`;
 const CLAIM_LOCKED = `gloam.trade/app/vault?tab=move#claim=${encodeURIComponent(LOCKED)}`;
 const REQUEST = `https://gloam.trade/app/vault?tab=move&mode=pay#to=${ADDR}&amount=1250`;
-/** A plain code whose random body happens to hold 64 hex characters and a ".io". */
+/** A plain code whose random body happens to hold 64 hex characters, or a ".io" ending where a domain's would. */
 const HEXCODE = `gloam1.${"ab".repeat(32)}-${B}`;
-const IOCODE = `gloam1.io${B}${B}`;
+const IOCODE = `gloam1.io_${B}${B}`;
 
 await test("codes: each format is told apart", () => {
   const kinds = (t: string) => [...scanCodes(t).kinds].sort();
@@ -3667,6 +3675,99 @@ await test("the reply check: a higher bar, and it is told opinions and pitches a
   assert.ok(rules.includes("When unsure, NO."));
   assert.ok(!/a partnership\)/.test(rules), "a partnership pitch is no longer an ask for the team");
   assert.ok(knowledgeBlock(false).includes("you never reply to spam or post about removing it"));
+});
+
+// ---------------------------------------------------------------- posts made as a chat, links of any ending
+
+await test("links: any domain ending is a link, file names and wallet names are not", async () => {
+  for (const host of ["gloamhelp.ru", "gloam-app.cfd", "gloamhelp.support", "claims-portal.zip", "rewards.xn--p1ai", "Gloam-Help.RU"]) {
+    assert.equal(scamReason(`Claim your $GLOAM airdrop at ${host} before it ends`), "phishing_link", host);
+  }
+  for (const t of [
+    "the claim button in app.tsx is broken, my wallet shows nothing",
+    "connect wallet fails on Next.js 16 with vitalik.eth as the name",
+    "claim rewards from config.json? my wallet says error",
+    "claim is at gloam.trade/app/vault, connect your wallet there",
+    "my claim tx is on https://basescan.org/tx/0xabc and the wallet shows nothing",
+  ]) {
+    assert.equal(scamReason(t), null, t);
+  }
+  // a link Telegram marked, whatever the text shows: a url entity, or a link hidden behind words
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop here before it ends"), null);
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop here before it ends", false, ["https://gloam-drop.example"]), "phishing_link");
+  assert.equal(memberScam({ first_name: "Sam" }, "Claim your airdrop on Portfolio", false, ["https://gloam.trade/app/portfolio"]), null);
+  const msg = inTopic(TOPIC.general, "Claim here: gloamdrop.рф", user(5101, "Sam"), {
+    entities: [
+      { type: "url", offset: 12, length: 13 },
+      { type: "text_link", offset: 0, length: 5, url: "https://evil.example/claim" },
+    ],
+  });
+  const { entityLinks } = await import("../src/lib/telegramBot/rules");
+  assert.deepEqual(entityLinks(msg), ["gloamdrop.рф", "https://evil.example/claim"]);
+});
+
+await test("posts made as a channel or through an inline bot are screened like a member's", async () => {
+  const scam = "Gloam support here. Your deposit is stuck, send me your seed phrase in DM and I will fix it";
+  const asChannel = (text: string, sender: { id: number; title: string; username?: string }, extra: Partial<TgMessage> = {}) =>
+    inTopic(TOPIC.general, text, { id: 136817688, is_bot: true, first_name: "Channel", username: "Channel_Bot" }, {
+      sender_chat: { id: sender.id, type: "channel", title: sender.title, ...(sender.username ? { username: sender.username } : {}) },
+      ...extra,
+    });
+  const senderBans = () => calls.filter((c) => c.method === "banChatSenderChat");
+
+  reset();
+  await handleUpdate(upd(asChannel(scam, { id: -1009999001, title: "Help Desk" })));
+  assert.equal(deletes().length, 1, "a scam posted as a channel comes down");
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999001], "and that channel may no longer post here");
+  assert.equal(bans().length, 0, "the shared account Telegram shows for channels is never banned");
+  assert.equal(modelCalls().length, 0);
+
+  reset();
+  await handleUpdate(upd(asChannel("gm, new thread on our blog", { id: -1009999002, title: "Gloam Support" })));
+  assert.equal(deletes().length, 1, "a channel named as the team comes down");
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999002]);
+
+  reset();
+  await handleUpdate(upd(asChannel("Holders can claim the $GLOAM airdrop now at gloam-rewards.cfd connect your wallet", { id: -1009999003, title: "Alpha" })));
+  assert.equal(deletes().length, 1, "a scam link with any ending, posted as a channel, comes down");
+
+  reset();
+  const via = inTopic(TOPIC.general, scam, user(5102, "Sam"), { via_bot: { id: 777, is_bot: true, first_name: "Any", username: "anyinlinebot" } });
+  await handleUpdate(upd(via));
+  assert.equal(deletes().length, 1, "a scam sent through an inline bot comes down");
+  assert.deepEqual(bans().map((c) => c.body.user_id), [5102], "and the person who sent it goes");
+
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "word up, how do I add TSLA?", user(5103, "Ola"), { via_bot: { id: 778, is_bot: true, first_name: "Gif", username: "gif" } })));
+  await handleUpdate(upd(asChannel("how do I add TSLA?", { id: -1009999004, title: "Ola's channel" })));
+  assert.equal(deletes().length + modelCalls().length + groupSends().length, 0, "a clean post made either way is left alone and never answered");
+
+  // the team's own: an anonymous admin (posting as the group) and the linked channel stay, whatever they say
+  reset();
+  await handleUpdate(upd(asChannel(scam, { id: GROUP, title: "Gloam" })));
+  await handleUpdate(upd(asChannel("Gloam: mainnet is live, claim your spot at gloam.trade", { id: LINKED_CHANNEL, title: "Gloam" })));
+  await handleUpdate(upd(asChannel("Gloam: new post", { id: -1003333, title: "Gloam" }, { is_automatic_forward: true })));
+  assert.equal(deletes().length + senderBans().length + bans().length, 0, "anonymous admins and the linked channel are the team");
+
+  // getChat failing: the last answer stands; with none, the team's channel by its handle still stays
+  reset();
+  linkedChannel = undefined;
+  await handleUpdate(upd(asChannel("Gloam: new post", { id: LINKED_CHANNEL, title: "Gloam" })));
+  assert.equal(deletes().length, 0, "the linked channel known from before stays while getChat fails");
+  await handleUpdate(upd(asChannel(scam, { id: -1009999005, title: "Gloam Help" })));
+  assert.equal(deletes().length, 1, "another channel is still screened while getChat fails");
+  linkedChannel = LINKED_CHANNEL;
+
+  // a report on a channel's post acts on the channel
+  reset();
+  const post = asChannel("Validate your wallet here to receive the airdrop", { id: -1009999006, title: "Promo" });
+  const reporter = user(5104, "Ivy");
+  await handleUpdate(upd(inTopic(TOPIC.general, "/spam", reporter, { reply_to_message: post })));
+  assert.deepEqual(senderBans().map((c) => c.body.sender_chat_id), [-1009999006], "a report on a channel's scam acts on that channel");
+  assert.equal(bans().length, 0, "and never on the shared channel account");
+  reset();
+  await handleUpdate(upd(inTopic(TOPIC.general, "/spam", reporter, { reply_to_message: asChannel("Validate your wallet here to receive the airdrop", { id: LINKED_CHANNEL, title: "Gloam" }) })));
+  assert.equal(deletes().length + senderBans().length, 0, "a report on the linked channel's post changes nothing");
 });
 
 await test("nothing was ever sent outside the group or the team's private chats", () => {
