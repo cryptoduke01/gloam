@@ -1,7 +1,7 @@
 /**
  * Self-contained facts the MCP server answers with, so it has no runtime
  * dependency on the web app. CHAIN and MARKETS are the Robinhood Chain TESTNET
- * surface for the trade-planning tools (private trading is not live, and the
+ * surface for the trade-planning tools (the sealed trade is retired, and the
  * mainnet pools take payments only); marks are indicative testnet values.
  */
 
@@ -53,9 +53,9 @@ export const PRIVACY_STATUS = {
     "Mainnet (beta) on Robinhood Chain and Tempo since 21 October 2026, and on Base and Ethereum since 26 October 2026. The testnets stay up.",
   provingKeys:
     "Mainnet verifies the final keys of the 13-contributor trusted setup (drand round 6561386, release ceremony-final). The testnets use single-party dev keys. This server proves with the set of the network it pays on.",
-  live: ["shield (deposit)", "private send and private payments (x402 and MPP)", "receiving and sweeping payments", "cash out (in the Gloam app and SDK)"],
-  disabled: ["private trading (sealed swaps): off on every network while a new engine is built; the mainnet pools take payments only"],
-  notLive: ["private trading"],
+  live: ["shield (deposit)", "private send and private payments (x402 and MPP)", "receiving and sweeping payments", "cash out (in the Gloam app and SDK)", "private swaps (in the Gloam app only): who swapped stays private, the tokens and amounts are public"],
+  disabled: ["the sealed trade: retired on every network; the mainnet pools take payments only"],
+  notLive: ["swaps from this server or the SDK"],
   review:
     "The contracts and circuits were reviewed internally before launch, with no Critical or High findings open. Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.",
   mainnetLimits:
@@ -68,5 +68,5 @@ export const PRIVACY_STATUS = {
   anonymitySet:
     "thin on a new pool, and the mainnet pools are new. Unlinkability is only as strong as the crowd of notes to hide among. Do not treat a cash-out as fully private until the pool has real volume, and do not cash out the same amount you just deposited.",
   execution:
-    "gloam_execute_shield performs a real private deposit (mints a note, generates the Groth16 proof server-side, and broadcasts shieldBound) when GLOAM_AGENT_PRIVATE_KEY is set, on mainnet too when the network is a -mainnet one. Private trading stays a plan until it is re-enabled.",
+    "gloam_execute_shield performs a real private deposit (mints a note, generates the Groth16 proof server-side, and broadcasts shieldBound) when GLOAM_AGENT_PRIVATE_KEY is set, on mainnet too when the network is a -mainnet one. This server does not swap; its trade tools only plan, for the retired sealed trade.",
 } as const;
