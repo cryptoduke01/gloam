@@ -175,6 +175,10 @@ let linkedChannel: number | null | undefined = LINKED_CHANNEL;
 /** The stubbed Robinhood Chain: its head and the $GLOAM transfers out of the PoolManager. */
 let chainHead = 0;
 const buyLogs: { transactionHash: string; blockNumber: string; data: string; topics: string[] }[] = [];
+/** Transactions whose receipt shows liquidity taken out of the PoolManager, not a swap. */
+const liquidityTx = new Set<string>();
+/** Transactions whose receipt can't be read right now. */
+const receiptFails = new Set<string>();
 /** What the "should I answer this?" check says. */
 let classifierReply = "HELP";
 /** What the spam check says, as the model would write it. */
@@ -257,7 +261,13 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       const inRange = buyLogs.filter((l) => parseInt(l.blockNumber, 16) >= parseInt(fromBlock, 16) && parseInt(l.blockNumber, 16) <= parseInt(toBlock, 16));
       return reply({ result: topics[1] ? inRange : [] });
     }
-    if (q.method === "eth_getTransactionByHash") return reply({ result: { from: `0x${"12".repeat(20)}` } });
+    if (q.method === "eth_getTransactionReceipt") {
+      const hash = String((q.params as unknown as string[])[0]);
+      if (receiptFails.has(hash)) return reply({ error: { code: -32000, message: "busy" } });
+      const pm = "0x8366a39cc670b4001a1121b8f6a443a643e40951";
+      const topic = liquidityTx.has(hash) ? "0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec" : "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+      return reply({ result: { from: `0x${"12".repeat(20)}`, status: "0x1", logs: [{ address: pm, topics: [topic] }] } });
+    }
   }
   if (url.host === "api.dexscreener.com") return reply({ pairs: [{ priceUsd: "0.5", marketCap: 100000, liquidity: { usd: 1 } }] });
   if (url.host === "redis.test") {
@@ -1459,6 +1469,50 @@ await test("buy alerts: six a check, a failed post stops the check there, Telegr
   assert.equal(await pollBuys(GROUP, true, -1), 0);
   assert.equal(await buysLastBlock(), 5000);
   buyLogs.length = 0;
+
+  // only swaps are buys: $GLOAM taken out of a position is never posted, and stays left out
+  reset();
+  chainHead = 7000;
+  await setBuysLastBlock(6000);
+  buy(61, 6001);
+  buy(62, 6002);
+  buy(63, 6003);
+  liquidityTx.add(tx(62));
+  assert.equal(await pollBuys(GROUP, true), 2);
+  assert.deepEqual(postedTx(), [tx(61), tx(63)], "the liquidity taken out is not a buy");
+  await setBuysLastBlock(6000);
+  calls.length = 0;
+  assert.equal(await pollBuys(GROUP, true), 0, "and a later check doesn't post it either");
+  buyLogs.length = 0;
+  liquidityTx.clear();
+
+  // a receipt that can't be read yet: not posted as a buy, and the next check starts there
+  reset();
+  chainHead = 8000;
+  await setBuysLastBlock(7000);
+  buy(71, 7001);
+  buy(72, 7002);
+  receiptFails.add(tx(72));
+  assert.equal(await pollBuys(GROUP, true), 1);
+  assert.equal(await buysLastBlock(), 7001);
+  receiptFails.clear();
+  calls.length = 0;
+  assert.equal(await pollBuys(GROUP, true), 1);
+  assert.deepEqual(postedTx(), [tx(72)]);
+  buyLogs.length = 0;
+});
+
+await test("buy alerts: what counts as a buy", async () => {
+  const { isSwapBuy } = await import("../src/lib/telegramBot/buys");
+  const pm = "0x8366A39cC670B4001A1121B8F6A443A643E40951";
+  const SWAP = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+  const MODIFY = "0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec";
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [SWAP] }] }), true, "a swap");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [MODIFY] }] }), false, "liquidity taken out");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: pm, topics: [MODIFY] }, { address: pm, topics: [SWAP] }] }), false, "a swap beside a liquidity change");
+  assert.equal(isSwapBuy({ status: "0x1", logs: [{ address: "0x0000000000000000000000000000000000000001", topics: [SWAP] }] }), false, "a swap event from another contract");
+  assert.equal(isSwapBuy({ status: "0x0", logs: [{ address: pm, topics: [SWAP] }] }), false, "a reverted transaction");
+  assert.equal(isSwapBuy({ logs: [] }), false);
 });
 
 await test("moderation: the fake migration airdrop and role names; reporters are never removed; /unban", async () => {
