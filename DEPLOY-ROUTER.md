@@ -114,7 +114,9 @@ switch stands alone.
 6. Make one small real swap each way, one of them from an ETH note where the chain has
    one, and read both on the explorer.
 
-@@REHEARSAL@@
+This was rehearsed locally with all four chains on: `tsc` and the build passed, the docs
+rendered each chain, and the swap tab quoted live pools on Base and Ethereum. Only the two
+selftests that pin what ships failed, as step 4 expects.
 
 **Which docs follow the flag.** `/docs/private-swaps`, `/docs/threat-model`, `/docs/chain`,
 `/verify`, every page that names the swap chains (through `swapMainnets()`), the hosted MCP

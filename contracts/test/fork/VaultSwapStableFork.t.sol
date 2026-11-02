@@ -15,7 +15,7 @@ pragma solidity ^0.8.24;
 import {console2} from "forge-std/Test.sol";
 import {GloamVaultSwap2} from "../../src/GloamVaultSwap2.sol";
 import {PoolKey, SwapParams, IPoolManagerSwap} from "../../src/GloamVaultSwapV4.sol";
-import {IERC20C, VaultSwapV4cForkTest} from "./VaultSwapV4cFork.t.sol";
+import {IERC20C, IExtC, VaultSwapV4cForkTest} from "./VaultSwapV4cFork.t.sol";
 
 interface IAllowance {
     function allowance(address owner, address spender) external view returns (uint256);
@@ -55,17 +55,13 @@ contract PoolMover {
         pm = IPM(pm_);
     }
 
-    function move(PoolKey memory key, bool zeroForOne, uint256 amountIn) external {
-        pm.unlock(abi.encode(key, zeroForOne, amountIn));
+    function move(PoolKey memory key, bool zeroForOne, uint256 amountIn, uint160 limit) external {
+        pm.unlock(abi.encode(key, zeroForOne, amountIn, limit));
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
-        (PoolKey memory key, bool z, uint256 amountIn) = abi.decode(data, (PoolKey, bool, uint256));
-        int256 d = pm.swap(
-            key,
-            SwapParams(z, -int256(amountIn), z ? 4295128739 + 1 : 1461446703485210103287273052203988822378723970342 - 1),
-            ""
-        );
+        (PoolKey memory key, bool z, uint256 amountIn, uint160 limit) = abi.decode(data, (PoolKey, bool, uint256, uint160));
+        int256 d = pm.swap(key, SwapParams(z, -int256(amountIn), limit), "");
         int128 a0 = int128(d >> 128);
         int128 a1 = int128(d);
         (address payC, address takeC, int128 paid, int128 got) = z
@@ -281,18 +277,20 @@ contract VaultSwapStableForkTest is VaultSwapV4cForkTest {
     function test_stable_a_price_move_past_the_buffer_reverts_whole() public {
         address usdc = _usdc();
         address usdt = _usdt();
-        uint256 want = 99_000e4; // 9,900 USDT, for a note of 10,000 USDC
+        uint256 want = 9_900e6; // for a note of 10,000 USDC
         (Call memory k, Snap memory sn) = _prepared(_one1(_usdPool()), usdc, usdt, 10_000e6, want);
         PoolMover m = new PoolMover(pm);
         bool usdcIs0 = p[_usdPool()].currency0 == usdc;
-        // what the pool can absorb: more than a deep pool's spread, all of a thin one
         uint256 size = IERC20C(usdc).balanceOf(pm) / 2;
         vm.prank(pm);
         (bool ok, ) = usdc.call(abi.encodeWithSelector(0xa9059cbb, address(m), size));
         assertTrue(ok, "funded the mover");
         uint256 depBefore = pool.deposited(usdc);
-        // buying USDT with size makes USDT dear: 10,000 USDC no longer buys 9,900
-        m.move(p[_usdPool()], usdcIs0, size);
+        // buying USDT with size makes USDT dear: 10,000 USDC no longer buys 9,900. The price
+        // moves 3%, which is past the 1% the swap has room for, and stops there.
+        bytes32 slot = keccak256(abi.encode(keccak256(abi.encode(p[_usdPool()])), bytes32(uint256(6))));
+        uint160 price = uint160(uint256(IExtC(pm).extsload(slot)));
+        m.move(p[_usdPool()], usdcIs0, size, usdcIs0 ? (price / 200) * 197 : (price / 200) * 203);
         vm.expectRevert();
         this.swapOnce(k);
         assertFalse(pool.isSpent(k.s.nullifier), "the note stays");
