@@ -225,7 +225,11 @@ const REVERT_MESSAGES: Record<string, string> = {
   OverInput: "The price moved since the quote. Get a new one and try again.",
   ShortOutput: "The price moved since the quote. Get a new one and try again.",
   OverDepositLimit: "The vault is not taking that much of this asset right now. Swap a smaller amount.",
-  BadExit: "This exit's signature doesn't match the swap, or its money has already left.",
+  BadExit: "This exit can't go to that address, its signature doesn't match the swap, or its money has already left.",
+  ReceiveBlocked: "The receiving wallet won't take this payment from Gloam, so the exit didn't go. Pick another address.",
+  EscrowUsed: "This swap's money has already left its escrow.",
+  EscrowFailed: "This swap's escrow couldn't pay out, so nothing moved. Try again.",
+  TokenCallFailed: "The token refused this payment, so nothing moved.",
   SwapExpired: "This swap's time ran out. Get a new quote and try again.",
   PoolNotAllowed: "This swap route is not allowed.",
   BadRoute: "This swap route is not allowed.",
@@ -700,14 +704,15 @@ function payoutAsset(call: Call): Address | null {
  * With `net` on Tempo, a cash out is also checked against the asset's TIP-403
  * issuer policy: the vault must be allowed to send it and `to` to receive it.
  * And `to`'s own receive policy must accept whoever pays it: the vault, or for
- * a swap's exit its router. When that policy can't be read nothing is sent
+ * a swap's exit the swap's escrow. When that policy can't be read nothing is sent
  * (check_failed), as a payment it refuses is held by Tempo rather than reverted.
  */
 export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> {
   const recipients = publicRecipients(call);
   if (recipients.length === 0) return;
   const asset = payoutAsset(call);
-  const sender = call.kind === "swapExit" ? call.router : net?.pool ?? undefined;
+  // an exit is paid by the swap's escrow itself (SwapEscrow2), a cash out by the vault
+  const sender = call.kind === "swapExit" ? escrowAddress(call.router, call.args[0], call.args[1]) : net?.pool ?? undefined;
   const context = net && asset !== null ? { chainId: net.chainId, asset, flow: "cashout" as const, sender } : undefined;
   const { allowed, message } = await screenAddresses(recipients, context);
   if (!allowed) {

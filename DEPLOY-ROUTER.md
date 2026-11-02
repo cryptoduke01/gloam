@@ -17,8 +17,10 @@ had one. See [What to review first](#what-to-review-first).
 - **An exit.** Money waiting at a swap's escrow can leave to an address the swap's
   one-time exit key signs for, when its refund can't land.
 - **A deadline.** Each swap carries one in its escrow key, 30 minutes after it is made
-  (`SWAP_DEADLINE_SECONDS`), or 10 on Base and Ethereum (`swapDeadlineSeconds`). It can't
-  land after that. A refund and an exit have no deadline.
+  (`SWAP_DEADLINE_SECONDS`), or 10 on Base and Ethereum (`swapDeadlineSeconds`). The swap
+  can't land after that. The deadline does not limit a forced refund: once someone has sent
+  the swap's unshield alone, the money waits at the escrow and the same call puts it back as
+  the refund note at any time, long after the deadline too. An exit has no deadline either.
 
 ## What it can't change
 
@@ -37,8 +39,15 @@ escrow key fixes the exit key, so a caller who names another one gets another es
 and the vault rejects the proof. Nothing in a swap's proofs or calldata can sign for it.
 
 The holder signs for an address. Anyone can send that signature, the relay included,
-and it can only pay the address it names. The escrow opens once, so a refund and an
-exit can never both happen.
+and it can only pay the address it names. The escrow pays that address itself, so the
+money never passes through the router, and a token that blocks the router still pays an
+exit. An exit can't go anywhere the money would stop for good: the escrow itself, the
+router, the vault, the token's own contract, WETH or the PoolManager, or Tempo's DEX.
+On Tempo, where a recipient's receive policy can hold a payment instead of refusing it,
+`GloamVaultSwapTempo2` asks the TIP-403 registry first and reverts an exit the
+recipient's policy would hold, and after the escrow pays it checks the recipient holds
+the whole amount more, and reverts if not. The escrow opens once, so a refund and an exit can
+never both happen.
 
 **The trade-off: an exit is public.** It pays a public address the whole amount, next to
 the swap. A refund stays private and costs up to 1%. An exit keeps everything that
@@ -86,10 +95,10 @@ pinned escrow code.
 
 | Chain | Router | Pools | Deploy gas |
 | --- | --- | --- | --- |
-| Robinhood Chain | `0xFD1547d9C404Bf670c9652d1D6007A1bB6528b93` | 45 | 4.6M |
-| Base | `0x0742fFA3d1C8e74765F8186d5E2133c307e2557c` | 7 | 3.6M |
-| Ethereum | `0xE36883A156ce5Ed68F083DdA79Bad7cf07AC5B2c` | 13 | 3.7M |
-| Tempo | `0x75A22213c7d64438246348129b843d69b76f2535` | no pools, its DEX | see the card |
+| Robinhood Chain | `0x9CdA89fA6E6f796a1623C2086b2C710DCa64486d` | 45 | 4.8M |
+| Base | `0x3A99f461bdbfc86fbd4e84ee80Bfb2fd73f3576a` | 7 | 3.7M |
+| Ethereum | `0x2E0c06Ac42Cc6f0ecC3eDc86bC0d67F3c2DC7E6A` | 13 | 3.9M |
+| Tempo | `0x991efFC6cA44BD578000d32C1351d78298BdBC0a` | no pools, its DEX | see the card |
 
 These hold for the contracts in `test/fixtures/router-next.json`, which
 `test_v3_predicted_addresses_are_pinned` checks.
@@ -223,7 +232,7 @@ Real proofs against the live vault, on a fork (`app/scripts/fork-router-v3.mts`)
 | A swap, two hops | 1.61M to 1.70M |
 | A swap, three hops | 1.70M |
 | A refund | 1.17M to 1.20M |
-| An exit | 145k |
+| An exit | 121k to 140k |
 
 The relay pays. At $2,290 ETH a one-hop swap costs about **$3.89 per gwei**.
 
@@ -320,9 +329,15 @@ leave a gap in that relay account's nonce.
 2. `_open` and the `OPENING` state: `receive()` takes ETH from any sender in that state.
 3. `GloamVaultSwapV4c._walk` and `unlockCallback`: conversion between ETH and WETH at
    the ends of a route, and that a pool can still take no more than the leftover.
-4. `SwapEscrow2`: a new init code. Every escrow address depends on it.
+4. `SwapEscrow2`: a new init code. Every escrow address depends on it. It asks the router
+   that deploys it where to pay (`escrowPayee`): the router, or an exit's recipient. It
+   leaves one byte of code (0xFE), so `_open` refuses an escrow opened before at once
+   (`EscrowUsed`), and one whose constructor stops with no reason says so (`EscrowFailed`).
 5. The escrow key, now ten fields: what it fixes, and that the app and the router hash
-   it the same way. The deadline: that it stops a swap, and only a swap.
+   it the same way. The deadline: that it stops a swap, and only a swap, never a forced
+   refund or an exit.
+   `GloamVaultSwapTempo2._beforeExit` and `_afterExit`: the receive policy read before an
+   exit on Tempo, and the check that the money arrived.
 6. The Base and Ethereum pool lists against live state on the day, and the depth table above.
 7. The deploy page: that what it signs is what was reviewed.
 8. The quote stops in `planVaultSwap`: thin pools, the dollar peg, and what a stablecoin swap

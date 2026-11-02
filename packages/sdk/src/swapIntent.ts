@@ -996,6 +996,8 @@ export async function buildSwapExit(rec: SwapRecovery, p: { client: PublicClient
   if (r.version !== 3 || !rec.info.exitKey) refuse("no_exit", "A swap through this router has no exit. Its refund lands once the vault has room.");
   const problem = cashOutTargetProblem(p.to, { chainId: rec.chainId, pool: rec.pool, routers: [rec.router] });
   if (problem) refuse("bad_recipient", problem);
+  // the router refuses these too (BadExit): the money would stop there for good
+  if (same(p.to, rec.escrow) || same(p.to, rec.info.assetIn)) refuse("bad_recipient", "An exit can't go to the swap's escrow or the token's own contract. Pick a wallet address.");
   await assertChain(p.client, rec.chainId);
   const outcome = await readSwapOutcome(p.client, rec);
   if (outcome.state !== "exit_ready" && outcome.state !== "refund_ready") refuse("not_waiting", `Nothing waits at this swap's escrow: the swap is ${outcome.state}.`);
