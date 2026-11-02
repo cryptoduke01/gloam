@@ -911,6 +911,46 @@ await test("signup: one IP makes a few accounts a day; changing an account is no
   assert.ok((await json(await from(owners[NEW_ACCOUNTS_PER_IP_PER_DAY]!, "198.51.100.78", "One more"))).ok);
 });
 
+await test("signup: sign-ups sent together from one IP still make only three", async () => {
+  const ip = "198.51.100.88";
+  const owners = Array.from({ length: 8 }, () => privateKeyToAccount(generatePrivateKey()).address);
+  const statuses = await Promise.all(
+    owners.map((owner, i) =>
+      accountPut(
+        new Request(`${ORIGIN}/api/partners/account`, {
+          method: "PUT",
+          headers: {
+            "x-forwarded-host": HOST, "x-forwarded-for": ip, origin: ORIGIN, "content-type": "application/json",
+            cookie: `${SESSION_COOKIE}=${encodeURIComponent(createSession(owner, HOST)!)}`,
+          },
+          body: JSON.stringify({ name: `Together ${i}`, website: "https://example.com" }),
+        }) as never
+      ).then((r: Response) => r.status)
+    )
+  );
+  assert.equal(statuses.filter((st) => st === 200).length, NEW_ACCOUNTS_PER_IP_PER_DAY);
+  assert.equal(statuses.filter((st) => st === 429).length, 8 - NEW_ACCOUNTS_PER_IP_PER_DAY);
+  assert.equal((await Promise.all(owners.map((o) => getPartnerByOwner(o)))).filter(Boolean).length, NEW_ACCOUNTS_PER_IP_PER_DAY);
+});
+
+await test("relay messages: a partner's save never undoes the admin's switch, even at the same moment", async () => {
+  const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Overlap", website: "https://example.com" });
+  await setRelayApproved(owner.id, true);
+  for (let i = 0; i < 5; i++) {
+    const want = i % 2 === 1;
+    await Promise.all([upsertPartner(owner.owner, { name: `Overlap ${i}` }), setRelayApproved(owner.id, want)]);
+    const now = (await getPartnerByOwner(owner.owner))!;
+    assert.equal(now.relayApproved, want, `round ${i}`);
+    assert.equal(now.name, `Overlap ${i}`);
+  }
+  // the record itself never carries it
+  const raw = (await kv1(["GET", k("partner", owner.id)])) as string;
+  assert.equal(JSON.parse(raw).relayApproved, undefined);
+  assert.equal((await listPartners()).find((p) => p.id === owner.id)?.relayApproved, false);
+  await setRelayApproved(owner.id, true);
+  assert.equal((await listPartners()).find((p) => p.id === owner.id)?.relayApproved, true);
+});
+
 await test("relay messages: a new account is not approved; only an admin, from the site, changes that", async () => {
   const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Fresh", website: "https://example.com" });
   assert.equal(owner.relayApproved, undefined);

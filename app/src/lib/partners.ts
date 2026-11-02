@@ -31,7 +31,7 @@ import { getAddress, isAddress, zeroAddress, type Address, type Hex } from "viem
 import { loadEthUsd } from "./live-quotes";
 import { getNetwork, isNetworkKey, NETWORK_KEYS, type GloamNetwork, type NetworkKey } from "./networks";
 import { cleanText } from "./paymentNote";
-import { hashNumbers, jsonOf, k, kv, kv1 } from "./partnersKv";
+import { hashNumbers, jsonOf, k, kv, kv1, type KvCommand } from "./partnersKv";
 import { randomId } from "./apiKeys";
 import { isDollarStable, shieldTokensFor, supportsNativeShield } from "./tokens";
 
@@ -179,9 +179,10 @@ export type Partner = {
   payout: PayoutAddresses;
   fees: PartnerFees;
   /**
-   * Set by a Gloam admin, never by the partner. Payment messages from an approved
-   * account's keys use the relay's larger message budget; every other account's keys
-   * share one the size of the budget for messages sent without a key.
+   * Set by a Gloam admin, never by the partner, and kept under its own key apart
+   * from the record, so a save of the record never changes it. Payment messages from
+   * an approved account's keys use the relay's larger message budget; every other
+   * account's keys share one the size of the budget for messages sent without a key.
    */
   relayApproved?: boolean;
   createdAt: number;
@@ -236,9 +237,25 @@ export function validatePayout(input: unknown, base: PayoutAddresses = {}): Payo
   return out;
 }
 
+/** A stored record with its approval, which lives under its own key. */
+function withApproval(raw: unknown, approved: unknown): Partner | null {
+  const p = jsonOf<Partner>(raw);
+  return p ? { ...p, relayApproved: approved === "1" } : null;
+}
+
+/** The record as stored: everything but the approval. */
+function recordOf(p: Partner): string {
+  const { relayApproved: _approval, ...rest } = p;
+  return JSON.stringify(rest);
+}
+
 export async function getPartner(id: string): Promise<Partner | null> {
   if (!/^ptr_[A-Za-z0-9]{6,32}$/.test(id)) return null;
-  return jsonOf<Partner>(await kv1(["GET", k("partner", id)]));
+  const [raw, approved] = await kv([
+    ["GET", k("partner", id)],
+    ["GET", k("relay-approved", id)],
+  ]);
+  return withApproval(raw, approved);
 }
 
 export async function getPartnerByOwner(owner: string): Promise<Partner | null> {
@@ -253,7 +270,15 @@ export type PartnerInput = {
   fees?: unknown;
 };
 
-/** Creates the wallet's partner account, or updates it. */
+/** Throws a PartnerError for what a new account would refuse, making nothing. */
+export function checkNewPartner(input: PartnerInput): void {
+  if (cleanPartnerName(input.name).length < 2) throw new PartnerError("Add your app's name (at least two characters).", 400, "bad_name");
+  cleanWebsite(input.website);
+  validatePayout(input.payout, {});
+  validateFees(input.fees, DEFAULT_FEES);
+}
+
+/** Creates the wallet's partner account, or updates it. Never changes its approval (setRelayApproved). */
 export async function upsertPartner(owner: Address, input: PartnerInput): Promise<Partner> {
   const existing = await getPartnerByOwner(owner);
   const now = Date.now();
@@ -265,7 +290,7 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
 
   if (existing) {
     const next: Partner = { ...existing, name, website, payout, fees, updatedAt: now };
-    await kv1(["SET", k("partner", existing.id), JSON.stringify(next)]);
+    await kv1(["SET", k("partner", existing.id), recordOf(next)]);
     return next;
   }
   const partner: Partner = {
@@ -279,7 +304,7 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
     updatedAt: now,
   };
   // The account first, then the wallet's claim on it: a claim with no account behind it locks the wallet out.
-  await kv1(["SET", k("partner", partner.id), JSON.stringify(partner)]);
+  await kv1(["SET", k("partner", partner.id), recordOf(partner)]);
   const [claimed] = await kv([["SET", k("owner", partner.owner), partner.id, "NX"]]);
   if (claimed !== "OK") {
     // Two tabs signed up at once: keep the first account.
@@ -295,21 +320,23 @@ export async function upsertPartner(owner: Address, input: PartnerInput): Promis
   return partner;
 }
 
-/** Admin only: approves this account for the relay's larger message budget, or takes that back. Null when there is no such account. */
+/**
+ * Admin only: approves this account for the relay's larger message budget, or takes
+ * that back. Written under its own key, never with the record. Null when there is no
+ * such account.
+ */
 export async function setRelayApproved(id: string, approved: boolean): Promise<Partner | null> {
-  const partner = await getPartner(id);
-  if (!partner) return null;
-  const next: Partner = { ...partner, relayApproved: approved, updatedAt: Date.now() };
-  await kv1(["SET", k("partner", partner.id), JSON.stringify(next)]);
-  return next;
+  if (!(await getPartner(id))) return null;
+  await kv1(approved ? ["SET", k("relay-approved", id), "1"] : ["DEL", k("relay-approved", id)]);
+  return getPartner(id);
 }
 
 export async function listPartners(): Promise<Partner[]> {
   const ids = (await kv1(["SMEMBERS", k("partners")])) as string[];
   if (!Array.isArray(ids) || ids.length === 0) return [];
-  const raw = await kv(ids.map((id) => ["GET", k("partner", id)]));
-  return raw
-    .map((r) => jsonOf<Partner>(r))
+  const raw = await kv(ids.flatMap((id) => [["GET", k("partner", id)], ["GET", k("relay-approved", id)]] as KvCommand[]));
+  return ids
+    .map((_, i) => withApproval(raw[2 * i], raw[2 * i + 1]))
     .filter((p): p is Partner => Boolean(p))
     .sort((a, b) => b.createdAt - a.createdAt);
 }

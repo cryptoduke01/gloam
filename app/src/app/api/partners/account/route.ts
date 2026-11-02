@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { ApiError, countNewAccount, jsonBody, limitNewAccount, limitPortalWrite, portal, sessionWallet } from "@/lib/partnersApi";
+import { ApiError, jsonBody, limitPortalWrite, portal, sessionWallet, takeNewAccount } from "@/lib/partnersApi";
 import { sameSiteJson } from "@/lib/partnersAuth";
-import { FEE_LIMITS, getPartnerByOwner, partnerView, upsertPartner } from "@/lib/partners";
+import { FEE_LIMITS, checkNewPartner, getPartnerByOwner, partnerView, upsertPartner } from "@/lib/partners";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,16 +25,13 @@ export async function PUT(req: NextRequest) {
     const wallet = sessionWallet(req);
     await limitPortalWrite(wallet);
     const body = await jsonBody(req);
-    // a few new accounts per IP a day; changes to an account are not counted
-    const isNew = !(await getPartnerByOwner(wallet));
-    if (isNew) await limitNewAccount(req);
-    const partner = await upsertPartner(wallet, {
-      name: body.name,
-      website: body.website,
-      payout: body.payout,
-      fees: body.fees,
-    });
-    if (isNew) await countNewAccount(req);
+    const input = { name: body.name, website: body.website, payout: body.payout, fees: body.fees };
+    // a few new accounts per IP a day, counted before one is made; changes to an account are not counted
+    if (!(await getPartnerByOwner(wallet))) {
+      checkNewPartner(input);
+      await takeNewAccount(req);
+    }
+    const partner = await upsertPartner(wallet, input);
     return { data: { wallet, partner: partnerView(partner), feeLimits: FEE_LIMITS } };
   });
 }
