@@ -168,18 +168,42 @@ function ActivityList({ items }: { items: Activity[] }) {
   );
 }
 
+/** Mainnet or testnet: the two are never added together. */
+function TierSwitch({ tier, onTier }: { tier: "mainnet" | "testnet"; onTier: (t: "mainnet" | "testnet") => void }) {
+  return (
+    <div role="radiogroup" aria-label="Network" className="inline-flex rounded-full bg-surface-2 p-1 text-[13px]">
+      {(["mainnet", "testnet"] as const).map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="radio"
+          aria-checked={tier === t}
+          onClick={() => onTier(t)}
+          className={`h-8 rounded-full px-3.5 transition-colors ${tier === t ? "bg-panel font-medium text-foreground shadow-card" : "text-mute hover:text-foreground"}`}
+        >
+          {t === "mainnet" ? "Mainnet" : "Testnet"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Overview({
   stats,
   fees,
   activeKeys,
   loading,
   onQuickstart,
+  tier,
+  onTier,
 }: {
   stats: Stats | null;
   fees: FeeSetting;
   activeKeys: number;
   loading: boolean;
   onQuickstart: () => void;
+  tier: "mainnet" | "testnet";
+  onTier: (t: "mainnet" | "testnet") => void;
 }) {
   const mainnetLive = useMainnetLive();
   if (!stats) {
@@ -197,16 +221,25 @@ export function Overview({
   }
   const t = stats.totals;
   const publicCount = t.cashOuts + t.deposits;
+  const testnet = stats.tier === "testnet";
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TierSwitch tier={tier} onTier={onTier} />
+        <p className="text-[12.5px] text-mute">{testnet ? "Testnet figures: counted, never valued in dollars." : "Mainnet figures. Testnet is counted apart."}</p>
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Private payments" value={fmtInt(t.privatePayments)} sub="amounts hidden, counted" />
+        <Kpi label="Private payments" value={fmtInt(t.privatePayments)} sub="amounts hidden, counted per day" />
         <Kpi
           label="Public volume"
-          value={fmtUsd(t.publicVolumeUsd)}
-          sub={`${fmtInt(publicCount)} cash outs and deposits${t.unpriced ? `, ${t.unpriced} unpriced` : ""}`}
+          value={testnet ? "Not priced" : fmtUsd(t.publicVolumeUsd)}
+          sub={`${fmtInt(publicCount)} cash outs and deposits${!testnet && t.unpriced ? `, ${t.unpriced} unpriced` : ""}`}
         />
-        <Kpi label="Would-be fees" value={fmtUsd(t.commissionUsd)} sub={mainnetLive ? "nothing charged yet" : "testnet, nothing charged"} />
+        <Kpi
+          label="Would-be fees"
+          value={testnet ? "Not priced" : fmtUsd(t.commissionUsd)}
+          sub={testnet ? "testnet, nothing charged" : mainnetLive ? "nothing charged yet" : "nothing charged"}
+        />
         <Kpi label="Active keys" value={fmtInt(activeKeys)} sub={stats.lastActivity ? `last payment ${ago(stats.lastActivity)}` : "no payments yet"} />
       </div>
 
@@ -250,14 +283,14 @@ export function Overview({
       </div>
 
       <Card
-        title="Recent payments"
+        title="Recent cash outs, deposits and swaps"
         flush
         action={<span className="text-[12.5px] text-mute">{loading ? "Checking…" : "Updates every 20 seconds"}</span>}
-        foot="Private payments never show an amount, to you or to us. Fees on cash outs and deposits would be paid in the same token."
+        foot="Cash outs, deposits and swaps are public on chain, so they are listed with their transaction. Private payments are not listed one by one, to you or anyone: they show only as counts per day, so no hidden payment can be tied to an invoice or a link. Fees on cash outs and deposits would be paid in the same token."
       >
         {stats.recent.length === 0 ? (
           <div className="px-5 py-12 text-center sm:px-6">
-            <p className="text-[15px] text-foreground">No payments yet</p>
+            <p className="text-[15px] text-foreground">Nothing listed yet</p>
             <p className="mx-auto mt-1.5 max-w-[46ch] text-[13.5px] leading-relaxed text-mute">
               Relay a payment with one of your keys, or share a link with your link code, and it shows up here once it lands.
             </p>

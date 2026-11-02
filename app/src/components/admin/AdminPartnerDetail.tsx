@@ -5,9 +5,10 @@ import { PartnerBreakdown, type BreakdownStats } from "@/components/partners/Par
 import type { BackfillResult } from "@/lib/partnerBackfill";
 
 /**
- * Admin > Partners, one partner: their figures by source, kind, day and token
- * (the same view the partner sees), the link codes Gloam issued them or they
- * made, and their own receiving addresses for the on-chain match.
+ * Admin > Partners, one partner: their figures for one tier by source, kind, day
+ * and token (the same view the partner sees, plus each link private payment the
+ * partner does not see), the link codes Gloam issued them or they made, and their
+ * own receiving addresses for the on-chain match, each proven by its signature.
  */
 
 type CodeView = {
@@ -20,13 +21,16 @@ type CodeView = {
   state: "live" | "revoked" | "expired";
 };
 
+type AddressView = { chainId: number; address: string; verifiedAt: number | null; message: string; addedAt: number };
+
 type Detail = {
   partner: { id: string; name: string };
   stats: BreakdownStats;
   codes: CodeView[];
-  addresses: Record<string, string[]>;
-  addressCount: number;
+  addresses: AddressView[];
+  addressCount: { total: number; verified: number };
   chains: { chainId: number; key: string; name: string }[];
+  migration: string | null;
   notMatched: { privatePayments: string; swaps: string };
 };
 
@@ -67,18 +71,18 @@ function ErrorLine({ text }: { text: string | null }) {
 
 const when = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Never");
 
-export function AdminPartnerDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
+export function AdminPartnerDetail({ id, tier, onChanged }: { id: string; tier: "mainnet" | "testnet"; onChanged: () => void }) {
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setD(await call<Detail>(`/api/partners/admin/partner?id=${encodeURIComponent(id)}`));
+      setD(await call<Detail>(`/api/partners/admin/partner?id=${encodeURIComponent(id)}&tier=${tier}`));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load this partner");
     }
-  }, [id]);
+  }, [id, tier]);
 
   useEffect(() => {
     const t = window.setTimeout(() => void load(), 0);
@@ -100,13 +104,19 @@ export function AdminPartnerDetail({ id, onChanged }: { id: string; onChanged: (
   };
   return (
     <div className="space-y-4">
+      {d.migration && (
+        <p className="rounded-xl bg-warn-soft px-4 py-3 text-[13px] text-warn">
+          {d.migration.slice("partial:".length)} older transactions of this partner fell out of its activity list before mainnet and
+          testnet were kept apart, so they are not in these figures.
+        </p>
+      )}
       <PartnerBreakdown
         stats={d.stats}
         days={30}
         notMatched={d.notMatched}
         csv={{
-          daily: `/api/partners/admin/export?id=${encodeURIComponent(d.partner.id)}&type=daily`,
-          transactions: `/api/partners/admin/export?id=${encodeURIComponent(d.partner.id)}&type=transactions`,
+          daily: `/api/partners/admin/export?id=${encodeURIComponent(d.partner.id)}&type=daily&tier=${tier}`,
+          transactions: `/api/partners/admin/export?id=${encodeURIComponent(d.partner.id)}&type=transactions&tier=${tier}`,
         }}
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -201,6 +211,10 @@ function Codes({ id, codes, onChanged }: { id: string; codes: CodeView[]; onChan
   );
 }
 
+function csvQuote(v: string): string {
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
 function Addresses({
   id,
   addresses,
@@ -209,77 +223,115 @@ function Addresses({
   onChanged,
 }: {
   id: string;
-  addresses: Record<string, string[]>;
-  count: number;
+  addresses: AddressView[];
+  count: { total: number; verified: number };
   chains: Detail["chains"];
   onChanged: () => void;
 }) {
   const [text, setText] = useState("");
+  const [sigs, setSigs] = useState("");
   const [chain, setChain] = useState<string>(String(chains[0]?.chainId ?? ""));
   const [mode, setMode] = useState<"add" | "replace">("add");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"save" | "verify" | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [result, setResult] = useState<{ read: number; rejectedCount: number; rejected: { line: number; reason: string }[] } | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [problems, setProblems] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(false);
 
-  async function save() {
-    setBusy(true);
+  const name = (chainId: number) => chains.find((c) => c.chainId === chainId)?.name ?? String(chainId);
+  const waiting = addresses.filter((a) => !a.verifiedAt);
+
+  async function send(kind: "save" | "verify") {
+    setBusy(kind);
     setErr(null);
     setResult(null);
+    setProblems([]);
     try {
-      const r = await call<{ read: number; rejectedCount: number; rejected: { line: number; reason: string }[] }>("/api/partners/admin/partner", {
-        method: "POST",
-        body: { id, action: "setAddresses", text, chainId: chain ? Number(chain) : null, mode },
-      });
-      setResult(r);
-      setText("");
+      if (kind === "save") {
+        const r = await call<{ read: number; rejectedCount: number; rejected: { line: number; reason: string }[] }>("/api/partners/admin/partner", {
+          method: "POST",
+          body: { id, action: "setAddresses", text, chainId: chain ? Number(chain) : null, mode },
+        });
+        setResult(`Read ${r.read.toLocaleString("en-US")} ${r.read === 1 ? "address" : "addresses"}. New ones wait for their signature before they count.`);
+        setProblems(r.rejected.map((x) => `Line ${x.line}: ${x.reason}`));
+        setText("");
+      } else {
+        const r = await call<{ proven: number; refused: number; results: { address: string; ok: boolean; reason?: string }[]; rejected: { line: number; reason: string }[] }>(
+          "/api/partners/admin/partner",
+          { method: "POST", body: { id, action: "verifyAddresses", text: sigs, chainId: chain ? Number(chain) : null } }
+        );
+        setResult(`${r.proven} proven, ${r.refused} refused.`);
+        setProblems([
+          ...r.results.filter((x) => !x.ok).map((x) => `${x.address.slice(0, 8)}…${x.address.slice(-4)}: ${x.reason ?? "refused"}`),
+          ...r.rejected.map((x) => `Line ${x.line}: ${x.reason}`),
+        ]);
+        setSigs("");
+      }
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  async function onFile(e: ChangeEvent<HTMLInputElement>) {
+  async function onFile(e: ChangeEvent<HTMLInputElement>, into: (t: string) => void) {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    if (f.size > 300_000) {
+    if (f.size > 600_000) {
       setErr("That file is too large. Up to 5,000 addresses.");
       return;
     }
-    setText(await f.text());
+    into(await f.text());
   }
 
-  const name = (chainId: string) => chains.find((c) => String(c.chainId) === chainId)?.name ?? chainId;
+  /** The messages still to sign, as a CSV to send the partner: chain, address, message. */
+  function messagesCsv() {
+    const rows = [["chain", "address", "message"], ...waiting.map((a) => [String(a.chainId), a.address, a.message])];
+    const blob = new Blob([rows.map((r) => r.map(csvQuote).join(",")).join("\r\n") + "\r\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `gloam-partner-${id}-messages-to-sign.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
-    <Box title={`Receiving addresses (${count.toLocaleString("en-US")})`}>
+    <Box title={`Receiving addresses (${count.verified.toLocaleString("en-US")} proven of ${count.total.toLocaleString("en-US")})`}>
       <p className="text-[13px] leading-relaxed text-mute">
-        The partner&apos;s own addresses only, per mainnet. The on-chain match counts past cash outs that paid one of them. Nothing about
-        who sent the money is kept.
+        The partner&apos;s own addresses only, per mainnet. An address counts in the on-chain match only once it signs its message
+        (EIP-191, naming the partner, the chain and the date). Send the partner the messages to sign, then paste what comes back as
+        chain,address,signature. Nothing about who sent the money is kept.
       </p>
-      {count > 0 && (
+      {count.total > 0 && (
         <div className="mt-3 rounded-xl bg-surface px-3.5 py-2.5 text-[12.5px] text-soft">
-          {Object.entries(addresses).map(([c, list]) => (
+          {[...new Set(addresses.map((a) => a.chainId))].map((c) => (
             <p key={c}>
-              {name(c)}: {list.length.toLocaleString("en-US")}
+              {name(c)}: {addresses.filter((a) => a.chainId === c && a.verifiedAt).length} proven,{" "}
+              {addresses.filter((a) => a.chainId === c && !a.verifiedAt).length} waiting for a signature
             </p>
           ))}
-          <button type="button" className="mt-1 underline underline-offset-4" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Hide the list" : "Show the list"}
-          </button>
+          <div className="mt-1 flex flex-wrap gap-3">
+            <button type="button" className="underline underline-offset-4" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Hide the list" : "Show the list"}
+            </button>
+            {waiting.length > 0 && (
+              <button type="button" className="underline underline-offset-4" onClick={messagesCsv}>
+                Download the {waiting.length} {waiting.length === 1 ? "message" : "messages"} to sign
+              </button>
+            )}
+          </div>
           {showAll && (
             <pre className="tnum mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[12px] text-foreground">
-              {Object.entries(addresses)
-                .flatMap(([c, list]) => list.map((a) => `${name(c)},${a}`))
-                .join("\n")}
+              {addresses.map((a) => `${name(a.chainId)},${a.address},${a.verifiedAt ? "proven" : "waiting"}`).join("\n")}
             </pre>
           )}
         </div>
       )}
       <textarea
-        className="gl-input mt-3 min-h-[110px] w-full py-2.5 font-mono text-[12.5px]"
+        className="gl-input mt-3 min-h-[90px] w-full py-2.5 font-mono text-[12.5px]"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={"0x… one per line, or chain,address\nTempo,0x…"}
@@ -296,33 +348,46 @@ function Addresses({
             ))}
           </select>
         </label>
-        <label className="inline-flex items-center gap-1.5">
-          <select className="gl-input h-9 w-auto py-0 text-[13px]" value={mode} onChange={(e) => setMode(e.target.value as "add" | "replace")}>
-            <option value="add">Add to the list</option>
-            <option value="replace">Replace the list</option>
-          </select>
-        </label>
+        <select className="gl-input h-9 w-auto py-0 text-[13px]" value={mode} onChange={(e) => setMode(e.target.value as "add" | "replace")} aria-label="Add or replace">
+          <option value="add">Add to the list</option>
+          <option value="replace">Replace the list</option>
+        </select>
         <label className="btn btn-ghost btn-sm cursor-pointer">
           Upload CSV
-          <input type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" onChange={(e) => void onFile(e)} />
+          <input type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" onChange={(e) => void onFile(e, setText)} />
         </label>
-        <button type="button" disabled={busy || (!text.trim() && mode === "add")} onClick={() => void save()} className="btn btn-ink btn-sm">
-          {busy ? "Saving" : mode === "replace" && !text.trim() ? "Clear the list" : "Save"}
+        <button type="button" disabled={busy !== null || (!text.trim() && mode === "add")} onClick={() => void send("save")} className="btn btn-ink btn-sm">
+          {busy === "save" ? "Saving" : mode === "replace" && !text.trim() ? "Clear the list" : "Save"}
         </button>
       </div>
+      {waiting.length > 0 && (
+        <>
+          <textarea
+            className="gl-input mt-3 min-h-[90px] w-full py-2.5 font-mono text-[12.5px]"
+            value={sigs}
+            onChange={(e) => setSigs(e.target.value)}
+            placeholder={"chain,address,signature\nRobinhood Chain,0x…,0x…"}
+            aria-label="Signatures"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="btn btn-ghost btn-sm cursor-pointer">
+              Upload signatures
+              <input type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" onChange={(e) => void onFile(e, setSigs)} />
+            </label>
+            <button type="button" disabled={busy !== null || !sigs.trim()} onClick={() => void send("verify")} className="btn btn-ink btn-sm">
+              {busy === "verify" ? "Checking" : "Check signatures"}
+            </button>
+          </div>
+        </>
+      )}
       <ErrorLine text={err} />
       {result && (
         <div className="mt-2 text-[12.5px] text-soft" role="status">
-          <p>
-            Read {result.read.toLocaleString("en-US")} {result.read === 1 ? "address" : "addresses"}
-            {result.rejectedCount ? `, left out ${result.rejectedCount} ${result.rejectedCount === 1 ? "line" : "lines"}:` : "."}
-          </p>
-          {result.rejected.length > 0 && (
+          <p>{result}</p>
+          {problems.length > 0 && (
             <ul className="mt-1 list-disc pl-5 text-warn">
-              {result.rejected.slice(0, 8).map((r) => (
-                <li key={r.line}>
-                  Line {r.line}: {r.reason}
-                </li>
+              {problems.slice(0, 10).map((p) => (
+                <li key={p}>{p}</li>
               ))}
             </ul>
           )}
@@ -354,8 +419,16 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
   }
 
   const notDone = r?.chains.some((c) => !c.done);
-  const label = (m: BackfillResult["matches"][number]) =>
-    m.result === "recorded" ? "Counted" : m.result === "would_record" ? "Would count" : m.result === "already_counted" ? "Already counted" : (m.reason ?? "Left out");
+  const LABEL: Record<string, string> = {
+    recorded: "Counted",
+    would_record: "Would count",
+    moved: "Moved from a link",
+    would_move: "Would move from a link",
+    settled: "Counted to its link",
+    would_settle: "Would count to its link",
+    already_counted: "Already counted",
+  };
+  const label = (m: BackfillResult["matches"][number]) => LABEL[m.result] ?? m.reason ?? "Left out";
   return (
     <Box
       title="Match past cash outs on chain"
@@ -375,10 +448,12 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
       }
     >
       <p className="text-[13px] leading-relaxed text-mute">
-        Reads every mainnet vault&apos;s cash outs (Unshielded) and counts the ones that paid a partner&apos;s receiving address, as
-        &quot;matched on chain&quot;. Read-only on chain. A transaction already counted, by a link, a key or an earlier pass, is never
-        counted again. Past private payments can&apos;t be matched: inside the vault the payee and the amount are hidden. Swaps can&apos;t
-        either: a swap&apos;s output goes back into the vault, not to an address. A dry run counts nothing.
+        Reads every mainnet vault&apos;s cash outs (Unshielded) and counts the ones that paid a partner&apos;s proven receiving
+        address, as &quot;matched on chain&quot;; one a link counted to someone else moves to the address&apos;s partner. It also counts
+        cash outs registered from a partner&apos;s link that nobody counted yet. Read-only on chain. A transaction is never counted
+        twice. Past private payments can&apos;t be matched: inside the vault the payee and the amount are hidden. Swaps can&apos;t either:
+        a swap&apos;s output goes back into the vault, not to an address. A dry run counts nothing and shows what it found per
+        address; counting needs a dry run of the same addresses first.
       </p>
       <ErrorLine text={err} />
       {r && (
@@ -389,6 +464,39 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
             {r.dryRun ? "would be counted" : "counted"}.
             {notDone ? " A chain failed or ran out of time: run it again with the deploy-block box off to carry on from where it stopped." : ""}
           </p>
+          {r.byAddress.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="tnum w-full text-left text-[12.5px]">
+                <thead className="border-b border-line bg-surface">
+                  <tr>
+                    {["Partner", "Chain", "Address", "Cash outs found", r.dryRun ? "Would count" : "Counted", "Amount"].map((h) => (
+                      <th key={h} className="px-3 py-2 font-medium text-mute">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.byAddress.map((a) => (
+                    <tr key={`${a.chainId}-${a.address}`} className="border-b border-line last:border-0">
+                      <td className="px-3 py-2">{a.partnerId}</td>
+                      <td className="px-3 py-2">{a.chainId}</td>
+                      <td className="px-3 py-2" title={a.address}>
+                        {a.address.slice(0, 8)}…{a.address.slice(-4)}
+                      </td>
+                      <td className="px-3 py-2">{a.matches}</td>
+                      <td className="px-3 py-2">{a.counted}</td>
+                      <td className="px-3 py-2">
+                        {Object.entries(a.byToken)
+                          .map(([sym, v]) => `${Number(v).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${sym}`)
+                          .join(", ") || "None"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <ul className="tnum space-y-0.5">
             {r.chains.map((c) => (
               <li key={c.chainId}>
@@ -401,7 +509,8 @@ export function AdminBackfill({ onDone }: { onDone: () => void }) {
             <ul className="tnum max-h-56 space-y-0.5 overflow-auto rounded-xl bg-surface px-3.5 py-2.5">
               {r.matches.slice(0, 200).map((m) => (
                 <li key={`${m.chainId}-${m.txHash}`}>
-                  {m.network} {m.txHash.slice(0, 12)}… {m.symbol ?? m.asset.slice(0, 8)} to {m.partnerId}: {label(m)}
+                  {m.network} {m.txHash.slice(0, 12)}… {m.symbol ?? m.asset.slice(0, 8)} to {m.partnerId || "a link"}: {label(m)}
+                  {m.from ? ` (was ${m.from})` : ""}
                 </li>
               ))}
             </ul>

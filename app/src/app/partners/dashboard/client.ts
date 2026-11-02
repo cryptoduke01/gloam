@@ -131,6 +131,10 @@ export type PartnerAccount = {
   website: string | null;
   payout: Partial<Record<"robinhood" | "tempo", Address>>;
   fees: FeeSetting;
+  /** The name Gloam approved to show in links, or null. */
+  approvedName?: string | null;
+  /** The account's name differs from the approved one (or none is approved yet). */
+  nameAwaitingApproval?: boolean;
   createdAt: number;
   updatedAt: number;
 };

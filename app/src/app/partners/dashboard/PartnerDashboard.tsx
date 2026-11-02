@@ -176,7 +176,7 @@ function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: Pa
               <input
                 id="ob-name"
                 className="gl-input"
-                maxLength={60}
+                maxLength={32}
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -213,6 +213,7 @@ function Onboard({ wallet, onDone, onSignOut }: { wallet: string; onDone: (p: Pa
 function Dashboard({ session, onSignOut, onPartner }: { session: Session & { partner: PartnerAccount }; onSignOut: () => void; onPartner: (p: PartnerAccount) => void }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [tier, setTier] = useState<"mainnet" | "testnet">("mainnet");
   const [statsLoading, setStatsLoading] = useState(false);
   const [keys, setKeys] = useState<KeyView[] | null>(null);
   const [keyMeta, setKeyMeta] = useState({ maxActive: 10, liveKeys: false });
@@ -226,7 +227,7 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      setStats(await portal<Stats>("/stats"));
+      setStats(await portal<Stats>(`/stats?tier=${tier}`));
       setErr(null);
     } catch (e) {
       if (e instanceof PortalError && e.status === 401) return onSignOut();
@@ -234,7 +235,7 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
     } finally {
       setStatsLoading(false);
     }
-  }, [onSignOut]);
+  }, [onSignOut, tier]);
 
   const loadKeys = useCallback(async () => {
     try {
@@ -351,9 +352,26 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
 
         <div id="partner-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} className="min-w-0">
           {tab === "overview" && (
-            <Overview stats={stats} fees={partner.fees} activeKeys={activeKeys} loading={statsLoading} onQuickstart={() => choose("quickstart")} />
+            <Overview
+              stats={stats && stats.tier === tier ? stats : null}
+              fees={partner.fees}
+              activeKeys={activeKeys}
+              loading={statsLoading}
+              onQuickstart={() => choose("quickstart")}
+              tier={tier}
+              onTier={setTier}
+            />
           )}
-          {tab === "links" && <LinksPanel codes={codes} maxLive={maxLiveCodes} origin={origin} onChanged={() => void loadCodes()} />}
+          {tab === "links" && (
+            <LinksPanel
+              codes={codes}
+              maxLive={maxLiveCodes}
+              origin={origin}
+              onChanged={() => void loadCodes()}
+              approvedName={partner.approvedName ?? null}
+              name={partner.name}
+            />
+          )}
           {tab === "keys" && <KeysPanel keys={keys} maxActive={keyMeta.maxActive} liveKeys={keyMeta.liveKeys} onChanged={() => void loadKeys()} />}
           {tab === "settings" && (
             <SettingsPanel

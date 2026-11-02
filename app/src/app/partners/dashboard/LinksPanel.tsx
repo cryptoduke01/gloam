@@ -128,11 +128,17 @@ export function LinksPanel({
   maxLive,
   origin,
   onChanged,
+  approvedName,
+  name,
 }: {
   codes: LinkCodeView[] | null;
   maxLive: number;
   origin: string;
   onChanged: () => void;
+  /** The name Gloam approved to show in links, or null. */
+  approvedName: string | null;
+  /** The account's name now. */
+  name: string;
 }) {
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
@@ -156,6 +162,21 @@ export function LinksPanel({
 
   return (
     <div className="space-y-4">
+      <Card title="Your name in links">
+        {approvedName ? (
+          <p className="text-[14px] leading-relaxed text-soft">
+            People who open your links see <span className="font-medium text-foreground">From {approvedName}</span> with a Gloam partner
+            mark.
+            {approvedName !== name ? ` Your account is now named ${name}; links keep showing ${approvedName} until Gloam approves the new name.` : ""}
+          </p>
+        ) : (
+          <p className="text-[14px] leading-relaxed text-soft">
+            Links show no partner name yet. Gloam checks a name before it shows next to the Gloam partner mark, so nobody can pass
+            as Gloam or another brand. Your links still count to you meanwhile. Ask us to approve <span className="text-foreground">{name}</span>.
+          </p>
+        )}
+      </Card>
+
       <Card title="New link code">
         <form onSubmit={make} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="min-w-0 flex-1">
@@ -180,11 +201,12 @@ export function LinksPanel({
         action={<span className="text-[12.5px] text-mute">{codes ? `${live} of ${maxLive} live` : "Loading…"}</span>}
         foot={
           <>
-            Add <span className="tnum text-foreground">p=&lt;code&gt;</span> to the part after # in a pay link or a swap link. When a payment,
-            cash out or swap opened from it lands, Gloam reads the transaction on its chain and counts it to you. Only public facts
-            about the transaction are kept: hash, chain, kind, token, amount and time. Never the payer&apos;s wallet or anything
-            else about them. A name in a link (name=, ref=) counts for nothing; your name shows from this account. Nothing is
-            charged.
+            Add <span className="tnum text-foreground">p=&lt;code&gt;</span> to the part after # in a pay link or a swap link. The
+            Gloam app ties each payment, cash out or swap opened from it to the code before it is sent, and Gloam counts it to you
+            once it lands, checked on its chain. Only public facts about the transaction are kept: hash, chain, kind, token, amount
+            and time. Never the payer&apos;s wallet or anything else about them. You see cash outs and swaps one by one, since they
+            are public on chain; private payments only as counts per day. A name in a link (name=, ref=) counts for nothing.
+            Nothing is charged.
           </>
         }
       >

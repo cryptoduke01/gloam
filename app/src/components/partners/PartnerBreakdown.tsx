@@ -5,10 +5,12 @@ import { getNetwork, networkName, type NetworkKey } from "@/lib/networks";
 import type { ActivityKind, ActivitySource, PartnerStats } from "@/lib/partners";
 
 /**
- * One partner's figures, the same in the partner's dashboard and in Admin >
- * Partners: by source (API key, link, matched on chain), by kind, by day and by
- * token, with the vault's own cash-out fee, and the CSV downloads. Only what the
- * partner brought in; private payments never show an amount.
+ * One partner's figures for one tier (mainnet or testnet, never added together),
+ * the same in the partner's dashboard and in Admin > Partners: by source (API key,
+ * link, matched on chain), by kind, by day and by token, with the vault's own
+ * cash-out fee, and the CSV downloads. Only what the partner brought in; private
+ * payments never show an amount and are never listed one by one. Testnet activity
+ * is counted, never valued in dollars.
  */
 
 export const SOURCE_LABEL: Record<ActivitySource, string> = {
@@ -91,7 +93,7 @@ function Section({ title, action, foot, children }: { title: string; action?: Re
   );
 }
 
-export type BreakdownStats = Pick<PartnerStats, "totals" | "byKind" | "bySource" | "byAsset" | "daily">;
+export type BreakdownStats = Pick<PartnerStats, "tier" | "totals" | "byKind" | "bySource" | "byAsset" | "daily">;
 
 export function PartnerBreakdown({
   stats,
@@ -107,6 +109,9 @@ export function PartnerBreakdown({
   days: number;
 }) {
   const t = stats.totals;
+  const testnet = stats.tier === "testnet";
+  // test tokens have no price: testnet money columns say so instead of showing $0
+  const money = (n: number) => (testnet ? "Not priced" : fmtUsd(n));
   const sources: ActivitySource[] = ["api", "link", "chain"];
   const active = stats.daily.filter((d) => d.privatePayments + d.cashOuts + d.deposits + d.swaps > 0).reverse();
 
@@ -126,9 +131,10 @@ export function PartnerBreakdown({
         }
         foot={
           <>
-            Volume is the dollar value of public edges: deposits, cash outs and each swap&apos;s input. The vault fee is Gloam&apos;s own
-            cash-out fee on those cash outs and swaps, read from each transaction or the vault&apos;s setting at the time. Nothing is
-            charged to partners.
+            {testnet
+              ? "Testnet: counted, never valued. Test tokens have no price. "
+              : "Volume is the dollar value of public edges: deposits, cash outs and each swap's input. The vault fee is Gloam's own cash-out fee on those cash outs and swaps, read from each transaction or the vault's setting at the time. "}
+            Nothing is charged to partners. Private payments show only as counts: never an amount, and never one by one.
             {notMatched ? ` ${notMatched.privatePayments} ${notMatched.swaps}` : ""}
           </>
         }
@@ -142,8 +148,8 @@ export function PartnerBreakdown({
                 {SOURCE_LABEL[s]}
               </span>,
               ...KINDS.map(([kind]) => int.format(r.counts[kind])),
-              fmtUsd(r.volumeUsd),
-              fmtUsd(r.vaultFeeUsd),
+              money(r.volumeUsd),
+              money(r.vaultFeeUsd),
             ];
           })}
           empty="Nothing yet."
@@ -156,7 +162,7 @@ export function PartnerBreakdown({
           headers={["Kind", "Count", "Volume", "Vault fee", "Not priced"]}
           rows={KINDS.map(([kind, label]) => {
             const k = stats.byKind[kind];
-            return [label, int.format(k.count), kind === "private_payment" ? "Hidden" : fmtUsd(k.volumeUsd), fmtUsd(k.vaultFeeUsd), int.format(k.unpriced)];
+            return [label, int.format(k.count), kind === "private_payment" ? "Hidden" : money(k.volumeUsd), money(k.vaultFeeUsd), int.format(k.unpriced)];
           })}
           empty="Nothing yet."
         />
@@ -173,9 +179,9 @@ export function PartnerBreakdown({
               int.format(d.cashOuts),
               int.format(d.deposits),
               int.format(d.swaps),
-              fmtUsd(d.volumeUsd),
-              fmtUsd(d.swapVolumeUsd),
-              fmtUsd(d.vaultFeeUsd),
+              money(d.volumeUsd),
+              money(d.swapVolumeUsd),
+              money(d.vaultFeeUsd),
               `${by("api")} · ${by("link")} · ${by("chain")}`,
             ];
           })}
