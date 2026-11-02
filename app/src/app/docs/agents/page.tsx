@@ -556,18 +556,22 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       </p>
       <p>
         VEYA checks payments: <code>gloam_execute_private_pay</code> and{" "}
-        <code>gloam_fetch_paid</code>. A private swap, and a swap&apos;s exit
-        to an address, go through the spending limits but not through VEYA,
-        and only run when the owner lists <code>swap</code> in the limits. Leave
-        it out if every spend must pass VEYA.
+        <code>gloam_fetch_paid</code>. These go through the spending limits but
+        not through VEYA: <code>gloam_execute_transfer</code>, a public send of
+        test ETH on Robinhood Chain testnet, and a private swap or a
+        swap&apos;s exit to an address, which only run when the owner lists{" "}
+        <code>swap</code> in the limits. Leave <code>swap</code> out if every
+        private spend must pass VEYA. A price of zero or less is refused before
+        any check, with the limits on or off.
       </p>
       <h3>The receipt after a payment</h3>
       <p>
         VEYA&apos;s allow carries a check id. Set{" "}
         <code>GLOAM_VEYA_ANCHOR_URL</code> to{" "}
-        <code>https://api.veyanet.tech/guard/v1/anchor</code> as well, and the
-        server proves each
-        payment once it lands, with that id as the receipt&apos;s verifier, and
+        <code>https://api.veyanet.tech/guard/v1/anchor</code> as well, on the
+        same origin as the check URL since the key goes to both, and the
+        server proves each payment once it lands, with that id as the
+        receipt&apos;s verifier, and
         hashes the proof into one <code>bytes32</code> leaf. VEYA gets that leaf
         and the agent id, nothing else: never the record, the proof, the amount,
         the payee, a note or the transaction hash. VEYA writes the leaf to{" "}
@@ -576,11 +580,16 @@ GLOAM_VEYA_AGENT_ID=an-id-you-choose`}</code>
       <p>
         With receipts on, an allow without a usable check id does not pay,
         because a payment can&apos;t be undone and it could never get its
-        receipt. After a payment, nothing can undo it: a receipt or an anchor
-        that fails leaves the payment paid, with a status of{" "}
-        <code>anchor_failed</code> or <code>receipt_failed</code> in the result,
-        and <code>gloam_retry_veya_receipts</code> tries again without paying
-        anything. <code>anchored</code> means VEYA named the leaf and the
+        receipt. The payment&apos;s answer, with its credential, never waits on
+        the receipt: it comes back as soon as the payment lands, with the
+        receipt <code>pending</code>, and the receipt is built after it, so a
+        challenge can&apos;t expire meanwhile and push the agent to pay twice.
+        Keep the server running until the receipt is done.{" "}
+        <code>gloam_retry_veya_receipts</code> shows where it stands and tries
+        again without paying anything, after <code>anchor_failed</code> or{" "}
+        <code>receipt_failed</code>. A leaf goes to VEYA only once its record is
+        saved, so one payment never gets two leaves.{" "}
+        <code>anchored</code> means VEYA named the leaf and the
         transaction that wrote it, given as <code>anchorTx</code>; the server
         does not read the chain to confirm the write. VEYA writes a leaf once,
         so sending the same one again is safe, and it answers with the first
