@@ -157,7 +157,8 @@ import { ClaimSafetyLine } from "./ClaimSafetyLine";
 import { canSwapAfterClaim, takeFirstClaim } from "@/lib/afterClaim";
 import { TokenLogo } from "./TokenLogo";
 import { AddTokenToWallet } from "./AddTokenToWallet";
-import { checkSweep, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { checkSweep, sweepVerdict, type SweepCheck, type SweepReader } from "@/lib/sweepCheck";
+import { EMBEDDED_CONNECTOR_ID } from "@/lib/embeddedWallet";
 import { moveModeFromParam, searchWithMoveMode } from "@/lib/vaultNav";
 import { cashOutHandoff, classifyPayRecipient, isWalletRecipient } from "@/lib/payRecipient";
 import { useEnsAddress } from "@/hooks/useEnsAddress";
@@ -182,7 +183,16 @@ const RELAY_MAYBE_SENT = new Set(["maybe_sent", "rpc", "network", "error", "inte
 export function MoveView() {
   const shieldLive = isShieldDeployed();
   const poseidonMode = HASH_SCHEME === "poseidon";
-  const { address, isConnected, chainId } = useAppAccount();
+  const { address, isConnected, chainId, connector } = useAppAccount();
+  /** `to` is the Gloam wallet connected now (lib/sweepCheck sweepVerdict: its own sponsored deposits look like a sweep). */
+  const ownGloamWallet = (to: string | null | undefined) =>
+    Boolean(
+      to &&
+        address &&
+        connector?.id === EMBEDDED_CONNECTOR_ID &&
+        connector.type === "turnkey" &&
+        to.toLowerCase() === address.toLowerCase()
+    );
   const { network } = useNetwork();
   const onProduct = chainId === network.chainId;
   const { open, local: allLocal, refresh: refreshNotes } = useLocalShieldNotes(address);
@@ -968,7 +978,8 @@ export function MoveView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sweepKey]);
   const sweepNow = sweepKey ? (sweepResults[sweepKey] ?? null) : null;
-  const sweepHold = Boolean(sweepNow?.swept) && sweepOkFor !== sweepKey;
+  const sweepSays = sweepVerdict(sweepNow, { ownGloamWallet: ownGloamWallet(cashOutTo) });
+  const sweepHold = sweepSays === "swept" && sweepOkFor !== sweepKey;
 
   /** What Round it starts from and gives: the amount (or the whole balance) down to whole units. */
   const roundFrom = cashOutAmountInvalid ? noteWei : cashOutAmount;
@@ -1160,7 +1171,8 @@ export function MoveView() {
           runSweepCheck(key, t, asset, network.chainId),
           new Promise<null>((r) => window.setTimeout(() => r(null), 4_000)),
         ]);
-        if (!result?.swept) continue;
+        // the person's own connected Gloam wallet gets a note under To, not a hold
+        if (sweepVerdict(result, { ownGloamWallet: ownGloamWallet(t) }) !== "swept") continue;
         if (quiet && t.toLowerCase() === quiet.toLowerCase()) return false;
         setError(
           `Money sent to ${shortAddress(t, 4)} has been moved out automatically within seconds before, by another account. Use another address for that piece.`
@@ -2930,7 +2942,22 @@ export function MoveView() {
                         For privacy, a fresh wallet that never added money to Gloam is best.
                       </p>
                     ) : null}
-                    {sweepNow?.swept && cashOutTo ? (
+                    {sweepNow?.swept && cashOutTo && sweepSays === "own-wallet" ? (
+                      <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
+                        Money that reached this Gloam wallet left again soon after, in a transaction another account sent.
+                        Adding money privately with the network fee covered looks like that. If you didn&apos;t add
+                        money privately, someone else may be moving money out of this wallet: don&apos;t cash out
+                        here, and sign out.{" "}
+                        <a
+                          href={network.explorerTx(sweepNow.swept.evidenceTx)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-foreground underline underline-offset-2"
+                        >
+                          See it on the explorer
+                        </a>
+                      </p>
+                    ) : sweepNow?.swept && cashOutTo ? (
                       <SweptWarning
                         address={cashOutTo}
                         evidenceHref={network.explorerTx(sweepNow.swept.evidenceTx)}

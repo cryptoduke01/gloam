@@ -83,7 +83,10 @@ work) counts as "nothing was sent"; a 5xx, an unknown code, a lost answer, or an
 after Turnkey took the send keeps the note the app saved ahead of it, because the deposit
 may still land. A sponsored wallet delegates to Turnkey's open-source gas
 delegate (`0x955D84139e7621bc571b117D8EB5D28A4A222C6f`, EIP-7702); the cash-out check
-already treats it as a known delegate.
+treats it as a known delegate. A sponsored deposit made soon after money arrived still
+reads as a sweep on chain (Turnkey's paymaster sent it, and its relayers can't be told
+apart from anyone else's), so a cash out to that address shows the sweep warning, except
+to the person's own connected Gloam wallet, which gets a quieter note and no hold.
 
 ## 2. Vercel environment
 
@@ -136,7 +139,8 @@ Add the preview's exact URL to Allowed Origins, set the variables on that previe
 7. With sponsorship on: on Base Sepolia, send test USDC to the wallet (no ETH), Add
    privately: approve and deposit go through, and Turnkey's dashboard shows the gas.
    A public send from the same wallet is not sponsored: the app says it has no ETH for
-   the fee and sends nothing. Without sponsorship, Add privately says the same.
+   the fee and sends nothing. Without sponsorship, Add privately says the same. Right
+   after, cash out to "my wallet": a quiet note under it, not the sweep warning.
 8. Tempo testnet: send test stablecoins to the wallet, Add privately: the first send sets
    a fee token, then the deposit goes through with the fee taken in the stablecoin.
 9. Bridge: on a mainnet, Add funds > Bring money from another chain opens the bridge.

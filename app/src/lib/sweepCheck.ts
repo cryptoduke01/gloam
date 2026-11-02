@@ -21,7 +21,6 @@
  */
 import { parseAbiItem, type Address, type Hex } from "viem";
 import { getLogsSafe } from "./logRange";
-import { allNetworks } from "./networks";
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
@@ -85,20 +84,6 @@ export type SweepReader = {
   getTransaction(args: { hash: Hex }): Promise<{ from: Address; to?: Address | null }>;
 };
 
-/**
- * An outgoing transfer another account sent that is still the wallet's own act:
- * a deposit into this chain's Gloam vault (a Gloam wallet's sponsored deposit, which
- * Turnkey's paymaster sends), from a wallet that delegates to a known smart-account
- * contract. Only the vault as the recipient excuses it: those delegates run any call
- * that carries the owner's signature, for any caller, so a thief holding the key can
- * send through their own relayer just as well. Money that leaves for anywhere else
- * stays a sweep, whoever relayed it.
- */
-function ownVaultDeposit(delegate: Address | null, recipient: Address | undefined, vault: Address | null): boolean {
-  if (!delegate || !KNOWN_DELEGATES.has(delegate.toLowerCase()) || !recipient || !vault) return false;
-  return recipient.toLowerCase() === vault.toLowerCase();
-}
-
 /** A Transfer log that moved money (zero-value ones are free for anyone to emit). */
 function movedMoney(l: { args?: { value?: bigint } }): boolean {
   return (l.args?.value ?? BigInt(0)) > BigInt(0);
@@ -129,8 +114,6 @@ async function sweptCheck(
   chainId: number,
   address: Address,
   token: Address,
-  delegate: Address | null,
-  vault: Address | null,
   head?: bigint
 ): Promise<SweepCheck["swept"]> {
   try {
@@ -164,8 +147,6 @@ async function sweptCheck(
       for (const l of out) {
         // the same transaction both paid in and out: a contract passing it on, not a sweep
         if (!l.transactionHash || l.transactionHash === arrival.transactionHash || !movedMoney(l)) continue;
-        // a deposit into this chain's vault from a delegated wallet (a sponsored deposit) is its own
-        if (ownVaultDeposit(delegate, l.args?.to, vault)) continue;
         const tx = await client.getTransaction({ hash: l.transactionHash });
         if (tx.from.toLowerCase() !== address.toLowerCase()) return { evidenceTx: l.transactionHash };
       }
@@ -179,17 +160,40 @@ async function sweptCheck(
 /**
  * Checks `address` before a cash out of `token` (null: the chain's native coin,
  * whose moves leave no Transfer log, so only the delegation is read).
- * `head` pins the newest block looked at, and `vault` the chain's Gloam vault (tests).
+ * `head` pins the newest block looked at (tests).
  */
 export async function checkSweep(
   client: SweepReader,
   chainId: number,
   address: Address,
   token: Address | null,
-  opts: { head?: bigint; vault?: Address | null } = {}
+  opts: { head?: bigint } = {}
 ): Promise<SweepCheck> {
   const delegate = await readDelegate(client, address);
-  const vault = opts.vault !== undefined ? opts.vault : (allNetworks().find((n) => n.chainId === chainId)?.pool ?? null);
-  const swept = token ? await sweptCheck(client, chainId, address, token, delegate, vault, opts.head) : null;
+  const swept = token ? await sweptCheck(client, chainId, address, token, opts.head) : null;
   return { delegated: delegatedCheck(delegate), swept };
+}
+
+/**
+ * What a cash out does with a sweep check's answer:
+ *  - "clean": nothing to say
+ *  - "swept": the warning, and the cash out waits until the person chooses
+ *    (or, for a split piece, is refused)
+ *  - "own-wallet": a quieter note, and nothing held. Only for the person's own
+ *    Gloam wallet, the one connected right now.
+ *
+ * Why the own Gloam wallet, and not "a deposit Turnkey relayed": a Gloam wallet
+ * that adds money privately with its fee covered sends that deposit from Turnkey's
+ * paymaster, so to this check it looks exactly like a sweep. The paymaster can't be
+ * told apart from a thief's relayer: Turnkey publishes no relayer addresses, its gas
+ * station takes any caller (50 recent calls on Ethereum came from 22 senders), and
+ * its paymaster relays for every Turnkey organization, a thief's included. What does
+ * set the person's own wallet apart is that they are signed in to it now: its key
+ * only signs for their session, so a cash out to it lands where they are.
+ */
+export type SweepVerdict = "clean" | "swept" | "own-wallet";
+
+export function sweepVerdict(check: SweepCheck | null, opts: { ownGloamWallet: boolean }): SweepVerdict {
+  if (!check?.swept) return "clean";
+  return opts.ownGloamWallet ? "own-wallet" : "swept";
 }
