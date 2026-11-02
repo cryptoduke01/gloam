@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Privacy Policy" };
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="November 1, 2026">
+    <LegalLayout title="Privacy Policy" updated="November 2, 2026">
       <p>
         This Privacy Policy describes what information Gloam (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;) handles when you use gloam.trade, the Gloam app, the
@@ -361,6 +361,14 @@ export default function PrivacyPage() {
           The RPC nodes and explorers of each network Gloam runs on, on
           Robinhood Chain, Tempo, Base and Ethereum, and Tempo&apos;s fee
           sponsor when you use Tempo Wallet on the testnet.
+        </li>
+        <li>
+          Relay (relay.link): when you bring money over, our server asks Relay
+          for a route and sends it the chains, the tokens, the amount, your
+          wallet, where the money lands and a refund address. For a deposit
+          straight into your private balance it also sends the vault deposit
+          that Relay makes for you. We then ask Relay how the order is going.
+          Relay fills the order under its own terms.
         </li>
         <li>
           WalletConnect (Reown), only when you choose Use a wallet app: its
