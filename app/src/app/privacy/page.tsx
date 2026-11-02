@@ -41,9 +41,11 @@ export default function PrivacyPage() {
           If you sign in with your email or a passkey and create a Gloam wallet,
           that wallet&apos;s key is made and kept by Turnkey, the service Gloam
           wallets run on, inside its secure hardware. It never reaches the page
-          or our servers, and Gloam can&apos;t sign with it: only your sign-in
-          can ask Turnkey to. Your private balance still lives in your browser,
-          as above.
+          or our servers. Turnkey signs with it when your signed-in session
+          asks, and keeps a record of each request, signatures included. Turnkey
+          gives Gloam&apos;s Turnkey account read-only visibility into the
+          account it keeps for you. Your private balance still lives in your
+          browser, as above.
         </p>
       )}
       <p>
@@ -229,7 +231,8 @@ export default function PrivacyPage() {
       <p>
         It is encrypted in your browser, before it leaves, with a key made
         from your wallet&apos;s signature or your passkey. We can&apos;t read
-        it, and it is filed under an id that doesn&apos;t reveal your wallet.
+        it{EMBEDDED_WALLETS && " (except a backup made with a Gloam wallet's signature, below)"},
+        and it is filed under an id that doesn&apos;t reveal your wallet.
         It is replaced each time your browser backs up, and it stays until you
         turn recovery off in Settings, which deletes it from our servers. We
         don&apos;t delete it on a schedule. Anyone who gets your recovery
@@ -238,10 +241,14 @@ export default function PrivacyPage() {
       </p>
       {EMBEDDED_WALLETS && (
         <p>
-          With a Gloam wallet, recovery turns on by itself after you sign in,
-          with that wallet&apos;s signature, so signing in on another device
-          brings your private balance back. If you turn recovery off in
-          Settings, it stays off on that browser.
+          With a Gloam wallet, the app offers recovery with a passkey: the key
+          comes from the passkey on your device and never leaves it, so neither
+          we nor Turnkey can open that backup. Nothing turns on without your
+          say. If your browser can&apos;t make a passkey backup, you can choose
+          the Gloam wallet&apos;s signature instead. Turnkey makes and keeps
+          that signature, so Turnkey, and anyone with access to Gloam&apos;s
+          Turnkey account, could open a backup made with it. The app says so
+          before you choose it.
         </p>
       )}
       <h2>9. Tester applications</h2>
@@ -398,7 +405,8 @@ export default function PrivacyPage() {
             the sign-in code), your passkey&apos;s public key and name, the
             account and wallet it makes for you and their addresses, every
             request your wallet signs (messages and transactions, with their
-            chain), and your IP address and browser details. When Gloam covers
+            chain) and the signatures it makes, which Gloam&apos;s Turnkey
+            account can also view, and your IP address and browser details. When Gloam covers
             a network fee for you, Turnkey sends that transaction and records
             its cost. It keeps your wallet&apos;s key encrypted in its secure
             hardware and processes all of this under its own privacy policy.

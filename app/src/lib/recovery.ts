@@ -558,12 +558,22 @@ const MARK_KEY = "gloam.recovery.mark.v1";
 /** Set when the person turns recovery off on this browser, cleared when it is turned on again. */
 const TURNED_OFF_KEY = "gloam.recovery.off.v1";
 
-/** The person turned recovery off on this browser, so nothing may turn it on for them. */
+/** The person turned recovery off on this browser, so nothing may offer to turn it on for them. */
 export function recoveryTurnedOffHere(): boolean {
   try {
     return localStorage.getItem(TURNED_OFF_KEY) === "1";
   } catch {
     return false;
+  }
+}
+
+/** A storage that refuses (private mode, a full quota) must not stop recovery turning on or off. */
+function markTurnedOff(off: boolean) {
+  try {
+    if (off) localStorage.setItem(TURNED_OFF_KEY, "1");
+    else localStorage.removeItem(TURNED_OFF_KEY);
+  } catch {
+    /* the mark is a courtesy: the setting itself is saved */
   }
 }
 
@@ -1064,7 +1074,7 @@ export async function connectRecovery(
     }
     const next: Config = { ...keys, n: remote?.n ?? 0, savedAt: remote?.t ?? null };
     await saveConfig(next);
-    localStorage.removeItem(TURNED_OFF_KEY);
+    markTurnedOff(false);
     if (save) {
       try {
         await tracked(upload(next));
@@ -1201,8 +1211,8 @@ export async function turnOffRecovery({ deleteBackup }: { deleteBackup: boolean 
     window.clearTimeout(timer);
     await saveConfig(null);
     off = true;
-    // Remembered so nothing turns it back on by itself (lib/embeddedRecovery). Turning it on clears it.
-    localStorage.setItem(TURNED_OFF_KEY, "1");
+    // Remembered so nothing offers to turn it back on (lib/embeddedRecovery). Turning it on clears it.
+    markTurnedOff(true);
     setState({ error: null });
   } finally {
     stopping = false;
