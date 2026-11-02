@@ -1152,9 +1152,16 @@ async function v4ExactOut(
  * The refund note a swap makes in advance, used only if someone sends the
  * note's unshield on its own (GloamVaultSwap): the amount less the vault's
  * highest possible cash-out fee (1%), so it is never more than arrives.
+ *
+ * With `feeBps`, on Base and Ethereum: the amount less the vault's fee now and 0.1%.
+ * On Ethereum a swap sits in a public mempool, so sending that first step alone costs
+ * a few cents, and a refund shouldn't cost more than the swap would have. A raise of
+ * the fee waits out a 3-day timelock, far past a swap's 30 minutes; should a proof
+ * outlive that, the refund won't land and the exit still pays.
  */
-export function refundAmountFor(amount: bigint): bigint {
-  return amount - amount / 100n;
+export function refundAmountFor(amount: bigint, feeBps?: number): bigint {
+  if (feeBps === undefined) return amount - amount / 100n;
+  return amount - vaultFeeOf(amount, feeBps) - amount / 1_000n;
 }
 
 /** One asset's beta deposit limits in the vault, and what it holds of it now. */
@@ -1173,15 +1180,17 @@ export function depositRoom(v: VaultRoom): bigint {
  * doesn't fit waits at the escrow until the limit is raised, so the app never
  * makes one: a larger note is split first.
  */
-export function refundFits(v: VaultRoom, amount: bigint): boolean {
-  const back = refundAmountFor(amount);
+export function refundFits(v: VaultRoom, amount: bigint, feeBps?: number): boolean {
+  const back = refundAmountFor(amount, feeBps);
   return back <= v.perDeposit && v.deposited - amount + back <= v.total;
 }
 
 /** The most of one note a single swap may spend so its refund note fits (refundFits). */
-export function maxSwapInForRefund(v: VaultRoom): bigint {
-  let a = (v.perDeposit * 100n) / 99n + 1n;
-  while (a > 0n && refundAmountFor(a) > v.perDeposit) a--;
+export function maxSwapInForRefund(v: VaultRoom, feeBps?: number): bigint {
+  // what the refund keeps, in basis points, at its smallest: rounding lands within a few units of this
+  const keeps = feeBps === undefined ? 9_900n : 9_990n - BigInt(feeBps);
+  let a = (v.perDeposit * 10_000n) / keeps + 3n;
+  while (a > 0n && refundAmountFor(a, feeBps) > v.perDeposit) a--;
   return a;
 }
 

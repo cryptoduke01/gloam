@@ -440,7 +440,7 @@ function mainnetLiveFacts(): string {
         ]
       : []),
     ...(swapV3Live(8453) || swapV3Live(1)
-      ? ["- On Base and Ethereum the app won't send a swap that moves its pool by more than 2%, or that gives less than 98 cents on the dollar between two dollar stablecoins. \"This pool is too thin for that amount\" comes with a size that fits. EURC's pool on Base is thin, so large EURC swaps there are refused."]
+      ? ["- On Base and Ethereum a refund comes back less the vault's cash-out fee and 0.1%, not the 1% it can be elsewhere.", "- On Base and Ethereum the app won't send a swap that moves its pool by more than 2%, or that gives less than 98 cents on the dollar between two dollar stablecoins. \"This pool is too thin for that amount\" comes with a size that fits. EURC's pool on Base is thin, so large EURC swaps there are refused."]
       : []),
     ...(swapV3Live(4663) || swapV3Live(4217) || swapV3Live(8453) || swapV3Live(1)
       ? ["- If the vault's limit keeps a refund from landing, the money waits at the swap's escrow and comes back privately once there is room. The person can also take it out now, from the held line in Portfolio, to a wallet they pick. That pays a public address, so that money stops being private. Only they can do it. A swap through an earlier router has no exit.", "- A swap through the newest routers carries a deadline, 30 minutes after it is made, and can't land after that. A refund and an exit have no deadline."]

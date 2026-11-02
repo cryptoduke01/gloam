@@ -301,6 +301,7 @@ export default function DocsPrivateSwapsPage() {
         covers the vault&apos;s cash-out fee (0.25% today), and what is left of
         it goes to the Gloam treasury. The app finishes the refund by itself,
         through the relay, the next time it syncs your balance.
+        {NEW_CHAINS.length > 0 && ` On ${and(NEW_CHAINS)} the refund is the note less the vault's fee and 0.1%.`}
       </p>
       <p>
         If a swap simply doesn&apos;t go through, for example because the price

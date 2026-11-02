@@ -292,21 +292,7 @@ export function VaultSwapView() {
     limitIn && typeof inVaultIn === "bigint" ? { perDeposit: limitIn[0], total: limitIn[1], deposited: inVaultIn } : null;
 
   const held = payAsset ? holdings.get(payAsset.toLowerCase()) : undefined;
-  const refundCap = roomIn ? maxSwapInForRefund(roomIn) : null;
-  // The most one swap can spend: the largest note, and no more than its refund could bring back.
-  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
-  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
-  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
-  // Nothing held counts as too little: a price still shows, the swap does not.
-  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
-  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
-  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed);
-  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
-
-  // The note this swap spends: an exact match first, else the smallest that covers it.
-  // A scan of a few notes, so no memo: the note found is the same object each render.
-  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
-
+  // The vault's cash-out fee: a refund on Base and Ethereum is sized from it. Until it reads, the most it can be.
   const { data: feeRead } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
@@ -315,6 +301,22 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool) },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
+  const refundFee = swapChecked(network.chainId) ? (feeBps ?? 100) : undefined;
+  const refundCap = roomIn ? maxSwapInForRefund(roomIn, refundFee) : null;
+  // The most one swap can spend: the largest note, and no more than its refund could bring back.
+  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
+  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
+  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
+  // Nothing held counts as too little: a price still shows, the swap does not.
+  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
+  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
+  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed, refundFee);
+  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
+
+  // The note this swap spends: an exact match first, else the smallest that covers it.
+  // A scan of a few notes, so no memo: the note found is the same object each render.
+  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
+
   const { data: limit } = useReadContract({
     address: network.pool ?? undefined,
     abi: limitAbi,

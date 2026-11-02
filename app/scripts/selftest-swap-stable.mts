@@ -49,8 +49,11 @@ const {
   encodeRoute,
   escrowAddress,
   pegGapBps,
+  maxSwapInForRefund,
   planVaultSwap,
   poolId,
+  refundAmountFor,
+  refundFits,
   replanVaultSwap,
   routesBetween,
   swapBufferBps,
@@ -58,6 +61,7 @@ const {
   swapRouterFor,
   swapV3Live,
   valueGapBps,
+  vaultFeeOf,
   vaultSwapRouter,
 } = await import("../src/lib/vaultSwap");
 const { FEED_MAX_AGE_SEC, hasSwapFloor, smallestSwapUsd, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
@@ -220,6 +224,28 @@ await test("a fresh quote that is refused keeps the one the person agreed to", a
   const agreed = await planVaultSwap(quotes(() => 0.999), 1, ask(E.USDC, E.USDT, usd(1_000)));
   assert.equal(await replanVaultSwap(quotes(() => 0.9), 1, ask(E.USDC, E.USDT, usd(1_000)), agreed), agreed);
   off(1);
+});
+
+await test("a refund on Base and Ethereum is the note less the vault's fee and 0.1%", () => {
+  assert.equal(refundAmountFor(usd(1_000)), usd(990), "elsewhere, the highest fee the vault allows");
+  assert.equal(refundAmountFor(usd(1_000), 25), usd(1_000) - usd(2.5) - usd(1));
+  assert.equal(refundAmountFor(usd(1_000), 50), usd(1_000) - usd(5) - usd(1));
+  // never more than arrives, at any size and fee the vault allows
+  for (const a of [1_000n, 1_001n, 999_999n, usd(1), usd(50_000), usd(50_000) + 7n]) {
+    for (const bps of [0, 1, 25, 50, 100]) assert.ok(refundAmountFor(a, bps) <= a - vaultFeeOf(a, bps), `${a} at ${bps}`);
+  }
+});
+
+await test("the most one swap may spend still fits its refund, at either margin", () => {
+  const room = { perDeposit: usd(50_000), total: usd(2_500_000), deposited: usd(100_000) };
+  for (const bps of [undefined, 0, 25, 50, 100]) {
+    const most = maxSwapInForRefund(room, bps);
+    assert.ok(refundAmountFor(most, bps) <= room.perDeposit, `${bps}`);
+    assert.ok(refundAmountFor(most + 1n, bps) > room.perDeposit, `${bps}: the most, not less`);
+    assert.ok(refundFits(room, most, bps));
+    assert.ok(!refundFits(room, most + 1n, bps));
+  }
+  assert.ok(maxSwapInForRefund(room, 25) < maxSwapInForRefund(room), "a bigger refund, so a smaller swap");
 });
 
 await test("value against market prices, for pairs with no peg", () => {

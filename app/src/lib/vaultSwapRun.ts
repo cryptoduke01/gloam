@@ -49,6 +49,7 @@ import {
   refundAmountFor,
   refundEscrowKey,
   replanVaultSwap,
+  swapChecked,
   swapRouterFor,
   vaultSwapAbi,
   vaultSwapV3Abi,
@@ -183,7 +184,7 @@ export async function runVaultSwap(args: {
   //    again, as close to sending as the proofs allow: the new note and the
   //    escrow below are bound to amountOut.
   args.onStatus("Proving privately, this takes 10 to 30 seconds…");
-  const back = await prepareBridgeNote(refundAmountFor(targetWei), target.asset, network, args.owner);
+  const back = await prepareBridgeNote(refundAmountFor(targetWei, swapChecked(network.chainId) ? args.feeBps : undefined), target.asset, network, args.owner);
   if (args.plan.router.toLowerCase() !== router.toLowerCase()) {
     throw new Error("This quote was for another swap router. Get a new quote and try again.");
   }
