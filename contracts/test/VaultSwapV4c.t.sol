@@ -312,6 +312,40 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         t.exit(address(usd), key, to, sig);
     }
 
+    /// Tempo's DEX holds nothing for anyone: an exit there is refused.
+    function test_tempo_exit_refuses_the_dex() public {
+        (GloamVaultSwapTempo2 t, Call memory k) = _tempoLeftAlone(28, 0xC9);
+        address dexAt = address(t.dex());
+        bytes memory sig = _sign(EXIT_PK, t.exitDigest(_escrow(k), dexAt));
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        vm.expectRevert(GloamVaultSwap2.BadExit.selector);
+        t.exit(address(usd), key, dexAt, sig);
+    }
+
+    /// With no registry to ask, a payment held somewhere other than the recipient still fails the
+    /// exit: the recipient must hold the whole amount more than before, or the escrow keeps it.
+    function test_tempo_exit_checks_the_money_arrived() public {
+        (GloamVaultSwapTempo2 t, MockERC20 usdt, ) = _tempo();
+        HoldingToken ht = new HoldingToken();
+        pool.setDepositLimit(address(ht), 500e6, 25_000e6);
+        ht.mint(depositor, 1_000e6);
+        vm.startPrank(depositor);
+        ht.approve(address(pool), type(uint256).max);
+        pool.shieldBound(address(ht), NOTE, bytes32(uint256(0xFCFC)), hex"00");
+        vm.stopPrank();
+        Call memory k = _callFrom(GloamVaultSwap(address(t)), 29, address(ht), NOTE, address(usdt), 1e6, 0xCA, "");
+        _leaveAlone(k);
+        ht.holdFor(exitTo);
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        bytes memory sig = _sign(EXIT_PK, t.exitDigest(_escrow(k), exitTo));
+        vm.expectRevert(GloamVaultSwapTempo2.ReceiveBlocked.selector);
+        t.exit(address(ht), key, exitTo, sig);
+        assertEq(ht.balanceOf(_escrow(k)), ARRIVES, "the escrow keeps it");
+        address other = address(0xE41B);
+        t.exit(address(ht), key, other, _sign(EXIT_PK, t.exitDigest(_escrow(k), other)));
+        assertEq(ht.balanceOf(other), ARRIVES);
+    }
+
     /// A registry that doesn't answer is a chain without receive policies: nothing there can hold a payment.
     function test_tempo_exit_goes_where_no_receive_policy_answers() public {
         (GloamVaultSwapTempo2 t, Call memory k) = _tempoLeftAlone(27, 0xC8);
@@ -389,7 +423,7 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         assertEq(pool.deposited(address(usd)), 4 * NOTE + want, "the new note, exactly");
         assertEq(treasury.balance, EARRIVES - cost, "leftover ETH to the treasury");
         assertEq(escrow.balance, 0, "escrow empty");
-        assertEq(escrow.code.length, 0, "and no code left");
+        assertEq(escrow.code, hex"fe", "one byte left, which refuses every call");
         _assertRouterEmpty();
         _assertEthBacked();
         _assertVaultBacked();
@@ -865,17 +899,89 @@ contract VaultSwapV4cTest is VaultSwapV4bTest {
         _v3().exit(address(usd), key, exitTo, sig);
     }
 
-    function test_exit_refuses_the_zero_address_the_router_and_the_vault() public {
+    /// Nowhere the money would stop for good: nothing, the router, the vault, the escrow itself,
+    /// the token's own contract, the PoolManager or WETH.
+    function test_exit_refuses_places_the_money_would_stop() public {
         Call memory k = _call(router, 1111, address(gloam), 39e18, 0x1111, _route1(direct));
         _leaveAlone(k);
         GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
-        address[3] memory bad = [address(0), address(router), address(pool)];
-        for (uint256 i = 0; i < 3; i++) {
+        address[7] memory bad =
+            [address(0), address(router), address(pool), _escrow(k), address(usd), address(_v3().poolManager()), _v3().weth()];
+        for (uint256 i = 0; i < bad.length; i++) {
             bytes memory sig = _exitSig(k, bad[i]);
             vm.expectRevert(GloamVaultSwap2.BadExit.selector);
             _v3().exit(address(usd), key, bad[i], sig);
         }
         assertEq(usd.balanceOf(_escrow(k)), ARRIVES);
+        _v3().exit(address(usd), key, exitTo, _exitSig(k, exitTo));
+        assertEq(usd.balanceOf(exitTo), ARRIVES, "and then where it can go");
+    }
+
+    /// The same for an ETH note: WETH would wrap it for the escrow, and the PoolManager keeps it.
+    function test_exit_of_an_eth_note_refuses_its_escrow_weth_and_the_pool_manager() public {
+        Call memory k = _callFrom(router, 1160, NATIVE, ENOTE, address(usd), 110e6, 0x1160, _route1(ethUsd));
+        _leaveAlone(k);
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        address[3] memory bad = [_escrow(k), _v3().weth(), address(_v3().poolManager())];
+        for (uint256 i = 0; i < bad.length; i++) {
+            bytes memory sig = _exitSig(k, bad[i]);
+            vm.expectRevert(GloamVaultSwap2.BadExit.selector);
+            _v3().exit(NATIVE, key, bad[i], sig);
+        }
+        assertEq(_escrow(k).balance, EARRIVES, "the money still waits");
+        // and the refund still lands
+        pool.setDepositLimit(NATIVE, 10 ether, 100 ether);
+        vm.prank(outsider);
+        _go(router, k);
+        assertTrue(pool.commitmentSeen(k.r.commitment));
+    }
+
+    /// An opened escrow keeps one byte of code that refuses every call: ETH sent to it later is
+    /// refused, and a second opening is refused at once, without using up the caller's gas.
+    function test_an_opened_escrow_is_refused_at_once_and_takes_no_eth() public {
+        Call memory k = _call(router, 1161, address(gloam), 39e18, 0x1161, _route1(direct));
+        _leaveAlone(k);
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        _v3().exit(address(usd), key, exitTo, _exitSig(k, exitTo));
+        address e = _escrow(k);
+        assertEq(e.code, hex"fe");
+        vm.deal(outsider, 1 ether);
+        vm.prank(outsider);
+        (bool sent, ) = e.call{value: 1}("");
+        assertFalse(sent, "no ETH into an opened escrow");
+        // something sent to it later: a second exit is refused as used, cheaply
+        usd.mint(e, 1);
+        address second = address(0xE41A);
+        bytes memory data = abi.encodeCall(GloamVaultSwap2.exit, (address(usd), key, second, _exitSig(k, second)));
+        uint256 g = gasleft();
+        (bool ok, bytes memory ret) = address(router).call{gas: 5_000_000}(data);
+        uint256 used = g - gasleft();
+        assertFalse(ok);
+        assertEq(bytes4(ret), GloamVaultSwap2.EscrowUsed.selector);
+        assertLt(used, 200_000, "the caller's gas is not used up");
+    }
+
+    /// An escrow whose constructor stops with no reason (out of gas here, copying what a token
+    /// sent back) says so, apart from an escrow opened before. The money still waits.
+    function test_an_escrow_that_stops_with_no_reason_says_so() public {
+        BigReturnToken rb = new BigReturnToken();
+        pool.setDepositLimit(address(rb), 500e6, 25_000e6);
+        rb.mint(depositor, 1_000e6);
+        vm.startPrank(depositor);
+        rb.approve(address(pool), type(uint256).max);
+        pool.shieldBound(address(rb), NOTE, bytes32(uint256(0xFBFB)), hex"00");
+        vm.stopPrank();
+        Call memory k = _callFrom(router, 1162, address(rb), NOTE, address(gloam), 39e18, 0x1162, _route1(direct));
+        _leaveAlone(k);
+        rb.sendBackLotsFrom(_escrow(k));
+        GloamVaultSwap2.EscrowKey memory key = _keyOf(k);
+        bytes memory sig = _exitSig(k, exitTo);
+        vm.expectRevert(GloamVaultSwap2.EscrowFailed.selector);
+        _v3().exit{gas: 3_000_000}(address(rb), key, exitTo, sig);
+        assertEq(rb.balanceOf(_escrow(k)), ARRIVES, "still there");
+        rb.sendBackLotsFrom(address(0));
+        _v3().exit(address(rb), key, exitTo, sig);
+        assertEq(rb.balanceOf(exitTo), ARRIVES);
     }
 
     /// An address that can't be paid fails the exit, not the money: sign for another and go again.
@@ -1492,5 +1598,89 @@ contract MockAddressRegistry {
 contract RevertingRegistry {
     fallback() external {
         revert("no such method");
+    }
+}
+
+/// A token that, for one sender, sends back a megabyte from transfer: copying it runs the caller out of gas.
+contract BigReturnToken {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    address public bigFrom;
+
+    function sendBackLotsFrom(address who) external {
+        bigFrom = who;
+    }
+
+    function mint(address to, uint256 a) external {
+        balanceOf[to] += a;
+    }
+
+    function approve(address s, uint256 a) external returns (bool) {
+        allowance[msg.sender][s] = a;
+        return true;
+    }
+
+    function transfer(address to, uint256 a) external returns (bool) {
+        balanceOf[msg.sender] -= a;
+        balanceOf[to] += a;
+        if (msg.sender == bigFrom && bigFrom != address(0)) {
+            // as much as six tenths of the gas left pays to send back: the caller has less to copy it
+            uint256 words = _sqrt((gasleft() * 6 / 10) * 512);
+            assembly {
+                mstore(0, 1)
+                return(0, mul(words, 32))
+            }
+        }
+        return true;
+    }
+
+    function transferFrom(address f, address to, uint256 a) external returns (bool) {
+        if (allowance[f][msg.sender] != type(uint256).max) allowance[f][msg.sender] -= a;
+        balanceOf[f] -= a;
+        balanceOf[to] += a;
+        return true;
+    }
+
+    function _sqrt(uint256 x) private pure returns (uint256 y) {
+        y = x;
+        uint256 z = (x + 1) / 2;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+}
+
+/// A token that holds payments to some recipients somewhere else, as Tempo's receive-policy guard does.
+contract HoldingToken {
+    address public constant GUARD = address(0x4010);
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => bool) public held;
+
+    function holdFor(address who) external {
+        held[who] = true;
+    }
+
+    function mint(address to, uint256 a) external {
+        balanceOf[to] += a;
+    }
+
+    function approve(address s, uint256 a) external returns (bool) {
+        allowance[msg.sender][s] = a;
+        return true;
+    }
+
+    function transfer(address to, uint256 a) external returns (bool) {
+        balanceOf[msg.sender] -= a;
+        balanceOf[held[to] ? GUARD : to] += a;
+        return true;
+    }
+
+    function transferFrom(address f, address to, uint256 a) external returns (bool) {
+        if (allowance[f][msg.sender] != type(uint256).max) allowance[f][msg.sender] -= a;
+        balanceOf[f] -= a;
+        balanceOf[held[to] ? GUARD : to] += a;
+        return true;
     }
 }

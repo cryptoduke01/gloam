@@ -18,8 +18,10 @@ import {IStablecoinDex} from "./GloamVaultSwapTempo.sol";
  *         On Tempo a recipient can refuse senders with a receive policy
  *         (TIP-1028), and a payment it refuses is held rather than reverted.
  *         So an exit first asks the TIP-403 registry whether `to` accepts the
- *         token from the escrow that pays it, and reverts if not: the money
- *         stays at the escrow for an exit to another address.
+ *         token from the escrow that pays it, and reverts if not, and after
+ *         the escrow paid it checks the recipient's balance went up by the whole
+ *         amount, and reverts if not: either way the money stays at the escrow
+ *         for an exit to another address.
  */
 contract GloamVaultSwapTempo2 is GloamVaultSwap2 {
     IStablecoinDex public immutable dex;
@@ -32,6 +34,11 @@ contract GloamVaultSwapTempo2 is GloamVaultSwap2 {
     error BadRoute();
     error NativeNotSupported();
     error ReceiveBlocked();
+
+    /// @dev The DEX holds nothing for anyone.
+    function _stopsHere(address to) internal view override returns (bool) {
+        return to == address(dex);
+    }
 
     constructor(address vault_, address treasury_, address dex_) GloamVaultSwap2(vault_, treasury_) {
         if (dex_ == address(0)) revert ZeroAddress();
@@ -56,16 +63,24 @@ contract GloamVaultSwapTempo2 is GloamVaultSwap2 {
 
     /// @dev Reverts if `to`'s receive policy refuses `token` from `escrow`. A virtual address is
     ///      checked as the wallet it forwards to. A registry that doesn't answer is a chain with
-    ///      no receive policies, where nothing can hold the payment.
-    function _checkExit(address token, address escrow, address to) internal view override {
+    ///      no receive policies; _afterExit checks the money arrived all the same.
+    function _beforeExit(address token, address escrow, address to) internal view override returns (address receiver, uint256 had) {
         (bool resolved, bytes memory who) = ADDRESS_REGISTRY.staticcall(abi.encodeWithSignature("resolveRecipient(address)", to));
-        address receiver = resolved && who.length >= 32 ? abi.decode(who, (address)) : to;
+        receiver = resolved && who.length >= 32 ? abi.decode(who, (address)) : to;
         if (receiver == address(0)) receiver = to;
         (bool ok, bytes memory ret) = TIP403_REGISTRY.staticcall(
             abi.encodeWithSignature("validateReceivePolicy(address,address,address)", token, escrow, receiver)
         );
-        if (!ok || ret.length < 64) return;
-        (bool authorized, ) = abi.decode(ret, (bool, uint8));
-        if (!authorized) revert ReceiveBlocked();
+        if (ok && ret.length >= 64) {
+            (bool authorized, ) = abi.decode(ret, (bool, uint8));
+            if (!authorized) revert ReceiveBlocked();
+        }
+        had = _holdingOf(token, receiver);
+    }
+
+    /// @dev The recipient must hold the whole amount more than before: a payment held for it
+    ///      elsewhere reverts the exit, and the escrow keeps the money.
+    function _afterExit(address token, address receiver, uint256 had, uint256 amount) internal view override {
+        if (_holdingOf(token, receiver) < had + amount) revert ReceiveBlocked();
     }
 }

@@ -132,6 +132,8 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
     error BadRefund();
     error BadExit();
     error EscrowUsed();
+    /// @notice The escrow's constructor stopped with no reason: out of gas, most likely.
+    error EscrowFailed();
     error SwapExpired();
     error OverInput(uint256 needed, uint256 available);
     error ShortOutput(uint256 got, uint256 wanted);
@@ -242,9 +244,13 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
         nonReentrant
         returns (uint256 amount)
     {
-        if (to == address(0) || to == address(this) || to == address(vault)) revert BadExit();
         bytes32 salt = keccak256(abi.encode(k));
         address escrow = _escrowAt(salt, assetIn);
+        // nowhere the money would stop for good: the escrow itself, this router, the vault,
+        // the token's own contract, or the venue's own contracts
+        if (to == address(0) || to == escrow || to == address(this) || to == address(vault) || to == assetIn || _stopsHere(to)) {
+            revert BadExit();
+        }
         // address(0) is what ecrecover answers a bad signature, never a key
         address signer = _recover(exitDigest(escrow, to), signature);
         if (signer == address(0) || signer != k.exitKey) revert BadExit();
@@ -252,17 +258,32 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
         if (!vault.isSpent(k.nullifier)) revert BadExit();
         amount = _holding(assetIn, escrow);
         if (amount == 0) revert BadExit();
-        _checkExit(assetIn, escrow, to);
+        (address receiver, uint256 had) = _beforeExit(assetIn, escrow, to);
 
         _payee = to;
         _open(salt, assetIn, EXITING);
         _payee = address(0);
+        _afterExit(assetIn, receiver, had, amount);
         emit VaultSwapExit(k.nullifier, assetIn, to, amount);
     }
 
-    /// @dev Refuses an exit `to` would not receive as sent from `escrow`. A venue on a chain
-    ///      where a recipient can refuse a payment without a revert overrides it (Tempo).
-    function _checkExit(address token, address escrow, address to) internal view virtual {}
+    /// @dev A venue's own contracts, where money sent from an escrow would stop. None here.
+    function _stopsHere(address to) internal view virtual returns (bool) {
+        to;
+        return false;
+    }
+
+    /// @dev Before an exit pays: refuses one `to` would not receive as sent from `escrow`, and
+    ///      returns who will hold the money and what they hold now. A venue on a chain where a
+    ///      recipient can refuse a payment without a revert overrides it (Tempo).
+    function _beforeExit(address token, address escrow, address to) internal view virtual returns (address receiver, uint256 had) {
+        token;
+        escrow;
+        return (to, 0);
+    }
+
+    /// @dev After an exit paid: a venue that checked before may check the money arrived.
+    function _afterExit(address token, address receiver, uint256 had, uint256 amount) internal view virtual {}
 
     /// @notice Where an escrow opening now pays (SwapEscrow2 asks): an exit's recipient, or this router.
     function escrowPayee() external view returns (address) {
@@ -345,6 +366,9 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
     ///      `state` is OPENING when the escrow pays this router, EXITING when it pays
     ///      an exit's recipient, while receive() takes no ETH.
     function _open(bytes32 salt, address token, uint96 state) private returns (uint256 arrived) {
+        // an opened escrow keeps one byte of code: refuse it here, before a second deploy
+        // could fail at that address and use up the gas the caller sent
+        if (_escrowAt(salt, token).code.length != 0) revert EscrowUsed();
         uint256 before = _balance(token);
         bytes memory code = abi.encodePacked(type(SwapEscrow2).creationCode, abi.encode(token));
         address e;
@@ -355,10 +379,11 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
             said := returndatasize()
         }
         _entered = RUNNING;
-        // an escrow that reverted couldn't pay; one that was never run had been opened before
+        // a payment out of the escrow that was refused says why; one that stopped with no
+        // reason ran out of gas, most likely
         if (e == address(0)) {
             if (said != 0) revert TokenCallFailed();
-            revert EscrowUsed();
+            revert EscrowFailed();
         }
         arrived = _balance(token) - before;
     }
@@ -379,6 +404,11 @@ abstract contract GloamVaultSwap2 is IEscrowPayee {
 
     function _holding(address token, address who) private view returns (uint256) {
         return token == NATIVE ? who.balance : IERC20Swap(token).balanceOf(who);
+    }
+
+    /// @dev What `who` holds of `token`, for a venue's checks.
+    function _holdingOf(address token, address who) internal view returns (uint256) {
+        return _holding(token, who);
     }
 
     /// @dev Everything held of `token` to the treasury, if it can take it. A
