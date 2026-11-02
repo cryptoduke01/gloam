@@ -30,7 +30,7 @@ const SWAPS_V2 = Boolean(VAULT_SWAP_V2_ROUTER[4663]);
 /** WalletConnect is on (lib/walletConnect.ts): phones without a wallet browser can use a wallet app. */
 const WALLET_APP = Boolean(process.env.NEXT_PUBLIC_WC_PROJECT_ID?.trim());
 const RH_CONNECT = WALLET_APP
-  ? "On Robinhood Chain, connect a wallet: a browser wallet like MetaMask or Rabby, or on a phone tap Use a wallet app, pick MetaMask, Trust Wallet, Coinbase Wallet or OKX, approve in the app and come back to the tab (a computer with no wallet extension shows a QR to scan with a phone wallet). Passkey accounts live on Tempo only."
+  ? "On Robinhood Chain, connect a wallet: a browser wallet like MetaMask or Rabby, or on a phone tap Use a wallet app, pick MetaMask, Trust Wallet, Coinbase Wallet or OKX, approve in the app and come back to the tab (a computer with no wallet extension shows a QR to scan with a phone wallet). Robinhood Wallet connects too: Robinhood's guide says to open the site in the wallet's Web3 browser (the globe icon on iPhone), or to scan the WalletConnect QR from a computer with the wallet's Scan icon. Passkey accounts live on Tempo only."
   : "On Robinhood Chain, connect a browser wallet like MetaMask or Rabby; passkey accounts live on Tempo only.";
 
 /** The $GLOAM token, as gloam.trade/token shows it. The only contract address the helper may share. */
