@@ -1385,7 +1385,7 @@ export async function planVaultSwap(client: PublicClient, chainId: number, p: Sw
 }
 
 /** The note that brings in about `arrives` after the vault's fee. */
-function noteFor(arrives: bigint, feeBps: number): bigint {
+export function noteFor(arrives: bigint, feeBps: number): bigint {
   return (arrives * 10_000n) / (10_000n - BigInt(feeBps));
 }
 
@@ -1404,6 +1404,24 @@ async function largestFair(
   const outs = await v4ExactInAll(client, r, sizes.map(() => route), p.assetIn, p.assetOut, sizes);
   const i = sizes.findIndex((a, j) => outs[j]! > 0n && priceImpactBps(a, outs[j]!, probe, small) <= IMPACT_WARN_BPS);
   return i < 0 ? 0n : sizes[i]!;
+}
+
+/**
+ * SDK only (swapIntent's impact stop on every chain): about the largest note on `route`
+ * whose price impact stays within IMPACT_WARN_BPS, from a few halvings of what arrives,
+ * in one multicall. 0 when none does.
+ */
+export async function largestFairNote(client: PublicClient, r: SwapRouter, route: PoolKey[], p: SwapAsk, available: bigint): Promise<bigint> {
+  if (r.venue !== "v4" || !route.length) return 0n;
+  const probe = available / 100n;
+  if (probe <= 0n) return 0n;
+  const sizes = [2n, 4n, 8n, 16n, 32n, 64n].map((d) => available / d).filter((a) => a > probe);
+  if (!sizes.length) return 0n;
+  const outs = await v4ExactInAll(client, r, [route, ...sizes.map(() => route)], p.assetIn, p.assetOut, [probe, ...sizes]);
+  const small = outs[0]!;
+  if (small <= 0n) return 0n;
+  const i = sizes.findIndex((a, j) => outs[j + 1]! > 0n && priceImpactBps(a, outs[j + 1]!, probe, small) <= IMPACT_WARN_BPS);
+  return i < 0 ? 0n : noteFor(sizes[i]!, p.feeBps);
 }
 
 /** 1 - (out / in) / (smallOut / smallIn), in basis points, never below 0. */

@@ -213,6 +213,43 @@ async function noteWithPath(amount, asset, chain) {
   assert((await quoteSwap({ ...ask, via: "wallet", relayStatus: { chainId: 4663, enabled: false } })).stop === null, "from a wallet, the relay's state doesn't matter");
 }
 
+// ── the impact, peg and value stops hold on every chain, unless the caller says otherwise ──
+{
+  const TEMPO_USDCE = "0x20c000000000000000000000b9537d11c60e8b50";
+  const TEMPO_PATHUSD = "0x20c0000000000000000000000000000000000000";
+  // a pool that pays a fair rate on a hundredth of the size and 1% of it at the full size
+  const thin = fakeChain(4663, { rate: (a) => (a > 10_000_000n ? a / 100n : a) });
+  const ask = { client: thin, chainId: 4663, assetIn: USDG, assetOut: GLOAM, amountIn: 1_000_000_000n };
+  const q = await quoteSwap(ask);
+  assert(q.stop?.code === "too_thin" && q.plan.impactBps >= 9_800, `Robinhood Chain: 99% price impact is stopped by default (${q.stop?.code}, ${q.plan.impactBps})`);
+  assert(q.stops.maxImpactBps === 200 && q.stops.maxPegGapBps === 200 && q.stops.maxValueGapBps === 400, "the default stops");
+  const loose = await quoteSwap({ ...ask, stops: { maxImpactBps: 10_000 } });
+  assert(loose.stop === null && loose.warnings.some((w) => w.includes("moves the price")), "the app's behavior on Robinhood Chain when the caller asks for it: a warning, no stop");
+  const tighter = await quoteSwap({ ...ask, client: fakeChain(4663, { rate: (a) => (a > 10_000_000n ? (a * 985n) / 1000n : a) }), stops: { maxImpactBps: 100 } });
+  assert(tighter.stop?.code === "too_thin", "a tighter stop than the default is held to");
+  // the build refuses a stopped quote before any proof
+  const { note, path } = await noteWithPath(1_000_000_000n, USDG, thin);
+  let proved = 0;
+  const counting = async () => (proved++, { proofBytes: PROOF });
+  await refused(buildSwapIntent({ client: thin, chainId: 4663, note, path, assetOut: GLOAM, shieldProver: counting, unshieldProver: counting }), "too_thin", "the build is refused at 99% impact");
+  assert(proved === 0, "nothing proved");
+  // a size too small to measure has nothing to lose; one that can't be measured otherwise is stopped
+  const blind = fakeChain(4663, { rate: (a) => (a >= 10_000_000n ? a : 0n) });
+  assert((await quoteSwap({ ...ask, client: blind })).stop?.code === "impact_unknown", "an impact that can't be measured is stopped");
+  // Tempo: its exchange names no peg, so the plan's own rate is held to one
+  const tempo = fakeChain(4217);
+  const tq = await quoteSwap({ client: tempo, chainId: 4217, assetIn: TEMPO_USDCE, assetOut: TEMPO_PATHUSD, amountIn: 100_000_000n });
+  assert(tq.stop === null && tq.plan.pegBps <= 40, `Tempo at the peg goes (${tq.plan.pegBps})`);
+  tempo.readContract = ((orig) => async (a) => (a.functionName === "quoteSwapExactAmountIn" ? (a.args[2] * 95n) / 100n : orig(a)))(tempo.readContract);
+  const off = await quoteSwap({ client: tempo, chainId: 4217, assetIn: TEMPO_USDCE, assetOut: TEMPO_PATHUSD, amountIn: 100_000_000n });
+  assert(off.stop?.code === "off_peg", "Tempo 5% off the peg is stopped");
+  // value against market, with marks, on Robinhood Chain too
+  const rh = fakeChain(4663);
+  const far = await quoteSwap({ client: rh, chainId: 4663, assetIn: USDG, assetOut: GLOAM, amountIn: 100_000_000n, decimals: { [GLOAM.toLowerCase()]: 6 }, marks: { [USDG.toLowerCase()]: 1, [GLOAM.toLowerCase()]: 0.5 } });
+  assert(far.stop?.code === "far_from_market", "far below market with marks, on Robinhood Chain");
+  await refused(quoteSwap({ ...ask, stops: { maxImpactBps: 20_000 } }), "bad_amount", "a stop outside 0 to 10,000");
+}
+
 // Ethereum, switched on: value below market, and the relay's floor
 VAULT_SWAP_V3_LIVE[1] = VAULT_SWAP_V3_ADDRESS[1];
 {

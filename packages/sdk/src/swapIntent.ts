@@ -37,7 +37,9 @@ import type { RelayNetworkStatus } from "./relay.js";
 import {
   ETH_USD_FEED,
   FEED_MAX_AGE_SEC,
+  IMPACT_STOP_BPS,
   IMPACT_WARN_BPS,
+  PEG_STOP_BPS,
   PEG_WARN_BPS,
   QUOTE_TTL_MS,
   SWAP_OFF_PEG,
@@ -56,8 +58,10 @@ import {
   hasSwapFloor,
   isKnownRoute,
   isSwapAsset,
+  largestFairNote,
   livePools,
   maxSwapInForRefund,
+  pegGapBps,
   planVaultSwap,
   quoteFresh,
   receiptPaysEscrow,
@@ -101,6 +105,7 @@ export type SwapStopCode =
   | "no_route"
   | "too_small"
   | "too_thin"
+  | "impact_unknown"
   | "off_peg"
   | "no_fill"
   | "price_moving"
@@ -240,9 +245,31 @@ export interface SwapQuoteParams {
   decimals?: Record<string, number>;
   /** The relay's status for this chain (relayStatus()), to stop a swap while it is off or gas is over its ceiling. */
   relayStatus?: RelayNetworkStatus | null;
+  /**
+   * Where a quote stops, on every chain. The Gloam app holds Base and Ethereum to these and
+   * only warns on Robinhood Chain and Tempo, where a person sees the warning before they
+   * swap. Code that swaps on its own gets the stop everywhere unless it says otherwise.
+   */
+  stops?: SwapStops;
   /** Clock in ms, for tests. */
   now?: () => number;
 }
+
+/** The most a quote may lose before it is stopped, in basis points (0 to 10,000). */
+export interface SwapStops {
+  /** Price impact: the full size against a hundredth of it on the same route. Default IMPACT_STOP_BPS (2%). */
+  maxImpactBps?: number;
+  /** Between two dollar stablecoins: how far below a dollar for a dollar. Default PEG_STOP_BPS (2%). */
+  maxPegGapBps?: number;
+  /** With `marks`: how much less the swap gives than it is worth at market prices. Default VALUE_STOP_BPS (4%). */
+  maxValueGapBps?: number;
+}
+
+const stopBps = (v: number | undefined, fallback: number): number => {
+  if (v === undefined) return fallback;
+  if (!Number.isInteger(v) || v < 0 || v > 10_000) throw new SwapRefusedError({ code: "bad_amount", message: "A stop must be a whole number of basis points from 0 to 10,000." });
+  return v;
+};
 
 export interface SwapQuote {
   chainId: number;
@@ -258,6 +285,8 @@ export interface SwapQuote {
   plan: SwapPlan;
   /** How much less the swap gives than it is worth at `marks`, in basis points. null without marks. */
   valueGapBps: number | null;
+  /** The stops this quote was held to. */
+  stops: Required<SwapStops>;
   warnings: string[];
   /** The first thing that stops this swap, or null when nothing does. buildSwapIntent refuses a stopped quote. */
   stop: SwapStop | null;
@@ -312,6 +341,11 @@ export async function quoteSwap(p: SwapQuoteParams): Promise<SwapQuote> {
   }
   await assertChain(client, chainId);
   const nowMs = (p.now ?? Date.now)();
+  const stops: Required<SwapStops> = {
+    maxImpactBps: stopBps(p.stops?.maxImpactBps, IMPACT_STOP_BPS),
+    maxPegGapBps: stopBps(p.stops?.maxPegGapBps, PEG_STOP_BPS),
+    maxValueGapBps: stopBps(p.stops?.maxValueGapBps, VALUE_STOP_BPS),
+  };
 
   let feeBps: number;
   try {
@@ -328,7 +362,8 @@ export async function quoteSwap(p: SwapQuoteParams): Promise<SwapQuote> {
     readDepositLimit(client, pool, p.assetOut).catch(() => null),
   ]);
   if ("error" in planned) throw planned.error;
-  const plan = planned.plan;
+  // Tempo's exchange swaps dollar stablecoins only and its planner names no peg: read it from the plan itself (the 0.1% buffer included)
+  const plan = r.venue === "tempo" ? { ...planned.plan, pegBps: pegGapBps(planned.plan.available, planned.plan.amountOut) } : planned.plan;
 
   const warnings: string[] = [];
   let stop: SwapStop | null = null;
@@ -341,6 +376,18 @@ export async function quoteSwap(p: SwapQuoteParams): Promise<SwapQuote> {
   if (plan.pegBps != null && plan.pegBps >= PEG_WARN_BPS) {
     warnings.push(`These two trade about ${(plan.pegBps / 100).toFixed(2)}% below a dollar for a dollar right now.`);
   }
+
+  // The impact and peg stops on every chain (the planner already holds Base and Ethereum to theirs).
+  if (r.venue === "v4") {
+    if (plan.impactBps == null) {
+      // a hundredth of the size measured nothing: only a size too small to matter is let through
+      if (stops.maxImpactBps < 10_000 && plan.available >= 100n) halt({ code: "impact_unknown", message: "The price impact of this swap could not be measured. Nothing was swapped." });
+    } else if (plan.impactBps > stops.maxImpactBps) {
+      const fits = await largestFairNote(client, r, plan.route, { assetIn: p.assetIn, assetOut: p.assetOut, amountIn: p.amountIn, feeBps, router: r.address }, plan.available).catch(() => 0n);
+      halt({ code: "too_thin", message: SWAP_TOO_THIN, ...(fits > 0n ? { fitsIn: fits } : {}) });
+    }
+  }
+  if (plan.pegBps != null && plan.pegBps > stops.maxPegGapBps) halt({ code: "off_peg", message: SWAP_OFF_PEG });
 
   // value against market prices, when the caller gave them (the app's own check)
   let valueGap: number | null = null;
@@ -355,7 +402,9 @@ export async function quoteSwap(p: SwapQuoteParams): Promise<SwapQuote> {
     if (valueGap != null && valueGap >= VALUE_WARN_BPS && !(plan.pegBps != null && plan.pegBps >= PEG_WARN_BPS)) {
       warnings.push(`You get about ${(valueGap / 100).toFixed(2)}% less than this is worth at market prices, fees included.`);
     }
-    if (swapChecked(chainId) && valueGap != null && valueGap >= VALUE_STOP_BPS) {
+    // the app's line on Base and Ethereum (a gap at the stop is stopped), and the caller's elsewhere
+    const valueStop = swapChecked(chainId) ? Math.min(VALUE_STOP_BPS, stops.maxValueGapBps) : stops.maxValueGapBps;
+    if (valueGap != null && valueGap >= valueStop && valueStop < 10_000) {
       halt({ code: "far_from_market", message: "Too far from the market price. Nothing was swapped." });
     }
   }
@@ -423,6 +472,7 @@ export async function quoteSwap(p: SwapQuoteParams): Promise<SwapQuote> {
     feeBps,
     plan,
     valueGapBps: valueGap,
+    stops,
     warnings,
     stop,
     limits: { maxIn, outRoom },
@@ -518,6 +568,8 @@ export interface SwapIntentParams {
   marks?: Record<string, number>;
   decimals?: Record<string, number>;
   relayStatus?: RelayNetworkStatus | null;
+  /** Where the quote stops, on every chain (quoteSwap's `stops`). */
+  stops?: SwapStops;
   agentAddress?: Address | null;
   now?: () => number;
 }
@@ -568,6 +620,7 @@ export async function buildSwapIntent(p: SwapIntentParams): Promise<SwapIntent> 
     marks: p.marks,
     decimals: p.decimals,
     relayStatus: p.relayStatus,
+    stops: p.stops,
     now,
   }).catch((e: unknown) => e as Error);
 
