@@ -1351,6 +1351,7 @@ export function ShieldView() {
           {bridgeVisible(network) && (!demo || process.env.NEXT_PUBLIC_BRIDGE_PREVIEW === "1") && (
             <BridgeInCard
               recipient={address ?? undefined}
+              startOpen={searchParams.get("bridge") === "open"}
               onArrived={(arrived) => {
                 // By address on mainnet (Tempo lists Relay's USDC as USDC.e), by symbol in a testnet preview.
                 const dest = BRIDGE_DESTINATIONS[network.family]?.token;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalLayout } from "@/components/LegalLayout";
+import { EMBEDDED_WALLETS } from "@/lib/embeddedWallet";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
@@ -35,6 +36,16 @@ export default function PrivacyPage() {
         your browser too. We never receive your keys, your seed phrase or your
         note secrets.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          If you sign in with your email or a passkey and create a Gloam wallet,
+          that wallet&apos;s key is made and kept by Turnkey, the service Gloam
+          wallets run on, inside its secure hardware. It never reaches the page
+          or our servers, and Gloam can&apos;t sign with it: only your sign-in
+          can ask Turnkey to. Your private balance still lives in your browser,
+          as above.
+        </p>
+      )}
       <p>
         We never hold your funds. Money in the Gloam vault contract leaves only
         with a valid proof, and there is no admin withdraw. Any change to how
@@ -152,8 +163,10 @@ export default function PrivacyPage() {
         sign-in cookies for the partner portal and the team&apos;s admin page.
         The app keeps your private balance, settings and preferences in your
         browser&apos;s local storage, and none of it is sent to us except an
-        encrypted recovery backup if you turn recovery on (section 8). Details
-        and your choices:{" "}
+        encrypted recovery backup if you turn recovery on (section 8).
+        {EMBEDDED_WALLETS &&
+          " If you sign in to a Gloam wallet, Turnkey's code keeps your sign-in session in this browser: a session key in its database and a session token in local storage, until you sign out or the session ends."}{" "}
+        Details and your choices:{" "}
         <a href="/cookies">
           Cookie Policy
         </a>
@@ -223,6 +236,14 @@ export default function PrivacyPage() {
         signature or passkey could open your backup and spend what is in it,
         so only sign the recovery message on gloam.trade.
       </p>
+      {EMBEDDED_WALLETS && (
+        <p>
+          With a Gloam wallet, recovery turns on by itself after you sign in,
+          with that wallet&apos;s signature, so signing in on another device
+          brings your private balance back. If you turn recovery off in
+          Settings, it stays off on that browser.
+        </p>
+      )}
       <h2>9. Tester applications</h2>
       <p>
         If you apply at gloam.trade/testers, we keep what you send: your name,
@@ -370,6 +391,19 @@ export default function PrivacyPage() {
           that Relay makes for you. We then ask Relay how the order is going.
           Relay fills the order under its own terms.
         </li>
+        {EMBEDDED_WALLETS && (
+          <li>
+            Turnkey, only when you sign in with your email or a passkey to use
+            a Gloam wallet. Turnkey receives your email address (it sends you
+            the sign-in code), your passkey&apos;s public key and name, the
+            account and wallet it makes for you and their addresses, every
+            request your wallet signs (messages and transactions, with their
+            chain), and your IP address and browser details. When Gloam covers
+            a network fee for you, Turnkey sends that transaction and records
+            its cost. It keeps your wallet&apos;s key encrypted in its secure
+            hardware and processes all of this under its own privacy policy.
+          </li>
+        )}
         <li>
           WalletConnect (Reown), only when you choose Use a wallet app: its
           relay passes encrypted messages between the page and your wallet app

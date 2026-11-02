@@ -76,7 +76,9 @@ const SERVICES = [
   "wss://*.walletconnect.com",
   "https://api.web3modal.org",
   "https://*.reown.com",
+  // Gloam wallets (Turnkey): api, authproxy, and the success animation the sign-in sheet loads
   "https://*.turnkey.com",
+  "https://lottie.host",
   "https://wallet.tempo.xyz",
   "https://tokenlist.tempo.xyz",
   "https://api.relay.link",
