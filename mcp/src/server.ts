@@ -1036,7 +1036,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
             expires: issued.challenge.expires,
             request: issued.challenge.request,
             httpHint:
-              "Return HTTP 402 with the header WWW-Authenticate set to wwwAuthenticate and Cache-Control: no-store. The agent retries with Authorization: Payment <credential>; pass that value to gloam_verify_payment and serve only when it says grantAccess, with its paymentReceipt as the Payment-Receipt header.",
+              "Return HTTP 402 with the header WWW-Authenticate set to wwwAuthenticate and Cache-Control: no-store. The agent retries with Authorization: Payment <credential>; pass that value to gloam_verify_payment as payment, with this resource's price (wwwAuthenticate, or the encoded requirements) as requirements, and serve only when it says grantAccess, with its paymentReceipt as the Payment-Receipt header.",
           };
         } catch (e) {
           mpp = { error: `No MPP challenge: ${errMsg(e)}` };
@@ -2385,8 +2385,19 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     }
   }
 
-  /** gloam_verify_payment for an MPP credential (`Payment …`, method gloam, intent charge). */
+  /**
+   * gloam_verify_payment for an MPP credential (`Payment …`, method gloam, intent charge),
+   * checked against `requirements`: the price of the resource being served. The challenge
+   * alone shows only that this server issued it, not for which resource.
+   */
   async function verifyMpp(payment: string, requirements: string | undefined, reject: Reject) {
+    if (!requirements?.trim()) {
+      return text({
+        status: "error",
+        grantAccess: false,
+        error: "requirements is required for an MPP payment too: pass the price of the resource you are serving (the challenge's WWW-Authenticate value, or the encoded requirements), so the payment is checked against it.",
+      });
+    }
     let cred;
     try {
       cred = parseMppCredential(payment);
@@ -2412,10 +2423,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch (e) {
       return reject(errMsg(e), { problem: "invalid-challenge" });
     }
-    // Optionally bind to the price of the resource being served (the challenge alone proves only that this server issued it).
-    if (requirements?.trim()) {
+    // Bound to the price of the resource being served (the challenge alone proves only that this server issued it).
+    {
       const priced = parsePriced(requirements);
-      if ("error" in priced) return text({ status: "error", error: priced.error });
+      if ("error" in priced) return text({ status: "error", grantAccess: false, error: priced.error });
       const expected = priced.mpp ? parseGloamChargeRequest(priced.mpp.request) : fromPaymentRequirements(priced.req);
       const mismatch = termsMismatch(expected, request);
       if (mismatch) return reject(`The credential was issued for a different ${mismatch} than these requirements.`, { problem: "invalid-challenge" });
@@ -2534,12 +2545,12 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Verify and settle a private payment (x402 or MPP)",
       description:
-        "SERVER side. Check a presented payment and make it final: an x402 X-PAYMENT value against its requirements, or an MPP credential (the Authorization: Payment value, method gloam) against the challenge it echoes, which must be one this server issued. Opens the payment note with this server's receive key, checks it binds the required amount and asset in the right pool (and, for MPP, that it is the payment output of a Transferred event and bound to that challenge), then sweeps it into a fresh note only this server knows and waits for that to confirm. Grant access only when the result says grantAccess: true; for MPP, serve with its paymentReceipt as the Payment-Receipt header. A payer creates the payment note, so without the sweep it could spend the money back after being served. Needs GLOAM_AGENT_PRIVATE_KEY or the relay (GLOAM_USE_RELAY=1) to sweep.",
+        "SERVER side. Check a presented payment and make it final: an x402 X-PAYMENT value against its requirements, or an MPP credential (the Authorization: Payment value, method gloam) against the challenge it echoes, which must be one this server issued for this price (pass the price as requirements in both cases). Opens the payment note with this server's receive key, checks it binds the required amount and asset in the right pool (and, for MPP, that it is the payment output of a Transferred event and bound to that challenge), then sweeps it into a fresh note only this server knows and waits for that to confirm. Grant access only when the result says grantAccess: true; for MPP, serve with its paymentReceipt as the Payment-Receipt header. A payer creates the payment note, so without the sweep it could spend the money back after being served. Needs GLOAM_AGENT_PRIVATE_KEY or the relay (GLOAM_USE_RELAY=1) to sweep.",
       inputSchema: {
         requirements: z
           .string()
           .optional()
-          .describe("The price you issued: x402 requirements (encoded or raw JSON), or the MPP challenge (WWW-Authenticate value). Required for x402. For MPP it is optional, and binds the credential to that exact price."),
+          .describe("The price of the resource you are serving: x402 requirements (encoded or raw JSON), or the MPP challenge (WWW-Authenticate value). Required for both x402 and MPP: the payment must match this price."),
         payment: z.string().describe("The X-PAYMENT header value (or raw JSON payload), or the MPP Authorization: Payment value presented by the payer."),
       },
     },
