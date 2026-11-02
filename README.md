@@ -54,7 +54,7 @@ Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) sin
 | Assets | USDG, $GLOAM, PONS, CASHCAT; ETH, AI, ORBIO and GRIFT once each timelocked limit lands | USDC.e, pathUSD, USDT0, OUSD | USDC, EURC, USDT, ETH | USDC, USDT, USDG, PYUSD, EURC, ETH |
 | Gas | ETH | Paid in stablecoins | ETH | ETH; the relay waits while gas is above its ceiling |
 | Keys | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup |
-| Private swaps | USDG and $GLOAM on Uniswap v4 (`GloamVaultSwapV4`). Router v2 (`GloamVaultSwapV4b`, any allowlisted pool, ETH via WETH) is deployed and opens in the app once the queued deposit limits for 28 more tokens execute on 26 October | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
+| Private swaps | USDG, $GLOAM, ETH (via WETH), stock tokens and other listed tokens on Uniswap v4, through router v2 (`GloamVaultSwapV4b`, allowlisted pools). The first router (`GloamVaultSwapV4`) stays so refunds of older swaps can finish | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
 
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25%. A private swap pays the same 0.25% on the amount swapped, plus a price buffer (0.5% on Robinhood Chain, 0.1% on Tempo) whose unused part goes to the treasury. Since 24 October fees go to their own treasury wallet (`0xB390…30B8`), and half of them are set to buy back $GLOAM, half of that burned and half kept.
 - **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin; ETH on Base and Ethereum 20 per deposit and 1,000 in total; $GLOAM 2,500,000 per deposit and 25,000,000 in total. Cash outs and private payments are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.
@@ -104,7 +104,7 @@ What they do not prove is said plainly on the verify page: a proof of payment sh
 Robinhood Chain is an **Arbitrum Orbit L2** (Nitro, mainnet live since July 2026), ETH gas, Ethereum blob DA. Gloam targets what the chain actually ships:
 
 - **Chainlink oracles from block zero.** RH Chain prices tokenized equities on-chain via standard `AggregatorV3` feeds. Gloam's `OracleRates` module binds sealed-trade rates to the live feed with L2 sequencer-uptime, staleness, and positivity guards, and a ratio-tolerance check that is also on-chain slippage protection. Built and tested (`contracts/src/lib/OracleRates.sol`) for the sealed trade, which is retired. Private swaps take the DEX pool's own price.
-- **Tokenized stocks are ERC-20s** (18 decimals, ERC-8056 Total-Return value). Deposit limits for stock tokens and other liquid Robinhood Chain tokens are queued behind the 3-day timelock; once they execute, private swaps can buy them into the vault.
+- **Tokenized stocks are ERC-20s** (18 decimals, ERC-8056 Total-Return value). Deposit limits for stock tokens and other liquid Robinhood Chain tokens are live, so private swaps can buy them into the vault.
 - **Groth16 runs native.** bn254 pairing precompiles are present and the 96 KB code-size cap fits large verifier contracts, so shield / unshield / transfer proofs verify with no special infra.
 - **First-class ERC-4337** opens the door to gasless private transactions.
 
@@ -199,7 +199,7 @@ gloam/
 | Owner (one wallet; a multisig is planned) | [`0x76b7…D4D8`](https://robin.etherscan.io/address/0x76b7E410a227c888aBD2Bdc24Ee32E094B0FD4D8) |
 | Relayer (run by the Gloam team; submits proven transactions and pays gas, cannot move or redirect money) | [`0xb1E9…512e`](https://robin.etherscan.io/address/0xb1E994586E62994648a0b866BF33F2EDd942512e) |
 | Private swap router `GloamVaultSwapV4` (Uniswap v4, three pools fixed at deploy; no owner, admin or upgrade) | [`0x34AB…c52d`](https://robin.etherscan.io/address/0x34AB06208586A737Bf1607fa996Bc9162271c52d) |
-| Private swap router v2 `GloamVaultSwapV4b` (allowlisted Uniswap v4 pools, ETH via WETH, up to 3 hops; pools added only after a 3-day delay; opens in the app once the queued deposit limits execute) | [`0xfCa1…F2DC`](https://robin.etherscan.io/address/0xfCa1887e77f738ef9C5751974b3f3873d029F2DC) |
+| Private swap router v2 `GloamVaultSwapV4b` (allowlisted Uniswap v4 pools, ETH via WETH, up to 3 hops; pools added only after a 3-day delay; new swaps in the app use it) | [`0xfCa1…F2DC`](https://robin.etherscan.io/address/0xfCa1887e77f738ef9C5751974b3f3873d029F2DC) |
 | Payment board `GloamPayMemo` (encrypted heads-ups; no owner, never logs the poster) | [`0x01B3…4598`](https://robin.etherscan.io/address/0x01B3172d9900Cb26d57E986429b9b23854c74598) |
 | Treasury (cash-out fees since 24 October, and where a swap's unused input goes, fixed in the router) | [`0xB390…30B8`](https://robin.etherscan.io/address/0xB3900ac9350903218e4c7597bAb0f008F01B30B8) |
 
