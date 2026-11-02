@@ -568,7 +568,9 @@ test("the docs show Motion's link, and say what a swap hides and what it doesn't
   assert.ok(section.includes("Trade privately with one link"));
   assert.ok(section.includes("tab=swap#from=USDG&amp;to=") || section.includes("tab=swap#from=USDG&to="), "Motion's example: USDG on Robinhood Chain");
   assert.ok(section.includes("robinhood-mainnet"));
-  assert.ok(section.includes("ref=Motion"));
+  // Motion's link carries its partner code; a name alone (ref) counts for nothing
+  assert.ok(section.includes("&p=<Motion's link code>"));
+  assert.ok(/ref<\/code>: optional[\s\S]*counts for nothing/.test(section));
   assert.ok(/hides who swapped, not the tokens or the amounts/.test(section.replace(/\s+/g, " ")));
   assert.ok(/[Oo]nly tokens the (swap )?router lists/.test(section.replace(/\s+/g, " ")));
   assert.ok(!/anonymous|untraceable|invisible|—/i.test(section), "copy rules");
