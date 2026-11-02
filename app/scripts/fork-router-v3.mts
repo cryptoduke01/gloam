@@ -52,7 +52,7 @@ const SALT = keccak256(toHex("gloam.vault-swap.v3"));
 const TREE_SLOT = 4n; // nextIndex 4, currentRoot 5, filledSubtrees 6.., zeros 26.. (forge inspect)
 const fixture = JSON.parse(readFileSync(new URL("../../contracts/test/fixtures/router-next.json", import.meta.url), "utf8"));
 
-type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" | "late" | "short" };
+type Case = { name: string; assetIn: Address; assetOut: Address; amountIn: bigint; pools: number[]; kind?: "swap" | "refund" | "exit" | "late" | "short" | "relayed" | "relayedExit" };
 type Cfg = { id: number; fork: string; quoter: Address; port: number; bufferBps: bigint; syms: Record<string, [string, number]>; cases: Case[]; prepare?: () => Promise<void> };
 
 const BU = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address;
@@ -85,6 +85,8 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "EURC -> USDC", assetIn: EE, assetOut: EU, amountIn: parseUnits("100", 6), pools: [11] },
       { name: "USDT swap priced past what arrives, reverted", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "short" },
       { name: "USDT refund, unshield sent alone", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "refund" },
+      { name: "USDC refund through the relay's own code", assetIn: EU, assetOut: ET, amountIn: parseUnits("100", 6), pools: [4], kind: "relayed" },
+      { name: "USDC exit through the relay's own code", assetIn: EU, assetOut: ET, amountIn: parseUnits("100", 6), pools: [4], kind: "relayedExit" },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDT exit, vault limit full", assetIn: ET, assetOut: EU, amountIn: parseUnits("100", 6), pools: [4], kind: "exit" },
       { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: EU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
@@ -104,6 +106,8 @@ const CONFIGS: Record<string, Omit<Cfg, "prepare">> = {
       { name: "USDT -> EURC via USDC, two hops", assetIn: BT, assetOut: BE, amountIn: parseUnits("100", 6), pools: [2, 6] },
       { name: "USDC -> USDT at 10,000", assetIn: BU, assetOut: BT, amountIn: parseUnits("10000", 6), pools: [2] },
       { name: "USDC swap priced past what arrives, reverted", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "short" },
+      { name: "USDC refund through the relay's own code", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "relayed" },
+      { name: "USDC exit through the relay's own code", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "relayedExit" },
       { name: "ETH refund, unshield sent alone", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "refund" },
       { name: "USDC exit, vault limit full", assetIn: BU, assetOut: BT, amountIn: parseUnits("100", 6), pools: [2], kind: "exit" },
       { name: "ETH swap past its deadline, then its refund", assetIn: NATIVE, assetOut: BU, amountIn: parseUnits("0.05", 18), pools: [0], kind: "late" },
@@ -131,6 +135,10 @@ const ROUTER = chainFx.address as Address;
 const POOL_MANAGER = chainFx.poolManager as Address;
 const WETH = chainFx.weth as Address;
 const pools = chainFx.pools as { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address }[];
+
+// The relay's code, for the cases that run it: pointed at this fork, with a throwaway key that exists only here.
+process.env[`GLOAM_RPC_URL_${cfg.id}`] = `http://127.0.0.1:${cfg.port}`;
+process.env.GLOAM_RELAYER_PRIVATE_KEY = generatePrivateKey();
 
 const anvil = spawn(`${homedir()}/.foundry/bin/anvil`, ["--fork-url", cfg.fork, "--port", String(cfg.port), "--silent"], { stdio: "ignore" });
 process.on("exit", () => anvil.kill("SIGTERM"));
@@ -370,10 +378,58 @@ async function runCase(c: Case, feeBps: bigint) {
     console.log(`  one second past its deadline: ${check(late.status === "reverted", "a swap past its deadline reverts")} (reverted), note unspent: ${check(!(await readVault("isSpent", [nullifier])), "the note stays unspent")}`);
   }
 
+  let unshieldTx: Hex | undefined;
   if (kind !== "swap" && kind !== "short") {
     const alone = await tx(STRANGER, VAULT, encodeFunctionData({ abi: vaultAbi, functionName: "unshield", args: [unProof, root, nullifier, c.assetIn, escrow, c.amountIn] }));
     console.log(`  unshield sent alone by a stranger: ${check(alone.status === "success", "unshield alone")}, gas ${alone.gasUsed}`);
+    unshieldTx = alone.transactionHash;
     console.log(`  waiting at the escrow: ${fmt(await balance(c.assetIn, escrow), c.assetIn)}: ${check((await balance(c.assetIn, escrow)) === available, "escrow holds what arrived")}`);
+  }
+
+  if (kind === "relayed" || kind === "relayedExit") {
+    const { RelayError, relayVaultSwap, relayVaultSwapExit, relayerAccount } = await import("../src/lib/relay/server");
+    const { VAULT_SWAP_ROUTERS, VAULT_SWAP_V3_LIVE } = await import("../src/lib/vaultSwap");
+    const { getNetwork } = await import("../src/lib/networks");
+    VAULT_SWAP_V3_LIVE[cfg.id] = ROUTER;
+    VAULT_SWAP_ROUTERS[cfg.id] = ROUTER;
+    const net = getNetwork(cfg.id === 1 ? "ethereum-mainnet" : "base-mainnet");
+    await raw("anvil_setBalance", [relayerAccount()!.address, toHex(parseUnits("10", 18))]);
+    const code = (p: Promise<unknown>) => p.then(() => "sent", (e) => (e instanceof RelayError ? e.code : String(e)));
+    const route = p.route.map((k) => ({ ...k }));
+    const body = {
+      router: ROUTER,
+      spend: { proof: unProof, root, nullifier, asset: c.assetIn, amount: c.amountIn.toString() },
+      deposit: { proof: outProof, commitment: out.commitment, asset: c.assetOut, amount: p.amountOut.toString() },
+      refund: { proof: backProof, commitment: back.commitment, asset: c.assetIn, amount: backAmount.toString() },
+      route,
+      exitKey: exitAccount.address,
+      deadline: deadline.toString(),
+    };
+    const wire = { ...key, amountIn: c.amountIn.toString(), amountOut: p.amountOut.toString(), refundAmount: backAmount.toString(), deadline: deadline.toString() };
+    const exitBody = { router: ROUTER, asset: c.assetIn, key: wire, to: EXIT_TO, signature: await exitAccount.sign({ hash: exitDigest(cfg.id, ROUTER, escrow, EXIT_TO) }) };
+    const send = (over: Record<string, unknown>) => (kind === "relayed" ? relayVaultSwap(net, { ...body, ...over }) : relayVaultSwapExit(net, { ...exitBody, ...over }));
+    const noHash = await code(send({}));
+    console.log(`  the relay with no transaction named: ${check(noHash === "unshield_tx", "refused with no transaction named")} (${noHash})`);
+    const wrong = await code(send({ unshieldTx: deployHash }));
+    console.log(`  the relay with another transaction: ${check(wrong === "unshield_tx", "refused with another transaction")} (${wrong})`);
+    // money at an escrow this note's unshield never paid, under the same spent nullifier
+    const made = { ...key, outCommitment: back.commitment as Hex, refundAmount: 1n };
+    const madeEscrow = escrowAddress(ROUTER, c.assetIn, made);
+    await tx(POOL_MANAGER, c.assetIn, encodeFunctionData({ abi: tokenAbi, functionName: "transfer", args: [madeEscrow, 1n] }));
+    const unpaid = await code(
+      kind === "relayed"
+        ? relayVaultSwap(net, { ...body, deposit: { ...body.deposit, commitment: back.commitment }, refund: { ...body.refund, amount: "1" }, unshieldTx })
+        : relayVaultSwapExit(net, { ...exitBody, key: { ...wire, outCommitment: back.commitment, refundAmount: "1" }, unshieldTx })
+    );
+    console.log(`  the relay for an escrow the vault didn't pay: ${check(unpaid === "unshield_tx", "refused for an escrow the vault didn't pay")} (${unpaid})`);
+    const before = await balance(c.assetIn, EXIT_TO);
+    const hash = (await send({ unshieldTx })) as Hex;
+    const r = await client.waitForTransactionReceipt({ hash });
+    console.log(`  the relay with the unshield's transaction: ${check(r.status === "success", "the relay's send lands")}, gas ${r.gasUsed}`);
+    gasRows.push({ name: c.name, gas: r.gasUsed, calldata: 0 });
+    if (kind === "relayed") console.log(`  refund note landed: ${check(await seen(back.commitment), "refund landed")}`);
+    else console.log(`  paid ${fmt((await balance(c.assetIn, EXIT_TO)) - before, c.assetIn)}: ${check((await balance(c.assetIn, EXIT_TO)) - before === available, "exit pays all that arrived")}`);
+    return;
   }
 
   if (kind === "exit") {
@@ -451,6 +507,7 @@ const script = execFileSync(
 );
 const initCode = (Object.values(JSON.parse(script.split("\n").filter((l) => l.startsWith("{")).pop()!).returns)[0] as { value: Hex }).value;
 const deploy = await tx(OWNER, FACTORY, `${SALT}${initCode.slice(2)}` as Hex);
+const deployHash = deploy.transactionHash;
 const code = await client.getCode({ address: ROUTER });
 console.log(`router through the factory: ${check(deploy.status === "success" && Boolean(code && code.length > 2), "router deployed at the pinned address")} at ${ROUTER}, gas ${deploy.gasUsed}`);
 if (!code || code.length <= 2) throw new Error("no router at the pinned address: was the last `forge build` a plain one?");
