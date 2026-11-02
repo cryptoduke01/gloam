@@ -3,7 +3,7 @@
  * so a trading app can offer "Trade privately with Gloam".
  *
  *   https://gloam.trade/app/vault?tab=swap#from=USDG&to=TSLA&amount=100
- *     &chain=robinhood-mainnet&ref=Motion
+ *     &chain=robinhood-mainnet&p=<partner link code>
  *
  * `from` and `to` are a token's symbol or address on that network. Only tokens
  * the swap router lists there are filled in (lib/vaultSwap VAULT_SWAP_ASSETS);

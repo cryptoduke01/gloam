@@ -329,6 +329,26 @@ export default function PrivacyPage() {
         private send or a private amount. A sign-in cookie keeps you signed in
         for up to 7 days.
       </p>
+      <p>
+        <strong>Paying or swapping through a partner&apos;s link.</strong>{" "}A
+        partner&apos;s link can carry their partner code. When you pay, cash out
+        or swap from such a link, the app asks us which partner the code belongs
+        to (to show their name), and once your transaction lands it sends us the
+        code and the transaction hash. We read that transaction on its chain and
+        record it against the partner: the transaction hash, the network, the
+        kind, the asset and amount where they are public, the vault&apos;s fee and
+        the time, which anyone can already see on chain. We do not record your
+        wallet address, your IP address, the address a cash out paid, or
+        anything else about you with it. For a cash out sent later by the relay,
+        the app keeps the relay&apos;s job id and the partner code in your browser
+        until it goes out, then forgets them.
+      </p>
+      <p>
+        <strong>Partners&apos; own addresses.</strong>{" "}A partner can give us
+        their own receiving addresses. We then count past cash outs from the vault
+        to those addresses as theirs, from the same public facts. We keep only the
+        partner&apos;s addresses, nothing about who sent the money.
+      </p>
       <h2>12. Hosted MCP server (gloam.trade/mcp)</h2>
       <p>
         The hosted MCP server lets AI clients such as Claude, ChatGPT and Cursor

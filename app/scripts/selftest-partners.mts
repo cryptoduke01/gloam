@@ -710,6 +710,30 @@ await test("v1 payment requests: link with the details after the #", async () =>
   }
 });
 
+await test("v1 payment requests: partnerCode adds p= only for the key's own live link code", async () => {
+  const { issueLinkCode, revokeLinkCode } = await import("../src/lib/partnerLinks");
+  const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const tag = "gloamr1." + Buffer.from(new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey))).toString("base64url");
+  const own = await issueLinkCode({ partnerId: partner.id, by: "partner" });
+  const res = await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG", partnerCode: own.code } }));
+  const b = await json(res);
+  assert.equal(res.status, 201);
+  assert.equal(new URLSearchParams(new URL(b.data!.url as string).hash.slice(1)).get("p"), own.code);
+  assert.equal(b.data!.partnerCode, own.code);
+  const none = await json(await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG" } })));
+  assert.ok(!(none.data!.url as string).includes("p="), "no code asked for, none added");
+  // another account's code, a revoked one and a made-up one are refused
+  const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Someone else" });
+  const theirs = await issueLinkCode({ partnerId: other.id, by: "admin" });
+  const gone = await issueLinkCode({ partnerId: partner.id, by: "partner" });
+  await revokeLinkCode({ code: gone.code, partnerId: partner.id });
+  for (const code of [theirs.code, gone.code, "AAAAAAAAAAAAAAAAAAAA", 42]) {
+    const r = await requestPost(req("/api/v1/payment-requests", { method: "POST", key: secret, body: { to: tag, asset: "USDG", partnerCode: code } }));
+    assert.equal(r.status, 400);
+    assert.equal((await json(r)).error!.code, "bad_code");
+  }
+});
+
 // ---------------------------------------------------------------- proofs
 
 const here = fileURLToPath(new URL(".", import.meta.url));
