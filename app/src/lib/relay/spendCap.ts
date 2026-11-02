@@ -11,7 +11,8 @@
  * ordinary gas. A chain not listed has no cap.
  *
  * GLOAM_RELAY_IP_SENDS_<chainId> sets how many sends one IP may ask for in 10 minutes
- * on a chain with a lower limit than the relay's own, or "off" for none.
+ * on a chain with a lower limit than the relay's own, or "off" for none. Payment
+ * messages don't count, and a browser proves each send first, so a payroll stays under it.
  */
 import { parseEther } from "viem";
 

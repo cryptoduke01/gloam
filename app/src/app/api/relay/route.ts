@@ -45,7 +45,8 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
-    await checkChainRateLimit(net, requester);
+    // payment messages have budgets of their own (lib/relay/server takeMemoSlot)
+    if (body.action !== "memo") await checkChainRateLimit(net, requester);
 
     let hash: `0x${string}`;
     switch (body.action) {
