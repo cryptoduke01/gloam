@@ -252,7 +252,7 @@ await checkAsync("Base Sepolia: the remote MCP lists it and gives final-key snip
   assert.equal(mpp.isError, false);
   assert.match(mpp.text, /testnetNetwork\(\\"base\\"\)/);
   assert.match(mpp.text, /BASE_SEPOLIA_USDC/);
-  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.5/);
+  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.6/);
   const info = await toolJson("gloam_info");
   assert.match(info.text, /Base Sepolia \(84532\)/);
 });

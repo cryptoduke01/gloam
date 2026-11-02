@@ -36,7 +36,7 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { buildPoseidonUnshieldWitness, fieldToBytes32, makeBoundNotePoseidon, packGroth16Proof, type Groth16Proof } from "@gloamtrade/sdk";
 
-const { SWAP_DEADLINE_SECONDS, escrowAddress, exitDigest } = await import("../src/lib/vaultSwap");
+const { escrowAddress, exitDigest, refundAmountFor, swapChecked, swapDeadlineSeconds } = await import("../src/lib/vaultSwap");
 
 const arg = process.argv[process.argv.indexOf("--chain") + 1] ?? "ethereum";
 const ETH_PRICE = Number(process.env.ETH_PRICE ?? 2250);
@@ -322,7 +322,7 @@ async function runCase(c: Case, feeBps: bigint) {
   if (p.cost > available) failures.push(`${c.name}: the quote costs more than arrives`);
   // a price past the buffer, as if the pool moved after the quote: the new note asks for more than arrives can buy
   if (kind === "short") p.amountOut = (p.amountOut * 102n) / 100n;
-  const backAmount = c.amountIn - c.amountIn / 100n;
+  const backAmount = refundAmountFor(c.amountIn, swapChecked(cfg.id) ? Number(feeBps) : undefined);
   const out = await makeBoundNotePoseidon(p.amountOut, c.assetOut);
   const back = await makeBoundNotePoseidon(backAmount, c.assetIn);
   // the exit key is a throwaway, held only here, like the one the app makes for each swap
@@ -330,7 +330,7 @@ async function runCase(c: Case, feeBps: bigint) {
   const exitAccount = privateKeyToAccount(exitPk);
   const routeBytes = encodeAbiParameters([{ type: "tuple[]", components: POOL_KEY }], [p.route.map((k) => ({ ...k }))]);
   // from the chain's clock, as the app does it
-  const deadline = (await client.getBlock()).timestamp + BigInt(SWAP_DEADLINE_SECONDS);
+  const deadline = (await client.getBlock()).timestamp + BigInt(swapDeadlineSeconds(cfg.id));
   const key = {
     nullifier: note.nullifier as Hex,
     amountIn: c.amountIn,
