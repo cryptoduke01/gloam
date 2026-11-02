@@ -284,6 +284,26 @@ export function swapLeftover(q: { out: bigint; amount: bigint; decimals: number;
   return Number(left) > 0 ? left : null;
 }
 
+/** "about 11 USDG", or null under a cent. Whole above ten: the figure moves with the price until the swap lands. */
+export function leftoverLabel(q: { extra: string | null; receive: { symbol: string } }): string | null {
+  const n = Number(q.extra ?? 0);
+  if (!(n >= 0.01)) return null;
+  const shown = n < 10 ? n.toFixed(2) : Math.round(n).toLocaleString("en-US");
+  return `about ${shown} ${q.receive.symbol}`;
+}
+
+/**
+ * What the wallet's confirm screen will show for a same-chain swap, said before
+ * it opens. The wallet sees the ETH go out and the leftover come back, and can
+ * never see the deposit. Without a figure, it still may show some.
+ */
+export function swapWalletNote(q: { extra: string | null; receive: { amount: string; symbol: string } }): string {
+  const n = Number(q.receive.amount);
+  const amount = n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+  const back = leftoverLabel(q);
+  return `Your wallet ${back ? `will show ${back}` : `may show a little ${q.receive.symbol}`} coming back. That's the leftover from the swap. The ${amount} ${q.receive.symbol} goes straight into your private balance, so your wallet won't list it.`;
+}
+
 export type BridgeStage = "waiting" | "moving" | "done" | "failed" | "refunded";
 
 export type BridgeStatus = { stage: BridgeStage; outTx: string | null };

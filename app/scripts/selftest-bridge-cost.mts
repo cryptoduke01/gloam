@@ -1,14 +1,18 @@
 /**
  * Self-test: what a bridge route costs, and when the panel warns before
  * anything is sent (lib/bridge routeCost, expensiveRoute): over 3% of what you
- * pay and at least $1.
+ * pay and at least $1. Also what a same-chain swap into the private balance
+ * says comes back to the wallet (swapLeftover, leftoverLabel, swapWalletNote):
+ * the wallet can only show that part, so the review has to name it first.
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-bridge-cost.mts
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const { SWAP_BUFFER_MAX_SHARE, SWAP_SLIPPAGE_BPS, expensiveRoute, routeCost, swapLeftover } = await import("../src/lib/bridge");
+const { SWAP_BUFFER_MAX_SHARE, SWAP_SLIPPAGE_BPS, expensiveRoute, leftoverLabel, routeCost, swapLeftover, swapWalletNote } = await import(
+  "../src/lib/bridge"
+);
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -144,7 +148,38 @@ test("no dollar price: nothing estimated, no warning guessed", () => {
   assert.deepEqual(routeCost(q), { usd: 0.62, share: null });
 });
 
+const quoted = (extra: string | null, amount = "1000") => ({ extra, receive: { amount, symbol: "USDG" } });
+
+test("the row and the note round the leftover the same way", () => {
+  assert.equal(leftoverLabel(quoted("11.168129")), "about 11 USDG");
+  assert.equal(leftoverLabel(quoted("14.97")), "about 15 USDG");
+  assert.equal(leftoverLabel(quoted("1234.5")), "about 1,235 USDG");
+  assert.equal(leftoverLabel(quoted("5.49")), "about 5.49 USDG");
+  assert.equal(leftoverLabel(quoted("0.03")), "about 0.03 USDG");
+  assert.equal(leftoverLabel(quoted("0.01")), "about 0.01 USDG", "a cent shows");
+  assert.equal(leftoverLabel(quoted("0.009999")), null, "under a cent doesn't");
+  assert.equal(leftoverLabel(quoted(null)), null);
+});
+
+test("the note says what the wallet will show, in real values", () => {
+  assert.equal(
+    swapWalletNote(quoted("11.168129")),
+    "Your wallet will show about 11 USDG coming back. That's the leftover from the swap. The 1,000 USDG goes straight into your private balance, so your wallet won't list it."
+  );
+  assert.match(swapWalletNote(quoted("0.03", "5")), /about 0\.03 USDG coming back.* The 5 USDG goes straight/);
+  assert.match(swapWalletNote(quoted("5.49", "1250.5")), /The 1,250\.50 USDG goes straight/);
+});
+
+test("with no figure the note promises none, and still says what the wallet won't list", () => {
+  for (const extra of [null, "0.004"]) {
+    const note = swapWalletNote(quoted(extra));
+    assert.match(note, /^Your wallet may show a little USDG coming back\./);
+    assert.match(note, /your wallet won't list it\.$/);
+  }
+});
+
 const route = readFileSync(new URL("../src/app/api/bridge/private/route.ts", import.meta.url), "utf8");
+const view = readFileSync(new URL("../src/components/app/BridgeIn.tsx", import.meta.url), "utf8");
 
 test("the tighter slippage goes on the same-chain swap only, and the refusals stay", () => {
   assert.equal(SWAP_SLIPPAGE_BPS, "30");
@@ -152,6 +187,13 @@ test("the tighter slippage goes on the same-chain swap only, and the refusals st
   assert.equal(route.match(/slippageTolerance/g)?.length, 1, "nothing else sets it");
   assert.match(route, /\(sameChain \? outAmount >= amount : outAmount === amount\)/);
   assert.match(route, /extra: sameChain \? swapLeftover\(/, "a bridge never reports a leftover");
+});
+
+test("the review says it all before the button, and the old line is gone", () => {
+  assert.ok(view.indexOf("swapWalletNote(q)") > 0);
+  assert.ok(view.indexOf("swapWalletNote(q)") < view.indexOf('"Waiting for your wallet…" : confirm'), "the note comes first");
+  assert.doesNotMatch(view, /few cents of price buffer/);
+  assert.match(view, /\["Back to your wallet", back\]/);
 });
 
 console.log(`\nbridge cost: ${passed} passed`);

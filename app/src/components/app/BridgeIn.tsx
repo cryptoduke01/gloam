@@ -15,8 +15,10 @@ import {
   SWAP_GAS_RESERVE_WEI,
   chainLogo,
   expensiveRoute,
+  leftoverLabel,
   privateBridgeable,
   swapSource,
+  swapWalletNote,
   type BridgeChain,
   type BridgeQuote,
   type BridgeStatus,
@@ -1408,6 +1410,7 @@ function PrivateReview({
       : q.sameChain
         ? "Swap and add privately"
         : "Confirm in your wallet";
+  const back = leftoverLabel(q);
   const rows: [string, React.ReactNode][] = [
     [
       "Added privately",
@@ -1423,9 +1426,7 @@ function PrivateReview({
       : q.evmTxs
         ? ([["Network fee", `Shown in your wallet, on ${q.send.chain}`]] as [string, React.ReactNode][])
         : []),
-    ...(q.extra && Number(q.extra) >= 0.01
-      ? ([["Back to your wallet", `about ${fmtMoney(Number(q.extra))} ${q.receive.symbol}`]] as [string, React.ReactNode][])
-      : []),
+    ...(back ? ([["Back to your wallet", back]] as [string, React.ReactNode][]) : []),
     ["Arrives", arrivesText(q)],
   ];
   return (
@@ -1453,6 +1454,10 @@ function PrivateReview({
 
       <CostWarning quote={q} />
 
+      {q.sameChain && (
+        <p className="mt-4 rounded-xl bg-surface px-4 py-3 text-[13px] leading-relaxed text-soft">{swapWalletNote(q)}</p>
+      )}
+
       {review.signing && review.progress && (
         <p className="mt-4 flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[13.5px] text-foreground">
           <span aria-hidden className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-foreground/50" />
@@ -1476,7 +1481,7 @@ function PrivateReview({
       )}
       <p className="mt-3 text-[12px] leading-relaxed text-mute">
         {q.sameChain
-          ? `One transaction swaps it and adds it to your private balance. The few cents of price buffer come back to your wallet as ${q.receive.symbol}.`
+          ? "One transaction swaps it and adds it to your private balance."
           : `It goes into your private balance as it arrives. If that can't happen, Relay sends it to your wallet on ${q.receive.chain} instead, and you add it privately from there.`}
         {steps > 1 && " Your wallet asks twice: once to approve, once to pay."}
       </p>
