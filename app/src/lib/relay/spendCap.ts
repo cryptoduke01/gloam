@@ -20,6 +20,8 @@ type Env = Record<string, string | undefined>;
 
 export const DEFAULT_HOURLY_SPEND: Readonly<Record<number, string>> = { 1: "0.05", 8453: "0.01", 4663: "0.02", 4217: "1" };
 export const NEW_SEND_SHARE_PCT = 80n;
+/** Payment messages outside the relay's paid message budget may hold this share of the cap between them. */
+export const MEMO_SPEND_SHARE_PCT = 20n;
 export const DEFAULT_IP_SENDS: Readonly<Record<number, number>> = { 1: 120 };
 
 const warned = new Set<string>();

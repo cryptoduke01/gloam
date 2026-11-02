@@ -1,7 +1,9 @@
+import type { NextRequest } from "next/server";
 import { isAdminAuthenticated } from "@/lib/adminAuth";
 import { activeKeyCounts } from "@/lib/apiKeys";
-import { ApiError, portal } from "@/lib/partnersApi";
-import { listPartners, partnerView, readAllPartnerTotals, readPartnerStats } from "@/lib/partners";
+import { ApiError, jsonBody, portal } from "@/lib/partnersApi";
+import { sameSiteJson } from "@/lib/partnersAuth";
+import { listPartners, partnerView, readAllPartnerTotals, readPartnerStats, setRelayApproved } from "@/lib/partners";
 import { kvBackend } from "@/lib/partnersKv";
 
 export const runtime = "nodejs";
@@ -30,5 +32,23 @@ export async function GET() {
         daily: all.daily,
       },
     };
+  });
+}
+
+/**
+ * Admin only: { id, relayApproved }. An approved account's payment messages use the
+ * relay's larger message budget (lib/relay/server, relayMemo).
+ */
+export async function POST(req: NextRequest) {
+  return portal(async () => {
+    if (!sameSiteJson(req)) throw new ApiError(403, "bad_origin", "Change partners from the Gloam site.");
+    if (!(await isAdminAuthenticated())) throw new ApiError(401, "unauthorized", "Admin session required.");
+    const body = await jsonBody(req);
+    if (typeof body.id !== "string" || typeof body.relayApproved !== "boolean") {
+      throw new ApiError(400, "bad_request", "Send { id, relayApproved: true | false }.");
+    }
+    const partner = await setRelayApproved(body.id, body.relayApproved);
+    if (!partner) throw new ApiError(404, "not_found", "No partner with that id.");
+    return { data: { partner: partnerView(partner) } };
   });
 }

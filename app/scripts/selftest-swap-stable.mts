@@ -72,7 +72,7 @@ const {
   vaultSwapRouter,
 } = await import("../src/lib/vaultSwap");
 const { FEED_MAX_AGE_SEC, SPLIT_GAS_UNITS, hasSwapFloor, smallestSwapUsd, swapFloorGas, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
-const { NOTE_WAIT_MESSAGE, RelayError, SPEND_CAP_MESSAGE, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayStatus, relayTransfer, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
+const { NOTE_WAIT_MESSAGE, RelayError, SPEND_CAP_MESSAGE, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayMemo, relayStatus, relayTransfer, relayUnshield, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
 const { hourlySpendWei, ipSendsLimit } = await import("../src/lib/relay/spendCap");
 const { resetGasReads } = await import("../src/lib/relay/gasCeiling");
 const { getNetwork } = await import("../src/lib/networks");
@@ -311,6 +311,7 @@ const chain = {
   gasUsed: 1_000_000n,
   dryRun: "ok" as "ok" | "revert",
   dryRunGas: DRY_RUN_GAS,
+  seen: false,
 };
 /** The vault's payments to escrows the fake chain has seen, by transaction hash. */
 const paidTxs = new Map<string, { status: string; logs: { address: string; topics: string[]; data: string }[] }>();
@@ -365,7 +366,7 @@ function answer(r: RpcReq, chainId: number): unknown {
       reads.push(sel);
       if (sel === SEL.spent) return word(chain.spent);
       if (sel === SEL.isKnownRoot) return word(true);
-      if (sel === SEL.commitmentSeen) return word(false);
+      if (sel === SEL.commitmentSeen) return word(chain.seen);
       if (sel === SEL.fee) return word(25);
       if (sel === SEL.balanceOf) return word(chain.held);
       if (sel === SEL.round) return `0x${[1, chain.ethUsd, chain.feedAt(), chain.feedAt(), 1].map((v) => word(BigInt(v)).slice(2)).join("")}`;
@@ -443,6 +444,7 @@ function fresh() {
   chain.gasUsed = 1_000_000n;
   chain.dryRun = "ok";
   chain.dryRunGas = DRY_RUN_GAS;
+  chain.seen = false;
   paidTxs.clear();
   (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
   delete process.env.GLOAM_RELAY_HOURLY_SPEND_1;
@@ -831,6 +833,70 @@ await test("a refund note short of what arrived after a fee rise reads short, an
 
 off(1);
 off(8453);
+
+const WALLET = "0x00000000000000000000000000000000000c0ffe";
+let cashOutN = 1;
+function cashOut(amount: bigint) {
+  cashOutN++;
+  return { proof, root: `0x${"22".repeat(32)}`, nullifier: `0x${(0xc0000 + cashOutN).toString(16).padStart(64, "0")}`, asset: E.USDC, to: WALLET, amount: amount.toString() };
+}
+const memoFor = (n: number) => ({ paymentCommitment: `0x${(0x5000 + n).toString(16).padStart(64, "0")}`, memo: `0x${"ab".repeat(64)}` });
+
+await test("the hourly spend cap counts cash outs like any send, a one-unit one as much as a large one", async () => {
+  fresh();
+  chain.receipt = "none";
+  chain.dryRunGas = 300_000n;
+  // 390k gas held at about 0.0444 gwei: 0.0000173 a cash out, so four fit under 80% of 0.0001
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.0001";
+  const outcomes: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const r = await relayUnshield(net, cashOut(i % 2 === 0 ? 1n : usd(40_000))).catch((e) => e);
+    outcomes.push(typeof r === "string" ? "sent" : isCode("spend_cap")(r) ? "cap" : String(r));
+  }
+  assert.deepEqual(outcomes, [...Array(4).fill("sent"), ...Array(8).fill("cap")]);
+  assert.equal(sends.length, 4);
+});
+
+await test("on Ethereum a key from an account no admin approved shares 60 messages an hour with every such account, as strangers do", async () => {
+  fresh();
+  chain.seen = true;
+  chain.dryRunGas = 100_000n;
+  chain.gasUsed = 90_000n;
+  let accepted = 0;
+  let refused = 0;
+  for (let p = 0; p < 40 && refused === 0; p++) {
+    for (let a = 0; a < 3 && refused === 0; a++) {
+      try {
+        await relayMemo(net, memoFor(p), { partner: `ptr_free${a}x${p}`, approved: false });
+        accepted++;
+      } catch (e) {
+        assert.ok(isCode("memo_busy")(e), String(e));
+        refused++;
+      }
+    }
+  }
+  assert.equal(accepted, 60);
+  // strangers have their own 60, and an approved account's key goes from the paid budget
+  assert.equal(typeof (await relayMemo(net, memoFor(900))), "string");
+  assert.equal(typeof (await relayMemo(net, memoFor(901), { partner: "ptr_approved1", approved: true })), "string");
+  await settled();
+});
+
+await test("messages outside the paid budget hold at most a fifth of the spend cap, and sends keep the rest", async () => {
+  fresh();
+  chain.seen = true;
+  chain.receipt = "none";
+  chain.dryRunGas = 100_000n;
+  // 130k gas held at about 0.0444 gwei: 0.0000058 a message; a fifth of 0.00005 is 0.00001
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.00005";
+  assert.equal(typeof (await relayMemo(net, memoFor(1))), "string");
+  await assert.rejects(relayMemo(net, memoFor(2)), isCode("memo_busy"));
+  await assert.rejects(relayMemo(net, memoFor(3), { partner: "ptr_free1", approved: false }), isCode("memo_busy"), "a key from an account no admin approved shares that fifth");
+  assert.equal(typeof (await relayMemo(net, memoFor(4), { partner: "ptr_approved1", approved: true })), "string", "the paid budget is outside it");
+  chain.dryRunGas = 300_000n;
+  assert.equal(typeof (await relayUnshield(net, cashOut(usd(100)))), "string", "a cash out still goes");
+  assert.equal(sends.length, 3);
+});
 
 await test("escrow and route bytes stay what they were", () => {
   const key = {
