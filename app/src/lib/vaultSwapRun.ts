@@ -314,8 +314,10 @@ export async function runVaultSwap(args: {
 
 /**
  * The transaction that paid a swap's escrow: what a refund or an exit shows the relay.
- * Found by its nullifier and kept on the note, as anyone may have sent it. No chain here
- * makes more than 12 blocks a second, and the note came first, which bounds the search.
+ * Found by its nullifier and kept on the note, as anyone may have sent it. The note came
+ * first, so the search starts where the chain stood then, at up to 12 blocks a second
+ * (Robinhood Chain makes about 10). If nothing is found there, it searches again from
+ * the vault's first block, in case a chain ran faster than that.
  */
 async function unshieldTxOf(note: LocalNote, escrow: Address): Promise<Hex | null> {
   const info = note.vaultSwap;
@@ -328,10 +330,13 @@ async function unshieldTxOf(note: LocalNote, escrow: Address): Promise<Hex | nul
   const age = Number.isFinite(note.createdAt) ? Math.ceil((Date.now() - note.createdAt) / 1000) + 3600 : null;
   const back = age === null ? null : head - BigInt(age) * 12n;
   const from = back !== null && back > floor ? back : floor;
-  const logs = await walkLogs(client, net.pool, from, head, { ...walkTuning(net.chainId, net.logRange), span: net.logRange }, {
-    event: UNSHIELDED_EVENT,
-    args: { nullifier: note.sweptFrom.nullifier, asset: info.assetIn, to: escrow },
-  });
+  const search = (start: bigint, end: bigint) =>
+    walkLogs(client, net.pool!, start, end, { ...walkTuning(net.chainId, net.logRange), span: net.logRange }, {
+      event: UNSHIELDED_EVENT,
+      args: { nullifier: note.sweptFrom!.nullifier, asset: info.assetIn, to: escrow },
+    });
+  let logs = await search(from, head);
+  if (!logs.length && from > floor) logs = await search(floor, from - 1n);
   const hash = logs[0]?.transactionHash ?? null;
   if (hash) await updateLocalNote(note.id, { vaultSwap: { ...info, unshieldTx: hash } }).catch(() => {});
   return hash;

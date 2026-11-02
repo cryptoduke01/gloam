@@ -45,19 +45,19 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
-    // payment messages have budgets of their own (lib/relay/server takeMemoSlot)
+    // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
     if (body.action !== "memo") await checkChainRateLimit(net, requester);
 
     let hash: `0x${string}`;
     switch (body.action) {
       case "transfer": {
-        hash = await relayTransfer(net, body);
+        hash = await relayTransfer(net, body, requester);
         // relayTransfer checked commitments[0] is a bytes32
         const payment = (body.commitments as string[])[0]!;
         return NextResponse.json({ ok: true, hash, memoTicket: memoTicket(net.chainId, payment) });
       }
       case "unshield":
-        hash = await relayUnshield(net, body);
+        hash = await relayUnshield(net, body, requester);
         break;
       case "gas-station":
         hash = await relayGasStation(net, body, requester);
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         hash = await relayMemo(net, body);
         break;
       case "swap":
-        hash = await relayVaultSwap(net, body);
+        hash = await relayVaultSwap(net, body, requester);
         break;
       case "swapExit":
         hash = await relayVaultSwapExit(net, body);

@@ -413,7 +413,7 @@ await test("a job waiting for gas can still be cancelled", async () => {
   await store.put(j);
   const state = { now: j.sendAfter + 1, high: true as boolean | "throw", sends: 0 };
   await sched.runDueJobs(store, deps(state));
-  assert.equal(await sched.cancelJob(store, j.id, state.now + 1), "cancelled");
+  assert.equal(await sched.cancelJob(store, j.id, state.now + 1, j.nullifier), "cancelled");
 });
 
 await test("waiting for gas never uses up the 2-hour give-up time", async () => {
@@ -481,7 +481,7 @@ await test("a relay that refuses over gas at the last moment: the job waits, the
   assert.equal(held.attempts, 0);
   assert.equal(held.maybeSent, undefined);
   assert.equal(held.reason, sched.GAS_WAIT_REASON);
-  assert.equal(await sched.cancelJob(store, j.id, state.now + 1), "cancelled", "still cancellable");
+  assert.equal(await sched.cancelJob(store, j.id, state.now + 1, j.nullifier), "cancelled", "still cancellable");
 });
 
 await test("a gas check that fails holds the job too", async () => {

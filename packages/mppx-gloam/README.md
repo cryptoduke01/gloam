@@ -103,6 +103,8 @@ It also exports the Payment scheme codec (challenges, credentials, receipts, the
 | If the server refuses | the value already moved (sealed to the payee) | nothing moved |
 | What the server learns | the payer's sending address, unless relayed | nothing about the payer's wallet |
 
+In pull mode the server checks the payer's transfer against the pool before it submits anything: `gloamChargeChainFromClient` makes an `eth_call` of `transfer()` (`transferWouldLand`), and a transfer the pool would refuse is refused with nothing sent. A custom `GloamChargeChain` can set `transferWouldLand` the same way (`transferCheckFromCall` builds it from any call function); without it the transfer is submitted as before.
+
 ## Networks
 
 | `network` | Chain | Default currency | Keys |

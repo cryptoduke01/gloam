@@ -72,7 +72,7 @@ const {
   vaultSwapRouter,
 } = await import("../src/lib/vaultSwap");
 const { FEED_MAX_AGE_SEC, SPLIT_GAS_UNITS, hasSwapFloor, smallestSwapUsd, swapFloorGas, swapFloorMessage, swapFloorShown, swapGasUnits } = await import("../src/lib/relay/swapFloor");
-const { NOTE_WAIT_MESSAGE, RelayError, SPEND_CAP_MESSAGE, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayMemo, relayStatus, relayTransfer, relayUnshield, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
+const { NOTE_WAIT_MESSAGE, RECEIPT_WATCH_WITHIN_MS, RelayError, SENDER_SHARE_MESSAGE, SPEND_CAP_MESSAGE, receiptWatchMs, SWAPS_PAUSED_MESSAGE, assertSwapWorthSending, checkChainRateLimit, relayMemo, relayStatus, relayTransfer, relayUnshield, relayVaultSwap, relayVaultSwapExit, resetSwapFloorReads, sendGasMost } = await import("../src/lib/relay/server");
 const { hourlySpendWei, ipSendsLimit } = await import("../src/lib/relay/spendCap");
 const { resetGasReads } = await import("../src/lib/relay/gasCeiling");
 const { getNetwork } = await import("../src/lib/networks");
@@ -312,6 +312,8 @@ const chain = {
   dryRun: "ok" as "ok" | "revert",
   dryRunGas: DRY_RUN_GAS,
   seen: false,
+  /** Base's fee for posting to Ethereum, in its receipts. */
+  l1Fee: 0n,
 };
 /** The vault's payments to escrows the fake chain has seen, by transaction hash. */
 const paidTxs = new Map<string, { status: string; logs: { address: string; topics: string[]; data: string }[] }>();
@@ -357,6 +359,7 @@ function answer(r: RpcReq, chainId: number): unknown {
         transactionHash: hash, transactionIndex: "0x0", blockHash: BLOCK.hash, blockNumber: "0x1", from: `0x${"00".repeat(20)}`, to: POOL,
         cumulativeGasUsed: toHex(chain.gasUsed), gasUsed: toHex(chain.gasUsed), effectiveGasPrice: toHex(chain.gasPrice), contractAddress: null, logs, logsBloom: BLOCK.logsBloom,
         status: paid ? paid.status : chain.receipt === "success" ? "0x1" : "0x0", type: "0x2",
+        ...(chainId === 8453 ? { l1Fee: toHex(chain.l1Fee) } : {}),
       };
     }
     case "eth_call": {
@@ -445,10 +448,13 @@ function fresh() {
   chain.dryRun = "ok";
   chain.dryRunGas = DRY_RUN_GAS;
   chain.seen = false;
+  chain.l1Fee = 0n;
   paidTxs.clear();
   (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
   delete process.env.GLOAM_RELAY_HOURLY_SPEND_1;
+  delete process.env.GLOAM_RELAY_HOURLY_SPEND_8453;
   delete process.env.GLOAM_RELAY_IP_SENDS_1;
+  delete process.env.GLOAM_RELAY_SENDER_SHARE_1;
   resetSwapFloorReads();
   resetGasReads();
 }
@@ -846,15 +852,120 @@ await test("the hourly spend cap counts cash outs like any send, a one-unit one 
   fresh();
   chain.receipt = "none";
   chain.dryRunGas = 300_000n;
-  // 390k gas held at about 0.0444 gwei: 0.0000173 a cash out, so four fit under 80% of 0.0001
+  // 390k gas held at about 0.0444 gwei: 0.0000173 a cash out. Money coming back may use all of
+  // the cap, so five fit under 0.0001
   process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.0001";
   const outcomes: string[] = [];
   for (let i = 0; i < 12; i++) {
     const r = await relayUnshield(net, cashOut(i % 2 === 0 ? 1n : usd(40_000))).catch((e) => e);
     outcomes.push(typeof r === "string" ? "sent" : isCode("spend_cap")(r) ? "cap" : String(r));
   }
-  assert.deepEqual(outcomes, [...Array(4).fill("sent"), ...Array(8).fill("cap")]);
-  assert.equal(sends.length, 4);
+  assert.deepEqual(outcomes, [...Array(5).fill("sent"), ...Array(7).fill("cap")]);
+  assert.equal(sends.length, 5);
+});
+
+const transferBody = () => {
+  cashOutN++;
+  const h = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
+  return { proof, root: `0x${"22".repeat(32)}`, nullifier: h(0xe0000 + cashOutN), commitments: [h(0xe1000 + cashOutN), h(0xe2000 + cashOutN)] };
+};
+const slotsUsed = async () => {
+  const { readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  return readRateLimit(`chain:${net.chainId}`, "relay-net", Date.now(), 3600);
+};
+
+// the two that follow send a refund
+on(1);
+
+await test("a send the cap turns away takes none of the network's slots, so a refund still goes", async () => {
+  fresh();
+  chain.receipt = "none";
+  // 0.000098 held a send: two fit under 80% of 0.0003
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.0003";
+  for (let i = 0; i < 2; i++) assert.equal(typeof (await relayTransfer(net, transferBody())), "string");
+  assert.equal(await slotsUsed(), 2);
+  // the network's slots nearly gone
+  const { addRateCount } = await import("../src/lib/mcpRemote/rateLimit");
+  await addRateCount(`chain:${net.chainId}`, "relay-net", 4_997, Date.now(), 3600);
+  const same = transferBody();
+  for (let i = 0; i < 50; i++) await assert.rejects(relayTransfer(net, same), (e: unknown) => isCode("spend_cap")(e) && (e as Error).message === SPEND_CAP_MESSAGE);
+  assert.equal(await slotsUsed(), 4_999, "fifty turned away, none counted");
+  chain.spent = true;
+  chain.held = usd(1_000);
+  await relayVaultSwap(net, refundBody(usd(1_000)));
+  assert.equal(sends.length, 3, "the refund went, in the last slot but one");
+});
+
+await test("one sender holds at most its share of the cap; other senders and cash outs still go", async () => {
+  fresh();
+  chain.receipt = "none";
+  // 0.000098 held a send. Cap 0.001: a sender's share 0.0004 (four), new sends 0.0008
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.001";
+  const A = "198.51.100.21";
+  const outcomes: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const r = await relayTransfer(net, transferBody(), A).catch((e) => e);
+    outcomes.push(typeof r === "string" ? "sent" : (r as Error).message === SENDER_SHARE_MESSAGE ? "share" : String(r));
+  }
+  assert.deepEqual(outcomes, ["sent", "sent", "sent", "sent", "share", "share"]);
+  // a cash out from the same sender counts toward its share too
+  chain.dryRunGas = 300_000n;
+  await assert.rejects(relayUnshield(net, cashOut(usd(10)), A), (e: unknown) => (e as Error).message === SENDER_SHARE_MESSAGE);
+  chain.dryRunGas = DRY_RUN_GAS;
+  // another sender takes the rest of the new-send share, and then new sends stop for everyone
+  const B = "198.51.100.22";
+  for (let i = 0; i < 4; i++) assert.equal(typeof (await relayTransfer(net, transferBody(), B)), "string");
+  await assert.rejects(relayTransfer(net, transferBody(), "198.51.100.23"), (e: unknown) => (e as Error).message === SPEND_CAP_MESSAGE);
+  // money coming back still goes: a cash out from someone else, and a refund
+  chain.dryRunGas = 300_000n;
+  assert.equal(typeof (await relayUnshield(net, cashOut(usd(10)), "198.51.100.24")), "string");
+  chain.dryRunGas = DRY_RUN_GAS;
+  chain.spent = true;
+  chain.held = usd(1_000);
+  await relayVaultSwap(net, refundBody(usd(1_000)), A);
+  assert.equal(sends.length, 10, "a refund holds against no sender's share");
+});
+
+off(1);
+
+await test("a sender's share is set by chain, and can be turned off", async () => {
+  const { senderSharePct, DEFAULT_SENDER_SHARE_PCT } = await import("../src/lib/relay/spendCap");
+  assert.equal(DEFAULT_SENDER_SHARE_PCT, 40);
+  assert.equal(senderSharePct(1, {}), 40);
+  assert.equal(senderSharePct(1, { GLOAM_RELAY_SENDER_SHARE_1: "25" }), 25);
+  assert.equal(senderSharePct(1, { GLOAM_RELAY_SENDER_SHARE_1: "off" }), null);
+  for (const bad of ["0", "101", "1.5", "x"]) assert.equal(senderSharePct(1, { GLOAM_RELAY_SENDER_SHARE_1: bad }), 40, bad);
+  fresh();
+  chain.receipt = "none";
+  process.env.GLOAM_RELAY_HOURLY_SPEND_1 = "0.001";
+  process.env.GLOAM_RELAY_SENDER_SHARE_1 = "off";
+  for (let i = 0; i < 6; i++) assert.equal(typeof (await relayTransfer(net, transferBody(), "198.51.100.31")), "string");
+});
+
+await test("on Base a send holds a margin for posting to Ethereum, and settles at what its receipt shows", async () => {
+  fresh();
+  const { readRateLimit } = await import("../src/lib/mcpRemote/rateLimit");
+  const spent = () => readRateLimit(`chain:${base.chainId}`, "relay-spend", Date.now(), 3600);
+  process.env.GLOAM_RELAY_HOURLY_SPEND_8453 = "0.01";
+  chain.receipt = "none";
+  await relayTransfer(base, transferBody());
+  // 2.21M gas at 0.037 gwei, half again
+  assert.equal(await spent(), Number((2_210_000n * 37_000_000n * 150n) / 100n / 1_000_000_000n) + 1);
+  fresh();
+  process.env.GLOAM_RELAY_HOURLY_SPEND_8453 = "0.01";
+  chain.l1Fee = 10_000_000_000_000n; // 10,000 gwei
+  await relayTransfer(base, transferBody());
+  await settled();
+  assert.equal(await spent(), Number((1_000_000n * 37_000_000n + 10_000_000_000_000n) / 1_000_000_000n) + 1, "the gas it burned and the fee to Ethereum");
+});
+
+await test("a receipt watch ends inside the request's time", () => {
+  const now = 1_000_000;
+  assert.equal(receiptWatchMs(1, now + RECEIPT_WATCH_WITHIN_MS, now), 45_000);
+  assert.equal(receiptWatchMs(1, now + 120_000, now), 50_000, "Ethereum's own watch is the most");
+  assert.equal(receiptWatchMs(8453, now + 120_000, now), 30_000);
+  assert.equal(receiptWatchMs(1, now + 5_000, now), 5_000, "a slow request watches what is left");
+  assert.equal(receiptWatchMs(1, now - 1, now), 0, "none left: one read, then the holds stay");
 });
 
 await test("on Ethereum a key from an account no admin approved shares 60 messages an hour with every such account, as strangers do", async () => {

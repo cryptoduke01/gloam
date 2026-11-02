@@ -436,7 +436,7 @@ function mainnetLiveFacts(): string {
     ...(swapV3Live(1)
       ? [
           "- Private swaps are live on Ethereum mainnet too: USDC, USDT, USDG, EURC and ETH, any one for another, on Uniswap v4. The price buffer there is 0.1% between two dollar stablecoins and 0.5% otherwise. PYUSD can be held and sent but not swapped: its plain Uniswap v4 pools return about $10 for $100.",
-          "- On Ethereum a swap has a smallest size. The relay pays the gas, so a swap's vault fee has to cover it, and the step that sets part of a note aside when there is one. The swap tab shows the smallest one right now. It moves with gas, so never give a number; point to the swap tab. \"Smallest swap right now\" means swap more, or wait for gas to fall. A refund never faces it.",
+          "- On Ethereum a swap has a smallest size. The relay pays the gas, so a swap's vault fee has to cover it, and the step that sets part of a note aside when there is one. The swap tab shows the smallest one right now. It moves with gas, so never give a number; point to the swap tab. \"Smallest swap right now\" means swap more, or wait for gas to fall. A refund isn't held to it, though a small one can wait for the next hour when the relay's hourly budget for small refunds is used up.",
         ]
       : []),
     ...(swapV3Live(8453) || swapV3Live(1)

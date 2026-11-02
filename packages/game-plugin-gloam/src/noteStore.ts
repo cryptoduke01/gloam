@@ -95,6 +95,12 @@ export type StoredNote = {
    * longer counted as confirming or as a payment in flight.
    */
   stale?: boolean;
+  /**
+   * A payment, claim link or cash out (and a split made for one): the spending-log
+   * entry it was counted under, so a retry replaces that entry instead of counting
+   * the same money twice.
+   */
+  spendId?: string;
   createdAt: string;
   updatedAt: string;
 };

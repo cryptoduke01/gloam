@@ -60,6 +60,7 @@ const REPLACE_REFUSED: Record<ReplaceRefusal, [number, string]> = {
 const NO_STORE = { "Cache-Control": "no-store" };
 
 const ID = /^[0-9a-f-]{36}$/;
+const NULLIFIER = /^0x[0-9a-fA-F]{64}$/;
 const LATER_OFF = "Cashing out later is off right now. Cash out now instead.";
 
 /** Without the shared store, an unknown job is not "gone": say the service is off, never "not found". */
@@ -257,9 +258,11 @@ export async function PATCH(req: Request) {
 }
 
 /**
- * Cancel a scheduled cash out that has not gone out: ?id=<job id>. The money
- * stays in the vault. Refused ({ ok: false, status: "sending" }) once a run
- * has reached the send.
+ * Cancel a scheduled cash out that has not gone out: ?id=<job id>, with the
+ * spend's nullifier in the body ({ nullifier }), which only whoever holds the
+ * note can work out. The money stays in the vault. Refused ({ ok: false,
+ * status: "sending" }) once a run has reached the send, and with a 403
+ * (not_yours) when the nullifier is not the job's.
  */
 export async function DELETE(req: Request) {
   try {
@@ -270,8 +273,14 @@ export async function DELETE(req: Request) {
     }
     const id = new URL(req.url).searchParams.get("id") ?? "";
     if (!ID.test(id)) throw new RelayError("Unknown cash out.", 400);
-    const status = await cancelJob(scheduledStore(), id, Date.now());
+    const body = (await req.json().catch(() => null)) as { nullifier?: unknown } | null;
+    const nullifier = typeof body?.nullifier === "string" && NULLIFIER.test(body.nullifier) ? body.nullifier : null;
+    if (!nullifier) throw new RelayError("Send this cash out's nullifier to cancel it. Update the app and try again.", 400, "owner_proof");
+    const status = await cancelJob(scheduledStore(), id, Date.now(), nullifier);
     if (status === null) return NextResponse.json({ ok: false, error: "Unknown cash out.", code: "not_found" }, { status: 404, headers: NO_STORE });
+    if (status === "not_yours") {
+      return NextResponse.json({ ok: false, error: "That cash out can only be cancelled from the wallet that scheduled it.", code: "not_yours" }, { status: 403, headers: NO_STORE });
+    }
     return NextResponse.json({ ok: status === "cancelled", status }, { headers: NO_STORE });
   } catch (e) {
     return fail(e);

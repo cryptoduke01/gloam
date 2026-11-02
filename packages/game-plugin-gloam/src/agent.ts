@@ -96,7 +96,7 @@ import { describeNetwork, findAsset, defaultAsset, resolveNetwork, type PluginNe
 import { agentId as envAgentId, balances, noteStorePath, noteStoreKey, NoteStore, noteView, type NewNote, type NoteOrigin, type StoredNote } from "./noteStore.js";
 import { holdsSecret, redact, registerSecret, registerUrlSecret, safeErrorMessage } from "./redact.js";
 import { isNotSent, walletCallSender, type Call, type CallSender } from "./sender.js";
-import { SpendLog, counted } from "./spendLog.js";
+import { SpendLog, counted, type SpendEntry } from "./spendLog.js";
 import { decodeProof, encodeProof, proveFunds, provePayment, verifyHolderProof, type ProofReport } from "./proofs.js";
 import { TreeSync, type SyncedVault } from "./treeSync.js";
 
@@ -321,8 +321,12 @@ export class GloamAgent {
     });
   }
 
-  /** Check a spend against the owner's limits and reserve it in the log before anything is signed. */
-  private gate(spend: Spend): { ok: true; id: string } | { ok: false; refusal: Refusal } {
+  /**
+   * Check a spend against the owner's limits and reserve it in the log before anything is signed.
+   * A retry passes the attempt it repeats (`retryOf`): it is checked like any spend, with the money
+   * that attempt reserved counted once, and that attempt's entry is marked replaced.
+   */
+  private gate(spend: Spend, retryOf?: StoredNote): { ok: true; id: string } | { ok: false; refusal: Refusal } {
     const now = Date.now();
     const loaded = this.loadPolicy();
     const symbol = this.network.assets.find((a) => a.address.toLowerCase() === spend.asset.toLowerCase())?.symbol ?? spend.asset;
@@ -347,13 +351,22 @@ export class GloamAgent {
         return { ok: false, refusal: r };
       }
       let refusal: Refusal | null = null;
+      const replaces = retryOf
+        ? {
+            id: retryOf.spendId,
+            // a note kept before the id was recorded: the latest counted entry for the same spend
+            like: (e: SpendEntry) =>
+              e.action === entry.action && e.chainId === entry.chainId && e.asset.toLowerCase() === entry.asset.toLowerCase() && e.amountWei === entry.amountWei && e.recipient === entry.recipient,
+          }
+        : undefined;
       const res = this.spendLog.reserve(
         entry,
         (c) => {
           refusal = checkSpend(loaded.policy, spend, c, now);
           return refusal?.message ?? null;
         },
-        now
+        now,
+        replaces
       );
       if (!res.ok) return { ok: false, refusal: refusal ?? { code: "refused", message: res.reason } };
       return { ok: true, id: entry.id };
@@ -525,6 +538,8 @@ export class GloamAgent {
     label?: string;
     memo?: string;
     requestKey?: string;
+    /** The spending-log entry this send is counted under, kept on the new payment note. */
+    spendId?: string;
     prepare?: (payment: StoredNote, paymentNote: NoteExport) => Promise<Partial<StoredNote> | void>;
   }): Promise<
     | { ok: true; hash: Hex; payment: StoredNote; change: StoredNote | null; paymentNote: NoteExport }
@@ -553,7 +568,15 @@ export class GloamAgent {
       if (BigInt(intent.changeNote.amountWei) > 0n) {
         change = this.keep(this.newNote(intent.changeNote, asset, "change", { label: args.label ? `change from ${args.label}` : undefined, ...from }));
       }
-      payment = this.keep(this.newNote(intent.paymentNote, asset, args.payOrigin, { label: args.label, memo: args.memo, requestKey: args.requestKey, ...from }));
+      payment = this.keep(
+        this.newNote(intent.paymentNote, asset, args.payOrigin, {
+          label: args.label,
+          memo: args.memo,
+          requestKey: args.requestKey,
+          ...(args.spendId ? { spendId: args.spendId } : {}),
+          ...from,
+        })
+      );
       if (args.prepare) {
         const patch = await args.prepare(payment, intent.paymentNote);
         if (patch) payment = this.store.update(payment.handle, patch) ?? payment;
@@ -990,11 +1013,15 @@ export class GloamAgent {
       message: "This payment already landed after its answer was lost. It was not sent again.",
     }));
     if (plan.kind === "answer") return plan.outcome;
-    // A retry spends the same note as the attempt it repeats, so only one of them can land. It was counted once already.
-    const gate = plan.kind === "same" ? null : this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: payTo });
-    if (gate && !gate.ok) return this.refused(gate.refusal);
+    // A retry spends the same note as the attempt it repeats, so only one of them can land. It is checked against
+    // the limits like a new payment, with that attempt's money counted once.
+    const gate = this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: payTo }, plan.kind === "same" ? plan.prior : undefined);
+    if (!gate.ok) {
+      if (plan.kind === "same") this.release(plan.input.handle);
+      return this.refused(gate.refusal);
+    }
     const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
-      if (gate?.ok) this.settle(gate.id, status, extra);
+      this.settle(gate.id, status, extra);
     };
     let input: StoredNote;
     if (plan.kind === "same") {
@@ -1016,6 +1043,7 @@ export class GloamAgent {
       label: args.label ?? `payment to ${shortTag(payTo)}`,
       memo: memo || undefined,
       requestKey,
+      spendId: gate.id,
       // Sealed before anything is sent: a payee key that cannot be sealed to stops the payment here.
       prepare: async (_payment, note) => {
         const pack = encodeNotePackage({
@@ -1092,7 +1120,7 @@ export class GloamAgent {
     amountWei: bigint,
     memo: string | null | undefined,
     landed: (n: StoredNote) => Outcome | Promise<Outcome>
-  ): Promise<{ kind: "new" } | { kind: "same"; input: StoredNote } | { kind: "answer"; outcome: Outcome }> {
+  ): Promise<{ kind: "new" } | { kind: "same"; input: StoredNote; prior: StoredNote } | { kind: "answer"; outcome: Outcome }> {
     const prior = () =>
       this.store
         .list()
@@ -1123,7 +1151,7 @@ export class GloamAgent {
     const input = p.spendsHandle ? this.store.get(p.spendsHandle) : undefined;
     if (p.stale && input && input.status === "unspent" && BigInt(input.amountWei) >= amountWei) {
       try {
-        return { kind: "same", input: this.store.reserveForSpend(input.handle) };
+        return { kind: "same", input: this.store.reserveForSpend(input.handle), prior: p };
       } catch {
         /* taken meanwhile: refused below */
       }
@@ -1165,10 +1193,17 @@ export class GloamAgent {
         }))
       : ({ kind: "new" } as const);
     if (plan.kind === "answer") return plan.outcome;
-    const gate = plan.kind === "same" ? null : this.gate({ action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: args.sealTo ?? CLAIM_LINK_RECIPIENT });
-    if (gate && !gate.ok) return this.refused(gate.refusal);
+    // a retry is checked like a new link, with the attempt it repeats counted once (see pay)
+    const gate = this.gate(
+      { action: "pay", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: args.sealTo ?? CLAIM_LINK_RECIPIENT },
+      plan.kind === "same" ? plan.prior : undefined
+    );
+    if (!gate.ok) {
+      if (plan.kind === "same") this.release(plan.input.handle);
+      return this.refused(gate.refusal);
+    }
     const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
-      if (gate?.ok) this.settle(gate.id, status, extra);
+      this.settle(gate.id, status, extra);
     };
     let input: StoredNote;
     if (plan.kind === "same") {
@@ -1190,6 +1225,7 @@ export class GloamAgent {
       label: args.label ?? "claim link",
       memo: memo || undefined,
       requestKey,
+      spendId: gate.id,
       // Sealed before anything is sent: an address that cannot be sealed to stops the payment here.
       prepare: args.sealTo
         ? async (payment) => {
@@ -1476,7 +1512,9 @@ export class GloamAgent {
     });
     let exact: StoredNote | null = null;
     let input: StoredNote | null = null;
-    let retrying = false;
+    /** The earlier attempt this one repeats (a retry), and how to undo what was reserved for it here. */
+    let retryOf: StoredNote | undefined;
+    let undoReserve: (() => void) | undefined;
     if (carrying().length) {
       const held = carrying().filter((x) => x.status === "pending" && x.pending === "spend").map((x) => x.handle);
       await this.refresh().catch(() => undefined);
@@ -1501,30 +1539,41 @@ export class GloamAgent {
       if (spending) {
         if (!spending.stale) return unconfirmedCashOut(spending);
         exact = spending; // sent again from the same note
-        retrying = true;
+        retryOf = spending;
       } else if (splitting) {
         const from = splitting.spendsHandle ? this.store.get(splitting.spendsHandle) : undefined;
         if (!splitting.stale || !from || from.status !== "unspent") return unconfirmedCashOut(splitting);
         try {
           input = this.store.reserveForSpend(from.handle); // split again from the same note
-          retrying = true;
+          retryOf = splitting;
+          undoReserve = () => this.release(from.handle);
         } catch {
           return unconfirmedCashOut(splitting);
         }
       } else if (ready) {
         try {
           exact = this.store.reserveForSpend(ready.handle);
-          retrying = true;
+          retryOf = ready;
+          // kept for this cash out: back to waiting for it, its tag kept
+          undoReserve = () => this.store.update(ready.handle, { status: "unspent" });
         } catch {
           /* taken meanwhile: a new cash out below */
         }
       }
     }
-    // A retry spends the note its first attempt did, and was counted once already.
-    const gate = retrying ? null : this.gate({ action: "cash_out", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: to });
-    if (gate && !gate.ok) return this.refused(gate.refusal);
+    // A retry spends the note its first attempt did, so only one of the two can land. It is checked against the
+    // limits like a new cash out, with that attempt's money counted once.
+    const gate = this.gate({ action: "cash_out", chainId: this.network.chainId, asset: asset.address, amountWei, recipient: to }, retryOf);
+    if (!gate.ok) {
+      try {
+        undoReserve?.();
+      } catch {
+        /* the note stays in the store; refresh() settles it */
+      }
+      return this.refused(gate.refusal);
+    }
     const settle = (status: "sent" | "unconfirmed" | "reverted" | "failed", extra: { hash?: string; reason?: string } = {}) => {
-      if (gate?.ok) this.settle(gate.id, status, extra);
+      this.settle(gate.id, status, extra);
     };
     let splitHash: Hex | null = null;
     if (!exact) {
@@ -1537,7 +1586,7 @@ export class GloamAgent {
         }
       }
       if (BigInt(input.amountWei) > amountWei) {
-        const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `split for a cash out to ${to}`, requestKey });
+        const split = await this.privateSend({ input, asset, amountPay: amountWei, payOrigin: "change", label: `split for a cash out to ${to}`, requestKey, spendId: gate.id });
         if (!split.ok) {
           settle(split.maybeSent ? "unconfirmed" : "failed", { hash: split.hash ?? undefined, reason: split.error });
           // Both halves of the split are kept: refresh() makes them spendable once the split is on chain. Nothing was cashed out.
@@ -1550,7 +1599,7 @@ export class GloamAgent {
         exact = input;
       }
     }
-    exact = this.store.update(exact.handle, { requestKey }) ?? exact;
+    exact = this.store.update(exact.handle, { requestKey, spendId: gate.id }) ?? exact;
     let hash: Hex | null = null;
     let sending = false;
     try {

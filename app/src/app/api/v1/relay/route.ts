@@ -36,7 +36,8 @@ export async function POST(req: Request) {
     const sender = `partner:${partner.id}`;
     await checkRateLimit(sender);
     if (body.action !== "memo") await checkChainRateLimit(net, sender);
-    const { hash, action, attribution } = await relayForPartner({ net, body, partner, keyId: key.id });
+    // the same sender holds its share of the network's cap when the relay sends (lib/relay/server)
+    const { hash, action, attribution } = await relayForPartner({ net, body, partner, keyId: key.id, sender });
     return { data: { hash, chainId: net.chainId, network: net.key, action, attribution, charged: false } };
   });
 }

@@ -40,7 +40,7 @@ import { screenAddresses } from "../src/lib/screeningServer";
 import { POST as screenPost } from "../src/app/api/screen/route";
 import { GET as policyGet } from "../src/app/api/screen/policy/route";
 import { POST as relayPost } from "../src/app/api/relay/route";
-import { RelayError, screenCall } from "../src/lib/relay/server";
+import { RelayError, relayUnshield, screenCall } from "../src/lib/relay/server";
 import { getNetwork } from "../src/lib/networks";
 
 let passed = 0;
@@ -457,6 +457,35 @@ await test("relay: a cash out pays from the vault, an exit from its router, and 
   setTip403ReaderFactory((chainId) => (chainId === TEMPO.chainId ? fake.reader : null));
   // Robinhood Chain has no receive policies to read
   await screenCall(exit(BLOCK_T, ERIN), RH);
+});
+
+await test("relay: a Tempo cash out reads the receive policy once", async () => {
+  const counted = fakeChain();
+  setTip403ReaderFactory(() => counted.reader);
+  // the node answers the relay's two reads before a send, then nothing: the cash out stops there
+  const real = globalThis.fetch;
+  const answer = (r: { id: number; method: string; params?: { data?: string; input?: string }[] }) => {
+    const data = String(r.params?.[0]?.data ?? r.params?.[0]?.input ?? "");
+    const ok = (result: string) => ({ jsonrpc: "2.0", id: r.id, result });
+    if (r.method === "eth_chainId") return ok(`0x${TEMPO.chainId.toString(16)}`);
+    if (r.method === "eth_call" && data.startsWith("0xae20bed3")) return ok(`0x${"00".repeat(32)}`); // spent: no
+    if (r.method === "eth_call") return ok(`0x${"00".repeat(31)}01`); // isKnownRoot: yes
+    return { jsonrpc: "2.0", id: r.id, error: { code: -32000, message: "selftest: no more" } };
+  };
+  globalThis.fetch = (async (_u: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify(Array.isArray(body) ? body.map(answer) : answer(body)), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      relayUnshield(TEMPO, { proof: PROOF, root: H32, nullifier: "0x" + "33".repeat(32), asset: ALLOW_T, to: ALICE, amount: "1" })
+    );
+  } finally {
+    globalThis.fetch = real;
+    setTip403ReaderFactory((chainId) => (chainId === TEMPO.chainId ? fake.reader : null));
+  }
+  assert.ok(counted.calls.includes("isKnownRoot") === false, "the fake reader is the policy registry only");
+  assert.equal(counted.calls.filter((c) => c === "validateReceivePolicy").length, 1);
 });
 
 await test("relay route on Tempo rejects a blocked recipient before any RPC call or signing", async () => {

@@ -33,6 +33,7 @@ import { useVaultStatus } from "@/lib/passkey";
 import { dropUnsentNote, saveLocalNote, updateLocalNote, type LocalNote } from "@/lib/shield";
 import { connectSolana, paySolana, useSolanaWallets, type SolanaAccount, type SolanaWallet } from "@/lib/solanaWallet";
 import { track } from "@/lib/track";
+import type { TrackEvent } from "@/lib/trackEvents";
 import { failedBeforeSend, solanaDeclined, solanaSurelyNotSent, surelyNotSent, walletDeclined, walletErrorText } from "@/lib/walletErrors";
 import { SealedField } from "@/components/ui/SealedField";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -450,7 +451,7 @@ function BridgeSheet({
 
   // Funnel events for /admin: chain and token names only, never amounts, addresses or hashes.
   const counted = useRef(new Set<string>());
-  const once = useCallback((key: string, event: string, meta: Record<string, string>) => {
+  const once = useCallback((key: string, event: TrackEvent, meta: Record<string, string>) => {
     if (counted.current.has(key)) return;
     counted.current.add(key);
     track(event, meta);

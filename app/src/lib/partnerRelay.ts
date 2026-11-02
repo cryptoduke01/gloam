@@ -46,10 +46,10 @@ export type Attribution =
   | { recorded: false; kind: ActivityKind | null; reason: "not_billable" | "duplicate" | "storage_error" };
 
 export type PartnerRelayDeps = {
-  relayTransfer: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
-  relayUnshield: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
+  relayTransfer: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
+  relayUnshield: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
   relayMemo: (net: GloamNetwork, body: Record<string, unknown>, from?: MemoPartner) => Promise<Hex>;
-  relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
+  relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
   relayVaultSwapExit: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
   /** The vault's spent(nullifier), read on the relay's own node. */
   isSpent: (net: GloamNetwork, nullifier: Hex) => Promise<boolean>;
@@ -81,10 +81,11 @@ export class UnknownRelayAction extends RelayError {
  * failed over accounting: a storage error comes back as attribution.reason.
  */
 export async function relayForPartner(
-  args: { net: GloamNetwork; body: Record<string, unknown>; partner: Partner; keyId: string },
+  /** `sender`: who holds a share of the network's cap for the send (the partner account), as the relay takes it. */
+  args: { net: GloamNetwork; body: Record<string, unknown>; partner: Partner; keyId: string; sender?: string },
   deps: PartnerRelayDeps = partnerRelayDeps
 ): Promise<{ hash: Hex; action: PartnerRelayAction; attribution: Attribution }> {
-  const { net, body, partner, keyId } = args;
+  const { net, body, partner, keyId, sender } = args;
   let hash: Hex;
   let kind: ActivityKind | null = null;
   let edge: { asset: Address; amount: bigint } | null = null;
@@ -92,11 +93,11 @@ export async function relayForPartner(
   let claimed: Hex | null = null;
   switch (body.action) {
     case "transfer":
-      hash = await deps.relayTransfer(net, body);
+      hash = await deps.relayTransfer(net, body, sender);
       kind = "private_payment";
       break;
     case "unshield":
-      hash = await deps.relayUnshield(net, body);
+      hash = await deps.relayUnshield(net, body, sender);
       kind = "cash_out";
       // Public inputs of the cash-out proof, already validated by the relay.
       edge = { asset: asAddress(body.asset, "asset"), amount: asAmount(body.amount) };
@@ -118,7 +119,7 @@ export async function relayForPartner(
       } catch {
         throw new RelayError("Could not read the vault right now. Nothing was sent. Try again shortly.", 503, "check_failed");
       }
-      hash = await deps.relayVaultSwap(net, body);
+      hash = await deps.relayVaultSwap(net, body, sender);
       if (!spent) {
         kind = "private_swap";
         // The swap's input: public inputs of its unshield proof, which the relay's dry run checked.

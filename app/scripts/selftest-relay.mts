@@ -944,7 +944,7 @@ await test("memo budgets: an account no admin approved shares one budget with ev
     }
   }
   assert.equal(accepted, 600, "the same size as the budget for messages with no key");
-  assert.equal(sum("relay-memo-key-net"), 601);
+  assert.equal(sum("relay-memo-key-net"), 600, "the one turned away was given back");
   assert.equal(sum("relay-memo-net"), 0, "none from the paid budget");
   assert.equal(sum("relay-memo-open-net"), 0, "nor the strangers' one");
   // strangers, the payer's ticket and an approved account all still go

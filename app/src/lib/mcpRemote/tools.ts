@@ -28,7 +28,7 @@ import {
 } from "@/lib/paymentRequest";
 import { LEGACY_DISCLOSURE } from "@/lib/disclosure";
 import { MAX_PROOF_TEXT, ProofInputError, verifyProofText, type ApiVerifyResult } from "@/lib/proofsServer";
-import { hitRateLimit } from "./rateLimit";
+import { SharedCountUnavailable, hitRateLimit } from "./rateLimit";
 import { findSecret, secretWarning } from "./safety";
 
 export const SITE = "https://www.gloam.trade";
@@ -554,7 +554,14 @@ function verdict(r: ApiVerifyResult): string {
 async function verifyProof(args: Args, ctx: ToolContext): Promise<CallToolResult> {
   const proof = optString(args, "proof", MAX_PROOF_TEXT)?.trim();
   if (!proof) return fail("Paste the full proof text, starting gloamfunds1:, gloampay1:, gloamroll1: or gloambal1:.");
-  const rl = await hitRateLimit(ctx.ip, "verify", VERIFY_PER_MINUTE);
+  // counted in Redis across every instance (a check can read the chain), and refused when that count can't be kept
+  let rl: Awaited<ReturnType<typeof hitRateLimit>>;
+  try {
+    rl = await hitRateLimit(ctx.ip, "verify", VERIFY_PER_MINUTE, Date.now(), 60, { failClosed: true });
+  } catch (e) {
+    if (!(e instanceof SharedCountUnavailable)) throw e;
+    return fail(`Proof checks are paused for a moment. Try again in a minute, or check it in the browser at ${ctx.origin}/verify.`);
+  }
   if (!rl.allowed) return fail(`Too many proofs checked from here in the last minute. Try again in ${rl.retryAfterSec} seconds.`);
   let r: ApiVerifyResult;
   try {
