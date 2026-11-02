@@ -10,7 +10,10 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { faucetFor } from "@/lib/faucet";
 import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, networkName, type NetworkKey } from "@/lib/networks";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
-import { swapMainnets, vaultSwapRouter } from "@/lib/vaultSwap";
+import { parseUnits, type Address } from "viem";
+import { swapMainnets, swapRouterFor, vaultSwapRouter } from "@/lib/vaultSwap";
+import { SWAP_PUBLIC_LINE, SwapQuoteError, quoteSwapServer, type SwapQuote } from "@/lib/swapQuote";
+import { knownTokens } from "@/lib/tokens";
 import { formatGwei, maxGasPriceWei } from "@/lib/relay/gasCeiling";
 import { fetchOnchainMetrics } from "@/lib/onchainMetrics";
 import {
@@ -34,6 +37,8 @@ export const LOCAL_SERVER = "npx -y @gloamtrade/mcp";
 
 /** Per IP, per minute, for the tools that do real work. */
 const VERIFY_PER_MINUTE = 20;
+/** Each swap quote is a few dozen chain reads. */
+const SWAP_QUOTE_PER_MINUTE = 20;
 const STATS_TIMEOUT_MS = 45_000;
 
 export type ToolContext = {
@@ -172,7 +177,7 @@ const BASE_TESTNET_LINE =
 const STATUS = MAINNET_ENABLED
   ? `Mainnet: ${andList(
       NETWORK_KEYS.filter((k) => !getNetwork(k).testnet).map((k) => `${getNetwork(k).label} (${getNetwork(k).chainId})`)
-    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues; the swap routers, circuits, app and relay were not part of it. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE}${ETHEREUM_LINE} Private swaps are live in the app on Robinhood Chain and Tempo mainnet (Vault > Swap): who swapped stays private, the tokens and amounts are public, and this server does not swap. The old private trade (sealed swaps) is retired.`
+    )}, with the trusted setup's final keys (13 contributors) and beta deposit limits. Deposits and private payments are free; a cash out costs 0.25%. Beta software: reviewed internally before launch, and Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues; the swap routers, circuits, app and relay were not part of it. Testnets: Tempo Moderato (42431) and Robinhood Chain testnet (46630), with development keys.${BASE_TESTNET_LINE}${ETHEREUM_LINE} Private swaps are live on ${swapMainnets()} mainnet: who swapped stays private, the tokens and amounts are public. This server quotes them (gloam_swap_quote) and never makes one: swap in the app (Vault > Swap) or with the local server (${LOCAL_SERVER}). The old private trade (sealed swaps) is retired.`
   : `Testnet only: Tempo Moderato (42431) and Robinhood Chain testnet (46630). Testnet proofs use development keys; the production ceremony is done (13 contributors) and mainnet deploys its final keys.${BASE_TESTNET_LINE} The old private trade (sealed swaps) is retired.`;
 
 const WHAT_IS_PUBLIC =
@@ -300,6 +305,23 @@ export const TOOLS: Tool[] = [
     annotations: { title: "Private payments over MPP", ...READ, openWorldHint: false },
   },
   {
+    name: "gloam_swap_quote",
+    title: "Quote a private swap",
+    description:
+      "Quote a private swap from a private Gloam balance: what you would get, the route, the vault's fee, and the first thing that would stop the swap (too thin a pool, a refund the vault could not take back, the relay's floor where gas is dear), or none. Read only: it never builds or sends a swap. A private swap hides who swapped; the tokens and amounts are public. To swap, use the Gloam app or the local server (npx -y @gloamtrade/mcp, gloam_execute_private_swap).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        network: { ...NETWORK_PROP, default: "robinhood-mainnet" },
+        from: { type: "string", description: "The asset you pay with: a symbol (USDG, ETH, USDC.e) or a token address." },
+        to: { type: "string", description: "The asset you receive: a symbol or a token address." },
+        amount: { type: "string", description: 'How much of `from` to swap, in whole units, e.g. "100" or "0.05".' },
+      },
+      required: ["from", "to", "amount"],
+    },
+    annotations: { title: "Quote a private swap", ...READ, openWorldHint: true },
+  },
+  {
     name: "gloam_connect_full_agent",
     title: "Connect the full Gloam agent",
     description:
@@ -344,6 +366,7 @@ function info(ctx: ToolContext) {
       "gloam_verify_proof: check a proof of funds, proof of payment, payroll total or exact balance",
       "gloam_plan_deposit: steps and app link for a private deposit",
       "gloam_mpp_how_to: pay or charge privately over MPP (HTTP 402), with code",
+      "gloam_swap_quote: quote a private swap (price, route, and anything that would stop it); read only",
       "gloam_connect_full_agent: install the local server that can sign and pay, with spending limits",
     ],
     status: STATUS,
@@ -603,6 +626,90 @@ function planDeposit(args: Args, ctx: ToolContext): CallToolResult {
         : "Before you sign, the app checks the depositing wallet against the OFAC sanctions list.",
     fasterWay: `Rather not click through it? Add the local server (${LOCAL_SERVER}) with a capped key and the agent can make this deposit for you with gloam_execute_shield, inside limits you set. See gloam_connect_full_agent.`,
     status: STATUS,
+  });
+}
+
+/** A swap asset on a chain by symbol or address, from the router's own list. */
+function findSwapAsset(chainId: number, assets: readonly Address[], input: string): { address: Address; symbol: string; decimals: number } | null {
+  const want = input.trim().toLowerCase();
+  for (const a of assets) {
+    const native = BigInt(a) === 0n;
+    const t = native ? null : knownTokens(chainId).find((k) => k.address.toLowerCase() === a.toLowerCase());
+    const symbol = native ? "ETH" : t?.symbol;
+    const decimals = native ? 18 : t?.decimals;
+    if (symbol == null || decimals == null) continue;
+    if (a.toLowerCase() === want || symbol.toLowerCase() === want) return { address: a, symbol, decimals };
+  }
+  return null;
+}
+
+/** "12.5" in whole units to base units, or an error in plain words. */
+function wholeUnits(input: string, decimals: number, symbol: string): bigint | string {
+  const v = input.trim();
+  if (!/^\d{1,30}(\.\d+)?$/.test(v)) return `amount must be a plain number of ${symbol}, like "100" or "0.05".`;
+  const frac = v.split(".")[1] ?? "";
+  if (frac.length > decimals) return `${symbol} has ${decimals} decimal places at most.`;
+  const units = parseUnits(v, decimals);
+  return units > 0n ? units : "amount must be above 0.";
+}
+
+function fmtUnits(raw: string | null, decimals: number): string | null {
+  if (raw == null) return null;
+  const v = BigInt(raw);
+  const base = 10n ** BigInt(decimals);
+  const frac = (v % base).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac ? `${v / base}.${frac}` : `${v / base}`;
+}
+
+async function swapQuote(args: Args, ctx: ToolContext): Promise<CallToolResult> {
+  const fallback = NETWORK_KEYS.includes("robinhood-mainnet") ? "robinhood-mainnet" : NETWORK_KEYS[0]!;
+  const network = optNetwork(args, fallback)!;
+  const n = getNetwork(network);
+  const r = n.pool ? swapRouterFor(n.chainId) : null;
+  if (!r) {
+    return fail(`Private swaps are not live on ${networkName(n)}. They are live on ${swapMainnets()} mainnet. Pick one of those networks.`);
+  }
+  const fromIn = optString(args, "from", 64);
+  const toIn = optString(args, "to", 64);
+  const amountIn = optString(args, "amount", 40);
+  if (!fromIn || !toIn || !amountIn) return fail("from, to and amount are all needed, e.g. from USDG, to ETH, amount 100.");
+  const names = () => r.assets.map((a) => findSwapAsset(n.chainId, [a], a)?.symbol).filter(Boolean).join(", ");
+  const from = findSwapAsset(n.chainId, r.assets, fromIn);
+  const to = findSwapAsset(n.chainId, r.assets, toIn);
+  if (!from || !to) return fail(`On ${networkName(n)} a private swap goes between: ${names()}.`);
+  if (from.address === to.address) return fail("Pick two different assets.");
+  const units = wholeUnits(amountIn, from.decimals, from.symbol);
+  if (typeof units === "string") return fail(units);
+  const rl = await hitRateLimit(ctx.ip, "swap-quote", SWAP_QUOTE_PER_MINUTE);
+  if (!rl.allowed) return fail(`Too many swap quotes from here in the last minute. Try again in ${rl.retryAfterSec} seconds.`);
+  let q: SwapQuote;
+  try {
+    q = await quoteSwapServer(n, { assetIn: from.address, assetOut: to.address, amountIn: units.toString() });
+  } catch (e) {
+    if (e instanceof SwapQuoteError) return fail(e.message);
+    return fail(`Could not get a price right now. Try again shortly, or see the swap tab: ${appLinks(ctx.origin).swap}`);
+  }
+  return ok({
+    network,
+    chainId: n.chainId,
+    pay: { amount: fmtUnits(q.amountIn, from.decimals), symbol: from.symbol, address: from.address },
+    receive: q.amountOut == null ? null : { amount: fmtUnits(q.amountOut, to.decimals), symbol: to.symbol, address: to.address },
+    canSwap: q.stop === null && q.amountOut !== null,
+    stop: q.stop,
+    warnings: q.warnings,
+    vaultFee: `${(q.feeBps / 100).toFixed(2)}% of what you pay, kept by the vault`,
+    priceImpactBps: q.impactBps,
+    hops: q.hops,
+    router: q.router,
+    quotedAt: new Date(q.quotedAt).toISOString(),
+    goodFor: `About ${Math.round((2 * q.ttlMs) / 1000)} seconds. A swap prices it again just before it goes.`,
+    whatIsPublic: SWAP_PUBLIC_LINE,
+    marketCheck: q.valueNote,
+    toSwap: {
+      app: appLinks(ctx.origin).swap,
+      localServer: `${LOCAL_SERVER}: gloam_swap_quote, then gloam_execute_private_swap, under the spending limits you set. See gloam_connect_full_agent.`,
+      thisServer: "Quotes only. It never builds, signs or sends a swap.",
+    },
   });
 }
 
@@ -904,6 +1011,8 @@ export async function callTool(name: string, rawArgs: unknown, ctx: ToolContext)
         return planDeposit(args, ctx);
       case "gloam_mpp_how_to":
         return mppHowTo(args);
+      case "gloam_swap_quote":
+        return await swapQuote(args, ctx);
       case "gloam_connect_full_agent":
         return connectFullAgent(args);
       default:
