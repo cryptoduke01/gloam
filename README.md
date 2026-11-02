@@ -54,7 +54,7 @@ Gloam is live on Robinhood Chain mainnet (`4663`) and Tempo mainnet (`4217`) sin
 | Assets | USDG, $GLOAM, PONS, CASHCAT; ETH, AI, ORBIO and GRIFT once each timelocked limit lands | USDC.e, pathUSD, USDT0, OUSD | USDC, EURC, USDT, ETH | USDC, USDT, USDG, PYUSD, EURC, ETH |
 | Gas | ETH | Paid in stablecoins | ETH | ETH; the relay waits while gas is above its ceiling |
 | Keys | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup | Final keys from the trusted setup |
-| Private swaps | USDG and $GLOAM on Uniswap v4 (`GloamVaultSwapV4`). Router v2 (`GloamVaultSwapV4b`, any allowlisted pool, ETH via WETH) is deployed and opens in the app once the queued deposit limits for 28 more tokens execute on 26 October | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
+| Private swaps | Router v2 (`GloamVaultSwapV4b`, any allowlisted pool on Uniswap v4, ETH via WETH): USDG, $GLOAM, stock tokens and more. Router v1 (`GloamVaultSwapV4`) stays for its refunds | USDC.e, pathUSD, USDT0, OUSD on Tempo's stablecoin exchange (`GloamVaultSwapTempo`) | Not yet | Not yet |
 
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25%. A private swap pays the same 0.25% on the amount swapped, plus a price buffer (0.5% on Robinhood Chain, 0.1% on Tempo) whose unused part goes to the treasury. Since 24 October fees go to their own treasury wallet (`0xB390…30B8`), and half of them are set to buy back $GLOAM, half of that burned and half kept.
 - **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin; ETH on Base and Ethereum 20 per deposit and 1,000 in total; $GLOAM 2,500,000 per deposit and 25,000,000 in total. Cash outs and private payments are never limited. Raising a limit or adding an asset waits a public 3-day timelock; the owner can lower limits or close deposits at once.
@@ -119,7 +119,7 @@ Base (an Ethereum L2 on the OP Stack) is the third chain. Base mainnet (`8453`) 
 - **Assets.** USDC, EURC and ETH on both; USDT (Tether bridged from Ethereum) on mainnet only, since Base Sepolia has none. On Base mainnet each stablecoin takes 50,000 per deposit and 2,500,000 in total, and ETH 20 per deposit and 1,000 in total. On Base Sepolia each stablecoin takes 500 per deposit and 25,000 in total, and ETH 0.2 per deposit and 10 in total.
 - **Base Sepolia.** Vault `0x39e28cde55cab798874746ac52cb4b5cc99a0194` (deploy block `49802958`) and payment-message board `0x01B3172d9900Cb26d57E986429b9b23854c74598`, the same addresses as on the other chains, every contract source-verified on Sourcify. Test USDC and EURC from [faucet.circle.com](https://faucet.circle.com/), test ETH from a Base Sepolia faucet. Addresses: [`contracts/deployments/base-sepolia.json`](./contracts/deployments/base-sepolia.json).
 - **Base mainnet.** Vault `0x39E28Cde55CAB798874746ac52cb4B5Cc99a0194` (deploy block `53109632`) and payment-message board `0xfCa1887e77f738ef9C5751974b3f3873d029F2DC`. Addresses: [`contracts/deployments/base-mainnet.json`](./contracts/deployments/base-mainnet.json).
-- **Later.** Private swaps on Base (the next router, on Uniswap v4) and bringing money over into Base (the Relay bridge).
+- **Later.** Private swaps on Base (the next router, on Uniswap v4). Bringing money over into Base (the Relay bridge) is live since 26 October 2026.
 
 Runbook: [`DEPLOY-BASE.md`](./DEPLOY-BASE.md).
 

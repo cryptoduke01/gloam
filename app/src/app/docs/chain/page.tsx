@@ -618,11 +618,10 @@ export default function DocsNetworksPage() {
           would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Base yet.</strong>{" "}
-          {swapV3Live(8453) ? "Bringing" : "Private swaps (next, through a router on Uniswap v4) and bringing"} money
-          over from another chain (the Relay
-          bridge). Payments, payroll, payment requests, claim links and proofs
-          work as on the other chains.{" "}
+          <strong>{swapV3Live(8453) ? "As on the other chains." : "Not on Base yet."}</strong>{" "}
+          {swapV3Live(8453) ? "" : "Private swaps, next, through a router on Uniswap v4. "}Bringing money
+          over from another chain (the Relay bridge), payments, payroll, payment
+          requests, claim links and proofs work as on the other chains.{" "}
           {BASE_MAINNET_MEMO
             ? "Base and Base Sepolia each have a payment-message board, so a payment can be found by scanning with your Gloam address."
             : "Base Sepolia has its payment-message board, so a payment can be found by scanning with your Gloam address; Base mainnet gets its own when it is deployed."}
@@ -701,10 +700,12 @@ export default function DocsNetworksPage() {
           asset would be frozen in the vault; other assets keep working.
         </li>
         <li>
-          <strong>Not on Ethereum yet.</strong>{" "}
-          {ETHEREUM_MAINNET_MEMO
-            ? "Private swaps, and bringing money over into Ethereum (Ethereum stays a chain you can bring money over from)."
-            : "Private swaps, bringing money over into Ethereum (Ethereum stays a chain you can bring money over from), and the payment-message board: until it is deployed, a payment there goes by claim link or sealed code."}
+          <strong>{swapV3Live(1) && ETHEREUM_MAINNET_MEMO ? "As on the other chains." : "Not on Ethereum yet."}</strong>{" "}
+          {[
+            ...(swapV3Live(1) ? [] : ["Private swaps."]),
+            ...(ETHEREUM_MAINNET_MEMO ? [] : ["The payment-message board: until it is deployed, a payment there goes by claim link or sealed code."]),
+          ].join(" ")}{" "}
+          Bringing money over into Ethereum works, and Ethereum stays a chain you can bring money over from.
         </li>
       </ul>
 

@@ -305,8 +305,8 @@ function baseFacts(): string | null {
   }
   lines.push(
     (swapV3Live(8453)
-      ? "- There is no Bring money over (the bridge) on Base yet; it is planned, never give a date."
-      : "- On Base there are no private swaps and no Bring money over (the bridge) yet; both are planned, never give a date.") +
+      ? "- Bring money over (the bridge) brings USDC into Base mainnet."
+      : "- Bring money over (the bridge) brings USDC into Base mainnet. There are no private swaps on Base yet; they are planned, never give a date.") +
       " Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
   );
   return lines.join("\n");
@@ -325,8 +325,8 @@ function ethereumFacts(): string | null {
     "- Gas on Ethereum costs far more than on the other chains. The Gloam relay pays it for private payments and cash outs, so while Ethereum gas is above the relay's limit (3 gwei unless the team changes it) the relay waits and the app says \"Ethereum gas is high right now; try again shortly\". A cash out for later still schedules and goes out once gas is back under the limit. Turning off Hide my wallet sends from the wallet instead, which pays its own gas and shows the wallet as the sender.",
     "- Depositing USDT on Ethereum can take two approvals in the wallet: Tether's token makes an old approval go to zero before a new one. That is expected.",
     (swapV3Live(1)
-      ? "- There is no Bring money over (the bridge) into Ethereum yet; never give a date."
-      : "- On Ethereum there are no private swaps and no Bring money over (the bridge) into it yet; never give a date.") +
+      ? "- Bring money over (the bridge) brings USDC into Ethereum mainnet."
+      : "- Bring money over (the bridge) brings USDC into Ethereum mainnet. There are no private swaps on Ethereum yet; never give a date.") +
       " Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
   ].join("\n");
 }
@@ -409,7 +409,7 @@ function mainnetLiveFacts(): string {
     "6. Turn on Recovery in Settings, or save a backup (Copy backup or Download), so a new device never loses your balance.",
     "",
     "GETTING MONEY IN ON MAINNET",
-    "- Bring money over (the bridge, powered by Relay): on Vault > Add, the Money on another chain? card, button Bring money over. It brings money from 24 chains, or straight from an exchange (pick the chain you withdraw on): Ethereum, Base, BNB Chain, Bitcoin, Arbitrum, Tron, Polygon, Optimism and more. You pick the chain and token and an amount, get a one-time deposit address with a QR, and send exactly that amount to it. It lands in your own wallet as USDG on Robinhood Chain, or as USDC on Tempo (listed in the vault as USDC.e). From 1 to 25,000 dollars at a time; the bridge fee and arrival time show first; usually a minute or two, Bitcoin waits for its confirmations. Bridging is public, like any deposit. Send only that token on that chain to that address, once.",
+    "- Bring money over (the bridge, powered by Relay): on Vault > Add, the Money on another chain? card, button Bring money over. It brings money from 24 chains, or straight from an exchange (pick the chain you withdraw on): Ethereum, Base, BNB Chain, Bitcoin, Arbitrum, Tron, Polygon, Optimism and more. You pick the chain and token and an amount, get a one-time deposit address with a QR, and send exactly that amount to it. It lands in your own wallet as USDG on Robinhood Chain, as USDC on Tempo (listed in the vault as USDC.e), or as USDC on Base or Ethereum mainnet. From 1 to 25,000 dollars at a time; the bridge fee and arrival time show first; usually a minute or two, Bitcoin waits for its confirmations. Bridging is public, like any deposit. Send only that token on that chain to that address, once.",
     "- Paying from your own wallet can go straight into the private balance in one step, when the panel offers it. Otherwise, when the money arrives the panel shows Add it privately, which you confirm yourself. Either way the deposit proof is made in your browser, which is what keeps it self-custodial.",
     "- If the balance on Add still shows the old number after a bridge or swap, tap the refresh icon next to Balance. The app also reads it again by itself a few seconds after money lands.",
     "- Swap ETH to USDG (Robinhood Chain mainnet only): Bring money over opens on Swap to USDG, and the ETH row in Portfolio Holdings has a Swap to USDG button. Type an amount or tap 25%, 50%, 75% or Max (Max keeps a little ETH back for gas). It shows the live price as you type: what you get, the rate, the least you get, the swap fee and the network fee (a few cents of ETH). Review the swap, then confirm once in your wallet. It is a public swap in your own wallet, powered by Relay, then Add it privately.",
