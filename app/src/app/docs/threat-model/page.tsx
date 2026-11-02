@@ -173,7 +173,7 @@ export default function DocsThreatModelPage() {
       {V2 ? (
         <p>
           <strong>What a router trusts.</strong>{" "}
-          No router can be upgraded, and none has a function that moves money. On {["Robinhood Chain", ...V3_NEW_CHAINS].join(" and ")} the router trades only
+          No router can be upgraded, and no owner function moves money. On {["Robinhood Chain", ...V3_NEW_CHAINS].join(" and ")} the router trades only
           on Uniswap v4 pools on its allowlist. Its owner can add one only by queueing it, usable 3 days later and public on
           chain from the start, and can take one off at once; the owner can do nothing else. A swap names its route in its
           escrow address, so no pool added later can enter it. {swapV3Live(4663) ? "A note can be ETH or WETH, and the router converts at a route's ends exactly what a pool holding the other form trades." : "ETH sits in the vault as WETH, and the router unwraps or wraps exactly what a pool holding ETH trades."}{" "}
@@ -211,11 +211,11 @@ export default function DocsThreatModelPage() {
       )}
       {swapV3Live(1) && (
         <p>
-          <strong>Ethereum&apos;s public mempool.</strong> A swap sits in the open until it lands, so a trader can take its
-          buffer, and anyone can send its first step on its own for a few cents, more easily than on a chain with a private
-          sequencer. Neither can change what lands. That first step forces a refund, so a refund here costs only the
-          vault&apos;s fee and 0.1%. The relay pays the gas, so it weighs a swap&apos;s vault fee against that gas first, and
-          reverted swaps and refunds are capped by the hour.
+          <strong>Ethereum before a swap lands.</strong> A swap can be seen before it lands, by searchers at the least,
+          so a trader can take its buffer, and anyone can send its first step on its own for a few cents. Neither can change
+          what lands. That first step forces a refund, so a refund through these routers costs only the vault&apos;s fee and
+          0.1%. The relay pays the gas, so it weighs a swap&apos;s vault fee against the swap&apos;s gas first, and what
+          reverts is capped by the hour.
         </p>
       )}
       <p>

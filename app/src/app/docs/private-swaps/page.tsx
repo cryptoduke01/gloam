@@ -230,7 +230,7 @@ export default function DocsPrivateSwapsPage() {
         <li>
           <strong>Network fee:</strong> the relay pays it.
           {V3_ETHEREUM &&
-            " On Ethereum that sets a smallest swap: a swap's vault fee has to cover its gas. The swap tab shows the smallest one right now, and it moves with gas."}
+            " On Ethereum that sets a smallest swap: a swap's vault fee has to cover its gas, and the step that sets part of a note aside when there is one. The swap tab shows the smallest one right now, and it moves with gas."}
         </li>
       </ul>
       <p>
@@ -301,7 +301,7 @@ export default function DocsPrivateSwapsPage() {
         covers the vault&apos;s cash-out fee (0.25% today), and what is left of
         it goes to the Gloam treasury. The app finishes the refund by itself,
         through the relay, the next time it syncs your balance.
-        {NEW_CHAINS.length > 0 && ` On ${and(NEW_CHAINS)} the refund is the note less the vault's fee and 0.1%.`}
+        {V3 && " Through the newest routers the refund is the note less the vault's fee and 0.1%."}
       </p>
       <p>
         If a swap simply doesn&apos;t go through, for example because the price

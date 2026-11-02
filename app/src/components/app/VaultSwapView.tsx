@@ -23,7 +23,7 @@ import { useAppAccount } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
 import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
-import { hasSwapFloor, swapFloorShown, swapGasUnits } from "@/lib/relay/swapFloor";
+import { hasSwapFloor, swapFloorGas, swapFloorShown, swapGasUnits } from "@/lib/relay/swapFloor";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
 import {
@@ -292,7 +292,7 @@ export function VaultSwapView() {
     limitIn && typeof inVaultIn === "bigint" ? { perDeposit: limitIn[0], total: limitIn[1], deposited: inVaultIn } : null;
 
   const held = payAsset ? holdings.get(payAsset.toLowerCase()) : undefined;
-  // The vault's cash-out fee: a refund on Base and Ethereum is sized from it. Until it reads, the most it can be.
+  // The vault's cash-out fee: a refund through a router with an exit is sized from it. Until it reads, the most it can be.
   const { data: feeRead } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
@@ -301,7 +301,7 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool) },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
-  const refundFee = swapChecked(network.chainId) ? (feeBps ?? 100) : undefined;
+  const refundFee = swapRouterFor(network.chainId)?.version === 3 ? (feeBps ?? 100) : undefined;
   const refundCap = roomIn ? maxSwapInForRefund(roomIn, refundFee) : null;
   // The most one swap can spend: the largest note, and no more than its refund could bring back.
   const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
@@ -546,11 +546,13 @@ export function VaultSwapView() {
   const receiveText = shownPlan && toAsset ? formatAssetAmount(shownPlan.amountOut, toAsset) : "0";
 
   // On a chain where gas is dear a swap's vault fee has to cover its gas (lib/relay/swapFloor), and the
-  // relay counts a stablecoin at face value. Each hop past the first costs more, so the floor follows the route.
+  // relay counts a stablecoin at face value. The floor follows the route, each hop past the first costing
+  // more, and setting part of a note aside first, which the relay can't see, so only this tab counts it.
   const hops = shownPlan?.route.length || 1;
+  const splits = Boolean(note && amount !== null && amount < BigInt(note.amountWei));
   const floorUsd =
     relayNow?.swapFloorUsd != null
-      ? (swapFloorShown(relayNow.swapFloorUsd) * Number(swapGasUnits(hops))) / Number(swapGasUnits(1))
+      ? (swapFloorShown(relayNow.swapFloorUsd) * Number(swapFloorGas(hops, splits))) / Number(swapGasUnits(1))
       : null;
   const paidFace =
     payAsset && typed !== null && typed > 0n
@@ -881,7 +883,8 @@ export function VaultSwapView() {
                 )}
                 {belowFloor && (
                   <p className="text-mute">
-                    The relay pays the gas, so on {network.label} a swap&apos;s vault fee has to cover it. This floor moves with gas.
+                    The relay pays the gas, so on {network.label} a swap&apos;s vault fee has to cover it
+                    {splits ? ", and the step that sets this part aside" : ""}. This floor moves with gas.
                   </p>
                 )}
                 {relayOk === false && (

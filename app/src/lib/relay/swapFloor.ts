@@ -1,10 +1,15 @@
 /**
  * The smallest private swap on a chain where gas is dear. The relay pays a swap's
  * gas, about 1.7M on Ethereum, and the vault's cash-out fee is all that surely comes
- * back. The price buffer doesn't count: on a public mempool anyone can trade in front
- * of a swap and take it. So a swap has to bring in, as vault fee, at least the gas it
+ * back. The price buffer doesn't count: a trader who sees a swap first can trade in
+ * front of it and take that. So a swap has to bring in, as vault fee, at least the gas it
  * costs, and the floor moves with the gas price. Nothing is charged for this: below the
- * floor the swap simply isn't sent. A refund and an exit never face it.
+ * floor the swap simply isn't sent. A refund and an exit under it aren't refused for
+ * that, but they spend from an hourly budget (lib/relay/server holdWaiting).
+ *
+ * The relay sees only the swap. Swapping part of a note sets that part aside first, a
+ * private send that costs about SPLIT_GAS_UNITS more, which the relay can't tell from
+ * any other. So the app counts it (swapFloorGas), and the relay's floor doesn't.
  *
  * Shared by the relay and the app: no server-only imports here.
  */
@@ -48,6 +53,14 @@ const SWAP_GAS_NEXT_HOP = 60_000n;
 
 export function swapGasUnits(hops: number): bigint {
   return SWAP_GAS_FIRST_HOP + SWAP_GAS_NEXT_HOP * BigInt(Math.max(0, hops - 1));
+}
+
+/** The private send that sets part of a note aside before a swap. */
+export const SPLIT_GAS_UNITS = 1_800_000n;
+
+/** What the swap tab weighs against the vault fee: the swap, and the split when there is one. */
+export function swapFloorGas(hops: number, split: boolean): bigint {
+  return swapGasUnits(hops) + (split ? SPLIT_GAS_UNITS : 0n);
 }
 
 /** The smallest swap, in dollars, whose vault fee covers its gas. Infinity while the vault takes no fee. */

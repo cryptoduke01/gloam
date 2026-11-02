@@ -142,7 +142,7 @@ step needs:
 | New pool after deploy | The owner queues it, live 3 days later | Pools queued on the old router do not carry over. The list is in the constructor. |
 | ETH swaps on Robinhood Chain | The vault's native ETH limit, ready 3 November at 17:08 UTC, executed | A swap into ETH reverts whole with `OverDepositLimit`, and the note stays in the vault. |
 | AI and ORBIO on the new router | Their vault limits executed | The pools are live from deploy, but a swap into either reverts whole until the vault takes it. |
-| The 0.50% cash-out fee (3 November, 15:30 UTC) | Nothing here | The router reads no fee. A quote made before it and landing after can come up short and revert whole, and the note stays. On Robinhood Chain and Tempo a refund's 1% margin covers any fee the vault allows. On Base and Ethereum a refund is sized from the fee when the swap is made, so if the fee rises past that with a proof still out, that refund can't land and the app offers the exit. The Ethereum floor halves by itself. |
+| The 0.50% cash-out fee (3 November, 15:30 UTC) | Nothing here | The router reads no fee. A quote made before it and landing after can come up short and revert whole, and the note stays. Through an older router a refund's 1% margin covers any fee the vault allows. Through a router with an exit a refund is sized from the fee when the swap is made, so if the fee rises past that with a proof still out, that refund can't land and the app offers the exit. The Ethereum floor halves by itself. |
 
 ## What happens to swaps in flight
 
@@ -227,9 +227,11 @@ Real proofs against the live vault, on a fork (`app/scripts/fork-router-v3.mts`)
 
 The relay pays. At $2,290 ETH a one-hop swap costs about **$3.89 per gwei**.
 
-**So a swap on Ethereum has a floor.** Its vault fee has to cover its gas, or the relay
-refuses it as `swap_small` before anything is sent (`lib/relay/swapFloor`). The floor moves
-with gas and with the vault's fee, read live, and the swap tab shows it.
+**So a swap on Ethereum has a floor.** Its vault fee has to cover the swap's own gas, or the
+relay refuses it as `swap_small` before anything is sent (`lib/relay/swapFloor`). The floor moves
+with gas and with the vault's fee, read live, and the swap tab shows it. Swapping part of a note
+sets that part aside first, a private send of about 1.8M gas more. The relay can't tell that
+send from any other, so its floor leaves it out. The swap tab counts it and shows the higher floor.
 
 | Gas price | One swap | Smallest swap at 0.25% | At 0.50% |
 | --- | --- | --- | --- |
@@ -246,22 +248,59 @@ Why this shape:
   as the threat model says, so the floor leaves it out.
 - **The floor is on the relay, not only the app.** Each hop past the first adds to it. The
   app asks 10% over it, so a small move in gas while a swap is proved doesn't turn it away.
-- **A refund and an exit have no floor.** Money waiting always gets to come back.
+- **A refund and an exit under the floor aren't refused for that.** They spend from an hourly
+  budget instead, below. Each one must show the vault paid its escrow.
 
 The vault's fee is 0.25% until the queued 0.50% executes, and the relay reads it each time.
 
-**Budgets on Ethereum.** A swap that reverts after it was sent pays nothing back. After 12 in an
-hour new swaps pause until the next hour (`swaps_paused`). A refund or an exit under the floor has
-a budget of 30 an hour, counted once its dry run passed, and past it it stays pending and comes
-back by itself. At or over the floor it just goes. A swap whose deadline is under a minute away is
-refused, as it could land late.
+**Refunds and exits show the vault's payment.** Everywhere, the app finds the transaction that
+paid a swap's escrow and sends its hash. The relay reads that receipt and needs
+`Unshielded(nullifier, asset, escrow, amount)` from the vault. A tab from before this sends no hash:
+it is refused, nothing moves, and the next load finishes the refund. Money already waiting at an
+escrow needs nothing else, as the app finds the transaction by its nullifier.
+
+**Gas budgets on Ethereum, per hour.** A send holds its gas limit when it goes and gives back what
+its receipt shows it didn't burn, so one nobody saw land stays counted. Receipts are watched for
+50 s there, 30 s elsewhere.
+
+| Budget | Size | What stays counted | Past it |
+| --- | --- | --- | --- |
+| Swaps | 20M gas | Gas of swaps that reverted | New swaps wait (`swaps_paused`) |
+| Refunds and exits | 30M gas | Gas of those that reverted, and of all under the floor | Those under the floor wait. At or over it they go. |
+| One note or escrow | 2 reverts | | That one waits (`note_wait`), and nobody else does |
+
+A swap whose deadline is under a minute away is refused, as it could land late.
+
+**The hourly spend cap, every chain.** The relay spends at most this much gas money in an hour,
+across every kind of send (`lib/relay/spendCap`). New sends stop at 80% of it (`spend_cap`), and
+the rest is kept for refunds and exits. Past all of it, those wait too, and an exit can still be
+sent from any wallet. A scheduled cash out that meets it tries again, like any refusal.
+
+| Chain | Cap an hour | Peak hour so far, to 2 November |
+| --- | --- | --- |
+| Ethereum | 0.05 ETH | no sends yet |
+| Base | 0.01 ETH | 15 sends, about 0.00016 ETH |
+| Robinhood Chain | 0.02 ETH | 34 sends, about 0.0012 ETH |
+| Tempo | 1, in its gas units | 1 send, about 0.0005 |
+
+A 200-person payroll fits these at ordinary gas, and on Ethereum up to about 0.1 gwei.
+`GLOAM_RELAY_HOURLY_SPEND_<chainId>` sets a chain's cap in its gas coin, or `off`. One IP may ask
+for 120 sends in 10 minutes on Ethereum, against 400 elsewhere: `GLOAM_RELAY_IP_SENDS_<chainId>`,
+or `off`. The partner API keeps its own limits.
 
 **Gas limits by kind.** The relay checks each dry run against `SEND_GAS_MOST`: 1.2M for a cash
 out, 2.6M for a swap or refund, 400k for an exit, four times that on Robinhood Chain, whose
 estimates carry a parent-chain cost. Tempo has none.
 
-**A refund on Base and Ethereum** is the note less the vault's fee and 0.1%, sized from the fee
-when the swap is made, not the 1% it is elsewhere, and a swap's deadline there is 10 minutes.
+**A refund through a router with an exit** is the note less the vault's fee and 0.1%, sized from
+the fee when the swap is made. Through an older router it is 1%. A swap's deadline on Base and
+Ethereum is 10 minutes.
+
+**How Ethereum sends go out.** The relay sends to `GLOAM_RPC_URL_1` when it is set, and DEPLOY.md
+asks for it before Ethereum is on. With none it sends to the first RPC in the chain's list that is
+up, `rpc.mevblocker.io`, not a public mempool, though searchers there see transactions for
+backruns. Its `/noreverts` endpoint isn't used. A send that went that way and got dropped would
+leave a gap in that relay account's nonce.
 
 **Before switching Ethereum on,** top up the relay. It held 0.04 ETH on 26 October. A swap at
 0.04 gwei uses about 0.00007 ETH.
