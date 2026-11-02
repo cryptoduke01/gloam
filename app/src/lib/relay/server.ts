@@ -86,6 +86,7 @@ import {
 import { SharedCountUnavailable, addRateCount, hitRateLimit, readRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
+import { TIP403_RECEIVE_UNCHECKED_MESSAGE } from "@/lib/tip403";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
 import { LockStoreDown, RECEIPT_WATCH_MS, forgetNonce, inSendLanes, inflightKey, relayStoreDown, releaseIfReverted, takeInflight, type InflightLock } from "@/lib/relay/inflight";
 import { jobKeyReady } from "@/lib/relay/jobSeal";
@@ -683,12 +684,16 @@ function payoutAsset(call: Call): Address | null {
  * Refuse a call that pays a sanctioned address. Says nothing more than that.
  * With `net` on Tempo, a cash out is also checked against the asset's TIP-403
  * issuer policy: the vault must be allowed to send it and `to` to receive it.
+ * And `to`'s own receive policy must accept whoever pays it: the vault, or for
+ * a swap's exit its router. When that policy can't be read nothing is sent
+ * (check_failed), as a payment it refuses is held by Tempo rather than reverted.
  */
 export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> {
   const recipients = publicRecipients(call);
   if (recipients.length === 0) return;
   const asset = payoutAsset(call);
-  const context = net && asset !== null ? { chainId: net.chainId, asset, flow: "cashout" as const } : undefined;
+  const sender = call.kind === "swapExit" ? call.router : net?.pool ?? undefined;
+  const context = net && asset !== null ? { chainId: net.chainId, asset, flow: "cashout" as const, sender } : undefined;
   const { allowed, message } = await screenAddresses(recipients, context);
   if (!allowed) {
     // A wallet block (sanctions or issuer) is neutral. A vault-level issuer
@@ -696,6 +701,7 @@ export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> 
     if (!message || message === SCREEN_BLOCKED_MESSAGE) {
       throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
     }
+    if (message === TIP403_RECEIVE_UNCHECKED_MESSAGE) throw new RelayError(message, 503, "check_failed");
     throw new RelayError(message, 403, "asset_policy");
   }
 }

@@ -19,8 +19,10 @@ import {
   TIP403_POOL_RECEIVE_MESSAGE,
   TIP403_POOL_SEND_MESSAGE,
   TIP403_RECEIVE_POLICY_MESSAGE,
+  TIP403_RECEIVE_UNCHECKED_MESSAGE,
   TIP403_REGISTRY,
   TEMPO_ADDRESS_REGISTRY,
+  checkReceivePolicy,
   checkTip403,
   isAuthorizedAs,
   isTip20Address,
@@ -64,6 +66,10 @@ const POOLBAN_T = "0x20c0000000000000000000000000000000000a06" as Address;
 const ALICE = "0x1111111111111111111111111111111111111111" as Address;
 const BOB = "0x2222222222222222222222222222222222222222" as Address;
 const CAROL = "0x3333333333333333333333333333333333333333" as Address;
+// Takes payments from the vault, refuses them from the swap router.
+const ERIN = "0x5555555555555555555555555555555555555555" as Address;
+// A swap router, the sender of an exit.
+const ROUTER = "0x75A22213000000000000000000000000000000aa" as Address;
 // TIP-1022 virtual address (ten 0xFD bytes at offset 4) whose master is ALICE.
 const VIRTUAL = "0xabcdef01fdfdfdfdfdfdfdfdfdfd123456789abc" as Address;
 // Lazarus Group (OFAC SDN), already covered by selftest-screening.
@@ -74,7 +80,7 @@ type Policy =
   | { type: 2; sender: bigint; recipient: bigint; mint: bigint };
 
 /** An in-memory TIP-403 registry + TIP-20 tokens, answering readContract like the chain. */
-function fakeChain(opts: { preT2?: boolean; down?: boolean } = {}) {
+function fakeChain(opts: { preT2?: boolean; down?: boolean; receiveDown?: boolean; resolveDown?: boolean } = {}) {
   const lc = (a: string) => a.toLowerCase();
   const policies = new Map<bigint, Policy>([
     // 2: allowlist with Alice, Bob and the pool.
@@ -98,6 +104,7 @@ function fakeChain(opts: { preT2?: boolean; down?: boolean } = {}) {
   ]);
   // Bob refuses payments from the pool (TIP-1028 receive policy).
   const refusesPool = new Set([lc(BOB)]);
+  const refusesRouter = new Set([lc(ERIN)]);
   const calls: string[] = [];
 
   const simple = (id: bigint, user: string): boolean => {
@@ -140,12 +147,15 @@ function fakeChain(opts: { preT2?: boolean; down?: boolean } = {}) {
             if (p && p.type === 2) return simple(p.sender, args[1] as string) && simple(p.recipient, args[1] as string);
             return simple(id, args[1] as string);
           }
-          case "validateReceivePolicy":
-            if (opts.preT2) throw new Error("execution reverted");
-            return [!(lc(args[1] as string) === lc(POOL) && refusesPool.has(lc(args[2] as string))), 2];
+          case "validateReceivePolicy": {
+            if (opts.preT2 || opts.receiveDown) throw new Error("execution reverted");
+            const [from, to] = [lc(args[1] as string), lc(args[2] as string)];
+            return [!((from === lc(POOL) && refusesPool.has(to)) || (from === lc(ROUTER) && refusesRouter.has(to))), 2];
+          }
         }
       }
       if (lc(call.address) === lc(TEMPO_ADDRESS_REGISTRY) && call.functionName === "resolveRecipient") {
+        if (opts.resolveDown) throw new Error("fetch failed");
         return lc(args[0] as string) === lc(VIRTUAL) ? ALICE : args[0];
       }
       const t = tokens.get(lc(call.address));
@@ -268,10 +278,28 @@ await test("cash out: recipient receive policy (TIP-1028) and virtual addresses"
   assert.deepEqual(await checkTip403({ reader, status: allow, addresses: [BOB], flow: "deposit" }), { allowed: true });
   // A virtual address is judged as its master (Alice, allowlisted).
   assert.deepEqual(await checkTip403({ reader, status: allow, addresses: [VIRTUAL], flow: "cashout" }), { allowed: true });
-  // Pre-TIP-1028 chains: no receive policies, so nothing is held.
+  // A receive policy that doesn't answer is never taken as yes: a payment it refuses is held, not reverted.
   const old = fakeChain({ preT2: true });
   const oldStatus = await readAssetStatus(old.reader, 42431, ALLOW_T, POOL);
-  assert.deepEqual(await checkTip403({ reader: old.reader, status: oldStatus, addresses: [BOB], flow: "cashout" }), { allowed: true });
+  await assert.rejects(checkTip403({ reader: old.reader, status: oldStatus, addresses: [ALICE], flow: "cashout" }));
+  // the issuer's checks alone still answer
+  assert.deepEqual(await checkTip403({ reader: old.reader, status: oldStatus, addresses: [ALICE], flow: "cashout", receive: false }), { allowed: true });
+  // nor is a virtual address whose wallet can't be looked up
+  const lost = fakeChain({ resolveDown: true });
+  await assert.rejects(checkReceivePolicy(lost.reader, ALLOW_T, POOL, [VIRTUAL]));
+  assert.deepEqual(await checkReceivePolicy(lost.reader, ALLOW_T, POOL, [ALICE]), { allowed: true });
+});
+
+await test("cash out: the receive policy is checked against whoever pays, the vault or a swap router", async () => {
+  const { reader } = fakeChain();
+  const allow = await readAssetStatus(reader, 42431, BLOCK_T, POOL);
+  const refused = { allowed: false, reason: "receive", message: TIP403_RECEIVE_POLICY_MESSAGE };
+  // Erin takes payments from the vault, not from the router; Bob the other way round.
+  assert.deepEqual(await checkTip403({ reader, status: allow, addresses: [ERIN], flow: "cashout" }), { allowed: true });
+  assert.deepEqual(await checkTip403({ reader, status: allow, addresses: [ERIN], flow: "cashout", sender: ROUTER }), refused);
+  assert.deepEqual(await checkTip403({ reader, status: allow, addresses: [BOB], flow: "cashout", sender: ROUTER }), { allowed: true });
+  assert.deepEqual(await checkReceivePolicy(reader, BLOCK_T, ROUTER, [ERIN]), refused);
+  assert.deepEqual(await checkReceivePolicy(reader, BLOCK_T, POOL, [BOB]), refused);
 });
 
 // ---------------------------------------------------------------- server wiring
@@ -303,13 +331,37 @@ await test("server screen: TIP-403 runs on Tempo with a TIP-20 asset only", asyn
   assert.deepEqual(await screenAddresses([LISTED], { ...tempo, flow: "deposit" }), { allowed: false });
 });
 
-await test("server screen fails open when the chain does not answer", async () => {
+await test("server screen: the issuer policy fails open when the chain does not answer, a cash out's receive policy fails closed", async () => {
+  const unchecked = { allowed: false, reason: "unchecked", message: TIP403_RECEIVE_UNCHECKED_MESSAGE };
   const down = fakeChain({ down: true });
   setTip403ReaderFactory(() => down.reader);
   assert.deepEqual(await screenTip403([CAROL], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "deposit" }), { allowed: true });
   assert.deepEqual(await screenAddresses([CAROL], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "deposit" }), { allowed: true });
   await assert.rejects(tip403AssetStatus(TEMPO.chainId, ALLOW_T));
+  assert.deepEqual(await screenTip403([ALICE], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "cashout" }), unchecked);
+  assert.deepEqual(await screenAddresses([ALICE], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "cashout" }), {
+    allowed: false,
+    message: TIP403_RECEIVE_UNCHECKED_MESSAGE,
+    scope: "asset",
+  });
+  // only the receive policy down: still refused
+  const receiveDown = fakeChain({ receiveDown: true });
+  setTip403ReaderFactory(() => receiveDown.reader);
+  assert.deepEqual(await screenTip403([ALICE], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "cashout" }), unchecked);
+  assert.deepEqual(await screenTip403([ALICE], { chainId: TEMPO.chainId, asset: ALLOW_T, flow: "deposit" }), { allowed: true });
+  // and a wallet the issuer blocks still gets the neutral line first
+  assert.deepEqual(await screenTip403([CAROL], { chainId: TEMPO.chainId, asset: BLOCK_T, flow: "cashout" }), {
+    allowed: false,
+    reason: "wallet",
+    message: SCREEN_BLOCKED_MESSAGE,
+  });
   setTip403ReaderFactory((chainId) => (chainId === TEMPO.chainId ? fake.reader : null));
+  assert.deepEqual(await screenTip403([ERIN], { chainId: TEMPO.chainId, asset: BLOCK_T, flow: "cashout", sender: ROUTER }), {
+    allowed: false,
+    reason: "receive",
+    message: TIP403_RECEIVE_POLICY_MESSAGE,
+  });
+  assert.deepEqual(await screenTip403([ERIN], { chainId: TEMPO.chainId, asset: BLOCK_T, flow: "cashout" }), { allowed: true });
 });
 
 function req(url: string, body: unknown, ip = "198.51.100.9") {
@@ -378,6 +430,33 @@ await test("relay: cash-out recipient and vault checked against the issuer polic
   await screenCall(unshield(BLOCK_T, CAROL));
   // Robinhood Chain is untouched by TIP-403.
   await screenCall(unshield(BLOCK_T, CAROL), RH);
+});
+
+await test("relay: a cash out pays from the vault, an exit from its router, and an unread receive policy sends nothing", async () => {
+  const unshield = (asset: Address, to: Address) =>
+    ({ kind: "unshield", args: [PROOF, H32, H32, asset, to, 1n] }) as never;
+  const exit = (asset: Address, to: Address) =>
+    ({ kind: "swapExit", router: ROUTER, args: [asset, {}, to, "0x"] }) as never;
+  const held = (e: RelayError) => e.message === TIP403_RECEIVE_POLICY_MESSAGE && e.code === "asset_policy" && e.status === 403;
+  // Erin refuses the router only, Bob the vault only
+  await screenCall(unshield(BLOCK_T, ERIN), TEMPO);
+  await assert.rejects(screenCall(exit(BLOCK_T, ERIN), TEMPO), held);
+  await assert.rejects(screenCall(unshield(BLOCK_T, BOB), TEMPO), held);
+  await screenCall(exit(BLOCK_T, BOB), TEMPO);
+  // the receive policy doesn't answer: nothing goes, and it can be tried again
+  for (const opts of [{ receiveDown: true }, { down: true }]) {
+    const quiet = fakeChain(opts);
+    setTip403ReaderFactory(() => quiet.reader);
+    for (const call of [unshield(ALLOW_T, ALICE), exit(ALLOW_T, ALICE)]) {
+      await assert.rejects(
+        screenCall(call, TEMPO),
+        (e: RelayError) => e.message === TIP403_RECEIVE_UNCHECKED_MESSAGE && e.code === "check_failed" && e.status === 503
+      );
+    }
+  }
+  setTip403ReaderFactory((chainId) => (chainId === TEMPO.chainId ? fake.reader : null));
+  // Robinhood Chain has no receive policies to read
+  await screenCall(exit(BLOCK_T, ERIN), RH);
 });
 
 await test("relay route on Tempo rejects a blocked recipient before any RPC call or signing", async () => {

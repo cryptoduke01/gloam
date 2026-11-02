@@ -351,8 +351,9 @@ export default function DocsPrivacyPage() {
         <li>
           <strong>Cash out:</strong> the vault must be allowed to send it, and
           the destination must be allowed to receive it. If the destination&apos;s
-          own Tempo receive policy would refuse the vault, Gloam says so instead
-          of letting the payment be held.
+          own Tempo receive policy would refuse the payment, Gloam says so instead
+          of letting it be held. If that policy can&apos;t be read, the relay sends
+          nothing and asks you to try again.
         </li>
         <li>
           <strong>When:</strong> next to sanctions screening, in the app before
