@@ -102,6 +102,8 @@ const anvil = spawn(`${homedir()}/.foundry/bin/anvil`, ["--fork-url", cfg.fork, 
 process.on("exit", () => anvil.kill("SIGTERM"));
 const url = `http://127.0.0.1:${cfg.port}`;
 const client = createPublicClient({ transport: http(url, { timeout: 180_000 }) }) as PublicClient;
+/** The same client, typed for the SDK (it may resolve another copy of viem than the app). */
+const sc = client as unknown as Parameters<typeof sdk.readSwapOutcome>[0];
 const raw = (method: string, params: unknown[] = []) => client.request({ method: method as never, params: params as never }) as Promise<unknown>;
 for (let i = 0; ; i++) {
   try {
@@ -208,21 +210,21 @@ async function runCase(c: Case) {
   const { note, path } = await realNote(c.assetIn, c.amountIn);
 
   if (c.kind === "floor") {
-    const q = await sdk.quoteSwap({ client, chainId: cfg.id, assetIn: c.assetIn, assetOut: c.assetOut, amountIn: c.amountIn });
+    const q = await sdk.quoteSwap({ client: sc, chainId: cfg.id, assetIn: c.assetIn, assetOut: c.assetOut, amountIn: c.amountIn });
     console.log(`  the SDK's quote: stop ${q.stop?.code}, floor $${q.floorUsd?.toFixed(2)}: ${check(q.stop?.code === "swap_small", "a swap under the floor is stopped in the quote")}`);
     const before = proofs;
-    const got = await code(sdk.buildSwapIntent({ client, chainId: cfg.id, note, path, assetOut: c.assetOut, shieldProver, unshieldProver }));
+    const got = await code(sdk.buildSwapIntent({ client: sc, chainId: cfg.id, note, path, assetOut: c.assetOut, shieldProver, unshieldProver }));
     console.log(`  the SDK's build: ${check(got === "swap_small", "the build is refused the same way")} (${got}), proofs made: ${check(proofs === before, "no proof was made")} (${proofs - before})`);
     // the relay agrees: from a wallet the SDK would build it, and the relay would refuse that body under its floor
-    const walletIntent = await sdk.buildSwapIntent({ client, chainId: cfg.id, note, path, assetOut: c.assetOut, shieldProver, unshieldProver, via: "wallet" });
+    const walletIntent = await sdk.buildSwapIntent({ client: sc, chainId: cfg.id, note, path, assetOut: c.assetOut, shieldProver, unshieldProver, via: "wallet" });
     const relayed = await code(relay.relayVaultSwap(net, wire(walletIntent.relay)));
     console.log(`  the relay, sent it anyway: ${check(relayed === "swap_small", "the relay refuses it under its floor")} (${relayed})`);
     return;
   }
 
-  const q = await sdk.quoteSwap({ client, chainId: cfg.id, assetIn: c.assetIn, assetOut: c.assetOut, amountIn: c.amountIn });
+  const q = await sdk.quoteSwap({ client: sc, chainId: cfg.id, assetIn: c.assetIn, assetOut: c.assetOut, amountIn: c.amountIn });
   console.log(`  quote: ${fmt(q.plan.amountOut, c.assetOut)} for ${fmt(c.amountIn, c.assetIn)}, ${q.plan.route.length} hop(s), fee ${q.feeBps} bps, stop ${q.stop?.code ?? "none"}: ${check(q.stop === null, "the quote has no stop")}`);
-  const intent = await sdk.buildSwapIntent({ client, chainId: cfg.id, note, path, assetOut: c.assetOut, quote: q, shieldProver, unshieldProver });
+  const intent = await sdk.buildSwapIntent({ client: sc, chainId: cfg.id, note, path, assetOut: c.assetOut, quote: q, shieldProver, unshieldProver });
   // stored and read back, as an integrator would
   const rec = sdk.parseSwapRecovery(JSON.stringify(sdk.swapJson(intent.recovery)));
   const v3 = intent.plan.routerVersion === 3;
@@ -232,20 +234,20 @@ async function runCase(c: Case) {
   if (c.kind === "relay" || c.kind === "partner") {
     let hash: Hex;
     if (c.kind === "partner") {
-      let counted: { kind: string; edge: unknown } | null = null;
+      const counted: { kind?: string } = {};
       const partner = { id: "ptr_forktest", owner: OWNER, name: "fork", website: null, payout: {}, fees: { privatePaymentCents: 0, cashoutBps: 0, depositBps: 0 }, createdAt: 0, updatedAt: 0 };
       const out = await relayForPartner(
         { net, body: wire(intent.relay), partner, keyId: "key_fork" },
-        { ...partnerRelayDeps, record: async (a) => ((counted = { kind: a.kind, edge: a.edge }), { recorded: true, record: { id: "act_fork", kind: a.kind } as never }) }
+        { ...partnerRelayDeps, record: async (a) => ((counted.kind = a.kind), { recorded: true, record: { id: "act_fork", kind: a.kind } as never }) }
       );
       hash = out.hash;
-      console.log(`  partner relay: counted as ${counted?.kind}: ${check(counted?.kind === "private_swap" && out.attribution.recorded, "the swap is counted to the partner")}`);
+      console.log(`  partner relay: counted as ${counted.kind}: ${check(counted.kind === "private_swap" && out.attribution.recorded, "the swap is counted to the partner")}`);
     } else {
       hash = await relay.relayVaultSwap(net, wire(intent.relay));
     }
     const r = await client.waitForTransactionReceipt({ hash });
     console.log(`  sent: ${check(r.status === "success", "the swap lands")}, gas ${r.gasUsed}`);
-    const o = await sdk.readSwapOutcome(client, rec);
+    const o = await sdk.readSwapOutcome(sc, rec);
     console.log(`  outcome: ${o.state}: ${check(o.state === "swapped", "the SDK reads it as swapped")}`);
     const outAmount = BigInt(rec.out.amountWei);
     check(outAmount === intent.plan.amountOut, "the new note is exactly what was proved");
@@ -262,18 +264,18 @@ async function runCase(c: Case) {
   const fee = BigInt(await readVault<number>("withdrawFeeBps"));
   const arrived = c.amountIn - ((c.amountIn / 10_000n) * fee + ((c.amountIn % 10_000n) * fee) / 10_000n);
   console.log(`  unshield sent alone: ${check(alone.status === "success", "unshield alone")}, waiting ${fmt(await balance(c.assetIn, rec.escrow), c.assetIn)}: ${check((await balance(c.assetIn, rec.escrow)) === arrived, "escrow holds what arrived")}`);
-  const o1 = await sdk.readSwapOutcome(client, rec);
+  const o1 = await sdk.readSwapOutcome(sc, rec);
   console.log(`  outcome: ${o1.state}: ${check(o1.state === "refund_ready", "the SDK reads it as refund ready")}`);
   // the swap itself can't go now
   const swapAgain = await code(relay.relayVaultSwap(net, wire(intent.relay)));
   console.log(`  the swap after that: ${check(swapAgain !== "sent", "the swap call without the payment named is refused")} (${swapAgain})`);
 
   if (c.kind === "refund") {
-    const refund = await sdk.buildSwapRefund(rec, { client, shieldProver });
+    const refund = await sdk.buildSwapRefund(rec, { client: sc, shieldProver });
     check(refund.relay.body.unshieldTx === alone.transactionHash, "the SDK finds the vault's payment to the escrow");
     const hash = await relay.relayVaultSwap(net, wire(refund.relay));
     const r = await client.waitForTransactionReceipt({ hash });
-    const o2 = await sdk.readSwapOutcome(client, rec);
+    const o2 = await sdk.readSwapOutcome(sc, rec);
     console.log(`  the SDK's refund through the relay: ${check(r.status === "success", "the refund lands")}, outcome ${o2.state}: ${check(o2.state === "refunded", "refunded")}, gas ${r.gasUsed}`);
     console.log(`  escrow empty: ${check((await balance(c.assetIn, rec.escrow)) === 0n, "escrow ends empty")}`);
     return;
@@ -283,15 +285,15 @@ async function runCase(c: Case) {
   const dep = await readVault<bigint>("deposited", [c.assetIn]);
   const [per] = await readVault<readonly [bigint, bigint]>("depositLimit", [c.assetIn]);
   await tx(OWNER, VAULT, encodeFunctionData({ abi: vaultAbi, functionName: "lowerDepositLimit", args: [c.assetIn, per, dep] }));
-  const noRefund = await code(sdk.buildSwapRefund(rec, { client, shieldProver }));
+  const noRefund = await code(sdk.buildSwapRefund(rec, { client: sc, shieldProver }));
   console.log(`  the SDK's refund with the vault full: ${check(noRefund === "refund_wont_fit", "the refund is refused before any proof")} (${noRefund})`);
-  const exit = await sdk.buildSwapExit(rec, { client, to: EXIT_TO });
+  const exit = await sdk.buildSwapExit(rec, { client: sc, to: EXIT_TO });
   const before = await balance(c.assetIn, EXIT_TO);
   const hash = await relay.relayVaultSwapExit(net, wire(exit.relay));
   const r = await client.waitForTransactionReceipt({ hash });
   const paid = (await balance(c.assetIn, EXIT_TO)) - before;
   console.log(`  the SDK's exit through the relay: ${check(r.status === "success", "the exit lands")}, paid ${fmt(paid, c.assetIn)}: ${check(paid === arrived, "the exit pays all that arrived")}, gas ${r.gasUsed}`);
-  const o3 = await sdk.readSwapOutcome(client, rec);
+  const o3 = await sdk.readSwapOutcome(sc, rec);
   console.log(`  outcome: ${o3.state}: ${check(o3.state === "closed", "closed once it left by its exit")}`);
   await tx(OWNER, VAULT, encodeFunctionData({ abi: vaultAbi, functionName: "lowerDepositLimit", args: [c.assetIn, per, dep] })).catch(() => {});
 }
@@ -324,7 +326,7 @@ if (cfg.deployRouter) {
   console.log(`router v3 through the factory: ${check(deploy.status === "success" && deployed, "router deployed at the pinned address")} at ${router}`);
   if (!deployed) throw new Error("no router at the pinned address: was the last `forge build` a plain one?");
   // before the switch: the SDK refuses this chain cleanly
-  const off = await code(sdk.quoteSwap({ client, chainId: cfg.id, assetIn: cfg.cases[0]!.assetIn, assetOut: cfg.cases[0]!.assetOut, amountIn: 1_000_000n }));
+  const off = await code(sdk.quoteSwap({ client: sc, chainId: cfg.id, assetIn: cfg.cases[0]!.assetIn, assetOut: cfg.cases[0]!.assetOut, amountIn: 1_000_000n }));
   console.log(`the SDK with the switch off: ${check(off === "no_swap", "refused while the switch is off")} (${off})`);
   // the switch, on this fork only: the SDK's and the app's (the relay's)
   sdk.VAULT_SWAP_V3_LIVE[cfg.id] = router;

@@ -37,7 +37,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 const CHAINS = [4663, 4217, 8453, 1, 46630, 42431, 84532, 11155111];
 const SWAP_CHAINS = [4663, 4217, 8453, 1];
 const NATIVE = "0x0000000000000000000000000000000000000000" as Address;
-const plain = <T>(v: T) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? `${x}n` : x)));
+const plain = <T,>(v: T) => JSON.parse(JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? `${x}n` : x)));
 
 /** Turns v3 on (or off) in both, the way the fork tests do it in the app. */
 function setV3(chainId: number, on: boolean) {
@@ -263,7 +263,7 @@ function fakeChain(rate: (amount: bigint, hops: number) => bigint): PublicClient
 async function samePlan(chainId: number, assetIn: Address, assetOut: Address, amountIn: bigint, rate: (a: bigint, hops: number) => bigint) {
   const ask = { assetIn, assetOut, amountIn, feeBps: 25 };
   const a = await app.planVaultSwap(fakeChain(rate), chainId, ask).then((p) => ({ p }), (e: Error) => ({ e: `${e.name}:${e.message}:${(e as app.SwapQuoteRefused).fitsIn ?? ""}` }));
-  const s = await sdk.planVaultSwap(fakeChain(rate), chainId, ask).then((p) => ({ p }), (e: Error) => ({ e: `${e.name}:${e.message}:${(e as sdk.SwapQuoteRefused).fitsIn ?? ""}` }));
+  const s = await sdk.planVaultSwap(fakeChain(rate) as unknown as Parameters<typeof sdk.planVaultSwap>[0], chainId, ask).then((p) => ({ p }), (e: Error) => ({ e: `${e.name}:${e.message}:${(e as sdk.SwapQuoteRefused).fitsIn ?? ""}` }));
   assert.deepEqual(plain(s), plain(a), `plan ${assetIn} -> ${assetOut} (${amountIn}) on ${chainId}`);
   outcomes["p" in a ? "priced" : "refused"]++;
   return a;
