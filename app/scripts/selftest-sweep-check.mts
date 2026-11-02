@@ -10,6 +10,8 @@
  *  - known smart-wallet delegates are not flagged
  *  - zero-value transfers (free for anyone) can't fake a sweep or hide a real one
  *  - a node that fails every read: clean, never a blocked cash out
+ *  - a Gloam wallet's own sponsored deposit (Turnkey's paymaster sends it) is
+ *    not a sweep; someone else's transfer from a delegated wallet still is
  *
  * Run from app/:  ../mcp/node_modules/.bin/tsx scripts/selftest-sweep-check.mts
  */
@@ -109,5 +111,41 @@ const down: SweepReader = {
 };
 assert.deepEqual(await checkSweep(down, RH, "0x058dC9a70EE9fB5678eD500F7FE69AF974C884b6", USDG), SWEEP_CLEAN, "fails open");
 n += 1;
+
+// A Gloam wallet's own sponsored deposit soon after money arrived: Turnkey's paymaster
+// sends it, so its sender isn't the wallet. With the wallet on Turnkey's delegate and the
+// transaction going to the wallet itself or through Turnkey's gas station, it is the
+// wallet's own act (the delegate runs nothing without the wallet's signature), not a sweep.
+{
+  const WALLET = "0x00000000000000000000000000000000000000a1" as Address;
+  const PAYMASTER = "0x00000000000000000000000000000000000000fe" as Address;
+  const STATION = "0x5aF5194B4b0909eB978e3Cf1e25333852277f07D" as Address;
+  const ARRIVAL = `0x${"aa".repeat(32)}` as Hex;
+  const OUT = `0x${"dd".repeat(32)}` as Hex;
+  const reader = (code: Hex, to: Address | null): SweepReader => ({
+    getCode: async () => code,
+    getBlockNumber: async () => BigInt(1_000),
+    getLogs: async ({ args }) =>
+      args.to
+        ? [{ blockNumber: BigInt(900), transactionHash: ARRIVAL, args: { value: BigInt(50_000_000) } }]
+        : [{ blockNumber: BigInt(915), transactionHash: OUT, args: { value: BigInt(50_000_000) } }],
+    getTransaction: async ({ hash }) => (hash === OUT ? { from: PAYMASTER, to } : { from: "0x00000000000000000000000000000000000000c3" as Address, to: WALLET }),
+  });
+  const turnkeyDelegate = "0xef0100955d84139e7621bc571b117d8eb5d28a4a222c6f" as Hex;
+  const unknownDelegate = "0xef01006d35c9c506732974219409a6e2e5fe72b082a622" as Hex;
+  const check = (code: Hex, to: Address | null) => checkSweep(reader(code, to), 8453, WALLET, USDG);
+
+  assert.deepEqual(await check(turnkeyDelegate, WALLET), SWEEP_CLEAN, "sent to the wallet itself, on a known delegate: its own deposit");
+  assert.deepEqual(await check(turnkeyDelegate, STATION), SWEEP_CLEAN, "through Turnkey's gas station, on Turnkey's delegate: its own deposit");
+  // still a sweep: someone else's transaction to a token or any other contract
+  assert.equal((await check(turnkeyDelegate, USDG))?.swept?.evidenceTx, OUT, "a transferFrom by another account is still a sweep");
+  assert.equal((await check("0x" as Hex, WALLET))?.swept?.evidenceTx, OUT, "a wallet with no delegate: still a sweep");
+  const unknown = await check(unknownDelegate, WALLET);
+  assert.equal(unknown.swept?.evidenceTx, OUT, "an unknown delegate is no excuse");
+  assert.ok(unknown.delegated, "and it is flagged as delegated");
+  // the gas station counts only for a wallet on Turnkey's delegate, not another known one
+  assert.equal((await check("0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b" as Hex, STATION))?.swept?.evidenceTx, OUT);
+  n += 6;
+}
 
 console.log(`sweep check: ${n} passed`);

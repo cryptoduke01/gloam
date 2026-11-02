@@ -81,8 +81,30 @@ export type SweepReader = {
     fromBlock: bigint;
     toBlock: bigint;
   }): Promise<{ blockNumber: bigint | null; transactionHash: Hex | null; args?: { value?: bigint } }[]>;
-  getTransaction(args: { hash: Hex }): Promise<{ from: Address }>;
+  getTransaction(args: { hash: Hex }): Promise<{ from: Address; to?: Address | null }>;
 };
+
+/**
+ * Turnkey's gas station: a sponsored send from a wallet delegating to Turnkey's
+ * TKGasDelegate goes out through it, carrying the wallet's own signature (the
+ * delegate runs nothing without one), so its sender is Turnkey's paymaster.
+ */
+const TURNKEY_GAS_STATION = "0x5af5194b4b0909eb978e3cf1e25333852277f07d";
+const TURNKEY_GAS_DELEGATE = "0x955d84139e7621bc571b117d8eb5d28a4a222c6f";
+
+/**
+ * An outgoing transfer another account sent that is still the wallet's own act:
+ * the wallet delegates to a known smart-account contract, and the transaction
+ * went to the wallet itself (a relayer calling its delegate), or through
+ * Turnkey's gas station for a wallet on Turnkey's delegate. A Gloam wallet's own
+ * sponsored deposit is one of these, not a sweep.
+ */
+function ownDelegatedSend(address: Address, delegate: Address | null, tx: { to?: Address | null }): boolean {
+  if (!delegate || !KNOWN_DELEGATES.has(delegate.toLowerCase()) || !tx.to) return false;
+  const to = tx.to.toLowerCase();
+  if (to === address.toLowerCase()) return true;
+  return to === TURNKEY_GAS_STATION && delegate.toLowerCase() === TURNKEY_GAS_DELEGATE;
+}
 
 /** A Transfer log that moved money (zero-value ones are free for anyone to emit). */
 function movedMoney(l: { args?: { value?: bigint } }): boolean {
@@ -95,14 +117,18 @@ export function delegateOf(code: Hex | undefined): Address | null {
   return `0x${code.slice(8)}` as Address;
 }
 
-async function delegatedCheck(client: SweepReader, address: Address): Promise<SweepCheck["delegated"]> {
+/** The address's EIP-7702 delegate, or null (none, or the read failed). */
+async function readDelegate(client: SweepReader, address: Address): Promise<Address | null> {
   try {
-    const delegate = delegateOf(await client.getCode({ address }));
-    if (!delegate || KNOWN_DELEGATES.has(delegate.toLowerCase())) return null;
-    return { delegate };
+    return delegateOf(await client.getCode({ address }));
   } catch {
     return null;
   }
+}
+
+function delegatedCheck(delegate: Address | null): SweepCheck["delegated"] {
+  if (!delegate || KNOWN_DELEGATES.has(delegate.toLowerCase())) return null;
+  return { delegate };
 }
 
 async function sweptCheck(
@@ -110,6 +136,7 @@ async function sweptCheck(
   chainId: number,
   address: Address,
   token: Address,
+  delegate: Address | null,
   head?: bigint
 ): Promise<SweepCheck["swept"]> {
   try {
@@ -144,7 +171,9 @@ async function sweptCheck(
         // the same transaction both paid in and out: a contract passing it on, not a sweep
         if (!l.transactionHash || l.transactionHash === arrival.transactionHash || !movedMoney(l)) continue;
         const tx = await client.getTransaction({ hash: l.transactionHash });
-        if (tx.from.toLowerCase() !== address.toLowerCase()) return { evidenceTx: l.transactionHash };
+        if (tx.from.toLowerCase() !== address.toLowerCase() && !ownDelegatedSend(address, delegate, tx)) {
+          return { evidenceTx: l.transactionHash };
+        }
       }
     }
     return null;
@@ -165,9 +194,7 @@ export async function checkSweep(
   token: Address | null,
   opts: { head?: bigint } = {}
 ): Promise<SweepCheck> {
-  const [delegated, swept] = await Promise.all([
-    delegatedCheck(client, address),
-    token ? sweptCheck(client, chainId, address, token, opts.head) : Promise.resolve(null),
-  ]);
-  return { delegated, swept };
+  const delegate = await readDelegate(client, address);
+  const swept = token ? await sweptCheck(client, chainId, address, token, delegate, opts.head) : null;
+  return { delegated: delegatedCheck(delegate), swept };
 }
