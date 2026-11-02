@@ -172,7 +172,8 @@ export default function DocsPartnersPage() {
         <code>Retry-After</code>. The relay also keeps its own per-sender and
         per-network caps, and an hourly limit on the gas it pays, of which one
         sender may use a share. Your partner account is the sender, so all your
-        keys count together.
+        keys count together. Until Gloam approves your account, the IP you call
+        from counts as a sender too.
       </p>
       <p>
         Payment messages sent with a key share a small hourly budget on each
