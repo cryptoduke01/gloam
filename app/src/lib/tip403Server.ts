@@ -46,6 +46,7 @@ function readerFor(net: GloamNetwork): Tip403Reader | null {
   if (hit) return hit;
   const client = createPublicClient({
     chain: net.chain,
+    ccipRead: false,
     transport: serverTransport(net, { timeout: 8_000, retryCount: 1 }),
   });
   const reader: Tip403Reader = {

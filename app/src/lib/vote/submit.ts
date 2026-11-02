@@ -73,6 +73,7 @@ let rhClient: PublicClient | null = null;
 async function verifySmartWallet(message: VoteMessage, signature: Hex): Promise<boolean> {
   rhClient ??= createPublicClient({
     chain: robinhood,
+    ccipRead: false,
     transport: serverTransport({ chainId: robinhood.id, chain: robinhood, historyRpc: null }, { timeout: 8_000, retryCount: 1 }),
   }) as PublicClient;
   // a smart wallet may have signed the typed data or, on the fallback, the plain-text form

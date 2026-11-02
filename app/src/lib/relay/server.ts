@@ -278,6 +278,7 @@ export function relayPublicClient(net: GloamNetwork): PublicClient {
   if (hit) return hit;
   const c = createPublicClient({
     chain: net.chain,
+    ccipRead: false,
     transport: serverTransport(net, { timeout: 20_000, retryCount: 1 }),
   });
   publicClients.set(net.chainId, c);
@@ -526,6 +527,23 @@ function explain(err: unknown, fallback: string, code: "rpc" | "check_failed" = 
 // Tempo caps a tx at 30M gas; keep headroom and pad estimates for Tempo's
 // storage-heavy pricing (tree inserts).
 const GAS_CAP = 25_000_000n;
+/**
+ * The most gas the relay pays for one send of a kind, checked against its dry run.
+ * Real cash outs use about 350k. Robinhood Chain's estimates carry a parent-chain
+ * cost that moves, so it gets more. Tempo prices storage its own way.
+ */
+const SEND_GAS_MOST: Partial<Record<Call["kind"], bigint>> = {
+  unshield: 1_200_000n,
+};
+const GAS_MOST_FACTOR: Readonly<Record<number, bigint>> = { 4663: 4n, 46630: 4n };
+export const GAS_TOO_MUCH_MESSAGE = "This costs more gas than the relay pays. Send from your wallet.";
+
+export function sendGasMost(chainId: number, kind: Call["kind"]): bigint | null {
+  const most = SEND_GAS_MOST[kind];
+  if (!most || isTempoChain(chainId)) return null;
+  return most * (GAS_MOST_FACTOR[chainId] ?? 1n);
+}
+
 function padGas(est: bigint) {
   const padded = (est * 13n) / 10n;
   return padded > GAS_CAP ? GAS_CAP : padded;
@@ -677,6 +695,8 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
   if ((call.kind === "make" || call.kind === "pump") && gas > STATION_MAX_ESTIMATE) {
     throw new RelayError(STATION_ESTIMATE_MESSAGE, 422, "station_gas");
   }
+  const most = sendGasMost(net.chainId, call.kind);
+  if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
   if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
   await (call.kind === "memo" ? takeMemoSlot(net, call.budget) : takeNetworkSlot(net));
 
@@ -853,11 +873,15 @@ export async function checkUnshieldForLater(net: GloamNetwork, body: Record<stri
   await precheckSpend(net, call.args[1], call.args[2]);
   // The dry run from an account that can send it, as the send itself will be (one empty key is skipped).
   const [account] = await fundedRelayAccounts(net, "Cashing out later needs the Gloam relay, which is off right now.");
+  let gas: bigint;
   try {
-    await relayPublicClient(net).estimateContractGas({ address: net.pool!, abi: relayPoolAbi, functionName: "unshield", args: call.args, account });
+    gas = await relayPublicClient(net).estimateContractGas({ address: net.pool!, abi: relayPoolAbi, functionName: "unshield", args: call.args, account });
   } catch (e) {
     throw explain(e, "Could not check this cash out. Try again.", "check_failed");
   }
+  // refused now rather than when its time comes
+  const most = sendGasMost(net.chainId, "unshield");
+  if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
   return call;
 }
 

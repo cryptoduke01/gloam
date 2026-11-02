@@ -167,7 +167,7 @@ function appRows(n: GloamNetwork): DirectoryRow[] {
       role: "owner",
       name: "Owner",
       contract: null,
-      what: "Queues rule changes, which wait 3 days in public. Can lower a limit or the fee at once. Cannot move anyone's balance.",
+      what: "Queues rule changes, which wait 3 days in public. Can lower a limit or the fee at once. Has no function to withdraw a balance.",
       address: GLOAM_OWNER,
       deployBlock: null,
       source: "app",

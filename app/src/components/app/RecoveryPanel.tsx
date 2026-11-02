@@ -72,8 +72,12 @@ const NO_BACKUP_YET = "Your private balance is only in this browser for now.";
 const OLDER_KEY_ENDS = new Date(VERSION1_SAVES_UNTIL).toLocaleDateString("en-GB", { timeZone: "UTC", dateStyle: "long" });
 const SIGN_THREE_TIMES = "Your wallet asks you to sign three times. It's free and sends nothing.";
 
+/** A version 1 key that no longer saves: paused, or never started. */
+const pausedTitle = (s: RecoveryState) => (s.savedAt ? "Backups are paused" : "No backup yet");
+
 /** Where a version 1 key stands. */
-function olderKeyText(s: RecoveryState): string {
+export function olderKeyText(s: RecoveryState): string {
+  if (!s.savedAt) return "This browser hasn't saved a backup yet, and the older key can't start one. Your balance stays here. Update to start saving.";
   if (s.gone) return "Another device moved or removed this backup, so this browser stopped saving. Your balance stays here. Update so your devices share one backup again.";
   if (s.paused) return `Backups from this browser stopped on ${OLDER_KEY_ENDS} and stay paused until you update. Your balance stays here.`;
   return `Backups from this browser stop on ${OLDER_KEY_ENDS} unless you update.`;
@@ -277,7 +281,7 @@ export function RecoverySettingsCard() {
               <div className="min-w-0">
                 <p className="flex items-center gap-2 text-[14px] text-foreground">
                   <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${noBackup || state.paused ? "bg-warn" : "bg-sealed"}`} />
-                  {state.paused ? "Backups are paused" : noBackup ? "No backup yet" : "Recovery is on"}
+                  {state.paused ? pausedTitle(state) : noBackup ? "No backup yet" : "Recovery is on"}
                 </p>
                 <p className="mt-0.5 text-[13px] text-mute">
                   {state.source === "passkey" ? "With a passkey" : "With your wallet"}
@@ -492,7 +496,7 @@ export function RecoveryNudge({ hasBalance, hasDeposits }: { hasBalance: boolean
               ? r.state.gone
                 ? "This backup moved"
                 : r.state.paused
-                  ? "Backups are paused"
+                  ? pausedTitle(r.state)
                   : "Update your recovery key"
               : done
                 ? "Recovery is on"

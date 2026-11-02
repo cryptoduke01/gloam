@@ -47,7 +47,10 @@ const FACTS = [
 
 /* ---------- what it does ---------- */
 
-const USES = [
+/** One of the token's jobs; `whenHref` links the line that says when it arrives. */
+type Use = { n: string; title: string; body: string; when: string; whenHref?: string };
+
+const USES: Use[] = [
   {
     n: "01",
     title: "Governance",
@@ -105,7 +108,9 @@ const QUESTIONS = [
 
 /* ---------- roadmap ---------- */
 
-type Phase = { tag: string; title: string; done?: boolean; items: string[] };
+/** A roadmap line, or a line that links somewhere. */
+type PhaseItem = string | { text: string; href: string };
+type Phase = { tag: string; title: string; done?: boolean; items: PhaseItem[] };
 
 const PHASES: Phase[] = [
   {
@@ -144,7 +149,7 @@ const PHASES: Phase[] = [
 /* ---------- the same, once mainnet is live ---------- */
 
 const LIVE_USES: typeof USES = [
-  { ...USES[0], when: "First vote next" },
+  { ...USES[0], when: "First vote ran 29 Oct to 1 Nov", whenHref: "/vote" },
   {
     ...USES[1],
     body: "On mainnet, direct deposits and private payments are free and cash-outs carry a 0.5% fee. Half of Gloam's fees buy $GLOAM from the market: half of that is burned, half goes to the Gloam treasury.",
@@ -190,9 +195,15 @@ const LIVE_PHASES: Phase[] = [
     ],
   },
   {
+    tag: "Done",
+    title: "First holder vote",
+    done: true,
+    items: [{ text: "Ran in the open from 29 October to 1 November 2026. See what holders chose", href: "/vote" }],
+  },
+  {
     tag: "Next",
     title: "Holders",
-    items: ["The first holder vote, held in the open", "Private voting with a proof of your balance", "Holders get new features first"],
+    items: ["Private voting with a proof of your balance", "Holders get new features first"],
   },
   {
     tag: "Later",
@@ -220,7 +231,15 @@ function UseRows({ uses }: { uses: typeof USES }) {
           <p className="text-[18px] tracking-[-0.01em] text-foreground">{u.title}</p>
           <p className="max-w-[60ch] text-[14.5px] leading-relaxed text-mute">{u.body}</p>
           {/* When each job arrives: a plain line, since the green tint is kept for what is private. */}
-          <p className="text-[13.5px] text-soft sm:text-right">{u.when}</p>
+          <p className="text-[13.5px] text-soft sm:text-right">
+            {u.whenHref ? (
+              <Link href={u.whenHref} className="underline decoration-line-strong underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground">
+                {u.when}
+              </Link>
+            ) : (
+              u.when
+            )}
+          </p>
         </div>
       ))}
     </>
@@ -261,9 +280,17 @@ function PhaseList({ phases }: { phases: Phase[] }) {
             <p className="mt-1.5 text-[22px] leading-snug tracking-[-0.015em]">{p.title}</p>
             <ul className="mt-4 space-y-2.5">
               {p.items.map((it) => (
-                <li key={it} className="flex gap-3 text-[14.5px] leading-relaxed text-mute">
+                <li key={typeof it === "string" ? it : it.text} className="flex gap-3 text-[14.5px] leading-relaxed text-mute">
                   <span aria-hidden className={`mt-[9px] h-1 w-1 shrink-0 rounded-full ${p.done ? "bg-sealed" : "bg-faint"}`} />
-                  <span className="min-w-0">{it}</span>
+                  <span className="min-w-0">
+                    {typeof it === "string" ? (
+                      it
+                    ) : (
+                      <Link href={it.href} className="underline decoration-line-strong underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground">
+                        {it.text}
+                      </Link>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>

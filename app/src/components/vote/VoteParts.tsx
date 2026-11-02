@@ -745,6 +745,8 @@ export function ResultsCard({ s, mine, link = true }: { s: VoteSummary; mine?: B
           );
         })}
       </ul>
+      {/* the hub leads with these; a vote's own page shows it here */}
+      {s.outcome && !link && <p className="mt-5 rounded-[12px] bg-surface px-4 py-3 text-[14.5px] leading-relaxed text-foreground">{s.outcome}</p>}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line pt-4">
         <p className="tnum text-[13px] text-mute">
           {s.totals.wallets} {s.totals.wallets === 1 ? "wallet" : "wallets"} · {formatGloam(s.totals.weight)} GLOAM

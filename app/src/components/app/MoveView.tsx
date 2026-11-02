@@ -2530,7 +2530,7 @@ export function MoveView() {
                               <>
                                 <p className="mt-2 text-[12.5px] leading-relaxed text-mute">
                                   Gloam pays it from your private balance. It arrives in their wallet like a normal
-                                  transfer, and nobody can see who sent it. The amount is public.
+                                  transfer, and it doesn&apos;t show which Gloam balance paid it. The amount is public.
                                 </p>
                                 <button
                                   type="button"

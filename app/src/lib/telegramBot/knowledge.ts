@@ -30,7 +30,7 @@ const SWAPS_V2 = Boolean(VAULT_SWAP_V2_ROUTER[4663]);
 /** WalletConnect is on (lib/walletConnect.ts): phones without a wallet browser can use a wallet app. */
 const WALLET_APP = Boolean(process.env.NEXT_PUBLIC_WC_PROJECT_ID?.trim());
 const RH_CONNECT = WALLET_APP
-  ? "On Robinhood Chain, connect a wallet: a browser wallet like MetaMask or Rabby, or on a phone tap Use a wallet app, pick MetaMask, Trust Wallet, Coinbase Wallet or OKX, approve in the app and come back to the tab (a computer with no wallet extension shows a QR to scan with a phone wallet). Passkey accounts live on Tempo only."
+  ? "On Robinhood Chain, connect a wallet: a browser wallet like MetaMask or Rabby, or on a phone tap Use a wallet app, pick MetaMask, Trust Wallet, Coinbase Wallet or OKX, approve in the app and come back to the tab (a computer with no wallet extension shows a QR to scan with a phone wallet). Robinhood Wallet connects too: Robinhood's guide says to open the site in the wallet's Web3 browser (the globe icon on iPhone), or to scan the WalletConnect QR from a computer with the wallet's Scan icon. Passkey accounts live on Tempo only."
   : "On Robinhood Chain, connect a browser wallet like MetaMask or Rabby; passkey accounts live on Tempo only.";
 
 /** The $GLOAM token, as gloam.trade/token shows it. The only contract address the helper may share. */
@@ -304,7 +304,7 @@ function baseFacts(): string | null {
     );
   }
   lines.push(
-    "- On Base there are no private swaps and no Bring money over (the bridge) yet; both are planned, never give a date. Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
+    "- Bring money over (the bridge) brings USDC into Base mainnet. There are no private swaps on Base yet; they are planned, never give a date. Passkey sign-in is not on Base: connect a browser wallet or a wallet app. In the network selector Base shows as Base, with Mainnet or Testnet beside it."
   );
   return lines.join("\n");
 }
@@ -321,7 +321,7 @@ function ethereumFacts(): string | null {
     "- Ethereum mainnet (chain ID 1): beta, joined after the 21 October launch. The vault takes USDC, USDT, USDG, PYUSD, EURC and ETH: 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 ETH per deposit and 1,000 ETH in total. Same fees as the other mainnets, same final keys. " + (ethereumSepoliaPool() ? "Its testnet is Ethereum Sepolia (see ETHEREUM SEPOLIA)." : "Ethereum has no Gloam testnet; Base Sepolia is the place to practise.") + " EURC is a euro stablecoin, never count it as dollars. Details, if someone asks: chain ID 1, currency ETH, explorer https://etherscan.io.",
     "- Gas on Ethereum costs far more than on the other chains. The Gloam relay pays it for private payments and cash outs, so while Ethereum gas is above the relay's limit (3 gwei unless the team changes it) the relay waits and the app says \"Ethereum gas is high right now; try again shortly\". A cash out for later still schedules and goes out once gas is back under the limit. Turning off Hide my wallet sends from the wallet instead, which pays its own gas and shows the wallet as the sender.",
     "- Depositing USDT on Ethereum can take two approvals in the wallet: Tether's token makes an old approval go to zero before a new one. That is expected.",
-    "- On Ethereum there are no private swaps and no Bring money over (the bridge) into it yet; never give a date. Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
+    "- Bring money over (the bridge) brings USDC into Ethereum mainnet. There are no private swaps on Ethereum yet; never give a date. Passkey sign-in is not on Ethereum: connect a browser wallet or a wallet app. In the network selector it shows as Ethereum, with Mainnet beside it.",
   ].join("\n");
 }
 

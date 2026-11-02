@@ -5,8 +5,9 @@
  * Chain and Tempo, each on mainnet (the ceremony's final keys, beta deposit
  * limits, payments only) and testnet (dev keys). Tools take
  * a `network` (default: GLOAM_NETWORK, else Robinhood Chain testnet), and the
- * 402 payment tools settle on whatever network the price names. Private trading
- * is not live on any network; the market and trade tools only plan.
+ * 402 payment tools settle on whatever network the price names. Private swaps
+ * are live in the Gloam app, not here: the market and trade tools only plan,
+ * for the retired sealed trade.
  *
  * This exposes read + planning tools that work today, and returns honest
  * "intent" objects for write actions (shield / pay / send) when there is no
@@ -423,14 +424,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
+          `Mainnet is beta. The mainnet pools take payments only (private swaps run in the Gloam app, not this server), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
           }). Direct deposits and private payments are free; cashing out costs 0.5%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
-          "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
-          "gloam_quote: indicative quote for a future private trade (read)",
-          "gloam_plan_private_trade: plan a private trade; it cannot execute while private trading is off (planning)",
+          "gloam_list_markets: markets from the retired sealed trade, with indicative testnet marks; nothing here trades (read)",
+          "gloam_quote: indicative quote for the retired sealed trade (read)",
+          "gloam_plan_private_trade: describe a sealed trade; it never executes, the sealed trade is retired (planning)",
           "gloam_plan_shield: describe a shield before executing (planning)",
           "gloam_execute_shield: REAL private deposit. Mints a note, proves, and broadcasts shieldBound; returns a note handle (execution; needs a signer)",
           "gloam_execute_transfer: sign and broadcast a public transfer of test ETH on Robinhood Chain testnet, for funding (execution; needs a signer)",
@@ -469,7 +470,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "List markets",
       description:
-        "List the markets planned for private trading on Gloam, with indicative testnet marks. Private trading is not live on any network yet (mainnet takes payments only), so these are for planning.",
+        "List the markets from Gloam's retired sealed trade, with indicative testnet marks. Nothing here trades. Private swaps are live in the Gloam app (Vault > Swap), and this server does not swap.",
       inputSchema: {
         kind: z.enum(["stock", "crypto", "all"]).default("all").describe("Filter by asset kind."),
       },
@@ -478,7 +479,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const list = kind === "all" ? MARKETS : MARKETS.filter((m) => m.kind === kind);
       return text({
         count: list.length,
-        note: "Marks are indicative testnet values. Private trading is not live yet: these markets cannot be traded today.",
+        note: "Marks are indicative testnet values from the retired sealed trade. Nothing here trades: private swaps are in the Gloam app, and this server does not swap.",
         markets: list,
       });
     }
@@ -506,9 +507,9 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         usd,
         estimatedUnits: Number(units.toFixed(6)),
         markUsd: m.mark,
-        staysPrivate: ["your size", "your position", "who you are"],
-        becomesPublic: ["only that a private trade occurred, not the amount"],
-        note: "Indicative only, and private trading is not live yet, so this cannot be executed today. Size privacy depends on the current anonymity set (see gloam_privacy_status).",
+        staysPrivate: ["who swapped"],
+        becomesPublic: ["the tokens", "the amounts"],
+        note: "Indicative only, for the retired sealed trade; this server does not swap. Private swaps are live in the Gloam app (Vault > Swap): who swapped stays private, and the tokens and amounts are public.",
       });
     }
   );
@@ -518,7 +519,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Plan a private trade",
       description:
-        "Plan a private trade (never executes). Private trading is not live on any network yet, so this is a plan only.",
+        "Describe a sealed trade (never executes; the sealed trade is retired). Private swaps are live in the Gloam app, and this server does not swap.",
       inputSchema: {
         market: z.string().describe("Symbol or id, e.g. TSLA."),
         side: z.enum(["buy", "sell"]),
@@ -537,8 +538,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         usd,
         estimatedUnits: Number((usd / m.mark).toFixed(6)),
         agentAddress: agentAddress ?? null,
-        privacy: "Size and position stay off the public chain.",
-        status: "Private trading is switched off on every network while a new engine is built. The mainnet pools take payments only.",
+        privacy: "In a private swap, who swapped stays private; the tokens and amounts are public.",
+        status: "The sealed trade is retired on every network, and this server does not swap. Private swaps are live in the Gloam app (Vault > Swap).",
         execution: AGENT_WALLET_NOTE,
       });
     }

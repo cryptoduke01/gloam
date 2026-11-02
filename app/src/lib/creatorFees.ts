@@ -84,7 +84,7 @@ let client: PublicClient | null = null;
 function rh(): PublicClient {
   if (client) return client;
   const n = getNetwork("robinhood-mainnet");
-  client = createPublicClient({ chain: n.chain, transport: serverTransport(n, { timeout: 20_000, retryCount: 4, retryDelay: 500 }) });
+  client = createPublicClient({ chain: n.chain, ccipRead: false, transport: serverTransport(n, { timeout: 20_000, retryCount: 4, retryDelay: 500 }) });
   return client;
 }
 

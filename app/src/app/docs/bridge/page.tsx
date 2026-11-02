@@ -16,7 +16,7 @@ export default function DocsBridgePage() {
   return (
     <DocsLayout
       title="Deposit from another chain"
-      lede="Pay in from the chain your money is already on. Gloam's bridge runs on Relay and lands your money as the vault's stablecoin: USDG on Robinhood Chain, USDC on Tempo."
+      lede="Pay in from the chain your money is already on. Gloam's bridge runs on Relay and lands your money as the vault's stablecoin: USDG on Robinhood Chain, USDC on Tempo, Base and Ethereum."
       glance={[
         { label: "From", value: "Bitcoin, Solana, Tron, 22 EVM" },
         { label: "Lands as", value: "USDG or USDC" },
@@ -38,8 +38,8 @@ export default function DocsBridgePage() {
       <p>
         A deposit address can&apos;t make the private deposit itself, so these
         take two steps. You get a one-time address, send to it from any wallet
-        or exchange, and the money arrives in your wallet on Robinhood Chain or
-        Tempo. Bitcoin waits for its own confirmations first, usually 10 to 30
+        or exchange, and the money arrives in your wallet on Robinhood Chain,
+        Tempo, Base or Ethereum. Bitcoin waits for its own confirmations first, usually 10 to 30
         minutes. Then you add it privately with one more tap.
       </p>
       <p>

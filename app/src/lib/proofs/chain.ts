@@ -86,6 +86,7 @@ export function clientFor(net: GloamNetwork): PublicClient {
   if (existing) return existing;
   const client = createPublicClient({
     chain: net.chain,
+    ccipRead: false,
     transport: serverTransport(net, { timeout: 25_000, retryCount: 2 }),
   });
   clients.set(net.chainId, client);
