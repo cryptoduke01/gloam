@@ -8,12 +8,21 @@
  *
  * One sender (an IP, or a partner account) may hold a share of the cap in an hour,
  * every kind of send it asks for together, apart from refunds and exits: the larger of
- * SENDER_SHARE_PCT of the cap and PAYROLL_SENDS sends like the one being held, at the
- * gas it is held at. So a payroll of up to 200 payments from one browser always fits
- * its own share, at any gas, and only the chain's cap can stop it. A partner account
- * no admin approved holds against the calling IP's share as well as its own: accounts
- * are free to make, an IP is not. GLOAM_RELAY_SENDER_SHARE_<chainId> sets the percent,
- * or "off" for no share. The busiest hour so far, every sender together, used about 6%.
+ * SENDER_SHARE_PCT of the cap and PAYROLL_SENDS sends like the one being held (their
+ * dry-run gas at the network's gas price now, unpadded), but never more than
+ * MAX_SENDER_SHARE_PCT. So a 200-payment payroll from one browser fits its share up to
+ * about 0.034 gwei on Robinhood Chain, 0.016 on Base and 0.084 on Ethereum (on 2 November:
+ * about 0.02, 0.006 and 0.04), and one sender always leaves part of the new-send part
+ * to everyone else. A partner account no admin approved holds against the calling IP's
+ * share as well as its own: accounts are free to make, an IP is not.
+ * GLOAM_RELAY_SENDER_SHARE_<chainId> sets the percent, or "off" for no share. The
+ * busiest hour so far, every sender together, used about 6%.
+ *
+ * Refunds and exits hold against no sender's share. On a chain without a swap floor
+ * (lib/relay/swapFloor), the ones an IP asks for hold against a budget of their own
+ * (BACK_SHARE_PCT, or five like the one being held at today's gas if that is more): that
+ * IP's sends never stand in the way of its refunds. Where there is a floor, refunds under
+ * it have their own hourly budget instead.
  *
  * GLOAM_RELAY_HOURLY_SPEND_<chainId> (server env) sets it, in the chain's gas coin
  * ("0.02"); "off" turns it off for that chain. The defaults sit well over what the
@@ -33,8 +42,17 @@ export const DEFAULT_HOURLY_SPEND: Readonly<Record<number, string>> = { 1: "0.05
 export const NEW_SEND_SHARE_PCT = 80n;
 /** Cash outs stop here. What is left above it is for refunds and exits only. */
 export const CASH_OUT_SHARE_PCT = 92n;
-/** A sender's share always fits this many sends like the one being held: a payroll's most payments. */
+/** A sender's share fits this many sends like the one being held, up to MAX_SENDER_SHARE_PCT: a payroll's most payments. */
 export const PAYROLL_SENDS = 200n;
+/** No sender's share passes this part of the cap, whatever a payroll would cost. */
+export const MAX_SENDER_SHARE_PCT = 60n;
+/**
+ * The refunds and exits one IP asks for, on a chain without a swap floor: the larger of this
+ * share of the cap an hour and BACK_SENDS like the one being held at today's gas, never more
+ * than the part of the cap kept for refunds and exits.
+ */
+export const BACK_SHARE_PCT = 2n;
+export const BACK_SENDS = 5n;
 /** Payment messages outside the relay's paid message budget may hold this share of the cap between them. */
 export const MEMO_SPEND_SHARE_PCT = 20n;
 export const DEFAULT_IP_SENDS: Readonly<Record<number, number>> = { 1: 120 };

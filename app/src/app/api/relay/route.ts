@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         hash = await relayVaultSwap(net, body, requester);
         break;
       case "swapExit":
-        hash = await relayVaultSwapExit(net, body);
+        hash = await relayVaultSwapExit(net, body, requester);
         break;
       default:
         throw new RelayError("Unknown action.");
