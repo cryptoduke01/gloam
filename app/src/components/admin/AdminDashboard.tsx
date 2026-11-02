@@ -1246,6 +1246,7 @@ type AdminPartner = {
     privatePayments: number;
     cashOuts: number;
     deposits: number;
+    privateSwaps?: number;
     publicVolumeUsd: number;
     commissionUsd: number;
     unpriced: number;
@@ -1256,7 +1257,7 @@ type AdminPartner = {
 type PartnersPayload = {
   backend: "redis" | "memory" | "none";
   partners: AdminPartner[];
-  totals: { privatePayments: number; cashOuts: number; deposits: number; publicVolumeUsd: number; commissionUsd: number } | null;
+  totals: { privatePayments: number; cashOuts: number; deposits: number; privateSwaps?: number; publicVolumeUsd: number; commissionUsd: number } | null;
 };
 
 /** The partner program: every partner, their keys and the volume their keys brought in. */
@@ -1312,13 +1313,13 @@ function PartnersPanel() {
     <>
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Partners" value={n(data.partners.length)} sub={`${n(data.partners.reduce((s, p) => s + p.activeKeys, 0))} active keys`} />
-        <Kpi label="Private payments" value={n(t?.privatePayments)} sub="relayed with a partner key" />
+        <Kpi label="Private payments" value={n(t?.privatePayments)} sub={`relayed with a partner key, and ${n(t?.privateSwaps ?? 0)} private swaps`} />
         <Kpi label="Public volume" value={fmtUsd(t?.publicVolumeUsd ?? 0)} sub={`${n((t?.cashOuts ?? 0) + (t?.deposits ?? 0))} cash outs and deposits`} />
         <Kpi label="Would-be fees" value={fmtUsd(t?.commissionUsd ?? 0)} sub={MAINNET_ENABLED ? "partner fees not charged yet" : "testnet, nothing charged"} />
       </section>
       <Panel title="Partners">
         <DataTable
-          headers={["Partner", "Owner", "Keys", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          headers={["Partner", "Owner", "Keys", "Private payments", "Cash outs", "Deposits", "Swaps", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
           rows={data.partners.map((p) => [
             <span key="n" className="text-foreground">
               {p.website ? (
@@ -1336,6 +1337,7 @@ function PartnersPanel() {
             n(p.totals?.privatePayments),
             n(p.totals?.cashOuts),
             n(p.totals?.deposits),
+            n(p.totals?.privateSwaps ?? 0),
             fmtUsd(p.totals?.publicVolumeUsd ?? 0),
             fmtUsd(p.totals?.commissionUsd ?? 0),
             `$${(p.fees.privatePaymentCents / 100).toFixed(2)} · ${pct(p.fees.cashoutBps)} · ${pct(p.fees.depositBps)}`,

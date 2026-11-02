@@ -12,6 +12,7 @@ const KIND_LABEL: Record<Activity["kind"], string> = {
   private_payment: "Private payment",
   cash_out: "Cash out",
   deposit: "Deposit",
+  private_swap: "Private swap",
 };
 
 function fmtDay(day: string, long = false): string {
@@ -32,7 +33,7 @@ const plural = (n: number, one: string, many: string) => `${fmtInt(n)} ${n === 1
  */
 function DailyBars({ daily }: { daily: Stats["daily"] }) {
   const [hover, setHover] = useState<number | null>(null);
-  const totals = daily.map((d) => d.privatePayments + d.cashOuts + d.deposits);
+  const totals = daily.map((d) => d.privatePayments + d.cashOuts + d.deposits + d.swaps);
   const max = Math.max(1, ...totals);
   const n = daily.length;
   const d = hover != null ? daily[hover] : null;
@@ -59,7 +60,7 @@ function DailyBars({ daily }: { daily: Stats["daily"] }) {
               <button
                 key={day.day}
                 type="button"
-                aria-label={`${fmtDay(day.day, true)}: ${plural(day.privatePayments, "private payment", "private payments")}, ${plural(day.cashOuts, "cash out", "cash outs")}, ${plural(day.deposits, "deposit", "deposits")}, ${fmtUsd(day.commissionUsd)} in would-be fees`}
+                aria-label={`${fmtDay(day.day, true)}: ${plural(day.privatePayments, "private payment", "private payments")}, ${plural(day.cashOuts, "cash out", "cash outs")}, ${plural(day.deposits, "deposit", "deposits")}, ${plural(day.swaps, "private swap", "private swaps")}, ${fmtUsd(day.commissionUsd)} in would-be fees`}
                 onMouseEnter={() => setHover(i)}
                 onFocus={() => setHover(i)}
                 onBlur={() => setHover(null)}
@@ -86,6 +87,7 @@ function DailyBars({ daily }: { daily: Stats["daily"] }) {
             <span className="block">
               {plural(d.cashOuts, "cash out", "cash outs")}, {plural(d.deposits, "deposit", "deposits")}
             </span>
+            {d.swaps > 0 && <span className="block">{plural(d.swaps, "private swap", "private swaps")}</span>}
             <span className="block">{fmtUsd(d.commissionUsd)} would-be fees</span>
           </div>
         )}
@@ -105,7 +107,7 @@ function KindBadge({ kind }: { kind: Activity["kind"] }) {
       aria-hidden
       className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${sealed ? "bg-sealed-soft text-sealed" : "bg-surface text-soft"}`}
     >
-      {sealed ? <LockIcon size={13} /> : <ArrowIcon dir={kind === "cash_out" ? "out" : "in"} />}
+      {sealed ? <LockIcon size={13} /> : <ArrowIcon dir={kind === "cash_out" || kind === "private_swap" ? "out" : "in"} />}
     </span>
   );
 }
@@ -223,6 +225,7 @@ export function Overview({
                 ["Private payment", `$${(fees.privatePaymentCents / 100).toFixed(2)} each`, t.privatePayments, true],
                 ["Cash out", `${(fees.cashoutBps / 100).toFixed(2)}%`, t.cashOuts, false],
                 ["Deposit", `${(fees.depositBps / 100).toFixed(2)}%`, t.deposits, false],
+                ["Private swap", "No fee", t.privateSwaps, false],
               ] as const
             ).map(([k, v, n, sealed]) => (
               <li key={k} className="flex min-h-[56px] items-center justify-between gap-3 px-5 sm:px-6">
