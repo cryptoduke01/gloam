@@ -11,7 +11,8 @@ export function voteFacts(all: VoteConfig[] = VOTES, now: number = Date.now()): 
   const lines = live.map((v) => {
     const status = voteStatus(v, now);
     const when = status === "upcoming" ? `opens ${formatUtc(v.start)}` : status === "open" ? `open until ${formatUtc(v.end)}` : `closed ${formatUtc(v.end)}`;
-    return `- gloam.trade/vote/${v.id} (${when}): "${v.question}" Options: ${v.options.join("; ")}.`;
+    const outcome = status === "closed" && v.outcome ? ` Result: ${v.outcome}` : "";
+    return `- gloam.trade/vote/${v.id} (${when}): "${v.question}" Options: ${v.options.join("; ")}.${outcome}`;
   });
   return [
     "HOLDER VOTES (gloam.trade/vote; you may share these links)",

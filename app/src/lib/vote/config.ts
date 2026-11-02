@@ -49,6 +49,8 @@ export type VoteConfig = {
   weighting?: "snapshot" | "close";
   /** Extra addresses that never count in this vote, on top of the standing list (lib/vote/excluded.ts). */
   exclude?: { address: string; reason: string }[];
+  /** What the team is doing with the result, in a sentence or two. Shown once the final count is in. */
+  outcome?: string;
 };
 
 /**
@@ -66,6 +68,7 @@ export const VOTES: VoteConfig[] = [
   {
     id: "private-swaps-next",
     published: true,
+    outcome: "Stablecoin swaps on Base and Ethereum are next. They run on the new swap router, which gets an outside review first.",
     question: "What should Gloam add to private swaps next?",
     description:
       "Private swaps hide who traded, while the token and the amount stay public. The winning option goes on the roadmap first: the result is advisory, and the team will act on it.",
@@ -83,6 +86,7 @@ export const VOTES: VoteConfig[] = [
   {
     id: "next-chain",
     published: true,
+    outcome: "Solana won narrowly, just ahead of Arbitrum. It needs its own version of the vault, so it will take longer than an EVM chain, and we'll share the plan before we start.",
     question: "Which chain should Gloam go live on next?",
     description:
       "Gloam runs on Robinhood Chain, Tempo, Base and Ethereum. The EVM chains reuse the same vault; Solana would be its own build, so it would take longer to ship. The result is advisory, and the team will act on it.",
@@ -101,6 +105,7 @@ export const VOTES: VoteConfig[] = [
   {
     id: "first-integration",
     published: true,
+    outcome: "Trading apps come first. That's where partner time goes next.",
     question: "Which kind of app should Gloam integrate first?",
     description:
       "Gloam is the privacy layer apps plug into, and this tells us where to spend partner time first. The result is advisory, and the team will act on it.",

@@ -971,6 +971,13 @@ await test("weight at close: stored once, on the first results request after the
   assert.equal(await final.ensureFinal(testVote, excluded, snapshot, { now: after }), null);
 });
 
+await test("a closed vote's outcome reaches Glim, and an open one's doesn't", async () => {
+  const { voteFacts } = await import("../src/lib/vote/glim");
+  const v = { ...VOTES[0]!, outcome: "Stablecoin swaps are next." };
+  assert.match(voteFacts([v], Date.parse(v.end) + 1000) ?? "", /Result: Stablecoin swaps are next\./);
+  assert.doesNotMatch(voteFacts([v], Date.parse(v.start) + 1000) ?? "", /Result:/);
+});
+
 await test("weight at close: feedback and Glim follow what a wallet holds now", async () => {
   const { feedbackWeight } = await import("../src/lib/vote/feedback");
   const { voteFacts } = await import("../src/lib/vote/glim");
