@@ -6,15 +6,18 @@
  * GLOAM_VEYA_KEY set, every 402 this server is about to pay goes to VEYA first,
  * and the payment goes ahead only on an exact allow.
  *
- * What is sent: the operator's opaque agent id, the chain, the asset, the amount,
- * the payee, the resource's host and the payment request, with the key as a
- * bearer token. Nothing else: never a note, a secret, a balance, a wallet or a
- * signing key.
+ * What is sent: the operator's opaque agent id, the chain, the asset, the amount
+ * and the payee, with the key as a bearer token. resource_host is always null, as
+ * agreed with VEYA on 31 Oct 2026, and no payment request text goes out. Nothing
+ * else: never a note, a secret, a balance, a wallet, a signing key, the resource or
+ * the 402 the payee sent.
  *
  * It fails closed. A refuse, an answer this code does not know, an HTTP error, a
  * body that is not JSON, no answer within the timeout, or a setting that is
- * missing or unusable all mean: do not pay. VEYA's reason is untrusted text, so
- * only a stripped, capped copy of it goes any further.
+ * missing or unusable all mean: do not pay. A request VEYA can't use as sent
+ * (bad_request, or HTTP 400 or 422) is a refusal too, never a reason to send
+ * more. VEYA's reason is untrusted text, so only a stripped, capped copy of it
+ * goes any further.
  *
  * An allow carries a check id. With GLOAM_VEYA_ANCHOR_URL set, the payment's
  * receipt is bound to that id afterwards (veyaReceipt.ts), so an allow without a
@@ -24,9 +27,9 @@
  * VEYA is never told how a payment it allowed ended, so if one fails afterwards
  * its running budget can sit ahead of what was really paid.
  *
- * The format is as VEYA documented it on 1 Nov 2026 (backend 1.2.12) and as its
- * live endpoints answered that day. It is the block below and nowhere else, so a
- * change stays there.
+ * The answers are as VEYA documented them on 1 Nov 2026 (backend 1.2.12) and as
+ * its live endpoints gave them that day. The request is the trimmed one above. The
+ * format is the block below and nowhere else, so a change stays there.
  */
 import { cleanReceiptLabel } from "@gloamtrade/sdk";
 import type { Hex } from "viem";
@@ -45,17 +48,13 @@ export interface VeyaConfig extends GuardEndpoint {
   anchorTimeoutMs: number;
 }
 
-/** The payment being checked. */
+/** The payment being checked: these four fields and the agent id are all VEYA gets. */
 export interface VeyaPayment {
   chainId: number;
   asset: string;
   amountWei: bigint;
   /** The requirement's payTo. */
   payee: string;
-  /** The host the payment is for, or null when the payment request names none. */
-  resourceHost: string | null;
-  /** The decoded payment request, the same text Agent Wormhole reads. */
-  content: string;
 }
 
 export type VeyaOutcome =
@@ -82,7 +81,11 @@ const WALLET_SHAPED = /(?:0x)?[0-9a-f]{40}/i;
 
 // ── VEYA's format ─────────────────────────────────────────────────────────────
 
-/** POST <GLOAM_VEYA_URL>. `amount` is base units as a decimal string, whatever form the price wrote it in. */
+/**
+ * POST <GLOAM_VEYA_URL>. `amount` is base units as a decimal string, whatever form the price wrote it in.
+ * `chain_id` is how VEYA tells its chain (it refuses another with wrong_chain). `resource_host` is always
+ * null, as agreed with VEYA on 31 Oct 2026, and there is no `content`.
+ */
 function veyaRequest(agentId: string, p: VeyaPayment) {
   return {
     agent_id: agentId,
@@ -90,10 +93,15 @@ function veyaRequest(agentId: string, p: VeyaPayment) {
     asset: p.asset,
     amount: p.amountWei.toString(),
     payee: p.payee,
-    resource_host: p.resourceHost,
-    content: p.content,
+    resource_host: null,
   };
 }
+
+/** What VEYA says when it can't use the request as sent: a refuse with this reason, or one of these statuses. */
+const MALFORMED_REASON = "bad_request";
+const MALFORMED_STATUS = new Set([400, 422]);
+const malformed = (how: string) =>
+  `VEYA did not accept the check as sent (${how}). This server sends it only the agent id, chain, asset, amount and payee, with resource_host null and no payment request text, and will not send more to get an answer. If VEYA now needs more, its format changed and this server has to be updated.`;
 
 /** The only HTTP status that can carry an answer. */
 const ANSWER_STATUS = 200;
@@ -214,11 +222,13 @@ export async function checkVeyaBudget(payment: VeyaPayment, env: Env, fetchImpl:
   if ("failed" in call) {
     return refuse(call.failed === "timeout" ? `VEYA did not answer within ${config.timeoutMs / 1000}s.` : "VEYA could not be reached.");
   }
+  if (MALFORMED_STATUS.has(call.res.status)) return refuse(malformed(`HTTP ${call.res.status}`));
   if (call.res.status !== ANSWER_STATUS) return refuse(`VEYA answered HTTP ${call.res.status}, so the budget was not checked.`);
 
   const answer = readAnswer(await guardBody(call.res));
   if (!answer) return refuse("VEYA's answer was not an allow or a refuse, so the budget was not checked.");
   if (!answer.allow) {
+    if (answer.reason === MALFORMED_REASON) return refuse(malformed(MALFORMED_REASON), "refuse", answer.reason);
     return refuse(answer.reason ? `VEYA refused this payment (${answer.reason}).` : "VEYA refused this payment.", "refuse", answer.reason);
   }
   // A payment can't be undone, and without the id it could never get its receipt.

@@ -1049,7 +1049,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const guardsBeforePay = [
         ...(env.GLOAM_WORMHOLE_KEY?.trim() ? ["Agent Wormhole checks this payment request first (GLOAM_WORMHOLE_KEY). Only an allow pays."] : []),
         ...(env.GLOAM_VEYA_KEY?.trim()
-          ? ["VEYA checks this payment against the agent's budget (GLOAM_VEYA_KEY) and sees the agent id, asset, amount, payee, resource host and payment request. Only an allow pays."]
+          ? ["VEYA checks this payment against the agent's budget (GLOAM_VEYA_KEY) and sees the agent id, chain, asset, amount and payee, and nothing about the resource. Only an allow pays."]
           : []),
         ...(env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()
           ? ["Once it lands, this server proves the payment and sends VEYA only the receipt's leaf and the agent id (GLOAM_VEYA_ANCHOR_URL)."]
@@ -1100,8 +1100,11 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         authorization?: string;
       };
 
-  /** The host a resource names, or null when it names none. The resource is the payee's own text, so never more than a host. */
-  const resourceHost = (resource: string): string | null => {
+  /**
+   * What a note label says about a paid resource. The resource is the payee's own text and labels go
+   * back to the model in later sessions, so only a host is kept, never free text.
+   */
+  const paidLabel = (resource: string): string => {
     if (/^[a-z0-9.-]{1,80}(:\d{1,5})?$/i.test(resource)) return resource;
     try {
       const { protocol, host } = new URL(resource);
@@ -1109,11 +1112,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch {
       // Not a URL.
     }
-    return null;
+    return "a paid resource";
   };
-
-  /** What a note label says about a paid resource. Labels go back to the model in later sessions, so only a host is kept, never free text. */
-  const paidLabel = (resource: string): string => resourceHost(resource) ?? "a paid resource";
 
   const receiptContext = (net: McpNetwork, notes: NoteStore): ReceiptContext => ({
     net,
@@ -1138,10 +1138,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * server broadcasts, so limits and the note store work exactly as for x402).
    * With GLOAM_WORMHOLE_KEY set, `quote` (the payment request as the payee sent
    * it) goes to Agent Wormhole after the spend gate, and only an allow pays. With
-   * GLOAM_VEYA_KEY set the payment then goes to VEYA, and only an allow pays.
-   * `resourceHost` is the host this server really fetched, when it fetched one.
-   * With GLOAM_VEYA_ANCHOR_URL set too, the payment's receipt is built once it
-   * lands; that never changes the payment.
+   * GLOAM_VEYA_KEY set the payment then goes to VEYA (the agent id, chain, asset,
+   * amount and payee only), and only an allow pays. With GLOAM_VEYA_ANCHOR_URL
+   * set too, the payment's receipt is built once it lands; that never changes the
+   * payment.
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
@@ -1151,7 +1151,6 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       legacyNote?: { secret: string; amount: number; decimals?: number };
       mpp?: PaymentChallenge;
       quote?: string;
-      resourceHost?: string;
       /** The URL the agent asked for: note labels name its host, not the payee's text. */
       requested?: string;
       /** Hears about the payment just before it goes out. If it throws, nothing goes out. */
@@ -1270,9 +1269,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
 
     const gate = authorizeSpend(spend, env);
     if (!gate.ok) return fail(gate.refusal);
-    const content = opts.quote ?? quoteText(req, opts.mpp);
     // Agent Wormhole, when the operator turned it on: it sees the payment request only, and anything but allow stops here.
-    const wormhole = await checkBeforePay(content, env);
+    const wormhole = await checkBeforePay(opts.quote ?? quoteText(req, opts.mpp), env);
     if (wormhole && !wormhole.pay) {
       settleSpend(gate, "failed", { reason: `Agent Wormhole: ${wormhole.decision}${wormhole.findings.length ? ` (${wormhole.findings.map((f) => f.code).join(", ")})` : ""}` });
       return fail({
@@ -1283,17 +1281,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       });
     }
     // VEYA, when the operator turned it on: last, so a request Agent Wormhole stopped never counts against the budget.
-    const veya = await checkVeyaBudget(
-      {
-        chainId: net.chainId,
-        asset: spend.asset,
-        amountWei: spend.amountWei,
-        payee: String(req.payTo ?? ""),
-        resourceHost: opts.resourceHost ?? resourceHost(String(req.resource ?? "")),
-        content,
-      },
-      env
-    );
+    // It gets the payment's chain, asset, amount and payee, never the resource or the payment request text.
+    const veya = await checkVeyaBudget({ chainId: net.chainId, asset: spend.asset, amountWei: spend.amountWei, payee: String(req.payTo ?? "") }, env);
     if (veya && !veya.pay) {
       settleSpend(gate, "failed", { reason: `VEYA: ${veya.decision}${veya.reason ? ` (${veya.reason})` : ""}` });
       return fail({
@@ -2016,11 +2005,10 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       // a body can carry it encoded. Then the 402 body as the payee sent it, when the price came in it. A price
       // in a header is what gets paid whatever the body says, so the check reads that price alone.
       const quote = !mpp && !requirementsHeader(first.headers) && firstBody.trim() && firstBody.length <= 65_536 ? `${quoteText(req)}\n${firstBody}` : undefined;
-      // For VEYA, resourceHost is the host that really asked for this payment: what the price says about itself is the payee's word.
       // A purchase is this call at this price: a server can answer each retry with a fresh challenge.
       const purchase = digest([url, method, body ?? null, contentType ?? null, note ?? null, req.network, req.poolAddress, req.asset, req.maxAmountRequired, req.payTo]);
       const once = await payOnce(slot, { key: `fetch:${purchase}`, ...(mpp ? { challenge: mpp } : {}) }, (sending, payFrom) =>
-        payPrivately(req, { handle: payFrom ?? note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), resourceHost: new URL(url).host, sending })
+        payPrivately(req, { handle: payFrom ?? note, requested: url, ...(mpp ? { mpp } : {}), ...(quote ? { quote } : {}), sending })
       );
       if ("answer" in once) return once.answer;
       const { paid } = once;
