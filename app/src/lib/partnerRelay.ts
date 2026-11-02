@@ -51,7 +51,7 @@ export type PartnerRelayDeps = {
   relayUnshield: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
   relayMemo: (net: GloamNetwork, body: Record<string, unknown>, from?: MemoPartner) => Promise<Hex>;
   relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
-  relayVaultSwapExit: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
+  relayVaultSwapExit: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
   /** The vault's spent(nullifier), read on the relay's own node. */
   isSpent: (net: GloamNetwork, nullifier: Hex) => Promise<boolean>;
   record: typeof recordActivity;
@@ -129,7 +129,7 @@ export async function relayForPartner(
       break;
     }
     case "swapExit":
-      hash = await deps.relayVaultSwapExit(net, body);
+      hash = await deps.relayVaultSwapExit(net, body, sender);
       claimed = hash;
       break;
     default:
