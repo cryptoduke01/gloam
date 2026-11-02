@@ -33,7 +33,8 @@ export async function postToGuard(
   try {
     const res = await fetchImpl(to.url, {
       method: "POST",
-      headers: { authorization: `Bearer ${to.key}`, "content-type": "application/json" },
+      // identity: an answer is a few hundred bytes, so a compressed one is never asked for (see guardBody).
+      headers: { authorization: `Bearer ${to.key}`, "content-type": "application/json", "accept-encoding": "identity" },
       body: JSON.stringify(body),
       redirect: "error",
       signal: AbortSignal.timeout(to.timeoutMs),
@@ -45,10 +46,42 @@ export async function postToGuard(
   }
 }
 
-/** The answer as a JSON object, or null when it is anything else. Never throws, and the timeout above still covers the read. */
+/** The most of an answer that is read: real answers are a few hundred bytes. */
+export const GUARD_BODY_LIMIT = 64 * 1024;
+
+/**
+ * The answer as a JSON object, or null when it is anything else, or longer than GUARD_BODY_LIMIT bytes as read (after any
+ * decoding, so a small compressed body that inflates past it is cut off too). Never throws, and the timeout above still
+ * covers the read.
+ */
 export async function guardBody(res: Response): Promise<Record<string, unknown> | null> {
   try {
-    const parsed: unknown = await res.json();
+    const declared = Number(res.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > GUARD_BODY_LIMIT) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    if (!res.body) return null;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > GUARD_BODY_LIMIT) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      bytes.set(c, at);
+      at += c.byteLength;
+    }
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;

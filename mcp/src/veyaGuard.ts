@@ -162,8 +162,9 @@ function readAnchor(body: Record<string, unknown> | null, leaf: string): { txHas
 
 /**
  * Off (null) unless GLOAM_VEYA_KEY is set. A key with an unusable GLOAM_VEYA_URL,
- * GLOAM_VEYA_AGENT_ID or GLOAM_VEYA_ANCHOR_URL is an error, so a typo can't quietly
- * turn the check or the receipts off. The errors name the setting and never repeat
+ * GLOAM_VEYA_AGENT_ID or GLOAM_VEYA_ANCHOR_URL (or an anchor URL on another origin
+ * than the check's) is an error, so a typo can't quietly turn the check or the
+ * receipts off, or send the key somewhere else. The errors name the setting and never repeat
  * its value.
  */
 export function veyaConfig(env: Env): VeyaConfig | { error: string } | null {
@@ -191,6 +192,8 @@ export function veyaConfig(env: Env): VeyaConfig | { error: string } | null {
       return { error: "GLOAM_VEYA_ANCHOR_URL is not a URL." };
     }
     if (!keyMayGoTo(anchor)) return { error: `GLOAM_VEYA_ANCHOR_URL must be https (or http on localhost), not ${anchor.protocol}//${anchor.host}.` };
+    // The key goes to both, so both must be VEYA's: one origin, never a second host the key would reach.
+    if (anchor.origin !== url.origin) return { error: "GLOAM_VEYA_ANCHOR_URL must be on the same origin (scheme, host and port) as GLOAM_VEYA_URL, since the key goes to both." };
     anchorUrl = anchor.toString();
   }
   return {

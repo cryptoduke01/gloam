@@ -88,6 +88,7 @@ const { createGloamServer } = await import("../src/server.js");
 const { allNetworks } = await import("../src/networks.js");
 const { openNoteStore } = await import("../src/noteStore.js");
 type ServerDeps = import("../src/server.js").ServerDeps;
+type ReceiptOutcome = import("../src/veyaReceipt.js").ReceiptOutcome;
 type Signer = import("../src/signer.js").Signer;
 type McpNetwork = import("../src/networks.js").McpNetwork;
 
@@ -135,7 +136,7 @@ function mockChain(pool: Address) {
   return { publicClient, walletClient, syncTree, insert };
 }
 
-async function connect(chain: ReturnType<typeof mockChain>, env: Env) {
+async function connect(chain: ReturnType<typeof mockChain>, env: Env, receiptWork?: ServerDeps["receiptWork"]) {
   const prover = async () => ({ proofBytes: "0xdeadbeef" as Hex });
   // No receiptProver here: this is the server's own, on the real circuit.
   const deps: Partial<ServerDeps> = {
@@ -145,6 +146,7 @@ async function connect(chain: ReturnType<typeof mockChain>, env: Env) {
     publicClient: () => chain.publicClient as unknown as Signer["publicClient"],
     transferProver: async () => prover,
     syncTree: chain.syncTree as unknown as ServerDeps["syncTree"],
+    ...(receiptWork ? { receiptWork } : {}),
   };
   const server = createGloamServer(deps);
   const [a, b] = InMemoryTransport.createLinkedPair();
@@ -199,13 +201,17 @@ async function pay(net: McpNetwork) {
     createdTx: null,
   });
   const S = await connect(chain, party("payee", dir));
-  const P = await connect(chain, payerEnv);
+  const work = new Map<string, Promise<ReceiptOutcome>>();
+  const P = await connect(chain, payerEnv, (handle, w) => work.set(handle, w));
   const priced = await S("gloam_payment_requirements", { amount: 1, resource: "https://api.example.com/answer", network: net.key });
   const paid = await P("gloam_execute_private_pay", { requirements: priced.encoded });
   assert.equal(paid.status, "paid", JSON.stringify(paid));
+  // The answer comes back first; the receipt is proved and anchored after it.
+  assert.equal(paid.veya.receipt.status, "pending", JSON.stringify(paid.veya));
+  const receipt = await work.get(paid.veya.receipt.note)!;
   const note = openNoteStore(payerEnv).list().find((n) => n.origin === "payment")!;
   const client = { getChainId: async () => net.chainId, ...chain.publicClient } as unknown as ReceiptChainReader;
-  return { paid, record: note.receipt!.record as PaymentReceiptRecord, client };
+  return { receipt, record: note.receipt!.record as PaymentReceiptRecord, client };
 }
 
 const vkeyOf = (ceremony: string) => JSON.parse(readFileSync(join(CIRCUITS, ceremony === "production" ? "final" : "", "receipt_vkey.json"), "utf8"));
@@ -223,8 +229,8 @@ for (const [key, ceremony, zkey] of cases) {
     assert.equal(net.ceremony, ceremony);
     served.length = 0;
     anchored.length = 0;
-    const { paid, record, client } = await pay(net);
-    assert.equal(paid.veya.receipt.status, "anchored", JSON.stringify(paid.veya));
+    const { receipt, record, client } = await pay(net);
+    assert.equal(receipt.status, "anchored", JSON.stringify(receipt));
     assert.equal(record.verifier, CHECK_ID);
     assert.deepEqual(JSON.parse(anchored[0]!), { leaf: record.leaf, agent_id: "agent-7f3a" });
     if (served.length) assert.ok(served.includes(zkey), `fetched ${served.join(", ")}`);
@@ -239,7 +245,7 @@ for (const [key, ceremony, zkey] of cases) {
 
     // All eight checks: leaf, fields, context, vault, snark, chain, root and that this transaction made this payment.
     const verifySnark = (signals: string[], proof: unknown) => verifyGroth16(vkey, signals, proof);
-    const check = await checkPaymentReceipt(record, { leaf: paid.veya.receipt.leaf, verifySnark, client });
+    const check = await checkPaymentReceipt(record, { leaf: receipt.leaf!, verifySnark, client });
     assert.ok(check.ok, JSON.stringify(check.checks.filter((c) => c.state !== "pass")));
     assert.equal(check.expired, false);
 

@@ -8,10 +8,14 @@
  * VEYA gets the leaf and the agent id, nothing else.
  *
  * The money has already moved when this runs, so it never throws and nothing it
- * does changes the payment. Its state lives on the payment's note in the note
- * store, saved before each step that can fail, so a failed receipt or anchor can
- * be retried. That state holds the full record, which shows the asset, the
- * minimum amount and the transaction hash: only the leaf and a status leave here.
+ * does changes the payment. It runs after the payment's answer (settleReceiptLater):
+ * the answer and its credential never wait on a proof or an anchor, since a
+ * challenge can expire meanwhile and the agent would pay again. Its state lives on
+ * the payment's note in the note store, saved before each step that can fail, so a
+ * failed receipt or anchor can be retried. A record the store could not save is
+ * never sent: a retry would build another, a second leaf for one payment. That
+ * state holds the full record, which shows the asset, the minimum amount and the
+ * transaction hash: only the leaf and a status leave here.
  *
  * Two runs can reach one receipt: reading a mainnet vault's tree can outlast the
  * wait for the answer, so a retry can arrive while the first run is still going, and
@@ -29,7 +33,7 @@ type Env = Record<string, string | undefined>;
 
 /** The SDK's default for a receipt. Gloam's /verify reads a receipt as expired after it; the leaf stays on chain. */
 const RECEIPT_TTL_S = 30 * 24 * 3600;
-/** How long a payment's answer waits on its receipt. A slow one must not read as a payment that never came back. */
+/** How long gloam_retry_veya_receipts waits on a receipt before it answers. The work may finish after. */
 const RECEIPT_TIMEOUT_MS = 30_000;
 /** An RPC can trail the receipt it just gave, so a tree that lacks the payment is read again before giving up. */
 const SYNC_TRIES = 3;
@@ -46,7 +50,8 @@ export interface ReceiptContext {
 
 /** What the agent sees of a receipt: never the record. */
 export interface ReceiptOutcome {
-  status: "anchored" | "anchor_failed" | "receipt_failed";
+  /** "pending": the payment's own answer, given before the receipt work, which goes on after it. */
+  status: "pending" | "anchored" | "anchor_failed" | "receipt_failed";
   /** The payment's note handle, for gloam_retry_veya_receipts. */
   note: string;
   checkId: string;
@@ -117,13 +122,20 @@ export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt },
   } catch {
     kept = false;
   }
-  const keep = (patch: Partial<NoteReceipt>) => {
+  /** Save a step under the store's lock. False when the store did not take it, and then the step is in memory only. */
+  const keep = (patch: Partial<NoteReceipt>): boolean => {
     try {
-      receipt = ctx.notes.updateReceipt(note.handle, (current) => advance(current, patch)) ?? advance(receipt, patch);
+      const saved = ctx.notes.updateReceipt(note.handle, (current) => advance(current, patch));
+      if (saved) {
+        receipt = saved;
+        return true;
+      }
     } catch {
-      kept = false;
-      receipt = advance(receipt, patch);
+      // the store could not be read or written
     }
+    kept = false;
+    receipt = advance(receipt, patch);
+    return false;
   };
   const outcome = (status: ReceiptOutcome["status"], message: string): ReceiptOutcome => ({
     status,
@@ -146,8 +158,20 @@ export async function settleReceipt(note: StoredNote & { receipt: NoteReceipt },
         if (!path) why = "The payment does not show in the vault's tree yet, so its receipt could not be built.";
         else {
           const record = await buildPaymentReceipt({ plan: receiptPlan(note, receipt), path, txHash: note.createdTx, prove: await ctx.prover() });
-          // Saved before it goes out, so a crash here leaves a leaf to send again, not a second one.
-          keep({ status: "anchor_failed", record, leaf: record.leaf });
+          // Saved before it goes out, so a crash here leaves a leaf to send again, not a second one. A record the
+          // store did not take never goes out: a retry would build another, and VEYA would hold two leaves for one payment.
+          if (!keep({ status: "anchor_failed", record, leaf: record.leaf })) {
+            receipt = { ...receipt, status: "receipt_failed", record: undefined, leaf: undefined };
+            keep({ status: "receipt_failed" });
+            return {
+              status: "receipt_failed",
+              note: note.handle,
+              checkId: receipt.checkId,
+              leaf: null,
+              anchorTx: null,
+              message: `${PAID} The receipt was built, but the note store could not save it, so its leaf was not sent to VEYA. ${RETRY}`,
+            };
+          }
         }
       } catch {
         why = "The receipt could not be built.";
@@ -191,6 +215,26 @@ function settleOnce(note: StoredNote & { receipt: NoteReceipt }, ctx: ReceiptCon
   const run = settleReceipt(note, ctx).finally(() => running.delete(key));
   running.set(key, run);
   return run;
+}
+
+/**
+ * Start the receipt and answer at once. The payment's answer, and the credential in it, never wait on a proof or an
+ * anchor. The work goes on in this process: `work` settles with its outcome, and gloam_retry_veya_receipts joins it
+ * while it runs, or picks it up from the note store after a restart. Never throws.
+ */
+export function settleReceiptLater(note: StoredNote & { receipt: NoteReceipt }, ctx: ReceiptContext): { now: ReceiptOutcome; work: Promise<ReceiptOutcome> } {
+  const now: ReceiptOutcome = {
+    status: "pending",
+    note: note.handle,
+    checkId: note.receipt.checkId,
+    leaf: null,
+    anchorTx: null,
+    message: `${PAID} Its receipt is built and sent to VEYA after this answer, so nothing here waits on it. Keep this server running until it is done; gloam_retry_veya_receipts shows where it stands.`,
+  };
+  const work = settleOnce(note, ctx).catch(
+    (): ReceiptOutcome => ({ ...now, status: "receipt_failed", message: `${PAID} The receipt could not be built. Nothing went to VEYA. ${RETRY}` })
+  );
+  return { now, work };
 }
 
 /** settleReceipt, but the caller stops waiting at the deadline. The work may still finish; a retry shows where it stands. */

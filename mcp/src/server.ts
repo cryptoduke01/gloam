@@ -109,7 +109,7 @@ import { guardedFetch } from "./safeFetch.js";
 import { WalletSendUnclear, walletSend } from "./walletSend.js";
 import { checkBeforePay } from "./wormholeGuard.js";
 import { checkVeyaBudget } from "./veyaGuard.js";
-import { plannedReceipt, settleReceiptInTime, type ReceiptContext, type ReceiptOutcome } from "./veyaReceipt.js";
+import { plannedReceipt, settleReceiptInTime, settleReceiptLater, type ReceiptContext, type ReceiptOutcome } from "./veyaReceipt.js";
 import {
   allowedModes,
   credentialField,
@@ -166,6 +166,8 @@ export interface ServerDeps {
   /** The relay's state per network (whether it is on, gas over its ceiling). */
   relayStatus(opts: RelayOptions): Promise<RelayNetworkStatus[]>;
   fetch: typeof fetch;
+  /** Hears about each VEYA receipt left to finish after a payment's answer, by the payment's note (tests, embedders). */
+  receiptWork?(note: string, work: Promise<ReceiptOutcome>): void;
 }
 
 function defaultDeps(env: Env): ServerDeps {
@@ -1052,7 +1054,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           ? ["VEYA checks this payment against the agent's budget (GLOAM_VEYA_KEY) and sees the agent id, chain, asset, amount and payee, and nothing about the resource. Only an allow pays."]
           : []),
         ...(env.GLOAM_VEYA_KEY?.trim() && env.GLOAM_VEYA_ANCHOR_URL?.trim()
-          ? ["Once it lands, this server proves the payment and sends VEYA only the receipt's leaf and the agent id (GLOAM_VEYA_ANCHOR_URL)."]
+          ? ["Once it lands, this server proves the payment and sends VEYA only the receipt's leaf and the agent id (GLOAM_VEYA_ANCHOR_URL), after the payment's answer, which never waits on it."]
           : []),
       ];
       return text({
@@ -1140,8 +1142,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
    * it) goes to Agent Wormhole after the spend gate, and only an allow pays. With
    * GLOAM_VEYA_KEY set the payment then goes to VEYA (the agent id, chain, asset,
    * amount and payee only), and only an allow pays. With GLOAM_VEYA_ANCHOR_URL
-   * set too, the payment's receipt is built once it lands; that never changes the
-   * payment.
+   * set too, the payment's receipt is built after its answer, which never waits on
+   * it and never changes because of it.
    */
   async function payPrivately(
     req: GloamPaymentRequirements,
@@ -1183,6 +1185,8 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     } catch {
       return fail({ status: "error", error: "The requirements carry an amount that is not a whole number of base units." });
     }
+    // Zero or less is never a payment, whatever the limits mode: with GLOAM_LIMITS=off nothing else stops it before the checks.
+    if (spend.amountWei <= 0n) return fail({ status: "refused", code: "bad_amount", message: "The amount must be above zero. Not paying." });
     const sealed = isReceiveTag(String(req.payTo ?? ""));
     if (!sealed && !legacy) {
       return fail({
@@ -1455,9 +1459,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           mppWarning = `Paid, but the MPP credential could not be built (${errMsg(e)}). The x402 header still carries the payment.`;
         }
       }
-      // The receipt VEYA anchors. Never throws: the money has moved, so nothing here can fail the payment.
+      // The receipt VEYA anchors, finished after this answer: the payment and its credential never wait on it, since a
+      // challenge can expire meanwhile and the agent would pay again. It never throws, and gloam_retry_veya_receipts joins it.
       let veyaReceipt: ReceiptOutcome | undefined;
-      if (sent?.receipt) veyaReceipt = await settleReceiptInTime({ ...sent, receipt: sent.receipt, createdTx: sentHash }, receiptContext(net, notes));
+      if (sent?.receipt) {
+        const later = settleReceiptLater({ ...sent, receipt: sent.receipt, createdTx: sentHash }, receiptContext(net, notes));
+        veyaReceipt = later.now;
+        deps.receiptWork?.(sent.handle, later.work);
+      }
       const noteWarning = storeWarnings.filter(Boolean).join(" ") || undefined;
       return {
         ok: true,
@@ -1537,7 +1546,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       {
         title: "Retry VEYA receipts",
         description:
-          "Retry the receipts of payments that already went through, after a result said anchor_failed or receipt_failed. Spends nothing and pays nothing: it builds a missing receipt and sends VEYA its leaf. A leaf VEYA already took is not sent again. Returns each payment's note handle, leaf and status, never the record.",
+          "See where the receipts of payments that already went through stand, and retry any that failed. A payment's answer says its receipt is pending, since the receipt is built after it; this waits up to 30 seconds on one still being built. Spends nothing and pays nothing: it builds a missing receipt and sends VEYA its leaf. A leaf VEYA already took is not sent again. Returns each payment's note handle, leaf and status, never the record.",
         inputSchema: {
           note: z.string().optional().describe("Handle of one payment's note. Omit for every receipt VEYA has not taken."),
         },

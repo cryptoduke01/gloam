@@ -56,7 +56,7 @@ import { createGloamServer, type ServerDeps } from "../src/server.js";
 import type { Signer } from "../src/signer.js";
 import { openNoteStore } from "../src/noteStore.js";
 import { anchorLeaf, checkVeyaBudget, veyaConfig, type VeyaPayment } from "../src/veyaGuard.js";
-import { settleReceipt, type ReceiptContext } from "../src/veyaReceipt.js";
+import { settleReceipt, type ReceiptContext, type ReceiptOutcome } from "../src/veyaReceipt.js";
 
 type Env = Record<string, string | undefined>;
 const TEMPO = GLOAM_NETWORKS.tempo;
@@ -73,13 +73,13 @@ const WORMHOLE_ALLOW: Answer = { body: { decision: "allow", findings: [], scanne
 const calls: string[] = [];
 
 function standIn(name: string, reply: (sent: string) => Answer) {
-  const received: { auth: string | undefined; contentType: string | undefined; method: string | undefined; body: string }[] = [];
-  const server = http.createServer((req, res) => {
+  const received: { auth: string | undefined; contentType: string | undefined; acceptEncoding: string | undefined; method: string | undefined; body: string }[] = [];
+  const handle = (req: http.IncomingMessage, res: http.ServerResponse) => {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
       calls.push(name);
-      received.push({ auth: req.headers.authorization, contentType: req.headers["content-type"], method: req.method, body });
+      received.push({ auth: req.headers.authorization, contentType: req.headers["content-type"], acceptEncoding: req.headers["accept-encoding"], method: req.method, body });
       const a = reply(body);
       const send = () => {
         if (res.destroyed) return;
@@ -90,8 +90,8 @@ function standIn(name: string, reply: (sent: string) => Answer) {
       if (a.delayMs) setTimeout(send, a.delayMs);
       else send();
     });
-  });
-  return { name, server, received };
+  };
+  return { name, server: http.createServer(handle), handle, received };
 }
 
 let answer: Answer = ALLOW;
@@ -112,12 +112,15 @@ let anchorAnswer: AnchorReply = veyaAnchors;
 const anchorApi = standIn("anchor", (sent) => (typeof anchorAnswer === "function" ? anchorAnswer(JSON.parse(sent).leaf) : anchorAnswer));
 const received = veyaApi.received;
 const listen = (s: http.Server) => new Promise<number>((r) => s.listen(0, "127.0.0.1", () => r((s.address() as AddressInfo).port)));
-const VEYA_URL = `http://127.0.0.1:${await listen(veyaApi.server)}/v1/check`;
+// VEYA's check and anchor are one origin, as the key goes to both: one server, by path.
+const veyaServer = http.createServer((req, res) => (req.url?.startsWith("/v1/anchor") ? anchorApi.handle(req, res) : veyaApi.handle(req, res)));
+const VEYA_ORIGIN = `http://127.0.0.1:${await listen(veyaServer)}`;
+const VEYA_URL = `${VEYA_ORIGIN}/v1/check`;
+const ANCHOR_URL = `${VEYA_ORIGIN}/v1/anchor`;
 const WORMHOLE_URL = `http://127.0.0.1:${await listen(wormholeApi.server)}/api/v1/check`;
 const ELSEWHERE_URL = `http://127.0.0.1:${await listen(elsewhere.server)}/stolen`;
-const ANCHOR_URL = `http://127.0.0.1:${await listen(anchorApi.server)}/v1/anchor`;
 after(() => {
-  for (const s of [veyaApi.server, wormholeApi.server, elsewhere.server, anchorApi.server]) {
+  for (const s of [veyaServer, wormholeApi.server, elsewhere.server]) {
     s.closeAllConnections();
     s.close();
   }
@@ -528,8 +531,20 @@ function deps(chain: Chain, env: Env, extra: Partial<ServerDeps> = {}): Partial<
     transferProver: async () => transferProver,
     receiptProver: async () => receiptProver,
     syncTree: chain.syncTree as unknown as ServerDeps["syncTree"],
+    receiptWork: (note, work) => void receiptWork.set(note, work),
     ...extra,
   };
+}
+
+/** Receipt work each server left running after a payment's answer, by the payment's note. */
+const receiptWork = new Map<string, Promise<ReceiptOutcome>>();
+
+/** A payment's answer comes back with its receipt pending: this is how the receipt work behind it ended. */
+async function receiptOf(paid: Record<string, any>): Promise<ReceiptOutcome> {
+  assert.equal(paid.veya?.receipt?.status, "pending", JSON.stringify(paid.veya));
+  const work = receiptWork.get(paid.veya.receipt.note);
+  assert.ok(work, "the receipt work started");
+  return work!;
 }
 
 async function connect(d: Partial<ServerDeps>) {
@@ -1060,8 +1075,16 @@ test("execute_private_pay: an allow with an id gives a leaf whose verifier is th
   assert.equal(paid.status, "paid", JSON.stringify(paid));
   assert.equal(paid.veya.decision, "allow");
   assert.equal(paid.veya.checkId, CHECK_ID);
+  // The answer comes first, with the receipt pending: nothing in it waits on the proof or the anchor.
+  assert.equal(paid.veya.receipt.status, "pending");
+  assert.equal(paid.veya.receipt.checkId, CHECK_ID);
+  assert.equal(paid.veya.receipt.leaf, null);
+  assert.equal(paid.veya.receipt.anchorTx, null);
+  assert.match(paid.veya.receipt.message, /^Paid, and the money has moved, so do not pay again\. Its receipt is built and sent to VEYA after this answer/);
+  const receipt = await receiptOf(paid);
   const note = paymentNote(s.payerEnv);
-  assert.deepEqual(paid.veya.receipt, {
+  assert.equal(paid.veya.receipt.note, note.handle);
+  assert.deepEqual(receipt, {
     status: "anchored",
     note: note.handle,
     checkId: CHECK_ID,
@@ -1071,7 +1094,7 @@ test("execute_private_pay: an allow with an id gives a leaf whose verifier is th
   });
   assert.equal(note.receipt!.anchorTx, TX_1);
   assert.ok(!JSON.stringify(paid).includes("explorer.example"), "VEYA's link is its own text, and stays out");
-  assert.match(paid.veya.receipt.leaf, /^0x[0-9a-f]{64}$/, "the leaf as VEYA takes it");
+  assert.match(receipt.leaf!, /^0x[0-9a-f]{64}$/, "the leaf as VEYA takes it");
   assert.deepEqual(calls, ["veya", "anchor"], "checked, paid, then anchored");
 
   // The record: bound to the check id, for this payment, in the note store.
@@ -1084,18 +1107,18 @@ test("execute_private_pay: an allow with an id gives a leaf whose verifier is th
   assert.equal(record.minAmount, "1000000");
   assert.equal(record.expiresAt, note.receipt!.expiresAt);
   assert.ok(record.expiresAt > Date.now() / 1000 + 29 * 24 * 3600);
-  assert.ok(verifyPaymentReceiptLeaf(paid.veya.receipt.leaf, record));
+  assert.ok(verifyPaymentReceiptLeaf(receipt.leaf!, record));
   const context = proofContext({ kind: "payment", chainId: record.chainId, pool: record.pool, verifier: CHECK_ID, expiresAt: record.expiresAt });
   const contextAt = RECEIPT_PUBLIC_SIGNALS.indexOf("context");
   assert.equal(record.publicSignals[contextAt], context.toString(), "the id is sealed into the proof");
   // The tie VEYA relies on: the id is in the leaf, so another id can't have this leaf.
   const otherId = proofContext({ kind: "payment", chainId: record.chainId, pool: record.pool, verifier: `${CHECK_ID}-other`, expiresAt: record.expiresAt });
-  assert.notEqual(paymentReceiptLeaf({ ...record, publicSignals: record.publicSignals.map((v, i) => (i === contextAt ? otherId.toString() : v)) }), paid.veya.receipt.leaf);
+  assert.notEqual(paymentReceiptLeaf({ ...record, publicSignals: record.publicSignals.map((v, i) => (i === contextAt ? otherId.toString() : v)) }), receipt.leaf);
 
   // The only thing VEYA gets after the payment.
   assert.equal(anchorApi.received.length, 1);
   assert.equal(anchorApi.received[0]!.auth, `Bearer ${KEY}`);
-  assert.deepEqual(JSON.parse(anchorApi.received[0]!.body), { leaf: paid.veya.receipt.leaf, agent_id: "agent-7f3a" });
+  assert.deepEqual(JSON.parse(anchorApi.received[0]!.body), { leaf: receipt.leaf, agent_id: "agent-7f3a" });
   const wire = lc(anchorApi.received[0]!.body);
   for (const secret of [note.secret, note.commitment, note.nullifier, paid.hash]) assert.ok(!wire.includes(lc(secret).slice(2)), secret);
   assert.ok(!wire.includes("1000000") && !wire.includes(lc(String(s.priced.requirements.payTo))), "no amount, no payee");
@@ -1143,7 +1166,8 @@ test("the path comes from a tree read after the payment landed, and a node behin
   let s = await setup(receiptsOn);
   s.chain.state.lag = 1;
   let paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  assert.equal(paid.veya.receipt.status, "anchored", JSON.stringify(paid.veya));
+  let receipt = await receiptOf(paid);
+  assert.equal(receipt.status, "anchored", JSON.stringify(receipt));
   assert.equal(s.chain.state.lag, 0);
   const signals = paymentNote(s.payerEnv).receipt!.record!.publicSignals;
   assert.equal(BigInt(signals[0]!), BigInt(proved[0]!.root as string), "the root the proof is over");
@@ -1155,9 +1179,10 @@ test("the path comes from a tree read after the payment landed, and a node behin
   s.chain.state.lag = 10;
   paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   assert.equal(paid.status, "paid", JSON.stringify(paid));
-  assert.equal(paid.veya.receipt.status, "receipt_failed");
-  assert.equal(paid.veya.receipt.leaf, null);
-  assert.match(paid.veya.receipt.message, /does not show in the vault's tree yet/);
+  receipt = await receiptOf(paid);
+  assert.equal(receipt.status, "receipt_failed");
+  assert.equal(receipt.leaf, null);
+  assert.match(receipt.message, /does not show in the vault's tree yet/);
   assert.equal(proved.length, 0, "nothing is proved over a tree without the payment");
   assert.equal(anchorApi.received.length, 0);
 });
@@ -1167,9 +1192,10 @@ test("a failed anchor or receipt never fails the payment", async () => {
   const stands = async (s: Awaited<ReturnType<typeof setup>>, paid: Record<string, any>, status: string) => {
     assert.equal(paid.status, "paid", JSON.stringify(paid));
     assert.ok(paid.hash, "the transaction is there");
-    assert.equal(paid.veya.receipt.status, status);
-    assert.match(paid.veya.receipt.message, /^Paid, and the money has moved, so do not pay again\./);
-    assert.match(paid.veya.receipt.message, /gloam_retry_veya_receipts/);
+    const receipt = await receiptOf(paid);
+    assert.equal(receipt.status, status);
+    assert.match(receipt.message, /^Paid, and the money has moved, so do not pay again\./);
+    assert.match(receipt.message, /gloam_retry_veya_receipts/);
     assert.equal(transfers(s.chain), 1);
     const pays = await paymentsLogged(s.P);
     assert.deepEqual(pays.map((p) => p.status), ["sent"], "the spend stays sent");
@@ -1183,7 +1209,7 @@ test("a failed anchor or receipt never fails the payment", async () => {
     const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
     await stands(s, paid, "anchor_failed");
     const note = paymentNote(s.payerEnv);
-    assert.equal(paid.veya.receipt.leaf, note.receipt!.leaf, "the leaf is returned");
+    assert.equal((await receiptOf(paid)).leaf, note.receipt!.leaf, "the leaf is returned");
     assert.ok(note.receipt!.record, "the record is kept for a retry");
     assert.equal(note.receipt!.status, "anchor_failed");
   }
@@ -1193,7 +1219,7 @@ test("a failed anchor or receipt never fails the payment", async () => {
   let s = await setup(receiptsOn);
   let paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   await stands(s, paid, "receipt_failed");
-  assert.equal(paid.veya.receipt.leaf, null);
+  assert.equal((await receiptOf(paid)).leaf, null);
   assert.ok(!JSON.stringify(paid).includes("0xsecretdetail"), "an error's text stays out of the result");
   assert.equal(anchorApi.received.length, 0);
   assert.equal(paymentNote(s.payerEnv).receipt!.status, "receipt_failed");
@@ -1204,43 +1230,59 @@ test("a failed anchor or receipt never fails the payment", async () => {
   paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   await stands(s, paid, "receipt_failed");
 
-  // A prover that never comes back does not hold the payment's answer.
+  // A prover that never comes back does not hold the payment's answer, and a retry stops waiting at its deadline.
   reset(ALLOW_ID);
   prover = "hangs";
   s = await setup({ ...receiptsOn, GLOAM_VEYA_RECEIPT_TIMEOUT_MS: "500" });
-  const t0 = Date.now();
+  let t0 = Date.now();
   paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  await stands(s, paid, "receipt_failed");
-  assert.match(paid.veya.receipt.message, /not built yet after 0\.5s/);
-  assert.ok(Date.now() - t0 < 2_000, "it stops waiting at the deadline");
+  assert.equal(paid.status, "paid", JSON.stringify(paid));
+  assert.equal(paid.veya.receipt.status, "pending");
+  assert.ok(Date.now() - t0 < 1_000, "the answer does not wait on the receipt");
+  t0 = Date.now();
+  const retry = await s.P("gloam_retry_veya_receipts", {});
+  assert.equal(retry.receipts[0].status, "receipt_failed");
+  assert.match(retry.receipts[0].message, /not built yet after 0\.5s/);
+  assert.ok(Date.now() - t0 < 2_000, "the retry stops waiting at the deadline");
+  assert.equal(transfers(s.chain), 1);
 });
 
-test("the answer can stop waiting on the anchor: the leaf is already kept, and it says so", async () => {
+test("the answer never waits on the anchor, and a retry stops waiting at its deadline with the leaf already kept", async () => {
   reset(ALLOW_ID, WORMHOLE_ALLOW, (leaf) => ({ ...veyaAnchors(leaf), delayMs: 1_500 }));
   const s = await setup({ ...receiptsOn, GLOAM_VEYA_ANCHOR_TIMEOUT_MS: "5000", GLOAM_VEYA_RECEIPT_TIMEOUT_MS: "500" });
+  const t0 = Date.now();
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   assert.equal(paid.status, "paid", JSON.stringify(paid));
-  assert.equal(paid.veya.receipt.status, "anchor_failed");
-  assert.match(paid.veya.receipt.message, /has not taken its leaf yet after 0\.5s/);
+  assert.equal(paid.veya.receipt.status, "pending");
+  assert.ok(Date.now() - t0 < 1_000, "a 1.5 second anchor does not hold the answer");
+
+  // While the anchor call is out, a retry joins the work and stops waiting at 0.5s.
+  for (let i = 0; i < 60 && !paymentNote(s.payerEnv).receipt!.record; i++) await new Promise((r) => setTimeout(r, 25));
+  const retry = await s.P("gloam_retry_veya_receipts", {});
+  assert.equal(retry.receipts[0].status, "anchor_failed");
+  assert.match(retry.receipts[0].message, /has not taken its leaf yet after 0\.5s/);
   const kept = paymentNote(s.payerEnv).receipt!;
   assert.ok(kept.record, "the record is saved before the leaf goes out, so a crash here loses nothing");
-  assert.equal(paid.veya.receipt.leaf, kept.leaf);
+  assert.equal(retry.receipts[0].leaf, kept.leaf);
 
   // The anchor finishes on its own, and a retry finds it done.
-  for (let i = 0; i < 60 && paymentNote(s.payerEnv).receipt!.status !== "anchored"; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal((await receiptOf(paid)).status, "anchored");
   assert.equal(paymentNote(s.payerEnv).receipt!.status, "anchored");
   assert.deepEqual((await s.P("gloam_retry_veya_receipts", {})).receipts, []);
   assert.equal(anchorApi.received.length, 1);
 });
 
-test("a note store that stops working mid-receipt does not fail the payment, and the result says what was lost", async () => {
+test("a note store that stops working mid-receipt: the payment stands, and a leaf it could not save is not sent", async () => {
   reset(ALLOW_ID);
   const s = await setup(receiptsOn);
   duringProof = () => writeFileSync(s.payerEnv.GLOAM_NOTE_STORE!, "not a note store");
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   assert.equal(paid.status, "paid", JSON.stringify(paid));
-  assert.equal(paid.veya.receipt.status, "anchored");
-  assert.match(paid.veya.receipt.message, /could not be saved in the note store/);
+  const receipt = await receiptOf(paid);
+  assert.equal(receipt.status, "receipt_failed");
+  assert.equal(receipt.leaf, null);
+  assert.match(receipt.message, /the note store could not save it, so its leaf was not sent to VEYA/);
+  assert.equal(anchorApi.received.length, 0, "a leaf that is not kept would be followed by a second one on retry");
 });
 
 test("fetch_paid: the resource is served whatever happens to the receipt", async () => {
@@ -1250,21 +1292,22 @@ test("fetch_paid: the resource is served whatever happens to the receipt", async
   assert.equal(r.status, "ok", JSON.stringify(r));
   assert.equal(r.body, "the answer is 42");
   assert.equal(sent, 1);
-  assert.equal(r.veya.receipt.status, "anchor_failed");
+  assert.equal((await receiptOf(r)).status, "anchor_failed");
 
   reset(ALLOW_ID);
   s = await setup(receiptsOn);
   ({ r } = await fetchPaid(s, s.priced.requirements));
   assert.equal(r.status, "ok", JSON.stringify(r));
-  assert.equal(r.veya.receipt.status, "anchored");
-  assert.equal(JSON.parse(anchorApi.received[0]!.body).leaf, r.veya.receipt.leaf);
+  const receipt = await receiptOf(r);
+  assert.equal(receipt.status, "anchored");
+  assert.equal(JSON.parse(anchorApi.received[0]!.body).leaf, receipt.leaf);
 });
 
 test("a retry after a failed anchor sends the same leaf, proves nothing and spends nothing", async () => {
   reset(ALLOW_ID, WORMHOLE_ALLOW, { status: 503, body: {} });
   const s = await setup(receiptsOn);
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  const { leaf, note } = paid.veya.receipt;
+  const { leaf, note } = await receiptOf(paid);
   const report = JSON.stringify(await paymentsLogged(s.P));
   const kept = JSON.stringify(paymentNote(s.payerEnv).receipt!.record);
 
@@ -1305,15 +1348,16 @@ test("a write that finished after its answer was lost: the retry gets the first 
   reset(ALLOW_ID, WORMHOLE_ALLOW, (leaf) => ({ ...veyaAnchors(leaf), delayMs: 1_000 }));
   const s = await setup({ ...receiptsOn, GLOAM_VEYA_ANCHOR_TIMEOUT_MS: "500" });
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  assert.equal(paid.veya.receipt.status, "anchor_failed");
-  assert.equal(paid.veya.receipt.anchorTx, null);
-  assert.match(paid.veya.receipt.message, /did not answer within 0\.5s\. Call gloam_retry_veya_receipts to try again\./);
+  const receipt = await receiptOf(paid);
+  assert.equal(receipt.status, "anchor_failed");
+  assert.equal(receipt.anchorTx, null);
+  assert.match(receipt.message, /did not answer within 0\.5s\. Call gloam_retry_veya_receipts to try again\./);
   assert.equal(written.size, 1, "VEYA wrote it anyway");
 
   anchorAnswer = veyaAnchors;
   const retry = await s.P("gloam_retry_veya_receipts", {});
   assert.equal(retry.receipts[0].status, "anchored", JSON.stringify(retry));
-  assert.equal(retry.receipts[0].leaf, paid.veya.receipt.leaf);
+  assert.equal(retry.receipts[0].leaf, receipt.leaf);
   assert.equal(retry.receipts[0].anchorTx, TX_1, "the transaction that wrote it");
   assert.equal(retry.receipts[0].message, "Paid, and VEYA already had the receipt's leaf.");
   assert.equal(written.size, 1, "and nothing was written twice");
@@ -1326,16 +1370,17 @@ test("403 and 404 on the anchor: the payment stands, the leaf is kept, and the m
     const s = await setup(receiptsOn);
     const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
     assert.equal(paid.status, "paid", JSON.stringify(paid));
-    assert.equal(paid.veya.receipt.status, "anchor_failed");
-    assert.match(paid.veya.receipt.message, words);
-    assert.match(paid.veya.receipt.message, /A retry will get the same answer until that changes/);
+    const receipt = await receiptOf(paid);
+    assert.equal(receipt.status, "anchor_failed");
+    assert.match(receipt.message, words);
+    assert.match(receipt.message, /A retry will get the same answer until that changes/);
     assert.equal(anchorApi.received.length, 1);
 
     // Fixed on VEYA's side: the same leaf goes through.
     anchorAnswer = veyaAnchors;
     const retry = await s.P("gloam_retry_veya_receipts", {});
     assert.equal(retry.receipts[0].status, "anchored", JSON.stringify(retry));
-    assert.equal(retry.receipts[0].leaf, paid.veya.receipt.leaf);
+    assert.equal(retry.receipts[0].leaf, receipt.leaf);
   }
 });
 
@@ -1344,7 +1389,7 @@ test("a retry after a failed receipt builds it with the same check id and expiry
   prover = "throws";
   const s = await setup(receiptsOn);
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  assert.equal(paid.veya.receipt.status, "receipt_failed");
+  assert.equal((await receiptOf(paid)).status, "receipt_failed");
   const before = paymentNote(s.payerEnv).receipt!;
   assert.equal(before.record, undefined);
 
@@ -1380,7 +1425,7 @@ async function paidWithNoReceipt() {
   prover = "throws";
   const s = await setup(receiptsOn);
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
-  assert.equal(paid.veya.receipt.status, "receipt_failed");
+  assert.equal((await receiptOf(paid)).status, "receipt_failed");
   prover = "proves";
   const held = paymentNote(s.payerEnv);
   assert.equal(held.receipt!.record, undefined);
@@ -1394,16 +1439,16 @@ test("a retry while the first receipt is still being built joins it: one proof, 
   const s = await setup({ ...receiptsOn, GLOAM_VEYA_RECEIPT_TIMEOUT_MS: "500" });
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   assert.equal(paid.status, "paid", JSON.stringify(paid));
-  assert.equal(paid.veya.receipt.status, "receipt_failed");
-  assert.match(paid.veya.receipt.message, /not built yet after 0\.5s/);
+  assert.equal(paid.veya.receipt.status, "pending");
 
   // The first run is still going, as it was on mainnet, where the tree read alone took 92 seconds.
   const retry = await s.P("gloam_retry_veya_receipts", {});
   assert.equal(retry.receipts[0].status, "receipt_failed");
+  assert.match(retry.receipts[0].message, /not built yet after 0\.5s/);
   assert.equal(proved.length, 1, "no second proof while the first is running");
 
   open();
-  for (let i = 0; i < 60 && paymentNote(s.payerEnv).receipt!.status !== "anchored"; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal((await receiptOf(paid)).status, "anchored");
   const kept = paymentNote(s.payerEnv).receipt!;
   assert.equal(kept.status, "anchored");
   assert.equal(kept.anchorTx, TX_1);
@@ -1491,7 +1536,7 @@ test("the first run finishes during this run's anchor call: anchored stands, wha
   const built = async () => {
     reset(ALLOW_ID, WORMHOLE_ALLOW, { status: 500, body: {} });
     const s = await setup(receiptsOn);
-    await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
+    await receiptOf(await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded }));
     const held = paymentNote(s.payerEnv);
     assert.equal(held.receipt!.status, "anchor_failed");
     const finished = { ...held.receipt!, status: "anchored" as const, anchorTx: `0x${"f1".repeat(32)}` as Hex };
@@ -1566,6 +1611,7 @@ test("the record never reaches the agent, and is encrypted where it is kept", as
   const s = await setup(receiptsOn);
   const paid = await s.P("gloam_execute_private_pay", { requirements: s.priced.encoded });
   leaks(paid);
+  leaks(await receiptOf(paid));
   leaks(await s.P("gloam_list_notes", { includeSpent: true, refresh: true }));
   leaks(await s.P("gloam_get_spending_report", {}));
   leaks(await s.P("gloam_retry_veya_receipts", {}));
