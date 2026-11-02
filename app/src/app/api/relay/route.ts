@@ -3,6 +3,7 @@ import { logSafe } from "@/lib/logSafe";
 import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import {
   RelayError,
+  checkChainRateLimit,
   checkRateLimit,
   memoTicket,
   networkForChain,
@@ -12,6 +13,7 @@ import {
   relayTransfer,
   relayUnshield,
   relayVaultSwap,
+  relayVaultSwapExit,
 } from "@/lib/relay/server";
 
 export const runtime = "nodejs";
@@ -28,7 +30,7 @@ export async function GET() {
 
 /**
  * Submit an already-proven private action through the Gloam relay.
- * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap", ...args }
+ * Body: { chainId, action: "transfer" | "unshield" | "memo" | "swap" | "swapExit", ...args }
  * Returns { ok: true, hash } as soon as the transaction is sent; the client
  * waits for the receipt itself. A transfer also returns `memoTicket` for its
  * payment (commitments[0]), null when the relay has no memo secret: sent back
@@ -43,17 +45,19 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     const requester = clientIp(req);
     await checkRateLimit(requester);
+    // payment messages have budgets of their own (lib/relay/server holdMemoSlot)
+    if (body.action !== "memo") await checkChainRateLimit(net, requester);
 
     let hash: `0x${string}`;
     switch (body.action) {
       case "transfer": {
-        hash = await relayTransfer(net, body);
+        hash = await relayTransfer(net, body, requester);
         // relayTransfer checked commitments[0] is a bytes32
         const payment = (body.commitments as string[])[0]!;
         return NextResponse.json({ ok: true, hash, memoTicket: memoTicket(net.chainId, payment) });
       }
       case "unshield":
-        hash = await relayUnshield(net, body);
+        hash = await relayUnshield(net, body, requester);
         break;
       case "gas-station":
         hash = await relayGasStation(net, body, requester);
@@ -62,7 +66,10 @@ export async function POST(req: Request) {
         hash = await relayMemo(net, body);
         break;
       case "swap":
-        hash = await relayVaultSwap(net, body);
+        hash = await relayVaultSwap(net, body, requester);
+        break;
+      case "swapExit":
+        hash = await relayVaultSwapExit(net, body);
         break;
       default:
         throw new RelayError("Unknown action.");

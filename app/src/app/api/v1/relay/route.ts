@@ -5,6 +5,7 @@ import { recordActivity, type ActivityKind, type ActivityRecord } from "@/lib/pa
 import {
   asAddress,
   asAmount,
+  checkChainRateLimit,
   checkRateLimit,
   networkForChain,
   relayMemo,
@@ -41,25 +42,28 @@ export async function POST(req: Request) {
     const body = await jsonBody(req);
     const net = networkForChain(body.chainId);
     requireKeyEnv(key, keyEnvForNetwork(net), net.label);
-    // The relay's own per-sender cap, with the key as the sender (the network cap applies when it sends).
-    await checkRateLimit(`key:${key.id}`);
+    // The relay's own per-sender caps, with the partner account as the sender: all its
+    // keys count together (the network caps apply when it sends).
+    const sender = `partner:${partner.id}`;
+    await checkRateLimit(sender);
+    if (body.action !== "memo") await checkChainRateLimit(net, sender);
 
     let hash: `0x${string}`;
     let kind: ActivityKind | null = null;
     let edge: { asset: `0x${string}`; amount: bigint } | null = null;
     switch (body.action) {
       case "transfer":
-        hash = await relayTransfer(net, body);
+        hash = await relayTransfer(net, body, sender);
         kind = "private_payment";
         break;
       case "unshield":
-        hash = await relayUnshield(net, body);
+        hash = await relayUnshield(net, body, sender);
         kind = "cash_out";
         // Public inputs of the cash-out proof, already validated by the relay.
         edge = { asset: asAddress(body.asset, "asset"), amount: asAmount(body.amount) };
         break;
       case "memo":
-        hash = await relayMemo(net, body, `key:${key.id}`);
+        hash = await relayMemo(net, body, { partner: partner.id, approved: partner.relayApproved === true });
         break;
       default:
         throw new ApiError(400, "bad_action", 'action must be "transfer", "unshield" or "memo".');

@@ -1240,6 +1240,7 @@ type AdminPartner = {
   name: string;
   website: string | null;
   fees: { privatePaymentCents: number; cashoutBps: number; depositBps: number };
+  relayApproved: boolean;
   createdAt: number;
   activeKeys: number;
   totals: {
@@ -1263,6 +1264,33 @@ type PartnersPayload = {
 function PartnersPanel() {
   const [data, setData] = useState<PartnersPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  /** Approves an account for the relay's larger message budget, or takes that back. */
+  const setApproved = async (id: string, relayApproved: boolean) => {
+    setSaving(id);
+    setSaveErr(null);
+    try {
+      const res = await fetch("/api/partners/admin", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, relayApproved }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: { partner?: { relayApproved?: boolean } }; error?: { message?: string } } | null;
+      if (!res.ok || !json?.ok) {
+        setSaveErr(json?.error?.message ?? `Saving failed (${res.status})`);
+        return;
+      }
+      const saved = json.data?.partner?.relayApproved === true;
+      setData((d) => (d ? { ...d, partners: d.partners.map((p) => (p.id === id ? { ...p, relayApproved: saved } : p)) } : d));
+    } catch {
+      setSaveErr("Network error saving the partner");
+    } finally {
+      setSaving(null);
+    }
+  };
 
   useEffect(() => {
     let live = true;
@@ -1318,7 +1346,7 @@ function PartnersPanel() {
       </section>
       <Panel title="Partners">
         <DataTable
-          headers={["Partner", "Owner", "Keys", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
+          headers={["Partner", "Owner", "Keys", "Messages", "Private payments", "Cash outs", "Deposits", "Public volume", "Would-be fees", "Fee setting", "Last payment", "Joined"]}
           rows={data.partners.map((p) => [
             <span key="n" className="text-foreground">
               {p.website ? (
@@ -1333,6 +1361,16 @@ function PartnersPanel() {
               {shortAddress(p.owner, 4)}
             </span>,
             n(p.activeKeys),
+            <button
+              key="r"
+              type="button"
+              disabled={saving === p.id}
+              onClick={() => void setApproved(p.id, !p.relayApproved)}
+              className="rounded-full border border-line px-3 py-1 text-[13px] text-foreground transition-colors hover:border-line-strong disabled:opacity-50"
+              title={p.relayApproved ? "Their keys use the larger message budget. Click to take it back." : "Their keys share the small message budget. Click to approve."}
+            >
+              {saving === p.id ? "Saving" : p.relayApproved ? "Approved" : "Approve"}
+            </button>,
             n(p.totals?.privatePayments),
             n(p.totals?.cashOuts),
             n(p.totals?.deposits),
@@ -1343,10 +1381,16 @@ function PartnersPanel() {
             new Date(p.createdAt).toLocaleDateString(),
           ])}
           empty={data.backend === "none" ? "Partner storage is not configured (set Upstash Redis)." : "No partners yet"}
-          minWidth={1100}
+          minWidth={1200}
         />
+        {saveErr && (
+          <p className="mt-3 text-[13px] text-danger" role="alert">
+            {saveErr}
+          </p>
+        )}
         <p className="mt-4 text-[13px] leading-relaxed text-mute">
-          Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
+          Messages: payment messages from an approved account&apos;s keys use the relay&apos;s larger budget. Every other
+          account&apos;s keys share a small one. Fee setting is per private payment, cash outs, deposits. Volume counts payments relayed with a partner key and
           deposits partners reported (checked on chain). Store: {data.backend}.
         </p>
       </Panel>

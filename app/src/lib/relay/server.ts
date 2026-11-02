@@ -5,8 +5,9 @@
  * Gloam relay account, so the user's own wallet never appears next to them on
  * a block explorer. The pool never checks msg.sender on transfer/unshield (the
  * Groth16 proof is the authorization, and unshield binds the recipient inside
- * the proof), so relaying cannot redirect funds: the worst a relay can do is
- * refuse to submit.
+ * the proof), so relaying cannot redirect funds. A relay can refuse or delay a
+ * send. Holding a swap's proofs, it can also send the swap's first step alone,
+ * which brings the money back as the refund note, at that note's cost.
  *
  * Guard rails:
  *   - only the active pool's transfer/unshield and the memo board's postMemo,
@@ -37,10 +38,19 @@
  *     default, none on the L2s): above it nothing is sent and the request is
  *     refused as gas_high, and a send under it never offers more than 1.5
  *     times the ceiling per unit of gas
+ *   - a floor under a private swap where gas is dear (lib/relay/swapFloor): its
+ *     vault fee must cover the swap's own gas, or it is refused as swap_small
+ *     before anything is sent, with hourly gas budgets for what reverts there
+ *   - a refund or an exit goes only for an escrow the vault paid: the unshield's
+ *     receipt must show it, for that note and that amount
+ *   - an hourly spend cap per chain across every kind of send, with the last part
+ *     kept for cash outs, refunds and exits, and a share of it for each sender
+ *     (lib/relay/spendCap)
  *   - per-sender and per-network rate limits, shared across instances (the
- *     network cap counts only transactions actually sent), and a few relayed
- *     payment messages per payment: the payer's own (with the memo ticket the
- *     transfer handed back), each partner key's, and one small allowance that
+ *     network cap counts only transactions actually sent: a send refused after
+ *     its slot was taken gives the slot back), and a few relayed payment
+ *     messages per payment: the payer's own (with the memo ticket the transfer
+ *     handed back), each partner account's, and one small allowance that
  *     everyone else shares, none of them kept by IP
  *
  * Submission is free for the user on every network, mainnet included: the relay
@@ -75,16 +85,20 @@ import {
   isNetworkWritable,
   type GloamNetwork,
 } from "@/lib/networks";
-import { SharedCountUnavailable, hitRateLimit } from "@/lib/mcpRemote/rateLimit";
+import { SharedCountUnavailable, addRateCount, hitRateLimit, readRateLimit } from "@/lib/mcpRemote/rateLimit";
 import { SCREEN_BLOCKED_MESSAGE } from "@/lib/screening";
 import { screenAddresses } from "@/lib/screeningServer";
+import { TIP403_RECEIVE_UNCHECKED_MESSAGE } from "@/lib/tip403";
 import { cashOutTargetProblem } from "@/lib/cashOutTarget";
-import { LockStoreDown, forgetNonce, inSendLanes, inflightKey, relayStoreDown, releaseIfReverted, takeInflight } from "@/lib/relay/inflight";
+import { LockStoreDown, RECEIPT_WATCH_MS, forgetNonce, inSendLanes, inflightKey, relayStoreDown, releaseIfReverted, takeInflight, type InflightLock } from "@/lib/relay/inflight";
 import { jobKeyReady } from "@/lib/relay/jobSeal";
 import { datedOff } from "@/lib/relay/scheduled";
 import { WrongChainRpcError, serverTransport } from "@/lib/serverRpc";
-import { isKnownRoute, isSwapAsset, swapRouterFor, vaultSwapAbi, encodeRoute, type PoolKey } from "@/lib/vaultSwap";
+import { SWAP_SEND_MARGIN_SECONDS, encodeRoute, escrowAddress, isKnownRoute, isSwapAsset, receiptPaysEscrow, swapExpired, swapRouterFor, vaultSwapAbi, vaultSwapRouter, vaultSwapV3Abi, type EscrowKey, type PoolKey } from "@/lib/vaultSwap";
+import { knownTokens } from "@/lib/tokens";
 import { GAS_HIGH_CODE, formatGwei, gasHighMessage, maxFeeCapWei, maxGasPriceWei as maxGasPriceWeiFor, readGas } from "@/lib/relay/gasCeiling";
+import { ETH_USD_FEED, FEED_MAX_AGE_SEC, ethUsdFeedAbi, hasSwapFloor, smallestSwapUsd, swapFloorMessage } from "@/lib/relay/swapFloor";
+import { L1_FEE_MARGIN_PCT, MEMO_SPEND_SHARE_PCT, NEW_SEND_SHARE_PCT, hourlySpendWei, ipSendsLimit, senderSharePct } from "@/lib/relay/spendCap";
 import { GAS_STATION_CHAIN_ID, GAS_STATION_FACTORY, gasStationAbi, gasStationFactoryAbi, readStationState } from "@/lib/gasStation";
 import {
   STATION_BAD_STEP_MESSAGE,
@@ -202,6 +216,8 @@ const REVERT_MESSAGES: Record<string, string> = {
   OverInput: "The price moved since the quote. Get a new one and try again.",
   ShortOutput: "The price moved since the quote. Get a new one and try again.",
   OverDepositLimit: "The vault is not taking that much of this asset right now. Swap a smaller amount.",
+  BadExit: "This exit's signature doesn't match the swap, or its money has already left.",
+  SwapExpired: "This swap's time ran out. Get a new quote and try again.",
   PoolNotAllowed: "This swap route is not allowed.",
   BadRoute: "This swap route is not allowed.",
   NativeRefused: "This swap route is not allowed.",
@@ -211,6 +227,14 @@ const REVERT_MESSAGES: Record<string, string> = {
 /** The router's call, with the vault's errors it can bubble up, for plain-language reverts. */
 const swapCallAbi = [
   ...vaultSwapAbi,
+  ...POOL_ERRORS,
+  { type: "error" as const, name: "OverDepositLimit", inputs: [] },
+  { type: "error" as const, name: "FeeOnTransferNotSupported", inputs: [] },
+] as const;
+
+/** v3's calls, with the same vault errors. */
+const swapV3CallAbi = [
+  ...vaultSwapV3Abi,
   ...POOL_ERRORS,
   { type: "error" as const, name: "OverDepositLimit", inputs: [] },
   { type: "error" as const, name: "FeeOnTransferNotSupported", inputs: [] },
@@ -319,8 +343,8 @@ const MEMOS_PER_PAYMENT_ALL = 10;
  * Payment messages have network budgets of their own, apart from sends
  * (GHSA-5gwv-jpjr-x34r): a message needs no note or proof, only a commitment
  * that is public on chain, so messages must never use up the slots that sends,
- * cash outs and swaps need. Messages with the payer's ticket or a partner key
- * share one budget (a ticket only comes with a transfer the relay sent);
+ * cash outs and swaps need. Messages with the payer's ticket or an approved
+ * partner's key share one budget (a ticket only comes with a transfer the relay sent);
  * everyone else's share a smaller one, smaller still where gas is dear (a
  * chain with a gas ceiling), which caps the gas strangers can make the relay
  * spend in an hour. When it is used up, a heads-up can still go from the wallet.
@@ -328,6 +352,33 @@ const MEMOS_PER_PAYMENT_ALL = 10;
 const PER_NETWORK_MEMO_HOURLY = 5_000;
 const PER_NETWORK_OPEN_MEMO_HOURLY = 600;
 const PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS = 60;
+/**
+ * Messages sent with a partner key share the paid budget only when a Gloam admin
+ * approved the account (Partner.relayApproved). Anyone can make an account and keys,
+ * so every other account's keys share one budget, together, the same size as the
+ * one for messages sent with no key. Messages outside the paid budget also hold
+ * against their own share of the hourly spend cap (lib/relay/spendCap).
+ */
+const PER_NETWORK_KEY_MEMO_HOURLY = PER_NETWORK_OPEN_MEMO_HOURLY;
+const PER_NETWORK_KEY_MEMO_HOURLY_DEAR_GAS = PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS;
+/**
+ * Hourly gas budgets where gas is dear (lib/relay/swapFloor). A swap or a refund that
+ * reverts after it was sent pays nothing back, so each kind has its own budget. A send
+ * holds its gas limit against its budget when it goes, and gives back what the receipt
+ * shows it didn't burn, so a landing nobody saw stays counted. A refund or exit under
+ * the swap floor is paid for by nobody, so its gas stays counted too. Past the budget,
+ * new swaps wait for the next hour, and so does a refund or exit under the floor. One at
+ * or over the floor goes regardless. One note or escrow can revert NOTE_REVERTS_HOURLY
+ * times an hour before it waits, alone, so it can't use the budget up for everyone.
+ */
+const SWAP_REVERT_GAS_HOURLY = 20_000_000;
+const WAITING_GAS_HOURLY = 30_000_000;
+const NOTE_REVERTS_HOURLY = 2;
+export const SWAPS_PAUSED_MESSAGE = "Swaps are paused here for a short while. Your money is safe. Try again in an hour.";
+export const NOTE_WAIT_MESSAGE = "This balance can't try that again yet. Your money is safe. Try again in an hour.";
+export const SPEND_CAP_MESSAGE = "The relay has reached its limit for this hour on this network. Try again later or send from your wallet.";
+export const SENDER_SHARE_MESSAGE = "You've reached your share of the relay for this hour on this network. Try again later or send from your wallet.";
+
 export const MEMO_BUSY_MESSAGE =
   "The relay can't post more payment messages on this network right now. Try again later, or send the heads-up from your wallet.";
 
@@ -358,6 +409,54 @@ export async function checkRateLimit(requester: string): Promise<void> {
   if (!(await relayCount(requester, "relay-ip", PER_IP, Date.now(), WINDOW_SEC)).allowed) {
     throw new RelayError("Too many requests from this device. Wait a few minutes.", 429, "rate_limit");
   }
+}
+
+/** The same on a chain with a lower limit of its own (lib/relay/spendCap): a send asked for by one sender there. */
+export async function checkChainRateLimit(net: GloamNetwork, requester: string): Promise<void> {
+  const limit = ipSendsLimit(net.chainId);
+  if (limit === null) return;
+  if (!(await relayCount(requester, `relay-ip-${net.chainId}`, limit, Date.now(), WINDOW_SEC)).allowed) {
+    throw new RelayError("Too many requests from this device. Wait a few minutes.", 429, "rate_limit");
+  }
+}
+
+// ---------------------------------------------------------------- holds
+
+/** How a send ended, from its receipt. */
+type SendEnd = { status: "success" | "reverted"; gasUsed: bigint; priceWei: bigint; extraWei: bigint };
+
+/** An amount held against an hourly count while a send is out. `keeps` says what stays counted once it ended. */
+type Hold = { owner: string; bucket: string; at: number; amount: number; keeps: (end: SendEnd) => number };
+
+async function addToCount(owner: string, bucket: string, delta: number, at: number): Promise<number> {
+  try {
+    return await addRateCount(owner, bucket, delta, at, 3600, { failClosed: true });
+  } catch (e) {
+    if (!(e instanceof SharedCountUnavailable)) throw e;
+    relayStoreDown(e.reason);
+    throw relayOff();
+  }
+}
+
+/** Holds `amount` of `bucket`, or null when that would pass `limit`. With no limit it always holds. */
+async function takeHold(owner: string, bucket: string, amount: number, limit: number | null, keeps: Hold["keeps"]): Promise<Hold | null> {
+  const at = Date.now();
+  const total = await addToCount(owner, bucket, amount, at);
+  if (limit !== null && total > limit) {
+    await addToCount(owner, bucket, -amount, at);
+    return null;
+  }
+  return { owner, bucket, at, amount, keeps };
+}
+
+/** Gives every hold back: nothing went out. Never throws, as what failed is the send. */
+async function dropHolds(holds: Hold[]): Promise<void> {
+  await Promise.all(holds.map((h) => addToCount(h.owner, h.bucket, -h.amount, h.at).catch(() => 0)));
+}
+
+/** Leaves what `end` says stays counted, and gives back the rest. */
+async function settleHolds(holds: Hold[], end: SendEnd): Promise<void> {
+  await Promise.all(holds.map((h) => addToCount(h.owner, h.bucket, h.keeps(end) - h.amount, h.at).catch(() => 0)));
 }
 
 // ---------------------------------------------------------------- memo tickets
@@ -401,22 +500,28 @@ function memoTicketOk(chainId: number, commitment: Hex, ticket: unknown): boolea
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** One relay transaction on this network, counted only once it passed every check and the dry run. */
-async function takeNetworkSlot(net: GloamNetwork): Promise<void> {
-  if (!(await relayCount(`chain:${net.chainId}`, "relay-net", PER_NETWORK_HOURLY, Date.now(), 3600)).allowed) {
-    throw new RelayError("The relay is busy. Try again shortly or send from your wallet.", 429, "rate_limit");
-  }
+/**
+ * One relay transaction on this network, held once it passed every check, the dry run
+ * and the spend cap, and given back if it doesn't go out. Kept whatever its receipt says.
+ */
+async function holdNetworkSlot(net: GloamNetwork): Promise<Hold> {
+  const held = await takeHold(`chain:${net.chainId}`, "relay-net", 1, PER_NETWORK_HOURLY, () => 1);
+  if (!held) throw new RelayError("The relay is busy. Try again shortly or send from your wallet.", 429, "rate_limit");
+  return held;
 }
 
-/** One relayed payment message on this network, from its own budget, never a send's. */
-async function takeMemoSlot(net: GloamNetwork, budget: MemoBudget): Promise<void> {
+/** One relayed payment message on this network, from its own budget, never a send's. Held as a send's slot is. */
+async function holdMemoSlot(net: GloamNetwork, budget: MemoBudget): Promise<Hold> {
+  const dear = maxGasPriceWeiFor(net.chainId) !== null;
   const [bucket, limit] =
     budget === "open"
-      ? ["relay-memo-open-net", maxGasPriceWeiFor(net.chainId) !== null ? PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS : PER_NETWORK_OPEN_MEMO_HOURLY]
-      : ["relay-memo-net", PER_NETWORK_MEMO_HOURLY];
-  if (!(await relayCount(`chain:${net.chainId}`, bucket, limit, Date.now(), 3600)).allowed) {
-    throw new RelayError(MEMO_BUSY_MESSAGE, 429, "memo_busy");
-  }
+      ? ["relay-memo-open-net", dear ? PER_NETWORK_OPEN_MEMO_HOURLY_DEAR_GAS : PER_NETWORK_OPEN_MEMO_HOURLY]
+      : budget === "key"
+        ? ["relay-memo-key-net", dear ? PER_NETWORK_KEY_MEMO_HOURLY_DEAR_GAS : PER_NETWORK_KEY_MEMO_HOURLY]
+        : ["relay-memo-net", PER_NETWORK_MEMO_HOURLY];
+  const held = await takeHold(`chain:${net.chainId}`, bucket, 1, limit, () => 1);
+  if (!held) throw new RelayError(MEMO_BUSY_MESSAGE, 429, "memo_busy");
+  return held;
 }
 
 // ---------------------------------------------------------------- validation
@@ -534,6 +639,9 @@ const GAS_CAP = 25_000_000n;
  */
 const SEND_GAS_MOST: Partial<Record<Call["kind"], bigint>> = {
   unshield: 1_200_000n,
+  swap: 2_600_000n,
+  swapV3: 2_600_000n,
+  swapExit: 400_000n,
 };
 const GAS_MOST_FACTOR: Readonly<Record<number, bigint>> = { 4663: 4n, 46630: 4n };
 export const GAS_TOO_MUCH_MESSAGE = "This costs more gas than the relay pays. Send from your wallet.";
@@ -553,7 +661,8 @@ type SwapSpend = { proof: Hex; root: Hex; nullifier: Hex; asset: Address; amount
 type SwapDeposit = { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
 
 /** Whose payment message it is: the payer's (ticket) or a partner key's, or anyone else's. */
-type MemoBudget = "paid" | "open";
+/** paid: the payer's ticket or an approved partner's key. key: any other partner key. open: no key. */
+type MemoBudget = "paid" | "key" | "open";
 
 export type Call =
   | { kind: "transfer"; args: readonly [Hex, Hex, Hex, readonly [Hex, Hex]] }
@@ -561,25 +670,36 @@ export type Call =
   | { kind: "make"; args: readonly [Address] }
   | { kind: "pump"; station: Address; args: readonly [bigint, bigint] }
   | { kind: "memo"; args: readonly [Hex, Hex]; budget: MemoBudget }
-  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] };
+  | { kind: "swap"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex] }
+  | { kind: "swapV3"; router: Address; args: readonly [SwapSpend, SwapDeposit, SwapDeposit, Hex, Address, bigint] }
+  | { kind: "swapExit"; router: Address; args: readonly [Address, Required<EscrowKey>, Address, Hex] };
 
-/** Public addresses a call pays out to. Only a cash out has one. */
+/** Public addresses a call pays out to: a cash out's and a swap exit's. */
 function publicRecipients(call: Call): Address[] {
+  if (call.kind === "swapExit") return [call.args[2]];
   return call.kind === "unshield" ? [call.args[4]] : [];
+}
+
+/** The asset a public payout moves. */
+function payoutAsset(call: Call): Address | null {
+  if (call.kind === "unshield") return call.args[3];
+  return call.kind === "swapExit" ? call.args[0] : null;
 }
 
 /**
  * Refuse a call that pays a sanctioned address. Says nothing more than that.
  * With `net` on Tempo, a cash out is also checked against the asset's TIP-403
  * issuer policy: the vault must be allowed to send it and `to` to receive it.
+ * And `to`'s own receive policy must accept whoever pays it: the vault, or for
+ * a swap's exit its router. When that policy can't be read nothing is sent
+ * (check_failed), as a payment it refuses is held by Tempo rather than reverted.
  */
 export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> {
   const recipients = publicRecipients(call);
   if (recipients.length === 0) return;
-  const context =
-    net && call.kind === "unshield"
-      ? { chainId: net.chainId, asset: call.args[3], flow: "cashout" as const }
-      : undefined;
+  const asset = payoutAsset(call);
+  const sender = call.kind === "swapExit" ? call.router : net?.pool ?? undefined;
+  const context = net && asset !== null ? { chainId: net.chainId, asset, flow: "cashout" as const, sender } : undefined;
   const { allowed, message } = await screenAddresses(recipients, context);
   if (!allowed) {
     // A wallet block (sanctions or issuer) is neutral. A vault-level issuer
@@ -587,6 +707,7 @@ export async function screenCall(call: Call, net?: GloamNetwork): Promise<void> 
     if (!message || message === SCREEN_BLOCKED_MESSAGE) {
       throw new RelayError(SCREEN_BLOCKED_MESSAGE, 403, "screened");
     }
+    if (message === TIP403_RECEIVE_UNCHECKED_MESSAGE) throw new RelayError(message, 503, "check_failed");
     throw new RelayError(message, 403, "asset_policy");
   }
 }
@@ -637,10 +758,117 @@ export async function fundedRelayAccounts(
   return accounts;
 }
 
-/** `onMaybeSent` runs when the send failed in a way that may still have put the transaction out. */
-async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): Promise<Hex> {
+type SubmitOpts = {
+  /** The send failed in a way that may still have put the transaction out. */
+  onMaybeSent?: () => void;
+  /** Once the dry run passed, with the gas limit the send will carry: what only a send that will go holds. */
+  afterDryRun?: (gasLimit: bigint) => Promise<Hold | null>;
+  /** Money on its way back to someone, as read by now: it may use all of the hourly cap. A cash out is, unless said. */
+  returning?: () => boolean;
+  /** Who asked for it (an IP, or partner:<id>), as read by now: it holds against that sender's share of the cap too. */
+  sender?: () => string | undefined;
+  /** The call's recipient was screened just before (relayUnshield): screenCall isn't run twice. */
+  screened?: boolean;
+  /** When watching for the receipt must stop, so it ends inside the request's time. */
+  watchUntil?: number;
+  /** Dropped when the receipt shows a revert. */
+  lock?: InflightLock;
+  /** How the send ended, once a receipt shows it. */
+  onEnd?: (status: SendEnd["status"]) => Promise<void>;
+};
+
+const NO_LOCK: InflightLock = { key: "", store: "memory", release: async () => {} };
+
+/** Ethereum's blocks are slow, so its receipts are watched longer. */
+const RECEIPT_WATCH_DEAR_GAS_MS = 50_000;
+/**
+ * A relay request has 60 s (maxDuration), the receipt watch after the reply included. The
+ * watch ends this long after the request reached submit(), so a slow request still leaves
+ * time for the holds to settle. A watch that ends first leaves its holds counted.
+ */
+export const RECEIPT_WATCH_WITHIN_MS = 45_000;
+
+/** How long to watch a receipt that went out at `now`: the chain's watch, cut short by `until`. */
+export function receiptWatchMs(chainId: number, until: number, now = Date.now()): number {
+  const watch = hasSwapFloor(chainId) ? RECEIPT_WATCH_DEAR_GAS_MS : RECEIPT_WATCH_MS;
+  return Math.max(0, Math.min(watch, until - now));
+}
+
+/** What a receipt shows a send cost on top of its gas: Base's fee for posting it to Ethereum. */
+function l1FeeOf(receipt: unknown): bigint {
+  const raw = (receipt as { l1Fee?: unknown }).l1Fee;
+  if (typeof raw === "bigint") return raw > 0n ? raw : 0n;
+  return typeof raw === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(raw) ? BigInt(raw) : 0n;
+}
+
+/**
+ * Follows a sent transaction after the reply: settles its holds and drops its lock by what the
+ * receipt shows. If no receipt shows in time the holds stay, so a late landing is still counted.
+ */
+function followSend(net: GloamNetwork, hash: Hex, holds: Hold[], opts: Pick<SubmitOpts, "lock" | "onEnd"> & { until: number }): void {
+  if (!opts.lock && !holds.length) return;
+  const outcome = async () => {
+    const r = await relayPublicClient(net).getTransactionReceipt({ hash });
+    await settleHolds(holds, { status: r.status, gasUsed: r.gasUsed, priceWei: r.effectiveGasPrice ?? 0n, extraWei: l1FeeOf(r) });
+    await opts.onEnd?.(r.status)?.catch(() => {});
+    return r.status;
+  };
+  afterReply(() => releaseIfReverted(opts.lock ?? NO_LOCK, outcome, receiptWatchMs(net.chainId, opts.until)));
+}
+
+/**
+ * Holds what this send could cost against the chain's hourly cap, or refuses it. Every
+ * kind of send counts: sends, cash outs, swaps, refunds, exits and payment messages.
+ * New sends stop short of the cap; money on its way back (`returning`) may use all of
+ * it. A send with a `sender` also holds against that sender's share of the cap, and a
+ * payment message outside the paid budget against MEMO_SPEND_SHARE_PCT of it, with the
+ * other such messages. Where posting to Ethereum costs extra (Base), the hold has a
+ * margin for it, and settles at what the receipt shows.
+ */
+async function holdSpend(
+  net: GloamNetwork,
+  pub: Pick<PublicClient, "getGasPrice">,
+  gasLimit: bigint,
+  fees: FeeCap | undefined,
+  opts: { returning: boolean; memo?: MemoBudget; sender?: string }
+): Promise<Hold[]> {
+  const cap = hourlySpendWei(net.chainId);
+  if (cap === null) return [];
+  let price: bigint;
+  try {
+    price = fees?.maxFeePerGas ?? (await pub.getGasPrice());
+  } catch (e) {
+    throw explain(e, "Could not read the network fee. Try again shortly.", "check_failed");
+  }
+  const gwei = (wei: bigint) => Number(wei / 1_000_000_000n) + 1;
+  const margin = L1_FEE_MARGIN_PCT[net.chainId] ?? 0n;
+  const amount = gwei((gasLimit * price * (100n + margin)) / 100n);
+  const keeps = (end: SendEnd) => gwei(end.gasUsed * (end.priceWei || price) + end.extraWei);
+  const holds: Hold[] = [];
+  const hold = async (owner: string, bucket: string, limit: bigint, refused: () => RelayError) => {
+    const held = await takeHold(owner, bucket, amount, gwei(limit), keeps);
+    if (!held) {
+      await dropHolds(holds);
+      throw refused();
+    }
+    holds.push(held);
+  };
+  const chain = `chain:${net.chainId}`;
+  if (opts.memo !== undefined && opts.memo !== "paid") {
+    await hold(chain, "relay-spend-memo", (cap * MEMO_SPEND_SHARE_PCT) / 100n, () => new RelayError(MEMO_BUSY_MESSAGE, 429, "memo_busy"));
+  }
+  const share = opts.sender ? senderSharePct(net.chainId) : null;
+  if (opts.sender && share !== null) {
+    await hold(opts.sender, `relay-spend-sender-${net.chainId}`, (cap * BigInt(share)) / 100n, () => new RelayError(SENDER_SHARE_MESSAGE, 429, "spend_cap"));
+  }
+  await hold(chain, "relay-spend", opts.returning ? cap : (cap * NEW_SEND_SHARE_PCT) / 100n, () => new RelayError(SPEND_CAP_MESSAGE, 429, "spend_cap"));
+  return holds;
+}
+
+async function submit(net: GloamNetwork, call: Call, opts: SubmitOpts = {}): Promise<Hex> {
+  const started = Date.now();
   // Screen before anything else: a blocked call never reaches the chain.
-  await screenCall(call, net);
+  if (!opts.screened) await screenCall(call, net);
   const pub = relayPublicClient(net);
   // Over the chain's gas ceiling nothing goes out (Ethereum: 3 gwei by default).
   const ceiling = await assertGasUnderCeiling(net, pub);
@@ -663,6 +891,10 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return pub.estimateContractGas({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, account });
       case "swap":
         return pub.estimateContractGas({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, account });
+      case "swapV3":
+        return pub.estimateContractGas({ address: call.router, abi: swapV3CallAbi, functionName: "swap", args: call.args, account });
+      case "swapExit":
+        return pub.estimateContractGas({ address: call.router, abi: swapV3CallAbi, functionName: "exit", args: call.args, account });
     }
   };
   let fees: FeeCap | undefined;
@@ -681,6 +913,10 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
         return wallet.writeContract({ address: net.payMemo!.address, abi: memoAbi, functionName: "postMemo", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
       case "swap":
         return wallet.writeContract({ address: call.router, abi: swapCallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "swapV3":
+        return wallet.writeContract({ address: call.router, abi: swapV3CallAbi, functionName: "swap", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
+      case "swapExit":
+        return wallet.writeContract({ address: call.router, abi: swapV3CallAbi, functionName: "exit", args: call.args, gas, nonce, chain: net.chain, account: from, ...fees });
     }
   };
 
@@ -697,45 +933,68 @@ async function submit(net: GloamNetwork, call: Call, onMaybeSent?: () => void): 
   }
   const most = sendGasMost(net.chainId, call.kind);
   if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
-  if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
-  await (call.kind === "memo" ? takeMemoSlot(net, call.budget) : takeNetworkSlot(net));
 
-  // one send at a time per relay account and chain, each with the next nonce; with
-  // several accounts, the first free one sends (lib/relay/inflight)
-  const lanes = accounts.map((a) => ({
-    id: `${net.chainId}:${a.address.toLowerCase()}`,
-    chainNonce: () => pub.getTransactionCount({ address: a.address, blockTag: "pending" }),
-  }));
-  let usedLane: string | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const out = await inSendLanes(lanes, (i, nonce) => {
-        usedLane = lanes[i]!.id;
-        return send(padGas(gas), nonce, accounts[i]!);
-      });
-      if (!out) throw new RelayError(RELAY_BUSY_MESSAGE, 503, "busy");
-      return out.value;
-    } catch (e) {
-      if (e instanceof RelayError) throw e;
-      // The lane's lock could not be kept in Redis: nothing was sent.
-      if (e instanceof LockStoreDown) throw relayOff();
-      // A send the node may have taken (a timeout, a dropped connection, "already
-      // known") is never sent again: a second one would only revert and hide the first.
-      const failure = sendFailure(e);
-      if (failure.code === "maybe_sent") {
-        onMaybeSent?.();
+  const holds: Hold[] = [];
+  let mayBeOut = false;
+  try {
+    const budget = await opts.afterDryRun?.(padGas(gas));
+    if (budget) holds.push(budget);
+    if (ceiling !== null) fees = await feeCap(net, pub, ceiling);
+    // The gas first, then the network's slot: a send the cap turns away takes no slot,
+    // and one turned away after it (no slot, no lane) gives every hold back below.
+    holds.push(
+      ...(await holdSpend(net, pub, padGas(gas), fees, {
+        returning: opts.returning?.() ?? call.kind === "unshield",
+        memo: call.kind === "memo" ? call.budget : undefined,
+        sender: opts.sender?.(),
+      }))
+    );
+    holds.push(await (call.kind === "memo" ? holdMemoSlot(net, call.budget) : holdNetworkSlot(net)));
+
+    // one send at a time per relay account and chain, each with the next nonce; with
+    // several accounts, the first free one sends (lib/relay/inflight)
+    const lanes = accounts.map((a) => ({
+      id: `${net.chainId}:${a.address.toLowerCase()}`,
+      chainNonce: () => pub.getTransactionCount({ address: a.address, blockTag: "pending" }),
+    }));
+    let usedLane: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const out = await inSendLanes(lanes, (i, nonce) => {
+          usedLane = lanes[i]!.id;
+          return send(padGas(gas), nonce, accounts[i]!);
+        });
+        if (!out) throw new RelayError(RELAY_BUSY_MESSAGE, 503, "busy");
+        followSend(net, out.value, holds, { ...opts, until: opts.watchUntil ?? started + RECEIPT_WATCH_WITHIN_MS });
+        return out.value;
+      } catch (e) {
+        if (e instanceof RelayError) throw e;
+        // The lane's lock could not be kept in Redis: nothing was sent.
+        if (e instanceof LockStoreDown) throw relayOff();
+        // A send the node may have taken (a timeout, a dropped connection, "already
+        // known") is never sent again: a second one would only revert and hide the first.
+        const failure = sendFailure(e);
+        if (failure.code === "maybe_sent") {
+          mayBeOut = true;
+          opts.onMaybeSent?.();
+          throw failure;
+        }
+        // The node refused it over the nonce: the kept nonce and the chain disagree.
+        // Start again from the chain, once.
+        if (attempt === 0 && usedLane && NONCE_CLASH.test(nodeSaid(e))) {
+          await forgetNonce(usedLane);
+          continue;
+        }
+        mayBeOut = failure.code === "rpc";
         throw failure;
       }
-      // The node refused it over the nonce: the kept nonce and the chain disagree.
-      // Start again from the chain, once.
-      if (attempt === 0 && usedLane && NONCE_CLASH.test(nodeSaid(e))) {
-        await forgetNonce(usedLane);
-        continue;
-      }
-      throw failure;
     }
+    mayBeOut = true;
+    throw new RelayError("The relay could not submit this payment.", 502, "rpc");
+  } catch (e) {
+    if (!mayBeOut) await dropHolds(holds);
+    throw e;
   }
-  throw new RelayError("The relay could not submit this payment.", 502, "rpc");
 }
 
 /** What a send under a gas ceiling may offer per unit of gas. */
@@ -801,14 +1060,19 @@ function afterReply(task: () => Promise<void>): void {
  */
 async function submitSpend(
   net: GloamNetwork,
-  call: Extract<Call, { kind: "transfer" | "unshield" | "swap" }>,
-  precheck?: () => Promise<void>
+  call: Extract<Call, { kind: "transfer" | "unshield" | "swap" | "swapV3" | "swapExit" }>,
+  opts: Pick<SubmitOpts, "afterDryRun" | "returning" | "onEnd" | "sender" | "screened" | "watchUntil"> & {
+    precheck?: () => Promise<void>;
+    /** What the lock is on, the nullifier unless said. */
+    lockOn?: Hex;
+  } = {}
 ): Promise<Hex> {
-  const root = call.kind === "swap" ? call.args[0].root : call.args[1];
-  const nullifier = call.kind === "swap" ? call.args[0].nullifier : call.args[2];
+  const { precheck, lockOn, afterDryRun, returning, onEnd, sender, screened, watchUntil } = opts;
+  const isSwap = call.kind === "swap" || call.kind === "swapV3";
+  const nullifier = call.kind === "swapExit" ? call.args[1].nullifier : isSwap ? call.args[0].nullifier : call.args[2];
   let lock: Awaited<ReturnType<typeof takeInflight>>;
   try {
-    lock = await takeInflight(inflightKey(net.chainId, nullifier));
+    lock = await takeInflight(inflightKey(net.chainId, lockOn ?? nullifier));
   } catch (e) {
     // never on memory in production: without Redis this spend is not sent at all
     if (e instanceof LockStoreDown) throw relayOff();
@@ -817,20 +1081,29 @@ async function submitSpend(
   if (!lock) throw new RelayError(IN_FLIGHT_MESSAGE, 409, "in_flight");
   let keep = false;
   try {
-    await (precheck ? precheck() : precheckSpend(net, root, nullifier));
-    const hash = await submit(net, call, () => {
-      keep = true;
+    if (precheck) await precheck();
+    else if (call.kind === "transfer" || call.kind === "unshield") await precheckSpend(net, call.args[1], nullifier);
+    const hash = await submit(net, call, {
+      onMaybeSent: () => {
+        keep = true;
+      },
+      afterDryRun,
+      returning,
+      onEnd,
+      sender,
+      screened,
+      watchUntil,
+      lock,
     });
     keep = true;
-    const receiptStatus = () => relayPublicClient(net).getTransactionReceipt({ hash }).then((r) => r.status);
-    afterReply(() => releaseIfReverted(lock, receiptStatus));
     return hash;
   } finally {
     if (!keep) await lock.release();
   }
 }
 
-export async function relayTransfer(net: GloamNetwork, body: Record<string, unknown>) {
+/** `sender` is who asked (an IP, or partner:<id>): the send holds against that sender's share of the cap. */
+export async function relayTransfer(net: GloamNetwork, body: Record<string, unknown>, sender?: string) {
   const proof = asProof(body.proof);
   const root = asBytes32(body.root, "root");
   const nullifier = asBytes32(body.nullifier, "nullifier");
@@ -838,7 +1111,7 @@ export async function relayTransfer(net: GloamNetwork, body: Record<string, unkn
   if (!Array.isArray(commitments) || commitments.length !== 2) throw new RelayError("Invalid commitments.");
   const c0 = asBytes32(commitments[0], "commitment");
   const c1 = asBytes32(commitments[1], "commitment");
-  return submitSpend(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] });
+  return submitSpend(net, { kind: "transfer", args: [proof, root, nullifier, [c0, c1]] }, { sender: () => sender });
 }
 
 type UnshieldCall = Extract<Call, { kind: "unshield" }>;
@@ -859,14 +1132,16 @@ async function unshieldCall(net: GloamNetwork, body: Record<string, unknown>): P
   return call;
 }
 
-export async function relayUnshield(net: GloamNetwork, body: Record<string, unknown>) {
-  return submitSpend(net, await unshieldCall(net, body));
+/** As relayTransfer. The recipient is screened once, before anything else. */
+export async function relayUnshield(net: GloamNetwork, body: Record<string, unknown>, sender?: string) {
+  return submitSpend(net, await unshieldCall(net, body), { sender: () => sender, screened: true });
 }
 
 /**
  * A cash out to send later (lib/relay/scheduled): everything relayUnshield
- * checks, plus the dry run, but nothing is sent. Refuses now what would fail
- * later: a spent note, a stale root, a bad proof, a blocked recipient.
+ * checks, plus the dry run, but nothing is sent. Refuses what would fail if it
+ * went now: a spent note, a stale root, a bad proof, a blocked recipient, a gas
+ * use over the limit. What it reads can change before the job's time comes.
  */
 export async function checkUnshieldForLater(net: GloamNetwork, body: Record<string, unknown>): Promise<UnshieldCall> {
   const call = await unshieldCall(net, body);
@@ -879,15 +1154,17 @@ export async function checkUnshieldForLater(net: GloamNetwork, body: Record<stri
   } catch (e) {
     throw explain(e, "Could not check this cash out. Try again.", "check_failed");
   }
-  // refused now rather than when its time comes
   const most = sendGasMost(net.chainId, "unshield");
   if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
   return call;
 }
 
-/** Sends a scheduled cash out now, through the same checks and lock as any relayed one. */
-export async function sendUnshieldNow(net: GloamNetwork, body: Record<string, unknown>): Promise<Hex> {
-  return submitSpend(net, await unshieldCall(net, body));
+/**
+ * Sends a scheduled cash out now, through the same checks and lock as any relayed one.
+ * `watchUntil` ends the receipt watch inside the run's own time.
+ */
+export async function sendUnshieldNow(net: GloamNetwork, body: Record<string, unknown>, opts: { watchUntil?: number } = {}): Promise<Hex> {
+  return submitSpend(net, await unshieldCall(net, body), { screened: true, watchUntil: opts.watchUntil });
 }
 
 /**
@@ -956,9 +1233,11 @@ const erc20BalanceAbi = [
  * puts it back as the refund note. That call (lib/vaultSwapRun
  * finishVaultSwapRefund) carries only the refund note's proof; the spend's
  * proof and root and the new note's proof are placeholders the router never
- * reads on that path, so the root is not checked for it.
+ * reads on that path, so the root is not checked for it. That call locks on its
+ * escrow, and a swap on its nullifier.
  */
-export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>) {
+/** `sender` as for relayTransfer. A refund holds against no sender's share: it has budgets of its own. */
+export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unknown>, sender?: string) {
   if (!swapRouterFor(net.chainId)) throw new RelayError("Private swaps are not live on this network yet.", 400, "no_swap");
   const asked = body.router == null ? null : asAddress(body.router, "router");
   const config = swapRouterFor(net.chainId, asked);
@@ -986,52 +1265,272 @@ export async function relayVaultSwap(net: GloamNetwork, body: Record<string, unk
     throw new RelayError(REVERT_MESSAGES.BadRoute, 400, "BadRoute");
   }
   const routeBytes = encodeRoute(route);
+  const v3 = config.version === 3;
+  const exitKey = v3 ? asAddress(body.exitKey, "exit key") : undefined;
+  const deadline = v3 ? asAmount(body.deadline) : undefined;
   const pub = relayPublicClient(net);
   // A new note that is already in the vault would revert after the proof checks.
   const seen = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "commitmentSeen", args: [deposit.commitment] });
   if (seen) throw new RelayError(REVERT_MESSAGES.DuplicateCommitment, 409, "DuplicateCommitment");
 
+  const escrow = escrowAddress(router, spend.asset, {
+    nullifier: spend.nullifier,
+    amountIn: spend.amount,
+    outCommitment: deposit.commitment,
+    assetOut: deposit.asset,
+    amountOut: deposit.amount,
+    refundCommitment: refund.commitment,
+    refundAmount: refund.amount,
+    routeHash: keccak256(routeBytes),
+    ...(exitKey ? { exitKey, deadline } : {}),
+  });
+  // a refund locks on its escrow, a swap on its nullifier
+  const left = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [spend.nullifier] });
+  const unshieldTx = body.unshieldTx == null ? null : asBytes32(body.unshieldTx, "unshield transaction");
+  let refunding = false;
   const precheck = async () => {
     const [spent, known] = await Promise.all([
       pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [spend.nullifier] }),
       pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "isKnownRoot", args: [spend.root] }),
     ]);
     if (!spent) {
+      // an earlier router stays for refunds, and a refund's note is always spent
+      if (config.address.toLowerCase() !== vaultSwapRouter(net.chainId)?.toLowerCase()) {
+        throw new RelayError("This quote was for an earlier swap router. Get a new quote and try again.", 409, "swap_router_old");
+      }
       if (!known) throw new RelayError(REVERT_MESSAGES.UnknownRoot, 409, "UnknownRoot");
+      // only a swap has a deadline: below this line is a refund, which never does. One
+      // about to pass would pass the dry run and revert on the way in, at the relay's expense.
+      if (deadline !== undefined && swapExpired(deadline, BigInt(Math.floor(Date.now() / 1000) + SWAP_SEND_MARGIN_SECONDS))) {
+        throw new RelayError(REVERT_MESSAGES.SwapExpired!, 409, "SwapExpired");
+      }
+      await assertNoteMayRetry(net, spend.nullifier);
+      await assertSwapWorthSending(net, spend, route.length);
       return;
     }
     // spent: only worth a send if this swap's money is waiting at its escrow (the refund)
-    const escrow = await pub.readContract({
-      address: router,
-      abi: vaultSwapAbi,
-      functionName: "escrowFor",
-      args: [
-        spend.asset,
-        {
-          nullifier: spend.nullifier,
-          amountIn: spend.amount,
-          outCommitment: deposit.commitment,
-          assetOut: deposit.asset,
-          amountOut: deposit.amount,
-          refundCommitment: refund.commitment,
-          refundAmount: refund.amount,
-          routeHash: keccak256(routeBytes),
-        },
-      ],
-    });
-    const waiting = await pub.readContract({ address: spend.asset, abi: erc20BalanceAbi, functionName: "balanceOf", args: [escrow] });
-    if (waiting < refund.amount) throw new RelayError(REVERT_MESSAGES.AlreadySpent, 409, "AlreadySpent");
+    if ((await heldAt(pub, spend.asset, escrow)) < refund.amount) throw new RelayError(REVERT_MESSAGES.AlreadySpent, 409, "AlreadySpent");
+    await assertEscrowPaid(net, unshieldTx, { nullifier: spend.nullifier, asset: spend.asset, escrow, amount: spend.amount });
+    await assertNoteMayRetry(net, `refund|${escrow}`);
+    refunding = true;
   };
-  return submitSpend(net, { kind: "swap", router, args: [spend, deposit, refund, routeBytes] }, precheck);
+  return submitSpend(
+    net,
+    exitKey
+      ? { kind: "swapV3", router, args: [spend, deposit, refund, routeBytes, exitKey, deadline!] }
+      : { kind: "swap", router, args: [spend, deposit, refund, routeBytes] },
+    {
+      precheck,
+      lockOn: left ? escrow : undefined,
+      returning: () => refunding,
+      sender: () => (refunding ? undefined : sender),
+      afterDryRun: (gasLimit) => (refunding ? holdWaiting(net, spend.asset, refund.amount, gasLimit) : holdSwap(net, gasLimit)),
+      onEnd: (status) => noteEnded(net, refunding ? `refund|${escrow}` : spend.nullifier, status),
+    }
+  );
+}
+
+/** The floor's inputs, read together and kept a minute, so a status poll and a swap share one read. */
+type FloorRead = { at: number; gasPriceWei: bigint; ethUsd: number; feeBps: number };
+const FLOOR_TTL_MS = 60_000;
+const floorReads = new Map<number, FloorRead>();
+
+/** Test hook: forget the kept reads. */
+export function resetSwapFloorReads(): void {
+  floorReads.clear();
+}
+
+const withdrawFeeAbi = [{ type: "function", name: "withdrawFeeBps", stateMutability: "view", inputs: [], outputs: [{ type: "uint16" }] }] as const;
+
+/** ETH's price and the vault's fee, and the gas price fresh each time. Throws when any can't be read, or the feed is stale. */
+async function readFloor(net: GloamNetwork, pub: Pick<PublicClient, "readContract" | "getGasPrice"> = relayPublicClient(net)): Promise<FloorRead> {
+  const now = Date.now();
+  const gasPriceWei = await pub.getGasPrice();
+  const hit = floorReads.get(net.chainId);
+  if (hit && now - hit.at < FLOOR_TTL_MS) return { ...hit, gasPriceWei };
+  const [round, feeBps] = await Promise.all([
+    pub.readContract({ address: ETH_USD_FEED[net.chainId]!, abi: ethUsdFeedAbi, functionName: "latestRoundData" }),
+    pub.readContract({ address: net.pool!, abi: withdrawFeeAbi, functionName: "withdrawFeeBps" }),
+  ]);
+  const age = Math.floor(now / 1000) - Number(round[3]);
+  if (round[1] <= 0n || age > FEED_MAX_AGE_SEC) throw new Error("eth usd feed stale");
+  const read = { at: now, gasPriceWei, ethUsd: Number(round[1]) / 1e8, feeBps };
+  floorReads.set(net.chainId, read);
+  return read;
+}
+
+/** What a note is worth in dollars, for the floor. EURC counts as a dollar, the side that asks more of it. */
+function noteUsd(chainId: number, asset: Address, amount: bigint, ethUsd: number): number {
+  if (BigInt(asset) === 0n) return (Number(amount) / 1e18) * ethUsd;
+  const t = knownTokens(chainId).find((k) => k.address.toLowerCase() === asset.toLowerCase());
+  return Number(amount) / 10 ** (t?.decimals ?? 18);
 }
 
 /**
- * `body.ticket` is the payment's memo ticket (memoTicket) from the transfer's
- * response. `requester` is `key:<id>` for the partner API, which gets its own
- * few messages per payment; the app's route passes none, so no IP is ever
- * kept next to a payment.
+ * A refund or an exit goes only for an escrow the vault paid: the receipt of `unshieldTx`
+ * must show this note's Unshielded, to this escrow, for this amount. The app finds that
+ * transaction by its nullifier (lib/vaultSwapRun). A tab from before this asks with none:
+ * it is refused, nothing moves, and its next load finishes the job.
  */
-export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>, requester?: string) {
+async function assertEscrowPaid(net: GloamNetwork, unshieldTx: Hex | null, paid: { nullifier: Hex; asset: Address; escrow: Address; amount: bigint }): Promise<void> {
+  if (!unshieldTx) throw new RelayError("Refresh Gloam to finish this. Your money is safe.", 409, "unshield_tx");
+  const receipt = await relayPublicClient(net).getTransactionReceipt({ hash: unshieldTx }).catch(() => null);
+  if (!receipt || receipt.status !== "success" || !receiptPaysEscrow(receipt.logs, net.pool!, paid)) {
+    throw new RelayError("The vault's payment to this swap's escrow could not be found. Try again shortly.", 409, "unshield_tx");
+  }
+}
+
+/** Where gas is dear, one note or escrow that keeps reverting waits, on its own. `key` names it. */
+async function assertNoteMayRetry(net: GloamNetwork, key: string): Promise<void> {
+  if (!hasSwapFloor(net.chainId)) return;
+  if ((await sharedCount(key, "relay-note-reverts")) >= NOTE_REVERTS_HOURLY) throw new RelayError(NOTE_WAIT_MESSAGE, 429, "note_wait");
+}
+
+async function noteEnded(net: GloamNetwork, key: string, status: SendEnd["status"]): Promise<void> {
+  if (status === "reverted" && hasSwapFloor(net.chainId)) await relayCount(key, "relay-note-reverts", NOTE_REVERTS_HOURLY, Date.now(), 3600);
+}
+
+async function sharedCount(owner: string, bucket: string): Promise<number> {
+  try {
+    return await readRateLimit(owner, bucket, Date.now(), 3600, { failClosed: true });
+  } catch (e) {
+    if (!(e instanceof SharedCountUnavailable)) throw e;
+    relayStoreDown(e.reason);
+    throw relayOff();
+  }
+}
+
+/**
+ * Refuses a new swap the relay would pay to lose: one whose vault fee can't cover the swap's
+ * own gas (lib/relay/swapFloor), or any while reverted swaps have used up this hour's budget.
+ * Nothing on a chain with no floor. A floor that can't be read refuses the swap: it costs a
+ * retry, where paying blind costs the relay's gas.
+ */
+export async function assertSwapWorthSending(
+  net: GloamNetwork,
+  spend: Pick<SwapSpend, "asset" | "amount">,
+  hops: number,
+  pub?: Pick<PublicClient, "readContract" | "getGasPrice">
+): Promise<void> {
+  if (!hasSwapFloor(net.chainId)) return;
+  if ((await sharedCount(`chain:${net.chainId}`, "relay-swap-gas")) >= SWAP_REVERT_GAS_HOURLY) {
+    throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
+  }
+  let floor: FloorRead;
+  try {
+    floor = await readFloor(net, pub);
+  } catch {
+    throw new RelayError("Could not read the network fee. Try again shortly.", 503, "check_failed");
+  }
+  const smallest = smallestSwapUsd({ ...floor, hops });
+  if (noteUsd(net.chainId, spend.asset, spend.amount, floor.ethUsd) < smallest) {
+    throw new RelayError(Number.isFinite(smallest) ? swapFloorMessage(net.label, smallest) : SWAPS_PAUSED_MESSAGE, 422, "swap_small");
+  }
+}
+
+/** Holds a swap's gas limit against the hour's budget where gas is dear. Only what a reverted one burned stays counted. */
+async function holdSwap(net: GloamNetwork, gasLimit: bigint): Promise<Hold | null> {
+  if (!hasSwapFloor(net.chainId)) return null;
+  const held = await takeHold(`chain:${net.chainId}`, "relay-swap-gas", Number(gasLimit), SWAP_REVERT_GAS_HOURLY, (end) =>
+    end.status === "reverted" ? Number(end.gasUsed) : 0
+  );
+  if (!held) throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
+  return held;
+}
+
+/**
+ * Holds a refund's or an exit's gas limit where gas is dear, apart from swaps. Under the swap
+ * floor it counts whatever happens, and waits once the budget is gone. At or over the floor
+ * it goes regardless, and only a revert stays counted.
+ */
+async function holdWaiting(net: GloamNetwork, asset: Address, amount: bigint, gasLimit: bigint): Promise<Hold | null> {
+  if (!hasSwapFloor(net.chainId)) return null;
+  const floor = await readFloor(net).catch(() => null);
+  const worthIt = floor !== null && noteUsd(net.chainId, asset, amount, floor.ethUsd) >= smallestSwapUsd({ ...floor, hops: 1 });
+  const held = await takeHold(`chain:${net.chainId}`, "relay-waiting-gas", Number(gasLimit), worthIt ? null : WAITING_GAS_HOURLY, (end) =>
+    worthIt && end.status === "success" ? 0 : Number(end.gasUsed)
+  );
+  if (!held) throw new RelayError(SWAPS_PAUSED_MESSAGE, 429, "swaps_paused");
+  return held;
+}
+
+/** The smallest one-hop swap right now, for the app, or null on a chain with no floor or when it can't be read. */
+async function swapFloorNow(net: GloamNetwork): Promise<number | null> {
+  if (!hasSwapFloor(net.chainId)) return null;
+  try {
+    const usd = smallestSwapUsd({ ...(await readFloor(net)), hops: 1 });
+    return Number.isFinite(usd) ? usd : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What an address holds of an asset; address(0) is native ETH. */
+function heldAt(pub: ReturnType<typeof relayPublicClient>, asset: Address, who: Address): Promise<bigint> {
+  if (BigInt(asset) === 0n) return pub.getBalance({ address: who });
+  return pub.readContract({ address: asset, abi: erc20BalanceAbi, functionName: "balanceOf", args: [who] });
+}
+
+/**
+ * Sends a swap's waiting money to the address its exit key signed for, when its
+ * refund can't land (GloamVaultSwap2.exit). It pays a public address, so it takes the
+ * checks and screening of any cash out. The relay can't change the address: the
+ * signature names it, and the swap's escrow key fixes the exit key. Refused unless
+ * money is waiting at this swap's escrow, so a call that can only fail costs no gas.
+ */
+export async function relayVaultSwapExit(net: GloamNetwork, body: Record<string, unknown>) {
+  if (!swapRouterFor(net.chainId)) throw new RelayError("Private swaps are not live on this network yet.", 400, "no_swap");
+  const config = swapRouterFor(net.chainId, asAddress(body.router, "router"));
+  if (!config) throw new RelayError("That is not a Gloam swap router on this network.", 400, "swap_router");
+  if (config.version !== 3) throw new RelayError("A swap through this router has no exit. Its refund lands once the vault has room.", 400, "no_exit");
+  const asset = asAddress(body.asset, "asset");
+  if (!isSwapAsset(net.chainId, asset, config.address)) throw new RelayError("This asset cannot be swapped here.", 400, "swap_asset");
+  const to = asAddress(body.to, "recipient");
+  assertCashOutTarget(net, to);
+  if (typeof body.signature !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(body.signature)) throw new RelayError("Invalid exit signature.");
+  const k = (body.key ?? {}) as Record<string, unknown>;
+  const key: Required<EscrowKey> = {
+    nullifier: asBytes32(k.nullifier, "nullifier"),
+    amountIn: asAmount(k.amountIn),
+    outCommitment: asBytes32(k.outCommitment, "commitment"),
+    assetOut: asAddress(k.assetOut, "asset"),
+    amountOut: asAmount(k.amountOut),
+    refundCommitment: asBytes32(k.refundCommitment, "commitment"),
+    refundAmount: asAmount(k.refundAmount),
+    routeHash: asBytes32(k.routeHash, "route"),
+    exitKey: asAddress(k.exitKey, "exit key"),
+    deadline: asAmount(k.deadline),
+  };
+  const pub = relayPublicClient(net);
+  const escrow = escrowAddress(config.address, asset, key);
+  const unshieldTx = body.unshieldTx == null ? null : asBytes32(body.unshieldTx, "unshield transaction");
+  let waiting = 0n;
+  const precheck = async () => {
+    const spent = await pub.readContract({ address: net.pool!, abi: relayPoolAbi, functionName: "spent", args: [key.nullifier] });
+    waiting = spent ? await heldAt(pub, asset, escrow) : 0n;
+    if (waiting === 0n) throw new RelayError("Nothing is waiting at this swap's escrow.", 409, "nothing_waiting");
+    await assertEscrowPaid(net, unshieldTx, { nullifier: key.nullifier, asset, escrow, amount: key.amountIn });
+    await assertNoteMayRetry(net, `exit|${escrow}`);
+  };
+  return submitSpend(net, { kind: "swapExit", router: config.address, args: [asset, key, to, body.signature as Hex] }, {
+    precheck,
+    lockOn: escrow,
+    returning: () => true,
+    afterDryRun: (gasLimit) => holdWaiting(net, asset, waiting, gasLimit),
+    onEnd: (status) => noteEnded(net, `exit|${escrow}`, status),
+  });
+}
+
+/** The partner account behind a payment message sent with a key, and whether a Gloam admin approved it. */
+export type MemoPartner = { partner: string; approved: boolean };
+
+/**
+ * `body.ticket` is the payment's memo ticket (memoTicket) from the transfer's
+ * response. `from` is the partner account for the partner API: each account
+ * gets its own few messages per payment, all its keys together. The app's
+ * route passes none, so no IP is ever kept next to a payment.
+ */
+export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>, from?: MemoPartner) {
   if (!net.payMemo) throw new RelayError("Payment messages are not live on this network yet.", 400, "no_memo");
   const commitment = asBytes32(body.paymentCommitment, "payment");
   const memo = asMemo(body.memo);
@@ -1044,24 +1543,25 @@ export async function relayMemo(net: GloamNetwork, body: Record<string, unknown>
   })) as boolean;
   if (!seen) throw new RelayError("That payment is not in the vault yet. Wait for it to confirm.", 409, "not_seen");
   // The memo board takes any number of messages per payment, and each relayed
-  // one is gas the relay pays. The payer (with the ticket) and each partner key
-  // get a few of their own; everyone else shares one small allowance, which a
-  // stranger can use up but never the payer's. Keys name the payment and who
-  // holds it, never an IP, and use no ":" (lib/mcpRemote/rateLimit reads a key
-  // with colons as an IPv6 address and keeps only its first four groups).
+  // one is gas the relay pays. The payer (with the ticket) and each partner
+  // account get a few of their own; everyone else shares one small allowance,
+  // which a stranger can use up but never the payer's. Keys name the payment and
+  // who holds it, never an IP, and use no ":" (lib/mcpRemote/rateLimit reads a
+  // key with colons as an IPv6 address and keeps only its first four groups).
   const payment = `memo|${net.chainId}|${commitment.toLowerCase()}`;
   const now = Date.now();
   const payer = memoTicketOk(net.chainId, commitment, body.ticket);
-  const partner = !payer && Boolean(requester?.startsWith("key:"));
+  const partner = payer ? undefined : from;
   const hit = payer
     ? await relayCount(`${payment}|payer`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
     : partner
-      ? await relayCount(`${payment}|key|${requester!.slice(4).replace(/:/g, "|")}`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
+      ? await relayCount(`${payment}|partner|${partner.partner.replace(/:/g, "|")}`, "relay-memo", MEMOS_PER_PAYMENT, now, 86_400)
       : await relayCount(payment, "relay-memo-all", MEMOS_PER_PAYMENT_ALL, now, 86_400);
   if (!hit.allowed) {
     throw new RelayError("A message for this payment was already sent.", 409, "memo_sent");
   }
-  return submit(net, { kind: "memo", args: [commitment, memo], budget: payer || partner ? "paid" : "open" });
+  const budget: MemoBudget = payer || partner?.approved === true ? "paid" : partner ? "key" : "open";
+  return submit(net, { kind: "memo", args: [commitment, memo], budget });
 }
 
 /**
@@ -1115,12 +1615,14 @@ export async function relayGasStation(net: GloamNetwork, body: Record<string, un
   let keep = false;
   try {
     const call = await stationCall(net, wallet, step);
-    const hash = await submit(net, call, () => {
-      keep = true;
+    const hash = await submit(net, call, {
+      onMaybeSent: () => {
+        keep = true;
+      },
+      sender: () => requester,
+      lock: held,
     });
     keep = true;
-    const receiptStatus = () => relayPublicClient(net).getTransactionReceipt({ hash }).then((r) => r.status);
-    afterReply(() => releaseIfReverted(held, receiptStatus));
     return hash;
   } finally {
     if (!keep) await held.release();
@@ -1187,6 +1689,8 @@ export type RelayNetworkStatus = {
   topUps: boolean;
   /** The relay pays for a fresh wallet's gas station here (lib/relay/gasStation). */
   gasStation: boolean;
+  /** The smallest one-hop private swap right now, in dollars, where gas is dear (lib/relay/swapFloor). Else null. */
+  swapFloorUsd: number | null;
 };
 
 /** Relay balance reads kept briefly, so a public status poll is not an RPC call each time. */
@@ -1203,7 +1707,9 @@ const tempoFeeAbi = [
   { name: "userTokens", type: "function", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "address" }] },
   { name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
-const isTempoChain = (chainId: number) => chainId === 42431 || chainId === 4217;
+function isTempoChain(chainId: number): boolean {
+  return chainId === 42431 || chainId === 4217;
+}
 
 /** Whether this relay account can no longer pay for a send on `net`. */
 async function relayEmpty(net: GloamNetwork, account: PrivateKeyAccount): Promise<boolean> {
@@ -1247,9 +1753,10 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
   return Promise.all(
     relayNetworks().map(async (net) => {
       // low = no account left that can pay for a send here
-      const [empties, gas] = await Promise.all([
+      const [empties, gas, swapFloorUsd] = await Promise.all([
         Promise.all(accounts.map((a) => relayEmpty(net, a))),
         readGas(net.chainId, relayPublicClient(net)),
+        swapRouterFor(net.chainId) ? swapFloorNow(net) : null,
       ]);
       const lowBalance = accounts.length > 0 && empties.every(Boolean);
       return {
@@ -1265,6 +1772,7 @@ export async function relayStatus(): Promise<RelayNetworkStatus[]> {
         gasGwei: gas.gasPriceWei === null ? null : formatGwei(gas.gasPriceWei),
         topUps: jobKeyReady() && !datedOff(net.chainId),
         gasStation: gasStationOn() && net.chainId === GAS_STATION_CHAIN_ID,
+        swapFloorUsd,
       };
     })
   );
