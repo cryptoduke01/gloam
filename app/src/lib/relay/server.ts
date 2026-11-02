@@ -278,6 +278,7 @@ export function relayPublicClient(net: GloamNetwork): PublicClient {
   if (hit) return hit;
   const c = createPublicClient({
     chain: net.chain,
+    ccipRead: false,
     transport: serverTransport(net, { timeout: 20_000, retryCount: 1 }),
   });
   publicClients.set(net.chainId, c);

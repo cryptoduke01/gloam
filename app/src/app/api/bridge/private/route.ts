@@ -158,7 +158,7 @@ export async function POST(req: Request) {
 
   // The vault's own checks, read before anyone pays: room under the beta
   // limits, a commitment it hasn't seen, and a proof its verifier accepts.
-  const client = createPublicClient({ chain: network.chain, transport: serverTransport(network, { retryCount: 2 }) });
+  const client = createPublicClient({ chain: network.chain, ccipRead: false, transport: serverTransport(network, { retryCount: 2 }) });
   const pool = network.pool as Address;
   try {
     const [limitsOn, limit, deposited, seen, verifier] = await Promise.all([
@@ -335,7 +335,7 @@ export async function POST(req: Request) {
     // The wallet must hold enough on that chain. The same-chain swap is
     // simulated whole (swap, approve and deposit); a cross-chain payment is
     // checked by balance, since its deposit needs the approve to land first.
-    const origin = createPublicClient({ chain: evmChain!, transport: http(evmChain!.rpcUrls.default.http[0], { timeout: 10_000 }) });
+    const origin = createPublicClient({ chain: evmChain!, ccipRead: false, transport: http(evmChain!.rpcUrls.default.http[0], { timeout: 10_000 }) });
     if (sameChain) {
       try {
         await origin.call({ account: sender as Address, to: deposit.to as Address, data: deposit.data as Hex, value: BigInt(deposit.value) });
