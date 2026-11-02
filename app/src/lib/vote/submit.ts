@@ -124,6 +124,10 @@ export async function submitBallot(raw: unknown, ctx: SubmitContext): Promise<{ 
   if (input.timestamp >= Date.parse(v.end) / 1000) {
     throw new VoteError(400, "stale", "Your device's clock is ahead of the vote's close. Set it right and sign again.");
   }
+  // The same for a slow clock, or a signature made before the vote opened: the count only takes ones signed inside the window.
+  if (input.timestamp < Date.parse(v.start) / 1000) {
+    throw new VoteError(400, "stale", "That signature is from before this vote opened. Sign again now.");
+  }
 
   const message = voteMessage(v, input.option, input.voter, input.timestamp);
   if (!(await signatureValid(message, input.signature, ctx.contractCheck))) {
