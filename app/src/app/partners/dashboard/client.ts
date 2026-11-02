@@ -4,6 +4,7 @@
  */
 import { getAddress, toHex, type Address } from "viem";
 import { createSiweMessage } from "viem/siwe";
+import type { ActivityRecord, PartnerStats } from "@/lib/partners";
 
 type Eip1193 = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
 
@@ -145,37 +146,24 @@ export type KeyView = {
   lastUsedAt: number | null;
 };
 
-export type Activity = {
-  id: string;
-  kind: "private_payment" | "cash_out" | "deposit" | "private_swap";
-  network: "robinhood" | "tempo";
-  chainId: number;
-  txHash: string;
-  ts: number;
-  asset: string | null;
-  symbol: string | null;
-  decimals: number | null;
-  amount: string | null;
-  volumeUsd: number | null;
-  feeUsd: number | null;
-  feeToken: string | null;
-  feeBasis: string;
+/** One counted transaction (lib/partners ActivityRecord): public facts only. */
+export type Activity = ActivityRecord;
+
+/** The signed-in partner's own figures (GET /api/partners/stats). */
+export type Stats = PartnerStats & {
+  recent: Activity[];
+  days: number;
+  charged: false;
+  notMatched?: { privatePayments: string; swaps: string };
 };
 
-export type Stats = {
-  totals: {
-    privatePayments: number;
-    cashOuts: number;
-    deposits: number;
-    privateSwaps: number;
-    publicVolumeUsd: number;
-    swapVolumeUsd: number;
-    commissionUsd: number;
-    unpriced: number;
-  };
-  byNetwork: Record<"robinhood" | "tempo", Record<Activity["kind"], number>>;
-  byAsset: { network: "robinhood" | "tempo"; chainId: number; asset: string; symbol: string; volume: string; commission: string }[];
-  daily: { day: string; privatePayments: number; cashOuts: number; deposits: number; swaps: number; volumeUsd: number; commissionUsd: number }[];
-  lastActivity: number | null;
-  recent: Activity[];
+/** A partner link code, as its partner sees it. */
+export type LinkCodeView = {
+  code: string;
+  label: string;
+  createdAt: number;
+  createdBy: "partner" | "admin";
+  expiresAt: number | null;
+  revokedAt: number | null;
+  state: "live" | "revoked" | "expired";
 };

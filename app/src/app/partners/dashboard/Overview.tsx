@@ -7,6 +7,7 @@ import { getNetwork } from "@/lib/networks";
 import type { Activity, FeeSetting, Stats } from "./client";
 import { ago, ArrowIcon, Card, fmtInt, fmtUnits, fmtUsd, fullDate, Kpi, LockIcon } from "./ui";
 import { ArrowUpRight } from "@/components/ui/ArrowUpRight";
+import { PartnerBreakdown, SOURCE_LABEL } from "@/components/partners/PartnerBreakdown";
 
 const KIND_LABEL: Record<Activity["kind"], string> = {
   private_payment: "Private payment",
@@ -129,7 +130,7 @@ function ActivityList({ items }: { items: Activity[] }) {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14.5px] text-foreground">{KIND_LABEL[a.kind]}</span>
               <span className="block truncate text-[12.5px] text-mute">
-                {net.label} ·{" "}
+                {SOURCE_LABEL[a.source ?? "api"]} · {net.label} ·{" "}
                 <time dateTime={new Date(a.ts).toISOString()} title={fullDate(a.ts)}>
                   {ago(a.ts)}
                 </time>
@@ -258,7 +259,7 @@ export function Overview({
           <div className="px-5 py-12 text-center sm:px-6">
             <p className="text-[15px] text-foreground">No payments yet</p>
             <p className="mx-auto mt-1.5 max-w-[46ch] text-[13.5px] leading-relaxed text-mute">
-              Relay a payment with one of your keys and it shows up here within seconds.
+              Relay a payment with one of your keys, or share a link with your link code, and it shows up here once it lands.
             </p>
             <button type="button" onClick={onQuickstart} className="btn btn-ghost btn-sm mt-5">
               See the quickstart
@@ -269,8 +270,15 @@ export function Overview({
         )}
       </Card>
 
+      <PartnerBreakdown
+        stats={stats}
+        days={stats.days ?? 14}
+        notMatched={stats.notMatched}
+        csv={{ daily: "/api/partners/export?type=daily", transactions: "/api/partners/export?type=transactions" }}
+      />
+
       {stats.byAsset.length > 0 && (
-        <Card title="By token" flush foot="Whole tokens. Fees would be paid in the token the user moved, to your payout address on that network.">
+        <Card title="Would-be fees by token" flush foot="Whole tokens. Fees would be paid in the token the user moved, to your payout address on that network.">
           <div className="overflow-x-auto">
             <table className="tnum w-full text-left text-[14px]">
               <thead className="border-b border-line bg-surface">

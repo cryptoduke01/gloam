@@ -12,22 +12,25 @@ import {
   PortalError,
   signInWith,
   type KeyView,
+  type LinkCodeView,
   type PartnerAccount,
   type Stats,
   type WalletChoice,
 } from "./client";
 import { KeysPanel } from "./KeysPanel";
+import { LinksPanel } from "./LinksPanel";
 import { Overview } from "./Overview";
 import { QuickstartPanel } from "./QuickstartPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Field, Notice, shortAddr } from "./ui";
 
 type Session = { wallet: string; partner: PartnerAccount | null };
-type Tab = "overview" | "keys" | "settings" | "quickstart";
+type Tab = "overview" | "links" | "keys" | "settings" | "quickstart";
 
 /** id, label, shorter label for phones */
 const TABS: [Tab, string, string][] = [
   ["overview", "Overview", "Overview"],
+  ["links", "Link codes", "Links"],
   ["keys", "API keys", "Keys"],
   ["settings", "Fees and payouts", "Fees"],
   ["quickstart", "Quickstart", "Quickstart"],
@@ -213,6 +216,8 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
   const [statsLoading, setStatsLoading] = useState(false);
   const [keys, setKeys] = useState<KeyView[] | null>(null);
   const [keyMeta, setKeyMeta] = useState({ maxActive: 10, liveKeys: false });
+  const [codes, setCodes] = useState<LinkCodeView[] | null>(null);
+  const [maxLiveCodes, setMaxLiveCodes] = useState(20);
   const [err, setErr] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const mainnetLive = useMainnetLive();
@@ -242,6 +247,17 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
     }
   }, [onSignOut]);
 
+  const loadCodes = useCallback(async () => {
+    try {
+      const r = await portal<{ codes: LinkCodeView[]; maxLive: number }>("/link-codes");
+      setCodes(r.codes);
+      setMaxLiveCodes(r.maxLive);
+    } catch (e) {
+      if (e instanceof PortalError && e.status === 401) return onSignOut();
+      setErr(e instanceof PortalError ? e.message : "Could not load your link codes.");
+    }
+  }, [onSignOut]);
+
   useEffect(() => {
     const t = window.setTimeout(() => {
       setOrigin(window.location.origin);
@@ -253,6 +269,7 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
       }
       void loadStats();
       void loadKeys();
+      void loadCodes();
     }, 0);
     // Tracked live: refresh the figures while the tab is visible.
     const id = window.setInterval(() => {
@@ -262,7 +279,7 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
       window.clearTimeout(t);
       window.clearInterval(id);
     };
-  }, [loadStats, loadKeys]);
+  }, [loadStats, loadKeys, loadCodes]);
 
   function choose(t: Tab) {
     setTab(t);
@@ -336,6 +353,7 @@ function Dashboard({ session, onSignOut, onPartner }: { session: Session & { par
           {tab === "overview" && (
             <Overview stats={stats} fees={partner.fees} activeKeys={activeKeys} loading={statsLoading} onQuickstart={() => choose("quickstart")} />
           )}
+          {tab === "links" && <LinksPanel codes={codes} maxLive={maxLiveCodes} origin={origin} onChanged={() => void loadCodes()} />}
           {tab === "keys" && <KeysPanel keys={keys} maxActive={keyMeta.maxActive} liveKeys={keyMeta.liveKeys} onChanged={() => void loadKeys()} />}
           {tab === "settings" && (
             <SettingsPanel
