@@ -561,6 +561,13 @@ const ESCROW_KEY_V3_COMPONENTS = [
 
 /** How long a v3 swap has to land, from the chain's own clock when it is made. */
 export const SWAP_DEADLINE_SECONDS = 30 * 60;
+/**
+ * On Base and Ethereum, 10 minutes: until a swap lands or its note moves, anyone can land it
+ * at the rate agreed, and a stablecoin that loses its peg in that time is what a deadline is for.
+ */
+export function swapDeadlineSeconds(chainId: number): number {
+  return swapChecked(chainId) ? 10 * 60 : SWAP_DEADLINE_SECONDS;
+}
 /** The relay sends a swap only with at least this long left: closer than that it could pass the dry run and land late. */
 export const SWAP_SEND_MARGIN_SECONDS = 60;
 
@@ -689,8 +696,12 @@ const balanceOfAbi = [
 ] as const;
 
 /**
- * Whether a swap's money waits at its escrow (someone sent the note's unshield
- * on its own, and no refund has finished yet): its balance covers the refund note.
+ * Whether a swap's money waits at its escrow (someone sent the note's unshield on its
+ * own, and no refund has finished yet): true when it covers the refund note; "short"
+ * when the note's money is there but the vault's fee rose past what the refund note
+ * allowed for, so that note can't land and the exit is the way back; false otherwise.
+ * "short" asks for at least what the vault's highest fee leaves, so a stray transfer
+ * to an escrow is never read as a swap's money.
  */
 export async function escrowHolds(
   client: PublicClient,
@@ -699,13 +710,14 @@ export async function escrowHolds(
   refundCommitment: Hex,
   refundAmount: bigint,
   blockNumber?: bigint
-): Promise<boolean> {
+): Promise<boolean | "short"> {
   const escrow = escrowAddress(info.router, info.assetIn, refundEscrowKey(info, nullifier, refundCommitment, refundAmount));
   const at = blockNumber !== undefined ? { blockNumber } : {};
   const held = same(info.assetIn, NATIVE)
     ? await client.getBalance({ address: escrow, ...at })
     : await client.readContract({ address: info.assetIn, abi: balanceOfAbi, functionName: "balanceOf", args: [escrow], ...at });
-  return held >= refundAmount;
+  if (held >= refundAmount) return true;
+  return held > 0n && held >= refundAmountFor(BigInt(info.amountIn)) ? "short" : false;
 }
 
 const DEPOSIT_COMPONENTS = [
@@ -1340,11 +1352,12 @@ export async function planVaultSwap(client: PublicClient, chainId: number, p: Sw
   const impactBps = small > 0n ? priceImpactBps(available, outs[best]!, probe, small) : null;
   const pegBps = isDollar(p.assetIn) && isDollar(p.assetOut) ? pegGapBps(available, outs[best]!) : null;
   if (swapChecked(chainId)) {
-    if (pegBps !== null && pegBps > PEG_STOP_BPS) throw new SwapQuoteRefused(SWAP_OFF_PEG);
+    // thin first: a pool that ran out reads as off its peg too, and only this says what size fits
     if (impactBps !== null && impactBps > IMPACT_STOP_BPS) {
       const fits = await largestFair(client, r, route, p, available, probe, small);
       throw new SwapQuoteRefused(SWAP_TOO_THIN, fits > 0n ? noteFor(fits, p.feeBps) : null);
     }
+    if (pegBps !== null && pegBps > PEG_STOP_BPS) throw new SwapQuoteRefused(SWAP_OFF_PEG);
   }
   // the buffer asks for less than the pool quoted, so one that can't fill even that moved since
   const cost = await v4ExactOut(client, r, route, p.assetIn, p.assetOut, amountOut).catch(() => available + 1n);

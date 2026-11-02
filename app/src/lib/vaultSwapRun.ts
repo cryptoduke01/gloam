@@ -41,7 +41,6 @@ import { publicClientFor } from "./rhClient";
 import { assertNoteOnNetwork, dropUnsentNote, saveLocalNote, shieldPoolAbi, updateLocalNote, type LocalNote } from "./shield";
 import type { GloamNetwork } from "./networks";
 import {
-  SWAP_DEADLINE_SECONDS,
   encodeRoute,
   escrowAddress,
   exitAccount,
@@ -50,6 +49,7 @@ import {
   refundEscrowKey,
   replanVaultSwap,
   swapChecked,
+  swapDeadlineSeconds,
   swapRouterFor,
   vaultSwapAbi,
   vaultSwapV3Abi,
@@ -206,7 +206,7 @@ export async function runVaultSwap(args: {
   // v3 names a one-time exit key, from the refund note's own secret, in the escrow key.
   const exitKey = swapRouterFor(network.chainId, router)?.version === 3 ? exitAccount(back.note.secret).address : undefined;
   // and a deadline, from the chain's clock rather than this device's
-  const deadline = exitKey ? (await client.getBlock()).timestamp + BigInt(SWAP_DEADLINE_SECONDS) : undefined;
+  const deadline = exitKey ? (await client.getBlock()).timestamp + BigInt(swapDeadlineSeconds(network.chainId)) : undefined;
   const key: EscrowKey = {
     nullifier,
     amountIn: targetWei,
