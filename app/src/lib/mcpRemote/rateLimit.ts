@@ -266,7 +266,7 @@ export async function addRateCount(
   const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
   const window = Math.floor(now / 1000 / span);
   const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
-  const key = `${PREFIX}${bucket}:${ipKey(ip)}:${slot}`;
+  const key = `${PREFIX}${bucket}:${ipKey(bucket, ip)}:${slot}`;
   const inMemory = () => {
     const m = memCounts();
     const cur = m.get(key);
@@ -278,7 +278,7 @@ export async function addRateCount(
     try {
       const json = await redisCall([
         ["INCRBY", key, delta],
-        ["EXPIRE", key, span * 2],
+        ["EXPIRE", key, keyTtl(span)],
       ]);
       const n = Number(json?.[0]?.result);
       if (!Number.isFinite(n)) throw new Error("redis: bad INCRBY result");
@@ -308,7 +308,7 @@ export async function readRateLimit(
   const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
   const window = Math.floor(now / 1000 / span);
   const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
-  const key = `${PREFIX}${bucket}:${ipKey(ip, opts.v6Bits)}:${slot}`;
+  const key = `${PREFIX}${bucket}:${ipKey(bucket, ip, opts.v6Bits)}:${slot}`;
   const inMemory = () => {
     const hit = memCounts().get(key);
     return hit && hit.exp > now ? hit.n : 0;
