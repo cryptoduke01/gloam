@@ -2,10 +2,10 @@ import Image from "next/image";
 
 /**
  * Partners already live on Gloam: a plain logo row on the landing page and /partners.
- * Raeto and Agent Wormhole are drawn inline so they follow the theme: Raeto's ring
- * takes the text colour, Agent Wormhole keeps its own dark disc. Zedkr's mark is a
- * rendered file, so it ships as its own black and white PNGs and the theme picks
- * one. Static copies of all three live in public/brand/partners.
+ * Raeto, Agent Wormhole and Motion are drawn inline so they follow the theme: Raeto's
+ * ring takes the text colour, Agent Wormhole and Motion keep their own dark grounds.
+ * Zedkr's mark is a rendered file, so it ships as its own black and white PNGs and the
+ * theme picks one. Static copies of all four live in public/brand/partners.
  */
 
 /** Raeto's mark: an open ring, a centre dot and the green dot in the gap. */
@@ -49,6 +49,17 @@ export function AgentWormholeMark({ size = 40 }: { size?: number }) {
   );
 }
 
+/** Motion's mark: their two forward triangles on a dark tile, edged in the text colour so it holds on dark grounds. */
+export function MotionMark({ size = 40 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
+      <rect width="64" height="64" rx="14" fill="#000000" />
+      <rect x="0.8" y="0.8" width="62.4" height="62.4" rx="13.2" fill="none" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1.6" />
+      <path d="M10.88 14.72 L32 32 L10.88 49.28 Z M35.21 14.72 L56.33 32 L35.21 49.28 Z" fill="#F2F4FF" />
+    </svg>
+  );
+}
+
 /** Zedkr's mark: their own files from zedkr.finance, black on light and white on dark. */
 export function ZedkrMark({ size = 40 }: { size?: number }) {
   const width = Math.round((size * 230) / 256);
@@ -72,6 +83,7 @@ export const LIVE_PARTNERS: Partner[] = [
   { name: "Raeto", href: "https://raeto.cc", line: "Private agent funding", Mark: RaetoMark },
   { name: "Agent Wormhole", href: "https://agentwormhole.com", line: "Agent payments checked before they go", Mark: AgentWormholeMark },
   { name: "Zedkr", href: "https://zedkr.finance", line: "Shop Amazon and eBay from a private balance", Mark: ZedkrMark },
+  { name: "Motion", href: "https://motion.gift", line: "Fund a trading wallet privately", Mark: MotionMark },
 ];
 
 function PartnerLink({ p, withLine = false, size = 32 }: { p: Partner; withLine?: boolean; size?: number }) {
