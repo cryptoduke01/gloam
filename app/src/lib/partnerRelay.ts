@@ -36,6 +36,7 @@ import {
   relayVaultSwap,
   relayVaultSwapExit,
   type MemoPartner,
+  type Sender,
 } from "./relay/server";
 
 export type PartnerRelayAction = "transfer" | "unshield" | "memo" | "swap" | "swapExit";
@@ -46,10 +47,10 @@ export type Attribution =
   | { recorded: false; kind: ActivityKind | null; reason: "not_billable" | "duplicate" | "storage_error" };
 
 export type PartnerRelayDeps = {
-  relayTransfer: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
-  relayUnshield: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
+  relayTransfer: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
+  relayUnshield: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
   relayMemo: (net: GloamNetwork, body: Record<string, unknown>, from?: MemoPartner) => Promise<Hex>;
-  relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>, sender?: string) => Promise<Hex>;
+  relayVaultSwap: (net: GloamNetwork, body: Record<string, unknown>, sender?: Sender) => Promise<Hex>;
   relayVaultSwapExit: (net: GloamNetwork, body: Record<string, unknown>) => Promise<Hex>;
   /** The vault's spent(nullifier), read on the relay's own node. */
   isSpent: (net: GloamNetwork, nullifier: Hex) => Promise<boolean>;
@@ -81,8 +82,8 @@ export class UnknownRelayAction extends RelayError {
  * failed over accounting: a storage error comes back as attribution.reason.
  */
 export async function relayForPartner(
-  /** `sender`: who holds a share of the network's cap for the send (the partner account), as the relay takes it. */
-  args: { net: GloamNetwork; body: Record<string, unknown>; partner: Partner; keyId: string; sender?: string },
+  /** `sender`: who holds a share of the network's cap for the send (the partner account, and the calling IP for an account no admin approved), as the relay takes it. */
+  args: { net: GloamNetwork; body: Record<string, unknown>; partner: Partner; keyId: string; sender?: Sender },
   deps: PartnerRelayDeps = partnerRelayDeps
 ): Promise<{ hash: Hex; action: PartnerRelayAction; attribution: Attribution }> {
   const { net, body, partner, keyId, sender } = args;

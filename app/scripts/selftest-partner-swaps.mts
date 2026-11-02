@@ -115,10 +115,10 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
   const recorded: { kind: string; edge: unknown }[] = [];
   const memoFrom: unknown[] = [];
   const claimed: Hex[] = [];
-  const senders: (string | undefined)[] = [];
+  const senders: (string | readonly string[] | undefined)[] = [];
   const deps = {
     ...partnerRelayDeps,
-    relayTransfer: async (_net: unknown, _body: unknown, sender?: string) => {
+    relayTransfer: async (_net: unknown, _body: unknown, sender?: string | readonly string[]) => {
       senders.push(sender);
       calls.push("transfer");
       return H(1);
@@ -132,7 +132,7 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       memoFrom.push(from);
       return H(3);
     },
-    relayVaultSwap: async (_net: unknown, _body: unknown, sender?: string) => {
+    relayVaultSwap: async (_net: unknown, _body: unknown, sender?: string | readonly string[]) => {
       senders.push(sender);
       calls.push("swap");
       return H(4 + calls.length);

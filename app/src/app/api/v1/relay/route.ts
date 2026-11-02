@@ -1,5 +1,6 @@
 import { jsonBody, requireKeyEnv, withApiKey } from "@/lib/partnersApi";
 import { keyEnvForNetwork } from "@/lib/apiKeys";
+import { clientIp } from "@/lib/mcpRemote/rateLimit";
 import { relayForPartner } from "@/lib/partnerRelay";
 import { checkChainRateLimit, checkRateLimit, networkForChain, relayStatus } from "@/lib/relay/server";
 
@@ -32,10 +33,14 @@ export async function POST(req: Request) {
     const net = networkForChain(body.chainId);
     requireKeyEnv(key, keyEnvForNetwork(net), net.label);
     // The relay's own per-sender caps, with the partner account as the sender: all its
-    // keys count together (the network caps apply when it sends).
-    const sender = `partner:${partner.id}`;
-    await checkRateLimit(sender);
-    if (body.action !== "memo") await checkChainRateLimit(net, sender);
+    // keys count together (the network caps apply when it sends). An account no admin
+    // approved counts as the calling IP too, as accounts are free to make and an IP is not.
+    const account = `partner:${partner.id}`;
+    const sender = partner.relayApproved === true ? [account] : [account, clientIp(req)];
+    for (const one of sender) {
+      await checkRateLimit(one);
+      if (body.action !== "memo") await checkChainRateLimit(net, one);
+    }
     // the same sender holds its share of the network's cap when the relay sends (lib/relay/server)
     const { hash, action, attribution } = await relayForPartner({ net, body, partner, keyId: key.id, sender });
     return { data: { hash, chainId: net.chainId, network: net.key, action, attribution, charged: false } };

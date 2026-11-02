@@ -272,9 +272,9 @@ its receipt shows it didn't burn, so one nobody saw land stays counted. Receipts
 A swap whose deadline is under a minute away is refused, as it could land late.
 
 **The hourly spend cap, every chain.** The relay spends at most this much gas money in an hour,
-across every kind of send (`lib/relay/spendCap`). New sends stop at 80% of it (`spend_cap`), and
-the rest is kept for refunds and exits. Past all of it, those wait too, and an exit can still be
-sent from any wallet. A scheduled cash out that meets it tries again, like any refusal.
+across every kind of send (`lib/relay/spendCap`). New sends stop at 80% of it (`spend_cap`), cash
+outs at 92%, and the last 8% is kept for refunds and exits alone. Past all of it, those wait too,
+and an exit can still be sent from any wallet. A scheduled cash out that meets it tries again, like any refusal.
 
 | Chain | Cap an hour | Peak hour so far, to 2 November |
 | --- | --- | --- |
@@ -283,13 +283,17 @@ sent from any wallet. A scheduled cash out that meets it tries again, like any r
 | Robinhood Chain | 0.02 ETH | 34 sends, about 0.0012 ETH |
 | Tempo | 1, in its gas units | 1 send, about 0.0005 |
 
-New sends stop at 80% of the cap. Cash outs, refunds and exits can use the rest. One sender (an
-IP, or a partner account) may hold 40% of the cap in an hour, refunds and exits apart, so a
-200-person payroll from one browser fits at ordinary gas, and on Ethereum up to about 0.05 gwei.
+One sender (an IP, or a partner account) may hold a share of the cap in an hour, refunds and
+exits apart: the larger of 40% of the cap and 200 sends like the one it is sending, at the gas it
+is held at. So a 200-person payroll from one browser always fits its own share, and only the
+chain's cap can stop it: that fits 200 payments up to about 0.11 gwei on Ethereum, 0.045 on
+Robinhood Chain and 0.022 on Base. A partner account no admin approved also counts as the IP it
+calls from, so a second free account from one IP adds nothing.
 `GLOAM_RELAY_HOURLY_SPEND_<chainId>` sets a chain's cap in its gas coin, or `off`, and
 `GLOAM_RELAY_SENDER_SHARE_<chainId>` a sender's share in percent, or `off`. One IP may ask for
 120 sends in 10 minutes on Ethereum, against 400 elsewhere: `GLOAM_RELAY_IP_SENDS_<chainId>`, or
-`off`. Through the partner API the account is the sender. On Base a send holds half again its
+`off`. Through the partner API the account is the sender, and for an account no admin approved
+the calling IP too. On Base a send holds half again its
 gas for the fee to post it to Ethereum, and settles at the fee its receipt shows.
 
 **Gas limits by kind.** The relay checks each dry run against `SEND_GAS_MOST`: 1.2M for a cash
