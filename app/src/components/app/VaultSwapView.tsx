@@ -381,6 +381,7 @@ export function VaultSwapView() {
 
   // The relay's state, and on a chain where gas is dear, its floor for a swap: it moves with gas, so it refreshes with the quote.
   const dearGas = hasSwapFloor(network.chainId);
+  const relaySlot = dearGas ? refreshSlot : 0;
   useEffect(() => {
     let live = true;
     const chainId = network.chainId;
@@ -388,7 +389,7 @@ export function VaultSwapView() {
     return () => {
       live = false;
     };
-  }, [network.chainId, dearGas, dearGas ? refreshSlot : 0]);
+  }, [network.chainId, dearGas, relaySlot]);
 
   // A fresh quote whenever what is being swapped changes (after a short pause while
   // typing), and again every QUOTE_TTL_MS while it shows. Any valid amount gets a
@@ -880,7 +881,7 @@ export function VaultSwapView() {
                 )}
                 {belowFloor && (
                   <p className="text-mute">
-                    The relay pays the gas, so on {network.label} a swap's vault fee has to cover it. This floor moves with gas.
+                    The relay pays the gas, so on {network.label} a swap&apos;s vault fee has to cover it. This floor moves with gas.
                   </p>
                 )}
                 {relayOk === false && (

@@ -465,7 +465,8 @@ if (cfg.id === 4663) {
 }
 
 // ONLY=<words> runs just the cases whose name has them.
-for (const c of cfg.cases.filter((x) => x.name.includes(process.env.ONLY ?? ""))) {
+const cases = cfg.cases.filter((x) => x.name.includes(process.env.ONLY ?? ""));
+for (const c of cases) {
   try {
     await runCase(c, feeBps);
   } catch (e) {
@@ -477,5 +478,5 @@ for (const c of cfg.cases.filter((x) => x.name.includes(process.env.ONLY ?? ""))
 console.log(`\nGas on ${chainFx.name} (real proofs, live vault):`);
 const rows = gasRows.map((g) => ({ ...g, usd: (Number(g.gas) * Number(liveGasPrice) * ETH_PRICE) / 1e18 }));
 for (const r of rows) console.log(`  ${String(r.gas).padStart(8)} gas  $${r.usd.toFixed(4)} at ${(Number(liveGasPrice) / 1e9).toFixed(3)} gwei, ETH $${ETH_PRICE}, ${r.calldata} bytes  ${r.name}`);
-console.log(failures.length ? `\nFAILED:\n  ${failures.join("\n  ")}` : `\nALL CHECKS PASSED (${cfg.cases.length} cases, a local fork, nothing broadcast, no key used)`);
+console.log(failures.length ? `\nFAILED:\n  ${failures.join("\n  ")}` : `\nALL CHECKS PASSED (${cases.length} cases, a local fork, nothing broadcast, no key used)`);
 process.exit(failures.length ? 1 : 0);
