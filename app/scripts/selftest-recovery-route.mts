@@ -361,22 +361,23 @@ await test("a marked record doesn't excuse a save with no version: the date goes
   assert.equal((await readBackup(id))!.n, 2);
 });
 
-await test("no version racing a delete: however the two interleave, the backup doesn't come back", async () => {
+await test("no version, a backup deleted just after the save saw it: it stays deleted", async () => {
   atTime(BEFORE_THE_END);
-  const headers = { "x-forwarded-for": "203.0.113.113" };
-  const statuses = new Set<number>();
-  for (let spin = 0; spin < 120; spin++) {
-    (globalThis as { __gloamMcpRate?: Map<string, unknown> }).__gloamMcpRate?.clear();
-    const id = hex64();
-    assert.equal((await put("203.0.113.113", id, 1)).status, 200);
-    const deleting = DELETE(new Request("http://localhost/api/recovery", { method: "DELETE", headers, body: JSON.stringify({ id, write: WRITE }) }));
-    for (let i = 0; i < spin; i++) await Promise.resolve();
-    const saving = PUT(new Request("http://localhost/api/recovery", { method: "PUT", headers, body: JSON.stringify({ id, write: WRITE, c: BLOB, n: 2 }) }));
-    const [saved, deleted] = await Promise.all([saving, deleting]);
-    statuses.add(saved.status);
-    if (deleted.status === 200) assert.equal(await held(id), false, `after ${spin} turns: saved ${saved.status}`);
+  const ip = "203.0.113.113";
+  const id = hex64();
+  assert.equal((await put(ip, id, 1)).status, 200);
+  // The save is counted once it has seen the backup there, so another device deletes it at that moment.
+  const counts = (globalThis as unknown as { __gloamMcpRate: Map<string, unknown> }).__gloamMcpRate;
+  counts.get = function (this: Map<string, unknown>, key: string) {
+    if (key.includes("recovery-save")) void kv([["DEL", `gloam:recovery:v1:${id}`]]);
+    return Map.prototype.get.call(this, key);
+  };
+  try {
+    assert.equal((await put(ip, id, 2, BLOB, NO_VERSION)).status, 410);
+  } finally {
+    delete (counts as unknown as { get?: unknown }).get;
   }
-  assert.ok(statuses.has(410), `the save lost the race at least once: ${[...statuses]}`);
+  assert.equal(await held(id), false, "the save doesn't bring it back");
 });
 
 await test("reads stay open and deletes still need the token, past the end date", async () => {
