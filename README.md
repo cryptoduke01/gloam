@@ -150,7 +150,7 @@ Privacy has to be checkable and correct before mainnet. Mainnet is beta software
 
 ## Using the SDK
 
-Deposit privately into the pool in a few lines. The SDK mints the note and generates the shield proof; you sign the resolved call. This deposits USDC.e on Tempo mainnet (`@gloamtrade/sdk` 0.2.2):
+Deposit privately into the pool in a few lines. The SDK mints the note and generates the shield proof; you sign the resolved call. This deposits USDC.e on Tempo mainnet (`@gloamtrade/sdk` 0.4.6):
 
 ```ts
 import { mainnetNetwork, buildShieldBoundIntent, artifactProver, circuitArtifactUrls, TEMPO_USDCE } from "@gloamtrade/sdk";
