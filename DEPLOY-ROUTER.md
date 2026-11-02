@@ -17,8 +17,8 @@ had one. See [What to review first](#what-to-review-first).
 - **An exit.** Money waiting at a swap's escrow can leave to an address the swap's
   one-time exit key signs for, when its refund can't land.
 - **A deadline.** Each swap carries one in its escrow key, 30 minutes after it is made
-  by default (`SWAP_DEADLINE_SECONDS`). It can't land after that. A refund and an exit
-  have no deadline.
+  (`SWAP_DEADLINE_SECONDS`), or 10 on Base and Ethereum (`swapDeadlineSeconds`). It can't
+  land after that. A refund and an exit have no deadline.
 
 ## What it can't change
 
@@ -140,7 +140,7 @@ step needs:
 | New pool after deploy | The owner queues it, live 3 days later | Pools queued on the old router do not carry over. The list is in the constructor. |
 | ETH swaps on Robinhood Chain | The vault's native ETH limit, ready 3 November at 17:08 UTC, executed | A swap into ETH reverts whole with `OverDepositLimit`, and the note stays in the vault. |
 | AI and ORBIO on the new router | Their vault limits executed | The pools are live from deploy, but a swap into either reverts whole until the vault takes it. |
-| The 0.50% cash-out fee (3 November, 15:30 UTC) | Nothing here | The router reads no fee. A quote made before it and landing after can come up short and revert whole, and the note stays. A refund is safe: its 1% margin covers any fee the vault allows. The Ethereum floor halves by itself. |
+| The 0.50% cash-out fee (3 November, 15:30 UTC) | Nothing here | The router reads no fee. A quote made before it and landing after can come up short and revert whole, and the note stays. On Robinhood Chain and Tempo a refund's 1% margin covers any fee the vault allows. On Base and Ethereum a refund is sized from the fee when the swap is made, so if the fee rises past that with a proof still out, that refund can't land and the app offers the exit. The Ethereum floor halves by itself. |
 
 ## What happens to swaps in flight
 

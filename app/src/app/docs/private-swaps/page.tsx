@@ -327,7 +327,7 @@ export default function DocsPrivateSwapsPage() {
       {V3 && (
         <p>
           A swap through the newest routers carries a deadline, 30 minutes after
-          it is made. It can&apos;t land after that. A refund and an exit have no
+          it is made{NEW_CHAINS.length > 0 && `, or 10 on ${and(NEW_CHAINS)}`}. It can&apos;t land after that. A refund and an exit have no
           deadline.
         </p>
       )}

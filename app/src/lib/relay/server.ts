@@ -938,11 +938,15 @@ export async function checkUnshieldForLater(net: GloamNetwork, body: Record<stri
   await precheckSpend(net, call.args[1], call.args[2]);
   // The dry run from an account that can send it, as the send itself will be (one empty key is skipped).
   const [account] = await fundedRelayAccounts(net, "Cashing out later needs the Gloam relay, which is off right now.");
+  let gas: bigint;
   try {
-    await relayPublicClient(net).estimateContractGas({ address: net.pool!, abi: relayPoolAbi, functionName: "unshield", args: call.args, account });
+    gas = await relayPublicClient(net).estimateContractGas({ address: net.pool!, abi: relayPoolAbi, functionName: "unshield", args: call.args, account });
   } catch (e) {
     throw explain(e, "Could not check this cash out. Try again.", "check_failed");
   }
+  // refused now rather than when its time comes
+  const most = sendGasMost(net.chainId, "unshield");
+  if (most !== null && gas > most) throw new RelayError(GAS_TOO_MUCH_MESSAGE, 422, "gas_most");
   return call;
 }
 
