@@ -366,13 +366,19 @@ const hash = await wallet.writeContract({
             </tr>
             <tr>
               <td>
-                <code>gloam_list_markets</code> / <code>gloam_quote</code>
+                <code>gloam_swap_quote</code>
               </td>
-              <td>Markets and indicative quotes, with what stays private (read)</td>
+              <td>The price of a private swap, and anything that would stop it (read)</td>
             </tr>
             <tr>
               <td>
-                <code>gloam_plan_shield</code> / <code>gloam_plan_private_trade</code>
+                <code>gloam_execute_private_swap</code> / <code>gloam_finish_swap</code>
+              </td>
+              <td>A private swap proved locally and sent through the Gloam relay, under the spending limits (&quot;swap&quot; must be listed); bring back a swap whose money waits at its escrow</td>
+            </tr>
+            <tr>
+              <td>
+                <code>gloam_plan_shield</code>
               </td>
               <td>Build an unsigned intent an agent can reason over (plan)</td>
             </tr>
@@ -588,11 +594,11 @@ const hash = await wallet.writeContract({
       <p>
         No fabricated fills, ever. If a private path is not live, the tool says so
         and returns a plan rather than a fake success.{" "}
-        <Link href="/docs/private-swaps">Private swaps</Link> are live in the
-        Gloam app on the {swapMainnets()} mainnets, but the SDK and the MCP server do not swap
-        yet: the market and trade tools only plan, and the old sealed trade they
-        describe is retired. Shield, private send, cash out, and disclosure are
-        live and proof-gated. Mainnet uses the final keys from the 13-contributor
+        <Link href="/docs/private-swaps">Private swaps</Link> are live on the{" "}
+        {swapMainnets()} mainnets, in the Gloam app, the SDK (<code>buildSwapIntent</code>) and the
+        MCP server (<code>gloam_execute_private_swap</code>): a swap hides who swapped, not the
+        tokens or the amounts. The old sealed trade is retired. Shield, private send, cash out,
+        swaps and disclosure are proof-gated. Mainnet uses the final keys from the 13-contributor
         ceremony; testnet runs on dev-ceremony keys. The code was reviewed
         internally before launch, and Kann Audits reviewed the vault contracts
         (<Link href="/security">report, 1 November 2026</Link>) and found no Critical, High or Medium issues. The SDK

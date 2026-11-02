@@ -23,7 +23,7 @@ Every tool that touches a chain takes a `network`:
 
 On mainnet:
 
-- **Payments only, beta limits.** On the mainnet pools this server makes deposits, private payments and sweeps. It does not swap: private swaps are in the Gloam app (Vault > Swap), on the mainnets listed in its [docs](https://gloam.trade/docs/private-swaps). A deposit is at most 50,000 of a stablecoin (20 ETH on Base and Ethereum, 2,500,000 GLOAM) during the beta, checked before anything is proved; private payments are never limited.
+- **Payments, swaps, beta limits.** On the mainnet pools this server makes deposits, private payments and sweeps, and private swaps on the mainnets with a swap router (see [Private swaps](#private-swaps)). A deposit is at most 50,000 of a stablecoin (20 ETH on Base and Ethereum, 2,500,000 GLOAM) during the beta, checked before anything is proved; private payments are never limited.
 - **Fees.** Deposits and private payments are free. Cashing out costs 0.25% (this server does not cash out; use the Gloam app or the SDK).
 - **Final keys.** Proofs for mainnet use the final keys of the 13-contributor trusted setup, downloaded from `https://www.gloam.trade/circuits/final` and checked against the SHA-256 the SDK pins. Testnet proofs use the dev keys. The two are cached apart.
 - **Beta software.** The contracts and circuits were reviewed internally before launch with no Critical or High findings open, and an independent review on 23 October found no new exploitable contract flaw (fixes in the app areas it named were merged by 24 October). Kann Audits reviewed the vault contracts (report, 1 November 2026: [gloam.trade/security](https://gloam.trade/security)) and found no Critical, High or Medium issues; the routers, circuits, app, relay, this server and the SDK were not part of it. The mainnet pools are new, so the crowd of notes to hide among is small at first. Start with small amounts.
@@ -85,9 +85,9 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 | --- | --- | --- |
 | `gloam_info` | read | What Gloam is, its networks, and what the agent can do |
 | `gloam_privacy_status` | read | Honest posture: what is public, what is private, mainnet limits and fees, how thin the anonymity set is |
-| `gloam_list_markets` | read | Markets from the retired sealed trade, with indicative testnet marks. Nothing here trades |
-| `gloam_quote` | read | Indicative quote for the retired sealed trade |
-| `gloam_plan_private_trade` | plan | Describe a sealed trade (never executes; the sealed trade is retired) |
+| `gloam_swap_quote` | read | Price a private swap of one note's value, with everything that would stop it (see [Private swaps](#private-swaps)) |
+| `gloam_execute_private_swap` | execute | **Real private swap.** Proves locally and sends through the Gloam relay; both new notes are kept first |
+| `gloam_finish_swap` | execute | Settle a swap whose money waits at its escrow: the refund note, or an exit to an address you name |
 | `gloam_plan_shield` | plan | Describe a shield before executing (no signing) |
 | `gloam_execute_shield` | execute | **Real private deposit** on the chosen network. Mints a note, generates the Groth16 proof server-side with that network's keys, broadcasts `shieldBound()`, and returns a note handle |
 | `gloam_execute_transfer` | execute | Public transfer of test ETH on Robinhood Chain testnet (funding while practicing). Amount and recipient are visible |
@@ -104,6 +104,23 @@ The server reads its environment, then `~/.gloam/agent.env` (or the file in `GLO
 `gloam_execute_shield` is the private-execution rail: the agent ends up with a shielded balance only this server can spend. The agent sees a note handle such as `n-k3x9p2qw7m`, never the note's secret. When no signer is configured, every execute tool returns a plan instead of acting, and we never return a fake private fill.
 
 The x402 tools are private agent payments (the MCPay pattern, but the settlement is private). `gloam_payment_requirements` prices a resource to the payee's receive tag. The paying agent calls `gloam_execute_private_pay` (or `gloam_fetch_paid` for the whole request), which settles a private send and seals the payment note to that tag, so only the payee can open it. The payee calls `gloam_verify_payment`, which opens the note, checks it binds the required amount and asset, and sweeps it into a fresh note before saying `grantAccess: true`. Unlike a Tempo Zone, no operator sees the transaction: it is private from the public and self-custodial, with an optional per-payment issuer-scoped compliance disclosure. See `TEMPO_EXPANSION.md`.
+
+## Private swaps
+
+A private swap takes one note out of the vault through a one-time escrow, trades it on a public DEX, and puts the result back as a new note, in one transaction the Gloam relay sends. It hides who swapped. The tokens and the amounts are public, like any trade on that DEX. The planning and the proofs are the SDK's, the same as the Gloam app's; the checks are listed below.
+
+| Tool | What it does |
+| --- | --- |
+| `gloam_swap_quote` | Read only. The price of swapping `amount` of `from` into `to` (or a note's whole value, with `note`), the vault's fee read live, the route, and anything that would stop it (below) |
+| `gloam_execute_private_swap` | Proves the swap here and sends it through the relay. Never from this server's wallet, which would put the wallet next to the swap on the explorer |
+| `gloam_finish_swap` | For a swap whose money waits at its escrow: brings it back as the refund note, or sends it to a `to` address when the refund note can't take it |
+
+- **One whole note.** A swap spends one note. With an `amount` below a note's value, the server first splits the note with a private send to its own notes (the amount and the change), waits for it, then swaps the note of the right size. Notes are never combined.
+- **What stops a swap, on every network.** Price impact over the owner's cap: 2% unless `GLOAM_SWAP_MAX_IMPACT_BPS` says otherwise (in basis points, 0 to 10000). An agent's `maxImpactBps` can lower it for one swap, never raise it. Two dollar stablecoins more than 2% apart. A refund note the vault couldn't take back, an output the vault doesn't take or has no room for, the relay off or over its gas ceiling, and on Ethereum a swap under the relay's smallest. Not checked: the price against the market, which the Gloam app's swap tab also weighs with prices from outside the chain; this server passes none.
+- **Limits.** A swap goes through the spending limits on the value it spends, and only when the owner lists `swap` in `tools` (`GLOAM_LIMIT_TOOLS=pay,swap`, or `"tools": [..., "swap"]` in the limits file). What it buys is limited too: one of `swapTo` when the owner sets it (`GLOAM_LIMIT_SWAP_TO=GLOAM,ETH`, or `"swapTo": ["GLOAM"]` in the file, symbols or 0x addresses), else one of the agent's own `assets`. An exit pays a public address, so it goes through the limits too, recipients included, but its amount is not counted again: the swap already counted it.
+- **Where.** Only on a network with a swap router: Robinhood Chain and Tempo mainnet today, Base and Ethereum once their routers are switched on. Elsewhere the tools say swaps aren't live there.
+- **The relay.** `GLOAM_RELAY_URL` names a relay; unset, it is Gloam's. Swaps always go through a relay, whatever `GLOAM_USE_RELAY` says, so they need the note store (`GLOAM_NOTE_KEY`, or one derived from `GLOAM_AGENT_PRIVATE_KEY`) but no gas in the agent's wallet.
+- **Getting money back.** Before anything is sent, the server keeps both notes the swap makes: the new note, and a refund note that also holds the swap's exit key. One of them lands. If the swapped note's unshield is ever sent on its own, its money waits at the swap's escrow: `gloam_list_notes` with `refresh` says so, and `gloam_finish_swap` brings it back as the refund note. If the refund note can't take it (the vault's fee rose, or the vault has no room for it now), the exit sends it to an address you name (on routers with an exit). A swap the relay refused, or one that reverted or ran out of time, leaves the note spendable again, and the refund note stays kept until that note is spent. The same holds for the split before a swap and for a payment: once the relay (or the wallet's RPC) has seen a send's proof, the notes it would make are kept, marked dead, and come back if it lands after all.
 
 ## Notes stay in the server
 
@@ -194,7 +211,7 @@ Not protected:
 
 | Limit | Meaning |
 | --- | --- |
-| `tools` | Which money tools the agent may use: `pay`, `send`, `shield`. Default all three |
+| `tools` | Which money tools the agent may use: `pay`, `send`, `shield`, `swap`. Default `pay`, `send` and `shield`: `swap` is allowed only when listed |
 | `assets` | Which assets it may move. Required, there is no "any" |
 | `maxPerPayment` | Cap on a single payment, in the asset's units (e.g. `"5"` is 5 USDC.e) |
 | `maxPerDay` | Cap over a rolling 24 hours, so a burst cannot straddle midnight |
@@ -280,7 +297,9 @@ GLOAM_LIMIT_MAX_PER_PAYMENT=5            # required, applies to each asset
 GLOAM_LIMIT_MAX_PER_DAY=50               # required, applies to each asset
 GLOAM_LIMIT_RECIPIENTS=any               # required: any, or a comma list
 GLOAM_LIMIT_EXPIRES=2026-12-31           # optional
-GLOAM_LIMIT_TOOLS=pay,shield             # optional
+GLOAM_LIMIT_TOOLS=pay,shield             # optional; add swap to allow private swaps
+GLOAM_LIMIT_SWAP_TO=GLOAM,ETH            # optional: what a swap may buy (else the assets above)
+GLOAM_SWAP_MAX_IMPACT_BPS=200            # optional: the most price impact a swap may take (default 200, 2%)
 ```
 
 Use the file or the variables, not both. The variables have one pair of caps for every asset listed, so list one kind of asset there (stablecoins, or a single other asset such as ETH); for ETH next to stablecoins, use the file.
@@ -403,4 +422,4 @@ Then the agent can shield into a private balance, pay for x402 and MPP resources
 - **Mainnet (beta):** Tempo, Robinhood Chain, Base and Ethereum, payments only, beta deposit limits, the trusted setup's final keys. Reviewed internally before launch and independently on 23 October; Kann Audits reviewed the vault contracts (report, 1 November 2026) and found no Critical, High or Medium issues.
 - **Testnet:** Tempo Moderato and Robinhood Chain testnet on dev keys; Base Sepolia and Ethereum Sepolia on the final keys.
 - **Circuit files** are fetched from `https://www.gloam.trade/circuits` (final keys under `/final`) on first use, checked against pinned SHA-256 and cached locally (`GLOAM_ARTIFACTS_DIR`).
-- **Swaps.** Private swaps are live in the Gloam app, with who swapped kept private and the amounts public ([docs](https://gloam.trade/docs/private-swaps)). This server does not swap: its market and trade tools only plan, for the retired sealed trade. See the [agent docs](https://gloam.trade/docs/agents).
+- **Swaps.** Private swaps run here and in the Gloam app where the network has a swap router: who swapped stays private, the tokens and the amounts are public ([docs](https://gloam.trade/docs/private-swaps)). The old sealed trade is retired, and its planning tools are gone.

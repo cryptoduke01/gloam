@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { mainnetPool } from "@/lib/mainnet";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 /** Mainnets whose pool is not in yet (lib/mainnet.ts): "Base mainnet and Ethereum" until their deploys. */
 const NOT_YET = [mainnetPool(8453) ? null : "Base mainnet", mainnetPool(1) ? null : "Ethereum"].filter(Boolean).join(" and ");
@@ -348,9 +349,9 @@ cashOutFee(500_000_000n);                     // what the pool keeps on a 500 US
         sealed trade, which is retired: the on-chain sealed-swap path stays
         disabled on testnet, and the mainnet pools have no sealed swap at all.{" "}
         <Link href="/docs/private-swaps">Private swaps</Link> replaced it. They
-        run in the Gloam app through a swap router on Robinhood Chain and
-        Tempo mainnet, and the SDK
-        does not build them yet.
+        go through a swap router on {swapMainnets()} mainnet, and from 0.5.0 the SDK
+        builds them: <code>buildSwapIntent</code>, with the refund and exit in
+        the SDK README.
       </p>
 
       <h3>Parameters</h3>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DocsLayout } from "@/components/DocsLayout";
 import { liveMainnetNames, mainnetPool } from "@/lib/mainnet";
+import { swapMainnets } from "@/lib/vaultSwap";
 
 const MAINNETS = liveMainnetNames();
 
@@ -443,8 +444,10 @@ for (const p of payments) {
         Sepolia (<code>11155111</code>) run the final keys with test funds. Real
         privacy only, never a mock success. Note secrets are the sole spend
         authority: persist and protect them. The old sealed trade is retired.{" "}
-        <Link href="/docs/private-swaps">Private swaps</Link> run in the app on
-        Robinhood Chain and Tempo mainnet; the SDK does not build them yet. See{" "}
+        <Link href="/docs/private-swaps">Private swaps</Link> run on {swapMainnets()} mainnet,
+        and from 0.5.0 the SDK builds them too (<code>quoteSwap</code>, <code>buildSwapIntent</code>,
+        and <code>buildSwapRefund</code> / <code>buildSwapExit</code> to get the money back): a swap
+        hides who swapped, not the tokens or the amounts. See{" "}
         <Link href="/docs/production">the production gate</Link>.
       </p>
     </DocsLayout>
