@@ -5,14 +5,15 @@
  * Chain and Tempo, each on mainnet (the ceremony's final keys, beta deposit
  * limits, payments only) and testnet (dev keys). Tools take
  * a `network` (default: GLOAM_NETWORK, else Robinhood Chain testnet), and the
- * 402 payment tools settle on whatever network the price names. Private trading
- * is not live on any network; the market and trade tools only plan.
+ * 402 payment tools settle on whatever network the price names. Private swaps
+ * (src/swaps.ts) run where the network has a swap router: who swapped stays
+ * private, the tokens and amounts are public. The old sealed trade is retired.
  *
  * This exposes read + planning tools that work today, and returns honest
  * "intent" objects for write actions (shield / pay / send) when there is no
  * signer. It never fakes a private fill or settlement.
  *
- * Every tool that moves money (shield, public send, private pay) first passes
+ * Every tool that moves money (shield, public send, private pay, private swap) first passes
  * the owner's spending limits (src/policy.ts, src/spendGuard.ts): allowed
  * tools, assets, recipients, a cap per payment and per rolling day, and an
  * expiry. No limits configured means no spending. The limits are enforced here,
@@ -34,7 +35,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
+import { TransactionNotFoundError, formatUnits, isAddress, parseEther, parseUnits, type Address, type Hex, type PublicClient } from "viem";
 import {
   approveNeedsReset,
   buildShieldBoundIntent,
@@ -67,6 +68,8 @@ import {
   GLOAM_RELAY_URL,
   GLOAM_X402_SCHEME,
   relayIntent,
+  relaySwapCall,
+  relayStatus as readRelayStatus,
   GloamRelayError,
   assertDepositAllowed,
   assertDepositWithinLiveLimit,
@@ -75,14 +78,17 @@ import {
   type GloamPaymentRequirements,
   type NoteExport,
   type Prover,
+  type RelayNetworkStatus,
   type RelayOptions,
+  type SwapRelayCall,
   type SweepChain,
 } from "@gloamtrade/sdk";
-import { CHAIN, MARKETS, PRIVACY_STATUS, findMarket } from "./data.js";
+import { CHAIN, PRIVACY_STATUS } from "./data.js";
 import { getPublicClient, getSigner, signerSetup, type Signer } from "./signer.js";
 import { checkAccessKey } from "./accessKey.js";
 import { packageVersion } from "./version.js";
-import { shieldArtifacts, transferArtifacts } from "./artifacts.js";
+import { shieldArtifacts, transferArtifacts, unshieldArtifacts } from "./artifacts.js";
+import { SWAP_PRIVACY, refreshSwapNotes, registerSwapTools } from "./swaps.js";
 import {
   allNetworks,
   defaultNetworkKey,
@@ -146,8 +152,14 @@ export interface ServerDeps {
   /** The prover for `net`'s key set: dev keys on testnet, the ceremony's final keys on mainnet. */
   shieldProver(net?: McpNetwork): Promise<Prover>;
   transferProver(net?: McpNetwork): Promise<Prover>;
+  /** The unshield prover for `net`'s key set: a private swap's note leaves the vault by an unshield to its escrow. */
+  unshieldProver(net?: McpNetwork): Promise<Prover>;
   syncTree: typeof syncTree;
   relay(intent: GloamIntent, opts: RelayOptions): Promise<Hex>;
+  /** A private swap, its refund or its exit, through the relay. */
+  relaySwap(call: SwapRelayCall, opts: RelayOptions): Promise<Hex>;
+  /** The relay's state per network (whether it is on, gas over its ceiling). */
+  relayStatus(opts: RelayOptions): Promise<RelayNetworkStatus[]>;
   fetch: typeof fetch;
 }
 
@@ -158,8 +170,11 @@ function defaultDeps(env: Env): ServerDeps {
     publicClient: (net) => getPublicClient(net),
     shieldProver: async (net) => artifactProver(await shieldArtifacts(net?.ceremony ?? "dev")),
     transferProver: async (net) => artifactProver(await transferArtifacts(net?.ceremony ?? "dev")),
+    unshieldProver: async (net) => artifactProver(await unshieldArtifacts(net?.ceremony ?? "dev")),
     syncTree,
     relay: relayIntent,
+    relaySwap: relaySwapCall,
+    relayStatus: readRelayStatus,
     fetch: guardedFetch(env),
   };
 }
@@ -423,14 +438,14 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
         })),
         defaultNetwork: defaultNet,
         mainnet:
-          `Mainnet is beta. The mainnet pools take payments only (no private trading), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
+          `Mainnet is beta. Private payments on every mainnet, and private swaps where the network has a swap router (gloam_swap_quote says), with beta deposit limits of 50,000 per deposit and 2,500,000 in total for each stablecoin (2,500,000 and 25,000,000 for GLOAM${
             ethNativeLimitText()
           }). Deposits and private payments are free; cashing out costs 0.25%. Reviewed internally before launch; Kann Audits reviewed the vault contracts (report, 1 November 2026: gloam.trade/security) and found no Critical, High or Medium issues. The swap routers, circuits, app, relay, this server and the SDK were not part of that review.`,
         tools: [
           "gloam_privacy_status: honest privacy posture, what is public vs private (read)",
-          "gloam_list_markets: markets for private trading, which is NOT live yet; indicative testnet marks (read)",
-          "gloam_quote: indicative quote for a future private trade (read)",
-          "gloam_plan_private_trade: plan a private trade; it cannot execute while private trading is off (planning)",
+          "gloam_swap_quote: price a private swap of one note's value, with everything that would stop it (read)",
+          "gloam_execute_private_swap: REAL private swap. Proves locally and sends through the Gloam relay; who swapped stays private, the tokens and amounts are public (execution; \"swap\" must be in the agent's limits)",
+          "gloam_finish_swap: settle a swap whose money waits at its escrow: the refund, or an exit to an address you name (execution)",
           "gloam_plan_shield: describe a shield before executing (planning)",
           "gloam_execute_shield: REAL private deposit. Mints a note, proves, and broadcasts shieldBound; returns a note handle (execution; needs a signer)",
           "gloam_execute_transfer: sign and broadcast a public transfer of test ETH on Robinhood Chain testnet, for funding (execution; needs a signer)",
@@ -449,6 +464,7 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
           : "Note secrets stay inside this server, encrypted. Tools give the agent handles (like n-k3x9p2qw7m) and amounts, never a secret.",
         spendingLimits:
           "Every execute tool that moves money checks the owner's limits first (tools, assets, recipients, per payment, per day, expiry) and logs the spend. The MCP server enforces them, off-chain; the vault contract does not.",
+        privateSwaps: `${SWAP_PRIVACY} A swap spends one whole note; both notes it makes are kept here before it is sent.`,
         privatePayments:
           "Agent payments over HTTP 402 (x402, or MPP with the gloam method) settle privately through the Gloam pool, sealed to the payee's receive tag. The payee sweeps each payment into a fresh note before serving, so a payer cannot take it back. Unlike a Tempo Zone, there is no operator that sees the transaction.",
       })
@@ -459,90 +475,28 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
     {
       title: "Privacy status",
       description:
-        "Honest, current privacy posture: what is live, what is not, and how strong the anonymity set is. Agents should check this before assuming a trade is fully private.",
+        "Honest, current privacy posture: what is live, what is not, and how strong the anonymity set is. Agents should check this before assuming what a payment or a swap keeps private.",
     },
     async () => text(PRIVACY_STATUS)
   );
 
-  server.registerTool(
-    "gloam_list_markets",
-    {
-      title: "List markets",
-      description:
-        "List the markets planned for private trading on Gloam, with indicative testnet marks. Private trading is not live on any network yet (mainnet takes payments only), so these are for planning.",
-      inputSchema: {
-        kind: z.enum(["stock", "crypto", "all"]).default("all").describe("Filter by asset kind."),
-      },
-    },
-    async ({ kind }) => {
-      const list = kind === "all" ? MARKETS : MARKETS.filter((m) => m.kind === kind);
-      return text({
-        count: list.length,
-        note: "Marks are indicative testnet values. Private trading is not live yet: these markets cannot be traded today.",
-        markets: list,
-      });
-    }
-  );
-
-  server.registerTool(
-    "gloam_quote",
-    {
-      title: "Quote a private trade",
-      description:
-        "Indicative quote for buying or selling a market, plus exactly what stays private and what becomes public.",
-      inputSchema: {
-        market: z.string().describe("Symbol or id, e.g. TSLA or eth."),
-        side: z.enum(["buy", "sell"]),
-        usd: z.number().positive().describe("Trade size in USD."),
-      },
-    },
-    async ({ market, side, usd }) => {
-      const m = findMarket(market);
-      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
-      const units = usd / m.mark;
-      return text({
-        market: m.symbol,
-        side,
-        usd,
-        estimatedUnits: Number(units.toFixed(6)),
-        markUsd: m.mark,
-        staysPrivate: ["your size", "your position", "who you are"],
-        becomesPublic: ["only that a private trade occurred, not the amount"],
-        note: "Indicative only, and private trading is not live yet, so this cannot be executed today. Size privacy depends on the current anonymity set (see gloam_privacy_status).",
-      });
-    }
-  );
-
-  server.registerTool(
-    "gloam_plan_private_trade",
-    {
-      title: "Plan a private trade",
-      description:
-        "Plan a private trade (never executes). Private trading is not live on any network yet, so this is a plan only.",
-      inputSchema: {
-        market: z.string().describe("Symbol or id, e.g. TSLA."),
-        side: z.enum(["buy", "sell"]),
-        usd: z.number().positive(),
-        agentAddress: z.string().optional().describe("The agent wallet address that would own the private position."),
-      },
-    },
-    async ({ market, side, usd, agentAddress }) => {
-      const m = findMarket(market);
-      if (!m) return text({ error: `Unknown market "${market}". Call gloam_list_markets.` });
-      return text({
-        intent: "private_trade",
-        chainId: CHAIN.chainId,
-        market: m.symbol,
-        side,
-        usd,
-        estimatedUnits: Number((usd / m.mark).toFixed(6)),
-        agentAddress: agentAddress ?? null,
-        privacy: "Size and position stay off the public chain.",
-        status: "Private trading is switched off on every network while a new engine is built. The mainnet pools take payments only.",
-        execution: AGENT_WALLET_NOTE,
-      });
-    }
-  );
+  // Private swaps: quote, execute and finish (src/swaps.ts). They replace the retired sealed-trade tools.
+  registerSwapTools(server, {
+    env,
+    text,
+    networkArg,
+    openStore,
+    tryStore,
+    errMsg,
+    client: (net) => (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as unknown as PublicClient,
+    shieldProver: (net) => deps.shieldProver(net),
+    unshieldProver: (net) => deps.unshieldProver(net),
+    transferProver: (net) => deps.transferProver(net),
+    syncTree: deps.syncTree,
+    relay: (intent, opts) => deps.relay(intent, opts),
+    relaySwap: (call, opts) => deps.relaySwap(call, opts),
+    relayStatus: (opts) => deps.relayStatus(opts),
+  });
 
   server.registerTool(
     "gloam_plan_shield",
@@ -836,9 +790,18 @@ export function createGloamServer(overrides: Partial<ServerDeps> = {}): McpServe
       const notes = opened.store;
       const refreshed: string[] = [];
       if (refresh) {
+        // A swap's two notes settle together, from how the swap ended (src/swaps.ts).
+        refreshed.push(
+          ...(await refreshSwapNotes(
+            { client: (net) => (deps.signer(net)?.publicClient ?? deps.publicClient(net)) as unknown as PublicClient, errMsg, tryStore },
+            notes
+          ))
+        );
         // Pending notes and notes made spendable again whose old spend may have landed since; then dead ones (in
         // case a read was wrong) when a look is due, or all of them once this pass sees a late send land.
-        const listed = notes.list();
+        const swapOpen = (x: StoredNote) =>
+          (x.origin === "swap" || x.origin === "swap_refund") && (x.status === "dead" || (x.status === "pending" && x.pending === "create"));
+        const listed = notes.list().filter((x) => !swapOpen(x));
         let woke = false;
         for (const n of [
           ...listed.filter((x) => x.status === "pending" || (x.status === "unspent" && x.recheck)),

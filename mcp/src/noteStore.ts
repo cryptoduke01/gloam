@@ -28,7 +28,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { formatUnits, type Address, type Hex } from "viem";
-import type { ReceiveKey } from "@gloamtrade/sdk";
+import type { ReceiveKey, SwapRecovery } from "@gloamtrade/sdk";
 import { withFileLock } from "./fileLock.js";
 import type { NetworkKey } from "./networks.js";
 
@@ -40,9 +40,11 @@ export type NoteStatus = "unspent" | "pending" | "spent" | "dead";
  * server received and swept. "payment" is a payment this server sent: the
  * payee's money, kept from before it is sent so a payment that lands is never
  * lost. It is never this server's balance and never pays; once it lands it is
- * marked spent (handed over).
+ * marked spent (handed over). "swap" is the new note a private swap makes, and
+ * "swap_refund" the refund note made with it: one of the two lands, the other
+ * never does, and the refund note keeps what finishes the swap any way it ends.
  */
-export type NoteOrigin = "shield" | "change" | "received" | "payment";
+export type NoteOrigin = "shield" | "change" | "received" | "payment" | "swap" | "swap_refund";
 export type KeySource = "GLOAM_NOTE_KEY" | "signer";
 
 export type StoredNote = {
@@ -86,6 +88,14 @@ export type StoredNote = {
   checkedAt?: string;
   /** What the note is for, e.g. the resource a received payment paid for. */
   label?: string;
+  /**
+   * A swap's refund note: everything that finishes the swap any way it ends (the SDK's
+   * SwapRecovery, which holds the new note's secret too). Kept even once the note is dead:
+   * the swapped note's unshield proof stays valid until that note is spent.
+   */
+  swap?: SwapRecovery;
+  /** A swap's new note: the handle of the refund note made with it. */
+  swapPair?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -590,6 +600,8 @@ export function balances(notes: StoredNote[]) {
   for (const n of notes) {
     if (n.status === "spent" || n.status === "dead" || n.origin === "payment") continue;
     if (n.status === "pending" && n.pending === "spend") continue;
+    // a pending swap makes two notes and only one lands: neither counts until it does
+    if (n.status === "pending" && (n.origin === "swap" || n.origin === "swap_refund")) continue;
     const k = `${n.chainId}:${n.asset.toLowerCase()}`;
     const cur = by.get(k) ?? { network: n.network, asset: n.asset, symbol: n.symbol, decimals: n.decimals, unspent: 0n, pending: 0n, notes: 0 };
     if (n.status === "unspent") {

@@ -72,13 +72,20 @@ import {
 } from "@gloamtrade/sdk";
 import type { NetworkKey } from "./networks.js";
 
-export type SpendTool = "pay" | "send" | "shield";
+export type SpendTool = "pay" | "send" | "shield" | "swap";
+/**
+ * The tools an agent may use when its limits list none. "swap" is not among them: an
+ * owner allows private swaps by listing "swap" in tools (or GLOAM_LIMIT_TOOLS).
+ */
 export const SPEND_TOOLS: SpendTool[] = ["pay", "send", "shield"];
+/** Every tool a limits config can name. */
+export const ALL_SPEND_TOOLS: SpendTool[] = ["pay", "send", "shield", "swap"];
 
 const TOOL_WORDS: Record<SpendTool, string> = {
   pay: "pay privately (gloam_execute_private_pay)",
   send: "send publicly (gloam_execute_transfer)",
   shield: "shield into a private balance (gloam_execute_shield)",
+  swap: 'swap privately (gloam_execute_private_swap; the owner lists "swap" in tools to allow it)',
 };
 
 /** One money-moving action an agent asked for, before it is signed. */
@@ -223,7 +230,7 @@ const agentSchema = z
   .object({
     expiresAt: z.string().optional(),
     recipients: z.union([z.literal("any"), z.array(z.string().min(1)).min(1)]),
-    tools: z.array(z.enum(["pay", "send", "shield"])).min(1).optional(),
+    tools: z.array(z.enum(["pay", "send", "shield", "swap"])).min(1).optional(),
     maxPerPayment: amount.optional(),
     maxPerDay: amount.optional(),
     assets: z.union([z.array(z.string().min(1)).min(1), z.record(assetEntry)]),
