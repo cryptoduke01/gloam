@@ -118,20 +118,27 @@ function TokenMark({ src, size = 20 }: { src: string; size?: number }) {
  * "Money on another chain?" on the add-money screen: opens the bridge panel.
  * `onArrived` gets the delivered amount so the screen can fill it in;
  * `onPrivate` runs after money went straight into the private balance.
+ * `startOpen` opens the panel once a wallet is there (a link with ?bridge=open,
+ * from a new Gloam wallet's Add funds).
  */
 export function BridgeInCard({
   recipient,
   onArrived,
   onPrivate,
+  startOpen = false,
 }: {
   recipient?: string;
   onArrived?: (amount: string) => void;
   onPrivate?: () => void;
+  startOpen?: boolean;
 }) {
   const { network } = useNetwork();
   const dest = BRIDGE_DESTINATIONS[network.family];
   const swap = swapSource(network);
-  const [open, setOpen] = useState(false);
+  const [opened, setOpen] = useState(false);
+  // Closing it, or opening it by hand, uses up the link's one opening.
+  const [startUsed, setStartUsed] = useState(false);
+  const open = opened || (startOpen && !startUsed && Boolean(recipient));
   // never offer the chain the money lands on as where it comes from
   const sources = dest ? bridgeSources(CHAINS, dest.chainId) : CHAINS;
   const featured = FEATURED.filter((id) => sources.some((c) => c.id === id));
@@ -164,13 +171,18 @@ export function BridgeInCard({
         <BridgeSheet
           open={open}
           recipient={recipient}
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            setStartUsed(true);
+          }}
           onArrived={(amount) => {
             setOpen(false);
+            setStartUsed(true);
             onArrived?.(amount);
           }}
           onPrivate={() => {
             setOpen(false);
+            setStartUsed(true);
             onPrivate?.();
           }}
         />
