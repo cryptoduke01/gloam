@@ -127,7 +127,7 @@ npm install snarkjs   # optional peer, for proving`}</code>
         <li>
           Beta deposit limits: 50,000 per deposit and 2,500,000 in total for
           each stablecoin; $GLOAM 2,500,000 per deposit and 25,000,000 in total.
-          Each network&apos;s <code>assets</code> carry the launch value in{" "}
+          Each network&apos;s <code>assets</code> carry a snapshot in{" "}
           <code>depositLimit</code>; <code>readDepositLimit</code> reads the
           live limit from the vault.
         </li>
