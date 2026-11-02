@@ -41,9 +41,12 @@ and the vault rejects the proof. Nothing in a swap's proofs or calldata can sign
 The holder signs for an address. Anyone can send that signature, the relay included,
 and it can only pay the address it names. The escrow pays that address itself, so the
 money never passes through the router, and a token that blocks the router still pays an
-exit. On Tempo, where a recipient's receive policy can hold a payment instead of
-refusing it, `GloamVaultSwapTempo2` asks the TIP-403 registry first and reverts an exit
-the recipient's policy would hold. The escrow opens once, so a refund and an exit can
+exit. An exit can't go anywhere the money would stop for good: the escrow itself, the
+router, the vault, the token's own contract, WETH or the PoolManager, or Tempo's DEX.
+On Tempo, where a recipient's receive policy can hold a payment instead of refusing it,
+`GloamVaultSwapTempo2` asks the TIP-403 registry first and reverts an exit the
+recipient's policy would hold, and after the escrow pays it checks the recipient holds
+the whole amount more, and reverts if not. The escrow opens once, so a refund and an exit can
 never both happen.
 
 **The trade-off: an exit is public.** It pays a public address the whole amount, next to
@@ -92,10 +95,10 @@ pinned escrow code.
 
 | Chain | Router | Pools | Deploy gas |
 | --- | --- | --- | --- |
-| Robinhood Chain | `0x04d9D7e6800ba58C0B62e3B59FE9cffD6265BeB1` | 45 | 4.7M |
-| Base | `0x873569a7Cc77d36cDD42A4Fd9D245B4bDE59BFc7` | 7 | 3.6M |
-| Ethereum | `0xe7bfAeE1d454b84afa5fbD4f74d169Cd770F62d5` | 13 | 3.8M |
-| Tempo | `0x7a3aAfC079F5A070A92BD5C63a35840C27083E38` | no pools, its DEX | see the card |
+| Robinhood Chain | `0x9CdA89fA6E6f796a1623C2086b2C710DCa64486d` | 45 | 4.7M |
+| Base | `0x3A99f461bdbfc86fbd4e84ee80Bfb2fd73f3576a` | 7 | 3.6M |
+| Ethereum | `0x2E0c06Ac42Cc6f0ecC3eDc86bC0d67F3c2DC7E6A` | 13 | 3.8M |
+| Tempo | `0x991efFC6cA44BD578000d32C1351d78298BdBC0a` | no pools, its DEX | see the card |
 
 These hold for the contracts in `test/fixtures/router-next.json`, which
 `test_v3_predicted_addresses_are_pinned` checks.
@@ -327,11 +330,14 @@ leave a gap in that relay account's nonce.
 3. `GloamVaultSwapV4c._walk` and `unlockCallback`: conversion between ETH and WETH at
    the ends of a route, and that a pool can still take no more than the leftover.
 4. `SwapEscrow2`: a new init code. Every escrow address depends on it. It asks the router
-   that deploys it where to pay (`escrowPayee`): the router, or an exit's recipient.
+   that deploys it where to pay (`escrowPayee`): the router, or an exit's recipient. It
+   leaves one byte of code (0xFE), so `_open` refuses an escrow opened before at once
+   (`EscrowUsed`), and one whose constructor stops with no reason says so (`EscrowFailed`).
 5. The escrow key, now ten fields: what it fixes, and that the app and the router hash
    it the same way. The deadline: that it stops a swap, and only a swap, never a forced
    refund or an exit.
-   `GloamVaultSwapTempo2._checkExit`: the receive policy read before an exit on Tempo.
+   `GloamVaultSwapTempo2._beforeExit` and `_afterExit`: the receive policy read before an
+   exit on Tempo, and the check that the money arrived.
 6. The Base and Ethereum pool lists against live state on the day, and the depth table above.
 7. The deploy page: that what it signs is what was reviewed.
 8. The quote stops in `planVaultSwap`: thin pools, the dollar peg, and what a stablecoin swap
