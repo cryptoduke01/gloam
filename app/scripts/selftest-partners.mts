@@ -118,8 +118,9 @@ const pepper = (() => {
   return p.pepper;
 })();
 
-function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null } = {}) {
+function req(path: string, init: { method?: string; key?: string; body?: unknown; cookie?: string; origin?: string | null; ip?: string } = {}) {
   const headers: Record<string, string> = { "x-forwarded-host": HOST };
+  if (init.ip) headers["x-forwarded-for"] = init.ip;
   if (init.key) headers.authorization = `Bearer ${init.key}`;
   if (init.body !== undefined) headers["content-type"] = "application/json";
   if (init.cookie) headers.cookie = init.cookie;
@@ -970,23 +971,43 @@ await test("relay messages: a new account is not approved; only an admin, from t
   assert.equal(await setRelayApproved("ptr_nobody00", true), null);
 });
 
+/** Requests through the v1 relay (an action it turns away after the per-sender check) until one is refused. */
+async function untilRefused(send: (i: number) => Request) {
+  let accepted = 0;
+  for (let i = 0; i < 1_000; i++) {
+    const b = await json(await relayPost(send(i)));
+    if (b.error?.code !== "bad_action") return { accepted, refusedBy: b.error?.code ?? "ok" };
+    accepted++;
+  }
+  return { accepted, refusedBy: "none" };
+}
+const shield = (secret: string, ip: string) => req("/api/v1/relay", { method: "POST", key: secret, ip, body: { chainId: 46630, action: "shield" } });
+
 await test("v1 relay: every key of one account counts as one sender", async () => {
   const owner = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Many keys", website: "https://example.com" });
+  await setRelayApproved(owner.id, true);
   const keys = await Promise.all(Array.from({ length: 4 }, (_, i) => createApiKey({ partnerId: owner.id, name: `k${i}`, env: "test", pepper })));
-  let accepted = 0;
-  let refusedBy = "";
-  for (let i = 0; i < 1_000 && !refusedBy; i++) {
-    const key = keys[i % keys.length]!;
-    const b = await json(await relayPost(req("/api/v1/relay", { method: "POST", key: key.secret, body: { chainId: 46630, action: "shield" } })));
-    if (b.error?.code === "bad_action") accepted++;
-    else refusedBy = b.error?.code ?? "ok";
-  }
-  assert.equal(refusedBy, "rate_limit");
-  assert.equal(accepted, 400, "the relay's limit for one sender, shared by the account's four keys");
+  // from several IPs: an approved account is the sender, whatever IP it calls from
+  assert.deepEqual(await untilRefused((i) => shield(keys[i % keys.length]!.secret, `198.51.100.${70 + (i % 3)}`)), { accepted: 400, refusedBy: "rate_limit" });
   // another account is its own sender
   const other = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name: "Other", website: "https://example.com" });
+  await setRelayApproved(other.id, true);
   const otherKey = await createApiKey({ partnerId: other.id, name: "k", env: "test", pepper });
-  assert.equal((await json(await relayPost(req("/api/v1/relay", { method: "POST", key: otherKey.secret, body: { chainId: 46630, action: "shield" } })))).error?.code, "bad_action");
+  assert.equal((await json(await relayPost(shield(otherKey.secret, "198.51.100.70")))).error?.code, "bad_action");
+});
+
+await test("v1 relay: accounts no admin approved count as their IP too, so a second account from it adds nothing", async () => {
+  const make = async (name: string) => {
+    const p = await upsertPartner(privateKeyToAccount(generatePrivateKey()).address, { name, website: "https://example.com" });
+    return { p, key: await createApiKey({ partnerId: p.id, name: "k", env: "test", pepper }) };
+  };
+  const [a, b, approved] = await Promise.all([make("Free one"), make("Free two"), make("Approved")]);
+  await setRelayApproved(approved.p.id, true);
+  const IP = "198.51.100.80";
+  assert.deepEqual(await untilRefused((i) => shield((i % 2 === 0 ? a : b).key.secret, IP)), { accepted: 400, refusedBy: "rate_limit" }, "both accounts, one IP's limit");
+  // the same accounts from elsewhere, and an approved account from that IP, still go
+  assert.equal((await json(await relayPost(shield(a.key.secret, "198.51.100.81")))).error?.code, "bad_action");
+  assert.equal((await json(await relayPost(shield(approved.key.secret, IP)))).error?.code, "bad_action");
 });
 
 console.log(`\n${passed} partner tests passed`);
