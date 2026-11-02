@@ -608,6 +608,19 @@ await test("swap: an unshield sent alone keeps the refund note pending and finis
   assert.equal(byId(refund.id).status, "open");
 });
 
+await test("swap: a refund note the vault's fee outgrew is held for the exit, not given up", async () => {
+  const pool = mockPool();
+  const { spentNote, refund } = await swapNotes(pool, 10_000_000n);
+  pool.spent.add(lc(spentNote.nullifier!));
+  let tried = 0;
+  await reconcileClaims(pool.env({ escrowWaiting: async () => "short", finishRefund: async () => void tried++ }));
+  assert.equal(byId(refund.id).status, "open", "the money is still there");
+  assert.equal(byId(refund.id).sweepPending, true, "and out of the balance");
+  assert.equal(byId(refund.id).refundHeld, "blocked", "which is what shows the exit");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(tried, 0, "this refund note can't land, so no proof is spent on it");
+});
+
 await test("swap: an unreadable escrow keeps the refund note pending, and nothing is finished blind", async () => {
   const pool = mockPool();
   const { spentNote, refund } = await swapNotes(pool, 10_000_000n);

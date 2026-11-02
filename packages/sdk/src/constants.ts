@@ -769,23 +769,31 @@ export const CASH_OUT_TO_ROUTER_MESSAGE =
 export const CASH_OUT_TO_ZERO_MESSAGE = "That is the zero address, which nobody controls. Cash out to a wallet you control.";
 
 /**
- * Gloam's swap routers, by chain: GloamVaultSwapV4b and GloamVaultSwapV4 (kept
- * for refunds) on Robinhood Chain, GloamVaultSwapTempo on Tempo. Base and
- * Ethereum have none. How swaps run is the app's (app/src/lib/vaultSwap.ts).
+ * Gloam's swap routers, by chain, the newest first. GloamVaultSwapV4c on Robinhood
+ * Chain, Base and Ethereum and GloamVaultSwapTempo2 on Tempo land through the CREATE2
+ * factory, so each address is known before it deploys and a cash out is refused from
+ * the start (contracts/test/fixtures/router-next.json pins them). The older routers
+ * stay listed for good: GloamVaultSwapV4b and GloamVaultSwapV4 on Robinhood Chain,
+ * GloamVaultSwapTempo on Tempo. How swaps run is the app's (app/src/lib/vaultSwap.ts).
  */
 const VAULT_SWAP_ROUTERS: Record<number, readonly Address[]> = {
-  [RH_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
-  [TEMPO_MAINNET_CHAIN_ID]: ["0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [RH_MAINNET_CHAIN_ID]: ["0xFD1547d9C404Bf670c9652d1D6007A1bB6528b93", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC", "0x34AB06208586A737Bf1607fa996Bc9162271c52d"],
+  [TEMPO_MAINNET_CHAIN_ID]: ["0x75A22213c7d64438246348129b843d69b76f2535", "0xfCa1887e77f738ef9C5751974b3f3873d029F2DC"],
+  [BASE_MAINNET_CHAIN_ID]: ["0x0742fFA3d1C8e74765F8186d5E2133c307e2557c"],
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0xE36883A156ce5Ed68F083DdA79Bad7cf07AC5B2c"],
 };
 
 /**
  * Tokens that are not in a network's `assets` because its pool doesn't take a
  * deposit of them, but a cash out could still be pointed at. On Robinhood Chain
  * mainnet: what a private swap can land in (the app's RH_SWAP_ASSETS_V2, past
- * the listed USDG, GLOAM, PONS and CASHCAT). On its testnet: the faucet stock
- * tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
+ * the listed USDG, GLOAM, PONS and CASHCAT). On Base and Ethereum: WETH, which the
+ * swap router there converts to and from. On Robinhood Chain's testnet: the faucet
+ * stock tokens. Kept out of `assets` on purpose: assertDepositAllowed reads that list.
  */
 const UNLISTED_TOKENS: Record<number, readonly Address[]> = {
+  [BASE_MAINNET_CHAIN_ID]: ["0x4200000000000000000000000000000000000006"], // WETH
+  [ETHEREUM_MAINNET_CHAIN_ID]: ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"], // WETH
   [RH_MAINNET_CHAIN_ID]: [
     "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", // WETH
     "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34", // USDe

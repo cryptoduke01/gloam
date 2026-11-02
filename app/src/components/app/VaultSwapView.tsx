@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { formatUnits, type Address, type Hex } from "viem";
+import { BaseError, formatUnits, type Address, type Hex } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import { hasCoingeckoMarks, useCoingeckoMarks } from "@/hooks/useCoingeckoMarks";
 import { useLiveMarkets } from "@/hooks/useLiveMarkets";
@@ -22,7 +22,8 @@ import { useOpenGatedTokens } from "@/hooks/useOpenGatedTokens";
 import { useAppAccount } from "@/lib/demo";
 import { useLocalShieldNotes } from "@/hooks/useLocalShieldNotes";
 import { getRhPublicClient, publicClientFor } from "@/lib/rhClient";
-import { relayFor } from "@/lib/relay/client";
+import { relayFor, type RelayNetworkStatus } from "@/lib/relay/client";
+import { hasSwapFloor, swapFloorShown, swapGasUnits } from "@/lib/relay/swapFloor";
 import { isUnsecuredClaim } from "@/lib/claimSweep";
 import { freshPath } from "@/lib/cashOutSplit";
 import {
@@ -36,10 +37,14 @@ import {
   withdrawFeeOf,
   type LocalNote,
 } from "@/lib/shield";
-import { isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
+import { NATIVE_ETH_TOKEN, isDollarStable, knownTokens, shieldTokensFor, type OnchainToken } from "@/lib/tokens";
 import {
   IMPACT_WARN_BPS,
+  PEG_WARN_BPS,
   QUOTE_TTL_MS,
+  SwapQuoteRefused,
+  VALUE_STOP_BPS,
+  VALUE_WARN_BPS,
   VAULT_SWAP_ASSETS,
   livePools,
   offeredSwapAssets,
@@ -51,7 +56,9 @@ import {
   quoteFresh,
   routeCurrencies,
   swapBufferBps,
+  swapChecked,
   swapRouterFor,
+  valueGapBps,
   vaultSwapRouter,
   type SwapPlan,
 } from "@/lib/vaultSwap";
@@ -61,6 +68,7 @@ import type { PoseidonMerklePath } from "@/lib/merklePoseidon";
 import { countPerson } from "@/lib/people";
 import type { GloamNetwork } from "@/lib/networks";
 import { useNetwork } from "./NetworkProvider";
+import { RelayGasNotice } from "./RelayGasNotice";
 import { SuccessModal } from "./SuccessModal";
 import { TokenLogo } from "./TokenLogo";
 import { WalletMenu } from "./WalletMenu";
@@ -92,6 +100,7 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 
 /** The token record for an asset on this chain (logo id, name). */
 function tokenFor(chainId: number, asset: string): OnchainToken | undefined {
+  if (same(asset, NATIVE_ETH_TOKEN.address)) return NATIVE_ETH_TOKEN;
   return knownTokens(chainId).find((t) => same(t.address, asset));
 }
 
@@ -149,7 +158,13 @@ function useUsdMarks(
     assets.forEach((a, i) => {
       const t = tokens[i];
       const key = a.toLowerCase();
-      out[key] = !t ? null : isDollarStable(t) ? 1 : t.id === "weth" ? (marketData?.ethUsd ?? null) : (serverMarks.get(key) ?? null);
+      out[key] = !t
+        ? null
+        : isDollarStable(t)
+          ? 1
+          : t.id === "weth" || t.id === "eth"
+            ? (marketData?.ethUsd ?? null)
+            : (serverMarks.get(key) ?? null);
     });
     stocks.forEach((a, i) => {
       const t = tokenFor(chainId, a);
@@ -277,21 +292,7 @@ export function VaultSwapView() {
     limitIn && typeof inVaultIn === "bigint" ? { perDeposit: limitIn[0], total: limitIn[1], deposited: inVaultIn } : null;
 
   const held = payAsset ? holdings.get(payAsset.toLowerCase()) : undefined;
-  const refundCap = roomIn ? maxSwapInForRefund(roomIn) : null;
-  // The most one swap can spend: the largest note, and no more than its refund could bring back.
-  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
-  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
-  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
-  // Nothing held counts as too little: a price still shows, the swap does not.
-  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
-  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
-  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed);
-  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
-
-  // The note this swap spends: an exact match first, else the smallest that covers it.
-  // A scan of a few notes, so no memo: the note found is the same object each render.
-  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
-
+  // The vault's cash-out fee: a refund on Base and Ethereum is sized from it. Until it reads, the most it can be.
   const { data: feeRead } = useReadContract({
     address: network.pool ?? undefined,
     abi: shieldPoolAbi,
@@ -300,6 +301,22 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool) },
   });
   const feeBps = typeof feeRead === "number" ? feeRead : null;
+  const refundFee = swapChecked(network.chainId) ? (feeBps ?? 100) : undefined;
+  const refundCap = roomIn ? maxSwapInForRefund(roomIn, refundFee) : null;
+  // The most one swap can spend: the largest note, and no more than its refund could bring back.
+  const oneSwapMax = held ? (refundCap != null && refundCap < held.largest ? refundCap : held.largest) : 0n;
+  const typed = amountInput.trim() && payAsset ? parseAssetAmount(amountInput.trim(), payAsset) : null;
+  const amountBad = amountInput.trim() !== "" && (typed === null || typed <= 0n);
+  // Nothing held counts as too little: a price still shows, the swap does not.
+  const overTotal = typed !== null && !amountBad && (held == null || typed > held.total);
+  const overNote = typed !== null && held != null && !overTotal && typed > oneSwapMax;
+  const refundBlocked = typed !== null && roomIn != null && !overTotal && !overNote && !refundFits(roomIn, typed, refundFee);
+  const amount = typed !== null && !amountBad && !overTotal && !overNote && !refundBlocked ? typed : null;
+
+  // The note this swap spends: an exact match first, else the smallest that covers it.
+  // A scan of a few notes, so no memo: the note found is the same object each render.
+  const note: LocalNote | null = pickSwapNote(held?.notes, amount);
+
   const { data: limit } = useReadContract({
     address: network.pool ?? undefined,
     abi: limitAbi,
@@ -317,14 +334,9 @@ export function VaultSwapView() {
     query: { enabled: Boolean(network.pool && toAsset) },
   });
 
-  const [relayOk, setRelayOk] = useState<boolean | null>(null);
-  useEffect(() => {
-    let live = true;
-    void relayFor(network.chainId).then((r) => live && setRelayOk(Boolean(r?.enabled)));
-    return () => {
-      live = false;
-    };
-  }, [network.chainId]);
+  const [relay, setRelay] = useState<{ chainId: number; status: RelayNetworkStatus | null } | null>(null);
+  const relayNow = relay?.chainId === network.chainId ? relay.status : null;
+  const relayOk = relay?.chainId === network.chainId ? Boolean(relay.status?.enabled) : null;
 
   // A quote counts only for the exact swap it was asked for (quoteKey), so a
   // stale one can never be sent for a newer amount, and only while it is fresh
@@ -332,6 +344,8 @@ export function VaultSwapView() {
   const [quote, setQuote] = useState<{ key: string; plan: SwapPlan; at: number } | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // About the most of the note a refused quote would take: the error line names it.
+  const [quoteFits, setQuoteFits] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -365,6 +379,18 @@ export function VaultSwapView() {
   }, []);
   const refreshSlot = Math.floor(clock / QUOTE_TTL_MS);
 
+  // The relay's state, and on a chain where gas is dear, its floor for a swap: it moves with gas, so it refreshes with the quote.
+  const dearGas = hasSwapFloor(network.chainId);
+  const relaySlot = dearGas ? refreshSlot : 0;
+  useEffect(() => {
+    let live = true;
+    const chainId = network.chainId;
+    void relayFor(chainId, dearGas).then((status) => live && setRelay({ chainId, status }));
+    return () => {
+      live = false;
+    };
+  }, [network.chainId, dearGas, relaySlot]);
+
   // A fresh quote whenever what is being swapped changes (after a short pause while
   // typing), and again every QUOTE_TTL_MS while it shows. Any valid amount gets a
   // price, even more than the balance holds, so people can see the rate before
@@ -382,6 +408,7 @@ export function VaultSwapView() {
     const t = window.setTimeout(() => {
       setQuoting(true);
       setQuoteError(null);
+      setQuoteFits(null);
       const key = quoteKey;
       planVaultSwap(getRhPublicClient(), network.chainId, {
         assetIn: payAsset,
@@ -396,7 +423,9 @@ export function VaultSwapView() {
           // A refresh that fails leaves a fresh price up; it stops showing by itself.
           const now = Date.now();
           setQuote((q) => (q && q.key === key && quoteFresh(q.at, now) ? q : null));
-          setQuoteError(e instanceof Error ? e.message : "Could not get a price. Try again.");
+          // an RPC's own words are no use here; what this code threw is
+          setQuoteError(e instanceof Error && !(e instanceof BaseError) ? e.message : "Could not get a price. Try again.");
+          setQuoteFits(e instanceof SwapQuoteRefused ? e.fitsIn : null);
         })
         .finally(() => live && setQuoting(false));
     }, 400);
@@ -424,6 +453,7 @@ export function VaultSwapView() {
       ? (quoteAmount * room * 99n) / (shownPlan.amountOut * 100n)
       : null;
   const impact = shownPlan?.impactBps ?? null;
+  const pegGap = shownPlan?.pegBps ?? null;
 
   if (!router) return null;
 
@@ -508,12 +538,32 @@ export function VaultSwapView() {
     setReceipt(null);
   }
 
-  const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : "Uniswap on Robinhood Chain";
+  const venue = network.chainId === 4217 ? "Tempo's stablecoin exchange" : `Uniswap on ${network.label}`;
   // What Add takes of the swap tokens (WETH, say, arrives only by swapping into it).
   const addable = assets.filter((a) => shieldTokensFor(network.chainId).some((t) => same(t.address, a)));
   const payUsd = payAsset && typed !== null && typed > 0n ? usdOf(typed, payAsset, marks) : null;
   const getUsd = shownPlan && toAsset ? usdOf(shownPlan.amountOut, toAsset, marks) : null;
   const receiveText = shownPlan && toAsset ? formatAssetAmount(shownPlan.amountOut, toAsset) : "0";
+
+  // On a chain where gas is dear a swap's vault fee has to cover its gas (lib/relay/swapFloor), and the
+  // relay counts a stablecoin at face value. Each hop past the first costs more, so the floor follows the route.
+  const hops = shownPlan?.route.length || 1;
+  const floorUsd =
+    relayNow?.swapFloorUsd != null
+      ? (swapFloorShown(relayNow.swapFloorUsd) * Number(swapGasUnits(hops))) / Number(swapGasUnits(1))
+      : null;
+  const paidFace =
+    payAsset && typed !== null && typed > 0n
+      ? tokenFor(network.chainId, payAsset)?.kind === "stablecoin"
+        ? Number(formatUnits(typed, assetDecimals(payAsset)))
+        : payUsd
+      : null;
+  const belowFloor = floorUsd != null && paidFace != null && paidFace < floorUsd;
+  const gasHigh = dearGas && Boolean(relayNow?.gasHigh);
+
+  // What the swap gives against what it costs, at market prices, fees included.
+  const valueGap = payUsd != null && getUsd != null ? valueGapBps(payUsd, getUsd) : null;
+  const farFromMarket = swapChecked(network.chainId) && valueGap != null && valueGap >= VALUE_STOP_BPS;
 
   // One label for the main button, the first thing that stops the swap.
   const button: { key: string; label: ReactNode; ready: boolean } = busy
@@ -558,7 +608,13 @@ export function VaultSwapView() {
                   ? { key: "room", label: "Too large for the vault right now", ready: false }
                   : relayOk === false
                     ? { key: "relay", label: "The Gloam relay is off", ready: false }
-                    : { key: "swap", label: "Swap privately", ready: Boolean(shownPlan && relayOk === true) };
+                    : gasHigh
+                      ? { key: "gas", label: `${network.label} gas is high right now`, ready: false }
+                      : belowFloor
+                        ? { key: "floor", label: `Smallest swap right now: ${fmtUsd(Math.ceil(floorUsd!))}`, ready: false }
+                        : farFromMarket
+                          ? { key: "market", label: "Too far from the market price", ready: false }
+                          : { key: "swap", label: "Swap privately", ready: Boolean(shownPlan && relayOk === true) };
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -753,13 +809,14 @@ export function VaultSwapView() {
                     <Row term={`Vault fee (${formatFeePercent(feeBps ?? 0)})`}>
                       {formatAssetLabel(withdrawFeeOf(amount, feeBps ?? 0), payAsset)}
                     </Row>
-                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId))})`}>
+                    <Row term={`Price buffer (${formatFeePercent(swapBufferBps(network.chainId, payAsset ?? undefined, toAsset ?? undefined))})`}>
                       about {formatAssetLabel(shownPlan.leftover, payAsset)} to the treasury
                     </Row>
                     {impact != null && (
                       <Row term="Price impact">{impact < 1 ? "<0.01%" : formatFeePercent(impact)}</Row>
                     )}
                     <Row term="Route">{routeLine(network.chainId, payAsset, toAsset, shownPlan, venue)}</Row>
+                    <Row term="Network fee">Paid by the Gloam relay</Row>
                     <Row term="Sent by">The Gloam relay, not your wallet</Row>
                   </dl>
                   </div>
@@ -771,6 +828,10 @@ export function VaultSwapView() {
               priceError ||
               overRoom ||
               relayOk === false ||
+              belowFloor ||
+              farFromMarket ||
+              (pegGap != null && pegGap >= PEG_WARN_BPS) ||
+              (valueGap != null && valueGap >= VALUE_WARN_BPS) ||
               (impact != null && impact >= IMPACT_WARN_BPS) ||
               (note && amount !== null && amount < BigInt(note.amountWei))) && (
               <div className="gl-settle mt-4 space-y-2.5 px-1 text-[12.5px] leading-[1.6]">
@@ -786,7 +847,12 @@ export function VaultSwapView() {
                     </Link>
                   </p>
                 )}
-                {priceError && <p className="text-warn">{priceError}</p>}
+                {priceError && (
+                  <p className="text-warn">
+                    {priceError}
+                    {quoteFits != null && payAsset ? ` Try about ${formatAssetLabel(quoteFits, payAsset)} or less.` : ""}
+                  </p>
+                )}
                 {overRoom && room != null && toAsset && (
                   <p className="text-warn">
                     The vault takes at most {formatAssetLabel(room, toAsset)} right now.
@@ -801,12 +867,35 @@ export function VaultSwapView() {
                     better rate.
                   </p>
                 )}
+                {pegGap != null && pegGap >= PEG_WARN_BPS && !priceError && (
+                  <p className="text-warn">
+                    These two are about {formatFeePercent(pegGap)} apart right now, so this is less than a dollar for a dollar.
+                  </p>
+                )}
+                {valueGap != null && valueGap >= VALUE_WARN_BPS && !priceError && !(pegGap != null && pegGap >= PEG_WARN_BPS) && (
+                  <p className="text-warn">
+                    {farFromMarket
+                      ? `You would get about ${formatFeePercent(valueGap)} less than this is worth at market prices, so the swap won't go.`
+                      : `You get about ${formatFeePercent(valueGap)} less than this is worth at market prices, fees included.`}
+                  </p>
+                )}
+                {belowFloor && (
+                  <p className="text-mute">
+                    The relay pays the gas, so on {network.label} a swap&apos;s vault fee has to cover it. This floor moves with gas.
+                  </p>
+                )}
                 {relayOk === false && (
                   <p className="text-warn">Swaps go through the Gloam relay, so your wallet never shows. It is off right now; try again soon.</p>
                 )}
                 {note && amount !== null && amount < BigInt(note.amountWei) && !priceError && (
                   <p className="text-mute">The rest stays in your private balance: it is set aside privately first.</p>
                 )}
+              </div>
+            )}
+
+            {gasHigh && (
+              <div className="mt-4">
+                <RelayGasNotice status={relayNow} label={network.label} />
               </div>
             )}
 

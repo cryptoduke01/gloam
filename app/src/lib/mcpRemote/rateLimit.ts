@@ -193,3 +193,38 @@ export async function hitRateLimit(
   const retryAfterSec = Math.max(1, (window + 1) * span - Math.floor(now / 1000));
   return { allowed: n <= limit, limit, remaining: Math.max(0, limit - n), retryAfterSec };
 }
+
+/**
+ * What hitRateLimit has counted for `bucket` in this window, counting nothing itself.
+ * Follows hitRateLimit's store: Redis when set, with `failClosed` throwing when it
+ * doesn't answer or a production build has none; process memory otherwise.
+ */
+export async function readRateLimit(
+  ip: string,
+  bucket: string,
+  now = Date.now(),
+  windowSec = WINDOW_SEC,
+  opts: { failClosed?: boolean; v6Bits?: V6Bits } = {},
+): Promise<number> {
+  const span = Number.isSafeInteger(windowSec) && windowSec > 0 ? windowSec : WINDOW_SEC;
+  const window = Math.floor(now / 1000 / span);
+  const slot = span === WINDOW_SEC ? `${window}` : `${span}s:${window}`;
+  const key = `${PREFIX}${bucket}:${ipKey(ip, opts.v6Bits)}:${slot}`;
+  const inMemory = () => {
+    const hit = memCounts().get(key);
+    return hit && hit.exp > now ? hit.n : 0;
+  };
+  if (redisConfigured() && !LOCAL_BUCKETS.has(bucket)) {
+    try {
+      const json = await redisCall([["GET", key]]);
+      if (json?.[0]?.error) throw new Error(`redis: ${String(json[0].error).slice(0, 160)}`);
+      return Number(json?.[0]?.result ?? 0) || 0;
+    } catch (e) {
+      if (opts.failClosed) throw new SharedCountUnavailable(e instanceof Error ? e.message : "redis failed");
+      logRedisMiss(e);
+      return inMemory();
+    }
+  }
+  if (opts.failClosed && process.env.NODE_ENV === "production") throw new SharedCountUnavailable("no redis");
+  return inMemory();
+}

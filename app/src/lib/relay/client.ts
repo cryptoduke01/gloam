@@ -6,7 +6,7 @@ import type { Address, Hex, PublicClient } from "viem";
 import { getRhPublicClient } from "@/lib/rhClient";
 import { readDemo } from "@/lib/demoFlag";
 import { demoRelay, demoRelayStatus, demoWaitForTx } from "@/lib/demo/chain";
-import type { PoolKey } from "@/lib/vaultSwap";
+import type { EscrowKey, PoolKey } from "@/lib/vaultSwap";
 
 export type RelayNetworkStatus = {
   chainId: number;
@@ -25,6 +25,8 @@ export type RelayNetworkStatus = {
   topUps?: boolean;
   /** The relay pays for a fresh wallet's gas station here. */
   gasStation?: boolean;
+  /** The smallest one-hop private swap right now, in dollars, where gas is dear. */
+  swapFloorUsd?: number | null;
 };
 
 const PREF_KEY = "gloam.relay.pref";
@@ -46,8 +48,8 @@ export async function fetchRelayStatus(force = false): Promise<RelayNetworkStatu
   }
 }
 
-export async function relayFor(chainId: number): Promise<RelayNetworkStatus | null> {
-  const all = await fetchRelayStatus();
+export async function relayFor(chainId: number, force = false): Promise<RelayNetworkStatus | null> {
+  const all = await fetchRelayStatus(force);
   return all.find((n) => n.chainId === chainId) ?? null;
 }
 
@@ -163,8 +165,23 @@ export async function relayVaultSwap(p: {
   deposit: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   refund: { proof: Hex; commitment: Hex; asset: Address; amount: bigint };
   route: readonly PoolKey[];
+  /** v3: the swap's exit key and deadline. */
+  exitKey?: Address;
+  deadline?: bigint;
 }): Promise<Hex> {
   return (await post({ action: "swap", ...p })).hash;
+}
+
+/** Sends a swap's waiting money to the address its exit key signed for (lib/vaultSwapRun exitVaultSwap). */
+export async function relayVaultSwapExit(p: {
+  chainId: number;
+  router: Address;
+  asset: Address;
+  key: Required<EscrowKey>;
+  to: Address;
+  signature: Hex;
+}): Promise<Hex> {
+  return (await post({ action: "swapExit", ...p })).hash;
 }
 
 /**

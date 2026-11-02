@@ -54,7 +54,7 @@ if (CONFIGURED && !LIVE) {
 const nets = await import("../src/lib/networks");
 const tokens = await import("../src/lib/tokens");
 const { bridgeVisible, BRIDGE_DESTINATIONS } = await import("../src/lib/bridge");
-const { vaultSwapRouter } = await import("../src/lib/vaultSwap");
+const { VAULT_SWAP_V3_ADDRESS, swapV3Live, vaultSwapRouter } = await import("../src/lib/vaultSwap");
 const { faucetFor } = await import("../src/lib/faucet");
 const { requestAssetsFor, claimNetworkProblem } = await import("../src/lib/paymentRequest");
 const { walkTuning } = await import("../src/lib/leafIndex");
@@ -148,12 +148,12 @@ check("The testnet bar offers Base Sepolia only Base mainnet, never another chai
   assert.equal(nets.mainnetOf(nets.getNetwork("base"))?.key ?? null, CONFIGURED ? "base-mainnet" : null);
 });
 
-check("a bridge into Base (USDC) on mainnet, no swaps yet", () => {
+check("a bridge into Base (USDC) on mainnet, and swaps only once v3 is on", () => {
   assert.equal(BRIDGE_DESTINATIONS.base?.chainId, 8453);
   assert.equal(BRIDGE_DESTINATIONS.base?.token.address.toLowerCase(), "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
   assert.equal(bridgeVisible(nets.getNetwork("base-mainnet")), true);
   assert.equal(bridgeVisible(nets.getNetwork("base")), false);
-  assert.equal(vaultSwapRouter(8453), null);
+  assert.equal(vaultSwapRouter(8453), swapV3Live(8453) ? VAULT_SWAP_V3_ADDRESS[8453] : null);
   assert.equal(vaultSwapRouter(84532), null);
 });
 
@@ -252,7 +252,7 @@ await checkAsync("Base Sepolia: the remote MCP lists it and gives final-key snip
   assert.equal(mpp.isError, false);
   assert.match(mpp.text, /testnetNetwork\(\\"base\\"\)/);
   assert.match(mpp.text, /BASE_SEPOLIA_USDC/);
-  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.5/);
+  assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.6/);
   const info = await toolJson("gloam_info");
   assert.match(info.text, /Base Sepolia \(84532\)/);
 });

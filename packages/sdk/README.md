@@ -99,7 +99,7 @@ Each `GloamNetwork` carries `chainId`, `pool`, `deployBlock`, a viem `chain`, `r
 What is different on mainnet:
 
 - **Final keys.** The mainnet verifiers hold the final keys of the 13-contributor trusted setup (drand round 6561386, release `ceremony-final`). The testnets keep the single-party dev keys. A proof made with one set never verifies against the other, so prove with `circuitArtifactUrls(circuit, chainId)`, which picks the right set for the chain.
-- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router on Robinhood Chain and Tempo mainnet; this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
+- **Payments only.** The mainnet pools (`ShieldPoolPayments`) take deposits, private payments and cash outs, and have no swap code. Private swaps run in the Gloam app through a separate router, on the mainnets listed in its [docs](https://gloam.trade/docs/private-swaps); this SDK does not build them yet. Stock tokens are testnet only, and Robinhood Chain mainnet takes no native ETH deposit (ETH is only gas).
 - **Beta deposit limits.** 50,000 per deposit and 2,500,000 in total for each stablecoin, 20 and 1,000 for ETH on Base and Ethereum, 2,500,000 and 25,000,000 for $GLOAM. On Robinhood Chain, ETH, AI and ORBIO are 0 on the vault until each one's timelocked limit lands, so a deposit reverts until then and `assertDepositWithinLiveLimit` says so. From 0.4.2 the SDK reads the limits live from the vault (`readDepositLimit`, `assertDepositWithinLiveLimit`); the `depositLimit` on each asset holds the launch value. Pass `client` (a viem public client on that chain) to `buildShieldBoundIntent` and it refuses an amount over the vault's live per-deposit limit, or over the room left under its total, before it proves. If the vault can't be read, nothing is refused: the vault enforces its own limits. An unlisted asset is refused either way. Cash outs and private payments are never limited.
 - **Fees.** Deposits and private payments are free. A cash out costs 0.25%: the pool keeps `cashOutFee(amount)` and sends the rest.
 - **Pools come with the SDK version.** Mainnet pool addresses live in `MAINNET_POOLS`. If your SDK version has no pool for a mainnet, `mainnetNetwork()` returns `null` and the builders refuse that chain id rather than guess. Update the SDK, or pass `poolAddress` yourself.
@@ -129,7 +129,7 @@ Ethereum mainnet is the fourth chain, live since 26 October 2026: from 0.4.1, `m
 - **EURC is a euro stablecoin.** Never count it as a dollar.
 - **Gas.** A private send costs about 1.9M gas and a cash out about 0.5M to 0.7M. On Ethereum that adds up, so the Gloam relay stops relaying while gas is above its ceiling (3 gwei by default) and says so; you can still submit yourself.
 - **RPC.** `ETHEREUM_MAINNET_CHAIN` reads through MEV Blocker (`rpc.mevblocker.io`), which keeps old state and serves `eth_getLogs` over 10,000-block ranges. Use your own RPC for heavy reads.
-- No private swaps on Ethereum yet, and no bridge into Ethereum.
+- No bridge into Ethereum yet. Private swaps there follow the next router: see the [docs](https://gloam.trade/docs/private-swaps).
 ### Ethereum Sepolia
 
 | Network | Key | Chain id | Assets (beta limit per deposit / total) | Keys |
@@ -714,7 +714,7 @@ PUBLIC_INPUTS.sealedSwap // [root, nullifier, newCOut, newCChange, assetIn, asse
 - **A new pool has a small crowd.** Privacy depends on how many notes you hide among. On a brand new mainnet pool that crowd is thin at first, so do not treat a quick deposit and cash out of the same amount as unlinkable.
 - **Testnet runs on dev keys.** Robinhood Chain testnet (`46630`) and Tempo Moderato (`42431`) keep running with the single-party dev keys. Base Sepolia (`84532`) and Ethereum Sepolia (`11155111`) are testnets too, but on the final keys.
 - **Real privacy only.** No mock successes. If a path cannot be private, the SDK returns a plan rather than a fake result.
-- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app on Robinhood Chain and Tempo mainnet; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
+- **The sealed trade is retired** on every pool (the mainnet pools have no swap code at all). Private swaps are live in the Gloam app; the SDK does not build them yet. Shield, private send, cash out, and disclosure are live and proof-gated.
 - **Note secrets are the sole spend authority.** Persist and protect them. `localStorage` is fine for a demo, not for real value. Never hand one to an agent: the `@gloamtrade/mcp` server keeps them in an encrypted store and gives the agent handles.
 - **A received x402 payment is not yours until you sweep it.** The payer knows the payment note's secret. Use `settleGloamPayment` and serve only on `grantAccess`.
 

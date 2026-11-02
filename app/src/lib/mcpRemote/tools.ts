@@ -10,7 +10,7 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { faucetFor } from "@/lib/faucet";
 import { MAINNET_ENABLED, getNetwork, NETWORK_KEYS, isNetworkKey, networkName, type NetworkKey } from "@/lib/networks";
 import { MAINNET_LAUNCH_ISO } from "@/lib/mainnet";
-import { vaultSwapRouter } from "@/lib/vaultSwap";
+import { swapMainnets, vaultSwapRouter } from "@/lib/vaultSwap";
 import { formatGwei, maxGasPriceWei } from "@/lib/relay/gasCeiling";
 import { fetchOnchainMetrics } from "@/lib/onchainMetrics";
 import {
@@ -212,7 +212,7 @@ export const TOOLS: Tool[] = [
     name: "gloam_networks",
     title: "Networks and assets",
     description: MAINNET_ENABLED
-      ? `The networks Gloam runs on, mainnets first, with each vault (pool) address, the private swap routers (Robinhood Chain and Tempo mainnet), the assets you can deposit (on mainnet: ${MAINNET_DEPOSITS_TEXT}; on testnet: OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain, and more on Base Sepolia and Ethereum Sepolia), explorers, RPCs and the testnet faucets.`
+      ? `The networks Gloam runs on, mainnets first, with each vault (pool) address, the private swap routers (${swapMainnets()} mainnet), the assets you can deposit (on mainnet: ${MAINNET_DEPOSITS_TEXT}; on testnet: OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain, and more on Base Sepolia and Ethereum Sepolia), explorers, RPCs and the testnet faucets.`
       : "The networks Gloam runs on, with each vault (pool) address, the assets you can deposit (OUSD and PathUSD on Tempo, USDG and ETH on Robinhood Chain), explorers, RPCs and faucets.",
     inputSchema: {
       type: "object",

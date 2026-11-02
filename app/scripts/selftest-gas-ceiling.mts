@@ -131,7 +131,7 @@ function answer(r: RpcReq): { result?: unknown; error?: { code: number; message:
     case "eth_maxPriorityFeePerGas":
       return { result: toHex(node.tip) };
     case "eth_estimateGas":
-      return { result: "0x1c9c38" };
+      return { result: "0x7a120" };
     case "eth_call": {
       const p = r.params?.[0] as { data?: string; input?: string };
       const sel = String(p?.data ?? p?.input).slice(0, 10);

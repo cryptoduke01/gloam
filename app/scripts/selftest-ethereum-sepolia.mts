@@ -254,7 +254,7 @@ if (on) {
     assert.equal(mpp.isError, false);
     assert.match(mpp.text, /testnetNetwork\(\\"ethereum\\"\)/);
     assert.match(mpp.text, /ETHEREUM_SEPOLIA_USDC/);
-    assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.5/);
+    assert.match(mpp.text, /@gloamtrade\/sdk@\^0\.4\.6/);
     assert.match(mpp.text, /Ethereum Sepolia/);
     assert.doesNotMatch(mpp.text, /play money|real money|test funds/);
     const info = await toolJson("gloam_info");

@@ -41,7 +41,7 @@ import { serverTransport } from "@/lib/serverRpc";
 import { readCreatorFees, type CreatorFees } from "./creatorFees";
 import { MAINNET_LAUNCH_MS } from "./mainnet";
 import { errText, getLogsSafe } from "./logRange";
-import { VAULT_SWAP_ROUTERS } from "./vaultSwap";
+import { EVERY_SWAP_ROUTER } from "./vaultSwap";
 import { addChainPeople } from "./peopleStore";
 import { hasUiMultiplier, holdableTokens, SWAP_LANDABLE, swapTokenPrice } from "./vaultAssets";
 
@@ -386,14 +386,11 @@ async function gated<T>(chainId: number, call: () => Promise<T>): Promise<T> {
  * privateBridgeable), so its address is not a person's wallet: such a deposit
  * counts as money in, but not as a wallet or a depositor. The same goes for a
  * private swap (lib/vaultSwap): its router puts the new note in, and the note
- * it spends goes out to a one-time escrow in the same transaction.
+ * it spends goes out to a one-time escrow in the same transaction. Every router
+ * counts, not only the one in use: its past deposits are still a router's.
  */
 const RELAY_ROUTER = "0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f";
-const SWAP_ROUTERS = new Set(
-  Object.values(VAULT_SWAP_ROUTERS)
-    .filter((a): a is Address => Boolean(a))
-    .map((a) => a.toLowerCase())
-);
+const SWAP_ROUTERS = new Set(EVERY_SWAP_ROUTER.map((a) => a.toLowerCase()));
 function depositor(from: string | undefined): string | undefined {
   const w = from?.toLowerCase();
   return w === RELAY_ROUTER || (w && SWAP_ROUTERS.has(w)) ? undefined : w;
