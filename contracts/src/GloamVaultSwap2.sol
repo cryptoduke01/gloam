@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IGloamVault, IERC20Swap} from "./GloamVaultSwap.sol";
-import {SwapEscrow2} from "./SwapEscrow2.sol";
+import {IEscrowPayee, SwapEscrow2} from "./SwapEscrow2.sol";
 
 /**
  * @title GloamVaultSwap2
@@ -18,7 +18,10 @@ import {SwapEscrow2} from "./SwapEscrow2.sol";
  *  - A way out. Each swap names a one-time exit key in its escrow key, and money
  *    waiting at the swap's escrow can leave to an address that key signs for.
  *  - A deadline. Each swap names the last time it can land in its escrow key.
- *    A refund and an exit have none.
+ *    It limits the swap only. It does not limit a forced refund: once someone
+ *    has sent the swap's unshield alone, the note's money waits at the escrow,
+ *    and the same call puts it back as the refund note at any time, before or
+ *    long after the deadline. An exit has no deadline either.
  *
  * What binds what. The vault's unshield proof has one free public input, `to`.
  * A swap sets it to an escrow address that CREATE2 derives from everything the
@@ -44,7 +47,8 @@ import {SwapEscrow2} from "./SwapEscrow2.sol";
  * the asset, and the vault can't exempt it. While that limit is full the money
  * would wait. exit() is the way out for that case, and for any other that keeps
  * a refund from landing: the holder of the exit key signs for an address, and
- * the whole escrow goes there, in the clear. The exit key is a throwaway address
+ * the whole escrow goes there, in the clear, straight from the escrow, so a token
+ * that blocks this router still pays an exit. The exit key is a throwaway address
  * made for this one swap from a secret only the note's owner has, so it says
  * nothing about who that is, and nothing in a swap's proofs or calldata can sign
  * for it. The escrow opens once, so a refund and an exit can never both happen.
@@ -58,7 +62,7 @@ import {SwapEscrow2} from "./SwapEscrow2.sol";
  * in balance, so it is never spent on anyone's behalf. Every approval is set
  * back to zero. No upgrade, and no one can move what passes through.
  */
-abstract contract GloamVaultSwap2 {
+abstract contract GloamVaultSwap2 is IEscrowPayee {
     struct Spend {
         bytes proof;
         bytes32 root;
@@ -91,10 +95,12 @@ abstract contract GloamVaultSwap2 {
     /// @notice Native ETH, as the vault names it.
     address internal constant NATIVE = address(0);
 
-    uint256 private constant IDLE = 0;
-    uint256 private constant RUNNING = 1;
+    uint96 private constant IDLE = 0;
+    uint96 private constant RUNNING = 1;
     /// @dev An escrow is being deployed: the one time ETH may come in from an address this contract can't name up front.
-    uint256 private constant OPENING = 2;
+    uint96 private constant OPENING = 2;
+    /// @dev An exit's escrow is being deployed and pays its recipient: nothing comes in here.
+    uint96 private constant EXITING = 3;
 
     /// @dev Keeps an exit signature from meaning anything else.
     bytes32 private constant EXIT_DOMAIN = keccak256("gloam.vault-swap.exit.v1");
@@ -103,7 +109,9 @@ abstract contract GloamVaultSwap2 {
     /// @notice Where the leftover input goes: the input the swap did not need.
     address public immutable treasury;
 
-    uint256 private _entered;
+    uint96 private _entered;
+    /// @dev While an exit opens its escrow, where the escrow pays. The router otherwise.
+    address private _payee;
 
     event VaultSwap(
         bytes32 indexed nullifier,
@@ -168,7 +176,8 @@ abstract contract GloamVaultSwap2 {
      * @param r The refund note, in `s.asset`, made in advance; used only in that case.
      * @param route Venue-specific route, checked by the venue contract.
      * @param exitKey The swap's one-time exit key (exit()).
-     * @param deadline The last time the swap can land. It does not apply to a refund.
+     * @param deadline The last time the swap can land. It does not limit a forced refund:
+     *        once the note's unshield has been sent alone, this call refunds at any time.
      * @return amountIn What the swap spent of the input (0 on a refund).
      */
     function swap(
@@ -220,7 +229,8 @@ abstract contract GloamVaultSwap2 {
      * @notice Take a swap's waiting money out of its escrow to `to`, in the clear,
      *         when its refund can't land. Anyone may send this; only the swap's
      *         exit key can have signed it, and the signature names `to`, so a
-     *         copy can't send the money anywhere else.
+     *         copy can't send the money anywhere else. The escrow pays `to`
+     *         itself: the money never passes through this router.
      * @param assetIn The note's asset.
      * @param k The swap's escrow key, as it was proved.
      * @param to Where the money goes. Public on chain, next to this swap.
@@ -239,11 +249,24 @@ abstract contract GloamVaultSwap2 {
         address signer = _recover(exitDigest(escrow, to), signature);
         if (signer == address(0) || signer != k.exitKey) revert BadExit();
         // a note still in the vault hasn't paid this escrow: there is nothing to take out yet
-        if (!vault.isSpent(k.nullifier) || _holding(assetIn, escrow) == 0) revert BadExit();
+        if (!vault.isSpent(k.nullifier)) revert BadExit();
+        amount = _holding(assetIn, escrow);
+        if (amount == 0) revert BadExit();
+        _checkExit(assetIn, escrow, to);
 
-        amount = _open(salt, assetIn);
-        _pay(assetIn, to, amount);
+        _payee = to;
+        _open(salt, assetIn, EXITING);
+        _payee = address(0);
         emit VaultSwapExit(k.nullifier, assetIn, to, amount);
+    }
+
+    /// @dev Refuses an exit `to` would not receive as sent from `escrow`. A venue on a chain
+    ///      where a recipient can refuse a payment without a revert overrides it (Tempo).
+    function _checkExit(address token, address escrow, address to) internal view virtual {}
+
+    /// @notice Where an escrow opening now pays (SwapEscrow2 asks): an exit's recipient, or this router.
+    function escrowPayee() external view returns (address) {
+        return _payee == address(0) ? address(this) : _payee;
     }
 
     /// @notice What an exit key signs: this escrow's money, on this chain and router, to `to`.
@@ -282,7 +305,7 @@ abstract contract GloamVaultSwap2 {
             revert BadRefund();
         }
         // the vault keeps its cash-out fee: what arrived is what the swap may spend
-        available = _open(salt, s.asset);
+        available = _open(salt, s.asset, OPENING);
     }
 
     function _unshieldTo(Spend calldata s, address to) private {
@@ -317,18 +340,26 @@ abstract contract GloamVaultSwap2 {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, codeHash)))));
     }
 
-    /// @dev Deploys the swap's escrow, which sends this contract all it holds, and
-    ///      returns what came in. Once per swap: a second deploy can't happen.
-    function _open(bytes32 salt, address token) private returns (uint256 arrived) {
+    /// @dev Deploys the swap's escrow, which sends all it holds to escrowPayee(), and
+    ///      returns what came in here. Once per swap: a second deploy can't happen.
+    ///      `state` is OPENING when the escrow pays this router, EXITING when it pays
+    ///      an exit's recipient, while receive() takes no ETH.
+    function _open(bytes32 salt, address token, uint96 state) private returns (uint256 arrived) {
         uint256 before = _balance(token);
         bytes memory code = abi.encodePacked(type(SwapEscrow2).creationCode, abi.encode(token));
         address e;
-        _entered = OPENING;
+        uint256 said;
+        _entered = state;
         assembly {
             e := create2(0, add(code, 0x20), mload(code), salt)
+            said := returndatasize()
         }
         _entered = RUNNING;
-        if (e == address(0)) revert EscrowUsed();
+        // an escrow that reverted couldn't pay; one that was never run had been opened before
+        if (e == address(0)) {
+            if (said != 0) revert TokenCallFailed();
+            revert EscrowUsed();
+        }
         arrived = _balance(token) - before;
     }
 
@@ -362,16 +393,6 @@ abstract contract GloamVaultSwap2 {
             (ok, ) = token.call(abi.encodeWithSelector(0xa9059cbb, treasury, amount));
         }
         ok; // best effort, on purpose
-    }
-
-    /// @dev Pays `to`, which must take it: the caller picked it.
-    function _pay(address token, address to, uint256 amount) private {
-        if (token == NATIVE) {
-            (bool ok, ) = to.call{value: amount}("");
-            if (!ok) revert TokenCallFailed();
-        } else {
-            _transfer(token, to, amount);
-        }
     }
 
     function _recover(bytes32 digest, bytes calldata signature) private pure returns (address) {
