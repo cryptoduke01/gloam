@@ -115,9 +115,11 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
   const recorded: { kind: string; edge: unknown }[] = [];
   const memoFrom: unknown[] = [];
   const claimed: Hex[] = [];
+  const senders: (string | undefined)[] = [];
   const deps = {
     ...partnerRelayDeps,
-    relayTransfer: async () => {
+    relayTransfer: async (_net: unknown, _body: unknown, sender?: string) => {
+      senders.push(sender);
       calls.push("transfer");
       return H(1);
     },
@@ -130,7 +132,8 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       memoFrom.push(from);
       return H(3);
     },
-    relayVaultSwap: async () => {
+    relayVaultSwap: async (_net: unknown, _body: unknown, sender?: string) => {
+      senders.push(sender);
       calls.push("swap");
       return H(4 + calls.length);
     },
@@ -149,7 +152,7 @@ function fakeDeps(opts: { spent?: boolean; spentRead?: "ok" | "fail" } = {}) {
       return recordActivity(a);
     }) as typeof recordActivity,
   };
-  return { deps, calls, recorded, memoFrom, claimed };
+  return { deps, calls, recorded, memoFrom, claimed, senders };
 }
 
 const swapBody = (over: Record<string, unknown> = {}) => ({
@@ -180,6 +183,13 @@ await test("partner relay: a swap of an unspent note is counted, with its input,
   assert.equal(r.attribution.recorded, true);
   assert.equal(r.attribution.kind, "private_swap");
   assert.deepEqual(recorded[0], { kind: "private_swap", edge: { asset: RH_USDG, amount: 50_000_000n } });
+});
+
+await test("partner relay: a send holds against the partner account's share of the cap, as the relay takes it", async () => {
+  const { deps, senders } = fakeDeps({ spent: false });
+  await relayForPartner({ net: RH, body: swapBody({ spend: { ...swapBody().spend, nullifier: H(950) } }), partner, keyId: "k", sender: `partner:${partner.id}` }, deps);
+  await relayForPartner({ net: RH, body: { chainId: RH.chainId, action: "transfer" }, partner, keyId: "k", sender: `partner:${partner.id}` }, deps);
+  assert.deepEqual(senders, [`partner:${partner.id}`, `partner:${partner.id}`]);
 });
 
 await test("partner relay: a swap call for a spent note (the refund path) is sent and not counted", async () => {
